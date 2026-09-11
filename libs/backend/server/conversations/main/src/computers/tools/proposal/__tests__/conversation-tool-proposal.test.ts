@@ -13,7 +13,7 @@ function _Fixture()
 	vi.setSystemTime(1_800_000_000_000);
 	const schema = { type: "object", additionalProperties: false, required: ["query"], properties: { query: { type: "string" } } };
 	const tool = { name: "records.read", toolRevisionId: "tool-1", description: "Read a record", requiresApproval: false, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) };
-	const turn = { bootstrapId: "b1f5a60b-22d8-4dce-b41f-8da167ea0554", siloId: "silo-1", computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" }, binding: { conversationId: "conversation-1", agentIdentityId: "identity-1", expectedRevision: 2n }, compile: { runId: "run-1", attempt: 1, digest: "sha256:compiled" }, outputSourceCommandId: null } as FrozenConversationComputerTurn;
+	const turn = { bootstrapId: "b1f5a60b-22d8-4dce-b41f-8da167ea0554", siloId: "silo-1", computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" }, binding: { conversationId: "conversation-1", agentIdentityId: "identity-1", expectedRevision: 2n }, compile: { runId: "run-1", attempt: 1, digest: "sha256:compiled" }, outputSourceCommandId: null, outputReceipt: null, toolSelection: null, continuationReservation: null, modelReservation: null } as FrozenConversationComputerTurn;
 	const candidate: ConversationComputerTurnCandidate = { ...turn, credentialExpiresAt: "2099-01-01T00:00:00.000Z", compiledInput: { promptCompilerVersion: "proof-v1", instructions: "", messages: [], model: { modelAlias: "proof", maxOutputTokens: 512, generatedOutputCapabilities: [] }, runId: "run-1", attempt: 1, digest: "sha256:compiled", tools: [tool], budget: { maxModelTurns: 2, maxCompletionTokens: 1_024, maxCostUsdMicros: null, wallClockDeadlineEpochMs: Date.now() + 60_000, maxToolInvocations: 1 } } };
 	const proposal: ConversationToolProposal = { bootstrapId: turn.bootstrapId, toolRevisionId: "tool-1", arguments: { query: "record" } };
 	return { turn, candidate, proposal, tool };
@@ -66,5 +66,24 @@ describe("one frozen conversation tool proposal", function _Suite()
 		const f = _Fixture();
 		expect(() => _PrepareConversationToolProposal({ ...f.turn, outputSourceCommandId: "output" }, f.candidate, f.proposal)).toThrow("invalid");
 		expect(() => _PrepareConversationToolProposal(f.turn, { ...f.candidate, compiledInput: { ...f.candidate.compiledInput, digest: "other" } }, f.proposal)).toThrow("invalid");
+	});
+	it("replays one saved selection after the history head advances", function _SavedSelection()
+	{
+		const f = _Fixture();
+		const prepared = _PrepareConversationToolProposal(f.turn, f.candidate, f.proposal);
+		const selected = { ...f.turn, toolSelection: { proposalId: prepared.proposalId, requestFingerprint: prepared.requestFingerprint, payloadRef: "payload", ciphertextDigest: `sha256:${"1".repeat(64)}` } };
+		const advanced = { ...f.candidate, binding: { ...f.candidate.binding, expectedRevision: 3n } };
+		expect(_PrepareConversationToolProposal(selected, advanced, f.proposal)).toEqual(prepared);
+	});
+	it("rejects stale history and changes to a saved selection", function _SavedSelectionFence()
+	{
+		const f = _Fixture();
+		const prepared = _PrepareConversationToolProposal(f.turn, f.candidate, f.proposal);
+		const selected = { ...f.turn, toolSelection: { proposalId: prepared.proposalId, requestFingerprint: prepared.requestFingerprint, payloadRef: "payload", ciphertextDigest: `sha256:${"1".repeat(64)}` } };
+		const stale = { ...f.candidate, binding: { ...f.candidate.binding, expectedRevision: 1n } };
+		expect(() => _PrepareConversationToolProposal(selected, stale, f.proposal)).toThrow("invalid");
+		const advanced = { ...f.candidate, binding: { ...f.candidate.binding, expectedRevision: 3n } };
+		expect(() => _PrepareConversationToolProposal(selected, advanced, { ...f.proposal, arguments: { query: "other" } })).toThrow("invalid");
+		expect(() => _PrepareConversationToolProposal(selected, advanced, { ...f.proposal, toolRevisionId: "other" })).toThrow("invalid");
 	});
 });

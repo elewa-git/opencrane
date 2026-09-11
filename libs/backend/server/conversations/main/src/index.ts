@@ -81,3 +81,7 @@ export { CONVERSATION_COMPUTER_TURN_TASK } from "./computers/turns/workflow/conv
 export { PrismaConversationComputerTurnWorkflowReceiptBinder } from "./computers/turns/workflow/prisma-conversation-computer-turn-workflow-receipt-binder";
 export { _RegisterConversationComputerTurnWorkflow, _ToolApprovalEventName, _ToolResultEventName } from "./computers/turns/workflow/conversation-computer-turn-workflow";
 export { PrismaConversationComputerTurnWorkflowEventRepository } from "./computers/turns/workflow/prisma-conversation-computer-turn-workflow-events";
+export { KurrentConversationApprovalNotificationPublisher } from "./computers/turns/approval-notifications/kurrent-conversation-approval-notification";
+export { PrismaConversationApprovalNotificationUnitOfWork } from "./computers/turns/approval-notifications/prisma-conversation-approval-notification-unit-of-work";
+export { ConversationApprovalNotificationOutcomes } from "./computers/turns/approval-notifications/conversation-approval-notification.types";
+export type { ConversationApprovalNotificationClock, ConversationApprovalNotificationCommand, ConversationApprovalNotificationPort, ConversationApprovalNotificationRequestReader } from "./computers/turns/approval-notifications/conversation-approval-notification.types";

@@ -55,6 +55,8 @@ export class PrismaConversationToolProposalRepository implements ConversationToo
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 		if (proposal.tool.requiresApproval)
 		{
+			if (run.approvalDisclosure === null)
+				throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Invalid);
 			if (invocation.state === ToolInvocationStates.Ready)
 			{
 				const runtimeAdmitted = await this.runtimeAdmission(this.transaction, invocation.id);
@@ -82,6 +84,9 @@ export class PrismaConversationToolProposalRepository implements ConversationToo
 				argumentsDigest: proposal.argumentsDigest,
 				parametersSchema: proposal.tool.parametersSchema,
 				parametersSchemaDigest: proposal.tool.parametersSchemaDigest,
+				toolName: run.approvalDisclosure.toolName,
+				toolDescription: run.approvalDisclosure.toolDescription,
+				externalSystemName: run.approvalDisclosure.serverName,
 				capabilitySetDigest: run.subject.capability.capabilitySetDigest,
 				invocationId: invocation.id,
 				now,

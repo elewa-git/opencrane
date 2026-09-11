@@ -7,6 +7,8 @@
 This package owns browser state for one server-authoritative question or approval. It reads the
 generic request, keeps a selected draft separate from submission, admits one response command at a
 time, restores that draft after verified sign-in, and adopts only the server's returned lifecycle.
+It discovers the oldest current request when a conversation is selected, preserves a draft across
+harmless refreshes, and performs one exact authority read when the request deadline arrives.
 
 It also maps canonical request references and safe tool histories into Activity rows. It never
 creates a run, chooses the respondent, interprets protected A2UI actions, or reads personal memory.
@@ -18,7 +20,8 @@ grants no access and does not copy an answer into this state package.
 
 ## Public surface
 
-- `ConversationElicitationStore` — component-scoped command, draft, step-up, and reconciliation state.
+- `ConversationElicitationStore` — component-scoped discovery, cancellable reads, command, draft,
+  deadline, step-up, and authoritative reconciliation state.
 - `OpenCraneConversationElicitationGateway` — generated-client adapter for selected-conversation
   pending lists, named request reads, responses, and Activity reads.
 - `__MapElicitationActivity` and `__MapToolActivity` — pure canonical-reference mappers.

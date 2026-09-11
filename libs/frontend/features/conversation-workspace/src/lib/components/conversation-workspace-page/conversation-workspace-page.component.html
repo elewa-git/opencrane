@@ -66,8 +66,13 @@
             [closed]="selected.lifecycle === vm.lifecycles.Closed" [contextPanelOpen]="contextPanelOpen()"
             [contextPanelLabel]="vm.contextPanelLabel()" (backRequested)="backToGroup()"
             (archiveRequested)="archiveConversation()" (closeRequested)="vm.store.close()" (contextRequested)="openContextPanel()" />
-          <wo-conversation-workspace-transcript [entries]="vm.messages()" (askRequested)="vm.askAssistant($event)" (shareRequested)="vm.reviewGroupShare($event)" (childRequested)="openChild($event)" />
-          <wo-conversation-workspace-composer
+	          <div class="conversation-workspace__body">
+	            <wo-conversation-workspace-transcript [entries]="vm.messages()" (askRequested)="vm.askAssistant($event)" (shareRequested)="vm.reviewGroupShare($event)" (childRequested)="openChild($event)" />
+	            @if (vm.elicitationStore.elicitation(); as elicitation) {
+	              <wo-conversation-elicitation-card [elicitation]="elicitation" [draft]="vm.elicitationStore.draft()" [busy]="vm.elicitationStore.busy()" [disabled]="vm.elicitationStore.deadlineReached()" [error]="vm.elicitationStore.error()" [stepUpPath]="vm.elicitationStore.stepUpPath()" (draftSelected)="vm.selectElicitation($event)" (submitRequested)="vm.submitElicitation()" (stepUpRequested)="requestStepUp($event)" />
+	            }
+	          </div>
+	          <wo-conversation-workspace-composer
             [draft]="vm.store.draft()" [composerState]="vm.composerState()" [error]="vm.store.error()"
             [groupError]="vm.groupStore.error()" [groupRefreshing]="vm.groupStore.loading()"
             [groupRefreshAvailable]="selected.mode === vm.modes.Group && (vm.groupStore.children().length > 0 || vm.groupStore.error() !== null)"

@@ -8,7 +8,7 @@ import { _PrepareConversationToolProposal } from "../conversation-tool-proposal"
 
 const _run = vi.hoisted(function _Run()
 {
-	return { subject: { principalId: "user-1", membership: { kind: "fleet" }, capability: { capabilitySetDigest: "sha256:capability" } }, agentRevisionId: "revision-1" };
+	return { subject: { principalId: "user-1", membership: { kind: "fleet" }, capability: { capabilitySetDigest: "sha256:capability" } }, agentRevisionId: "revision-1", approvalDisclosure: { toolName: "records.update", toolDescription: "Update a record", serverName: "Records" } };
 });
 
 const _invocation = vi.hoisted(function _Invocation()
@@ -39,7 +39,7 @@ vi.mock("../../dispatch/prisma-conversation-tool-dispatch-authority", function _
 function _Fixture()
 {
 	const schema = { type: "object", additionalProperties: false, required: ["recordId"], properties: { recordId: { type: "string" } } };
-	const turn = { bootstrapId: "bootstrap-1", siloId: "silo-1", computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "claim-1" }, binding: { conversationId: "conversation-1", agentIdentityId: "identity-1", agentServiceId: "service-1", expectedRevision: 2n }, compile: { runId: "run-1", attempt: 1, digest: "sha256:compiled" }, outputSourceCommandId: null } as any;
+	const turn = { bootstrapId: "bootstrap-1", siloId: "silo-1", computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "claim-1" }, binding: { conversationId: "conversation-1", agentIdentityId: "identity-1", agentServiceId: "service-1", expectedRevision: 2n }, compile: { runId: "run-1", attempt: 1, digest: "sha256:compiled" }, outputSourceCommandId: null, toolSelection: null } as any;
 	const candidate = { ...turn, credentialExpiresAt: "2099-01-01T00:00:00.000Z", compiledInput: { promptCompilerVersion: "proof-v1", runId: "run-1", attempt: 1, digest: "sha256:compiled", instructions: "", messages: [], tools: [{ name: "records.update", toolRevisionId: "tool-1", description: "Update a record", requiresApproval: true, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) }], model: { modelAlias: "proof", maxOutputTokens: 512, generatedOutputCapabilities: [] }, budget: { maxModelTurns: 2, maxCompletionTokens: 1_024, maxCostUsdMicros: null, wallClockDeadlineEpochMs: Date.now() + 60_000, maxToolInvocations: 1 } } } as any;
 	const proposal = _PrepareConversationToolProposal(turn, candidate, { bootstrapId: turn.bootstrapId, toolRevisionId: "tool-1", arguments: { recordId: "record-1" } });
 	return { turn, candidate, proposal };

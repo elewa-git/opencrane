@@ -20,7 +20,7 @@ export function _PrepareConversationToolProposal(turn: FrozenConversationCompute
 	const input = candidate.compiledInput;
 	const tool = input.tools.find(item => item.toolRevisionId === proposal.toolRevisionId);
 	if (turn.outputSourceCommandId !== null || proposal.bootstrapId !== turn.bootstrapId || input.digest !== turn.compile.digest
-		|| input.runId !== turn.compile.runId || input.attempt !== turn.compile.attempt || candidate.binding.expectedRevision !== turn.binding.expectedRevision
+		|| input.runId !== turn.compile.runId || input.attempt !== turn.compile.attempt
 		|| tool === undefined || ___DigestCanonicalJson(tool.parametersSchema) !== tool.parametersSchemaDigest
 		|| !__ValidateDeferredToolArguments(tool.parametersSchema, proposal.arguments))
 		throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Invalid);
@@ -34,5 +34,12 @@ export function _PrepareConversationToolProposal(turn: FrozenConversationCompute
 	const argumentsValue = ___CloneCanonicalJson(proposal.arguments) as ConversationToolProposal["arguments"];
 	const argumentsDigest = ___DigestCanonicalJson(argumentsValue);
 	const requestFingerprint = ___DigestCanonicalJson({ proposalId, assignmentDigest, compiledInputDigest: input.digest, toolRevisionId: tool.toolRevisionId, parametersSchemaDigest: tool.parametersSchemaDigest, argumentsDigest });
+	const savedSelection = turn.toolSelection;
+	// A saved selection keeps its original input while notifications or later messages advance the
+	// output position. Current run, approval and lease checks still decide whether it may execute.
+	if (candidate.binding.expectedRevision < turn.binding.expectedRevision
+		|| savedSelection === null && candidate.binding.expectedRevision !== turn.binding.expectedRevision
+		|| savedSelection !== null && (savedSelection.proposalId !== proposalId || savedSelection.requestFingerprint !== requestFingerprint))
+		throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Invalid);
 	return { proposalId, tool, arguments: argumentsValue, argumentsDigest, assignmentDigest, requestFingerprint };
 }

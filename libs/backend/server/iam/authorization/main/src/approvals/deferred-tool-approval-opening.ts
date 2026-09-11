@@ -9,6 +9,25 @@ import { ToolInvocationStates } from "../tool-invocations/tool-invocation-lifecy
 import { __FindToolInvocationInTransaction } from "../tool-invocations/persistence/tool-invocation-transaction";
 import { __ReconcileDeferredToolApprovalGrants } from "./deferred-tool-approval-grants";
 
+const _UNSAFE_DISPLAY_TEXT = /[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/u;
+
+/** Return whether a persisted label can be shown without terminal or direction-control characters. */
+function _IsDisplayLabel(value: string, maximumLength: number): boolean
+{
+	return value.trim().length > 0 && value.length <= maximumLength && !_UNSAFE_DISPLAY_TEXT.test(value);
+}
+
+/** Describe the one-use invocation while identifying provider text as descriptive metadata. */
+function _ApprovalConsequence(description: string | null): string
+{
+	const fallback = "This invokes the external tool once. No further display-safe description is available.";
+	if (description === null)
+		return fallback;
+	const value = description.trim();
+	const prefix = "This invokes the external tool once. Its saved description says: ";
+	return _IsDisplayLabel(value, 2_000 - prefix.length) ? `${prefix}${value}` : fallback;
+}
+
 /** Resolves the exact assignment principal and its authenticated participant subject. */
 async function _ResolveAssignedPrincipal(transaction: Prisma.TransactionClient, siloId: string, principalId: string): Promise<{ readonly principalId: string; readonly subjectId: string } | null>
 {
@@ -48,6 +67,8 @@ function _approvalRunState(state: AgentRunState): DeferredToolApprovalRunStates 
  */
 export async function __DeferToolRequest(transaction: Prisma.TransactionClient, command: DeferToolRequestCommand): Promise<DeferToolRequestResult>
 {
+	if (!_IsDisplayLabel(command.toolName, 1_000) || !_IsDisplayLabel(command.externalSystemName, 500))
+		return { outcome: DeferToolRequestOutcomes.Unavailable };
 	// 1. Bind the approval to the run's immutable execution subject and the invocation admitted for that exact computer lease.
 	const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
 	const runSubject = run === null ? null : ___ExecutionSubjectSchema.safeParse(run.executionSubject);
@@ -104,11 +125,15 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 	{
 		const body: ElicitationApprovalBody = {
 			kind: ElicitationBodyKinds.Approval,
-			prompt: "Allow this agent to use the reviewed tool?",
+			prompt: "Allow this agent to invoke the reviewed tool?",
 			action: "Invoke tool",
-			target: command.toolRevisionId,
-			dataUse: "Only the reviewed values shown in this request will be sent.",
-			consequence: "The agent may perform this external action once.",
+			target: command.toolName,
+			dataUse: command.safeProposedArguments === null
+				? "Some proposed values are hidden because the tool marks them sensitive. This request can only be denied."
+				: "The proposed arguments shown in this request will be sent to the tool.",
+			externalSystem: command.externalSystemName,
+			consequence: _ApprovalConsequence(command.toolDescription),
+			proposedArguments: command.safeProposedArguments,
 		};
 		const purposePayload = { approvalRequestId: command.interruptId };
 		await transaction.elicitationRequest.create({ data: {
@@ -154,7 +179,7 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 				reviewedToolArguments: command.reviewedArguments as unknown as Prisma.InputJsonValue,
 				reviewedToolSchema: command.reviewedParametersSchema as unknown as Prisma.InputJsonValue,
 				reviewedToolSchemaDigest: command.reviewedParametersSchemaDigest,
-				safeProposedArguments: command.safeProposedArguments as unknown as Prisma.InputJsonValue,
+				safeProposedArguments: command.safeProposedArguments === null ? Prisma.JsonNull : command.safeProposedArguments as unknown as Prisma.InputJsonValue,
 				responseSchema: command.responseSchema as unknown as Prisma.InputJsonValue,
 			},
 		});

@@ -4799,6 +4799,17 @@
                                   },
                                   "cost": {
                                     "type": "string"
+                                  },
+                                  "proposedArguments": {
+                                    "oneOf": [
+                                      {
+                                        "type": "object",
+                                        "additionalProperties": true
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
                                   }
                                 }
                               },
@@ -5100,6 +5111,17 @@
                                   },
                                   "cost": {
                                     "type": "string"
+                                  },
+                                  "proposedArguments": {
+                                    "oneOf": [
+                                      {
+                                        "type": "object",
+                                        "additionalProperties": true
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
                                   }
                                 }
                               },
@@ -5407,6 +5429,17 @@
                                 },
                                 "cost": {
                                   "type": "string"
+                                },
+                                "proposedArguments": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "additionalProperties": true
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 }
                               }
                             },

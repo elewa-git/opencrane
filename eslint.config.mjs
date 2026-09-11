@@ -133,7 +133,7 @@ export default [
             { sourceTag: "scope:skills-controller", onlyDependOnLibsWithTags: ["scope:skills-controller", "scope:skills-launcher", "scope:skills-workflow-contract", "scope:runtime-workloads", "scope:shared", "scope:workflows"] },
             { sourceTag: "scope:agent-controller", onlyDependOnLibsWithTags: ["scope:agent-controller", "scope:artifact-preprocessor-controller", "scope:artifact-preprocessor-launcher", "scope:artifacts-workflow-contract", "scope:execution-runs", "scope:execution-runs-workflow-contract", "scope:runtime-workloads", "scope:skills-controller", "scope:skills-workflow-contract", "scope:mcp-runtime", "scope:shared", "scope:workflows"] },
             { sourceTag: "scope:cluster-tenants", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:k8s-api", "scope:shared"] },
-			{ sourceTag: "scope:conversations", onlyDependOnLibsWithTags: ["scope:agent-services", "scope:membership", "scope:agent-sandbox", "scope:agents", "scope:artifacts", "scope:auth", "scope:authorization", "scope:conversations", "scope:execution-inputs", "scope:execution-runs", "scope:history-store", "scope:identity", "scope:shared", "scope:workflows", "scope:workload-identity"] },
+			{ sourceTag: "scope:conversations", onlyDependOnLibsWithTags: ["scope:execution-elicitation", "scope:agent-services", "scope:membership", "scope:agent-sandbox", "scope:agents", "scope:artifacts", "scope:auth", "scope:authorization", "scope:conversations", "scope:execution-inputs", "scope:execution-runs", "scope:history-store", "scope:identity", "scope:shared", "scope:workflows", "scope:workload-identity"] },
 			{ sourceTag: "scope:conversation-assets", onlyDependOnLibsWithTags: ["scope:artifacts", "scope:auth", "scope:authorization", "scope:conversations", "scope:conversation-assets", "scope:execution-runs", "scope:shared", "scope:web"] },
 			{ sourceTag: "scope:personal-configuration", onlyDependOnLibsWithTags: ["scope:agent-services", "scope:agents", "scope:auth", "scope:personal-configuration", "scope:shared"] },
 			{ sourceTag: "scope:user-onboarding", onlyDependOnLibsWithTags: ["scope:agent-services", "scope:auth", "scope:model-routing", "scope:personal-personas", "scope:user-onboarding", "scope:shared"] },
@@ -174,7 +174,7 @@ export default [
 			{ sourceTag: "scope:conversation-elicitation", onlyDependOnLibsWithTags: ["scope:conversation-elicitation", "scope:shared", "scope:web"] },
 			{ sourceTag: "scope:conversation-workspace", onlyDependOnLibsWithTags: ["scope:conversation-assets", "scope:conversation-elicitation", "scope:conversation-workspace", "scope:conversations", "scope:shared", "scope:user-onboarding", "scope:web"] },
 			{ sourceTag: "scope:web", onlyDependOnLibsWithTags: ["scope:web", "scope:shared"] },
-			{ sourceTag: "scope:opencrane-ui", onlyDependOnLibsWithTags: ["scope:conversation-assets", "scope:conversation-workspace", "scope:organization-members", "scope:persona-onboarding", "scope:shared", "scope:web"] },
+			{ sourceTag: "scope:opencrane-ui", onlyDependOnLibsWithTags: ["scope:conversation-elicitation", "scope:conversation-assets", "scope:conversation-workspace", "scope:organization-members", "scope:persona-onboarding", "scope:shared", "scope:web"] },
             {
               sourceTag: "scope:opencrane",
               onlyDependOnLibsWithTags: [

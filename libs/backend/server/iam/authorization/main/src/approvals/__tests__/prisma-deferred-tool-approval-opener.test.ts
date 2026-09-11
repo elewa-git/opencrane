@@ -34,7 +34,7 @@ function _Command()
 	const now = new Date("2026-07-29T00:00:00.000Z");
 	const argumentsValue = { calendarId: "primary" };
 	const parametersSchema = { type: "object", additionalProperties: false, required: ["calendarId"], properties: { calendarId: { type: "string" } } };
-	return { interruptId: "interrupt-1", runId: "run-1", attempt: 1, toolInvocationId: "invoke-1", toolRevisionId: "integration:calendar:read", arguments: argumentsValue, argumentsDigest: __DigestCanonicalJson(argumentsValue), parametersSchema, parametersSchemaDigest: __DigestCanonicalJson(parametersSchema), capabilitySetDigest: "sha256:capabilities", invocationId: "invocation-1", now, expiresAt: new Date(now.getTime() + 60_000) };
+	return { interruptId: "interrupt-1", runId: "run-1", attempt: 1, toolInvocationId: "invoke-1", toolRevisionId: "integration:calendar:read", toolName: "calendar.read", toolDescription: "Read one calendar", externalSystemName: "Team calendar", arguments: argumentsValue, argumentsDigest: __DigestCanonicalJson(argumentsValue), parametersSchema, parametersSchemaDigest: __DigestCanonicalJson(parametersSchema), capabilitySetDigest: "sha256:capabilities", invocationId: "invocation-1", now, expiresAt: new Date(now.getTime() + 60_000) };
 }
 
 /** Build the complete awaiting-approval invocation returned by the transaction repository. */
@@ -66,6 +66,10 @@ describe("Prisma deferred-tool approval opener", function _describeOpener()
 
 		await expect(__OpenDeferredToolApprovalInTransaction(transaction as unknown as Prisma.TransactionClient, _Command())).resolves.toBe(true);
 		expect(transaction.approvalRequest.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ toolInvocationRowId: "invocation-1", reviewedToolArguments: { calendarId: "primary" } }) }));
+		expect(transaction.elicitationRequest.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+			body: expect.objectContaining({ target: "calendar.read", externalSystem: "Team calendar", proposedArguments: { calendarId: "primary" }, consequence: expect.stringContaining("Its saved description says: Read one calendar") }),
+			bodyDigest: expect.stringMatching(/^sha256:/),
+		}) });
 	});
 
 	it("creates the approval inside the caller-owned transaction", async function _createsApproval()

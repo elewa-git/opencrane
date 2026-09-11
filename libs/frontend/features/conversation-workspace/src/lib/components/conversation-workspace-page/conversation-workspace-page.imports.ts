@@ -3,6 +3,7 @@ import { ConversationWorkspaceTranscriptComponent } from "../conversation-worksp
 import { ConversationWorkspaceHeaderComponent } from "../conversation-workspace-header/conversation-workspace-header.component";
 import type { Type } from "@angular/core";
 import { ButtonModule } from "primeng/button";
+import { ConversationElicitationCardComponent } from "@opencrane/features/conversation-elicitation";
 
 
 import { ConversationCreateComponent } from "../conversation-create/conversation-create.component";
@@ -19,6 +20,7 @@ export const CONVERSATION_WORKSPACE_PAGE_IMPORTS: Type<unknown>[] =
 	ConversationWorkspaceComposerComponent,
 	ConversationWorkspaceTranscriptComponent,
 	ConversationWorkspaceHeaderComponent,
+	ConversationElicitationCardComponent,
 	ConversationGroupRequestComponent,
 	ConversationGroupShareComponent,
 	ButtonModule,

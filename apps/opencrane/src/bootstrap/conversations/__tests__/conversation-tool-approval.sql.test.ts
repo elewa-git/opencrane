@@ -6,9 +6,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { PrismaElicitationRepository, PrismaElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
 import { ElicitationBodyKinds, CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import { __FakeWorkflowEngine } from "@opencrane/backend/server/infra/workflows/testing";
-import { PrismaConversationComputerTurnWorkflowEventRepository, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, _RegisterConversationComputerTurnWorkflow, CONVERSATION_COMPUTER_TURN_TASK } from "@opencrane/backend/server/conversations";
+import { ConversationApprovalNotificationOutcomes, PrismaConversationComputerTurnWorkflowEventRepository, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, _RegisterConversationComputerTurnWorkflow, CONVERSATION_COMPUTER_TURN_TASK } from "@opencrane/backend/server/conversations";
 import { ToolInvocationEventTypes } from "@opencrane/backend/server/iam/authorization";
 import type { IWorkflowTaskReceipt, IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { _ToolHandoffSqlRuntime, _WaitPastSqlDeadline } from "./conversation-tool-handoff.sql-fixture";
 import { _SeedConversationToolProposalSqlFixture } from "./conversation-tool-proposal.sql-fixture";
@@ -16,6 +17,7 @@ import { _SeedConversationToolProposalSqlFixture } from "./conversation-tool-pro
 const _First = new PrismaClient();
 const _Runtimes = new Set<ReturnType<typeof _ToolHandoffSqlRuntime>>();
 const _WORKLOAD = { subject: "system:serviceaccount:computers:computer", audience: CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, namespace: "computers", serviceAccountName: "computer", workloadKind: "pod", workloadUid: "computer-pod-1", podUid: "computer-pod-1" } as const;
+const _APPROVAL_NOTIFICATIONS = { publishRequested: async function _PublishRequested() { return ConversationApprovalNotificationOutcomes.Published; } } as const;
 
 describe("saved personal approval through the conversation workflow on PostgreSQL", function _Suite()
 {
@@ -71,7 +73,7 @@ describe("saved personal approval through the conversation workflow on PostgreSQ
 				return { outcome: "completed" as const };
 			},
 		};
-		_RegisterConversationComputerTurnWorkflow(workflows, { authority: authority as never, receipts: { bind: async function _Bind() { return true; } }, siloId: f.siloId });
+		_RegisterConversationComputerTurnWorkflow(workflows, { authority: authority as never, approvalNotifications: _APPROVAL_NOTIFICATIONS, receipts: { bind: async function _Bind() { return true; } }, siloId: f.siloId });
 		const activationEventId = randomUUID();
 		const task = await workflows.spawn({ client: {} }, { taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: activationEventId, input: { siloId: f.siloId, computerId: f.turn.computerId, leaseId: f.turn.lease.leaseId, leaseGeneration: f.turn.lease.leaseGeneration, activationEventId, causationId: f.turn.latestPendingEntryId, causationPosition: f.turn.latestPendingEntryPosition } });
 		const persistedTask = { ...task, taskId: randomUUID() };
@@ -83,7 +85,23 @@ describe("saved personal approval through the conversation workflow on PostgreSQ
 		expect(invocationBefore.state).toBe(ToolInvocationState.AwaitingApproval);
 		expect(await _First.mcpRuntimeExecution.count({ where: { siloId: f.siloId } })).toBe(0);
 		const approval = await _First.approvalRequest.findFirstOrThrow({ where: { runId: f.runId } });
+		const approvalRequest = await _First.elicitationRequest.findUniqueOrThrow({ where: { id: approval.elicitationRequestId! } });
+		const disclosure = {
+			kind: ElicitationBodyKinds.Approval,
+			prompt: "Allow this agent to invoke the reviewed tool?",
+			action: "Invoke tool",
+			target: f.tool.name,
+			dataUse: "The proposed arguments shown in this request will be sent to the tool.",
+			externalSystem: f.serverName,
+			consequence: `This invokes the external tool once. Its saved description says: ${f.tool.description}`,
+			proposedArguments: f.proposal.arguments,
+		};
+		expect(approvalRequest.body).toEqual(disclosure);
+		expect(approvalRequest.bodyDigest).toBe(___DigestCanonicalJson(disclosure));
 		const elicitation = new PrismaElicitationUnitOfWork(_First, function _WakeFactory(transaction) { return new PrismaConversationComputerTurnWorkflowEventRepository(transaction as never, eventPort); });
+		const browserRequest = await elicitation.readOwned(f.siloId, f.turn.binding.conversationId, approval.elicitationRequestId!, f.principalId, new Date());
+		expect(browserRequest?.body).toEqual(disclosure);
+		expect(JSON.stringify(browserRequest)).not.toMatch(/purposePayload|bodyDigest|requestKey|toolRevisionId|profileId|secretName|secretKey/);
 		await expect(elicitation.respond({ siloId: f.siloId, conversationId: f.turn.binding.conversationId, requestId: approval.elicitationRequestId!, subjectId: f.principalId, verifiedStepUpAt: new Date(), submission: { idempotencyKey: `approve-${f.runId}`, response: { kind: ElicitationBodyKinds.Approval, approved: true } }, now: new Date() })).resolves.toMatchObject({ outcome: "accepted" });
 		await _Eventually(async function _Ready() { return (await _First.toolInvocation.findFirstOrThrow({ where: { runId: f.runId } })).state === ToolInvocationState.Ready; });
 		expect(await _First.mcpRuntimeExecution.count({ where: { siloId: f.siloId } })).toBe(0);
@@ -95,7 +113,7 @@ describe("saved personal approval through the conversation workflow on PostgreSQ
 		const restarted = new __FakeWorkflowEngine();
 		const restartedAliases = new Map<string, { readonly taskId: string; readonly taskName: string; readonly idempotencyKey: string }>();
 		const restartedEventPort = _EventPort(restarted, emitted, restartedAliases);
-		_RegisterConversationComputerTurnWorkflow(restarted, { authority: authority as never, receipts: { bind: async function _Bind() { return true; } }, siloId: f.siloId });
+		_RegisterConversationComputerTurnWorkflow(restarted, { authority: authority as never, approvalNotifications: _APPROVAL_NOTIFICATIONS, receipts: { bind: async function _Bind() { return true; } }, siloId: f.siloId });
 		const restartedActivationEventId = activationEventId;
 		const restartedTask = await restarted.spawn({ client: {} }, { taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: restartedActivationEventId, input: { siloId: f.siloId, computerId: f.turn.computerId, leaseId: f.turn.lease.leaseId, leaseGeneration: f.turn.lease.leaseGeneration, activationEventId: restartedActivationEventId, causationId: f.turn.latestPendingEntryId, causationPosition: f.turn.latestPendingEntryPosition } });
 		restartedAliases.set(persistedTask.taskId, restartedTask);
@@ -145,14 +163,19 @@ describe("saved personal approval through the conversation workflow on PostgreSQ
 
 	it("denies the saved approval before runtime admission", async function _DeniedJourney()
 	{
-		const f = await _SeedConversationToolProposalSqlFixture({ approvalRequired: true });
+		const f = await _SeedConversationToolProposalSqlFixture({ approvalRequired: true, secretArguments: true });
 		const runtime = _ToolHandoffSqlRuntime(_First, f);
 		_Runtimes.add(runtime);
 		const owner = new PrismaConversationToolProposalUnitOfWork(_First, f.dependencies, runtime.admission, async function _ApprovalExpiry(transaction, command) { await new PrismaElicitationRepository(transaction as never).expireDue(command); });
 		await owner.admit(f.turn, f.candidate, f.proposal, _WORKLOAD);
 		const pending = await _First.toolInvocation.findFirstOrThrow({ where: { runId: f.runId } });
 		const approval = await _First.approvalRequest.findFirstOrThrow({ where: { runId: f.runId } });
+		const request = await _First.elicitationRequest.findUniqueOrThrow({ where: { id: approval.elicitationRequestId! } });
+		expect(request.body).toMatchObject({ target: f.tool.name, externalSystem: f.serverName, proposedArguments: null, dataUse: expect.stringContaining("can only be denied") });
+		expect(JSON.stringify(request.body)).not.toContain("sql-secret-never-visible");
+		expect(approval.safeProposedArguments).toBeNull();
 		const elicitation = new PrismaElicitationUnitOfWork(_First);
+		await expect(elicitation.respond({ siloId: f.siloId, conversationId: f.turn.binding.conversationId, requestId: approval.elicitationRequestId!, subjectId: f.principalId, verifiedStepUpAt: new Date(), submission: { idempotencyKey: `approve-hidden-${f.runId}`, response: { kind: ElicitationBodyKinds.Approval, approved: true } }, now: new Date() })).resolves.toEqual({ outcome: "invalid_response" });
 		await expect(elicitation.respond({ siloId: f.siloId, conversationId: f.turn.binding.conversationId, requestId: approval.elicitationRequestId!, subjectId: f.principalId, verifiedStepUpAt: new Date(), submission: { idempotencyKey: `deny-${f.runId}`, response: { kind: ElicitationBodyKinds.Approval, approved: false } }, now: new Date() })).resolves.toMatchObject({ outcome: "accepted" });
 		const denied = await _First.toolInvocation.findUniqueOrThrow({ where: { id: pending.id } });
 		expect(denied).toMatchObject({ state: ToolInvocationState.Failed, failureCode: "approval_denied" });

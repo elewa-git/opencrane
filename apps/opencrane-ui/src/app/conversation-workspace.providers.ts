@@ -5,6 +5,7 @@ import { CONVERSATION_PERSONAL_RUNS_GATEWAY, CONVERSATION_CURRENT_SUBJECT, CONVE
 import { OpenCraneConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace/adapter";
 import { OpenCraneConversationEventStream } from "@opencrane/state/conversation/adapter";
 import { CONVERSATION_ASSETS_GATEWAY, OpenCraneConversationAssetsGateway } from "@opencrane/state/conversation/assets";
+import { ELICITATION_GATEWAY, OpenCraneConversationElicitationGateway } from "@opencrane/state/conversation/elicitation";
 
 /**
  * Bind the chat feature's typed ports to this web application's concrete adapters.
@@ -45,7 +46,8 @@ export function provideConversationWorkspaceComposition(): Provider[]
 		// The stream remains shared by direct, group, and Agent-session conversations so every mode
 		// resumes immutable history from the same server-owned position contract.
 		{ provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useExisting: OpenCraneConversationEventStream },
-		{ provide: CONVERSATION_ASSETS_GATEWAY, useClass: OpenCraneConversationAssetsGateway }
+		{ provide: CONVERSATION_ASSETS_GATEWAY, useClass: OpenCraneConversationAssetsGateway },
+		{ provide: ELICITATION_GATEWAY, useClass: OpenCraneConversationElicitationGateway }
 	];
 }
 

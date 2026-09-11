@@ -53,6 +53,13 @@ export function _RegisterConversationComputerTurnWorkflow(workflows: IWorkflowEn
 						break;
 					case "tool_pending":
 					{
+						if (progress.waitFor === "approval")
+						{
+							await context.checkpoint({ stepName: "publish-tool-approval-requested" }, function _PublishRequested()
+							{
+								return dependencies.approvalNotifications.publishRequested({ bootstrapId: turn.bootstrapId, siloId: turn.siloId, conversationId: turn.binding.conversationId, runId: turn.compile.runId, attempt: turn.compile.attempt, approvalId: progress.toolInvocationId });
+							});
+						}
 						const approvalWait = progress.waitFor === "approval" && progress.waitUntilEpochMs !== undefined ? { timeoutAt: new Date(progress.waitUntilEpochMs) } : undefined;
 						const eventName = progress.waitFor === "approval" ? _ToolApprovalEventName(progress.toolInvocationId) : _ToolResultEventName(progress.toolInvocationId);
 						if (approvalWait === undefined)

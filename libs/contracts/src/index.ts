@@ -44,7 +44,7 @@ export { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 
 export { ConversationToolProposalOutcomes } from "./conversations/conversation-tool-proposal.types";
 export type { ConversationToolProposal, ConversationToolProposalReceipt } from "./conversations/conversation-tool-proposal.types";
-export { ___ConversationToolProposalSchema } from "./conversations/conversation-tool-proposal.validator";
+export { ___ConversationToolArgumentsSchema, ___ConversationToolProposalSchema } from "./conversations/conversation-tool-proposal.validator";
 
 export * from "./conversations/conversation-model.types";
 export { ___ConversationModelToolCallSchema, ___ConversationModelContinuationSchema, ___ConversationModelResponseSchema } from "./conversations/conversation-model.validator";

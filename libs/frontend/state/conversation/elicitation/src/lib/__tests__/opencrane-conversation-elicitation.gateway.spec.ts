@@ -34,7 +34,7 @@ describe("OpenCraneConversationElicitationGateway", function _Suite()
 	{
 		const GET = vi.fn().mockResolvedValue({ data: { elicitations: [_ELICITATION] }, error: undefined, response: { ok: true, status: 200 } });
 		const elicitations = await _Gateway({ GET }).listOpen("conversation-1");
-		expect(GET).toHaveBeenCalledWith("/me/conversations/{conversationId}/elicitations", { params: { path: { conversationId: "conversation-1" } } });
+		expect(GET).toHaveBeenCalledWith("/me/conversations/{conversationId}/elicitations", { params: { path: { conversationId: "conversation-1" } }, signal: undefined });
 		expect(elicitations).toEqual([_ELICITATION]);
 	});
 
@@ -54,5 +54,36 @@ describe("OpenCraneConversationElicitationGateway", function _Suite()
 	{
 		const GET = vi.fn().mockResolvedValue({ data: { elicitations: [{ ..._ELICITATION, conversationId: "conversation-2" }] }, error: undefined, response: { ok: true, status: 200 } });
 		await expect(_Gateway({ GET }).listOpen("conversation-1")).rejects.toThrow("open elicitation list does not match the selected conversation");
+	});
+
+	it("accepts omitted, visible, and explicitly hidden proposal arguments", async function _ProposalArguments()
+	{
+		const omitted = { ..._ELICITATION, body: { kind: ElicitationBodyKinds.Approval, prompt: "Proceed?", action: "Create event", target: "Calendar", dataUse: "Meeting details", consequence: "An event is created." } };
+		const visible = { ...omitted, body: { ...omitted.body, proposedArguments: { title: "Planning", invitees: ["Amina"] } } };
+		const hidden = { ...omitted, body: { ...omitted.body, proposedArguments: null } };
+		for (const elicitation of [omitted, visible, hidden])
+		{
+			const GET = vi.fn().mockResolvedValue({ data: { elicitations: [elicitation] }, error: undefined, response: { ok: true, status: 200 } });
+			await expect(_Gateway({ GET }).listOpen("conversation-1")).resolves.toEqual([elicitation]);
+		}
+	});
+
+	it("rejects a tool approval whose reviewable argument state is omitted", async function _MissingToolArguments()
+	{
+		const body = { kind: ElicitationBodyKinds.Approval, prompt: "Proceed?", action: "Create event", target: "Calendar", dataUse: "Meeting details", consequence: "An event is created." };
+		const GET = vi.fn().mockResolvedValue({ data: { elicitations: [{ ..._ELICITATION, purpose: ElicitationPurposes.ToolApproval, body }] }, error: undefined, response: { ok: true, status: 200 } });
+		await expect(_Gateway({ GET }).listOpen("conversation-1")).rejects.toThrow("tool approval arguments are missing");
+	});
+
+	it("rejects proposal arguments beyond the shared depth and size bounds", async function _RejectsUnsafeArguments()
+	{
+		let deep: Record<string, unknown> = { value: "end" };
+		for (let depth = 0; depth < 17; depth += 1) deep = { child: deep };
+		const approval = { kind: ElicitationBodyKinds.Approval, prompt: "Proceed?", action: "Create event", target: "Calendar", dataUse: "Meeting details", consequence: "An event is created." };
+		for (const proposedArguments of [deep, { text: "x".repeat(65_537) }])
+		{
+			const GET = vi.fn().mockResolvedValue({ data: { elicitations: [{ ..._ELICITATION, body: { ...approval, proposedArguments } }] }, error: undefined, response: { ok: true, status: 200 } });
+			await expect(_Gateway({ GET }).listOpen("conversation-1")).rejects.toThrow("elicitation approval arguments are invalid");
+		}
 	});
 });

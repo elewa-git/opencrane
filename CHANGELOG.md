@@ -20,11 +20,14 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Added
 
-- **Authenticated clients can discover pending input for one selected conversation.** The read
-  returns at most fifty unexpired requests assigned to the current participant after active
-  membership, conversation participation and central read permission are checked. It exposes no
-  protected purpose payload, credentials or resume material. The approval card, live notification
-  trigger and informed tool-action disclosure remain unfinished.
+- **People can review a personal assistant's proposed tool call in the conversation.** The approval
+  card shows the saved tool and system names and reviewable arguments, then requires a separate
+  confirmation to approve or deny. Requests with hidden secret fields allow denial only. Pending
+  requests return when the conversation reopens and new requests appear through durable history
+  notifications. Switching conversations or losing access clears the private draft; reauthentication
+  and uncertain submissions reconcile with the saved server decision. The original run resumes
+  without a fresh model allowance. Company approver binding and live remote-provider/hosted-MCP
+  qualification remain unfinished.
 
 - **People can distinguish tool progress from an assistant's final answer in recent personal activity.**
   The activity view shows queued, running, result-received and needs-attention tool phases while
@@ -67,11 +70,6 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   a tool prevents later dispatch through the old revision. Edits preserve the original model
   allowance; new assistants permit two model requests for one tool result and a final answer.
   Credential activation, a management screen and live retrieval qualification remain unfinished.
-
-- **Personal assistants can wait for their owner's approval before calling a tool.** A decision
-  applies to the saved arguments and original run allowance. Approved work resumes after a restart
-  without repeating the call; denial, expiry, lost access or changed arguments prevent execution.
-  Live remote-provider and hosted-MCP qualification remain separate.
 
 - **People can use agent-session conversations whose complete history survives server and executor
   restarts.** Immutable KurrentDB streams preserve ordered messages and computer lifecycle events,

@@ -93,6 +93,10 @@ coordinates, terminal finality, and one accepted response.
 Ordinary input answers are delivered to the exact runtime attempt once. Protected tool, memory, and
 A2UI payloads remain server-side. The authorization package owns every ToolInvocation transition
 inside the elicitation transaction; this package owns only the response and exact memory receipt.
+Tool-approval bodies carry the frozen display-safe argument projection, tool name, and server label.
+When IAM cannot disclose every proposed value, the body carries `proposedArguments: null` and the
+request can only be denied. Reviewed arguments, schemas, purpose payloads, and provider credentials
+remain outside the browser projection.
 Receipt verification rechecks the current single dispatch claim, fence, revision, lease, execution
 user, query digest, frozen input digest, and persona. Until a transient memory-delivery path can hand
 facts directly to the active model loop without persistence, an accepted receipt stops with the

@@ -1,5 +1,6 @@
 import { Ajv } from "ajv";
 
+import { ___ConversationToolArgumentsSchema } from "@opencrane/contracts";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { DeferredToolApprovalProjection } from "./deferred-tool-approval-projection.types";
@@ -186,14 +187,21 @@ export function __IsDeferredToolApprovalReplacementAllowed(parametersSchema: Jso
 export function __ProjectDeferredToolApproval(parametersSchema: JsonValue, argumentsValue: JsonValue): DeferredToolApprovalProjection
 {
 	if (!__IsDeferredToolApprovalReplacementAllowed(parametersSchema))
-	{
-		return {
-			proposedArguments: null,
-			responseSchema: { oneOf: [{ type: "object", additionalProperties: false, required: ["decision"], properties: { decision: { const: "denied" } } }] },
-		};
-	}
+		return _DenialOnlyProjection();
+	const proposedArguments = ___ConversationToolArgumentsSchema.safeParse(___CloneCanonicalJson(_safeArguments(argumentsValue, parametersSchema)));
+	if (!proposedArguments.success)
+		return _DenialOnlyProjection();
 	return {
-		proposedArguments: ___CloneCanonicalJson(_safeArguments(argumentsValue, parametersSchema)),
+		proposedArguments: proposedArguments.data,
 		responseSchema: ___CloneCanonicalJson(_responseSchema(parametersSchema)),
+	};
+}
+
+/** Hide the proposal and accept only denial when an actor cannot review every value. */
+function _DenialOnlyProjection(): DeferredToolApprovalProjection
+{
+	return {
+		proposedArguments: null,
+		responseSchema: { oneOf: [{ type: "object", additionalProperties: false, required: ["decision"], properties: { decision: { const: "denied" } } }] },
 	};
 }

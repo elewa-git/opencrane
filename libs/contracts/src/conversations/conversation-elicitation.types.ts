@@ -1,4 +1,4 @@
-import type { JsonValue } from "@opencrane/util";
+import type { ConversationToolProposal } from "./conversation-tool-proposal.types";
 
 /** Version of the browser-safe, replayable conversation elicitation envelope. */
 export const CONVERSATION_ELICITATION_VERSION = "opencrane.elicitation.v1";
@@ -68,6 +68,13 @@ export interface ElicitationApprovalBody
 	readonly target: string;
 	/** Plain-language description of data sent or changed. */
 	readonly dataUse: string;
+	/**
+	 * Shows the arguments that IAM admitted for review when this tool request was created.
+	 * An object contains the complete reviewable proposal. Null means secret fields prevented
+	 * disclosure, so the participant may deny but must not approve. Other approval purposes omit
+	 * this field. A browser sends only its decision; it cannot replace these saved arguments.
+	 */
+	readonly proposedArguments?: ConversationToolProposal["arguments"] | null;
 	/** External system label, when an external system is involved. */
 	readonly externalSystem?: string;
 	/** Plain-language consequence of approval. */

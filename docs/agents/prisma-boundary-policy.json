@@ -1280,6 +1280,18 @@
 						"importPath": "@opencrane/backend/server/iam/authorization"
 					}
 				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/computers/turns/approval-notifications/prisma-conversation-approval-notification-unit-of-work.ts",
+				"adapter": "PrismaConversationApprovalNotificationRepository",
+				"contract": "ConversationApprovalNotificationRequestReader",
+				"contractImportPath": "./conversation-approval-notification.types",
+				"constructs": [
+					{
+						"adapter": "PrismaElicitationRepository",
+						"importPath": "@opencrane/backend/agents/execution/elicitation"
+					}
+				]
 			}
 		],
 		"unitsOfWork": [
@@ -2099,6 +2111,18 @@
 				"constructs": [
 					{
 						"adapter": "PrismaConversationToolResultsRepository",
+						"importPath": "<same-file>"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/computers/turns/approval-notifications/prisma-conversation-approval-notification-unit-of-work.ts",
+				"adapter": "PrismaConversationApprovalNotificationUnitOfWork",
+				"contract": "ConversationApprovalNotificationRequestReader",
+				"contractImportPath": "./conversation-approval-notification.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationApprovalNotificationRepository",
 						"importPath": "<same-file>"
 					}
 				]

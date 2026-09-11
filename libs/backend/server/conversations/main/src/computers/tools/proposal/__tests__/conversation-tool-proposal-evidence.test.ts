@@ -59,6 +59,7 @@ function _fixture()
 	const transaction = {
 		agentRun: { findFirst: vi.fn().mockResolvedValue(run) },
 		runInputSnapshot: { findFirst: vi.fn().mockResolvedValue(snapshot) },
+		mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ name: tool.name, description: tool.description, serverRevision: { server: { name: "Records" } } }) },
 		toolInvocation: { findUnique: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0) },
 	};
 	const reader = new PrismaConversationToolProposalRunRepository(transaction as unknown as Prisma.TransactionClient);
@@ -71,7 +72,7 @@ describe("proposal run and slot evidence", function _suite()
 	{
 		const f = _fixture();
 		f.proposal = { ...f.proposal, tool: { ...f.proposal.tool, requiresApproval: true } };
-		await expect(f.reader.load(f.turn, f.candidate, f.proposal)).resolves.toEqual({ subject: f.subject, agentRevisionId: "revision-1" });
+		await expect(f.reader.load(f.turn, f.candidate, f.proposal)).resolves.toEqual({ subject: f.subject, agentRevisionId: "revision-1", approvalDisclosure: { toolName: "records.read", toolDescription: "Read a record", serverName: "Records" } });
 		expect(f.transaction.agentRun.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: {
 			id: "run-1", attempt: 1, siloId: "silo-1", state: AgentRunState.Running,
 			conversationId: "conversation-1", agentIdentityId: "identity-1", agentServiceId: "service-1",
@@ -80,6 +81,7 @@ describe("proposal run and slot evidence", function _suite()
 			runId: "run-1", attempt: 1, digest: f.run.inputSnapshotDigest, siloId: "silo-1",
 			agentRevisionId: "revision-1", agentIdentityId: "identity-1", principalId: "person-1", conversationId: "conversation-1",
 		} }));
+		expect(f.transaction.mcpToolRevision.findFirst).toHaveBeenCalledWith({ where: { id: "tool-1", siloId: "silo-1" }, select: { name: true, description: true, serverRevision: { select: { server: { select: { name: true } } } } } });
 	});
 
 	it("lets an identical retry use its occupied slot but refuses a changed request", async function _savedSlot()
@@ -112,6 +114,29 @@ describe("proposal run and slot evidence", function _suite()
 		expect(f.transaction.toolInvocation.findUnique).not.toHaveBeenCalled();
 	});
 
+	it("rejects changed descriptive metadata before opening an approval", async function _ChangedApprovalMetadata()
+	{
+		const f = _fixture();
+		f.proposal = { ...f.proposal, tool: { ...f.proposal.tool, requiresApproval: true } };
+		f.transaction.runInputSnapshot.findFirst.mockResolvedValue({ ...f.snapshot, mcpTools: [{ ...f.snapshot.mcpTools[0], description: "A different description" }] });
+		await expect(f.reader.load(f.turn, f.candidate, f.proposal)).rejects.toThrow("conversation_tool_proposal_invalid");
+		expect(f.transaction.mcpToolRevision.findFirst).not.toHaveBeenCalled();
+		f.transaction.runInputSnapshot.findFirst.mockResolvedValue(f.snapshot);
+		f.transaction.mcpToolRevision.findFirst.mockResolvedValue({ name: f.proposal.tool.name, description: f.proposal.tool.description, serverRevision: { server: { name: "Another silo's server" } } });
+		await expect(f.reader.load(f.turn, f.candidate, f.proposal)).resolves.toMatchObject({ approvalDisclosure: { serverName: "Another silo's server" } });
+		expect(f.transaction.mcpToolRevision.findFirst).toHaveBeenLastCalledWith(expect.objectContaining({ where: { id: "tool-1", siloId: "silo-1" } }));
+	});
+
+	it("rejects missing or changed stored tool metadata for an approval", async function _MissingApprovalMetadata()
+	{
+		const f = _fixture();
+		f.proposal = { ...f.proposal, tool: { ...f.proposal.tool, requiresApproval: true } };
+		f.transaction.mcpToolRevision.findFirst.mockResolvedValue(null);
+		await expect(f.reader.load(f.turn, f.candidate, f.proposal)).rejects.toThrow("conversation_tool_proposal_invalid");
+		f.transaction.mcpToolRevision.findFirst.mockResolvedValue({ name: "changed.name", description: f.proposal.tool.description, serverRevision: { server: { name: "Records" } } });
+		await expect(f.reader.load(f.turn, f.candidate, f.proposal)).rejects.toThrow("conversation_tool_proposal_invalid");
+	});
+
 	it("propagates an unavailable database instead of treating it as a refused proposal", async function _failedRead()
 	{
 		const f = _fixture();
@@ -125,7 +150,7 @@ describe("proposal permission evidence", function _evidence()
 	it("binds each new permission decision without changing the saved retry identity", function _retryEvidence()
 	{
 		const f = _fixture();
-		const run = { subject: f.subject, agentRevisionId: "revision-1" };
+		const run = { subject: f.subject, agentRevisionId: "revision-1", approvalDisclosure: null };
 		const proposal = { ...f.proposal, tool: { ...f.proposal.tool, requiresApproval: true } };
 		const coordinate = { resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: "tool-1" }, action: ProductAuthorizationActions.Invoke } as const;
 		const first = _CreateConversationToolProposalIntent(f.turn, run, proposal, coordinate, ___DigestCanonicalJson("first-decision"));

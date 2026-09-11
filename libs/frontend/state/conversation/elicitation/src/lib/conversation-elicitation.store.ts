@@ -1,6 +1,6 @@
-import { Injectable, computed, inject, signal } from "@angular/core";
+import { DestroyRef, Injectable, computed, inject, signal } from "@angular/core";
 
-import { ElicitationRequestStates, type ConversationElicitation, type ElicitationResponseValue } from "@opencrane/contracts";
+import { ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation, type ElicitationResponseValue } from "@opencrane/contracts";
 
 import { ElicitationGatewayError, ElicitationGatewayErrorKinds } from "./elicitation-gateway.errors";
 import { ELICITATION_GATEWAY } from "./opencrane-conversation-elicitation.gateway";
@@ -26,6 +26,8 @@ export class ConversationElicitationStore
 {
 	/** The signed-in participant's elicitation API port: read the request, send the response. */
 	private readonly _gateway = inject(ELICITATION_GATEWAY);
+	/** Ends selected-conversation reads when the component-scoped store is destroyed. */
+	private readonly _destroyRef = inject(DestroyRef);
 	/** The request as the server last described it, or null when there is none to answer. */
 	private readonly _elicitation = signal<ConversationElicitation | null>(null);
 	/**
@@ -35,6 +37,8 @@ export class ConversationElicitationStore
 	private readonly _draft = signal<ElicitationResponseValue | null>(null);
 	/** True while a submission is in flight. Blocks a second submission of the same answer. */
 	private readonly _busy = signal(false);
+	/** True after the displayed response deadline while authority is being re-read once. */
+	private readonly _deadlineReached = signal(false);
 	/** Message for the last failed load or submit, already safe to display. Null when nothing failed. */
 	private readonly _error = signal<string | null>(null);
 	/** Where to send the participant to sign in again, when the server demanded step-up for this answer. Null when no step-up is pending. */
@@ -45,7 +49,19 @@ export class ConversationElicitationStore
 	 * Counts loads and clears. A command captures it before it starts and compares afterwards, so a
 	 * response for a request that is no longer on screen is dropped instead of applied.
 	 */
-	private _generation = 0;
+	private _scopeGeneration = 0;
+	/** Orders discovery and reconciliation reads without cancelling an uncertain response mutation. */
+	private _readGeneration = 0;
+	/** Cancels the current discovery or exact-request read when a newer read replaces it. */
+	private _readAbort: AbortController | null = null;
+	/** Selected conversation whose private request may be retained across harmless refreshes. */
+	private _conversationId: string | null = null;
+	/** Request whose response command currently owns the busy flag. */
+	private _busyRequestId: string | null = null;
+	/** One selected-request deadline refresh; this is not a periodic poll. */
+	private _expiryTimer: ReturnType<typeof setTimeout> | null = null;
+	/** Request that already consumed its sole deadline-triggered authority read. */
+	private _deadlineRefreshRequestId: string | null = null;
 
 	/** The request on screen, for the card to render its question and its state. */
 	public readonly elicitation = this._elicitation.asReadonly();
@@ -53,6 +69,8 @@ export class ConversationElicitationStore
 	public readonly draft = this._draft.asReadonly();
 	/** Whether a submission is in flight, so the card can disable its submit control. */
 	public readonly busy = this._busy.asReadonly();
+	/** Whether the displayed deadline has passed, so controls stop admitting stale drafts immediately. */
+	public readonly deadlineReached = this._deadlineReached.asReadonly();
 	/** The last load or submit failure message to show, or null. */
 	public readonly error = this._error.asReadonly();
 	/** Set only while a step-up sign-in is owed before the answer can be accepted. */
@@ -62,6 +80,63 @@ export class ConversationElicitationStore
 	/** True when an answer is chosen, nothing is in flight, and the request is still open. */
 	public readonly canSubmit = computed(this._CanSubmit.bind(this));
 
+	/** Clear private browser state and cancellable reads when the owning page is destroyed. */
+	public constructor() { this._destroyRef.onDestroy(this.clear.bind(this)); }
+
+	/**
+	 * Discover the oldest open request for one selected conversation through current server authority.
+	 *
+	 * A refresh keeps the participant's draft when the same request remains open. When the open list is
+	 * empty, the store re-reads its displayed request by that request's real coordinate so an expiry or
+	 * denial can replace stale editable controls. Approval-log identifiers never enter this method.
+	 *
+	 * Called by: `ConversationWorkspaceSelectionCoordinator`, once on selection and whenever an
+	 * approval log changes the selected conversation's history.
+	 *
+	 * @param conversationId - The currently selected readable conversation.
+	 * @returns Resolves after the latest read adopts an open or terminal authoritative projection.
+	 */
+	public async refresh(conversationId: string): Promise<void>
+	{
+		if (this._conversationId !== conversationId)
+			this._ResetScope(conversationId);
+		const current = this._elicitation();
+		const read = this._StartRead();
+		this._error.set(null);
+		try
+		{
+			const open = await this._gateway.listOpen(conversationId, read.signal);
+			if (!this._CurrentRead(read.generation, conversationId))
+				return;
+			const retained = current === null ? undefined : open.find(function _SameRequest(candidate) { return candidate.requestId === current.requestId; });
+			const next = retained ?? open[0];
+			if (next !== undefined)
+			{
+				this._Adopt(next);
+				return;
+			}
+			if (current !== null && current.conversationId === conversationId)
+			{
+				const terminal = await this._gateway.read(conversationId, current.requestId, read.signal);
+				if (this._CurrentRead(read.generation, conversationId))
+					this._Adopt(terminal);
+			}
+			else this._elicitation.set(null);
+		}
+		catch (error)
+		{
+			if (this._CurrentRead(read.generation, conversationId) && !read.signal.aborted)
+			{
+				if (error instanceof ElicitationGatewayError && error.kind === ElicitationGatewayErrorKinds.Forbidden)
+				{
+					this._ResetScope(null);
+					return;
+				}
+				this._error.set(error instanceof Error ? error.message : "OpenCrane could not load this approval.");
+			}
+		}
+	}
+
 	/**
 	 * Reads one request from the server and shows it.
 	 *
@@ -70,8 +145,8 @@ export class ConversationElicitationStore
 	 * re-reading the same request must not wipe an answer the participant is in the middle of choosing.
 	 * The generation captured at the start means a slow read that has been overtaken is discarded.
 	 *
-	 * Called by: `ConversationWorkspacePresenter._OpenComposedState`, with the first pending interrupt
-	 * from the live stream, and {@link recoverAfterStepUp}.
+	 * Called by: {@link recoverAfterStepUp} for exact-request reconciliation after verified sign-in and
+	 * by the selected request's one-shot deadline callback.
 	 *
 	 * @param conversationId - The conversation the request belongs to.
 	 * @param requestId - The request to read.
@@ -80,16 +155,29 @@ export class ConversationElicitationStore
 	 */
 	public async load(conversationId: string, requestId: string): Promise<void>
 	{
-		const generation = ++this._generation;
+		if (this._conversationId !== conversationId)
+			this._ResetScope(conversationId);
+		const read = this._StartRead();
 		this._error.set(null);
 		try
 		{
-			const elicitation = await this._gateway.read(conversationId, requestId);
-			if (generation !== this._generation) return;
-			if (this._elicitation()?.requestId !== elicitation.requestId) this._draft.set(null);
-			this._elicitation.set(elicitation);
+			const elicitation = await this._gateway.read(conversationId, requestId, read.signal);
+			if (!this._CurrentRead(read.generation, conversationId))
+				return;
+			this._Adopt(elicitation);
 		}
-		catch { if (generation === this._generation) this._error.set("OpenCrane could not load this question."); }
+		catch (error)
+		{
+			if (this._CurrentRead(read.generation, conversationId) && !read.signal.aborted)
+			{
+				if (error instanceof ElicitationGatewayError && error.kind === ElicitationGatewayErrorKinds.Forbidden)
+				{
+					this._ResetScope(null);
+					return;
+				}
+				this._error.set("OpenCrane could not load this question.");
+			}
+		}
 	}
 
 	/**
@@ -106,7 +194,10 @@ export class ConversationElicitationStore
 	public select(response: ElicitationResponseValue): void
 	{
 		const elicitation = this._elicitation();
-		if (elicitation === null || elicitation.state !== ElicitationRequestStates.Requested || response.kind !== elicitation.body.kind) return;
+		if (elicitation === null || elicitation.state !== ElicitationRequestStates.Requested || response.kind !== elicitation.body.kind)
+			return;
+		if (response.kind === ElicitationBodyKinds.Approval && elicitation.body.kind === ElicitationBodyKinds.Approval && response.approved && (elicitation.body.proposedArguments === null || (elicitation.purpose === ElicitationPurposes.ToolApproval && elicitation.body.proposedArguments === undefined)))
+			return;
 		this._draft.set(response);
 		this._error.set(null);
 	}
@@ -133,8 +224,13 @@ export class ConversationElicitationStore
 		// 1. Refuse unless there is an answer to send and the request is still open.
 		const elicitation = this._elicitation();
 		const draft = this._draft();
-		if (elicitation === null || draft === null || !this._CanSubmit()) return false;
-		const generation = this._generation;
+		if (elicitation === null || draft === null || !this._CanSubmit())
+			return false;
+		const scopeGeneration = this._scopeGeneration;
+		this._readGeneration += 1;
+		this._readAbort?.abort();
+		this._readAbort = null;
+		this._busyRequestId = elicitation.requestId;
 		this._busy.set(true);
 		this._error.set(null);
 		try
@@ -142,7 +238,8 @@ export class ConversationElicitationStore
 			// 2. Send the answer with a fresh idempotency key, so the server can recognise a duplicate.
 			const projection = await this._gateway.respond(elicitation.conversationId, elicitation.requestId, { idempotencyKey: globalThis.crypto.randomUUID(), response: draft });
 			// 3. Drop the result if the store moved on, or if it answers a different request.
-			if (generation !== this._generation || projection.requestId !== this._elicitation()?.requestId) return false;
+			if (scopeGeneration !== this._scopeGeneration || projection.requestId !== this._elicitation()?.requestId)
+				return false;
 			// 4. Take the server's resolved state and time, then let the answer and any step-up go.
 			this._elicitation.update(function _Terminal(current) { return current === null ? null : { ...current, state: projection.state, resolvedAt: projection.resolvedAt }; });
 			this._draft.set(null);
@@ -151,7 +248,8 @@ export class ConversationElicitationStore
 		}
 		catch (error)
 		{
-			if (generation !== this._generation) return false;
+			if (scopeGeneration !== this._scopeGeneration)
+				return false;
 			// 5. A step-up demand keeps the answer and points the page at reauthentication instead.
 			if (error instanceof ElicitationGatewayError && error.kind === ElicitationGatewayErrorKinds.StepUpRequired)
 			{
@@ -162,10 +260,17 @@ export class ConversationElicitationStore
 			}
 			// 6. Any other failure may still have been applied, so re-read and show what the server has.
 			this._error.set(error instanceof Error ? error.message : "OpenCrane could not save this response.");
-			await this._Reconcile(elicitation, generation);
+			await this._Reconcile(elicitation, scopeGeneration);
 			return false;
 		}
-		finally { if (generation === this._generation) this._busy.set(false); }
+		finally
+		{
+			if (scopeGeneration === this._scopeGeneration && this._busyRequestId === elicitation.requestId)
+			{
+				this._busyRequestId = null;
+				this._busy.set(false);
+			}
+		}
 	}
 
 	/**
@@ -183,7 +288,8 @@ export class ConversationElicitationStore
 	public async recoverAfterStepUp(): Promise<void>
 	{
 		const current = this._elicitation();
-		if (current === null) return;
+		if (current === null)
+			return;
 		this._stepUpPath.set(null);
 		await this.load(current.conversationId, current.requestId);
 	}
@@ -211,20 +317,98 @@ export class ConversationElicitationStore
 	 */
 	public clear(): void
 	{
-		this._generation += 1;
+		this._ResetScope(null);
+	}
+
+	/** Replace the selected private scope and stop reads that still belong to the previous one. */
+	private _ResetScope(conversationId: string | null): void
+	{
+		this._scopeGeneration += 1;
+		this._readGeneration += 1;
+		this._readAbort?.abort();
+		this._readAbort = null;
+		this._conversationId = conversationId;
+		this._busyRequestId = null;
+		if (this._expiryTimer !== null)
+			clearTimeout(this._expiryTimer);
+		this._expiryTimer = null;
+		this._deadlineRefreshRequestId = null;
 		this._elicitation.set(null);
 		this._draft.set(null);
 		this._busy.set(false);
+		this._deadlineReached.set(false);
 		this._error.set(null);
 		this._stepUpPath.set(null);
 		this._restoreFocusRequestId.set(null);
+	}
+
+	/** Begin one cancellable authority read and make every earlier read stale. */
+	private _StartRead(): { readonly generation: number; readonly signal: AbortSignal }
+	{
+		this._readAbort?.abort();
+		const abort = new AbortController();
+		this._readAbort = abort;
+		return { generation: ++this._readGeneration, signal: abort.signal };
+	}
+
+	/** Check that a read still belongs to the current selected conversation and latest request. */
+	private _CurrentRead(generation: number, conversationId: string): boolean
+	{
+		return generation === this._readGeneration && conversationId === this._conversationId;
+	}
+
+	/** Adopt server-owned state while retaining a draft only for the same still-open request. */
+	private _Adopt(elicitation: ConversationElicitation): void
+	{
+		const previous = this._elicitation();
+		if (previous?.requestId !== elicitation.requestId || elicitation.state !== ElicitationRequestStates.Requested)
+			this._draft.set(null);
+		this._elicitation.set(elicitation);
+		this._ScheduleExpiry(elicitation);
+		if (elicitation.state !== ElicitationRequestStates.Requested)
+			this._stepUpPath.set(null);
+	}
+
+	/** Schedule one authority read at the selected request's deadline and disable stale submission. */
+	private _ScheduleExpiry(elicitation: ConversationElicitation): void
+	{
+		if (this._expiryTimer !== null)
+			clearTimeout(this._expiryTimer);
+		this._expiryTimer = null;
+		this._deadlineReached.set(false);
+		if (elicitation.state !== ElicitationRequestStates.Requested)
+			return;
+		if (this._deadlineRefreshRequestId === elicitation.requestId)
+		{
+			this._deadlineReached.set(true);
+			return;
+		}
+		const remaining = Math.max(0, Date.parse(elicitation.expiresAt) - Date.now());
+		this._expiryTimer = setTimeout(this._RefreshExpiredRequest.bind(this, elicitation.conversationId, elicitation.requestId), Math.min(remaining, 2_147_483_647));
+	}
+
+	/** Disable the expired draft, then re-read its authoritative terminal projection exactly once. */
+	private _RefreshExpiredRequest(conversationId: string, requestId: string): void
+	{
+		this._expiryTimer = null;
+		if (this._conversationId !== conversationId || this._elicitation()?.requestId !== requestId)
+			return;
+		const expiresAt = Date.parse(this._elicitation()?.expiresAt ?? "");
+		if (Number.isFinite(expiresAt) && Date.now() < expiresAt)
+		{
+			this._ScheduleExpiry(this._elicitation()!);
+			return;
+		}
+		this._deadlineRefreshRequestId = requestId;
+		this._deadlineReached.set(true);
+		void this.load(conversationId, requestId);
 	}
 
 	/**
 	 * Decides whether the answer can be sent: nothing in flight, an answer chosen, and the request still
 	 * in `Requested` state — so a question the server has already resolved cannot be answered again.
 	 */
-	private _CanSubmit(): boolean { return !this._busy() && this._draft() !== null && this._elicitation()?.state === ElicitationRequestStates.Requested; }
+	private _CanSubmit(): boolean { return !this._busy() && !this._deadlineReached() && this._draft() !== null && this._elicitation()?.state === ElicitationRequestStates.Requested; }
 
 	/**
 	 * Re-reads the request after a submit failed, to find out whether it landed anyway.
@@ -233,13 +417,20 @@ export class ConversationElicitationStore
 	 * the server's own copy is the only way to tell. If this read also fails, the state is left as it was
 	 * and the submit error stays on screen for the participant to retry.
 	 */
-	private async _Reconcile(elicitation: ConversationElicitation, generation: number): Promise<void>
+	private async _Reconcile(elicitation: ConversationElicitation, scopeGeneration: number): Promise<void>
 	{
+		const read = this._StartRead();
 		try
 		{
-			const current = await this._gateway.read(elicitation.conversationId, elicitation.requestId);
-			if (generation === this._generation) this._elicitation.set(current);
+			const current = await this._gateway.read(elicitation.conversationId, elicitation.requestId, read.signal);
+			if (scopeGeneration === this._scopeGeneration && this._CurrentRead(read.generation, elicitation.conversationId))
+				this._Adopt(current);
 		}
-		catch { /* The bounded action error remains visible for explicit retry. */ }
+		catch (error)
+		{
+			if (scopeGeneration === this._scopeGeneration && this._CurrentRead(read.generation, elicitation.conversationId) && error instanceof ElicitationGatewayError && error.kind === ElicitationGatewayErrorKinds.Forbidden)
+				this._ResetScope(null);
+			/* Other failures leave the bounded action error visible for explicit retry. */
+		}
 	}
 }

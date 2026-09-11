@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { ElicitationBodyKinds } from "@opencrane/contracts";
+import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates } from "@opencrane/contracts";
 
 import { __CreateSelfElicitationActivityRouter, __CreateSelfElicitationRouter } from "../self-elicitation.router";
 import type { SelfElicitationRouterDependencies } from "../self-elicitation.router.types";
@@ -71,6 +71,31 @@ describe("__CreateSelfElicitationRouter", function _Suite()
 		expect(response.status).toBe(200);
 		expect(response.body).toEqual({ elicitation: { requestId: "request-1" } });
 		expect(dependencies.elicitations.readOwned).toHaveBeenCalledWith("silo-1", "conversation-1", "request-1", "user-1", new Date("2026-08-11T10:00:00.000Z"));
+	});
+
+	it("returns the frozen display-safe approval body without protected purpose fields", async function _ReadsApprovalDisclosure()
+	{
+		const elicitation = {
+			version: CONVERSATION_ELICITATION_VERSION,
+			requestId: "request-1",
+			conversationId: "conversation-1",
+			runId: "run-1",
+			attempt: 1,
+			assignedParticipantId: "user-1",
+			purpose: ElicitationPurposes.ToolApproval,
+			state: ElicitationRequestStates.Requested,
+			body: { kind: ElicitationBodyKinds.Approval, prompt: "Allow this tool?", action: "Invoke tool", target: "records.update", dataUse: "The displayed arguments will be sent.", externalSystem: "Records", consequence: "This invokes the tool once.", proposedArguments: { recordId: "record-1" } },
+			requiresStepUp: true,
+			requestedAt: "2026-08-11T10:00:00.000Z",
+			expiresAt: "2026-08-11T10:05:00.000Z",
+		};
+		const dependencies = _Dependencies({ elicitations: _Elicitations({ readOwned: vi.fn().mockResolvedValue(elicitation) }) });
+
+		const response = await request(_App(dependencies)).get("/api/v1/me/conversations/conversation-1/elicitations/request-1");
+
+		expect(response.status).toBe(200);
+		expect(response.body).toEqual({ elicitation });
+		expect(JSON.stringify(response.body)).not.toMatch(/purposePayload|reviewedToolArguments|responseSchema|toolRevisionId|profileId|secret/i);
 	});
 
 	it("rejects browser-supplied authority and passes only the typed answer", async function _Responds()

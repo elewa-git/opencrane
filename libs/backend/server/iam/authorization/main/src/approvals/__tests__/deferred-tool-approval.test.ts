@@ -159,9 +159,12 @@ describe("deferred tool approval authority", function _suite()
 		const invocation = _invocation({ arguments: reviewedArguments, argumentsDigest: __DigestCanonicalJson(reviewedArguments) });
 		const { transaction, updateMany, invocationUpdateMany } = _transaction(approval, 1, invocation);
 
-		await expect(__DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", reviewerSubjectId: "user-1", decision: DeferredToolDecisionKinds.Approved, arguments: { token: "replacement" }, decidedBy: "user-1", now: NOW })).resolves.toEqual({ outcome: "invalid_arguments" });
+		await expect(__DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", reviewerSubjectId: "user-1", decision: DeferredToolDecisionKinds.Approved, arguments: reviewedArguments, decidedBy: "user-1", now: NOW })).resolves.toEqual({ outcome: "invalid_arguments" });
 		expect(updateMany).not.toHaveBeenCalled();
 		expect(invocationUpdateMany).not.toHaveBeenCalled();
+		const denied = _transaction(approval, 1, invocation);
+		await expect(__DecideDeferredToolRequest(denied.transaction, { approvalRequestId: "approval-1", siloId: "silo-1", reviewerSubjectId: "user-1", decision: DeferredToolDecisionKinds.Denied, decidedBy: "user-1", now: NOW })).resolves.toEqual({ outcome: "denied" });
+		expect(denied.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ApprovalRequestState.Denied }) }));
 	});
 
 	it("rejects a handcrafted approval whose persisted response policy differs from its frozen schema", async function _forgedResponsePolicy()
@@ -280,7 +283,7 @@ const ACTIVE_LEASE = { siloId: "silo-1", conversationId: "conversation-1", compu
 function _deferCommand(): Parameters<typeof __DeferToolRequest>[1]
 {
 	const schema = { type: "object", properties: { query: { type: "string" } } };
-	return { interruptId: "approval-existing", runId: "run-1", attempt: 2, toolInvocationRowId: "tool-1", toolRevisionId: "integration:search:query", reviewedArguments: { query: "original" }, argumentsDigest: __DigestCanonicalJson({ query: "original" }), reviewedParametersSchema: schema, reviewedParametersSchemaDigest: __DigestCanonicalJson(schema), safeProposedArguments: { query: "original" }, responseSchema: { type: "object" }, actionDigest: "invocation-1", effectivePolicyDigest: "sha256:cap", approverPolicyRevision: "integration-tools-require-approval", now: NOW, expiresAt: new Date("2026-07-22T09:00:00.000Z") };
+	return { interruptId: "approval-existing", runId: "run-1", attempt: 2, toolInvocationRowId: "tool-1", toolRevisionId: "integration:search:query", toolName: "records.search", toolDescription: "Search the saved records", externalSystemName: "Records", reviewedArguments: { query: "original" }, argumentsDigest: __DigestCanonicalJson({ query: "original" }), reviewedParametersSchema: schema, reviewedParametersSchemaDigest: __DigestCanonicalJson(schema), safeProposedArguments: { query: "original" }, responseSchema: { type: "object" }, actionDigest: "invocation-1", effectivePolicyDigest: "sha256:cap", approverPolicyRevision: "integration-tools-require-approval", now: NOW, expiresAt: new Date("2026-07-22T09:00:00.000Z") };
 }
 
 describe("defer tool request authority", function _deferSuite()
@@ -305,9 +308,59 @@ describe("defer tool request authority", function _deferSuite()
 		expect(result).toEqual({ outcome: "deferred", approvalRequestId: "approval-9" });
 		expect(pause).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 2, state: AgentRunState.Running }, data: { state: AgentRunState.WaitingForInput } });
 		expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ApprovalRequestState.Pending, toolInvocationRowId: "tool-1", resourceKind: "tool", resourceId: "integration:search:query", expiresAt: ACTIVE_LEASE.expiresAt }) }));
+		const elicitationCreate = transaction.elicitationRequest.create as unknown as ReturnType<typeof vi.fn>;
+		const expectedBody = {
+			kind: "approval",
+			prompt: "Allow this agent to invoke the reviewed tool?",
+			action: "Invoke tool",
+			target: "records.search",
+			dataUse: "The proposed arguments shown in this request will be sent to the tool.",
+			externalSystem: "Records",
+			consequence: "This invokes the external tool once. Its saved description says: Search the saved records",
+			proposedArguments: { query: "original" },
+		};
+		expect(elicitationCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ body: expectedBody, bodyDigest: __DigestCanonicalJson(expectedBody) }) });
 		expect(transaction.conversationComputerActiveLease.findUnique).toHaveBeenCalledTimes(1);
 		expect(transaction.conversationComputerActiveLease.findUnique).toHaveBeenCalledWith({ where: { computerId: "computer-1" }, select: { expiresAt: true } });
 		expect(_managedGrantMocks.reconcile).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ siloId: "silo-1", managerId: "deferred-tool-approval-assignee", resource: { kind: "approval-request", id: "approval-9" }, grants: [expect.objectContaining({ capability: expect.objectContaining({ capabilityId: "approval-request:read" }), createdByPrincipalId: "principal-1" }), expect.objectContaining({ capability: expect.objectContaining({ capabilityId: "approval-request:decide" }), createdByPrincipalId: "principal-1" })] }));
+	});
+
+	it("freezes denial-only disclosure without storing a secret value", async function _SecretDisclosure()
+	{
+		const reviewedParametersSchema = { type: "object", required: ["token"], properties: { token: { type: "string", writeOnly: true } } };
+		const projection = __ProjectDeferredToolApproval(reviewedParametersSchema, { token: "never-visible" });
+		const command = { ..._deferCommand(), reviewedArguments: { token: "never-visible" }, argumentsDigest: __DigestCanonicalJson({ token: "never-visible" }), reviewedParametersSchema, reviewedParametersSchemaDigest: __DigestCanonicalJson(reviewedParametersSchema), safeProposedArguments: projection.proposedArguments, responseSchema: projection.responseSchema };
+		const elicitationCreate = vi.fn().mockResolvedValue({ id: "approval-existing" });
+		const transaction = {
+			agentRun: { findUnique: vi.fn().mockResolvedValue(RUN), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+			conversationComputerActiveLease: _ActiveLeaseDelegate(ACTIVE_LEASE),
+			elicitationRequest: { create: elicitationCreate },
+			approvalRequest: { create: vi.fn().mockResolvedValue({ id: "approval-9" }), findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0) },
+			principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },
+			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation({ arguments: command.reviewedArguments, argumentsDigest: command.argumentsDigest })) },
+		} as unknown as Prisma.TransactionClient;
+
+		await expect(__DeferToolRequest(transaction, command)).resolves.toMatchObject({ outcome: "deferred" });
+		const saved = elicitationCreate.mock.calls[0]?.[0].data;
+		expect(saved.body).toMatchObject({ proposedArguments: null, dataUse: expect.stringContaining("can only be denied") });
+		expect(JSON.stringify(saved)).not.toContain("never-visible");
+		expect(saved.responseSchema).toBeUndefined();
+	});
+
+	it("replays the original request without replacing its frozen disclosure", async function _FrozenReplay()
+	{
+		const elicitationCreate = vi.fn();
+		const transaction = {
+			agentRun: { findUnique: vi.fn().mockResolvedValue(RUN) },
+			conversationComputerActiveLease: _ActiveLeaseDelegate(ACTIVE_LEASE),
+			elicitationRequest: { create: elicitationCreate },
+			approvalRequest: { create: vi.fn(), findFirst: vi.fn().mockResolvedValue({ id: "approval-existing", elicitationRequestId: "approval-existing", argumentsDigest: _deferCommand().argumentsDigest, reviewedToolSchemaDigest: _deferCommand().reviewedParametersSchemaDigest, state: ApprovalRequestState.Pending }), count: vi.fn() },
+			principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },
+			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
+		} as unknown as Prisma.TransactionClient;
+
+		await expect(__DeferToolRequest(transaction, { ..._deferCommand(), externalSystemName: "Renamed records" })).resolves.toEqual({ outcome: "already_deferred", approvalRequestId: "approval-existing" });
+		expect(elicitationCreate).not.toHaveBeenCalled();
 	});
 
 	it.each(["2026-07-21T08:59:59.000Z", "2026-07-21T09:10:00.000Z"])("bounds approval by the independent requester evidence ending at %s", async function _RequesterExpiry(trustedUntil)

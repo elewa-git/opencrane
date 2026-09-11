@@ -1,6 +1,5 @@
-:host { display: block; min-block-size: 0; overflow: hidden; }
-.conversation-workspace__transcript { overflow: auto; display: grid; align-content: start; gap: var(--oc-conversation-content-gap); padding: var(--oc-conversation-transcript-padding); }
+:host { display: block; min-block-size: 0; }
+.conversation-workspace__transcript { display: grid; align-content: start; gap: var(--oc-conversation-content-gap); padding: var(--oc-conversation-transcript-padding); }
 .conversation-workspace__message { display: grid; gap: var(--oc-conversation-message-gap); }
 .conversation-workspace__empty { margin: auto; max-width: var(--oc-conversation-empty-width); padding: var(--oc-conversation-empty-padding); text-align: center; color: var(--p-text-muted-color); }
-.conversation-workspace__transcript { block-size: 100%; }
 @media (max-width: 52rem) { .conversation-workspace__transcript { padding: var(--oc-conversation-content-gap); } }

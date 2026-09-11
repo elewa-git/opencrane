@@ -7,7 +7,7 @@ import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "../../turns/conversation-computer-turn.types";
 import { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
 import { ConversationToolProposalRefusals, type PreparedConversationToolProposal } from "./conversation-tool-proposal.types";
-import type { ConversationToolProposalRun, ConversationToolProposalRunReader } from "./conversation-tool-proposal-run.types";
+import type { ConversationToolApprovalDisclosure, ConversationToolProposalRun, ConversationToolProposalRunReader } from "./conversation-tool-proposal-run.types";
 
 /**
  * Checks the running attempt, its saved input and the proposal slot without writing anything.
@@ -40,14 +40,15 @@ export class PrismaConversationToolProposalRunRepository implements Conversation
 		const parsed = ___ExecutionSubjectSchema.safeParse(run?.executionSubject);
 		if (run === null || !parsed.success)
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
-		const checked = { subject: parsed.data, agentRevisionId: run.agentRevisionId };
-		await this._checkSnapshot(turn, candidate, proposal, checked, run.inputSnapshotDigest);
+		const checked = { subject: parsed.data, agentRevisionId: run.agentRevisionId, approvalDisclosure: null };
+		const frozenTool = await this._checkSnapshot(turn, candidate, proposal, checked, run.inputSnapshotDigest);
 		await this._checkSlot(turn, candidate, proposal);
-		return checked;
+		const approvalDisclosure = proposal.tool.requiresApproval ? await this._readApprovalDisclosure(turn.siloId, frozenTool) : null;
+		return { ...checked, approvalDisclosure };
 	}
 
 	/** Require the proposal's tool and budget to agree with the input saved for this attempt. */
-	private async _checkSnapshot(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: PreparedConversationToolProposal, run: ConversationToolProposalRun, inputSnapshotDigest: string): Promise<void>
+	private async _checkSnapshot(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: PreparedConversationToolProposal, run: ConversationToolProposalRun, inputSnapshotDigest: string): Promise<RunInputSnapshotMcpTool>
 	{
 		const query = {
 			where: {
@@ -72,8 +73,21 @@ export class PrismaConversationToolProposalRunRepository implements Conversation
 			|| !Array.isArray(tools) || !__AreRunInputSnapshotMcpToolsValid(tools as unknown as RunInputSnapshotMcpTool[]))
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 		const frozenTool = (tools as unknown as RunInputSnapshotMcpTool[]).find(tool => tool.toolRevisionId === proposal.tool.toolRevisionId);
-		if (frozenTool === undefined || frozenTool.inputSchemaDigest !== proposal.tool.parametersSchemaDigest || frozenTool.name !== proposal.tool.name)
+		if (frozenTool === undefined || frozenTool.inputSchemaDigest !== proposal.tool.parametersSchemaDigest || frozenTool.name !== proposal.tool.name || (frozenTool.description ?? "") !== proposal.tool.description)
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Invalid);
+		return frozenTool;
+	}
+
+	/** Read the operator-owned server name through the exact silo-bound tool revision. */
+	private async _readApprovalDisclosure(siloId: string, frozenTool: RunInputSnapshotMcpTool): Promise<ConversationToolApprovalDisclosure>
+	{
+		const row = await this.transaction.mcpToolRevision.findFirst({
+			where: { id: frozenTool.toolRevisionId, siloId },
+			select: { name: true, description: true, serverRevision: { select: { server: { select: { name: true } } } } },
+		});
+		if (row === null || row.name !== frozenTool.name || row.description !== frozenTool.description)
+			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Invalid);
+		return { toolName: frozenTool.name, toolDescription: frozenTool.description, serverName: row.serverRevision.server.name };
 	}
 
 	/** Reject a changed retry and prevent a new proposal from taking an occupied call slot. */
