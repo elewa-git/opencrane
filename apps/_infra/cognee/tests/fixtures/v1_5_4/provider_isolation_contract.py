@@ -40,7 +40,7 @@ def document_id(item: dict[str, Any]) -> str:
 def dataset_members(api: DatasetDataReader, dataset_id: str) -> list[dict[str, Any]]:
     members = api.list_data(dataset_id)
     for member in members:
-        if member.get("dataset_id") != dataset_id:
+        if member.get("datasetId") != dataset_id:
             raise AssertionError("Dataset data response contains a member owned by another dataset")
         document_id(member)
     return members

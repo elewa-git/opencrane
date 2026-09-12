@@ -39,6 +39,18 @@ class _Api:
         self.deleted.append((dataset_id, data_id))
 
 
+class _MemberApi:
+    def __init__(self, member: dict[str, str], content: bytes):
+        self.member = member
+        self.content = content
+
+    def list_data(self, _dataset_id: str) -> list[dict[str, str]]:
+        return [self.member]
+
+    def raw(self, _dataset_id: str, _data_id: str) -> bytes:
+        return self.content
+
+
 class _CommittedDeleteAdapter:
     def __init__(self, raw_location: str, original_location: str):
         self.raw_location = raw_location
@@ -56,6 +68,31 @@ class _CommittedDeleteAdapter:
 
 
 class ProviderDeletion154Test(unittest.TestCase):
+    def test_member_discovery_requires_camel_case_dataset_owner(self) -> None:
+        dataset_id = str(uuid.uuid4())
+        data_id = str(uuid.uuid4())
+        content = b"synthetic member"
+        content_digest = MODULE.hashlib.sha256(content).hexdigest()
+
+        discovered = MODULE._only_member_id(
+            _MemberApi({"id": data_id, "datasetId": dataset_id}, content),
+            dataset_id,
+            content_digest,
+        )
+        self.assertEqual(discovered, data_id)
+
+        invalid_members = (
+            {"id": data_id, "datasetId": str(uuid.uuid4())},
+            {"id": data_id, "dataset_id": dataset_id},
+            {"id": data_id},
+        )
+        for member in invalid_members:
+            with self.subTest(member=member):
+                with self.assertRaisesRegex(AssertionError, "exactly one digest-matched"):
+                    MODULE._only_member_id(
+                        _MemberApi(member, content), dataset_id, content_digest
+                    )
+
     def test_injection_occurs_after_commit_and_restores_the_adapter_method(self) -> None:
         dataset_id = str(uuid.uuid4())
         data_id = str(uuid.uuid4())

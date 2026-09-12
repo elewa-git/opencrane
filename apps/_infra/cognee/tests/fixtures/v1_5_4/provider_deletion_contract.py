@@ -205,7 +205,7 @@ def _only_member_id(api: "ProviderApi", dataset_id: str, content_digest: str) ->
     matching = []
     for member in api.list_data(dataset_id):
         data_id = member.get("id")
-        member_dataset_id = member.get("dataset_id")
+        member_dataset_id = member.get("datasetId")
         has_expected_digest = (
             isinstance(data_id, str)
             and hashlib.sha256(api.raw(dataset_id, data_id)).hexdigest() == content_digest

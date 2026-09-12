@@ -101,7 +101,7 @@ subsequent product slices are complete. Local container VMs are not started for 
 
 ### Candidate follow-up: fresh Cognee 1.5.4 qualification
 
-The next source slice starts directly above #863 at
+Draft [#867](https://github.com/elewa-git/opencrane/pull/867) starts directly above #863 at
 `b8f7d7ac902583b6a0a4e348c3189188ecf28149` on
 `feat/0.12-memory-candidate-qualification`. Architecture preflight permits a disposable image and
 contract under the existing Cognee test tree. The production Dockerfile, chart, release manifest
@@ -116,9 +116,17 @@ and interrupted deletion. Every failed proof stays visible; a candidate pass nev
 image or enables personal memory by itself.
 
 The bounded source slice is implemented and independently reviewed. Local Cognee test/lint passes
-with 17 Python tests, image contracts and a regression rejecting a smoke run with no execution
+with 18 Python tests, image contracts and a regression rejecting a smoke run with no execution
 receipt. All 24 affected-deployable tests and the relevant ownership, style, Prisma, module-growth
-and release checks pass. Exact-image CI remains pending.
+and release checks pass.
+
+The first exact-image run, `34608702447` at `5123f591bfecc25fe355e693b78546b985f67480`,
+passed offline image/native-store checks and all 47 installed source hashes. The fixture then
+stopped on a response-field mismatch: Cognee's HTTP dataset records use `datasetId`, while the
+fixture read the internal Python field name `dataset_id`. This did not prove a foreign listing.
+The bounded correction reads the exact HTTP field and keeps dataset ownership strict in both
+control and authenticated modes. Search, authenticated recovery and deletion were not reached;
+the corrected candidate still requires exact-image CI.
 
 The candidate keeps a separate disposable lifecycle because its non-root storage, evidence volume
 and additional restart differ from 1.2.1; API, stub, proxy, attestation and summary helpers remain

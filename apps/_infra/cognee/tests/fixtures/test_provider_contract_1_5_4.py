@@ -17,19 +17,28 @@ DOCUMENT_ID = "b57331b7-25fb-4596-a094-0750f3fb3173"
 
 
 class _Api:
-    def __init__(self, dataset_id: str):
-        self.dataset_id = dataset_id
+    def __init__(self, member: dict[str, str]):
+        self.member = member
 
     def list_data(self, _dataset_id: str) -> list[dict[str, str]]:
-        return [{"id": DOCUMENT_ID, "dataset_id": self.dataset_id}]
+        return [self.member]
 
 
 class CandidateDatasetIdentityTest(unittest.TestCase):
     def test_accepts_only_members_owned_by_the_requested_dataset(self) -> None:
-        members = dataset_members(_Api(DATASET_ID), DATASET_ID)
+        members = dataset_members(
+            _Api({"id": DOCUMENT_ID, "datasetId": DATASET_ID}), DATASET_ID
+        )
         self.assertEqual(members[0]["id"], DOCUMENT_ID)
-        with self.assertRaisesRegex(AssertionError, "owned by another dataset"):
-            dataset_members(_Api("1d7a06d8-b602-48b9-9a79-6a91afbf7048"), DATASET_ID)
+        invalid_members = (
+            {"id": DOCUMENT_ID, "datasetId": "1d7a06d8-b602-48b9-9a79-6a91afbf7048"},
+            {"id": DOCUMENT_ID, "dataset_id": DATASET_ID},
+            {"id": DOCUMENT_ID},
+        )
+        for member in invalid_members:
+            with self.subTest(member=member):
+                with self.assertRaisesRegex(AssertionError, "owned by another dataset"):
+                    dataset_members(_Api(member), DATASET_ID)
 
     def test_deletion_restart_success_retains_prior_qualification(self) -> None:
         validated = {"authorizedDatasetId": DATASET_ID, "sourceGraphDelta": ["graph"]}
