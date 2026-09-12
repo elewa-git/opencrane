@@ -5,7 +5,7 @@
     "declaredVersion": "1.5.4",
     "isOciAttestation": false,
     "repository": "topoteretes/cognee",
-    "scope": "official-tag-source-expectations",
+    "scope": "official-tag-source-with-explicit-candidate-repair",
     "tag": "v1.5.4"
   },
   "modules": {
@@ -29,6 +29,7 @@
     "cognee.infrastructure.files.storage.LocalFileStorage": "5e0a9d26c3634b274436db0b9d950bf2d867d9faeb6bf254ecce0a457d218068",
     "cognee.infrastructure.files.storage.get_file_storage": "c9ff7589606d586025850d538d1d30aecee776ecad6fe6cb26e14be20bfbb953",
     "cognee.infrastructure.files.utils.local_path_safety": "40c7438ca9fbb61496aa5c2efb4e19579dc980f5c7e0828619f413b1c67fbb61",
+    "cognee.infrastructure.locks": "d8bc16e31af2aa5ea8c55e688216b2fa11aa8e36270977c9c4e4821b7ebbde1d",
     "cognee.infrastructure.loaders.core.text_loader": "9dbbe87e463bd735e59a808a825a724db090f2c82d15c1c64fc943bb7025f9e4",
     "cognee.modules.chunking.TextChunker": "4130617364aeff346703d5cf32708a766c27deabf80532409a262bfab8d19f59",
     "cognee.modules.data.methods.delete_data": "52d5e0a7021bc7b108a6ea919cdc32e11d371b37e9b3df68a695eda94ae11f71",
@@ -47,6 +48,7 @@
     "cognee.modules.migrations.versions.adapter_storage_migration": "4b2de3906d42d1d3ccd50780e85f7cc1549b3d48e55644143f8c4c10f844f453",
     "cognee.modules.migrations.versions.ladybug_graph_provenance_columns": "646587511d0ff7637eea711d655a9475c927909d8361c8abeab8c0b644c47c0c",
     "cognee.modules.migrations.versions.rekey_fork_document_ids": "5965b0d8594b2812c99d26e375151e9fcef8270d87010a2f302d2f729df5c6dc",
+    "cognee.modules.pipelines.operations.run_tasks_data_item": "bf994bdf10d4d132ea75db57bd64ea64ced0615cf0177f1e5562f5d71b199ae7",
     "cognee.modules.retrieval.chunks_retriever": "7cb62960a65e39915a21a2b1a72e6dff89fa1dd4be65c18a9cd252bb2d328525",
     "cognee.modules.search.methods.get_search_type_retriever_instance": "f557b9aec1a1156e23828a43b44662c5bd581c0efeff735e85b387a68e4294eb",
     "cognee.modules.search.methods.search": "687c15fc330bde5f262ad8f19d9e979e47bd4abaf24dea066a465243dfabfa58",
@@ -56,5 +58,39 @@
     "cognee.tasks.ingestion.ingest_data": "6493bd63bb7f860684695458c3755c3531a9722612da41a2deb5f5307b52d674",
     "cognee.tasks.ingestion.save_data_item_to_storage": "3979e866334ff639648441adf4afea4e3cbda7a323ce4c792f2f1208558ba6c5",
     "cognee.version": "8ac37d817a40c24611f36726871fb66a78bc2b2968b81caa33a8942ebf391f29"
+  },
+  "repairs": {
+    "cognee.infrastructure.databases.relational.sqlalchemy.SqlAlchemyAdapter": {
+      "baseImageDigest": "sha256:a52b0c2669e28932b53d677a6adf6d6487b03886732a5db07b58f3b869647b10",
+      "preimageSha256": "d64bd2d7214a0c69c8aa40268a0c2536d46cc54bade51b643341f82cb2f078e9",
+      "patchSha256": "08d46750e34abdc9a0cd76d37318fa886b027ef50bb792b0f25f27f526574b50",
+      "postimageSha256": "3d7f8fdc029226ba33919838a522b0325e616d3c3c7820fde828f90c68c8daaf",
+      "patchPath": "/opt/opencrane/cognee-repair/sqlalchemy-delete-recovery.patch",
+      "receiptPath": "/opt/opencrane/cognee-repair/sqlalchemy-delete-recovery.json"
+    },
+    "cognee.infrastructure.locks": {
+      "baseImageDigest": "sha256:a52b0c2669e28932b53d677a6adf6d6487b03886732a5db07b58f3b869647b10",
+      "preimageSha256": "d8bc16e31af2aa5ea8c55e688216b2fa11aa8e36270977c9c4e4821b7ebbde1d",
+      "patchSha256": "0f3ecd0c126b4061bdf5efcc95b54e8ca90f6d0a887d817aa597ea77df0d9b88",
+      "postimageSha256": "5df9e8d38636ae9f0e35978b6327ce1a530d0b949f484b4c1e8dee84fbe61abc",
+      "patchPath": "/opt/opencrane/cognee-repair/locks-export.patch",
+      "receiptPath": "/opt/opencrane/cognee-repair/locks-export.json"
+    },
+    "cognee.infrastructure.locks.managed_data_file_lock": {
+      "baseImageDigest": "sha256:a52b0c2669e28932b53d677a6adf6d6487b03886732a5db07b58f3b869647b10",
+      "preimageSha256": null,
+      "patchSha256": "91c4006d8f69584b809eb1d3351363e8634d7f5068e4dcbcdcb550916e6fc938",
+      "postimageSha256": "c3fbada36b40460f67832da43bf04b9d7e7ce2f56ed81aa01a0fc2b831fd51e7",
+      "patchPath": "/opt/opencrane/cognee-repair/managed-data-file-lock.patch",
+      "receiptPath": "/opt/opencrane/cognee-repair/managed-data-file-lock.json"
+    },
+    "cognee.modules.pipelines.operations.run_tasks_data_item": {
+      "baseImageDigest": "sha256:a52b0c2669e28932b53d677a6adf6d6487b03886732a5db07b58f3b869647b10",
+      "preimageSha256": "bf994bdf10d4d132ea75db57bd64ea64ced0615cf0177f1e5562f5d71b199ae7",
+      "patchSha256": "7eb15e93fa0986d225ce0a3c89001f1c1b671db72c4254a690141edd4c4be312",
+      "postimageSha256": "df8872f1f864b50640f7a083e62c33d29a1c704a8f9df9918702d0b712dedc7b",
+      "patchPath": "/opt/opencrane/cognee-repair/run-tasks-data-item.patch",
+      "receiptPath": "/opt/opencrane/cognee-repair/run-tasks-data-item.json"
+    }
   }
 }

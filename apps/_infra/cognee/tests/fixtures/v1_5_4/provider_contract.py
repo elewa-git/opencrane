@@ -10,6 +10,10 @@ FIXTURE_DIRECTORY = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(FIXTURE_DIRECTORY))
 
 from provider_api import ProviderApi  # noqa: E402
+from v1_5_4.provider_dataset_provisioning_contract import (  # noqa: E402
+    qualify_dataset_provisioning,
+    verify_dataset_provisioning_after_restart,
+)
 from v1_5_4.provider_identity_contract import prepare_identity, recover_identity  # noqa: E402
 from v1_5_4.provider_isolation_contract import prepare_isolation  # noqa: E402
 
@@ -75,13 +79,22 @@ def main() -> None:
                 register=args.phase == "initial",
             )
         if args.phase == "initial":
+            dataset_provisioning = None
+            if args.mode == "acl-enabled":
+                dataset_provisioning = qualify_dataset_provisioning(api, args.namespace)
             evidence = prepare_isolation(api, args.namespace, args.mode)
             if args.mode == "acl-enabled":
+                evidence["datasetProvisioning"] = dataset_provisioning
                 evidence = prepare_identity(api, evidence, args.drop_proxy)
             state_path.write_text(
                 json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
             )
         elif args.phase == "recovery":
+            validated_evidence["datasetProvisioning"] = (
+                verify_dataset_provisioning_after_restart(
+                    api, validated_evidence.get("datasetProvisioning")
+                )
+            )
             evidence = recover_identity(api, validated_evidence)
             state_path.write_text(
                 json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"

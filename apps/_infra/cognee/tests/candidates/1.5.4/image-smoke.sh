@@ -72,6 +72,12 @@ expected_labels = {
     "ai.opencrane.cognee.source-commit": profile["source"]["commit"],
     "ai.opencrane.cognee.base-index-digest": image["indexDigest"],
     "ai.opencrane.cognee.base-linux-amd64-digest": image["linuxAmd64Digest"],
+    "ai.opencrane.cognee.repair-patch-sha256": profile["source"]["repairs"][
+        "cognee.infrastructure.databases.relational.sqlalchemy.SqlAlchemyAdapter"
+    ]["patchSha256"],
+    "ai.opencrane.cognee.repair-postimage-sha256": profile["source"]["repairs"][
+        "cognee.infrastructure.databases.relational.sqlalchemy.SqlAlchemyAdapter"
+    ]["postimageSha256"],
     "ai.opencrane.ladybug-json.sha256": ladybug["extensionSha256"],
 }
 actual_labels = config.get("Labels") or {}
@@ -137,6 +143,7 @@ profile = json.loads(
 )
 image = profile["image"]
 ladybug_profile = profile["ladybug"]
+repair_profiles = profile["source"]["repairs"]
 
 require(
     cognee.__version__ == profile["source"]["runtimeVersion"],
@@ -176,6 +183,28 @@ require(
     extension.stat().st_size == ladybug_profile["extensionSizeBytes"],
     "Ladybug JSON extension size does not match the profile",
 )
+
+for repair_module, repair_profile in repair_profiles.items():
+    repair_patch = pathlib.Path(repair_profile["patchPath"])
+    repair_receipt = pathlib.Path(repair_profile["receiptPath"])
+    for repair_artifact in (repair_patch, repair_receipt):
+        require(repair_artifact.is_file(), "Cognee repair artifact is missing")
+        require(not repair_artifact.is_symlink(), "Cognee repair artifact must not be a symlink")
+    require(
+        hashlib.sha256(repair_patch.read_bytes()).hexdigest()
+        == repair_profile["patchSha256"],
+        "Cognee repair patch digest does not match the profile",
+    )
+    receipt = json.loads(repair_receipt.read_text(encoding="utf-8"))
+    require(receipt["module"] == repair_module, "Cognee repair module differs")
+    require(
+        receipt["patchSha256"] == repair_profile["patchSha256"],
+        "Cognee repair receipt patch digest differs",
+    )
+    require(
+        receipt["postimageSha256"] == repair_profile["postimageSha256"],
+        "Cognee repair receipt postimage digest differs",
+    )
 require(
     hashlib.sha256(extension.read_bytes()).hexdigest()
     == ladybug_profile["extensionSha256"],

@@ -1,5 +1,68 @@
 # OpenCrane — Active Plan
 
+## Recover interrupted memory deletion — source reviewed, local checks passed
+
+This independent M1 slice starts directly from draft #871 at
+`749b50058f6503653d203b5a7caf98926076cf08`, on `feat/0.12-memory-delete-recovery`.
+The remote MCP connection wave remains in its separate worktree. Its personal connection UI has
+passed local tests, build and independent review; its runtime SQL acceptance remains blocked on
+the earlier specific source approval.
+
+The unpatched Cognee 1.5.4 candidate commits deletion of its Data row before deleting both stored
+files. If file cleanup fails, restart loses the information needed to finish. The candidate repair
+keeps and locks that row until cleanup succeeds, checks references across both file-location fields,
+and rejects paths outside the provider's storage root. Missing files count as completed cleanup.
+The candidate image must verify the upstream source, each patch and the resulting source bytes.
+One provider-owned local file lock covers ingestion and deletion against the same storage root and
+relational store. It prevents concurrent operations from losing a shared file or leaving it behind.
+Cancellation and process death must release the lock, and a child task cannot inherit its parent's
+ownership. The candidate remains limited to Linux, local file storage and its default SQLite store.
+
+Architecture preflight permits this candidate-only implementation. The existing image qualification
+must also prove interruption before either file removal, interruption before the final commit,
+restart using the same public document coordinate, shared-reference retention, path containment,
+and concurrent shared-file delete/delete and delete/add. The 15 focused source-verification tests
+pass: the receipt preserves official preimages, records new modules explicitly, verifies the patch
+and running source, rejects unrelated source drift, and retains machine-readable evidence when a
+repair declaration fails. The complete local Cognee test and lint run passes all 45 tests, shell syntax
+and Python compilation. Architecture preflight/post-review and independent source, build and harness
+reviews pass. All four patches were independently reconstructed and compiled against the official
+source. Style, Prisma ownership and module-growth checks have no errors. Source whitespace checks pass; the patch artifacts contain only required blank context markers. Exact-image CI still
+must run every interruption, restart and concurrency case before provider qualification is complete.
+The memory gateway gains no file paths,
+storage access or second deletion mechanism. Production image pins, charts and memory mutations
+remain unchanged. No live provider, credentials, cluster or testv5 data are touched.
+
+Draft #872 publishes the candidate source. Its first exact-image run (`34703119458`) stopped
+during image construction: the upstream image's non-root user could not create the repair-evidence
+directory under `/opt`. The candidate Dockerfile now uses root only to install the source repairs
+and evidence, then returns to the upstream `cognee` user before the existing extension setup.
+The next exact-image run (`34703714519`, job `103579931845`) builds successfully, passes the
+non-root runtime smoke check and reports no source-attestation mismatches. It then stops in the
+path-safety fixture because its old adapter double cannot call the repaired provider's private
+cleanup helper. The fixture now inherits the installed adapter's helper chain and replaces only
+database construction and the reference-count query. Its seven focused tests pass, including a
+regression for that inherited call. All provider containment assertions remain required;
+deletion qualification still awaits a successful successor CI run.
+
+The candidate harness now also requires same-name dataset identity across repeated and concurrent
+creation, recovery of an unread create response through the saved name and owner, and the same
+coordinates after the existing provider restart. All 53 local Cognee tests and lint pass. These
+checks cover successful creation and response loss, not interruption between the provider's dataset
+commit and separate access grants. That partial-grant recovery gap remains a required provider
+repair before product provisioning; a lost synchronous cognify response also remains unresolved
+without correlated completion evidence. The next personal-memory source wave starts separately
+with stable gateway DTOs and gateway-only provider authentication.
+
+At `36e1717bbc0bd395c474b2e1534958630f34e020`, exact-image run `34705105949`, candidate job
+`103583745894`, passes dataset identity/replay/response-loss and restart checks, scoped search,
+document identity and add recovery, and first/last-reference deletion. It then times out waiting
+two seconds for a synthetic lock-holder process to import Cognee and signal acquisition. The fixture
+now waits up to 30 seconds for an explicit post-import readiness signal, then retains the separate
+two-second acquisition deadline and termination/reacquisition assertions. This changes the process
+test's startup allowance, not the provider lock or its deadline; full interrupted-deletion and
+concurrency qualification still require a successful successor run.
+
 ## MCP readiness CI repair — 2026-09-12
 
 The first exact-head run for draft #871 found missing readiness data in existing conversation test
@@ -12,11 +75,11 @@ Linux Removing-state capture, including the corrected “No credential required�
 Validation passes all 114 application tests, application type checks, 44 real PostgreSQL application
 cases and the three SQL authority scripts. The disposable PostgreSQL database and Node test process
 both use UTC, matching CI; this prevents local time-zone offsets from changing timestamp-without-time-zone
-authority evidence. Style and Prisma ownership checks have no errors. A new exact-head CI run remains
-required for the real Kurrent recovery proof and Linux visual comparison. No testv5 or live provider
+authority evidence. Style and Prisma ownership checks have no errors. The latest read confirms that
+exact-head CI passes its selected jobs, including real Kurrent recovery and Linux visuals. No testv5 or live provider
 changes are included.
 
-## Explicit MCP connection readiness — source reviewed, CI pending
+## Explicit MCP connection readiness — source reviewed, CI passed
 
 Draft [#871](https://github.com/elewa-git/opencrane/pull/871) publishes T1 on
 `feat/0.12-mcp-credential-readiness`, based directly on memory correction
@@ -374,7 +437,7 @@ remain separate gates.
 | --- | --- | --- | --- |
 | 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection and participant terminal-result history are implemented. Explicit connection readiness and execution fencing pass source review and local database proof. Standard remote activation/discovery/calls, hosted MCP execution and real integration qualification remain. |
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry, durable resume and visible decision controls are implemented in draft #857. Company approver/connection binding and real action qualification remain. |
-| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: qualify the pinned provider's isolation, identity, restart and deletion contracts on disposable CI data before implementing personal dataset provisioning and explicit Remember. |
+| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: both the pinned provider and unpatched 1.5.4 candidate fail safe deletion. The candidate repair retains restart coordinates and coordinates shared-file ingestion/deletion; 45 local tests and independent review pass, with exact-image CI still required. Product Remember, recall, correction and Forget remain unimplemented. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass independent review and exact-head CI in draft #862; qualify the live journey. Other-participant controls remain a separate actor-policy decision. |
 | 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | PAUSED: runtime-question source work awaits its separate explicit approval; partial implementation is not validated delivery. Structured results and A2UI remain. |
 | 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file Open/Preview/Download is implemented and exact-head CI passes in #868. PDF-informed answers are source complete in #869 and exact-head CI passes, including real-store recovery and Linux visuals; live qualification remains. Generated file production follows. |
