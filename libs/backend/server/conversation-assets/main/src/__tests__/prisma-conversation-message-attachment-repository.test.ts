@@ -1,6 +1,8 @@
 import { ConversationAssetProvenance, ConversationAssetState } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+
 import { PrismaConversationMessageAttachmentRepository } from "../prisma-conversation-message-attachment-repository";
 
 const _PORTS = vi.hoisted(function _Ports() { return { access: vi.fn(), admit: vi.fn(), resolve: vi.fn() }; });
@@ -50,6 +52,7 @@ describe("conversation message attachment admission", function _Suite()
 		const harness = _Harness();
 		await expect(harness.repository.bindOrVerify(_COMMAND)).resolves.toEqual({ attachments: [{ assetId: "asset", artifactId: "pdf", artifactRevisionId: "pdf-1", name: "Brief.pdf", mediaType: "application/pdf" }] });
 		expect(harness.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ messageId: null, siloId: "silo", createdByUserId: "user", revisionId: "pdf-1" }), data: { messageId: "message" } }));
+		expect(_PORTS.access).toHaveBeenCalledExactlyOnceWith(_COMMAND.caller, { kind: ProductAuthorizationResourceKinds.Artifact, id: "pdf" }, ProductAuthorizationActions.Read);
 		expect(_PORTS.resolve).toHaveBeenCalledExactlyOnceWith("silo", "pdf", "pdf-1");
 	});
 

@@ -569,6 +569,13 @@ jobs:
         timeout-minutes: 10
         run: npx playwright install --with-deps chromium
 
+      # Browser caches do not include host fonts. The PDF filename fixtures require Chinese glyphs
+      # on every runner; install only that font package with a bounded wait for the package lock.
+      - name: Install the Unicode font used by Storybook filenames
+        if: steps.storybook-regression.outputs.required == 'true'
+        timeout-minutes: 3
+        run: sudo apt-get -o DPkg::Lock::Timeout=60 install --no-install-recommends -y fonts-wqy-zenhei
+
       - name: Build and test affected Storybook component contracts
         if: steps.storybook-regression.outputs.required == 'true'
         run: npx nx affected -t build-storybook test-storybook test-storybook-visual --base="$NX_BASE" --head="$NX_HEAD" --parallel=1

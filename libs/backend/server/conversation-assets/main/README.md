@@ -30,7 +30,7 @@ response keeps the bindings reserved for the same message key.
 - `_CreateConversationAssetAuthority` composes uploads with scanner availability and private storage.
 - `_CreateConversationAssetContentBroker` opens exact published bytes for an authorized file read.
 - `PrismaConversationMessageAttachmentRepository` implements the conversation-owned attachment port
-  over the message transaction.
+  after that transaction has admitted Conversation Use; it checks each source Artifact before binding.
 - `PrismaConversationPromptDocumentRepository` resolves message-bound Ready PDFs through the current
   participant, source Artifact and converted-text lineage checks used by prompt compilation.
 - `PrismaConversationAssetScanRepository` and `PrismaConversationAssetPreprocessRepository` apply file

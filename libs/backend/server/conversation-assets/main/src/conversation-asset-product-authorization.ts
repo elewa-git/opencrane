@@ -18,7 +18,7 @@ export class PrismaConversationAssetProductAuthorizationRepository implements Co
 	constructor(transaction: Prisma.TransactionClient) { this.transaction = transaction; this.authority = new PrismaAuthorizationAuthority(transaction); this.managedGrants = new PrismaManagedAuthorizationGrantRepository(transaction); }
 
 	/** Decides a read without introducing another owner or participant policy kernel. */
-	async canAccess(caller: ConversationAssetProductCaller, resource: ProductAuthorizationResourceLocator, action: ProductAuthorizationActions): Promise<boolean>
+	async canAccess(caller: ConversationAssetProductCaller, resource: ProductAuthorizationResourceLocator, action: ProductAuthorizationActions.Read): Promise<boolean>
 	{
 		const entitled = await this.authority.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, resources: [resource], action, nowEpochMs: Date.now() });
 		return entitled.length === 1;

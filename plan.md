@@ -77,9 +77,19 @@ its lint target pass. Style and module-growth checks have zero errors.
 The real PostgreSQL/Kurrent recovery test is implemented in the existing conversation integration
 target and history-store CI job. Local typecheck and collection pass, with real service cases
 explicitly skipped because no local Kurrent endpoint is configured. An explicitly unqualified draft
-can run that CI proof; passing it is required before calling the slice ready. This branch is prepared
-for draft publication directly above #868, with real-store CI, Linux visuals and live qualification
-still pending.
+can run that CI proof; passing it is required before calling the slice ready. Draft
+[#869](https://github.com/elewa-git/opencrane/pull/869) publishes the slice directly above #868,
+with real-store CI, Linux visuals and live qualification still pending.
+
+The first draft CI run exposed an attachment authorization wiring defect before either new real-store
+recovery case reached its intended assertion: the attachment repository passed Conversation Use to
+the authorization catalogue's Read-only filter after message admission had already recorded Use in
+the same transaction. The local correction removes that duplicate check and limits the shared read
+helper to Read at compile time. Independent source review, 43 asset tests, 543 conversation tests
+and both package lint targets pass; a new exact-head real-store run remains required. Independent
+visual review accepts twenty Linux captures. Two PDF filename captures lack Chinese glyphs and
+remain rejected until the bounded CI font installation produces new evidence. The filename fixture
+and screenshot tolerances are unchanged. No live PDF answer or testv5 qualification is claimed.
 
 ## Execution checkpoint — 2026-09-11
 

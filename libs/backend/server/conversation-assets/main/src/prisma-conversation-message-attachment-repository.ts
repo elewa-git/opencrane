@@ -27,6 +27,7 @@ export class PrismaConversationMessageAttachmentRepository implements Conversati
 	/**
 	 * A payload retry must present exactly its original set, including an original empty set.
 	 * Bindings survive an uncertain history append: this owner never frees them for a new key.
+	 * The caller has already admitted conversation Use in the surrounding message transaction.
 	 * Null is a denial that the caller must turn into rollback of the whole message transaction.
 	 */
 	async bindOrVerify(command: ConversationMessageAttachmentAdmissionCommand): Promise<ConversationMessageAttachmentAdmissionResult | null>
@@ -40,8 +41,6 @@ export class PrismaConversationMessageAttachmentRepository implements Conversati
 			throw new Error("Conversation attachment idempotency key has a different saved set");
 		if (canonicalAssetIds.length === 0)
 			return { attachments: [] };
-		if (!await this.authorization.canAccess(caller, { kind: ProductAuthorizationResourceKinds.Conversation, id: conversationId }, ProductAuthorizationActions.Use))
-			return null;
 		const rows = await this.transaction.conversationAsset.findMany({ where: { id: { in: [...canonicalAssetIds] }, siloId: caller.siloId, conversationId } });
 		const byId = new Map(rows.map(asset => [asset.id, asset]));
 		if (rows.length !== canonicalAssetIds.length || byId.size !== rows.length)
