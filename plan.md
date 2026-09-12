@@ -33,6 +33,12 @@ The memory gateway gains no file paths,
 storage access or second deletion mechanism. Production image pins, charts and memory mutations
 remain unchanged. No live provider, credentials, cluster or testv5 data are touched.
 
+Draft #872 publishes the candidate source. Its first exact-image run (`34703119458`) stopped
+during image construction: the upstream image's non-root user could not create the repair-evidence
+directory under `/opt`. The candidate Dockerfile now uses root only to install the source repairs
+and evidence, then returns to the upstream `cognee` user before the existing extension setup.
+The runtime-user smoke assertion remains unchanged; deletion qualification still awaits CI.
+
 ## MCP readiness CI repair — 2026-09-12
 
 The first exact-head run for draft #871 found missing readiness data in existing conversation test

@@ -11,6 +11,9 @@ LABEL org.opencontainers.image.source="https://github.com/topoteretes/cognee" \
   ai.opencrane.cognee.repair-postimage-sha256="3d7f8fdc029226ba33919838a522b0325e616d3c3c7820fde828f90c68c8daaf" \
   ai.opencrane.ladybug-json.sha256="39c51fa9b1915590a500eef732c76913aeb10cd942e46e1c259497e609b97426"
 
+# Installing the source repair and its evidence needs build-time write access to the image.
+USER root
+
 RUN mkdir -p /opt/opencrane/cognee-repair
 
 COPY --chmod=0644 apps/_infra/cognee/tests/candidates/1.5.4/patches/*.patch \
@@ -58,11 +61,11 @@ RUN package_root="$(python -c 'import cognee, pathlib; print(pathlib.Path(cognee
     --postimage-sha256 df8872f1f864b50640f7a083e62c33d29a1c704a8f9df9918702d0b712dedc7b && \
   rm /tmp/apply-cognee-source-patch.py
 
+USER cognee
+
 RUN mkdir -p /app/.lbdb/extension/0.19.0/linux_amd64/json
 
 ADD --chown=1000:1000 --chmod=0644 \
   --checksum=sha256:39c51fa9b1915590a500eef732c76913aeb10cd942e46e1c259497e609b97426 \
   https://extension.ladybugdb.com/v0.19.0/linux_amd64/json/libjson.lbug_extension \
   /app/.lbdb/extension/0.19.0/linux_amd64/json/libjson.lbug_extension
-
-USER cognee
