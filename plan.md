@@ -27,6 +27,13 @@ outstanding findings. Linux CI remains pending. This slice changes no backend ro
 model request, credential path or runtime-question behavior. Scanned document input and generated
 file production remain separate F1 slices. Testv5 and live file access remain unqualified.
 
+Draft [#868](https://github.com/elewa-git/opencrane/pull/868) publishes this source at
+`37c7fdf9a15b502b960d74c9c55067e8f14a8dc7`. CI run `34679624105` passes affected build/test/lint,
+database authority, real Kurrent, stack and Storybook behavior checks. Its visual failure names
+only three missing Linux references. All three captures from artifact `10292992544` passed
+independent inspection and are copied unchanged into those new reference paths; existing images
+and comparison tolerances are unchanged. The follow-up commit still requires exact-head CI.
+
 ## Execution checkpoint — 2026-09-11
 
 Draft #858 is fully green at `3cb899d68c851bfb0073c42933fc77fba3fe0e17`:
