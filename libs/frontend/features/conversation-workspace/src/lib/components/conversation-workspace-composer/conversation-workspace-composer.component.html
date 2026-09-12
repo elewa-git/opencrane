@@ -16,13 +16,19 @@
             @if (error(); as error) {
               <p-message severity="error" [text]="error" />
             }
-            <wo-conversation-composer
+                  <wo-conversation-composer
               fieldId="workspace-message"
               label="Message conversation"
               placeholder="Write a message…"
               [draft]="draft()"
-              [state]="composerState()"
-              (draftChange)="draftChanged.emit($event)"
-              (submitted)="submitted.emit()"
-            />
+                    [state]="composerState()"
+                    [allowEmptySubmission]="allowAttachmentSubmission()"
+                    [submissionBlocked]="attachmentSubmissionBlocked()"
+					[draftReadOnly]="attachmentSelectionLocked()"
+                    (draftChange)="draftChanged.emit($event)"
+                    (submitted)="submitted.emit()"
+                  >
+                    <wo-conversation-attachment-tray conversation-composer-leading [items]="attachments()" [feedback]="attachmentFeedback()" [canDeselect]="!attachmentSelectionLocked()" (actionRequested)="assetActionRequested.emit($event)" />
+                    <wo-conversation-pdf-picker conversation-composer-footer [disabled]="composerState() !== states.Available || attachmentSelectionLocked()" (filesSelected)="filesSelected.emit($event)" />
+                  </wo-conversation-composer>
           </section>

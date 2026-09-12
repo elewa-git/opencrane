@@ -25,7 +25,10 @@
 	@if (item().canRetry) {
 		<p-button label="Retry" severity="contrast" [link]="true" size="small" (onClick)="retry()" />
 	}
-	@if (item().canRemove) {
+	@if (item().canRemove && !canDeselect()) {
 		<p-button icon="pi pi-times" severity="contrast" [text]="true" [rounded]="true" size="small" [ariaLabel]="'Remove ' + item().displayName" (onClick)="remove()" />
+	}
+	@if (canDeselect()) {
+		<p-button icon="pi pi-times" severity="contrast" [text]="true" [rounded]="true" size="small" [ariaLabel]="'Remove ' + item().displayName + ' from message'" (onClick)="deselect()" />
 	}
 </span>

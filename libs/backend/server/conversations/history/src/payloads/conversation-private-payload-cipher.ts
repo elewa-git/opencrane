@@ -33,12 +33,12 @@ export class AesGcmConversationPrivatePayloadCipher implements ConversationPriva
 		return new AesGcmConversationPrivatePayloadCipher(document.currentKeyId, document.keys);
 	}
 
-	/** Encrypts UTF-8 text and authenticates the exact server-derived ownership coordinates. */
+	/** Encrypts UTF-8 text, including an attachment-only message, and authenticates its ownership coordinates. */
 	public encrypt(plaintext: string, coordinates: ConversationPrivatePayloadCoordinates): EncryptedConversationPrivatePayload
 	{
 		_ValidateCoordinates(coordinates);
-		if (plaintext.length === 0 || Buffer.byteLength(plaintext, "utf8") > 65_536)
-			throw new Error("Conversation private payload text must contain between 1 and 65536 UTF-8 bytes");
+		if (Buffer.byteLength(plaintext, "utf8") > 65_536)
+			throw new Error("Conversation private payload text must contain at most 65536 UTF-8 bytes");
 		const nonce = randomBytes(12);
 		const cipher = createCipheriv(_ALGORITHM, this.keys.get(this.currentKeyId)!, nonce);
 		cipher.setAAD(_AdditionalData(coordinates));

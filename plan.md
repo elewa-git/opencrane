@@ -2,8 +2,8 @@
 
 ## Ready conversation file access — 2026-09-12
 
-The active F1 source slice starts directly above #867 at
-`d1d783e482276ef5c8924117b611fb554c69d14c` on
+The F1 file-access source slice is stacked directly above #867 at
+`a6337511183042952fce67b25608e8473b553eb3` on
 `feat/0.12-conversation-asset-downloads`. It connects the existing Files panel's Open action to
 the authenticated Ready-asset content reader. The reusable asset card gains matching loading and
 error states in Storybook; the production transcript does not yet mount that card.
@@ -23,16 +23,83 @@ Storybook behavior checks; three macOS visual checks; and the production UI buil
 visual references have independent inspection. Style and Prisma boundaries pass with no errors or
 warnings; module growth has no errors and identifies the two focused state owners for review.
 Independent source review, architecture post-review and component post-review pass with no
-outstanding findings. Linux CI remains pending. This slice changes no backend route, upload contract,
+outstanding findings. Linux CI passes. This slice changes no backend route, upload contract,
 model request, credential path or runtime-question behavior. Scanned document input and generated
 file production remain separate F1 slices. Testv5 and live file access remain unqualified.
 
 Draft [#868](https://github.com/elewa-git/opencrane/pull/868) publishes this source at
-`37c7fdf9a15b502b960d74c9c55067e8f14a8dc7`. CI run `34679624105` passes affected build/test/lint,
-database authority, real Kurrent, stack and Storybook behavior checks. Its visual failure names
-only three missing Linux references. All three captures from artifact `10292992544` passed
-independent inspection and are copied unchanged into those new reference paths; existing images
-and comparison tolerances are unchanged. The follow-up commit still requires exact-head CI.
+`158962f9cd94b4f6886960e7eeaabe06c4fdf595`. Exact-head CI run `34681268050` passes affected
+build/test/lint, database authority, real Kurrent, stack, Storybook Linux visuals and the UI image
+build. The three new Linux references came from independently inspected CI captures; existing
+images and comparison tolerances are unchanged.
+
+### PDF-informed answers — source complete, CI pending
+
+F1a starts from that exact #868 head on `feat/0.12-conversation-pdf-input`. It connects the
+existing PDF upload and preprocessing path to participant message admission and server-owned
+model input. The component preflight reuses the attachment tray and file card, adds a narrow PDF
+picker, and requires an exact artifact/revision/message join before showing file actions.
+
+Architecture and component preflight pass. Source implementation now binds attachments atomically,
+including empty-set retries, and reads bounded derived content outside write transactions. The accepted command keeps its text,
+attachment set and retry key after an uncertain response. Only completed, lineage-checked PDF text
+may enter the model as untrusted user content. Saved model input and the original remaining
+allowance retain their current restart guarantees. Generated file production remains the next F1
+slice. Attachment-only messages require an authenticated encrypted empty-text payload. The fresh-install
+baseline permits zero ciphertext bytes while preserving nonce, tag, ownership, uniqueness and
+immutability checks; seven new PostgreSQL checks pass on a disposable database. Independent source,
+architecture and component post-review pass. No live provider call, deployment or testv5 change is
+part of this source work.
+
+The implementation now passes 543 conversation tests, 113 app tests, focused PDF preparation and
+asset tests, six frontend package test/lint targets, the initial server/UI builds, generated API checks and the
+Prisma, workflow, domain and app-composition boundaries. A disposable PostgreSQL proof confirms
+one author wins a concurrent message UUID and retries cannot replace an originally empty attachment
+set. Backend architecture and independent message-admission source review pass. Acceptance still
+requires the real Kurrent lost-response/conflicting-entry proof and Linux visual qualification. The
+final Storybook behavior run passes all 183 checks after the corrected geometry guards and PDF
+desktop/narrow fixture coverage.
+Visual review found and corrected Send clipping in two 390px composer states. The responsive
+footer and its bounds regression pass independent review. Final desktop and narrow PDF captures
+show the named bound attachment and the next selected PDF with usable actions. All three macOS
+visual checks pass against six new and sixteen changed independently accepted references.
+Independent frontend review caught implicit attachment selection and uncertain-send display
+bugs. The reviewed corrections keep an explicit selected set, allow deselection without deletion,
+count all selected files, and visibly lock the draft and attachments while an uncertain message is
+retried. Focused asset-state tests (47), workspace-state tests (85), workspace-feature tests (57),
+asset-feature tests (14), and composer tests (8) pass with their relevant type checks. Runtime asset
+metadata now goes through a validator beside its model. Independent source review clears the
+material findings, and the final macOS captures have independent acceptance. The final UI production build passes
+after fixing two request-serialization type errors: Stop supplies an empty attachment list, and
+message send copies the domain's readonly list for the generated client. All 16 adapter tests and
+its lint target pass. Style and module-growth checks have zero errors.
+
+The real PostgreSQL/Kurrent recovery test is implemented in the existing conversation integration
+target and history-store CI job. Local typecheck and collection pass, with real service cases
+explicitly skipped because no local Kurrent endpoint is configured. An explicitly unqualified draft
+can run that CI proof; passing it is required before calling the slice ready. Draft
+[#869](https://github.com/elewa-git/opencrane/pull/869) publishes the slice directly above #868,
+with real-store CI, Linux visuals and live qualification still pending.
+
+The first draft CI run exposed an attachment authorization wiring defect before either new real-store
+recovery case reached its intended assertion: the attachment repository passed Conversation Use to
+the authorization catalogue's Read-only filter after message admission had already recorded Use in
+the same transaction. The local correction removes that duplicate check and limits the shared read
+helper to Read at compile time. Independent source review, 43 asset tests, 543 conversation tests
+and both package lint targets pass; a new exact-head real-store run remains required. Independent
+visual review accepts twenty Linux captures. Two PDF filename captures lack Chinese glyphs and
+remain rejected until the bounded CI font installation produces new evidence. The filename fixture
+and screenshot tolerances are unchanged. No live PDF answer or testv5 qualification is claimed.
+
+Exact-head run `34687912995` on `f3f4f35a254a3bd1d9423f677a7e24904f78c9be` passes the real
+Kurrent attachment recovery cases, database authority and generated API checks. Its only visual
+failures are the two deliberately absent PDF shell references. The new desktop and narrow captures
+from artifact `10296043961` render the Chinese filename correctly and pass independent inspection;
+they are now accepted without changing fixtures or tolerances. One asset-store unit case assumed the
+initial list was loaded before testing byte-upload retry. It now waits for that existing precondition;
+all 47 asset-state tests pass, with the original retry assertions unchanged. A new CI run must
+confirm these test/reference corrections; production source is unchanged.
+
 
 ## Execution checkpoint — 2026-09-11
 
@@ -180,7 +247,14 @@ CHUNKS coordinates, with duplicate results preserved and distinct counts reporte
 is saved before the existing two-chunk assertion, so a repeat failure can be classified without
 retaining source text or relaxing that gate. Fast tests cover malformed coordinates, exact target
 selection, duplicate preservation and evidence retention on assertion failure. Cognee test/lint
-passes and independent source review passes. The additional evidence still needs exact-image CI.
+passes and independent source review passes. Exact-head CI run `34681268225` at
+`a6337511183042952fce67b25608e8473b553eb3` now preserves the failed proof: the second dataset's
+graph contains 12 chunks for its distinct document, while its scoped CHUNKS response returns 20
+coordinates and none for that document. Follow-up confirms the fixture query was replaced by the
+synthetic model's literal `query_to_answer` during automatic feedback preparation. That ranked
+response does not prove missing vectors or a provider retrieval defect. The next correction must
+keep the requested query stable in the disposable harness and rerun the unchanged useful-retrieval
+and deletion gates. The candidate remains unqualified; deletion checks have not been reached.
 
 The candidate keeps a separate disposable lifecycle because its non-root storage, evidence volume
 and additional restart differ from 1.2.1; API, stub, proxy, attestation and summary helpers remain
@@ -246,7 +320,7 @@ remain separate gates.
 | 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: qualify the pinned provider's isolation, identity, restart and deletion contracts on disposable CI data before implementing personal dataset provisioning and explicit Remember. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass independent review and exact-head CI in draft #862; qualify the live journey. Other-participant controls remain a separate actor-policy decision. |
 | 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | PAUSED: runtime-question source work awaits its separate explicit approval; partial implementation is not validated delivery. Structured results and A2UI remain. |
-| 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: wire Ready-file Open/Preview/Download through the existing authorized reader. Document-informed answers and generated file production follow as separate slices. |
+| 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file Open/Preview/Download is implemented and exact-head CI passes in #868. PDF-informed answers are the active source slice; generated file production follows. |
 | 7 | D1 — autonomous delegation | A bounded child works with explicit context and narrower authority, then returns one durable result. | Follow [#845](https://github.com/elewa-git/opencrane/issues/845): root budgets, depth/fan-out, cancellation and result brokering. |
 | 8 | S1 — scheduled work | A reviewed routine fires under current authority with explicit overlap, retry and missed-run policy. | Follow [#848](https://github.com/elewa-git/opencrane/issues/848) through Absurd and existing admission. |
 | 9 | A2 — complete administration | Operators configure agents, connections, models, permissions and budgets, and inspect effective access and actual usage. | Complete protected settings over the owners established by the earlier tracks. |
@@ -560,7 +634,7 @@ their own completion track; they are not silently bundled into the first tool PR
 | U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
 | M1 | IN PROGRESS: #863 qualifies the exact provider image. Isolation and restart recovery pass in the authenticated candidate, but final-reference deletion leaves original source bytes; provider repair and product memory journeys remain. |
 | U2 | PAUSED: partial runtime-question source awaits its separate explicit approval. |
-| F1 | IN PROGRESS: existing Ready-file access is being connected to the conversation UI; document input and generated outputs remain. |
+| F1 | IN PROGRESS: Ready-file Open/Preview/Download passes exact-head CI in #868. PDF-informed answers are being integrated and reviewed; generated outputs follow. |
 | D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |
 | Q1 — operational acceptance | CONTINUOUS — source checks and CI do not replace fresh-install or real-account acceptance. |
 

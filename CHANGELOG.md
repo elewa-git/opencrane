@@ -25,6 +25,12 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   feedback, and discard pending results when the selected conversation or access changes.
   Document-informed answers, generated files and live qualification remain unfinished.
 
+- **Personal assistant turns can receive selected scanned PDFs as reference text.** The source under
+  review binds each Ready PDF to the accepted message, loads only lineage-checked converted text,
+  rechecks current access before initial and restarted compilation, and treats the text as untrusted
+  user content. Each document is capped at 64 KiB, with at most ten PDFs and 128 KiB in total.
+  Live testv5 qualification and generated-file production remain unfinished.
+
 - **Operators can qualify the pinned Cognee image against the memory-provider contract before publication.** The uncached `cognee:memory-contract` target runs disposable synthetic datasets with a deterministic local model and embedding stub on an internal Docker network, checking isolation, source and document identity, lost-response and restart recovery, indexing and deletion; selected CI retains the evidence and gates image publication. Personal memory writes and Remember, Recall, Correct and Forget journeys remain unfinished.
 
 - **Operators can evaluate a proposed Cognee replacement independently of the deployed image.** The

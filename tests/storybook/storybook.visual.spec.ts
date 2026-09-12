@@ -238,6 +238,32 @@ async function _OpenStableStory(page: Page, storyId: string): Promise<void>
 	await page.evaluate(async () => document.fonts.ready);
 	if (storyId.startsWith("conversations-workspace-shell--"))
 		await expect(page.locator(".conversation-workspace:not([data-route-state=\"loading\"])")).toHaveCount(1, { timeout: 15_000 });
+	if (storyId === "conversations-workspace-shell--pdf-informed-answer" || storyId === "conversations-workspace-shell--pdf-informed-answer-narrow")
+	{
+		const closeContext = page.getByRole("button", { name: /Close (?:activity|context) pane/u });
+		if (await closeContext.count() > 0)
+			await closeContext.first().click();
+		const selectedPdf = page.getByText("Résumé – Nairobi supplier review 你好.pdf", { exact: true });
+		if (await selectedPdf.count() === 0)
+		{
+			await page.getByLabel("Attach PDF").setInputFiles({ name: "Résumé – Nairobi supplier review 你好.pdf", mimeType: "application/pdf", buffer: Buffer.from("pdf-next") });
+		}
+		await expect(page.locator("wo-conversation-workspace-context-panel")).toHaveCount(0, { timeout: 15_000 });
+		const boundPdf = page.getByText("project-brief.pdf", { exact: true });
+		await expect(boundPdf).toBeVisible();
+		await expect(selectedPdf).toBeVisible();
+		if (storyId.endsWith("--pdf-informed-answer-narrow"))
+		{
+			const scrollOwner = page.locator(".conversation-workspace__body");
+			const boundPdfCard = page.locator("wo-conversation-workspace-transcript wo-conversation-asset-card").filter({ hasText: "project-brief.pdf" });
+			await boundPdfCard.evaluate(function _ShowBoundPdf(element) { element.scrollIntoView({ block: "center" }); });
+			await expect.poll(async function _BoundPdfIsInViewport()
+			{
+				const [bounds, ownerBounds] = await Promise.all([boundPdfCard.boundingBox(), scrollOwner.boundingBox()]);
+				return bounds !== null && ownerBounds !== null && bounds.y >= ownerBounds.y && bounds.y + bounds.height <= ownerBounds.y + ownerBounds.height;
+			}).toBe(true);
+		}
+	}
 	if (storyId === "conversations-workspace-shell--personal-tool-approval" || storyId === "conversations-workspace-shell--personal-tool-approval-narrow")
 	{
 		const scrollOwner = page.locator(".conversation-workspace__body");

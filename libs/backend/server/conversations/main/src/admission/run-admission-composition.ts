@@ -21,6 +21,8 @@ import { PersonalExecutionEvidenceAuthority, PrismaPersonalExecutionEvidenceRepo
 import { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
 import { _CreateHumanMembershipEvidenceConfig, type HumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
+import { PrismaConversationPromptDocumentPreparationUnitOfWork } from "../messages/prisma-conversation-prompt-document-preparation-unit-of-work";
+import type { ConversationPromptDocumentAuthorityFactory, ConversationPromptDocumentContentReader, ConversationPromptDocumentPreparation, ConversationPromptDocumentPreparationCommand } from "../messages/conversation-prompt-document.types";
 
 import type { RunAdmissionConcurrencyPolicy } from "@opencrane/backend/agents/execution/runs";
 import { _ReadConversationPrivatePayloadKeyring } from "@opencrane/backend/server/conversations/history";
@@ -33,24 +35,41 @@ import type { ConversationRunExecutionSubjectAuthorityFactory, ConversationRunHi
  * Called by: the OpenCrane process entrypoint before it creates the private computer router.
  * @see _CreateConversationRunAdmission for capacity and transaction sequencing.
  */
-export function _CreateProductionConversationRunAdmission(prisma: ConstructorParameters<typeof PrismaRunAdmissionUnitOfWork>[0], history: HistoryStore, keyringPath: string, policy: RunAdmissionConcurrencyPolicy, logger: Logger): ConversationComputerRunAdmissionPort
+export function _CreateProductionConversationRunAdmission(prisma: ConstructorParameters<typeof PrismaRunAdmissionUnitOfWork>[0], history: HistoryStore, keyringPath: string, documentAuthorities: ConversationPromptDocumentAuthorityFactory, documentContent: ConversationPromptDocumentContentReader, policy: RunAdmissionConcurrencyPolicy, logger: Logger): ConversationComputerRunAdmissionPort
 {
 	const authorities = _CreateConversationRunAuthorities(history, _CreateHumanMembershipEvidenceConfig());
 	const cipher = AesGcmConversationPrivatePayloadCipher.fromDocument(_ReadConversationPrivatePayloadKeyring(keyringPath));
-	function _CreateMessages(command: ConversationComputerRunAdmissionCommand, transaction: Prisma.TransactionClient): VerifiedConversationPromptMessageRepository
+	const documents = new PrismaConversationPromptDocumentPreparationUnitOfWork(prisma, history, documentAuthorities, documentContent);
+	function _CreateMessages(command: ConversationComputerRunAdmissionCommand, prepared: ConversationPromptDocumentPreparation, transaction: Prisma.TransactionClient): VerifiedConversationPromptMessageRepository
 	{
-		const source = new PrismaKurrentConversationPromptMessageRepository(transaction, history, cipher, command.computer.siloId, command.computer.conversationId, command.messageInput.historyRevision, { siloId: command.computer.siloId, principalId: command.requesterPrincipalId, subjectId: command.requesterSubjectId, externalIssuer: command.requesterIssuer, verifiedAuthenticationAt: command.requesterAuthenticatedAt });
+		const requester = _DocumentRequester(command);
+		const source = new PrismaKurrentConversationPromptMessageRepository(transaction, history, cipher, command.computer.siloId, command.computer.conversationId, command.messageInput.historyRevision, prepared, documentAuthorities.create(transaction), requester);
 		return new VerifiedConversationPromptMessageRepository(source);
 	}
 	const compilers: ConversationRunInputCompilerRepositoryFactory = {
-		create: function _CreateCompiler(command, transaction) { return new PrismaPromptCompilerRepository(transaction, _CreateMessages(command, transaction), command.computer.siloId); },
-		compile: function _CompileIdempotent(command, snapshot)
+		prepare: function _PrepareDocuments(command) { return documents.prepare(_DocumentCommand(command)); },
+		create: function _CreateCompiler(command, prepared, transaction) { return new PrismaPromptCompilerRepository(transaction, _CreateMessages(command, prepared, transaction), command.computer.siloId); },
+		compile: function _CompileIdempotent(command, prepared, snapshot)
 		{
-			const compiler = new PrismaPromptCompilerUnitOfWork(prisma, function _CreateIdempotentMessages(transaction) { return _CreateMessages(command, transaction); });
+			const compiler = new PrismaPromptCompilerUnitOfWork(prisma, function _CreateIdempotentMessages(transaction) { return _CreateMessages(command, prepared, transaction); });
 			return compiler.compile(snapshot, snapshot.attempt);
 		},
 	};
 	return _CreateConversationRunAdmission(prisma, authorities.executionSubjects, authorities.histories, compilers, policy, logger);
+}
+
+/** Convert a server-resolved computer command into document preparation coordinates. */
+function _DocumentCommand(command: ConversationComputerRunAdmissionCommand): ConversationPromptDocumentPreparationCommand
+{
+	return { siloId: command.computer.siloId, conversationId: command.computer.conversationId, historyRevision: command.messageInput.historyRevision,
+		orderedMessageIds: command.messageInput.orderedMessageIds, requester: _DocumentRequester(command) };
+}
+
+/** Preserve the original authenticated participant for each source authority check. */
+function _DocumentRequester(command: ConversationComputerRunAdmissionCommand)
+{
+	return { siloId: command.computer.siloId, principalId: command.requesterPrincipalId, subjectId: command.requesterSubjectId,
+		externalIssuer: command.requesterIssuer, verifiedAuthenticationAt: command.requesterAuthenticatedAt };
 }
 
 /** Build transaction-bound identity evidence and exact Kurrent history authorities for admission. */
@@ -107,6 +126,7 @@ export function _CreateConversationRunAdmission(prisma: ConstructorParameters<ty
 		admit: async function _AdmitConversationRun(command: ConversationComputerRunAdmissionCommand)
 		{
 			let compiled;
+			let prepared: ConversationPromptDocumentPreparation | undefined;
 			const admission = {
 				runId: command.runId,
 				siloId: command.computer.siloId,
@@ -123,10 +143,12 @@ export function _CreateConversationRunAdmission(prisma: ConstructorParameters<ty
 			};
 			const result = await concurrency.execute(admission, async function _AssembleWithinCapacity()
 			{
+				const currentPreparation = await compilers.prepare(command);
+				prepared = currentPreparation;
 				const authorities = __CreatePrismaSessionAssemblyAuthorities(persistence, executionSubjects.create(command), histories.create(command));
 				return await __AssembleRunInputSnapshot(admission, authorities, async function _CompileBeforeCommit(transaction, value)
 				{
-					compiled = await __CompileRunInput(value.snapshot, value.snapshot.attempt, compilers.create(command, transaction.prisma as Prisma.TransactionClient));
+					compiled = await __CompileRunInput(value.snapshot, value.snapshot.attempt, compilers.create(command, currentPreparation, transaction.prisma as Prisma.TransactionClient));
 				});
 			});
 			if (result.outcome === RunAdmissionConcurrencyOutcomes.Rejected)
@@ -138,7 +160,9 @@ export function _CreateConversationRunAdmission(prisma: ConstructorParameters<ty
 			}
 			if (command.agent.agentRevisionId !== result.value.snapshot.agentRevisionId)
 				throw new Error("Conversation run admission selected another agent revision");
-			const compiledInput = compiled ?? await compilers.compile(command, result.value.snapshot);
+			if (prepared === undefined)
+				throw new Error("Conversation run admission did not prepare prompt documents");
+			const compiledInput = compiled ?? await compilers.compile(command, prepared, result.value.snapshot);
 			return { compiledInput, authorityExpiresAt: __RunInputAuthorityExpiresAt(result.value.snapshot, compiledInput, result.value.currentExecutionSubject) };
 		},
 	};

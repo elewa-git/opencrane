@@ -20,14 +20,14 @@ export function _InternalArtifactServiceUrl(value: string): string
  * @param serviceUrl - Validated same-silo artifact-service origin.
  * @returns Read port that preserves the lease inside the server process.
  */
-export function _CreateArtifactServiceReadPort(serviceUrl: string): { read(lease: string): Promise<Response> }
+export function _CreateArtifactServiceReadPort(serviceUrl: string): { read(lease: string, signal?: AbortSignal): Promise<Response> }
 {
 	return {
-		async read(lease: string): Promise<Response>
+		async read(lease: string, signal?: AbortSignal): Promise<Response>
 		{
 			return ___DoWithTrace("artifact.read.fetch", { service: "artifact-service" }, async function _FetchArtifact(): Promise<Response>
 			{
-				const response = await fetch(`${serviceUrl}/v1/artifacts/read`, { redirect: "error", headers: { "x-opencrane-artifact-read-lease": lease } });
+				const response = await fetch(`${serviceUrl}/v1/artifacts/read`, { redirect: "error", signal, headers: { "x-opencrane-artifact-read-lease": lease } });
 				if (!response.ok || response.body === null)
 					throw new Error(`artifact service read failed with ${response.status}`);
 				return response;

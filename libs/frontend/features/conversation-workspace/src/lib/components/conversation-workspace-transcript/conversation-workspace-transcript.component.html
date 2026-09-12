@@ -21,11 +21,14 @@
                     [id]="entry.message.id"
                     tabindex="-1"
                   >
-                    <wo-conversation-message [message]="entry.message"
-                      ><wo-conversation-rich-text
-                        conversation-message-rich-card
-                        [presentation]="entry.richText"
-                    /></wo-conversation-message>
+                            <wo-conversation-message [message]="entry.message">
+                              <div class="conversation-workspace__message-content" conversation-message-rich-card>
+                                <wo-conversation-rich-text [presentation]="entry.richText" />
+                                @for (attachment of entry.attachments; track attachment.id) {
+                                  <wo-conversation-asset-card [item]="attachment" (actionRequested)="assetActionRequested.emit($event)" />
+                                }
+                              </div>
+                            </wo-conversation-message>
                     @if (entry.requestSource !== null || entry.shareSource !== null || entry.children.length > 0) { <wo-conversation-group-message-actions [canAsk]="entry.requestSource !== null" [canShare]="entry.shareSource !== null" [children]="entry.children" (askRequested)="askRequested.emit(entry.message.id)" (shareRequested)="shareRequested.emit(entry.message.id)" (childRequested)="childRequested.emit($event)" /> }
                   </div>
                 }

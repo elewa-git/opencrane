@@ -18,6 +18,7 @@ export enum ConversationAssetPresentationStates
 /** Typed user intent emitted by file presentation controls. */
 export enum ConversationAssetActionKinds
 {
+	Deselect = "deselect",
 	Retry = "retry",
 	Remove = "remove",
 	Preview = "preview",
@@ -31,6 +32,10 @@ export interface ConversationAssetPresentation
 {
 	readonly id: string;
 	readonly messageId: string | null;
+	/** Artifact record used to join a history block, or null before publication. */
+	readonly artifactId: string | null;
+	/** Published revision used to join a history block, or null before publication. */
+	readonly artifactRevisionId: string | null;
 	readonly provenance: ConversationAssetProvenance;
 	readonly displayName: string;
 	readonly mediaType: string;

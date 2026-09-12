@@ -1346,6 +1346,57 @@
 						"importPath": "../../authorization/db/conversation-product-authorization"
 					}
 				]
+			},
+			{
+				"path": "libs/backend/server/agents/artifacts/main/src/pdf-input/prisma-scanned-pdf-text-repository.ts",
+				"adapter": "PrismaScannedPdfTextRepository",
+				"contract": "ScannedPdfTextRepository",
+				"contractImportPath": "./pdf-text-lineage.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/conversation-assets/main/src/prisma-conversation-asset-preprocess-repository.ts",
+				"adapter": "PrismaConversationAssetPreprocessRepository",
+				"contract": "ConversationAssetPreprocessLifecycleRepository",
+				"contractImportPath": "@opencrane/backend/server/agents/artifacts",
+				"constructs": [
+					{
+						"adapter": "PrismaScannedPdfTextRepository",
+						"importPath": "@opencrane/backend/server/agents/artifacts"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversation-assets/main/src/prisma-conversation-message-attachment-repository.ts",
+				"adapter": "PrismaConversationMessageAttachmentRepository",
+				"contract": "ConversationMessageAttachmentAdmission",
+				"contractImportPath": "@opencrane/backend/server/conversations",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationAssetProductAuthorizationRepository",
+						"importPath": "./conversation-asset-product-authorization"
+					},
+					{
+						"adapter": "PrismaScannedPdfTextRepository",
+						"importPath": "@opencrane/backend/server/agents/artifacts"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversation-assets/main/src/pdf-input/prisma-conversation-prompt-document-repository.ts",
+				"adapter": "PrismaConversationPromptDocumentRepository",
+				"contract": "ConversationPromptDocumentAuthority",
+				"contractImportPath": "@opencrane/backend/server/conversations",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationAssetRepository",
+						"importPath": "../prisma-conversation-asset-repository"
+					},
+					{
+						"adapter": "PrismaScannedPdfTextRepository",
+						"importPath": "@opencrane/backend/server/agents/artifacts"
+					}
+				]
 			}
 		],
 		"unitsOfWork": [
@@ -2240,6 +2291,25 @@
 						"importPath": "@opencrane/backend/agents/execution/runs"
 					}
 				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/messages/prisma-conversation-message-admission-unit-of-work.ts",
+				"adapter": "PrismaConversationMessageAdmissionUnitOfWork",
+				"contract": "ConversationMessageAdmission",
+				"contractImportPath": "./conversation-message-admission.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationHistoryRepository",
+						"importPath": "./db/prisma-conversation-history-repository"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/messages/prisma-conversation-prompt-document-preparation-unit-of-work.ts",
+				"adapter": "PrismaConversationPromptDocumentPreparationUnitOfWork",
+				"contract": "ConversationPromptDocumentPreparer",
+				"contractImportPath": "./conversation-prompt-document.types",
+				"constructs": []
 			}
 		],
 		"compositions": [
@@ -2296,14 +2366,17 @@
 			"libs/backend/server/iam/authorization/main/src/approvals/deferred-tool-approval-batch.ts",
 			"libs/backend/server/iam/authorization/main/src/approvals/deferred-tool-approval-fence.ts",
 			"libs/backend/server/iam/authorization/main/src/approvals/deferred-tool-approval-grants.ts",
-			"libs/backend/server/agents/artifacts/main/src/service/artifact-preprocess-output-broker.factory.ts",
 			"libs/backend/server/conversation-assets/main/src/service/conversation-asset-brokers.factory.ts",
 			"libs/backend/server/conversations/main/src/authorization/prisma-conversation-membership.ts",
 			"libs/backend/server/conversations/main/src/metadata/prisma-company-assistant-directory.ts",
 			"libs/backend/server/conversations/main/src/children/db/prisma-group-child-agent-resolver.ts",
 			"libs/backend/server/conversations/main/src/computers/activation/conversation-computer-activation-composition.ts",
 			"libs/backend/server/infra/prisma-unit-of-work/src/prisma-client.ts",
-			"libs/backend/server/gateways/mcp/main/src/runtime/mcp-tool-invocation-admission.factory.ts"
+			"libs/backend/server/gateways/mcp/main/src/runtime/mcp-tool-invocation-admission.factory.ts",
+			"libs/backend/server/agents/artifacts/main/src/artifact-preprocess-conversation-lifecycle.types.ts",
+			"libs/backend/server/conversations/main/src/messages/conversation-message-admission.types.ts",
+			"libs/backend/server/conversations/main/src/messages/conversation-prompt-document.types.ts",
+			"apps/opencrane/src/index.ts"
 		]
 	},
 	"rawProcedureCalls": [

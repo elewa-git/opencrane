@@ -32,6 +32,14 @@
     },
     "test:integration": {
       "executor": "nx:run-commands",
+      "dependsOn": [
+        {
+          "projects": [
+            "opencrane"
+          ],
+          "target": "db:generate"
+        }
+      ],
       "options": {
         "command": "vitest run --config vitest.integration.config.ts",
         "cwd": "libs/backend/server/conversations/main"
@@ -39,8 +47,13 @@
       "cache": false,
       "inputs": [
         "{projectRoot}/**/*",
+        "{workspaceRoot}/apps/opencrane/src/bootstrap/conversations/__tests__/conversation-message-admission.integration.ts",
+        "{workspaceRoot}/apps/opencrane/src/bootstrap/conversations/__tests__/conversation-tool-proposal.sql-fixture.ts",
         {
           "env": "KURRENTDB_INTEGRATION_URL"
+        },
+        {
+          "env": "DATABASE_URL"
         }
       ]
     }

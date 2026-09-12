@@ -46,6 +46,8 @@ export interface ConversationMessageCommand
 {
 	/** Selects whether this message requests agent work. */
 	readonly activation: ConversationMessageActivations;
+	/** Lists selected conversation assets in validated canonical order. */
+	readonly assetIds: readonly string[];
 	/** UUID that deduplicates the browser command and KurrentDB event. */
 	readonly idempotencyKey: string;
 	/** Plaintext accepted only at the encryption boundary. */

@@ -106,6 +106,7 @@ describe("PrismaArtifactScanRepository", function _Suite()
 
 		await expect(repository.complete({ jobId: "job-1", attempt: 2, claimFence: "fence-2", verdict: ArtifactScannerVerdict.Clean, scannerVersion: "clamav-pinned" })).resolves.toBe("completed");
 		expect(workflow.spawn).toHaveBeenCalledWith({ client: transaction }, expect.objectContaining({ input: { siloId: "silo-1", preprocessJobId: "preprocess-1" } }));
+		expect(lifecycle.report).not.toHaveBeenCalled();
 		expect(transaction.artifactPreprocessJob.update).toHaveBeenCalledWith({ where: { id: "preprocess-1" }, data: { taskId: "task-1", taskName: expect.any(String) } });
 	});
 

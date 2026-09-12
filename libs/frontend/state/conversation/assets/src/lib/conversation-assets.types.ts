@@ -6,6 +6,10 @@ export interface ConversationAsset
 	readonly id: string;
 	readonly conversationId: string;
 	readonly messageId: string | null;
+	/** Artifact record referenced by a bound history block, or null before publication. */
+	readonly artifactId: string | null;
+	/** Published revision referenced by a bound history block, or null before publication. */
+	readonly artifactRevisionId: string | null;
 	readonly provenance: ConversationAssetProvenance;
 	readonly state: ConversationAssetLifecycle;
 	readonly displayName: string;

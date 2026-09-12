@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 
+import type { ConversationAssetPreprocessLifecycleFactory } from "./artifact-preprocess-conversation-lifecycle.types";
 import { PrismaArtifactPreprocessRepository } from "./prisma-artifact-preprocessing";
 import type { ArtifactPreprocessUnitOfWork, ArtifactPreprocessWork } from "./artifact-unit-of-work.types";
 
@@ -24,7 +25,7 @@ export class PrismaArtifactPreprocessUnitOfWork implements ArtifactPreprocessUni
 	/** The product database client. Held privately so router and broker code cannot reach it and open its own transaction. */
 	private readonly prisma: PrismaClient;
 	/** Creates the preprocessing transaction boundary. */
-	constructor(prisma: PrismaClient)
+	constructor(prisma: PrismaClient, private readonly createConversationAssets: ConversationAssetPreprocessLifecycleFactory)
 	{
 		this.prisma = prisma;
 	}
@@ -40,9 +41,10 @@ export class PrismaArtifactPreprocessUnitOfWork implements ArtifactPreprocessUni
 	 */
 	async run<Result>(work: ArtifactPreprocessWork<Result>): Promise<Result>
 	{
+		const createConversationAssets = this.createConversationAssets;
 		return ___RunInPrismaUnitOfWork(this.prisma, async function _Run(transaction): Promise<Result>
 		{
-			return work(new PrismaArtifactPreprocessRepository(transaction));
+			return work(new PrismaArtifactPreprocessRepository(transaction, createConversationAssets(transaction)));
 		}, { isolationLevel: "Serializable", operation: "artifact preprocessing", attemptLimit: 3 });
 	}
 }

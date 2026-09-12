@@ -2,6 +2,7 @@ import type { ConversationComputerRunAdmissionCommand } from "../computers/turns
 import type { __CreatePrismaSessionAssemblyAuthorities } from "@opencrane/backend/agents/execution/inputs";
 import type { PrismaPromptCompilerRepository } from "@opencrane/backend/agents/execution/inputs";
 import type { CompiledRunInput, RunInputSnapshot } from "@opencrane/contracts";
+import type { ConversationPromptDocumentPreparation, ConversationPromptDocumentPreparer } from "../messages/conversation-prompt-document.types";
 
 /** Exact execution-subject source created only after the computer path has supplied its verified lease coordinates. */
 export interface ConversationRunExecutionSubjectAuthorityFactory
@@ -20,10 +21,12 @@ export interface ConversationRunHistoryAdmissionReaderFactory
 /** Compiled-input readers bound to the same canonical Kurrent conversation selected for admission. */
 export interface ConversationRunInputCompilerRepositoryFactory
 {
+	/** Prepare PDF text before the final compiler transaction starts. */
+	prepare(command: ConversationComputerRunAdmissionCommand): ReturnType<ConversationPromptDocumentPreparer["prepare"]>;
 	/** Create readers that dereference only the immutable records named by the admitted snapshot. */
-	create(command: ConversationComputerRunAdmissionCommand, transaction: ConstructorParameters<typeof PrismaPromptCompilerRepository>[0]): PrismaPromptCompilerRepository;
+	create(command: ConversationComputerRunAdmissionCommand, prepared: ConversationPromptDocumentPreparation, transaction: ConstructorParameters<typeof PrismaPromptCompilerRepository>[0]): PrismaPromptCompilerRepository;
 	/** Compile a previously admitted idempotent snapshot in its own immutable read transaction. */
-	compile(command: ConversationComputerRunAdmissionCommand, snapshot: RunInputSnapshot): Promise<CompiledRunInput>;
+	compile(command: ConversationComputerRunAdmissionCommand, prepared: ConversationPromptDocumentPreparation, snapshot: RunInputSnapshot): Promise<CompiledRunInput>;
 }
 
 /** Concrete conversation authorities shared by application run-admission composition. */

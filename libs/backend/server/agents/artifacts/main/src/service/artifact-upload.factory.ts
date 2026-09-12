@@ -46,12 +46,13 @@ export function _CreateArtifactUploadGateway(prisma: PrismaClient, workflow: Pic
 }
 
 /** Build the server-side path that turns exact published coordinates into verified ArtifactStore bytes. */
-export function _CreatePublishedArtifactReader(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): { read(input: PublishedArtifactReadTarget): Promise<ReadableStream<Uint8Array>> }
+export function _CreatePublishedArtifactReader(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): { read(input: PublishedArtifactReadTarget, signal?: AbortSignal): Promise<ReadableStream<Uint8Array>> }
 {
 	const repository = _CreateArtifactCatalogueRepository(prisma);
 	return {
-		async read(input: PublishedArtifactReadTarget): Promise<ReadableStream<Uint8Array>>
+		async read(input: PublishedArtifactReadTarget, signal?: AbortSignal): Promise<ReadableStream<Uint8Array>>
 		{
+			signal?.throwIfAborted();
 			return ___DoWithTrace("artifact.published-read", { siloId: input.siloId, artifactId: input.artifactId, artifactRevisionId: input.artifactRevisionId }, async function _ReadArtifact(): Promise<ReadableStream<Uint8Array>>
 			{
 				const serviceUrl = _InternalArtifactServiceUrl(environment.ARTIFACT_SERVICE_URL ?? "");
@@ -60,7 +61,8 @@ export function _CreatePublishedArtifactReader(prisma: PrismaClient, environment
 				const issued = await __IssueArtifactReadLease(repository, { sign: signLease }, { siloId: input.siloId, artifactId: input.artifactId, artifactRevisionId: input.artifactRevisionId }, Math.floor(Date.now() / 1_000));
 				if (issued.outcome !== IssueArtifactReadLeaseOutcomes.Issued)
 					throw new Error("artifact read lease denied");
-				const response = await readPort.read(issued.compactLease);
+				signal?.throwIfAborted();
+				const response = await readPort.read(issued.compactLease, signal);
 				if (response.headers.get("content-length") !== String(issued.claims.byteLength) || response.headers.get("content-type") !== issued.claims.mediaType)
 					throw new Error("artifact service read metadata did not match the published revision");
 				if (response.body === null)

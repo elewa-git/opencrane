@@ -47,7 +47,7 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	/** Append an explicit Stop control message without starting a replacement turn. */
 	public async requestStop(command: ConversationWorkStopCommand): Promise<void>
 	{
-		const result = await this._api.client.POST("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: command.conversationId } }, body: { idempotencyKey: command.idempotencyKey, text: "Stop", activation: "stop" } });
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: command.conversationId } }, body: { idempotencyKey: command.idempotencyKey, text: "Stop", assetIds: [], activation: "stop" } });
 		if (result.error !== undefined || result.data === undefined)
 			throw _Failure(result.response?.status);
 	}
@@ -162,7 +162,7 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	/** @inheritdoc */
 	public async send(command: SubmitConversationMessageCommand): Promise<void>
 	{
-		const result = await this._api.client.POST("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: command.conversationId } }, body: { idempotencyKey: command.idempotencyKey, text: command.text, activation: command.activation } });
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: command.conversationId } }, body: { idempotencyKey: command.idempotencyKey, text: command.text, assetIds: [...command.assetIds], activation: command.activation } });
 		if (result.error !== undefined || result.data === undefined)
 			throw _Failure(result.response?.status);
 	}

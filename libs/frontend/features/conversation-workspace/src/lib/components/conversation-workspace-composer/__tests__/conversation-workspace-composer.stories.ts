@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/angular";
+import { expect, within } from "storybook/test";
 import { ConversationComposerStates, ConversationStatusTones } from "@opencrane/elements/conversation";
 import { ConversationWorkspaceComposerComponent } from "../conversation-workspace-composer.component";
 
@@ -15,4 +16,12 @@ export const Reconnecting: Story = { tags: ["visual-test"], args: { composerStat
 /** A group failure offers a separate request-state refresh. */
 export const GroupFailure: Story = { tags: ["visual-test"], args: { groupError: "Assistant request could not be refreshed.", groupRefreshAvailable: true } };
 /** Recovery controls and the retained draft remain visible at the supported narrow viewport. */
-export const ReconnectingNarrow: Story = { ...Reconnecting, tags: ["visual-test", "visual-test-narrow"] };
+export const ReconnectingNarrow: Story = { ...Reconnecting, tags: ["visual-test", "visual-test-narrow"], play: async function _NarrowBounds({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	const pickerBounds = canvas.getByLabelText("Attach PDF").getBoundingClientRect();
+	const sendBounds = canvas.getByRole("button", { name: "Send" }).getBoundingClientRect();
+	expect(Math.ceil(pickerBounds.right)).toBeLessThanOrEqual(globalThis.innerWidth);
+	expect(Math.ceil(sendBounds.right)).toBeLessThanOrEqual(globalThis.innerWidth);
+	expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth);
+} };

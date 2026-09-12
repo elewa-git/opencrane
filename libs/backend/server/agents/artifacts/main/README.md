@@ -71,11 +71,15 @@ trusted server process:
 Conversation uploads instead enter a quarantined revision. The dedicated scanner receives only a
 fenced attempt and brokered bytes. A clean verdict publishes the exact revision; a rejection or
 terminal scanner failure leaves it unavailable and gives the participant only a stable failure.
+For a conversation PDF, clean scanning leaves the file Processing until the workflow controller
+consumes the conversion receipt. Its Completed job and Ready file commit together. Terminal worker
+or controller failure marks the file Failed in the same transaction; a retryable failure leaves it
+Processing. General artifact conversions have no conversation file to update.
 
 **In this flow:** [skills](../../skills/main/README.md) · [agent-services](../../agent-services/main/README.md) *(both pin artifacts)*
 
-Invariant: this domain never touches artifact bytes — no upload, no download, no hashing of content
-here. It commits revision metadata, the current-revision pointer, the lease consumption, and the
+The repositories commit metadata; `src/service/` owns byte transport and content hashing outside
+those transactions. Publication commits the revision, current-revision pointer, lease consumption and
 outbox event in one transaction, keyed by an idempotency key so a retried finalize returns the same
 result instead of creating a duplicate. A stale, replayed, or already-consumed receipt fails closed.
 Read leases contain only facts reloaded from the catalogue; caller-provided digests, byte counts,
@@ -102,6 +106,10 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
 
 - `_CreateArtifactUploadGateway` composes lease signing and verified publication.
 - `_CreatePublishedArtifactReader` returns bytes only after reloading immutable catalogue metadata.
+  Its optional abort signal lets the calling use case bound the private byte-store read.
+- `PrismaScannedPdfTextRepository` resolves one clean, current PDF through its completed conversion,
+  exact generated text revision and sole source parent. The caller authorizes the source Artifact
+  before using these internal coordinates; the hidden derivative supplies no independent grant.
 - `_CreateArtifactPreprocessOutputBroker`, `_CreateArtifactPreprocessSourceBroker` and
   `_CreateArtifactScanSourceBroker` bind worker operations to authorised artifact coordinates.
 

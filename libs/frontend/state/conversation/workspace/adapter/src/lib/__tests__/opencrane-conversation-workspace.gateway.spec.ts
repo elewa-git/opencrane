@@ -49,7 +49,7 @@ describe("OpenCraneConversationWorkspaceGateway", function _DescribeMessageGatew
 		const post = vi.fn().mockResolvedValue({ data: { outcome: "appended", position: "3" } });
 		const gateway = _Gateway(post);
 		await gateway.requestStop({ conversationId: "conversation-1", idempotencyKey: "stop-command-1" });
-		expect(post).toHaveBeenCalledWith("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: "conversation-1" } }, body: { idempotencyKey: "stop-command-1", text: "Stop", activation: "stop" } });
+		expect(post).toHaveBeenCalledWith("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: "conversation-1" } }, body: { idempotencyKey: "stop-command-1", text: "Stop", assetIds: [], activation: "stop" } });
 	});
 
 	it("binds a child request to the selected parent and preserves its retry command and abort signal", async function _ChildRequest()
@@ -107,8 +107,10 @@ describe("OpenCraneConversationWorkspaceGateway", function _DescribeMessageGatew
 	{
 		const post = vi.fn().mockResolvedValue({ data: { outcome: "appended", position: "1" } });
 		const gateway = _Gateway(post);
-		await gateway.send({ conversationId: "conversation-1", idempotencyKey: "command-1", text: "Hello", activation: "start" });
-		expect(post).toHaveBeenCalledWith("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: "conversation-1" } }, body: { idempotencyKey: "command-1", text: "Hello", activation: "start" } });
+		const command = { conversationId: "conversation-1", idempotencyKey: "command-1", text: "Hello", assetIds: ["asset-1"], activation: "start" } as const;
+		await gateway.send(command);
+		expect(post).toHaveBeenCalledWith("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: "conversation-1" } }, body: { idempotencyKey: "command-1", text: "Hello", assetIds: ["asset-1"], activation: "start" } });
+		expect(post.mock.calls[0]![1].body.assetIds).not.toBe(command.assetIds);
 	});
 
 	it("rejects malformed command output before state can adopt it", async function _RejectsCommand()

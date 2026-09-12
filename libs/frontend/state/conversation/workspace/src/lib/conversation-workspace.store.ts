@@ -6,6 +6,7 @@ import { __CreateConversationHistoryProjection, ConversationEventStreamStatuses,
 import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "./conversation-workspace-gateway.errors";
 import { _CanCreateConversation, _ResolveConversationCreationCommand } from "./conversation-creation-command";
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "./conversation-workspace.gateway";
+import { _CanonicalConversationMessageAssetIds, _ConversationMessageAssetIdsForSend, _ConversationMessageCommand } from "./conversation-message-command";
 import { ConversationOnboardingHistoryStore } from "./conversation-onboarding-history.store";
 import { ConversationCreationStates, ConversationOnboardingHistoryStatuses, ConversationWorkspaceRouteStates, type ConversationCreationDirectory, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceNavigationIntent, type CreateConversationCommand, type SubmitConversationMessageCommand } from "./conversation-workspace.types";
 
@@ -47,8 +48,10 @@ export class ConversationWorkspaceStore
 	private _pendingCreation: CreateConversationCommand | null = null;
 	/** Whether a message command is active. */
 	private readonly _sending = signal(false);
-	/** Exact command retained after an ambiguous response so retry cannot duplicate the message. */
-	private _pendingMessage: SubmitConversationMessageCommand | null = null;
+	/** Exact message command retained while its outcome is uncertain. */
+	private readonly _pendingMessage = signal<SubmitConversationMessageCommand | null>(null);
+	/** Whether the composer must keep the retained draft and file selection visibly fixed for retry. */
+	public readonly messageRetryPending = computed(() => this._pendingMessage() !== null);
 	/** Whether a conversation command is active. */
 	private readonly _conversationCommandBusy = signal(false);
 	/** Browser-safe error for the latest failed operation. */
@@ -244,8 +247,12 @@ export class ConversationWorkspaceStore
 		}
 	}
 
-	/** Keep the message composer controlled by this selected conversation. */
-	public updateDraft(value: string): void { this._draft.set(value); }
+	/** Keep the message composer controlled and freeze its visible retry text after an uncertain send. */
+	public updateDraft(value: string): void
+	{
+		if (!this.messageRetryPending())
+			this._draft.set(value);
+	}
 
 	/** Replace a paused or failed stream without discarding its draft or accepted projection. */
 	public reconnect(): void
@@ -267,10 +274,12 @@ export class ConversationWorkspaceStore
 	{
 		const selected = this._selected();
 		const text = this._draft().trim();
-		if (selected === null || text.length === 0 || assetIds.length > 0 || !this._CanSend())
+		const canonicalAssetIds = _CanonicalConversationMessageAssetIds(assetIds);
+		if (selected === null || canonicalAssetIds === null || !this._CanSend(canonicalAssetIds.length > 0))
 			return false;
 		const generation = this._generation;
-		const command = this._PendingMessageCommand(selected.id, text, selected.mode);
+		const command = _ConversationMessageCommand(this._pendingMessage(), selected.id, text, selected.mode, canonicalAssetIds);
+		this._pendingMessage.set(command);
 		this._sending.set(true);
 		this._error.set(null);
 		try
@@ -279,7 +288,7 @@ export class ConversationWorkspaceStore
 			if (generation !== this._generation)
 				return false;
 			this._draft.set("");
-			this._pendingMessage = null;
+			this._pendingMessage.set(null);
 			return true;
 		}
 		catch (error)
@@ -299,6 +308,9 @@ export class ConversationWorkspaceStore
 		}
 	}
 
+	/** Returns the exact uncertain attachment set before considering newly edited selection state. */
+	public messageAssetIdsForSend(currentAssetIds: readonly string[]): readonly string[] { return _ConversationMessageAssetIdsForSend(this._pendingMessage(), currentAssetIds); }
+
 	/** Adopt a server-proven permanent close before the user can submit another message. */
 	private _CloseSelectedConversation(conversationId: string): void
 	{
@@ -307,7 +319,7 @@ export class ConversationWorkspaceStore
 			return;
 		this._selected.set({ ...selected, lifecycle: ConversationLifecycles.Closed });
 		this._conversations.update(current => current.map(candidate => candidate.id === conversationId ? { ...candidate, lifecycle: ConversationLifecycles.Closed } : candidate));
-		this._pendingMessage = null;
+		this._pendingMessage.set(null);
 	}
 
 	/** Archive the selected row for this participant and return to the remaining list. */
@@ -439,7 +451,7 @@ export class ConversationWorkspaceStore
 		this.history.clearSelection();
 		this._live.set(__CreateConversationHistoryProjection());
 		this._draft.set("");
-		this._pendingMessage = null;
+		this._pendingMessage.set(null);
 		this._reconnectAttempt.set(0);
 		this._manualReconnectPending.set(false);
 	}
@@ -466,18 +478,6 @@ export class ConversationWorkspaceStore
 	{
 		const selected = this._selected();
 		return selected !== null && selected.lifecycle === ConversationLifecycles.Open && selected.accessEndedPosition === null && this._streamStatus() === ConversationEventStreamStatuses.Live && !this._sending() && (this._draft().trim().length > 0 || hasAssets);
-	}
-
-	/** Reuse the exact pending command, or freeze a fresh command from the current composer. */
-	private _PendingMessageCommand(conversationId: string, text: string, mode: ConversationModes): SubmitConversationMessageCommand
-	{
-		const activation = mode === ConversationModes.AgentSession ? "start" : "none";
-		const pending = this._pendingMessage;
-		if (pending !== null && pending.conversationId === conversationId && pending.text === text && pending.activation === activation)
-			return pending;
-		const command: SubmitConversationMessageCommand = { conversationId, idempotencyKey: globalThis.crypto.randomUUID(), text, activation };
-		this._pendingMessage = command;
-		return command;
 	}
 
 	/** Whether the creation selection matches the fixed mode's cardinality. */

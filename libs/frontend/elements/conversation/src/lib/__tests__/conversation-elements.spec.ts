@@ -130,4 +130,51 @@ describe("conversation elements", function _ConversationElements()
 
 		expect(submitted).toEqual([""]);
 	});
+
+	it("keeps a draft editable but refuses submit while projected content is blocked", async function _BlocksSelectedContent()
+	{
+		const fixture = await _Fixture(ConversationComposerComponent);
+		const submitted = vi.fn();
+		fixture.componentInstance.submitted.subscribe(submitted);
+		_SetInput(fixture.componentInstance.draft, "Keep this draft");
+		_SetInput(fixture.componentInstance.submissionBlocked, true);
+		fixture.detectChanges();
+
+		(fixture.nativeElement as HTMLElement).querySelector<HTMLFormElement>("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+
+		expect(submitted).not.toHaveBeenCalled();
+		expect((fixture.nativeElement as HTMLElement).querySelector<HTMLTextAreaElement>("textarea")?.disabled).toBe(false);
+	});
+
+	it("keeps an uncertain retry draft visibly read-only while leaving exact retry enabled", async function _ReadOnlyRetry()
+	{
+		const fixture = await _Fixture(ConversationComposerComponent);
+		const changed = vi.fn();
+		const submitted = vi.fn();
+		fixture.componentInstance.draftChange.subscribe(changed);
+		fixture.componentInstance.submitted.subscribe(submitted);
+		_SetInput(fixture.componentInstance.draft, "Read the selected PDF");
+		_SetInput(fixture.componentInstance.draftReadOnly, true);
+		fixture.detectChanges();
+		const textarea = (fixture.nativeElement as HTMLElement).querySelector<HTMLTextAreaElement>("textarea");
+		if (textarea === null)
+			throw new Error("Composer textarea is missing.");
+
+		textarea.value = "Hidden replacement";
+		textarea.dispatchEvent(new Event("input", { bubbles: true }));
+		(fixture.nativeElement as HTMLElement).querySelector<HTMLFormElement>("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+
+		expect(textarea.readOnly).toBe(true);
+		expect(changed).not.toHaveBeenCalled();
+		expect(submitted).toHaveBeenCalledExactlyOnceWith("Read the selected PDF");
+		expect((fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>("button")?.disabled).toBe(false);
+
+		_SetInput(fixture.componentInstance.draftReadOnly, false);
+		fixture.detectChanges();
+		textarea.value = "A confirmed-send draft";
+		textarea.dispatchEvent(new Event("input", { bubbles: true }));
+
+		expect(textarea.readOnly).toBe(false);
+		expect(changed).toHaveBeenCalledExactlyOnceWith("A confirmed-send draft");
+	});
 });

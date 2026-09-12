@@ -6130,7 +6130,7 @@ ALTER TABLE "conversations" ADD CONSTRAINT "conversations_identity_check" CHECK 
 ALTER TABLE "conversation_private_payloads" ADD CONSTRAINT "conversation_private_payloads_encryption_check" CHECK (
         btrim("silo_id") <> '' AND btrim("author_subject") <> '' AND btrim("idempotency_key") <> ''
         AND btrim("key_id") <> '' AND octet_length("nonce") = 12 AND octet_length("auth_tag") = 16
-        AND octet_length("ciphertext") BETWEEN 1 AND 65536
+        AND octet_length("ciphertext") BETWEEN 0 AND 65536
         AND "ciphertext_digest" ~ '^sha256:[0-9a-f]{64}$'
     );
 CREATE FUNCTION "reject_conversation_private_payload_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$

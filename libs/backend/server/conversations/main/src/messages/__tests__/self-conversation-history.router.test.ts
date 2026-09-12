@@ -54,11 +54,35 @@ describe("_CreateSelfConversationHistoryRouter", function _DescribeRouter()
 	{
 		const postMessage = vi.fn().mockResolvedValueOnce({ outcome: "accepted", position: "2" }).mockResolvedValueOnce({ outcome: "idempotent", position: "2" });
 		const app = _App({ read: vi.fn(), postMessage });
-		const body = { idempotencyKey: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", text: "hello", activation: "none" };
+		const body = { idempotencyKey: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", text: "hello", assetIds: [], activation: "none" };
 		expect((await request(app).post("/api/v1/me/conversations/conversation-1/messages").send(body)).status).toBe(202);
 		expect((await request(app).post("/api/v1/me/conversations/conversation-1/messages").send(body)).status).toBe(200);
 		expect(postMessage).toHaveBeenNthCalledWith(1, _CALLER, "conversation-1", body);
 		expect(_TRACING.failed).not.toHaveBeenCalled();
+	});
+
+	it("accepts attachment-only input and passes one canonical asset set to admission", async function _CanonicalAssets()
+	{
+		const postMessage = vi.fn().mockResolvedValue({ outcome: "accepted", position: "2" });
+		const body = { idempotencyKey: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", text: "", assetIds: ["asset-z", "asset-a"], activation: "start" };
+		const response = await request(_App({ read: vi.fn(), postMessage })).post("/api/v1/me/conversations/conversation-1/messages").send(body);
+
+		expect(response.status).toBe(202);
+		expect(postMessage).toHaveBeenCalledWith(_CALLER, "conversation-1", { ...body, assetIds: ["asset-a", "asset-z"] });
+	});
+
+	it.each([
+		{ text: "", assetIds: [] },
+		{ text: "hello", assetIds: ["duplicate", "duplicate"] },
+		{ text: "hello", assetIds: ["has space"] },
+		{ text: "hello", assetIds: Array.from({ length: 11 }, (_value, index) => `asset-${index}`) },
+	])("rejects invalid text and attachment combinations", async function _RejectsAssets(command)
+	{
+		const postMessage = vi.fn();
+		const response = await request(_App({ read: vi.fn(), postMessage })).post("/api/v1/me/conversations/conversation-1/messages").send({ idempotencyKey: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", activation: "none", ...command });
+
+		expect(response.status).toBe(400);
+		expect(postMessage).not.toHaveBeenCalled();
 	});
 
 	it("rejects malformed cursors, bodies, and unavailable participant access", async function _RejectsInvalidRequests()
@@ -68,8 +92,8 @@ describe("_CreateSelfConversationHistoryRouter", function _DescribeRouter()
 		const app = _App(authority, warn);
 		expect((await request(app).get("/api/v1/me/conversations/conversation-1/history?afterPosition=-1")).status).toBe(400);
 		expect((await request(app).get("/api/v1/me/conversations/conversation-1/history")).status).toBe(404);
-		expect((await request(app).post("/api/v1/me/conversations/conversation-1/messages").send({ idempotencyKey: "bad", text: "hello", activation: "none" })).status).toBe(400);
-		expect((await request(app).post("/api/v1/me/conversations/conversation-1/messages").send({ idempotencyKey: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", text: "hello", activation: "none" })).status).toBe(404);
+		expect((await request(app).post("/api/v1/me/conversations/conversation-1/messages").send({ idempotencyKey: "bad", text: "hello", assetIds: [], activation: "none" })).status).toBe(400);
+		expect((await request(app).post("/api/v1/me/conversations/conversation-1/messages").send({ idempotencyKey: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", text: "hello", assetIds: [], activation: "none" })).status).toBe(404);
 		expect(warn).not.toHaveBeenCalled();
 		expect(_TRACING.failed).not.toHaveBeenCalled();
 	});
@@ -81,7 +105,7 @@ describe("_CreateSelfConversationHistoryRouter", function _DescribeRouter()
 		const app = _App({ read: vi.fn().mockRejectedValue(failure), postMessage: vi.fn().mockRejectedValue(failure) }, warn);
 		const pending = operation === "read"
 			? request(app).get("/api/v1/me/conversations/PRIVATE_PATH/history?afterPosition=7")
-			: request(app).post("/api/v1/me/conversations/PRIVATE_PATH/messages").send({ idempotencyKey: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", text: "PRIVATE_MESSAGE", activation: "none" });
+			: request(app).post("/api/v1/me/conversations/PRIVATE_PATH/messages").send({ idempotencyKey: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", text: "PRIVATE_MESSAGE", assetIds: [], activation: "none" });
 		const response = await pending;
 
 		expect(response.status).toBe(503);
@@ -186,7 +210,7 @@ describe("_CreateSelfConversationHistoryRouter", function _DescribeRouter()
 	{
 		const warn = vi.fn();
 		const app = _App({ read: vi.fn(), postMessage: vi.fn().mockRejectedValue(new Error(message)) }, warn);
-		const response = await request(app).post("/api/v1/me/conversations/conversation-1/messages").send({ idempotencyKey: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", text: "hello", activation: "none" });
+		const response = await request(app).post("/api/v1/me/conversations/conversation-1/messages").send({ idempotencyKey: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", text: "hello", assetIds: [], activation: "none" });
 
 		expect(response.status).toBe(409);
 		expect(response.body).toEqual({ error: "message_conflict" });

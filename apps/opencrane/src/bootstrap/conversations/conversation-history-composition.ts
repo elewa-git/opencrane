@@ -6,6 +6,7 @@ import { ConversationComputerHistory } from "@opencrane/backend/server/conversat
 import { _ResolveConversationCaller, _RegisterGroupChildWorkflow, PrismaCompanyAssistantDirectory, PrismaGroupChildAgentResolver, PrismaGroupChildAuthority, _CreateGroupChildRouter, PrismaAgentSessionCreationUnitOfWork, PrismaConversationMetadataUnitOfWork, PrismaSelfConversationHistoryUnitOfWork, _CreateConversationMetadataRouter, _CreateSelfConversationHistoryRouter } from "@opencrane/backend/server/conversations";
 import { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
 import { _CreateHumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
+import { PrismaConversationMessageAttachmentRepository } from "@opencrane/backend/server/conversation-assets";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import type { AgentSandboxReleaseProfileConfig } from "../configuration/config.types";
@@ -26,7 +27,7 @@ export function _CreateConversationHistoryComposition(
   const authority = new PrismaSelfConversationHistoryUnitOfWork(prisma, historyStore, {
     cipher,
     computerReader: new ConversationComputerHistory(historyStore),
-  }, new ConversationHistoryAuthority(historyStore));
+  }, new ConversationHistoryAuthority(historyStore), function _CreateAttachmentAdmission(transaction) { return new PrismaConversationMessageAttachmentRepository(transaction); });
   const resolveCaller = _ResolveConversationCaller;
   const creation = new PrismaAgentSessionCreationUnitOfWork(
     prisma,

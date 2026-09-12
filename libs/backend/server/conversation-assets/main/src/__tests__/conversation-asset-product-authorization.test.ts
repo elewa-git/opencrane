@@ -42,7 +42,7 @@ describe("conversation asset product authorization", function _Suite()
 
 		await expect(repository.canAccess(_CALLER, { kind: ProductAuthorizationResourceKinds.Artifact, id: "artifact-1" }, ProductAuthorizationActions.Read)).resolves.toBe(true);
 
-		expect(_authorization.listPrincipalEntitled.mock.calls[0]?.[0]).not.toHaveProperty("boundary");
+		expect(_authorization.listPrincipalEntitled).toHaveBeenCalledExactlyOnceWith({ siloId: "silo-1", principalId: "principal-1", resources: [{ kind: ProductAuthorizationResourceKinds.Artifact, id: "artifact-1" }], action: ProductAuthorizationActions.Read, nowEpochMs: expect.any(Number) });
 	});
 
 	it("records artifact mutations through the same Principal-wide authority", async function _AdmitsAcrossBoundaries()

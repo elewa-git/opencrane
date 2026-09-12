@@ -7,14 +7,14 @@ export function __ConversationAssetPresentation(asset: ConversationAsset, conten
 {
 	const state = _DurableState(asset.state);
 	const currentContentState = state === ConversationAssetPresentationStates.Ready ? contentState : ConversationAssetContentCommandStates.Idle;
-	return { id: asset.id, messageId: asset.messageId, provenance: asset.provenance, displayName: asset.displayName, mediaType: asset.mediaType, byteLength: asset.byteLength, disposition: asset.disposition, state, detail: _StateDetail(state), canRetry: false, canRemove: asset.canRemove, uploadProgressPercent: null, contentState: currentContentState, contentDetail: _ContentDetail(currentContentState) };
+	return { id: asset.id, messageId: asset.messageId, artifactId: asset.artifactId, artifactRevisionId: asset.artifactRevisionId, provenance: asset.provenance, displayName: asset.displayName, mediaType: asset.mediaType, byteLength: asset.byteLength, disposition: asset.disposition, state, detail: _StateDetail(state), canRetry: false, canRemove: asset.canRemove, uploadProgressPercent: null, contentState: currentContentState, contentDetail: _ContentDetail(currentContentState) };
 }
 
 /** Map one browser-local intent while omitting its retained File bytes. */
 export function __PendingConversationAssetPresentation(upload: PendingConversationAssetUpload): ConversationAssetPresentation
 {
 	const state = _PendingState(upload.phase);
-	return { id: upload.idempotencyKey, messageId: null, provenance: ConversationAssetProvenance.ParticipantUpload, displayName: upload.displayName, mediaType: upload.mediaType, byteLength: upload.byteLength, disposition: _Disposition(upload.mediaType), state, detail: _StateDetail(state), canRetry: state === ConversationAssetPresentationStates.Failed, canRemove: upload.canRemove, uploadProgressPercent: upload.uploadProgressPercent, contentState: ConversationAssetContentCommandStates.Idle, contentDetail: null };
+	return { id: upload.idempotencyKey, messageId: null, artifactId: null, artifactRevisionId: null, provenance: ConversationAssetProvenance.ParticipantUpload, displayName: upload.displayName, mediaType: upload.mediaType, byteLength: upload.byteLength, disposition: _Disposition(upload.mediaType), state, detail: _StateDetail(state), canRetry: state === ConversationAssetPresentationStates.Failed, canRemove: upload.canRemove, uploadProgressPercent: upload.uploadProgressPercent, contentState: ConversationAssetContentCommandStates.Idle, contentDetail: null };
 }
 
 /** Map typed selection rejection to stable user-facing feedback without transport details. */

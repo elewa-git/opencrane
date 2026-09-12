@@ -7,7 +7,7 @@ export interface ConversationAssetProductCaller { readonly siloId: string; reado
 /** Transaction-scoped product checks and owner-grant projection used by conversation assets. */
 export interface ConversationAssetProductAuthorizationRepository
 {
-	canAccess(caller: ConversationAssetProductCaller, resource: ProductAuthorizationResourceLocator, action: ProductAuthorizationActions): Promise<boolean>;
+	canAccess(caller: ConversationAssetProductCaller, resource: ProductAuthorizationResourceLocator, action: ProductAuthorizationActions.Read): Promise<boolean>;
 	admit(caller: ConversationAssetProductCaller, resource: ProductAuthorizationResourceLocator, action: ProductAuthorizationActions, argumentsValue: JsonValue): Promise<boolean>;
 	admitAs(caller: ConversationAssetProductCaller, actorKind: "user" | "agent-service" | "workload" | "system", actorId: string, resource: ProductAuthorizationResourceLocator, action: ProductAuthorizationActions, argumentsValue: JsonValue): Promise<boolean>;
 	reconcileArtifactOwner(siloId: string, artifactId: string, principalId: string, now: Date): Promise<void>;
