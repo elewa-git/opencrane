@@ -21,9 +21,16 @@ applier reproduces the declared postimages from the pinned upstream source. Arch
 and independent correctness review pass. Production and candidate qualification each require
 their own exact dropped-response evidence; neither accepts the other profile.
 Installed-image tests count actual model and embedding requests across lost-response, concurrent and
-restarted replay, and reject a changed snapshot before first dispatch. Their runtime execution remains
-pending in exact-image CI on the pushed commit; source checks do not promote the candidate image or
-establish testv5 readiness.
+restarted replay, and reject a changed snapshot before first dispatch.
+
+The first exact-image run on draft #875 (`331f80a2500d8d5e1eac113e5bc33d4ced42a2de`)
+passed affected build/test/lint, database authority, KurrentDB and review topology. Both provider jobs
+failed. The candidate stopped on its first Add before any indexing-recovery request: external
+tokenizer discovery exhausted the connection-test deadline before reaching the synthetic provider.
+The reviewed harness repair disables that external discovery while retaining the actual synthetic
+model and embedding connection tests. All eight focused harness tests and Cognee lint pass.
+Exact-image indexing recovery remains unqualified until the repaired commit passes CI; source
+checks do not promote the candidate image or establish testv5 readiness.
 
 ## Recover interrupted memory dataset permissions — implementation and validation
 

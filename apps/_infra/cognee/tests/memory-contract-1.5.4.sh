@@ -226,6 +226,8 @@ _start_cognee()
     --env "ENABLE_BACKEND_ACCESS_CONTROL=$access_control" \
     --env "REQUIRE_AUTHENTICATION=$require_authentication" \
     --env AUTO_FEEDBACK=false \
+    --env HF_HUB_OFFLINE=1 \
+    --env TRANSFORMERS_OFFLINE=1 \
     --env DATA_ROOT_DIRECTORY=/cognee-storage/data \
     --env SYSTEM_ROOT_DIRECTORY=/cognee-storage/system \
     --env LLM_PROVIDER=openai \
