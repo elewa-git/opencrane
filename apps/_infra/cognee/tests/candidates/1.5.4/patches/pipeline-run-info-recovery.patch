@@ -1,0 +1,5 @@
+--- a/cognee/modules/pipelines/models/PipelineRunInfo.py
++++ b/cognee/modules/pipelines/models/PipelineRunInfo.py
+@@ -15,0 +15,2 @@
++    operation_id: Optional[UUID] = None
++    input_evidence_digest: Optional[str] = None

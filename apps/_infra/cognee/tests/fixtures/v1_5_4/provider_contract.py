@@ -20,6 +20,10 @@ from v1_5_4.provider_dataset_provisioning_contract import (  # noqa: E402
     qualify_dataset_provisioning,
     verify_dataset_provisioning_after_restart,
 )
+from v1_5_4.provider_cognify_recovery_contract import (  # noqa: E402
+    prepare_cognify_recovery,
+    verify_cognify_recovery_after_restart,
+)
 from v1_5_4.provider_identity_contract import prepare_identity, recover_identity  # noqa: E402
 from v1_5_4.provider_isolation_contract import prepare_isolation  # noqa: E402
 
@@ -102,6 +106,9 @@ def main() -> None:
                 evidence["datasetProvisioning"] = dataset_provisioning
                 evidence["datasetAclRecovery"] = dataset_acl_recovery
                 evidence = prepare_identity(api, evidence, args.drop_proxy)
+                evidence["cognifyRecovery"] = prepare_cognify_recovery(
+                    api, args.namespace, args.drop_proxy
+                )
             state_path.write_text(
                 json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8"
             )
@@ -124,6 +131,11 @@ def main() -> None:
                     validated_evidence.get("datasetAclRecovery"),
                     args.namespace,
                     foreign_api,
+                )
+            )
+            validated_evidence["cognifyRecovery"] = (
+                verify_cognify_recovery_after_restart(
+                    api, validated_evidence.get("cognifyRecovery")
                 )
             )
             evidence = recover_identity(api, validated_evidence)

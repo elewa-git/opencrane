@@ -162,12 +162,25 @@ saved coordinates again.
 
 The candidate dataset route always passes an authenticated create or same-name retry through the
 authorised-dataset owner. That owner holds Cognee's existing per-dataset lock while it ensures the
-owner's `read`, `write`, `delete` and `share` grants. A restart retry can therefore complete grants
+owner’s `read`, `write`, `delete` and `share` grants. A restart retry can therefore complete grants
 that stopped after the dataset row or any one grant. This lock is process-local: the qualification
 is limited to the candidate's one-worker, one-replica SQLite profile and does not establish safety
 for a multi-worker or shared provider. The exact candidate image must still pass the five fault
 boundaries, foreign-owner isolation, concurrent uniqueness and public list/add/search/delete proof
 before personal dataset provisioning can be activated.
+
+The candidate Cognify recovery path extends the existing dataset-data and Cognify routes. An owner
+first reads one locked, bounded input snapshot. Its digest covers the complete raw bytes and private
+routing metadata for at most 1,000 documents of at most 65,536 bytes each. The caller then supplies
+that saved digest with one operation UUID. Under the same dataset lock, a new run compares the
+current snapshot before it records Started; an exact terminal history returns its saved run receipt
+without starting another task. A Started-only or contradictory history returns a fixed recovery
+failure and remains ambiguous. The evidence contains only dataset, document, operation and run
+coordinates plus digests and byte counts; it contains no document text, file paths or credentials.
+
+This recovery authority has the same one-worker, one-replica SQLite limit as the candidate dataset
+lock. Exact-image qualification must still prove response-loss replay, concurrent replay and
+restart refusal of a Started-only run before any candidate image can be selected for production.
 
 ## See also
 

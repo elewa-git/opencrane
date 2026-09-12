@@ -86,7 +86,7 @@ class ProviderDatasetAclRecovery154Test(unittest.TestCase):
                 "cognee.api.v1.datasets.routers.get_datasets_router",
                 "dataset-route-acl-recovery.patch",
                 "87b3ff9da756bbf730237197cdedcd26278f27e0c17f19ae887b77c9c0ccc241",
-                "0f6226908897c14c97c17a449f715e461201e801a8bab5832b7fd0f8766a551e",
+                "677afc0b7bb6c2633cf2c01d59a18f72dee0a2131ea6f49b16a42c72420baafb",
             ),
             (
                 "cognee.modules.data.methods.create_authorized_dataset",
@@ -114,7 +114,7 @@ class ProviderDatasetAclRecovery154Test(unittest.TestCase):
         )
         self.assertIn("-from cognee.modules.data.methods import get_datasets_by_name", source_patch)
         self.assertIn("-            datasets = await get_datasets_by_name", source_patch)
-        self.assertIn("             dataset = await create_authorized_dataset", source_patch)
+        self.assertNotIn("-            dataset = await create_authorized_dataset", source_patch)
 
     def test_authorized_dataset_patch_holds_one_lock_through_all_grants(self) -> None:
         source_patch = (PATCHES / "create-authorized-dataset-acl-recovery.patch").read_text(
@@ -311,6 +311,7 @@ class ProviderDatasetAclRecovery154Test(unittest.TestCase):
                     {
                         "datasetProvisioning": provisioned,
                         "datasetAclRecovery": acl_before,
+                        "cognifyRecovery": {"operationId": str(uuid.uuid4())},
                     }
                 ),
                 encoding="utf-8",
@@ -336,6 +337,11 @@ class ProviderDatasetAclRecovery154Test(unittest.TestCase):
                     provider_contract,
                     "verify_dataset_acl_recovery_after_restart",
                     side_effect=verify_acl,
+                ),
+                patch.object(
+                    provider_contract,
+                    "verify_cognify_recovery_after_restart",
+                    side_effect=lambda _api, evidence: evidence,
                 ),
                 patch.object(
                     provider_contract,
