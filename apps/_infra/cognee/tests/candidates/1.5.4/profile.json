@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "candidate": "cognee-1.5.4",
+  "source": {
+    "repository": "https://github.com/topoteretes/cognee",
+    "tag": "v1.5.4",
+    "commit": "20e0bd88746de2d96e99b4b122361dfc3dad21bc",
+    "runtimeVersion": "1.5.4-local"
+  },
+  "image": {
+    "repository": "cognee/cognee",
+    "baseReference": "cognee/cognee@sha256:a52b0c2669e28932b53d677a6adf6d6487b03886732a5db07b58f3b869647b10",
+    "indexDigest": "sha256:68b755bebae2a19f482069b5efcbe8e4bdf717a68f6afb6fef80c3c352c37015",
+    "linuxAmd64Digest": "sha256:a52b0c2669e28932b53d677a6adf6d6487b03886732a5db07b58f3b869647b10",
+    "configDigest": "sha256:d065be870ef8ddb09dcee5eb58e77814a10eec593bff6632d6d2ee1b7d1d0387",
+    "platform": "linux/amd64",
+    "runtimeUser": "cognee",
+    "runtimeUid": 1000,
+    "runtimeGid": 1000,
+    "home": "/app",
+    "workingDirectory": "/app",
+    "entrypoint": [
+      "/app/entrypoint.sh"
+    ],
+    "systemRootDirectory": "/cognee-storage/system",
+    "dataRootDirectory": "/cognee-storage/data"
+  },
+  "ladybug": {
+    "packageVersion": "0.19.0",
+    "storageCode": 43,
+    "extensionName": "json",
+    "extensionUrl": "https://extension.ladybugdb.com/v0.19.0/linux_amd64/json/libjson.lbug_extension",
+    "extensionPath": "/app/.lbdb/extension/0.19.0/linux_amd64/json/libjson.lbug_extension",
+    "extensionSha256": "39c51fa9b1915590a500eef732c76913aeb10cd942e46e1c259497e609b97426",
+    "extensionSizeBytes": 846920
+  }
+}

@@ -715,6 +715,45 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  cognee_candidate_contract:
+    name: Cognee 1.5.4 candidate qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: prepare
+    if: needs.prepare.outputs.cognee_memory_contract_required == 'true'
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}
+
+      - name: Install candidate-contract dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Qualify the disposable candidate image
+        env:
+          NX_DAEMON: 'false'
+        run: npm exec -- nx run cognee:memory-contract-1-5-4
+
+      - name: Preserve candidate qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cognee-memory-contract-1-5-4-${{ github.run_attempt }}
+          path: .nx/test-results/cognee-memory-contract-1-5-4
+          if-no-files-found: error
+          retention-days: 14
+
   build-and-push:
     name: Build and publish affected images
     runs-on: ubuntu-latest

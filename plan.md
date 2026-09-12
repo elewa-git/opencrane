@@ -99,6 +99,62 @@ recovery after an interrupted deletion before memory mutation can be enabled.
 Personal Remember, Recall, Correct and Forget remain unavailable until this evidence and their
 subsequent product slices are complete. Local container VMs are not started for this work.
 
+### Candidate follow-up: fresh Cognee 1.5.4 qualification
+
+Draft [#867](https://github.com/elewa-git/opencrane/pull/867) starts directly above #863 at
+`b8f7d7ac902583b6a0a4e348c3189188ecf28149` on
+`feat/0.12-memory-candidate-qualification`. Architecture preflight permits a disposable image and
+contract under the existing Cognee test tree. The production Dockerfile, chart, release manifest
+and failing 1.2.1 publication gate stay unchanged.
+
+The official 1.5.4 source fixes ordinary original-upload deletion, but changes document identity to
+dataset-scoped rows, uses a newer native database extension and still has a gap when file cleanup
+fails after the relational deletion commits. Qualification must check the whole provider on fresh
+storage: exact source/image/native-extension pins, non-root offline startup, dataset and document
+identity, useful recall, lost-response and restart recovery, shared files, local path ownership,
+and interrupted deletion. Every failed proof stays visible; a candidate pass never publishes an
+image or enables personal memory by itself.
+
+The bounded source slice is implemented and independently reviewed. Local Cognee test/lint passes
+with 23 Python tests, image contracts and a regression rejecting a smoke run with no execution
+receipt. All 24 affected-deployable tests and the relevant ownership, style, Prisma, module-growth
+and release checks pass.
+
+The first exact-image run, `34608702447` at `5123f591bfecc25fe355e693b78546b985f67480`,
+passed offline image/native-store checks and all 47 installed source hashes. The fixture then
+stopped on a response-field mismatch: Cognee's HTTP dataset records use `datasetId`, while the
+fixture read the internal Python field name `dataset_id`. This did not prove a foreign listing.
+The bounded correction reads the exact HTTP field and keeps dataset ownership strict in both
+control and authenticated modes. Search, authenticated recovery and deletion were not reached;
+the corrected candidate then required another exact-image run.
+
+The corrected run `34678289718` at `d1d783e482276ef5c8924117b611fb554c69d14c`
+passes image/native-store checks, all 47 source hashes, the ACL-disabled negative control,
+authenticated dataset isolation, identity and committed-response/restart recovery. It stops at
+identical content in a second dataset: that dataset has its own byte-proven document row, but the
+CHUNKS response does not establish the required useful retrieval for that document. The returned
+chunk/document coordinates were not retained. Source and log follow-up show that session
+preparation replaced the requested query with the synthetic model's `query_to_answer`; a ranked
+top-20 response to that query cannot prove complete document association. The next proof must
+separate graph association from useful retrieval and retain only safe chunk/document coordinates.
+This result does not establish lost chunks. Deletion, path containment and interrupted-deletion
+checks were not reached. The
+candidate remains unqualified; no production image or memory availability changes.
+
+The diagnostic follow-up records graph document/chunk association separately from the ordered
+CHUNKS coordinates, with duplicate results preserved and distinct counts reported. The evidence
+is saved before the existing two-chunk assertion, so a repeat failure can be classified without
+retaining source text or relaxing that gate. Fast tests cover malformed coordinates, exact target
+selection, duplicate preservation and evidence retention on assertion failure. Cognee test/lint
+passes and independent source review passes. The additional evidence still needs exact-image CI.
+
+The candidate keeps a separate disposable lifecycle because its non-root storage, evidence volume
+and additional restart differ from 1.2.1; API, stub, proxy, attestation and summary helpers remain
+shared. Remove the obsolete lifecycle when a qualified production replacement is selected.
+Before activation, complete the wider provider matrix: concurrent delete/add, interruptions before
+relational commit and between graph and relational cleanup, exact schema/native-store recovery,
+duplicate-chunk checks and explicit removal of both stored file locations.
+
 ## Delivery priorities — 2026-09-10
 
 The user selected this order. Each track delivers a useful journey through the existing owners;
