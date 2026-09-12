@@ -1,40 +1,13 @@
 import { InjectionToken } from "@angular/core";
 
-import { McpCredentialField, McpInstalledServer, McpServer } from "@opencrane/core";
+import { McpInstalledServer, McpServer } from "@opencrane/core";
+import type { paths } from "@opencrane/contracts";
 
-/** Wire shape of a catalogue server. */
-export interface McpServerWire
-{
-	/** Stable id / slug. */
-	id: string;
-	/** Display name. */
-	name?: string;
-	/** Short description. */
-	description?: string;
-	/** Publisher label. */
-	publisher?: string;
-	/** Tile glyph. */
-	glyph?: string;
-	/** Connection type (raw string). */
-	type?: string;
-	/** Lifecycle status (raw string). */
-	approvalStatus?: string;
-	/** Credential fields. */
-	credentialSchema?: McpCredentialField[];
-	/** Entitlement summary. */
-	entitlementSummary?: string;
-}
+/** Generated catalogue response interpreted by the MCP model mapper. */
+export type McpServerWire = paths["/mcp/catalog"]["get"]["responses"][200]["content"]["application/json"][number];
 
-/** Wire shape of an installed-server record. */
-export interface McpInstalledWire
-{
-	/** Catalogue server id. */
-	serverId: string;
-	/** Connection status (raw string). */
-	connectionStatus?: string;
-	/** Relative last-used label. */
-	lastUsed?: string | null;
-}
+/** Generated installed-server response interpreted by the MCP model mapper. */
+export type McpInstalledWire = paths["/mcp/installed"]["get"]["responses"][200]["content"]["application/json"][number];
 
 /**
  * Abstraction over the OpenCrane MCP catalogue and install operations backing
@@ -61,9 +34,8 @@ export interface McpGateway
 
 	/**
 	 * Install a server for the current user. Resolves with the new installed
-	 * record; its initial {@link McpInstalledServer.connectionStatus} depends on
-	 * the server type (a shared-key multi-user server is ready immediately; a
-	 * single-user or OAuth server remains pending external activation).
+	 * record. A credentialless server needs no activation; every credential-requiring server remains
+	 * pending until a separately governed activation flow exists.
 	 *
 	 * @param serverId - The catalogue server id to install.
 	 */

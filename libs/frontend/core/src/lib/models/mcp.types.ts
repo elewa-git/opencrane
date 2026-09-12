@@ -1,23 +1,28 @@
 /**
- * Domain model for the MCP (Model Context Protocol) catalogue, credential
- * connect, and activation feature.
+ * Domain model for the MCP (Model Context Protocol) catalogue, installation, and governance
+ * feature.
  *
  * These are the browser-safe projections of the OpenCrane
  * `/api/v1/mcp/...` contract shapes rendered by the catalogue UI.
  */
 
+import type { McpCredentialRequirement } from "@opencrane/contracts";
+
+export { McpCredentialRequirement } from "@opencrane/contracts";
+
 /**
- * How a user connects their identity to an MCP server — drives the Connect UX.
+ * How the catalogue presents an MCP server connection.
  *
- * Mirrors the server-type values in the OpenCrane MCP API.
+ * Mirrors the server-type values in the OpenCrane MCP API. The separate credential requirement
+ * controls readiness; this presentation does not provide a browser activation flow.
  */
 export enum McpServerType
 {
-	/** The user supplies their own credential (an API token). */
+	/** Presents a connection configured for an individual user. */
 	SingleUser = "single-user",
-	/** An admin pre-sets a shared key; the user is never prompted. */
+	/** Presents a connection intended for multiple users. */
 	MultiUser = "multi-user",
-	/** Browser OAuth consent flow against the provider. */
+	/** Presents a remote connection intended for OAuth activation. */
 	RemoteOauth = "remote-oauth"
 }
 
@@ -42,7 +47,7 @@ export enum McpApprovalStatus
 
 /**
  * Determines whether the Tools UI presents an installed MCP server as awaiting external activation
- * or ready through an administrator-managed key.
+ * or requiring no credential.
  *
  * The adapter maps the operator API's two retained string values into this closed set. OpenCrane has
  * no browser credential or OAuth activation command, so `NeedsCredential` is informational here.
@@ -51,30 +56,28 @@ export enum McpConnectionStatus
 {
 	/** The install remains unusable until a custody flow outside the current browser API activates it. */
 	NeedsCredential = "needs-credential",
-	/** The install is usable through an administrator-managed key and needs no user action. */
-	SharedKey = "shared-key"
+	/** The installed server requires no credential; execution still checks current authority. */
+	Credentialless = "credentialless"
 }
 
 /**
- * One configurable credential field from a server's config schema.
+ * Server-declared credential-field metadata for a future governed custody flow.
  *
- * For single-user servers, the Connect form is rendered from these fields.
- * A `sensitive` field is write-only: it is masked, never returned to the
- * browser, and never echoed back after being saved.
+ * The current browser API neither renders nor submits credential values.
  */
 export interface McpCredentialField
 {
-	/** Stable key sent to the control plane. */
+	/** Stable field key declared by the server. */
 	key: string;
 	/** Human-readable field label. */
 	label: string;
-	/** Whether the field is mandatory. */
+	/** Whether a future activation flow must supply the field. */
 	required: boolean;
-	/** Whether the value is a secret (write-only, masked, never read back). */
+	/** Whether a future activation UI must treat the value as a write-only secret. */
 	sensitive: boolean;
-	/** Placeholder shown in the empty input. */
+	/** Optional placeholder metadata. */
 	placeholder?: string;
-	/** Optional hint rendered under the field. */
+	/** Optional helper-text metadata. */
 	hint?: string;
 }
 
@@ -93,11 +96,13 @@ export interface McpServer
 	publisher: string;
 	/** Two-letter glyph for the catalogue tile. */
 	glyph: string;
-	/** Connection type — drives the Connect UX. */
+	/** Connection presentation; does not determine credential readiness. */
 	type: McpServerType;
+	/** Credential custody required before an installation can execute. */
+	credentialRequirement: McpCredentialRequirement;
 	/** Governance lifecycle status. */
 	approvalStatus: McpApprovalStatus;
-	/** Credential fields for single-user servers (empty for multi-user / OAuth). */
+	/** Server-declared credential field metadata; empty when no field form is supplied. */
 	credentialSchema: McpCredentialField[];
 	/** Short entitlement summary for the admin table (e.g. "Everyone (org)"). */
 	entitlementSummary: string;

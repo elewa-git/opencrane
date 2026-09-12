@@ -9,6 +9,8 @@ export interface RuntimeMcpEffectEligibilityCommand
 	readonly agentRevisionId: string;
 	/** Immutable MCP tool revision proposed by the runtime. */
 	readonly toolRevisionId: string;
+	/** Personal or managed-service Principal that will perform the effect. */
+	readonly ownerPrincipalId: string;
 }
 
 /** Rechecks MCP publication and the exact AgentRevision assignment on a caller-owned transaction. */

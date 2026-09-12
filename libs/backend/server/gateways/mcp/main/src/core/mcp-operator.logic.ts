@@ -1,4 +1,4 @@
-import { McpApprovalStatus, McpConnectionStatus, McpServerType, McpToolRevisionEligibility, McpToolRevisionReadiness, type CredentialField, type McpAssignableToolRevision, type McpCatalogServer, type McpInstalled } from "@opencrane/contracts";
+import { McpApprovalStatus, McpConnectionStatus, McpCredentialRequirement, McpServerType, McpToolRevisionEligibility, McpToolRevisionReadiness, type CredentialField, type McpAssignableToolRevision, type McpCatalogServer, type McpInstalled } from "@opencrane/contracts";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___CloneCanonicalJson, ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import type { McpOperatorCaller } from "./mcp-operator.logic.types";
@@ -9,7 +9,9 @@ import { __RequireMcpOrganizationAdministration, __RequireMcpOrganizationAdminis
 const _TYPE = { SingleUser: McpServerType.SingleUser, MultiUser: McpServerType.MultiUser, RemoteOauth: McpServerType.RemoteOauth } as const;
 const _APPROVAL = { PendingReview: McpApprovalStatus.PendingReview, Approved: McpApprovalStatus.Approved, Published: McpApprovalStatus.Published, Disabled: McpApprovalStatus.Disabled } as const;
 const _REQUIRED_APPROVAL = { Approved: "PendingReview", Published: "Approved" } as const;
-const _CONNECTION = { NeedsCredential: McpConnectionStatus.NeedsCredential, SharedKey: McpConnectionStatus.SharedKey } as const;
+const _CONNECTION = { NeedsCredential: McpConnectionStatus.NeedsCredential, Credentialless: McpConnectionStatus.Credentialless } as const;
+/** Maps every stored credential requirement into the public closed vocabulary. */
+const _REQUIREMENT = { Credentialless: McpCredentialRequirement.Credentialless, PrincipalCredential: McpCredentialRequirement.PrincipalCredential, SharedCredential: McpCredentialRequirement.SharedCredential } as const;
 /** Marks the persisted server state that permits a tool assignment. */
 const _ASSIGNABLE_SERVER_STATUS = { Active: true, Degraded: false, Draft: false } as const;
 /** Marks the persisted revision state that has frozen tool schemas. */
@@ -86,9 +88,9 @@ export function listInstalled(unitOfWork: McpOperatorUnitOfWork, principalId: st
  *
  * A catalog result may be stale by the time a caller installs it. The flow therefore confirms that
  * the server is still in the caller's silo, still published, and still allowed by the MCP-use
- * capability before it writes the install. Multi-user servers start as `SharedKey`; other server
- * types start as `NeedsCredential`. The typed `Install` check, install, and audit entry all use the
- * same database transaction and commit or roll back together.
+ * capability before it writes the install. Only an explicitly credentialless server starts ready;
+ * either credential-requiring mode starts as `NeedsCredential`. The typed `Install` check, install,
+ * and audit entry use the same database transaction and commit or roll back together.
  *
  * Called by: {@link mcpOperatorRouter} for `POST /installed`.
  * @param unitOfWork - Runs the authorization check, installation write, and audit write together.
@@ -115,7 +117,8 @@ export function installServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOper
 		});
 		if (admission.outcome !== AuthorizationDecisionOutcomes.Allow)
 			return null;
-		const status = server.serverType === "MultiUser" ? "SharedKey" : "NeedsCredential";
+		const requirement = _CredentialRequirement(server.credentialRequirement);
+		const status = requirement === McpCredentialRequirement.Credentialless ? "Credentialless" : "NeedsCredential";
 		const installed = await transaction.mcp.upsertInstall(serverId, caller.principalId, status);
 		await transaction.mcp.appendAudit(caller.siloId, "Created", `McpServerInstall/${serverId}:${caller.principalId}`, `MCP server ${serverId} installed for ${caller.principalId}`, caller.principalId);
 		return _MapInstall(installed);
@@ -242,7 +245,15 @@ function _Approval(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller,
 /** Maps the repository projection into the catalog contract and normalizes optional fields. */
 function _MapServer(server: McpOperatorServerRecord): McpCatalogServer
 {
-	return { id: server.id, name: server.name, description: server.description, publisher: server.publisher ?? undefined, glyph: server.glyph ?? undefined, type: _TYPE[server.serverType as keyof typeof _TYPE], approvalStatus: _APPROVAL[server.approvalStatus as keyof typeof _APPROVAL], credentialSchema: _CredentialSchema(server.credentialSchema), entitlementSummary: server.entitlementSummary ?? undefined, tools: _MapTools(server) };
+	return { id: server.id, name: server.name, description: server.description, publisher: server.publisher ?? undefined, glyph: server.glyph ?? undefined, type: _TYPE[server.serverType as keyof typeof _TYPE], credentialRequirement: _CredentialRequirement(server.credentialRequirement), approvalStatus: _APPROVAL[server.approvalStatus as keyof typeof _APPROVAL], credentialSchema: _CredentialSchema(server.credentialSchema), entitlementSummary: server.entitlementSummary ?? undefined, tools: _MapTools(server) };
+}
+
+/** Maps a stored credential requirement and refuses unknown persisted values. */
+function _CredentialRequirement(value: string): McpCredentialRequirement
+{
+	if (!Object.hasOwn(_REQUIREMENT, value))
+		throw new Error("MCP server has an unknown credential requirement.");
+	return _REQUIREMENT[value as keyof typeof _REQUIREMENT];
 }
 
 /**
@@ -289,7 +300,15 @@ function _GovernanceEligible(server: McpOperatorServerRecord): boolean
 /** Maps one persisted installation into the response status and ISO timestamp expected by clients. */
 function _MapInstall(install: McpOperatorInstallRecord): McpInstalled
 {
-	return { serverId: install.mcpServerId, connectionStatus: _CONNECTION[install.connectionStatus as keyof typeof _CONNECTION], lastUsed: install.lastUsedAt?.toISOString() ?? null };
+	return { serverId: install.mcpServerId, connectionStatus: _ConnectionStatus(install.connectionStatus), lastUsed: install.lastUsedAt?.toISOString() ?? null };
+}
+
+/** Maps a stored connection status and refuses unknown persisted values. */
+function _ConnectionStatus(value: string): McpConnectionStatus
+{
+	if (!Object.hasOwn(_CONNECTION, value))
+		throw new Error("MCP install has an unknown connection status.");
+	return _CONNECTION[value as keyof typeof _CONNECTION];
 }
 
 /**
@@ -309,13 +328,13 @@ function _CredentialSchema(value: unknown): CredentialField[]
 		const record = entry as Record<string, unknown>;
 		if (typeof record.key !== "string" || typeof record.label !== "string")
 			return [];
-			return [{
-				key: record.key,
-				label: record.label,
-				required: record.required === true,
-				sensitive: record.sensitive === true,
-				...(typeof record.placeholder === "string" ? { placeholder: record.placeholder } : {}),
-				...(typeof record.hint === "string" ? { hint: record.hint } : {}),
-			}];
+		return [{
+			key: record.key,
+			label: record.label,
+			required: record.required === true,
+			sensitive: record.sensitive === true,
+			...(typeof record.placeholder === "string" ? { placeholder: record.placeholder } : {}),
+			...(typeof record.hint === "string" ? { hint: record.hint } : {}),
+		}];
 	});
 }

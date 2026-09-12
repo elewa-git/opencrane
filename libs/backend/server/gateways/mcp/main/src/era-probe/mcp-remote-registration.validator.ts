@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { McpCredentialRequirement } from "@opencrane/contracts";
+
 import type { McpRemoteServerRegistrationCommand } from "./mcp-era-probe.types";
 
 /** Validate and normalize the public fields that can become a remote MCP registration. */
@@ -8,4 +10,5 @@ export const ___McpRemoteServerRegistrationSchema: z.ZodType<McpRemoteServerRegi
 	name: z.string().trim().min(1).max(120),
 	description: z.string().trim().max(1_000).optional(),
 	endpoint: z.string().trim().url().max(2_048),
+	credentialRequirement: z.nativeEnum(McpCredentialRequirement),
 }).strict();

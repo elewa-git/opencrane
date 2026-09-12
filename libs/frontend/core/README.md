@@ -26,6 +26,9 @@ a feature never calls `fetch` directly and never guesses a request or response s
 
 - `lib/models/*.types.ts` — shared data models (DTOs), enums, and colour/label maps (`scope`, `session`, `thread`,
   `context`, `notification`, `settings`, `mcp`, `plan`).
+- The MCP server model re-exports the shared credential-requirement enum and requires it on every
+  catalogue server. Its adjacent validator rejects missing and unknown requirement values before
+  they become browser state.
 - `CanvasDocument` — the owner-supplied content and action-state contract for context-panel canvas documents.
 - `lib/data/*.data.ts` — demo fixtures, temporary until the live API replaces them.
 - `ControlPlaneApiService` — the typed HTTP client and its `CONTROL_PLANE_BASE_URL` injection token.
@@ -45,6 +48,9 @@ Consumed by every other frontend package. The control-plane client types against
 `@opencrane/contracts`, generated from the backend's OpenAPI spec so the browser and server use the
 same contract. It must never import backend application source — the network contract is the only
 coupling.
+
+The fleet client contains no MCP catalogue types. MCP reads use the generated Control Plane contract
+in `@opencrane/contracts`, so their credential requirement has one maintained API source.
 
 ## Dependency direction
 

@@ -1,4 +1,4 @@
-import { McpApprovalStatus, McpConnectionStatus, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
+import { _ParseMcpCredentialRequirement, McpApprovalStatus, McpConnectionStatus, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
 import type { McpInstalledWire, McpServerWire } from "./mcp-gateway.types";
 
 /**
@@ -6,8 +6,9 @@ import type { McpInstalledWire, McpServerWire } from "./mcp-gateway.types";
  *
  * Local projections of the `/api/v1/mcp/...` JSON — WeOwnAI never imports
  * OpenCrane source. Enum-bearing fields arrive as raw strings, so the mappers
- * coerce them through the known enum values (with a safe default) and fill
- * missing collections, so every field on the read models is always set — components never see undefined.
+ * coerce them through the known enum values and fill missing collections, so every field on the read
+ * models is always set. Unknown presentation and install values use unavailable defaults, while a
+ * missing or unknown credential requirement rejects the server projection.
  */
 
 /** Coerce a raw string into a {@link McpServerType}, defaulting to single-user. */
@@ -41,6 +42,7 @@ export function _MapServer(wire: McpServerWire): McpServer
 		publisher: wire.publisher ?? "",
 		glyph: wire.glyph ?? wire.id.slice(0, 2),
 		type: _ToServerType(wire.type),
+		credentialRequirement: _ParseMcpCredentialRequirement(wire.credentialRequirement),
 		approvalStatus: _ToApprovalStatus(wire.approvalStatus),
 		credentialSchema: wire.credentialSchema ?? [],
 		entitlementSummary: wire.entitlementSummary ?? ""

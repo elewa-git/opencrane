@@ -464,7 +464,8 @@
         "description": "An MCP server exposed by the operator API. Display metadata is optional because this shape serves both the entitled catalogue and the organisation-admin governance view; tools is always present and empty when no Ready OCI revision exists.",
         "required": [
           "id",
-          "tools"
+          "tools",
+          "credentialRequirement"
         ],
         "properties": {
           "id": {
@@ -494,7 +495,16 @@
               "multi-user",
               "remote-oauth"
             ],
-            "description": "How the server is configured for connection: single-user requires a caller-owned credential through an external custody flow, multi-user uses an administrator-managed shared key, and remote-oauth requires an OAuth handshake outside this API."
+            "description": "How the catalogue presents the connection. This value does not grant installation readiness."
+          },
+          "credentialRequirement": {
+            "type": "string",
+            "enum": [
+              "credentialless",
+              "principal-credential",
+              "shared-credential"
+            ],
+            "description": "Credential custody required for execution. Only credentialless installations can execute through the current API; the other requirements await a governed activation flow."
           },
           "approvalStatus": {
             "type": "string",
@@ -508,7 +518,7 @@
           },
           "credentialSchema": {
             "type": "array",
-            "description": "Input fields required by an external custody flow for a single-user connection. This API describes requested values but neither receives nor returns credential material.",
+            "description": "Fields declared by the server for credential setup, independent of its presentation type. This API describes the fields but neither receives nor returns credential values; activation remains unavailable.",
             "items": {
               "$ref": "#/components/schemas/CredentialField"
             }
@@ -585,7 +595,7 @@
       },
       "CredentialField": {
         "type": "object",
-        "description": "One input an external custody flow requires to connect a single-user MCP server. This API describes the input but neither receives nor returns its value.",
+        "description": "One field declared by an MCP server for credential setup. This API describes the field but neither receives nor returns its value.",
         "required": [
           "key",
           "label",
@@ -623,7 +633,8 @@
         "type": "object",
         "description": "An MCP server installed by the calling user, with its current connection state.",
         "required": [
-          "serverId"
+          "serverId",
+          "connectionStatus"
         ],
         "properties": {
           "serverId": {
@@ -634,9 +645,9 @@
             "type": "string",
             "enum": [
               "needs-credential",
-              "shared-key"
+              "credentialless"
             ],
-            "description": "Recorded activation requirement: needs-credential requires an external custody flow, while shared-key records an administrator-managed shared key. This API does not activate either state."
+            "description": "Persisted installation state. Needs-credential is unavailable until activation exists; credentialless requires no provider credential and still needs current execution authority."
           },
           "lastUsed": {
             "type": [
@@ -2267,7 +2278,8 @@
                 "required": [
                   "idempotencyKey",
                   "name",
-                  "endpoint"
+                  "endpoint",
+                  "credentialRequirement"
                 ],
                 "properties": {
                   "idempotencyKey": {
@@ -2288,6 +2300,14 @@
                     "type": "string",
                     "format": "uri",
                     "maxLength": 2048
+                  },
+                  "credentialRequirement": {
+                    "type": "string",
+                    "enum": [
+                      "credentialless",
+                      "principal-credential",
+                      "shared-credential"
+                    ]
                   }
                 }
               }

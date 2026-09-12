@@ -5,7 +5,7 @@ import { PrismaAuthorizationAuthority, type ProductAuthorizationWorkloadContext 
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
 import { PrismaGroupChildAccessRepository } from "../../../children/db/prisma-group-child-access-repository";
-import type { ConversationToolDispatchDependencies } from "./conversation-tool-dispatch.types";
+import type { ConversationToolAssignmentCommand, ConversationToolDispatchDependencies } from "./conversation-tool-dispatch.types";
 import type { ConversationToolCurrentAccess, ConversationToolCurrentMembership, ConversationToolRunEvidence } from "./conversation-tool-dispatch-evidence.types";
 
 /** Rechecks who may use this conversation and tool, recording decisions in the existing transaction. */
@@ -87,7 +87,7 @@ export class PrismaConversationToolAccessAuthority implements ConversationToolCu
 	{
 		const scope = run.subject.runScope;
 		const eligibility = this.dependencies.toolEligibility(this.transaction);
-		const assignment = { siloId: run.siloId, agentServiceId: scope.agentServiceId, agentRevisionId: scope.agentRevisionId, toolRevisionId: run.toolRevisionId };
+		const assignment = _ConversationToolAssignment(run);
 		if (!await eligibility.isEligible(assignment))
 			return false;
 		if (!run.authorization.coordinates.some(coordinate => coordinate.resource.kind === ProductAuthorizationResourceKinds.McpToolRevision && coordinate.resource.id === run.toolRevisionId && coordinate.action === ProductAuthorizationActions.Invoke))
@@ -104,4 +104,11 @@ export class PrismaConversationToolAccessAuthority implements ConversationToolCu
 		}
 		return true;
 	}
+}
+
+/** Bind assignment checks to the Principal that owns this exact personal or managed run. */
+export function _ConversationToolAssignment(run: ConversationToolRunEvidence): ConversationToolAssignmentCommand
+{
+	const scope = run.subject.runScope;
+	return { siloId: run.siloId, agentServiceId: scope.agentServiceId, agentRevisionId: scope.agentRevisionId, toolRevisionId: run.toolRevisionId, ownerPrincipalId: run.subject.principalId };
 }

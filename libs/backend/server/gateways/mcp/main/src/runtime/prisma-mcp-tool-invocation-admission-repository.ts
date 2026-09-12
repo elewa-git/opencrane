@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import { McpApprovalStatus, McpRuntimeExecutionKind, McpServerRevisionState, McpServerStatus, type Prisma } from "@prisma/client";
+import { McpRuntimeExecutionKind, type Prisma } from "@prisma/client";
 
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
 import { ExternalActionRecoveryModes, ToolInvocationStates, type McpToolInvocationTransactionParticipant } from "@opencrane/backend/server/iam/authorization";
 
+import { _MCP_CONNECTION_UNAVAILABLE, _McpConnectionOwnerPrincipalId } from "../connections/mcp-connection-readiness";
+import type { McpConnectionReadiness } from "../connections/mcp-connection-readiness.types";
 import { McpRuntimeExecutionKinds } from "./mcp-runtime.types";
 import type { McpRuntimeAuthorityOptions, McpToolInvocationAdmissionRepository } from "./mcp-runtime.types";
 
@@ -21,15 +23,18 @@ export class PrismaMcpToolInvocationAdmissionRepository implements McpToolInvoca
 	/** Transaction shared with the authorization-owned invocation participant. */
 	private readonly _transaction: Prisma.TransactionClient;
 	/** Authorization operations bound to this exact transaction. */
-	private readonly _toolInvocations: Pick<McpToolInvocationTransactionParticipant, "findById">;
+	private readonly _toolInvocations: Pick<McpToolInvocationTransactionParticipant, "findById" | "completeUnusedBeforeDispatch">;
+	/** Current installation readiness bound to the admission transaction. */
+	private readonly _connectionReadiness: McpConnectionReadiness;
 	/** Fixed deployment policy for newly admitted MCP work. */
 	private readonly _options: McpRuntimeAuthorityOptions;
 
 	/** Binds invocation admission to one serializable MCP transaction. */
-	constructor(transaction: Prisma.TransactionClient, toolInvocations: Pick<McpToolInvocationTransactionParticipant, "findById">, options: McpRuntimeAuthorityOptions)
+	constructor(transaction: Prisma.TransactionClient, toolInvocations: Pick<McpToolInvocationTransactionParticipant, "findById" | "completeUnusedBeforeDispatch">, connectionReadiness: McpConnectionReadiness, options: McpRuntimeAuthorityOptions)
 	{
 		this._transaction = transaction;
 		this._toolInvocations = toolInvocations;
+		this._connectionReadiness = connectionReadiness;
 		this._options = options;
 	}
 
@@ -53,13 +58,7 @@ export class PrismaMcpToolInvocationAdmissionRepository implements McpToolInvoca
 			return "not_mcp";
 		const existing = await this._transaction.mcpRuntimeExecution.findUnique({ where: { toolInvocationId: invocation.id }, select: { siloId: true, kind: true, toolInvocationId: true, serverRevisionId: true, profileName: true, idempotencyKey: true } });
 
-		const tool = await this._transaction.mcpToolRevision.findFirst({
-			where: { id: invocation.toolRevisionId, siloId: invocation.siloId },
-			select: {
-				serverRevisionId: true,
-				serverRevision: { select: { state: true, server: { select: { status: true, approvalStatus: true } } } },
-			},
-		});
+		const tool = await this._transaction.mcpToolRevision.findFirst({ where: { id: invocation.toolRevisionId, siloId: invocation.siloId }, select: { serverRevisionId: true } });
 		if (tool === null)
 			return "not_mcp";
 		if (existing !== null)
@@ -67,11 +66,16 @@ export class PrismaMcpToolInvocationAdmissionRepository implements McpToolInvoca
 				&& existing.toolInvocationId === invocation.id && existing.serverRevisionId === tool.serverRevisionId
 				&& existing.profileName === this._options.profileName && existing.idempotencyKey === `mcp-invocation:${invocation.id}` ? "idempotent" : "not_mcp";
 		if (invocation.state !== ToolInvocationStates.Ready
-			|| invocation.recoveryMode !== ExternalActionRecoveryModes.Manual
-			|| tool.serverRevision.state !== McpServerRevisionState.Ready
-			|| tool.serverRevision.server.status !== McpServerStatus.Active
-			|| tool.serverRevision.server.approvalStatus !== McpApprovalStatus.Published)
+			|| invocation.recoveryMode !== ExternalActionRecoveryModes.Manual)
 			return "not_ready";
+		const ownerPrincipalId = _McpConnectionOwnerPrincipalId(invocation);
+		const ready = ownerPrincipalId !== null && await this._connectionReadiness.isReady({ siloId: invocation.siloId, toolRevisionId: invocation.toolRevisionId, ownerPrincipalId });
+		if (!ready)
+		{
+			if (invocation.mcpTaskId !== null)
+				await this._toolInvocations.completeUnusedBeforeDispatch(invocation.id, invocation.revision, _MCP_CONNECTION_UNAVAILABLE, new Date());
+			return "not_ready";
+		}
 
 		await this._transaction.mcpRuntimeExecution.create({
 			data: {

@@ -117,6 +117,9 @@ Dispatch access is checked during proposal preparation, executor claim and termi
 The dispatch coordinator delegates saved run and budget evidence, current computer identity and
 conversation access to their owners. It does not decide the invocation lifecycle; central IAM owns
 those state transitions. A terminal result remains readable only while its original authority holds.
+MCP assignment checks receive the saved execution Principal: the human for a personal run or the
+managed service for a company run. The MCP owner checks that Principal's current installation; a
+requester's or administrator's connection cannot substitute for it.
 
 After encrypted continuation custody accepts the exact result, the turn publishes one content-free
 tool log before it reserves the second model call. A private revision-zero receipt binds the saved

@@ -19,6 +19,10 @@ The screens read connection and key state through component-scoped **stores/gate
 injection token that is the port to the opencrane-server HTTP API) and render it; the server stays
 the authority on what a user may install or govern.
 
+Installed rows show `No credential required` only for the explicit Credentialless server state.
+Servers that require a Principal or shared organisation credential remain `Needs credential`; the
+feature never infers readiness from the server's single-user, multi-user, or OAuth presentation.
+
 The shared inventory store serves the catalogue and installed-tools routes. Separate administration
 stores own catalogue transitions and write-only model-key drafts. Commands for the same server or
 provider cannot overlap; independent targets keep separate pending state. Failed saves retain the

@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
+import { McpCredentialRequirement } from "@opencrane/contracts";
+
 import { PrismaMcpOperatorRepository } from "../core/prisma-mcp-operator-repository";
 import type { McpOperatorServerRecord, McpRemoteServerRegistrationRecord } from "../core/mcp-operator-repository.types";
 import { McpEraProbeStates } from "../era-probe/mcp-era-probe.types";
@@ -15,6 +17,7 @@ function _Registration(): McpRemoteServerRegistrationRecord
 		name: "Example MCP",
 		description: "Public tools",
 		endpoint: "https://mcp.example.test/",
+		credentialRequirement: McpCredentialRequirement.SharedCredential,
 		registrationKeyDigest: `sha256:${"a".repeat(64)}`,
 		registrationDigest: `sha256:${"b".repeat(64)}`,
 	};
@@ -23,7 +26,7 @@ function _Registration(): McpRemoteServerRegistrationRecord
 /** Return the stored draft selected by registration operations. */
 function _Server(registration: McpRemoteServerRegistrationRecord): McpOperatorServerRecord
 {
-	return { id: "server-1", name: registration.name, description: registration.description, publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "PendingReview", status: "Draft", latestReadyRevision: null, credentialSchema: [], entitlementSummary: null, endpoint: registration.endpoint, registrationKeyDigest: registration.registrationKeyDigest, registrationDigest: registration.registrationDigest, eraProbeStatus: McpEraProbeStates.Pending, eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 };
+	return { id: "server-1", name: registration.name, description: registration.description, publisher: null, glyph: null, serverType: "MultiUser", credentialRequirement: "SharedCredential", approvalStatus: "PendingReview", status: "Draft", latestReadyRevision: null, credentialSchema: [], entitlementSummary: null, endpoint: registration.endpoint, registrationKeyDigest: registration.registrationKeyDigest, registrationDigest: registration.registrationDigest, eraProbeStatus: McpEraProbeStates.Pending, eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 };
 }
 
 /** Derive the exact fixed-width claim identity expected from the adapter. */
@@ -56,7 +59,7 @@ describe("Prisma MCP registration claims", function _RegistrationClaimsSuite()
 			_ClaimDigest("name", registration.name),
 		].sort();
 		expect(events).toEqual([`claim:${expectedClaims[0]}`, `claim:${expectedClaims[1]}`, "find:key", "find:name", "create"]);
-		expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ eraProbeStatus: "Pending" }) }));
+		expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ credentialRequirement: "SharedCredential", eraProbeStatus: "Pending" }) }));
 		expect(result).toEqual({ created: true, server: _Server(registration) });
 	});
 

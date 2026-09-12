@@ -42,6 +42,11 @@ The run states include `cancelling` while Stop cleanup is owed and `cancelled` a
 The conversation message fragment describes Stop admission separately from that eventual result;
 clients cannot submit a run, attempt or lease as the cancellation target.
 
+MCP catalogue responses require an explicit credential requirement, and installation responses
+require their persisted connection status. A multi-user presentation does not imply a configured
+shared credential. Remote registration names the requirement; uploaded OCI promotion fixes it to
+credentialless within the server's existing execution restrictions.
+
 ## Boundary
 
 Consumed by the server's HTTP layer (served as `/openapi.json`) and by the contracts-client generator.

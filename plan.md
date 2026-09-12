@@ -1,5 +1,61 @@
 # OpenCrane — Active Plan
 
+## MCP readiness CI repair — 2026-09-12
+
+The first exact-head run for draft #871 found missing readiness data in existing conversation test
+fixtures and one changed Linux component reference. The repair gives the unit fixture the current
+installation reader, proves that a missing ready installation denies dispatch, and seeds the SQL
+fixture with an explicitly credentialless server and its execution Principal's installation.
+Production source is unchanged. Independent review accepts the two fixture changes and the exact
+Linux Removing-state capture, including the corrected “No credential required” label.
+
+Validation passes all 114 application tests, application type checks, 44 real PostgreSQL application
+cases and the three SQL authority scripts. The disposable PostgreSQL database and Node test process
+both use UTC, matching CI; this prevents local time-zone offsets from changing timestamp-without-time-zone
+authority evidence. Style and Prisma ownership checks have no errors. A new exact-head CI run remains
+required for the real Kurrent recovery proof and Linux visual comparison. No testv5 or live provider
+changes are included.
+
+## Explicit MCP connection readiness — source reviewed, CI pending
+
+Draft [#871](https://github.com/elewa-git/opencrane/pull/871) publishes T1 on
+`feat/0.12-mcp-credential-readiness`, based directly on memory correction
+[#870](https://github.com/elewa-git/opencrane/pull/870) at
+`a415684ae98758e0e52970ea42ffabeebeaae66e`. The implemented prerequisite replaces
+server-type-derived readiness with an explicit credential requirement and repeated checks of the
+execution Principal's installation. This slice stores no credentials and activates no remote connection.
+
+The schema and public contracts distinguish credentialless, Principal-owned and shared credentials.
+Uploaded OCI servers must be credentialless; an installation requiring credentials remains
+unavailable. The UI says “No credential required” only for that explicit state. Unused work loses
+eligibility when its exact installation, pinned tool revision or published server is unavailable.
+The final installation lock serializes uninstall with the ToolInvocation claim in one transaction;
+already-dispatched or uncertain work retains its evidence. Task creation now respects the baseline's
+Preparing-to-Ready transition before queueing work.
+
+Architecture preflight and post-review, component review and independent source review pass.
+Validation includes 179 MCP, 544 conversation, 122 contract and 2 API tests; frontend core (14),
+MCP adapter (11), gateway (15) and tools (8) tests; their lint/type checks; baseline preservation,
+release binding, dependency and authority boundaries. Five tests against a fresh disposable PostgreSQL
+baseline prove both observed uninstall/claim orders, wrong coordinates and server lifecycle denial,
+and credentialless-schema/OCI constraints. The database is stopped and preserved. Style has zero
+errors and four inherited warnings outside the changed lines; module growth has zero errors and two
+reviewed ownership candidates. The changed Darwin component reference has independent acceptance.
+Linux visual qualification remains a CI gate. Final server and production UI builds pass after the
+last reviewed gateway and task-transition corrections. All 183 Storybook behavior checks pass.
+
+The PDF repair in [#869](https://github.com/elewa-git/opencrane/pull/869) is pushed at
+`8c534445f93dcc7168c06a6f8d1dbec4f459bcde`. Its exact-head CI run `34689057317` is green,
+including affected build/test/lint, real Kurrent attachment lost-response recovery, database authority,
+generated API, Linux Storybook and all selected image checks. Memory correction #870 fixes the candidate fixture's exact
+SQLAlchemy adapter class name and is pushed directly above it. Its ordinary affected checks pass;
+the current Cognee 1.2.1 provider still fails its deletion gate and the 1.5.4 candidate qualification
+also fails in run `34689058826`. The candidate failure is under diagnosis. Neither result qualifies a usable memory product.
+
+Standard remote MCP activation follows this prerequisite through MCP-owned credential custody,
+connection-specific discovery and server-owned calls using the existing Absurd workflow. Remote and
+hosted provider qualification, deployment and testv5 data remain separate.
+
 ## Ready conversation file access — 2026-09-12
 
 The F1 file-access source slice is stacked directly above #867 at
@@ -316,12 +372,12 @@ remain separate gates.
 
 | Priority | Track | Completion means | Current next step |
 | --- | --- | --- | --- |
-| 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection and participant terminal-result history are implemented and result-history CI passes. Standard remote connection activation awaits its recorded approval, then one real integration and the required hosted MCP slice follow. |
+| 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection and participant terminal-result history are implemented. Explicit connection readiness and execution fencing pass source review and local database proof. Standard remote activation/discovery/calls, hosted MCP execution and real integration qualification remain. |
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry, durable resume and visible decision controls are implemented in draft #857. Company approver/connection binding and real action qualification remain. |
 | 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: qualify the pinned provider's isolation, identity, restart and deletion contracts on disposable CI data before implementing personal dataset provisioning and explicit Remember. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass independent review and exact-head CI in draft #862; qualify the live journey. Other-participant controls remain a separate actor-policy decision. |
 | 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | PAUSED: runtime-question source work awaits its separate explicit approval; partial implementation is not validated delivery. Structured results and A2UI remain. |
-| 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file Open/Preview/Download is implemented and exact-head CI passes in #868. PDF-informed answers are the active source slice; generated file production follows. |
+| 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file Open/Preview/Download is implemented and exact-head CI passes in #868. PDF-informed answers are source complete in #869 and exact-head CI passes, including real-store recovery and Linux visuals; live qualification remains. Generated file production follows. |
 | 7 | D1 — autonomous delegation | A bounded child works with explicit context and narrower authority, then returns one durable result. | Follow [#845](https://github.com/elewa-git/opencrane/issues/845): root budgets, depth/fan-out, cancellation and result brokering. |
 | 8 | S1 — scheduled work | A reviewed routine fires under current authority with explicit overlap, retry and missed-run policy. | Follow [#848](https://github.com/elewa-git/opencrane/issues/848) through Absurd and existing admission. |
 | 9 | A2 — complete administration | Operators configure agents, connections, models, permissions and budgets, and inspect effective access and actual usage. | Complete protected settings over the owners established by the earlier tracks. |

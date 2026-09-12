@@ -1,4 +1,4 @@
-import { McpApprovalStatus, McpConnectionStatus, McpInstalledServer, McpServer, McpServerType } from "../../models/mcp.types";
+import { McpApprovalStatus, McpConnectionStatus, McpCredentialRequirement, McpInstalledServer, McpServer, McpServerType } from "../../models/mcp.types";
 
 /**
  * Mock MCP catalogue backing the dev/default {@link McpServer} reads until the
@@ -17,6 +17,7 @@ export const MCP_CATALOGUE: McpServer[] =
 		publisher: "GitHub, Inc.",
 		glyph: "Gh",
 		type: McpServerType.RemoteOauth,
+		credentialRequirement: McpCredentialRequirement.PrincipalCredential,
 		approvalStatus: McpApprovalStatus.Published,
 		credentialSchema: [],
 		entitlementSummary: "Everyone (org)"
@@ -28,6 +29,7 @@ export const MCP_CATALOGUE: McpServer[] =
 		publisher: "Notion Labs",
 		glyph: "No",
 		type: McpServerType.RemoteOauth,
+		credentialRequirement: McpCredentialRequirement.PrincipalCredential,
 		approvalStatus: McpApprovalStatus.Published,
 		credentialSchema: [],
 		entitlementSummary: "Product, Eng (2 grp)"
@@ -39,6 +41,7 @@ export const MCP_CATALOGUE: McpServer[] =
 		publisher: "Slack Technologies",
 		glyph: "Sl",
 		type: McpServerType.RemoteOauth,
+		credentialRequirement: McpCredentialRequirement.PrincipalCredential,
 		approvalStatus: McpApprovalStatus.Published,
 		credentialSchema: [],
 		entitlementSummary: "Everyone (org)"
@@ -50,6 +53,7 @@ export const MCP_CATALOGUE: McpServer[] =
 		publisher: "Stripe, Inc.",
 		glyph: "St",
 		type: McpServerType.SingleUser,
+		credentialRequirement: McpCredentialRequirement.PrincipalCredential,
 		approvalStatus: McpApprovalStatus.Published,
 		credentialSchema:
 		[
@@ -61,10 +65,11 @@ export const MCP_CATALOGUE: McpServer[] =
 	{
 		id: "postgres-prod",
 		name: "postgres-prod",
-		description: "Analytics read replica. Shared key managed by your admin.",
+		description: "Analytics read replica. Shared credential managed by your admin.",
 		publisher: "Internal · Platform team",
 		glyph: "Pg",
 		type: McpServerType.MultiUser,
+		credentialRequirement: McpCredentialRequirement.SharedCredential,
 		approvalStatus: McpApprovalStatus.Published,
 		credentialSchema: [],
 		entitlementSummary: "Data (6)"
@@ -76,6 +81,7 @@ export const MCP_CATALOGUE: McpServer[] =
 		publisher: "Google LLC",
 		glyph: "Gd",
 		type: McpServerType.RemoteOauth,
+		credentialRequirement: McpCredentialRequirement.PrincipalCredential,
 		approvalStatus: McpApprovalStatus.Published,
 		credentialSchema: [],
 		entitlementSummary: "Everyone (org)"
@@ -87,6 +93,7 @@ export const MCP_CATALOGUE: McpServer[] =
 		publisher: "Linear Orbit, Inc.",
 		glyph: "Li",
 		type: McpServerType.RemoteOauth,
+		credentialRequirement: McpCredentialRequirement.PrincipalCredential,
 		approvalStatus: McpApprovalStatus.PendingReview,
 		credentialSchema: [],
 		entitlementSummary: "— not assigned"
@@ -98,6 +105,7 @@ export const MCP_CATALOGUE: McpServer[] =
 		publisher: "Figma, Inc.",
 		glyph: "Fg",
 		type: McpServerType.RemoteOauth,
+		credentialRequirement: McpCredentialRequirement.PrincipalCredential,
 		approvalStatus: McpApprovalStatus.PendingReview,
 		credentialSchema: [],
 		entitlementSummary: "— not assigned"
@@ -109,12 +117,25 @@ export const MCP_CATALOGUE: McpServer[] =
 		publisher: "Functional Software",
 		glyph: "Se",
 		type: McpServerType.SingleUser,
+		credentialRequirement: McpCredentialRequirement.PrincipalCredential,
 		approvalStatus: McpApprovalStatus.Disabled,
 		credentialSchema:
 		[
 			{ key: "apiToken", label: "Auth token", required: true, sensitive: true, placeholder: "sntrys_••••••••", hint: "Write-only; stored server-side." }
 		],
 		entitlementSummary: "Eng (11)"
+	},
+	{
+		id: "public-weather",
+		name: "public-weather",
+		description: "Public forecasts that require no provider credential.",
+		publisher: "OpenCrane examples",
+		glyph: "Pw",
+		type: McpServerType.MultiUser,
+		credentialRequirement: McpCredentialRequirement.Credentialless,
+		approvalStatus: McpApprovalStatus.Published,
+		credentialSchema: [],
+		entitlementSummary: "Everyone (org)"
 	}
 ];
 
@@ -126,6 +147,7 @@ export const MCP_INSTALLED: McpInstalledServer[] =
 	{ serverId: "stripe", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null },
 	{ serverId: "github", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null },
 	{ serverId: "notion", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null },
-	{ serverId: "postgres-prod", connectionStatus: McpConnectionStatus.SharedKey, lastUsed: "3 days ago" },
-	{ serverId: "slack", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null }
+	{ serverId: "postgres-prod", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null },
+	{ serverId: "slack", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null },
+	{ serverId: "public-weather", connectionStatus: McpConnectionStatus.Credentialless, lastUsed: "Today" }
 ];

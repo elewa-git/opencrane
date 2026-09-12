@@ -45,6 +45,8 @@ export interface ConversationToolDispatchDependencies
 export type ConversationToolAssignmentCommand = Pick<ExecutionSubject["runScope"], "siloId" | "agentServiceId" | "agentRevisionId"> & {
 	/** Identify the tool revision stored on the invocation. */
 	readonly toolRevisionId: string;
+	/** Principal that owns the personal or managed execution. */
+	readonly ownerPrincipalId: string;
 };
 
 /** Preserve MCP ownership of current publication and tool assignment checks. */

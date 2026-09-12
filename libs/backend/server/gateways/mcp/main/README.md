@@ -122,8 +122,11 @@ labels an install connected before a real connection exists.
 Company tool selection belongs to [agent services](../../../agents/agent-services/main/README.md).
 Its administrator API publishes exact assignments and grants for the assistant's own Principal,
 the service's saved identity. It does not create a connection or transfer a person's credentials.
-The install states `NeedsCredential` and `SharedKey` describe configuration; neither proves that
-credential activation or a provider call has succeeded.
+Credential requirement is separate from the server's single-user, multi-user, or OAuth
+presentation. Only an explicitly `Credentialless` server installs as `Credentialless`; both
+`PrincipalCredential` and `SharedCredential` install as `NeedsCredential`. The current package has
+no activation route, so `NeedsCredential` can never become usable here. An install state still does
+not prove that a provider call has succeeded.
 
 ## Rules
 
@@ -133,8 +136,9 @@ credential activation or a provider call has succeeded.
 - Network failures, timeouts, rate limits, and server errors are retried. Unsafe addresses and bad
   replies are saved as rejected so the same task cannot keep contacting an unchanged endpoint. A
   temporary failure is tried at most five times, with a longer delay before each later check.
-- A user only sees and installs Published, Active servers with a Ready OCI revision when saved access
-  grants allow that server.
+- A user only sees and installs Published, Active servers with a Ready revision when saved access
+  grants allow that server. Execution also requires the exact Principal's install; a credentialless
+  status is never inferred from the server's presentation type.
 - Creating a public task atomically grants its creator `McpTask/Read`, `Edit`, and `Cancel`. Every
   read, required-input response, and cancellation rechecks that current task grant; creator identity
   and lifecycle fences narrow the operation but never replace authorization.

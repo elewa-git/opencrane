@@ -8,6 +8,8 @@ import { MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
+import { _MCP_CONNECTION_UNAVAILABLE, _McpConnectionOwnerPrincipalId } from "../connections/mcp-connection-readiness";
+import type { McpConnectionReadiness } from "../connections/mcp-connection-readiness.types";
 import { _McpRuntimeLeaseExpiryProposal, _McpRuntimeTimestampProposal } from "./mcp-runtime-timestamps";
 import { McpRuntimeCompanionClaimOutcomes, type McpRuntimeAuthorityOptions, type McpRuntimeCompanionRepository } from "./mcp-runtime.types";
 
@@ -18,14 +20,17 @@ export class PrismaMcpRuntimeCompanionRepository implements McpRuntimeCompanionR
 	private readonly _transaction: Prisma.TransactionClient;
 	/** Authorization-owned ToolInvocation operations in the same transaction. */
 	private readonly _toolInvocations: McpToolInvocationTransactionParticipant;
+	/** Current installation readiness bound to this transaction. */
+	private readonly _connectionReadiness: McpConnectionReadiness;
 	/** Fixed identity and lease policy for the MCP executor class. */
 	private readonly _options: McpRuntimeAuthorityOptions;
 
 	/** Bind MCP and ToolInvocation changes to one serializable transaction. */
-	constructor(transaction: Prisma.TransactionClient, toolInvocations: McpToolInvocationTransactionParticipant, options: McpRuntimeAuthorityOptions)
+	constructor(transaction: Prisma.TransactionClient, toolInvocations: McpToolInvocationTransactionParticipant, connectionReadiness: McpConnectionReadiness, options: McpRuntimeAuthorityOptions)
 	{
 		this._transaction = transaction;
 		this._toolInvocations = toolInvocations;
+		this._connectionReadiness = connectionReadiness;
 		this._options = options;
 	}
 
@@ -62,6 +67,22 @@ export class PrismaMcpRuntimeCompanionRepository implements McpRuntimeCompanionR
 		{
 			if (execution.toolInvocationId === null || typeof execution.workloadUid !== "string" || execution.workloadUid.trim().length === 0)
 				return null;
+			const currentInvocation = await this._toolInvocations.findById(execution.toolInvocationId);
+			if (currentInvocation === null)
+			{
+				await this._CloseBeforeDispatch(execution, null);
+				return McpRuntimeCompanionClaimOutcomes.Terminal;
+			}
+			const ownerPrincipalId = _McpConnectionOwnerPrincipalId(currentInvocation);
+			const connectionLocked = ownerPrincipalId !== null && await this._connectionReadiness.lockForDispatch({ siloId: currentInvocation.siloId, toolRevisionId: currentInvocation.toolRevisionId, ownerPrincipalId });
+			if (!connectionLocked && currentInvocation.mcpTaskId !== null)
+			{
+				const closed = await this._toolInvocations.completeUnusedBeforeDispatch(currentInvocation.id, currentInvocation.revision, _MCP_CONNECTION_UNAVAILABLE, now);
+				if (closed.invocation !== null && !_InvocationIsTerminal(closed.invocation.state))
+					throw new Error("MCP task invocation changed while connection readiness was being closed");
+				await this._CloseBeforeDispatch(execution, closed.invocation?.state ?? null);
+				return McpRuntimeCompanionClaimOutcomes.Terminal;
+			}
 			const workload = { audience: MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, workloadKind: "job" as const, workloadUid: execution.workloadUid, podUid: identity.podUid };
 			const claimed = await this._toolInvocations.claim(execution.toolInvocationId, now, this._options.companionClaimLeaseMilliseconds, workload);
 			if (claimed.outcome === ToolInvocationClaimOutcomes.Missing)

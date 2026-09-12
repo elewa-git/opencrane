@@ -14,22 +14,38 @@ import type { JsonValue } from "@opencrane/util";
  */
 
 /**
- * How a caller consumes a downstream MCP server.
+ * How the catalogue presents a downstream MCP connection.
  *
- * Returned as the `type` field on {@link McpCatalogServer}, and it decides what happens when a
- * user installs the server: a single-user server starts at `NeedsCredential` and must collect
- * the fields in `credentialSchema`; a multi-user server is already usable via the org-wide key;
- * a remote-OAuth server needs an OAuth handshake instead of a form.
+ * Returned as the `type` field on {@link McpCatalogServer}. The separate credential requirement
+ * determines whether an installation needs activation; this presentation never grants readiness.
  * @see https://modelcontextprotocol.io/specification/2026-07-28
  */
 export enum McpServerType
 {
-  /** Each user supplies their own credential, using the fields in `credentialSchema`. */
+  /** Presents a connection configured by an individual user. */
   SingleUser = "single-user",
-  /** One org-wide shared key brokered for every caller (no per-user secret). */
+  /** Presents a connection intended for multiple users. */
   MultiUser = "multi-user",
-  /** Remote OAuth — the caller authorises via an OAuth handshake. */
+  /** Presents a remote connection configured through OAuth. */
   RemoteOauth = "remote-oauth",
+}
+
+/**
+ * Names the credential custody required before an installed MCP server can execute.
+ *
+ * Registration saves this value independently of connection presentation. Only Credentialless
+ * installs can execute through the current API; the two credential-requiring modes remain
+ * unavailable until a governed activation flow exists. Renaming a value changes the public and
+ * persisted contract together.
+ */
+export enum McpCredentialRequirement
+{
+  /** The server can execute without any provider credential. */
+  Credentialless = "credentialless",
+  /** Execution requires a credential bound to the exact execution Principal. */
+  PrincipalCredential = "principal-credential",
+  /** Execution requires a governed credential shared by the owning organisation. */
+  SharedCredential = "shared-credential",
 }
 
 /**
@@ -52,8 +68,7 @@ export enum McpApprovalStatus
 }
 
 /**
- * Reports whether an installed MCP server still needs external activation or is usable through an
- * administrator-managed shared key.
+ * Reports whether an installed MCP server needs credential activation or requires no credential.
  *
  * The operator API returns these values from persisted install rows. OpenCrane currently has no
  * credential or OAuth activation command, so `NeedsCredential` cannot advance through this API.
@@ -63,8 +78,8 @@ export enum McpConnectionStatus
 {
   /** The install is saved but this API cannot use it until credential setup exists. */
   NeedsCredential = "needs-credential",
-  /** The server is usable through an administrator-managed key; the caller supplies no credential. */
-  SharedKey = "shared-key",
+  /** The installed server requires no credential; execution still checks current authority. */
+  Credentialless = "credentialless",
 }
 
 /**
@@ -161,11 +176,13 @@ export interface McpCatalogServer
   publisher?: string;
   /** Glyph / icon key rendered by the frontend. */
   glyph?: string;
-  /** Consumption shape; decides the credential-connect flow. */
+  /** Connection presentation; does not determine installation readiness. */
   type?: McpServerType;
+  /** Explicit credential requirement, independent of connection presentation. */
+  credentialRequirement: McpCredentialRequirement;
   /** Governance lifecycle status. */
   approvalStatus?: McpApprovalStatus;
-  /** Credential fields a caller must supply to connect (single-user servers). */
+  /** Fields declared for credential setup; this API cannot accept their values or activate a connection. */
   credentialSchema?: CredentialField[];
   /** Human-readable summary of who is entitled (admin governance view). */
   entitlementSummary?: string;
@@ -181,7 +198,7 @@ export interface McpInstalled
   /** Identifier of the installed server. */
   serverId: string;
   /** Current connection state of this install. */
-  connectionStatus?: McpConnectionStatus;
+  connectionStatus: McpConnectionStatus;
   /** ISO-8601 timestamp of last use, or null when never used. */
   lastUsed?: string | null;
 }

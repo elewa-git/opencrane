@@ -38,5 +38,5 @@ export const MCP_APPROVAL_CHIPS: Record<McpApprovalStatus, _McpChipPresentation>
 export const MCP_CONNECTION_INDICATORS: Record<McpConnectionStatus, _McpConnectionPresentation> =
 {
 	[McpConnectionStatus.NeedsCredential]: { label: "Needs credential", tone: ScopeChipTones.Warning, pulse: false },
-	[McpConnectionStatus.SharedKey]: { label: "Shared key · set by admin", tone: ScopeChipTones.Info, pulse: false }
+	[McpConnectionStatus.Credentialless]: { label: "No credential required", tone: ScopeChipTones.Info, pulse: false }
 };

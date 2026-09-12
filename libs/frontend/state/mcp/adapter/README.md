@@ -10,8 +10,8 @@ package owns both halves of the frontend seam for it: the **`McpGateway`** port 
 the Tools UI injects, so it never knows about HTTP) and the live **adapter** class that fulfils that
 port by calling the backend.
 
-The adapter, `OpenCraneMcpGateway`, issues requests to `/api/v1/mcp/*` through the shared Control Plane
-API client and maps the responses onto UI read models. It covers the user flow (list entitled
+The adapter, `OpenCraneMcpGateway`, issues typed `/api/v1/mcp/*` requests through the shared Control
+Plane client and maps generated response types onto UI read models. It covers the user flow (list entitled
 catalogue and install/uninstall) and the admin governance flow (list all servers,
 approve/publish/reject, and enable/disable). Generic central grant administration owns sharing; the
 MCP adapter has no separate access-policy or subject-directory methods.
@@ -30,12 +30,16 @@ MCP adapter has no separate access-policy or subject-directory methods.
 
 Invariant: credential and OAuth activation are absent until a verified custody boundary is composed.
 No method accepts or returns credential material, provider URLs, or tokens.
+Catalogue mapping requires the server's credential requirement and rejects missing or unknown
+values. Installation status remains server-owned; neither the adapter nor the UI infers readiness
+from single-user, multi-user, or OAuth presentation.
 
 ## Public surface
 
 - `McpGateway`, `MCP_GATEWAY` — the MCP catalogue and install port + DI token.
 - `OpenCraneMcpGateway` — the live implementation over `/api/v1/mcp/*`, bound in `state/gateways`.
-- `mcp-mapper.util` — pure wire-shape → read-model mappers.
+- `mcp-mapper.util` — pure generated-response → read-model mappers with fail-closed credential-requirement
+  validation.
 
 ## Boundary
 
@@ -46,7 +50,8 @@ only gate what is shown.
 ## Dependency direction
 
 Tagged `scope:web` (`type:state`): it may depend only on other `scope:web` and `scope:shared`
-packages — here `@opencrane/core` and Angular — never on apps or server domains.
+packages — here `@opencrane/core`, `@opencrane/contracts`, and Angular — never on apps or server
+domains.
 
 ## See also
 

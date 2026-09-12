@@ -42,7 +42,12 @@
 				"adapter": "PrismaRuntimeMcpEffectEligibilityAuthority",
 				"contract": "RuntimeMcpEffectEligibility",
 				"contractImportPath": "./runtime-mcp-effect-eligibility.types",
-				"constructs": []
+				"constructs": [
+					{
+						"adapter": "PrismaMcpConnectionReadinessRepository",
+						"importPath": "../connections/prisma-mcp-connection-readiness-repository"
+					}
+				]
 			},
 			{
 				"path": "libs/backend/agents/personal/memory/main/src/prisma-runtime-personal-memory-effect-eligibility.ts",
@@ -797,6 +802,13 @@
 				"constructs": []
 			},
 			{
+				"path": "libs/backend/server/gateways/mcp/main/src/connections/prisma-mcp-connection-readiness-repository.ts",
+				"adapter": "PrismaMcpConnectionReadinessRepository",
+				"contract": "McpConnectionReadiness",
+				"contractImportPath": "./mcp-connection-readiness.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/server/gateways/mcp/main/src/core/prisma-mcp-operator-repository.ts",
 				"adapter": "PrismaMcpOperatorRepository",
 				"contract": "IMcpOperatorRepository",
@@ -819,6 +831,10 @@
 					{
 						"adapter": "PrismaManagedAuthorizationGrantRepository",
 						"importPath": "@opencrane/backend/server/iam/authorization"
+					},
+					{
+						"adapter": "PrismaMcpConnectionReadinessRepository",
+						"importPath": "../connections/prisma-mcp-connection-readiness-repository"
 					}
 				]
 			},
@@ -2102,6 +2118,10 @@
 					{
 						"adapter": "PrismaMcpTaskWorkflowExhaustionRepository",
 						"importPath": "../mcp-tasks/prisma-mcp-task-workflow-exhaustion-repository"
+					},
+					{
+						"adapter": "PrismaMcpConnectionReadinessRepository",
+						"importPath": "../connections/prisma-mcp-connection-readiness-repository"
 					}
 				]
 			},

@@ -98,7 +98,7 @@ export const _McpOpenapiPaths = {
       tags: ["MCP Operator"],
       requestBody: {
         required: true,
-        content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["idempotencyKey", "name", "endpoint"], properties: { idempotencyKey: { type: "string", minLength: 8, maxLength: 128 }, name: { type: "string", minLength: 1, maxLength: 120 }, description: { type: "string", maxLength: 1000 }, endpoint: { type: "string", format: "uri", maxLength: 2048 } } } } },
+        content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["idempotencyKey", "name", "endpoint", "credentialRequirement"], properties: { idempotencyKey: { type: "string", minLength: 8, maxLength: 128 }, name: { type: "string", minLength: 1, maxLength: 120 }, description: { type: "string", maxLength: 1000 }, endpoint: { type: "string", format: "uri", maxLength: 2048 }, credentialRequirement: { type: "string", enum: ["credentialless", "principal-credential", "shared-credential"] } } } } },
       },
       responses: {
         201: created("Remote server and protocol-check job saved.", { type: "object", required: ["id", "name", "endpoint", "eraProbeStatus"], properties: { id: { type: "string" }, name: { type: "string" }, endpoint: { type: "string", format: "uri" }, eraProbeStatus: { type: "string", enum: ["Pending", "Accepted", "Rejected"] } } }),

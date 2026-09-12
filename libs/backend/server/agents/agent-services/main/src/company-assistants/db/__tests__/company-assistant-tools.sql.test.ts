@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AgentRevisionState, McpApprovalStatus, McpServerRevisionState, McpServerStatus, McpServerTransport, ModelRoutingScope, OciImageValidationState, OrgMemberStatus, OrgRole, PrincipalProvenance, Prisma, PrismaClient } from "@prisma/client";
+import { AgentRevisionState, McpApprovalStatus, McpCredentialRequirement, McpServerRevisionState, McpServerStatus, McpServerTransport, ModelRoutingScope, OciImageValidationState, OrgMemberStatus, OrgRole, PrincipalProvenance, Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { PrismaManagedAuthorizationGrantRepository, PrismaOrganizationAdminGrantBootstrapRepository } from "@opencrane/backend/server/iam/authorization";
@@ -38,7 +38,7 @@ async function _Tool(transaction: Prisma.TransactionClient, siloId: string, prin
 	const digest = ___DigestCanonicalJson(toolId);
 	const image = `registry.example.test/company-tool-proof/image@${digest}`;
 	const now = new Date();
-	await transaction.mcpServer.create({ data: { id: serverId, siloId, name: serverId, endpoint: image, transport: McpServerTransport.OciImage, status: McpServerStatus.Active, approvalStatus: McpApprovalStatus.Published } });
+	await transaction.mcpServer.create({ data: { id: serverId, siloId, name: serverId, endpoint: image, transport: McpServerTransport.OciImage, credentialRequirement: McpCredentialRequirement.Credentialless, status: McpServerStatus.Active, approvalStatus: McpApprovalStatus.Published } });
 	await transaction.ociImageValidation.create({ data: { id: validationId, siloId, artifactId: randomUUID(), artifactRevisionId: randomUUID(), contentAddress: digest, byteLength: 1, mediaType: "application/vnd.oci.image.layout.v1+tar", submissionKeyDigest: digest, submissionDigest: digest, state: OciImageValidationState.Imported, indexDigest: digest, imageManifestDigest: digest, configDigest: digest, registryReference: image, createdByPrincipalId: principalId, completedAt: now } });
 	await transaction.mcpServerRevision.create({ data: { id: revisionId, siloId, mcpServerId: serverId, ociImageValidationId: validationId, revision: 1, registryReference: image } });
 	const schema = { type: "object", properties: {}, additionalProperties: false };
