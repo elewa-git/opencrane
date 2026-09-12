@@ -2,7 +2,8 @@
 
 ## Explicit MCP connection readiness — source reviewed, CI pending
 
-T1 continues on `feat/0.12-mcp-credential-readiness`, based directly on memory correction
+Draft [#871](https://github.com/elewa-git/opencrane/pull/871) publishes T1 on
+`feat/0.12-mcp-credential-readiness`, based directly on memory correction
 [#870](https://github.com/elewa-git/opencrane/pull/870) at
 `a415684ae98758e0e52970ea42ffabeebeaae66e`. The implemented prerequisite replaces
 server-type-derived readiness with an explicit credential requirement and repeated checks of the
@@ -28,12 +29,12 @@ Linux visual qualification remains a CI gate. Final server and production UI bui
 last reviewed gateway and task-transition corrections. All 183 Storybook behavior checks pass.
 
 The PDF repair in [#869](https://github.com/elewa-git/opencrane/pull/869) is pushed at
-`8c534445f93dcc7168c06a6f8d1dbec4f459bcde`. Its latest CI passes the real Kurrent attachment
-lost-response recovery, database authority, generated API and Linux Storybook checks; affected
-build/test/lint is still running. Memory correction #870 fixes the candidate fixture's exact
+`8c534445f93dcc7168c06a6f8d1dbec4f459bcde`. Its exact-head CI run `34689057317` is green,
+including affected build/test/lint, real Kurrent attachment lost-response recovery, database authority,
+generated API, Linux Storybook and all selected image checks. Memory correction #870 fixes the candidate fixture's exact
 SQLAlchemy adapter class name and is pushed directly above it. Its ordinary affected checks pass;
-the current Cognee 1.2.1 provider still fails its deletion gate and 1.5.4 candidate qualification is
-running. Neither result qualifies a usable memory product.
+the current Cognee 1.2.1 provider still fails its deletion gate and the 1.5.4 candidate qualification
+also fails in run `34689058826`. The candidate failure is under diagnosis. Neither result qualifies a usable memory product.
 
 Standard remote MCP activation follows this prerequisite through MCP-owned credential custody,
 connection-specific discovery and server-owned calls using the existing Absurd workflow. Remote and
@@ -360,7 +361,7 @@ remain separate gates.
 | 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: qualify the pinned provider's isolation, identity, restart and deletion contracts on disposable CI data before implementing personal dataset provisioning and explicit Remember. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass independent review and exact-head CI in draft #862; qualify the live journey. Other-participant controls remain a separate actor-policy decision. |
 | 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | PAUSED: runtime-question source work awaits its separate explicit approval; partial implementation is not validated delivery. Structured results and A2UI remain. |
-| 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file Open/Preview/Download is implemented and exact-head CI passes in #868. PDF-informed answers are source complete in #869 and their real-store recovery and Linux visuals pass; final CI and live qualification remain. Generated file production follows. |
+| 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file Open/Preview/Download is implemented and exact-head CI passes in #868. PDF-informed answers are source complete in #869 and exact-head CI passes, including real-store recovery and Linux visuals; live qualification remains. Generated file production follows. |
 | 7 | D1 — autonomous delegation | A bounded child works with explicit context and narrower authority, then returns one durable result. | Follow [#845](https://github.com/elewa-git/opencrane/issues/845): root budgets, depth/fan-out, cancellation and result brokering. |
 | 8 | S1 — scheduled work | A reviewed routine fires under current authority with explicit overlap, retry and missed-run policy. | Follow [#848](https://github.com/elewa-git/opencrane/issues/848) through Absurd and existing admission. |
 | 9 | A2 — complete administration | Operators configure agents, connections, models, permissions and budgets, and inspect effective access and actual usage. | Complete protected settings over the owners established by the earlier tracks. |
