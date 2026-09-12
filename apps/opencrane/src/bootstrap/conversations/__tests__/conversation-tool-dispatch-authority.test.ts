@@ -49,6 +49,7 @@ function _Fixture()
 	const transaction = {
 		agentRun: { findFirst: vi.fn().mockResolvedValue({ conversationId: "conversation-1", executionSubject: subject, inputSnapshotDigest: `sha256:${"e".repeat(64)}` }) },
 		runInputSnapshot: { findFirst: vi.fn().mockResolvedValue({ budgetPolicy: { wallClockDeadlineEpochMs: _NOW.getTime() + 60_000, maxToolInvocations: 1 } }) },
+		mcpServerInstall: { findFirst: vi.fn().mockResolvedValue({ id: "install-1" }) },
 		toolInvocation: { count: vi.fn().mockResolvedValue(1) },
 		conversation: { findFirst: vi.fn().mockResolvedValue({ id: "conversation-1", computerAgentIdentityId: "identity-1", computerProfileRevisionId: "profile-1" }) },
 		agentRevision: { findFirst: vi.fn().mockResolvedValue({ id: "revision-1", digest: `sha256:${"a".repeat(64)}`, modelDefinitionId: "model-1", budget: {}, boundaryAttachments: [], skillAssignments: [], mcpToolAssignments: [{ toolRevisionId: "tool-1" }] }) },
@@ -114,10 +115,18 @@ describe("current conversation tool dispatch authority", function _Suite()
 		const f = _Fixture();
 		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBe(_NOW.getTime() + 5_000);
 		expect(f.transaction.agentRun.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ state: "Running", attempt: 1, principalId: "principal-1" }) }));
+		expect(f.transaction.mcpServerInstall.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ principalId: "principal-1", connectionStatus: "Credentialless" }) }));
 		expect(f.transaction.orgMembership.findUnique).toHaveBeenCalledOnce();
 		expect(f.transaction.agentRevisionMcpToolAssignment.findFirst).toHaveBeenCalledOnce();
 		expect(f.transaction.auditDecision.create).toHaveBeenCalledTimes(3);
 		expect(f.transaction.auditDecision.create).toHaveBeenCalledWith({ data: expect.objectContaining({ actorKind: "Workload", actorId: _WORKLOAD.podUid, audience: _WORKLOAD.audience, namespace: _WORKLOAD.namespace, serviceAccountName: _WORKLOAD.serviceAccountName, workloadKind: "Job", workloadUid: _WORKLOAD.workloadUid, podUid: _WORKLOAD.podUid, runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1" }) });
+	});
+
+	it("denies a saved tool when its execution principal no longer has a ready installation", async function _MissingInstallation()
+	{
+		const f = _Fixture();
+		f.transaction.mcpServerInstall.findFirst.mockResolvedValue(null);
+		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
 	});
 
 	it.each([0, 1, 2])("denies a revoked persisted grant at coordinate %i", async function _RevokedGrant(index)

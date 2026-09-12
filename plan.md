@@ -1,5 +1,21 @@
 # OpenCrane — Active Plan
 
+## MCP readiness CI repair — 2026-09-12
+
+The first exact-head run for draft #871 found missing readiness data in existing conversation test
+fixtures and one changed Linux component reference. The repair gives the unit fixture the current
+installation reader, proves that a missing ready installation denies dispatch, and seeds the SQL
+fixture with an explicitly credentialless server and its execution Principal's installation.
+Production source is unchanged. Independent review accepts the two fixture changes and the exact
+Linux Removing-state capture, including the corrected “No credential required” label.
+
+Validation passes all 114 application tests, application type checks, 44 real PostgreSQL application
+cases and the three SQL authority scripts. The disposable PostgreSQL database and Node test process
+both use UTC, matching CI; this prevents local time-zone offsets from changing timestamp-without-time-zone
+authority evidence. Style and Prisma ownership checks have no errors. A new exact-head CI run remains
+required for the real Kurrent recovery proof and Linux visual comparison. No testv5 or live provider
+changes are included.
+
 ## Explicit MCP connection readiness — source reviewed, CI pending
 
 Draft [#871](https://github.com/elewa-git/opencrane/pull/871) publishes T1 on
