@@ -1,5 +1,8 @@
 import { ConversationStatusTones } from "@opencrane/elements/conversation";
 import type { MessageEntry, ToolCallLogEntry } from "@opencrane/contracts";
+import { ConversationAssetPresentationStates, type ConversationAssetPresentation } from "@opencrane/features/conversation-assets";
+import { ConversationAssetDisposition, ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
+import { ConversationAssetContentCommandStates } from "@opencrane/state/conversation/assets";
 import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, type ConversationCreationDirectory, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
 import { _ConversationEntryViews, _ConversationOnboardingContinuationPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation, _ConversationToolStatus } from "../conversation-workspace.mapper";
@@ -22,6 +25,12 @@ function _Directory(): ConversationCreationDirectory
 function _Message(): MessageEntry
 {
 	return { schemaVersion: 1, id: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", conversationId: "conversation-1", position: "1", author: { kind: "human", principalId: "principal-1", participantId: "participant-1", issuer: "https://issuer.example", authenticatedAt: "2026-08-12T11:08:00.000Z", name: "Jente Rosseel", avatarArtifactRevisionId: null }, provenance: "human-authored", visibility: { audience: "conversation" }, runId: null, causationId: "command-1", correlationId: "request-1", idempotencyKey: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", occurredAt: "2026-08-12T11:08:00.000Z", attestation: null, kind: "message", state: "completed", blocks: [{ id: "block-1", kind: "text", payloadRef: "payload-1", ciphertextDigest: "sha256:digest" }], replyToEntryId: null, addressedAgentIdentityId: null, activation: "none" };
+}
+
+/** Builds the currently authorized asset projection for one immutable message artifact block. */
+function _Asset(): ConversationAssetPresentation
+{
+	return { id: "asset-1", messageId: _Message().id, artifactId: "artifact-1", artifactRevisionId: "revision-1", provenance: ConversationAssetProvenance.ParticipantUpload, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 1_024, disposition: ConversationAssetDisposition.Preview, state: ConversationAssetPresentationStates.Ready, detail: "Ready", canRetry: false, canRemove: false, uploadProgressPercent: null, contentState: ConversationAssetContentCommandStates.Idle, contentDetail: null };
 }
 
 /** Builds one canonical tool lifecycle fact without any result payload. */
@@ -89,6 +98,35 @@ describe("Conversation workspace presentation", function _ConversationWorkspaceP
 		expect(view.message.authorName).toBe("Jente Rosseel");
 		expect(view.richText.html).not.toContain("<script");
 		expect(view.richText.html).toContain("Hello");
+	});
+
+	it("shows a PDF only when its immutable artifact coordinates and message binding match", function _ArtifactIdentity()
+	{
+		const artifact = { id: "artifact-block-1", kind: "artifact" as const, artifactId: "artifact-1", artifactRevisionId: "revision-1", name: "brief.pdf", mediaType: "application/pdf" };
+		const message = { ..._Message(), blocks: [..._Message().blocks, artifact] };
+		const matched = _ConversationEntryViews([message], { "payload-1": "Read this" }, [_Asset()])[0];
+		const wrongMessage = _ConversationEntryViews([message], { "payload-1": "Read this" }, [{ ..._Asset(), messageId: "another-message" }])[0];
+		if (matched?.kind !== ConversationWorkspaceTranscriptEntryKinds.Message || wrongMessage?.kind !== ConversationWorkspaceTranscriptEntryKinds.Message)
+			throw new Error("Expected message presentations.");
+
+		expect(matched.attachments).toEqual([_Asset()]);
+		expect(wrongMessage.attachments).toMatchObject([{ state: ConversationAssetPresentationStates.Unavailable, canRemove: false, disposition: null }]);
+		expect(matched.richText.html).not.toContain("brief.pdf");
+	});
+
+	it("does not grant file actions from names, partial coordinates, or duplicate projections", function _ArtifactMismatch()
+	{
+		const artifact = { id: "artifact-block-1", kind: "artifact" as const, artifactId: "artifact-1", artifactRevisionId: "revision-1", name: "brief.pdf", mediaType: "application/pdf" };
+		const message = { ..._Message(), blocks: [artifact] };
+		const variants = [[{ ..._Asset(), artifactRevisionId: "another-revision" }], [{ ..._Asset(), artifactId: null, artifactRevisionId: null }], [_Asset(), { ..._Asset(), id: "asset-duplicate" }]];
+
+		for (const assets of variants)
+		{
+			const view = _ConversationEntryViews([message], {}, assets)[0];
+			if (view?.kind !== ConversationWorkspaceTranscriptEntryKinds.Message)
+				throw new Error("Expected a message presentation.");
+			expect(view.attachments).toMatchObject([{ state: ConversationAssetPresentationStates.Unavailable, disposition: null, canRemove: false }]);
+		}
 	});
 
 	it("maps every tool phase without claiming that a final answer exists", function _ToolPhases()

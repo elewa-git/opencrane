@@ -4,7 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 import { _CreateArtifactPreprocessAuthority, PrismaArtifactScanUnitOfWork, __CreateArtifactPreprocessControllerRouter, __CreateArtifactPreprocessorRouter, __CreateArtifactScannerRouter } from "@opencrane/backend/server/agents/artifacts";
 import { PrismaSkillAuthoringValidationControllerUnitOfWork, PrismaSkillAuthoringValidationWorkerUnitOfWork, __CreateSkillAuthoringValidationControllerRouter, __CreateSkillAuthoringValidationWorkerRouter } from "@opencrane/backend/server/agents/skills";
 import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateSkillAuthoringValidationTokenReviewer, _ValidateIsolatedWorkloadNamespace } from "@opencrane/backend/server/infra/workload-identity";
-import { PrismaConversationAssetScanRepository } from "@opencrane/backend/server/conversation-assets";
+import { PrismaConversationAssetScanRepository, PrismaConversationAssetPreprocessRepository } from "@opencrane/backend/server/conversation-assets";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _CreateArtifactPreprocessSourceBroker } from "@opencrane/backend/server/agents/artifacts";
@@ -72,7 +72,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 	const artifactScannerNamespace = config.artifactScannerEnabled
 		? _ValidateIsolatedWorkloadNamespace(config.artifactScannerNamespace, serverNamespace)
 		: null;
-	const artifactPreprocessRepository = _CreateArtifactPreprocessAuthority(prisma);
+	const artifactPreprocessRepository = _CreateArtifactPreprocessAuthority(prisma, function _ConversationPreprocessAssets(transaction) { return new PrismaConversationAssetPreprocessRepository(transaction); });
 	return {
 		artifactPreprocessController: artifactPreprocessorNamespace === null
 			? null
@@ -90,7 +90,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 				namespace: artifactPreprocessorNamespace,
 				repository: artifactPreprocessRepository,
 				sourceBroker: _CreateArtifactPreprocessSourceBroker(artifactPreprocessRepository),
-				outputBroker: _CreateArtifactPreprocessOutputBroker(prisma, config.artifactPreprocessorMaximumOutputBytes),
+				outputBroker: _CreateArtifactPreprocessOutputBroker(artifactPreprocessRepository, config.artifactPreprocessorMaximumOutputBytes),
 				logger: _log,
 			}),
 		artifactScanner: artifactScannerNamespace === null

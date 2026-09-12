@@ -8,3 +8,6 @@ export type { ConversationAssetAuthority, ConversationAssetRouterDependencies } 
 export type { ConversationAssetContent, ConversationAssetContentAuthority, ConversationAssetContentBroker, ConversationAssetReadTarget } from "./conversation-asset-content.types";
 export { _CreateConversationAssetAuthority, _CreateConversationAssetContentBroker } from "./service/conversation-asset-brokers.factory";
 export { _ResolveConversationAssetCaller } from "./http/conversation-asset-caller-resolver";
+export { PrismaConversationAssetPreprocessRepository } from "./prisma-conversation-asset-preprocess-repository";
+export { PrismaConversationMessageAttachmentRepository } from "./prisma-conversation-message-attachment-repository";
+export { PrismaConversationPromptDocumentRepository } from "./pdf-input/prisma-conversation-prompt-document-repository";

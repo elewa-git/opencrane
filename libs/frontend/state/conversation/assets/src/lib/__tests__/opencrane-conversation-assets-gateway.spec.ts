@@ -5,7 +5,7 @@ import { ControlPlaneApiService } from "@opencrane/core";
 
 import { OpenCraneConversationAssetsGateway } from "../opencrane-conversation-assets-gateway";
 
-const _ASSET = { id: "asset-1", conversationId: "conversation-1", messageId: null, provenance: "participant_upload" as const, state: "processing" as const, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: "preview" as const, failureCode: null, canRemove: false, createdAt: "2026-08-11T10:00:00.000Z" };
+const _ASSET = { id: "asset-1", conversationId: "conversation-1", messageId: null, artifactId: null, artifactRevisionId: null, provenance: "participant_upload" as const, state: "processing" as const, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: "preview" as const, failureCode: null, canRemove: false, createdAt: "2026-08-11T10:00:00.000Z" };
 
 /** Construct the adapter with controlled generated-client methods. */
 function _Gateway(client: object): OpenCraneConversationAssetsGateway
@@ -63,4 +63,24 @@ describe("OpenCraneConversationAssetsGateway", function _Suite()
 		const GET = vi.fn().mockResolvedValue({ data: { lease: "must-not-be-used" }, error: undefined });
 		await expect(_Gateway({ GET }).read("conversation-1", "asset-1")).rejects.toThrow("could not be opened");
 	});
+
+	it("rejects partial immutable artifact coordinates", async function _RejectsPartialArtifactIdentity()
+	{
+		const GET = vi.fn().mockResolvedValue({ data: { assets: [{ ..._ASSET, artifactId: "artifact-1", artifactRevisionId: null }] }, error: undefined });
+		await expect(_Gateway({ GET }).list("conversation-1")).rejects.toThrow("metadata is invalid");
+	});
+
+	it.each([
+		{ state: "unknown" },
+		{ provenance: "unknown" },
+		{ disposition: "execute" },
+		{ byteLength: -1 },
+		{ byteLength: 1.5 },
+		{ artifactId: "   ", artifactRevisionId: "revision-1" },
+	])("rejects invalid runtime metadata before it enters state: %j", async function _RejectsInvalidMetadata(invalid)
+	{
+		const GET = vi.fn().mockResolvedValue({ data: { assets: [{ ..._ASSET, ...invalid }] }, error: undefined });
+		await expect(_Gateway({ GET }).list("conversation-1")).rejects.toThrow("metadata is invalid");
+	});
+
 });

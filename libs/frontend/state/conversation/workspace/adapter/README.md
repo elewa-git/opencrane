@@ -7,6 +7,7 @@
 This package translates the generated signed-in conversation, onboarding, and company-assistant APIs into the
 transport-neutral workspace gateway. It maps only fields the browser state needs, reduces HTTP
 failures to fixed display-safe categories, and submits ordinary participant messages through the generated HTTP client.
+Message submission forwards the state-owned canonical asset-id set with the same retry-stable UUID and text.
 
 ```
  Control Plane generated client ──► workspace gateway  ◄── HERE

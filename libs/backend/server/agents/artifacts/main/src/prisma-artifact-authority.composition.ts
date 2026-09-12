@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { ArtifactPreprocessControllerAuthority } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
+import type { ConversationAssetPreprocessLifecycleFactory } from "./artifact-preprocess-conversation-lifecycle.types";
 import { _ArtifactPreprocessAuthority } from "./artifact-preprocess-authority";
 import { _ArtifactUploadAuthority } from "./artifact-authority";
 import type { ArtifactReadLeaseRepository } from "./artifact-read-lease.types";
@@ -44,9 +45,9 @@ export function _CreateArtifactUploadAuthority(prisma: PrismaClient, workflow: P
  * @returns The repository the router and both brokers use. Unlike the upload authority, it lets
  *   an exhausted database collision reach the caller, which the router answers as HTTP 503.
  */
-export function _CreateArtifactPreprocessAuthority(prisma: PrismaClient): ArtifactPreprocessRepository & ArtifactPreprocessControllerAuthority
+export function _CreateArtifactPreprocessAuthority(prisma: PrismaClient, createConversationAssets: ConversationAssetPreprocessLifecycleFactory): ArtifactPreprocessRepository & ArtifactPreprocessControllerAuthority
 {
-	return new _ArtifactPreprocessAuthority(new PrismaArtifactPreprocessUnitOfWork(prisma));
+	return new _ArtifactPreprocessAuthority(new PrismaArtifactPreprocessUnitOfWork(prisma, createConversationAssets));
 }
 
 /**

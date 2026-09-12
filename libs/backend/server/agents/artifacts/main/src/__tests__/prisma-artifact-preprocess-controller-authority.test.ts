@@ -67,7 +67,8 @@ function _Harness(initial: Record<string, unknown> = _Job(), updateCount = 1)
 		artifactPreprocessJob: { findUnique: vi.fn(async function _Find(): Promise<Record<string, unknown>> { return job; }), updateMany, update },
 		artifact: { create: vi.fn().mockResolvedValue({}) },
 	};
-	return { authority: new PrismaArtifactPreprocessControllerRepository(transaction as never), transaction, job: function _Current(): Record<string, unknown> { return job; } };
+	const conversationAssets = { complete: vi.fn(async function _Ready(): Promise<void> { expect(job["state"]).toBe(ArtifactPreprocessJobState.Completed); }), fail: vi.fn().mockResolvedValue(undefined) };
+	return { authority: new PrismaArtifactPreprocessControllerRepository(transaction as never, conversationAssets), conversationAssets, transaction, job: function _Current(): Record<string, unknown> { return job; } };
 }
 
 /** Builds the binding fields copied from one issued controller record. */
@@ -132,6 +133,7 @@ describe("Prisma artifact preprocessing controller authority", function _Describ
 		await expect(harness.authority.complete("preprocess-1", completion, _Task())).resolves.toBe("completed");
 		await expect(harness.authority.complete("preprocess-1", completion, _Task())).resolves.toBe("idempotent");
 		expect(harness.job()).toMatchObject({ state: ArtifactPreprocessJobState.Completed, completionConsumedAt: _NOW, completedAt: _NOW });
+		expect(harness.conversationAssets.complete).toHaveBeenCalledExactlyOnceWith("revision-1");
 	});
 
 	it("returns the retry time only for the exact failed delivery", async function _LoadsRetryableOutcome()
@@ -141,6 +143,24 @@ describe("Prisma artifact preprocessing controller authority", function _Describ
 
 		await expect(harness.authority.loadOutcome("preprocess-1", 2, _Task())).resolves.toEqual({ kind: "retryable_failed", preprocessJobId: "preprocess-1", deliveryCount: 2, retryAt: retryAt.toISOString() });
 		await expect(harness.authority.loadOutcome("preprocess-1", 1, _Task())).resolves.toBeNull();
+	});
+
+	it("propagates a file lifecycle failure so the owning transaction rolls back completion", async function _RejectsPartialCompletion()
+	{
+		const digest = `sha256:${"b".repeat(64)}`;
+		const harness = _Harness(_Job({ state: ArtifactPreprocessJobState.Claimed, workloadUid: "job", firstPodUid: "pod", completionDigest: digest }));
+		harness.conversationAssets.complete.mockRejectedValueOnce(new Error("file changed"));
+		await expect(harness.authority.complete("preprocess-1", { preprocessJobId: "preprocess-1", completionDigest: digest }, _Task())).rejects.toThrow("file changed");
+	});
+
+	it("marks the source Failed when the controller observes the last delivery fail", async function _TerminalSourceFailure()
+	{
+		const claimedAt = new Date(_NOW.getTime() - 120_000);
+		const harness = _Harness(_Job({ state: ArtifactPreprocessJobState.Claimed, claimFence: "claim-3", profileName: "pdf-preprocessor", claimedAt,
+			deliveryCount: 3, claimExpiresAt: new Date(_NOW.getTime() - 60_000), workloadUid: "job", firstPodUid: "pod" }));
+		const binding = { claimId: "claim-3", claimedAt: claimedAt.toISOString(), deliveryCount: 3, profileName: "pdf-preprocessor", workloadUid: "job", firstPodUid: "pod" };
+		await expect(harness.authority.recordUnreportedFailure("preprocess-1", _Task(), { binding, reason: ArtifactPreprocessRecoveryReasons.JobTerminalWithoutOutcome })).resolves.toMatchObject({ kind: "terminal_failed" });
+		expect(harness.conversationAssets.fail).toHaveBeenCalledExactlyOnceWith("revision-1");
 	});
 
 	it("returns terminal failure without inventing another delivery", async function _LoadsTerminalOutcome()

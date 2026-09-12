@@ -19,7 +19,7 @@ function _Harness()
 	const history = { readStream: vi.fn(), readHead: vi.fn(), append: vi.fn(), appendAtomic: vi.fn() };
 	const cipher = { encrypt: vi.fn(), decrypt: vi.fn() };
 	const computerReader = { load: vi.fn() };
-	const authority = new PrismaSelfConversationHistoryUnitOfWork(prisma, history, { cipher, computerReader }, new ConversationHistoryAuthority(history));
+	const authority = new PrismaSelfConversationHistoryUnitOfWork(prisma, history, { cipher, computerReader }, new ConversationHistoryAuthority(history), function _Attachments() { return { bindOrVerify: vi.fn() }; });
 	const options = { maxCount: 1, maximumBytes: 4096, signal: new AbortController().signal };
 	return { authority, authorize, payloads, read, cipher, computerReader, options, projection };
 }

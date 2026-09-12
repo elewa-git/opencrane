@@ -1,7 +1,7 @@
 import { Injectable, computed, effect, inject, signal } from "@angular/core";
 
 import { ConversationComputerStates } from "@opencrane/contracts";
-import { ConversationAssetActionKinds, __ConversationAssetPresentation, __PendingConversationAssetPresentation, type ConversationAssetActionIntent, type ConversationAssetPresentation } from "@opencrane/features/conversation-assets";
+import { ConversationAssetActionKinds, __ConversationAssetPresentation, __ConversationAssetSelectionFeedback, __PendingConversationAssetPresentation, type ConversationAssetActionIntent, type ConversationAssetPresentation, type ConversationAssetSelectionFeedback } from "@opencrane/features/conversation-assets";
 import { ConversationActivityReadStates } from "@opencrane/features/conversation-activity";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import { ConversationElicitationStore, type ElicitationResponseValue } from "@opencrane/state/conversation/elicitation";
@@ -82,6 +82,18 @@ export class ConversationWorkspacePresenter
 	public readonly runActions = computed(() => _ConversationRunActions(this.personalRuns.currentRun(), this.personalRuns.stopPending(), this.personalRuns.stopBusy(), this.personalRuns.stopError()));
 	/** Existing asset presentations for transcript and Files views. */
 	public readonly assets = computed(this._Assets.bind(this));
+	/** Files currently selected for the next message. */
+	public readonly messageAssets = computed(this._MessageAssets.bind(this));
+	/** Safe message-level feedback for the last rejected file pick. */
+	public readonly assetSelectionFeedback = computed<ConversationAssetSelectionFeedback | null>(() =>
+	{
+		const failure = this.assetsStore.selectionFailure();
+		return failure === null ? null : __ConversationAssetSelectionFeedback(failure);
+	});
+	/** Prevents a selected unfinished or failed file from being silently omitted from Send. */
+	public readonly attachmentSubmissionBlocked = computed(() => this.messageAssets().length > this.assetsStore.messageAssetIds().length);
+	/** Keeps the exact visible file set fixed while an uncertain message command is retried. */
+	public readonly attachmentSelectionLocked = this.store.messageRetryPending;
 	/** Participant-facing name for the selected context panel. */
 	public readonly contextPanelLabel = computed(this._ContextPanelLabel.bind(this));
 	/** Shared composer state derived from current command and lifecycle. */
@@ -120,7 +132,20 @@ export class ConversationWorkspacePresenter
 	/** Keep ordinary message input controlled by the conversation store. */
 	public updateDraft(value: string): void { this.store.updateDraft(value); }
 	/** Submit ordinary participant text through the authenticated history command. */
-	public async send(): Promise<void> { await this.store.send(); }
+	public async send(): Promise<void>
+	{
+		if (this.attachmentSubmissionBlocked())
+			return;
+		const assetIds = this.store.messageAssetIdsForSend(this.assetsStore.messageAssetIds());
+		if (await this.store.send(assetIds))
+			this.assetsStore.clearMessageSelection(assetIds);
+	}
+	/** Starts resumable upload state for files selected by the PDF picker. */
+	public async selectFiles(files: readonly File[]): Promise<void>
+	{
+		if (!this.attachmentSelectionLocked())
+			await this.assetsStore.select(files);
+	}
 	/** Ask the selected workspace store to replace a paused or failed socket. */
 	public reconnect(): void { this.store.reconnect(); }
 	/** Ask the personal work store to append one retry-stable Stop control message. */
@@ -134,6 +159,12 @@ export class ConversationWorkspacePresenter
 	/** Route existing asset intents back to their owning store. */
 	public async assetAction(intent: ConversationAssetActionIntent): Promise<void>
 	{
+		if (intent.kind === ConversationAssetActionKinds.Deselect)
+		{
+			if (!this.attachmentSelectionLocked())
+				this.assetsStore.deselectMessageAsset(intent.assetId);
+			return;
+		}
 		if (intent.kind === ConversationAssetActionKinds.Retry)
 			{ await this.assetsStore.retry(intent.assetId); return; }
 		if (intent.kind === ConversationAssetActionKinds.Remove)
@@ -234,7 +265,7 @@ export class ConversationWorkspacePresenter
 		const entries = new Map(history.entries.map(entry => [entry.id, entry]));
 		const subject = this._subject() ?? undefined;
 		const children = this.groupStore.children();
-		return _ConversationEntryViews(history.entries, history.payloads).map(function _GroupActions(view)
+		return _ConversationEntryViews(history.entries, history.payloads, this.assets()).map(function _GroupActions(view)
 		{
 			if (view.kind === ConversationWorkspaceTranscriptEntryKinds.ToolActivity)
 				return view;
@@ -247,6 +278,13 @@ export class ConversationWorkspacePresenter
 	private _Assets(): readonly ConversationAssetPresentation[]
 	{
 		const durable = this.assetsStore.assets.hasValue() ? this.assetsStore.assets.value().map(asset => __ConversationAssetPresentation(asset, this._assetContent.state(asset.id))) : [];
+		return [...durable, ...this.assetsStore.pendingUploads().map(__PendingConversationAssetPresentation)];
+	}
+
+	/** Maps only files which still belong to the next message selection. */
+	private _MessageAssets(): readonly ConversationAssetPresentation[]
+	{
+		const durable = this.assetsStore.messageAssets().map(asset => __ConversationAssetPresentation(asset, this._assetContent.state(asset.id)));
 		return [...durable, ...this.assetsStore.pendingUploads().map(__PendingConversationAssetPresentation)];
 	}
 

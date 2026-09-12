@@ -1311,7 +1311,7 @@ export interface paths {
         put?: never;
         /**
          * Post one encrypted participant message
-         * @description Encrypts plaintext before PostgreSQL persistence and appends only an opaque payload reference and ciphertext digest to KurrentDB.
+         * @description Encrypts plaintext and atomically binds up to ten selected Ready PDF assets before appending opaque text and artifact coordinates to KurrentDB. Text may be empty only when at least one asset is selected. Exact retries preserve the original text, asset set, author and activation.
          */
         post: operations["postMyConversationMessage"];
         delete?: never;
@@ -5948,6 +5948,8 @@ export interface operations {
                             id: string;
                             conversationId: string;
                             messageId: string | null;
+                            artifactId: string | null;
+                            artifactRevisionId: string | null;
                             /** @enum {string} */
                             provenance: "participant_upload";
                             /** @enum {string} */
@@ -6015,6 +6017,8 @@ export interface operations {
                             id: string;
                             conversationId: string;
                             messageId: string | null;
+                            artifactId: string | null;
+                            artifactRevisionId: string | null;
                             /** @enum {string} */
                             provenance: "participant_upload";
                             /** @enum {string} */
@@ -6045,6 +6049,8 @@ export interface operations {
                             id: string;
                             conversationId: string;
                             messageId: string | null;
+                            artifactId: string | null;
+                            artifactRevisionId: string | null;
                             /** @enum {string} */
                             provenance: "participant_upload";
                             /** @enum {string} */
@@ -6179,6 +6185,8 @@ export interface operations {
                             id: string;
                             conversationId: string;
                             messageId: string | null;
+                            artifactId: string | null;
+                            artifactRevisionId: string | null;
                             /** @enum {string} */
                             provenance: "participant_upload";
                             /** @enum {string} */
@@ -6251,6 +6259,8 @@ export interface operations {
                             id: string;
                             conversationId: string;
                             messageId: string | null;
+                            artifactId: string | null;
+                            artifactRevisionId: string | null;
                             /** @enum {string} */
                             provenance: "participant_upload";
                             /** @enum {string} */
@@ -7802,7 +7812,10 @@ export interface operations {
                 "application/json": {
                     /** Format: uuid */
                     idempotencyKey: string;
+                    /** @description Participant text limited to 65536 UTF-8 bytes; it may be empty only when assetIds is non-empty. */
                     text: string;
+                    /** @description Unique conversation asset identifiers; the server stores them in ASCII order. */
+                    assetIds: string[];
                     /**
                      * @description Stop requests cancellation of the original requester's current turn without starting another turn. Admission is not cancellation completion.
                      * @enum {string}
@@ -7852,14 +7865,14 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Conversation is unavailable to the current participant. */
+            /** @description Conversation or selected asset is unavailable to the current participant. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Idempotency or activation conflict. */
+            /** @description Idempotency, asset binding or activation conflict. */
             409: {
                 headers: {
                     [name: string]: unknown;

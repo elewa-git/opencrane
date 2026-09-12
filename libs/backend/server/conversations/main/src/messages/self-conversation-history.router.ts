@@ -1,12 +1,11 @@
 import { Router, type Request } from "express";
 import { ___DoWithTrace, ___MarkActiveSpanFailed } from "@opencrane/backend/observability";
 
-import { ConversationMessageActivations, ConversationMessageAdmissionOutcomes, type ConversationMessageCommand, type SelfConversationHistoryRouterDependencies } from "./self-conversation-history.types";
+import { ConversationMessageAdmissionOutcomes, type ConversationMessageCommand, type SelfConversationHistoryRouterDependencies } from "./self-conversation-history.types";
+import { _ParseConversationMessageCommand } from "./conversation-message-admission.validator";
 import { _ConversationFailureDiagnostic } from "./conversation-failure-diagnostic";
 import { _CreateSelfConversationEventsHandler } from "./self-conversation-events";
 
-/** UUID syntax accepted for browser message retry keys. */
-const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 /** Nonnegative decimal cursor accepted without normalization ambiguity. */
 const _POSITION_PATTERN = /^(0|[1-9][0-9]*)$/;
 
@@ -121,18 +120,7 @@ function _AfterPosition(value: unknown): bigint | undefined | null
 /** Validates the closed participant message body without retaining extra browser fields. */
 function _MessageCommand(value: unknown): ConversationMessageCommand | null
 {
-	if (typeof value !== "object" || value === null || Array.isArray(value))
-		return null;
-	const body = value as Record<string, unknown>;
-	if (Object.keys(body).some(key => !["idempotencyKey", "text", "activation"].includes(key)))
-		return null;
-	if (typeof body["idempotencyKey"] !== "string" || !_UUID_PATTERN.test(body["idempotencyKey"]))
-		return null;
-	if (typeof body["text"] !== "string" || body["text"].length === 0 || Buffer.byteLength(body["text"], "utf8") > 65_536)
-		return null;
-	if (!Object.values(ConversationMessageActivations).includes(body["activation"] as ConversationMessageActivations))
-		return null;
-	return { idempotencyKey: body["idempotencyKey"], text: body["text"], activation: body["activation"] as ConversationMessageActivations };
+	return _ParseConversationMessageCommand(value);
 }
 
 /** Narrows an Express path parameter without selecting among repeated coordinates. */

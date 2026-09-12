@@ -1,6 +1,7 @@
 import type { GroupChildView } from "@opencrane/models/conversations";
 import type { ConversationStatusPresentation } from "@opencrane/elements/conversation";
 import type { ConversationGroupSource } from "@opencrane/state/conversation/workspace";
+import type { ConversationAssetPresentation } from "@opencrane/features/conversation-assets";
 import type { ConversationMessageView } from "../conversation-workspace-feature.types";
 
 /** Selects the finite row anatomy rendered in the selected conversation transcript. */
@@ -34,6 +35,8 @@ export interface ConversationWorkspaceTranscriptMessageEntry extends Conversatio
 	readonly shareSource: ConversationGroupSource | null;
 	/** Authorized child requests originating from this message. */
 	readonly children: readonly GroupChildView[];
+	/** File cards derived from artifact blocks in this message. */
+	readonly attachments: readonly ConversationAssetPresentation[];
 }
 
 /** Renders one latest canonical tool lifecycle fact without exposing its coordinates or payload. */

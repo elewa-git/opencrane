@@ -28,6 +28,10 @@ in every mode. A changed member set receives a new command UUID. A successful re
 choices stay fixed while the request is in flight and become editable again after failure.
 The package-local creation-command helper compares selections and builds commands; the store owns
 the pending command's lifetime and clears it after success, an explicit mode change or proven access loss.
+Ordinary message commands canonicalize at most ten unique asset ids by code-unit order and freeze them
+with the draft and UUID. An ambiguous failure retains all three for exact retry even when the visible
+draft or file selection changes. After a confirmed send, the next draft or asset set receives a fresh
+command. Attachment-only messages are valid when the set is non-empty.
 
 Proven access loss from a workspace read, command or event stream erases the conversation list,
 creation directory, selected history, draft and onboarding transcript. It also clears pending creation

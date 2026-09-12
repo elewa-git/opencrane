@@ -9006,6 +9006,8 @@
                           "id",
                           "conversationId",
                           "messageId",
+                          "artifactId",
+                          "artifactRevisionId",
                           "provenance",
                           "state",
                           "displayName",
@@ -9024,6 +9026,18 @@
                             "type": "string"
                           },
                           "messageId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "artifactId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "artifactRevisionId": {
                             "type": [
                               "string",
                               "null"
@@ -9184,6 +9198,8 @@
                         "id",
                         "conversationId",
                         "messageId",
+                        "artifactId",
+                        "artifactRevisionId",
                         "provenance",
                         "state",
                         "displayName",
@@ -9202,6 +9218,18 @@
                           "type": "string"
                         },
                         "messageId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "artifactId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "artifactRevisionId": {
                           "type": [
                             "string",
                             "null"
@@ -9293,6 +9321,8 @@
                         "id",
                         "conversationId",
                         "messageId",
+                        "artifactId",
+                        "artifactRevisionId",
                         "provenance",
                         "state",
                         "displayName",
@@ -9311,6 +9341,18 @@
                           "type": "string"
                         },
                         "messageId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "artifactId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "artifactRevisionId": {
                           "type": [
                             "string",
                             "null"
@@ -9563,6 +9605,8 @@
                         "id",
                         "conversationId",
                         "messageId",
+                        "artifactId",
+                        "artifactRevisionId",
                         "provenance",
                         "state",
                         "displayName",
@@ -9581,6 +9625,18 @@
                           "type": "string"
                         },
                         "messageId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "artifactId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "artifactRevisionId": {
                           "type": [
                             "string",
                             "null"
@@ -9741,6 +9797,8 @@
                         "id",
                         "conversationId",
                         "messageId",
+                        "artifactId",
+                        "artifactRevisionId",
                         "provenance",
                         "state",
                         "displayName",
@@ -9759,6 +9817,18 @@
                           "type": "string"
                         },
                         "messageId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "artifactId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "artifactRevisionId": {
                           "type": [
                             "string",
                             "null"
@@ -12482,7 +12552,7 @@
       "post": {
         "operationId": "postMyConversationMessage",
         "summary": "Post one encrypted participant message",
-        "description": "Encrypts plaintext before PostgreSQL persistence and appends only an opaque payload reference and ciphertext digest to KurrentDB.",
+        "description": "Encrypts plaintext and atomically binds up to ten selected Ready PDF assets before appending opaque text and artifact coordinates to KurrentDB. Text may be empty only when at least one asset is selected. Exact retries preserve the original text, asset set, author and activation.",
         "tags": [
           "Conversations"
         ],
@@ -12506,6 +12576,7 @@
                 "required": [
                   "idempotencyKey",
                   "text",
+                  "assetIds",
                   "activation"
                 ],
                 "properties": {
@@ -12515,8 +12586,21 @@
                   },
                   "text": {
                     "type": "string",
-                    "minLength": 1,
-                    "maxLength": 65536
+                    "maxLength": 65536,
+                    "description": "Participant text limited to 65536 UTF-8 bytes; it may be empty only when assetIds is non-empty."
+                  },
+                  "assetIds": {
+                    "type": "array",
+                    "minItems": 0,
+                    "maxItems": 10,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[\\x21-\\x7E]+$"
+                    },
+                    "description": "Unique conversation asset identifiers; the server stores them in ASCII order."
                   },
                   "activation": {
                     "type": "string",
@@ -12593,10 +12677,10 @@
             "description": "Authentication required."
           },
           "404": {
-            "description": "Conversation is unavailable to the current participant."
+            "description": "Conversation or selected asset is unavailable to the current participant."
           },
           "409": {
-            "description": "Idempotency or activation conflict."
+            "description": "Idempotency, asset binding or activation conflict."
           },
           "503": {
             "description": "Conversation history or private payload authority unavailable."

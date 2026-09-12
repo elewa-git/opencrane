@@ -9,6 +9,8 @@ describe("_SelfConversationHistoryOpenapiPaths", function _DescribeOpenapi()
 		expect(_SelfConversationHistoryOpenapiPaths["/me/conversations/{conversationId}/history"].get.operationId).toBe("readMyConversationHistory");
 		expect(_SelfConversationHistoryOpenapiPaths["/me/conversations/{conversationId}/history"].get.parameters[1]?.description).toContain("Exclusive");
 		expect(_SelfConversationHistoryOpenapiPaths["/me/conversations/{conversationId}/messages"].post.operationId).toBe("postMyConversationMessage");
+		expect(_SelfConversationHistoryOpenapiPaths["/me/conversations/{conversationId}/messages"].post.requestBody.content["application/json"].schema.required).toContain("assetIds");
+		expect(_SelfConversationHistoryOpenapiPaths["/me/conversations/{conversationId}/messages"].post.requestBody.content["application/json"].schema.properties.assetIds.maxItems).toBe(10);
 		expect(JSON.stringify(_SelfConversationHistoryOpenapiPaths)).not.toContain("authTag");
 	});
 

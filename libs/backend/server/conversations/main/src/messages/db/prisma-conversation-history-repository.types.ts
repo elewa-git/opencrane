@@ -29,7 +29,7 @@ export interface StoredConversationPrivatePayload extends EncryptedConversationP
 }
 
 /** Encrypted message intent whose retry and activation coordinates are recorded with Use admission. */
-export interface ConversationMessagePayloadAdmissionCommand extends Pick<ConversationMessageCommand, "idempotencyKey" | "activation">
+export interface ConversationMessagePayloadAdmissionCommand extends Pick<ConversationMessageCommand, "idempotencyKey" | "activation" | "assetIds">
 {
 	/** Newly generated payload reference, used only if no stored retry row wins. */
 	readonly payloadRef: string;
@@ -40,6 +40,8 @@ export interface ConversationMessagePayloadAdmissionCommand extends Pick<Convers
 /** Current projection and winning payload admitted together in the message transaction. */
 export interface AdmittedConversationMessagePayload
 {
+	/** States whether this transaction created the retry row rather than reading its winner. */
+	readonly created: boolean;
 	/** Participant and computer facts checked in the transaction that records admission. */
 	readonly projection: AuthorizedConversationProjection;
 	/** Existing retry row or the ciphertext created by this transaction. */

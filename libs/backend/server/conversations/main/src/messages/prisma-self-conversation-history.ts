@@ -1,19 +1,15 @@
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
-
 import { ConversationMode, Prisma, type PrismaClient } from "@prisma/client";
-import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
-import { ComputerLeaseStates, ConversationAuthorKinds, ConversationEntryKinds, type ConversationEntry, type MessageEntry } from "@opencrane/contracts";
+import { type HistoryStore } from "@opencrane/backend/server/infra/history-store";
+import { type ConversationEntry } from "@opencrane/contracts";
 
-import { ConversationHistoryAuthority } from "@opencrane/backend/server/conversations/history";
-import { ConversationHistoryAppendOutcomes } from "@opencrane/backend/server/conversations/history";
-import { ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
+import { ConversationHistoryAuthority, ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
 import type { ConversationCaller } from "../authorization/conversation-caller.types";
+import type { ConversationMessageAttachmentAdmissionFactory } from "./conversation-message-admission.types";
+import { PrismaConversationMessageAdmissionUnitOfWork } from "./prisma-conversation-message-admission-unit-of-work";
 import { PrismaConversationHistoryRepository } from "./db/prisma-conversation-history-repository";
 import type { AuthorizedConversationProjection, StoredConversationPrivatePayload } from "./db/prisma-conversation-history-repository.types";
-import { ConversationMessageActivations, ConversationMessageAdmissionOutcomes, type ConversationMessageAdmissionResult, type ConversationMessageCommand, type PrismaSelfConversationHistoryDependencies, type SelfConversationHistoryAuthority, type SelfConversationHistoryReadOptions, type SelfConversationHistoryResult } from "./self-conversation-history.types";
+import type { ConversationMessageAdmissionResult, ConversationMessageCommand, PrismaSelfConversationHistoryDependencies, SelfConversationHistoryAuthority, SelfConversationHistoryReadOptions, SelfConversationHistoryResult } from "./self-conversation-history.types";
 
-/** Limits checked-append retries without silently dropping a contending participant message. */
-const _APPEND_ATTEMPTS = 4;
 const _CONVERSATION_AUDIENCE = "conversation";
 const _MESSAGE_ENTRY_KIND = "message";
 const _A2UI_ENTRY_KIND = "a2ui";
@@ -22,16 +18,16 @@ const _TEXT_BLOCK_KIND = "text";
 /** Participant authority joining PostgreSQL policy and encrypted payloads to KurrentDB history. */
 export class PrismaSelfConversationHistoryUnitOfWork implements SelfConversationHistoryAuthority
 {
-	/** KurrentDB append boundary that accepts only complete server-stamped entries. */
-	private readonly historyAuthority: ConversationHistoryAuthority;
 	/** KurrentDB read boundary that validates every immutable event envelope. */
 	private readonly historyReader: ConversationHistoryReader;
+	/** Cohesive write owner for SQL admission, attachment binding and KurrentDB append. */
+	private readonly messageAdmission: PrismaConversationMessageAdmissionUnitOfWork;
 
 	/** Connects the authority to its transaction owner, HistoryStore, payload cipher, and computer reader. */
-	public constructor(private readonly prisma: PrismaClient, private readonly historyStore: Pick<HistoryStore, "append" | "appendAtomic" | "readHead" | "readStream">, private readonly dependencies: PrismaSelfConversationHistoryDependencies, historyAuthority: ConversationHistoryAuthority)
+	public constructor(private readonly prisma: PrismaClient, historyStore: Pick<HistoryStore, "append" | "appendAtomic" | "readHead" | "readStream">, private readonly dependencies: PrismaSelfConversationHistoryDependencies, historyAuthority: ConversationHistoryAuthority, createAttachmentAdmission: ConversationMessageAttachmentAdmissionFactory)
 	{
-		this.historyAuthority = historyAuthority;
 		this.historyReader = new ConversationHistoryReader(historyStore);
+		this.messageAdmission = new PrismaConversationMessageAdmissionUnitOfWork(prisma, historyStore, dependencies, historyAuthority, createAttachmentAdmission);
 	}
 
 	/** Rechecks participant access around one KurrentDB read and decrypts only referenced visible payloads. */
@@ -71,74 +67,10 @@ export class PrismaSelfConversationHistoryUnitOfWork implements SelfConversation
 		return result;
 	}
 
-	/** Commits current Use admission and encrypted payload together, then appends the opaque reference at a checked KurrentDB head. */
-	public async postMessage(caller: ConversationCaller, conversationId: string, command: ConversationMessageCommand): Promise<ConversationMessageAdmissionResult | null>
+	/** Delegates message writes to the SQL and KurrentDB admission owner. */
+	public postMessage(caller: ConversationCaller, conversationId: string, command: ConversationMessageCommand): Promise<ConversationMessageAdmissionResult | null>
 	{
-		// 1. Keep plaintext outside repository arguments and reject missing identity before persistence.
-		if (caller.externalIssuer === undefined || caller.verifiedAuthenticationAt === undefined)
-			throw new Error("Conversation message admission requires verified requester evidence");
-		const payloadRef = randomUUID();
-		const coordinates = { siloId: caller.siloId, conversationId, payloadRef, authorSubject: caller.subjectId };
-		const cipher = this.dependencies.cipher;
-		const payload = cipher.encrypt(command.text, coordinates);
-		// 2. A retry mismatch must roll back its admission along with any payload or ordering writes.
-		const stored = await this._transaction(async function _AdmitMessage(repository)
-		{
-			const admitted = await repository.admitMessagePayload(caller, conversationId, { idempotencyKey: command.idempotencyKey, activation: command.activation, payloadRef, payload });
-			if (admitted === null)
-				return null;
-			const priorText = cipher.decrypt(admitted.payload, admitted.payload.coordinates);
-			if (!_SameText(priorText, command.text))
-				throw new Error("Conversation message idempotency key was already used for different text");
-			return admitted;
-		}, Prisma.TransactionIsolationLevel.Serializable);
-		if (stored === null)
-			return null;
-		// 3. Append at a freshly observed head, retrying only checked conflicts from other valid writers.
-		return this._append(caller, conversationId, command, stored.projection, stored.payload);
-	}
-
-	/** Appends or finds the one immutable entry identified by the browser UUID. */
-	private async _append(caller: ConversationCaller, conversationId: string, command: ConversationMessageCommand, projection: AuthorizedConversationProjection, payload: StoredConversationPrivatePayload): Promise<ConversationMessageAdmissionResult>
-	{
-		for (let attempt = 0; attempt < _APPEND_ATTEMPTS; attempt += 1)
-		{
-			const history = await this.historyReader.read({ siloId: caller.siloId, conversationId });
-			const existing = history.entries.find(entry => entry.id === command.idempotencyKey);
-			if (existing !== undefined)
-			{
-				if (existing.kind !== ConversationEntryKinds.Message || existing.author.kind !== ConversationAuthorKinds.Human || existing.author.principalId !== caller.principalId || existing.author.participantId !== caller.subjectId || existing.activation !== command.activation)
-					throw new Error("Conversation message idempotency key was already used for a different command");
-				return { outcome: ConversationMessageAdmissionOutcomes.Idempotent, position: existing.position };
-			}
-			const expectedRevision = history.entries.length === 0 ? 0n : BigInt(history.entries.at(-1)!.position);
-			const position = (expectedRevision + 1n).toString();
-			const entry = _MessageEntry(caller, conversationId, command, projection, payload, position);
-			const result = await this._appendEntry(caller, conversationId, command, projection, entry, expectedRevision);
-			if (result.outcome === ConversationHistoryAppendOutcomes.Appended)
-				return { outcome: ConversationMessageAdmissionOutcomes.Accepted, position };
-			if (await this._transaction(function _Reauthorize(repository) { return repository.authorizeWrite(caller, conversationId); }) === null)
-				throw new Error("Conversation message authority ended while resolving a stream conflict");
-		}
-		throw new Error("Conversation message stream remained contended");
-	}
-
-	/** Appends one message alone or atomically with a checked computer activation queue request. */
-	private async _appendEntry(caller: ConversationCaller, conversationId: string, command: ConversationMessageCommand, projection: AuthorizedConversationProjection, entry: MessageEntry, expectedRevision: HistoryExpectedRevisions.NoStream | bigint)
-	{
-		if (command.activation === ConversationMessageActivations.None)
-			return this.historyAuthority.append({ siloId: caller.siloId, conversationId, expectedRevision, entry });
-		const current = await this.dependencies.computerReader.load({ computer: { siloId: caller.siloId, conversationId, computerId: projection.computerId!, agentIdentityId: projection.computerAgentIdentityId! }, profileRevisionId: projection.computerProfileRevisionId! });
-		if (current === null || current.computer.leaseGeneration < 1)
-			throw new Error("Conversation computer activation requires a current checked computer generation");
-		let generation = current.computer.leaseGeneration;
-		if (command.activation === ConversationMessageActivations.Start && (current.lease?.state === ComputerLeaseStates.Released || current.lease?.state === ComputerLeaseStates.Lost))
-			generation += 1;
-		const queueStreamName = `computer-activations-${caller.siloId}`;
-		const queueHead = await this.historyStore.readHead(queueStreamName);
-		if (queueHead.streamName !== queueStreamName)
-			throw new Error("Conversation computer activation queue returned a foreign stream head");
-		return this.historyAuthority.appendWithActivation({ siloId: caller.siloId, conversationId, expectedRevision, entry, activation: { computerId: current.computer.id, generation, eventId: _ActivationEventId(command.idempotencyKey), queueExpectedRevision: queueHead.revision ?? HistoryExpectedRevisions.NoStream } });
+		return this.messageAdmission.post(caller, conversationId, command);
 	}
 
 	/** Loads an agent conversation's current checked computer or returns null outside agent mode. */
@@ -168,19 +100,11 @@ export class PrismaSelfConversationHistoryUnitOfWork implements SelfConversation
 		return payloads;
 	}
 
-	/** Runs one repository operation in the requested PostgreSQL isolation level. */
-	private _transaction<Result>(work: (repository: PrismaConversationHistoryRepository) => Promise<Result>, isolationLevel: Prisma.TransactionIsolationLevel = Prisma.TransactionIsolationLevel.RepeatableRead): Promise<Result>
+	/** Runs one read repository operation at repeatable-read isolation. */
+	private _transaction<Result>(work: (repository: PrismaConversationHistoryRepository) => Promise<Result>): Promise<Result>
 	{
-		return this.prisma.$transaction(async function _Transaction(transaction) { return work(new PrismaConversationHistoryRepository(transaction)); }, { isolationLevel });
+		return this.prisma.$transaction(async function _Transaction(transaction) { return work(new PrismaConversationHistoryRepository(transaction)); }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
 	}
-}
-
-/** Creates a complete human-authored message entry without embedding plaintext. */
-function _MessageEntry(caller: ConversationCaller, conversationId: string, command: ConversationMessageCommand, projection: AuthorizedConversationProjection, payload: StoredConversationPrivatePayload, position: string): MessageEntry
-{
-	if (caller.externalIssuer === undefined || caller.verifiedAuthenticationAt === undefined)
-		throw new Error("Conversation message admission requires verified requester evidence");
-	return { schemaVersion: 1, id: command.idempotencyKey, conversationId, position, author: { kind: "human", principalId: caller.principalId, participantId: caller.subjectId, issuer: caller.externalIssuer, authenticatedAt: caller.verifiedAuthenticationAt, name: projection.authorName, avatarArtifactRevisionId: null }, provenance: "human-authored", visibility: { audience: "conversation" }, runId: null, causationId: command.idempotencyKey, correlationId: command.idempotencyKey, idempotencyKey: command.idempotencyKey, occurredAt: new Date().toISOString(), attestation: null, kind: "message", state: "completed", blocks: [{ id: randomUUID(), kind: "text", payloadRef: payload.coordinates.payloadRef, ciphertextDigest: payload.ciphertextDigest }], replyToEntryId: null, addressedAgentIdentityId: projection.computerAgentIdentityId, activation: command.activation };
 }
 
 /** Returns whether an entry's immutable visibility includes this participant. */
@@ -201,22 +125,4 @@ function _PayloadRefs(entries: readonly ConversationEntry[]): readonly string[]
 		return [];
 	});
 	return [...new Set(references)];
-}
-
-/** Compares retry plaintext without an early-return timing signal. */
-function _SameText(left: string, right: string): boolean
-{
-	const leftBytes = Buffer.from(left, "utf8");
-	const rightBytes = Buffer.from(right, "utf8");
-	return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
-}
-
-/** Derives a stable UUID-shaped activation event id from the immutable message retry key. */
-function _ActivationEventId(messageId: string): string
-{
-	const bytes = Buffer.from(createHash("sha256").update(`conversation-activation:${messageId}`, "utf8").digest().subarray(0, 16));
-	bytes[6] = (bytes[6]! & 0x0f) | 0x50;
-	bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-	const hex = bytes.toString("hex");
-	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }

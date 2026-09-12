@@ -1,22 +1,19 @@
 import { createHash } from "node:crypto";
-import type { PrismaClient } from "@prisma/client";
 import { __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@opencrane/backend/artifacts/authorization";
-import { _CreateArtifactPreprocessAuthority } from "../prisma-artifact-authority.composition";
 import { __CompleteArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease } from "../artifact-preprocessing";
-import type { ArtifactPreprocessOutputBroker } from "../artifact-preprocessing.types";
+import type { ArtifactPreprocessOutputBroker, ArtifactPreprocessRepository } from "../artifact-preprocessing.types";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { _ReadArtifactMountedPem } from "./artifact-mounted-key.loader";
 import { _InternalArtifactServiceUrl } from "./artifact-service-read-port.factory";
 import { _CreateArtifactServicePromotionPort } from "./artifact-service-promotion-port";
 
 /** Builds the server-side output broker that owns hashing, promotion, receipt verification, and completion. */
-export function _CreateArtifactPreprocessOutputBroker(prisma: PrismaClient, maximumOutputBytes: number, environment: NodeJS.ProcessEnv = process.env): ArtifactPreprocessOutputBroker
+export function _CreateArtifactPreprocessOutputBroker(jobs: ArtifactPreprocessRepository, maximumOutputBytes: number, environment: NodeJS.ProcessEnv = process.env): ArtifactPreprocessOutputBroker
 {
 	if (!Number.isSafeInteger(maximumOutputBytes) || maximumOutputBytes <= 0)
 	{
 		throw new Error("maximumOutputBytes must be a positive safe integer");
 	}
-	const jobs = _CreateArtifactPreprocessAuthority(prisma);
 	const serviceUrl = _InternalArtifactServiceUrl(environment.ARTIFACT_SERVICE_URL ?? "");
 	const promotionPort = _CreateArtifactServicePromotionPort(serviceUrl);
 	const leasePrivateKey = _ReadArtifactMountedPem(environment.ARTIFACT_LEASE_PRIVATE_KEY_PATH, "ARTIFACT_LEASE_PRIVATE_KEY_PATH");

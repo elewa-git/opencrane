@@ -154,9 +154,12 @@ function _ReservationMatches(asset: { readonly displayName: string; readonly med
 }
 
 /** Project a browser-safe view without technical authority facts. */
-export function _ConversationAssetView(asset: { readonly id: string; readonly conversationId: string; readonly messageId: string | null; readonly provenance: PersistedProvenance; readonly state: ConversationAssetState; readonly displayName: string; readonly mediaType: string; readonly byteLength: bigint | null; readonly failureCode: string | null; readonly createdByUserId?: string | null; readonly revisionId?: string | null; readonly createdAt: Date }, subjectId: string): ConversationAssetView
+export function _ConversationAssetView(asset: { readonly id: string; readonly conversationId: string; readonly messageId: string | null; readonly provenance: PersistedProvenance; readonly state: ConversationAssetState; readonly displayName: string; readonly mediaType: string; readonly byteLength: bigint | null; readonly failureCode: string | null; readonly createdByUserId?: string | null; readonly artifactId?: string | null; readonly revisionId?: string | null; readonly createdAt: Date }, subjectId: string): ConversationAssetView
 {
-	return { id: asset.id, conversationId: asset.conversationId, messageId: asset.messageId, provenance: ConversationAssetProvenance.ParticipantUpload, state: _Lifecycle(asset.state), displayName: asset.displayName, mediaType: asset.mediaType, byteLength: asset.byteLength === null ? null : Number(asset.byteLength), disposition: ___ConversationAssetMediaDisposition(asset.mediaType), failureCode: asset.failureCode, canRemove: _CanRemove(asset, subjectId), createdAt: asset.createdAt.toISOString() };
+	const hasRevision = asset.state !== ConversationAssetState.Removed && asset.artifactId != null && asset.revisionId != null;
+	return { id: asset.id, conversationId: asset.conversationId, messageId: asset.messageId, artifactId: hasRevision ? asset.artifactId! : null,
+		artifactRevisionId: hasRevision ? asset.revisionId! : null,
+		provenance: ConversationAssetProvenance.ParticipantUpload, state: _Lifecycle(asset.state), displayName: asset.displayName, mediaType: asset.mediaType, byteLength: asset.byteLength === null ? null : Number(asset.byteLength), disposition: ___ConversationAssetMediaDisposition(asset.mediaType), failureCode: asset.failureCode, canRemove: _CanRemove(asset, subjectId), createdAt: asset.createdAt.toISOString() };
 }
 
 /** Convert Prisma enum members to the public string-backed lifecycle. */

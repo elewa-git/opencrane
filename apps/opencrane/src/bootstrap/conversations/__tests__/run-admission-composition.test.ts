@@ -47,6 +47,12 @@ function _command(): ConversationComputerRunAdmissionCommand
 	return { runId: "run-1", computer: { siloId: "silo-1", computerId: "computer-1", conversationId: "child-1", agentIdentityId: "identity-1" }, agent: { agentServiceId: "service-1", agentRevisionId: "revision-1", profileRevisionId: "profile-1" }, lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "claim-1" }, requesterPrincipalId: "human-principal", requesterSubjectId: "human-subject", requesterIssuer: "https://issuer.test", requesterAuthenticatedAt: "2026-09-07T00:00:00.000Z", requestIdempotencyKey: "message-1", messageInput: { mode: "pre_persisted_history", messageId: "message-1", historyRevision: "1", orderedMessageIds: ["message-1"] } };
 }
 
+/** Supplies an empty command-bound document preparation for tests outside the PDF slice. */
+function _Prepared(command = _command())
+{
+	return { siloId: command.computer.siloId, conversationId: command.computer.conversationId, historyRevision: command.messageInput.historyRevision, orderedMessageIds: command.messageInput.orderedMessageIds, documents: [] } as const;
+}
+
 describe("conversation run admission composition", function _ConversationRunAdmissionCompositionSuite()
 {
 	it.each([AgentServiceKind.Personal, AgentServiceKind.Managed])("assembles and persists a first %s answer input through the real admission owners", async function _FirstAdmission(kind)
@@ -82,13 +88,16 @@ describe("conversation run admission composition", function _ConversationRunAdmi
 		vi.spyOn(PrismaAuthorizationAuthority.prototype, "admitPrincipal").mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: `sha256:${"d".repeat(64)}` } } as never);
 		const resources = vi.spyOn(PrismaAuthorizationAuthority.prototype, "admitPrincipalBatch").mockImplementation(async function _AdmitResources(commands) { return commands.map(function _Allowed() { return {} as never; }); });
 		const messages = { loadMessages: vi.fn().mockResolvedValue([{ role: "user", content: "Please help with this group request." }]) };
-		const compilers = { create: function _Compiler(_command: ConversationComputerRunAdmissionCommand, transaction: ConstructorParameters<typeof PrismaPromptCompilerRepository>[0]) { return new PrismaPromptCompilerRepository(transaction, messages, "silo-1"); }, compile: vi.fn() };
+		const compilers = { prepare: vi.fn().mockResolvedValue(_Prepared(command)), create: function _Compiler(_command: ConversationComputerRunAdmissionCommand, _prepared: ReturnType<typeof _Prepared>, transaction: ConstructorParameters<typeof PrismaPromptCompilerRepository>[0]) { return new PrismaPromptCompilerRepository(transaction, messages, "silo-1"); }, compile: vi.fn() };
 		const history = { read: vi.fn().mockResolvedValue({ historyRevision: "1", orderedMessageIds: ["message-1"], finalMessageAuthor: { principalId: "human-principal", issuer: command.requesterIssuer, subjectId: command.requesterSubjectId, authenticatedAt: command.requesterAuthenticatedAt } }) };
 		const port = _CreateConversationRunAdmission(prisma as never, { create: function _Identity() { return { load: vi.fn().mockResolvedValue({ outcome: "loaded", value: subject }) }; } }, { create: function _History() { return history; } }, compilers, { maxConcurrentAdmissions: 1, maxQueuedAdmissions: 1 }, _log);
 
 		const result = await port.admit(command);
 
 		expect(result.compiledInput.messages).toEqual([{ role: "user", content: "Please help with this group request." }]);
+		expect(compilers.prepare).toHaveBeenCalledExactlyOnceWith(command);
+		expect(compilers.prepare.mock.invocationCallOrder[0]).toBeLessThan(resources.mock.invocationCallOrder[0]!);
+		expect(compilers.compile).not.toHaveBeenCalled();
 		expect(result.compiledInput.model.modelAlias).toBe("test-model");
 		expect(result.compiledInput.model.maxOutputTokens).toBe(4096);
 		expect(result.compiledInput.budget.maxCompletionTokens).toBe(256_000);
@@ -114,7 +123,7 @@ describe("conversation run admission composition", function _ConversationRunAdmi
 	{
 		vi.spyOn(PrismaRunAdmissionUnitOfWork.prototype, "admit").mockResolvedValue({ outcome: "denied", reason: "persona_unavailable" });
 		const warn = vi.spyOn(_log, "warn").mockImplementation(function _Silence() {});
-		const port = _CreateConversationRunAdmission({} as never, { create: vi.fn() }, { create: vi.fn() }, { create: vi.fn(), compile: vi.fn() }, { maxConcurrentAdmissions: 1, maxQueuedAdmissions: 1 }, _log);
+		const port = _CreateConversationRunAdmission({} as never, { create: vi.fn() }, { create: vi.fn() }, { prepare: vi.fn().mockResolvedValue(_Prepared()), create: vi.fn(), compile: vi.fn() }, { maxConcurrentAdmissions: 1, maxQueuedAdmissions: 1 }, _log);
 
 		await expect(port.admit(_command())).rejects.toThrow(/^Conversation run admission was denied$/);
 		expect(warn).toHaveBeenCalledExactlyOnceWith({ operation: "conversation.run.admission", reason: "persona_unavailable", runId: "run-1", siloId: "silo-1", conversationId: "child-1", agentServiceId: "service-1" }, "Conversation run admission was denied");
@@ -150,7 +159,7 @@ describe("conversation run admission composition", function _ConversationRunAdmi
 				return { outcome: "denied", reason: verified.reason };
 			return { outcome: "idempotent", snapshot };
 		});
-		const compilers = { create: vi.fn(), compile: vi.fn().mockResolvedValue(compiled) };
+		const compilers = { prepare: vi.fn().mockResolvedValue(_Prepared()), create: vi.fn(), compile: vi.fn().mockResolvedValue(compiled) };
 		const port = _CreateConversationRunAdmission({} as never, { create: function _ExecutionSubject() { return { load }; } }, { create: vi.fn() }, compilers, { maxConcurrentAdmissions: 1, maxQueuedAdmissions: 1 }, _log);
 		const command = _command();
 
@@ -161,7 +170,8 @@ describe("conversation run admission composition", function _ConversationRunAdmi
 		expect(load).toHaveBeenCalledWith(expect.objectContaining({ runId: command.runId, requestIdempotencyKey: command.requestIdempotencyKey }), expect.objectContaining({ agentRevisionId: snapshot.agentRevisionId }), transaction);
 		expect(admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ principalId: "human-principal", membershipRevision: 2, action: ProductAuthorizationActions.Use, resource: { kind: ProductAuthorizationResourceKinds.Conversation, id: "child-1" } }));
 		expect(compilers.create).not.toHaveBeenCalled();
-		expect(compilers.compile).toHaveBeenCalledWith(command, snapshot);
+		expect(compilers.compile).toHaveBeenCalledWith(command, _Prepared(command), snapshot);
+		expect(compilers.prepare).toHaveBeenCalledExactlyOnceWith(command);
 		expect(snapshot).toEqual(original);
 	});
 });
@@ -195,7 +205,7 @@ function _StandaloneComputerFixture()
 		const verified = await verifyExisting(snapshot, transaction);
 		return verified.outcome === "denied" ? { outcome: "denied", reason: verified.reason } : { outcome: "idempotent", snapshot };
 	});
-	const compilers = { create: vi.fn(), compile: vi.fn().mockResolvedValue(compiled) };
+	const compilers = { prepare: vi.fn().mockResolvedValue(_Prepared()), create: vi.fn(), compile: vi.fn().mockResolvedValue(compiled) };
 	const port = _CreateConversationRunAdmission({} as never, { create: function _Subject() { return { load }; } }, { create: vi.fn() }, compilers, { maxConcurrentAdmissions: 1, maxQueuedAdmissions: 1 }, _log);
 	const command = _command();
 	let stored: FrozenConversationComputerTurn | null = null;

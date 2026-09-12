@@ -33,8 +33,12 @@ export type { ConversationComputerBoundWriterFactory, ConversationComputerCreden
 export type { ConversationComputerRawCredentialAuthority } from "./computers/turns/conversation-computer-turn.types";
 export { _SelfConversationHistoryOpenapiPaths } from "./http/openapi";
 export { PrismaSelfConversationHistoryUnitOfWork } from "./messages/prisma-self-conversation-history";
+export { PrismaConversationMessageAdmissionUnitOfWork } from "./messages/prisma-conversation-message-admission-unit-of-work";
+export type { ConversationMessageAdmission, ConversationMessageAttachment, ConversationMessageAttachmentAdmission, ConversationMessageAttachmentAdmissionCommand, ConversationMessageAttachmentAdmissionFactory, ConversationMessageAttachmentAdmissionResult } from "./messages/conversation-message-admission.types";
 export { KurrentConversationHistoryAdmissionReader } from "./messages/kurrent-conversation-history-admission-reader";
 export { PrismaKurrentConversationPromptMessageRepository } from "./messages/db/prisma-kurrent-conversation-prompt-message-repository";
+export { PrismaConversationPromptDocumentPreparationUnitOfWork } from "./messages/prisma-conversation-prompt-document-preparation-unit-of-work";
+export type { ConversationPromptDocumentAuthority, ConversationPromptDocumentAuthorityFactory, ConversationPromptDocumentContentReader, ConversationPromptDocumentPreparation, ConversationPromptDocumentPreparationCommand, ConversationPromptDocumentPreparer, ConversationPromptDocumentReference, PreparedConversationPromptDocument, ResolvedConversationPromptDocument } from "./messages/conversation-prompt-document.types";
 export { _CreateSelfConversationHistoryRouter } from "./messages/self-conversation-history.router";
 export { ConversationMessageActivations, ConversationMessageAdmissionOutcomes } from "./messages/self-conversation-history.types";
 export type { ConversationCallerResolver, ConversationMessageAdmissionResult, ConversationMessageCommand, SelfConversationHistoryAuthority, SelfConversationHistoryResult } from "./messages/self-conversation-history.types";

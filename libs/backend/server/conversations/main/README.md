@@ -43,7 +43,11 @@ signed-in participant ──► main ◄── HERE ──► history
 
 - `PrismaConversationMetadataUnitOfWork` and `_CreateConversationMetadataRouter` compose directory, list, create, archive and close operations. `PrismaConversationMetadataReader` supplies review coordinates without exposing creation.
 - `PrismaAgentSessionCreationUnitOfWork` creates or recovers a personal assistant conversation from its caller-scoped UUID.
-- `PrismaSelfConversationHistoryUnitOfWork` and `_CreateSelfConversationHistoryRouter` bind current access to messages, history and event streams.
+- `PrismaSelfConversationHistoryUnitOfWork` and `_CreateSelfConversationHistoryRouter` bind current access to messages, history and event streams. `PrismaConversationMessageAdmissionUnitOfWork` commits the encrypted payload and delegates selected-asset binding through a transaction-scoped `ConversationMessageAttachmentAdmissionFactory` before KurrentDB append.
+- `PrismaConversationPromptDocumentPreparationUnitOfWork` reads the exact Kurrent history prefix,
+  resolves selected PDFs through `ConversationPromptDocumentAuthority`, and verifies their converted
+  bytes outside SQL. Initial and restarted compilation repeat the current authority and coordinate
+  checks before adding the text as untrusted user content.
 - `PrismaGroupChildAuthority`, `_CreateGroupChildRouter` and `GROUP_CHILD_TASK` compose explicit child requests and recovery.
 - Computer activation atomically admits the existing Absurd turn task when it publishes an active lease. The workflow advances saved model, tool-result, continuation and completion state; the only Pod-facing turn route returns its lease-derived review credential.
 - Stop handling reloads the immutable causation message to derive its requester and never enters activation. Its Kurrent publisher gives final output and cancellation one checked turn-stream winner; cancellation commits the private receipt, safe interrupted log and active-turn settlement together.
@@ -90,7 +94,9 @@ rechecks active organisation membership and participant bounds; child reads also
 parent access. Revocation cannot become an empty successful history response.
 
 Creation retries preserve the original member set, current grants and lifecycle. Message retries
-bind the UUID to the same plaintext and activation; a changed-text retry rolls back its admission.
+bind the UUID conversation-wide to the same author, plaintext, canonical asset set, immutable content
+blocks and activation. A changed retry rolls back its admission and attachment writes. Text may be
+empty only when the command binds at least one selected asset.
 Ordinary group messages never start runs. Shared child work keeps the originally admitted audience
 and company identity, and returns text to the parent only through an explicit human sharing action.
 

@@ -2,6 +2,7 @@
 // the remaining import graph runs. Keep this side-effect import first when editing the entrypoint.
 import "./bootstrap/process/instrument";
 
+import type { Prisma } from "@prisma/client";
 import { ___BindConsole } from "@opencrane/backend/observability";
 
 import { _ReadAgentSandboxReleaseProfileConfig, _ReadProcessConfig } from "./bootstrap/configuration/config";
@@ -19,7 +20,8 @@ import { _StartProcessLifecycle } from "./bootstrap/process/lifecycle";
 import { _log } from "./bootstrap/process/log";
 import { _CreatePublicApp, _CreatePublicAuthentication } from "./bootstrap/http/public-app";
 
-import { _CreateArtifactUploadGateway } from "@opencrane/backend/server/agents/artifacts";
+import { _CreateArtifactUploadGateway, _CreatePublishedArtifactReader } from "@opencrane/backend/server/agents/artifacts";
+import { PrismaConversationPromptDocumentRepository } from "@opencrane/backend/server/conversation-assets";
 import { ___CreatePrismaClient } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import { ___CreatePublicHealthReportReader } from "@opencrane/backend/server/infra/http";
 import { _CreateProviderEffectCommandExecutor } from "@opencrane/backend/server/gateways/providers";
@@ -48,7 +50,8 @@ async function _Main(): Promise<void>
 	// 3. Compose the retained workload authorities.
 	const mcpRuntime = _CreateMcpRuntimeComposition(prisma, kubernetes.authApi, config.runtime, workflows, historyStore.historyStore);
 	const providerEffects = _CreateProviderEffectCommandExecutor(prisma, kubernetes.coreApi, config.runtime.serverNamespace, _log);
-	const conversationRunAdmission = _CreateProductionConversationRunAdmission(prisma, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, config.runAdmission, _log);
+	const documentAuthorities = { create: function _CreatePromptDocumentAuthority(transaction: Prisma.TransactionClient) { return new PrismaConversationPromptDocumentRepository(transaction); } };
+	const conversationRunAdmission = _CreateProductionConversationRunAdmission(prisma, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, documentAuthorities, _CreatePublishedArtifactReader(prisma), config.runAdmission, _log);
 	const conversationComputerWorkflows = _CreateConversationComputerWorkflowComposition(prisma, historyStore.historyStore, kubernetes.authApi, kubernetes.coreApi, kubernetes.customApi, config.workflows.siloId, agentSandboxReleaseProfile, config.conversationPrivatePayloadKeyringPath, conversationRunAdmission, mcpRuntime.admitToolInvocationInTransaction, workflows.execution);
 	const conversationComputerActivations = await _StartConversationComputerActivationWorker(prisma, kubernetes.customApi, historyStore.historyStore, workflows.execution, config.workflows.siloId, agentSandboxReleaseProfile, { stopAuthority: conversationComputerWorkflows.stopAuthority, logger: _log, onExhausted: function _RequestProcessShutdown() { process.kill(process.pid, "SIGTERM"); } });
 	const conversationComputerLifecycle = _CreateConversationComputerLifecycleComposition(prisma, historyStore.historyStore, kubernetes.authApi, kubernetes.coreApi, kubernetes.customApi, config.workflows.siloId, agentSandboxReleaseProfile, config.conversationPrivatePayloadKeyringPath, workflows.execution);

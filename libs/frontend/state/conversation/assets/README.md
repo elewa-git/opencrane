@@ -9,13 +9,25 @@ It validates the complete ten-file, 200 MiB message selection before starting wo
 content digest locally, reuses the same idempotency key and bytes after a transport failure, and
 adopts only the server's returned lifecycle.
 
-The live gateway uses the generated Control Plane client. It never receives storage URLs, leases,
+The next-message selection is an explicit page-scoped set. Completed uploads and transfers still in
+progress both count toward the message limits. Deselecting removes a file only from that set; it does
+not delete a server-held upload or unbind a saved message. Conversation switches and access cleanup
+clear the set and any browser-held file bytes.
+
+While a selected upload remains Processing, the page-scoped store performs at most twelve fallback
+reads at five-second intervals. Conversation changes, access cleanup, and page destruction cancel the
+timer; explicit refresh remains available independently.
+
+The live gateway uses the generated Control Plane client. Its model-adjacent runtime validator
+checks every returned asset, including closed lifecycle values and the all-or-neither artifact
+coordinate pair, before metadata enters state. It never receives storage URLs, leases,
 receipts, scanner evidence, or credentials.
 
 ## Public surface
 
-- `ConversationAssetsStore` — component-scoped read resource, independent upload admission, retry,
-  local pre-admission removal, and removal of exact reservations granted by server capability.
+- `ConversationAssetsStore` — component-scoped read resource, explicit next-message selection,
+  independent upload admission and retry, selection-only deselection, local pre-admission removal,
+  and removal of exact reservations granted by server capability.
 - `ConversationAssetContentStore` — component-scoped Ready-file reads with per-asset duplicate,
   metadata, selection, and access-loss fences. It returns Blob bytes to its immediate caller and
   never retains them in reactive state.
@@ -23,6 +35,7 @@ receipts, scanner evidence, or credentials.
 - `OpenCraneConversationAssetsGateway` — generated-client adapter.
 - `ConversationAssetsGateway.read` — participant-bound byte read that returns a browser `Blob` and never a storage URL.
 - Browser-safe asset, pending-upload progress, typed selection-error, and server capability types.
+- Nullable artifact and artifact-revision coordinates which are accepted only as an all-or-neither pair.
 
 ## Boundary
 

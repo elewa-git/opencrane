@@ -123,7 +123,8 @@ export class PrismaArtifactScanRepository implements ArtifactScanRepository
 	{
 		await this.transaction.artifactRevision.update({ where: { id: job.artifactRevisionId }, data: { state: ArtifactRevisionState.Published } });
 		await this.transaction.artifact.update({ where: { id: job.artifactRevision.artifactId }, data: { currentRevisionId: job.artifactRevisionId } });
-		await this.conversationAssets.report({ revisionId: job.artifactRevisionId, state: ConversationAssetScanLifecycleStates.Ready, failureCode: null });
+		if (job.artifactRevision.mediaType !== "application/pdf")
+			await this.conversationAssets.report({ revisionId: job.artifactRevisionId, state: ConversationAssetScanLifecycleStates.Ready, failureCode: null });
 		await this.transaction.artifactOutboxEvent.create({ data: { artifactId: job.artifactRevision.artifactId, revisionId: job.artifactRevisionId, kind: "RevisionPublished", idempotencyKey: `scan:${job.id}`, payload: { byteLength: Number(job.artifactRevision.byteLength), mediaType: job.artifactRevision.mediaType } } });
 		if (job.artifactRevision.mediaType === "application/pdf")
 		{

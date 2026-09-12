@@ -193,6 +193,8 @@ export interface SubmitConversationMessageCommand
 	readonly idempotencyKey: string;
 	/** Plain participant text stored through the server's private payload boundary. */
 	readonly text: string;
+	/** Ready conversation assets attached as one canonical unique set. */
+	readonly assetIds: readonly string[];
 	/** Whether this message starts, stops, interrupts, or does not activate computer work. */
 	readonly activation: "none" | "start" | "stop" | "interrupt";
 }

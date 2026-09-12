@@ -15,9 +15,8 @@ import { ConversationComposerStates } from "../conversation.types";
  *
  * The template offers two content slots for a parent that needs more than text —
  * `conversation-composer-leading` above the field and `conversation-composer-footer` beside the send
- * button — but no parent fills them yet. The workspace page keeps its attachment tray as a sibling in
- * the page footer instead, which is exactly why the composer cannot see the attachments and needs
- * {@link allowEmptySubmission} to be told they exist.
+	 * button. The workspace fills them with its attachment tray and PDF picker. The composer still cannot
+	 * inspect those projected children, so {@link allowEmptySubmission} states that sendable content exists.
  *
  * Called by: {@link ConversationWorkspacePageComponent} template.
  * @see ConversationComposerStates for the three states a parent may put it in.
@@ -59,6 +58,10 @@ export class ConversationComposerComponent
 	 * @see conversation-elements.spec.ts — "allows an empty text submission only when the host has non-text content".
 	 */
 	public readonly allowEmptySubmission = input(false);
+	/** Keeps text editable while a selected unfinished or failed file prevents this message from being sent. */
+	public readonly submissionBlocked = input(false);
+	/** Keeps the displayed draft immutable while an uncertain command is available for exact retry. */
+	public readonly draftReadOnly = input(false);
 	/** Fires on every keystroke with the whole field value. The parent stores it and passes it back as `draft`; nothing is sent yet. */
 	public readonly draftChange = output<string>();
 	/**
@@ -82,6 +85,8 @@ export class ConversationComposerComponent
 	 */
 	protected changeDraft(event: Event): void
 	{
+		if (this.draftReadOnly())
+			return;
 		const target = event.target;
 		if (target instanceof HTMLTextAreaElement)
 			this.draftChange.emit(target.value);
@@ -112,7 +117,7 @@ export class ConversationComposerComponent
 	{
 		// 1. Refuse in any state but Available: Submitting means the parent's send is still out, and
 		// re-emitting there would send the same message twice.
-		if (this.state() !== ConversationComposerStates.Available)
+		if (this.state() !== ConversationComposerStates.Available || this.submissionBlocked())
 			return;
 
 		// 2. Require something to send — text, or content the parent holds and we cannot see, such as

@@ -32,6 +32,17 @@ describe("AesGcmConversationPrivatePayloadCipher", function _DescribeCipher()
 		expect(function _WrongCiphertext() { cipher.decrypt({ ...encrypted, ciphertext: Buffer.from("changed") }, _COORDINATES); }).toThrow("digest");
 	});
 
+	it("authenticates empty attachment-only text without a sentinel or transferable ownership", function _EmptyText()
+	{
+		const cipher = _Cipher();
+		const encrypted = cipher.encrypt("", _COORDINATES);
+		expect(encrypted.ciphertext.byteLength).toBe(0);
+		expect(encrypted.authTag.byteLength).toBe(16);
+		expect(cipher.decrypt(encrypted, _COORDINATES)).toBe("");
+		expect(function _WrongOwner() { cipher.decrypt(encrypted, { ..._COORDINATES, authorSubject: "other" }); }).toThrow();
+		expect(function _InvalidTag() { cipher.decrypt({ ...encrypted, authTag: randomBytes(16) }, _COORDINATES); }).toThrow();
+	});
+
 	it("rejects missing current keys and non-256-bit key material", function _RejectsInvalidKeyrings()
 	{
 		expect(function _MissingCurrent() { new AesGcmConversationPrivatePayloadCipher("key-2", { "key-1": randomBytes(32).toString("base64url") }); }).toThrow("current key");

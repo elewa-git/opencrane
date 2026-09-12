@@ -53,15 +53,17 @@ export class PrismaConversationHistoryRepository implements ConversationHistoryR
 		if (command.activation === ConversationMessageActivations.Interrupt)
 			throw new Error("Conversation computer interrupt authority is unavailable");
 		// 2. Bind admission to the stored retry winner, never the new ciphertext discarded on a retry.
-		const existing = await this._readPayload(caller, conversationId, command.idempotencyKey);
+		const existing = await this._readMessagePayload(caller, conversationId, command.idempotencyKey);
 		const payloadRef = existing?.coordinates.payloadRef ?? command.payloadRef;
 		const ciphertextDigest = existing?.ciphertextDigest ?? command.payload.ciphertextDigest;
-		const admitted = await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Conversation, id: conversationId }, ProductAuthorizationActions.Use, { payloadRef, ciphertextDigest, idempotencyKey: command.idempotencyKey, activation: command.activation });
+		const admitted = await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Conversation, id: conversationId }, ProductAuthorizationActions.Use, { payloadRef, ciphertextDigest, idempotencyKey: command.idempotencyKey, activation: command.activation, assetIds: command.assetIds });
 		if (!admitted)
 			return null;
 		// 3. Commit evidence, encrypted content and ordering together, or let the caller roll them back.
-		const payload = existing ?? await this._createPayload(caller, conversationId, command.idempotencyKey, payloadRef, command.payload);
-		return { projection, payload };
+		const stored = existing === null
+			? { created: true, payload: await this._createPayload(caller, conversationId, command.idempotencyKey, payloadRef, command.payload) }
+			: { created: false, payload: existing };
+		return { created: stored.created, projection, payload: stored.payload };
 	}
 
 	/** Stores ciphertext once per participant retry key, moves the conversation to the top of every list, and returns the winning encrypted row. */
@@ -104,10 +106,19 @@ export class PrismaConversationHistoryRepository implements ConversationHistoryR
 		return { authorName: membership.displayName?.trim() || "Participant", mode: conversation.mode, computerId: conversation.computerId, computerAgentIdentityId: conversation.computerAgentIdentityId, computerProfileRevisionId: conversation.computerProfileRevisionId, visibleFromPosition: conversation.participants[0]!.visibleFromPosition };
 	}
 
-	/** Reads the winning encrypted row for this participant's retry key. */
+	/** Reads one participant's retry row for internal copied-message operations. */
 	private async _readPayload(caller: ConversationCaller, conversationId: string, idempotencyKey: string): Promise<StoredConversationPrivatePayload | null>
 	{
 		const row = await this.transaction.conversationPrivatePayload.findUnique({ where: { conversationId_authorSubject_idempotencyKey: { conversationId, authorSubject: caller.subjectId, idempotencyKey } } });
+		return row === null ? null : _Stored(row);
+	}
+
+	/** Predicate-reads the conversation-wide browser message key before payload creation. */
+	private async _readMessagePayload(caller: ConversationCaller, conversationId: string, idempotencyKey: string): Promise<StoredConversationPrivatePayload | null>
+	{
+		const row = await this.transaction.conversationPrivatePayload.findFirst({ where: { siloId: caller.siloId, conversationId, idempotencyKey } });
+		if (row !== null && row.authorSubject !== caller.subjectId)
+			throw new Error("Conversation message idempotency key was already used by a different participant");
 		return row === null ? null : _Stored(row);
 	}
 

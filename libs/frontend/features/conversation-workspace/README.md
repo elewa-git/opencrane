@@ -25,6 +25,11 @@ Ready file intents pass through a feature-local coordinator: it reserves the pla
 or Download action during the click, then asks the component-scoped asset state for authorized bytes.
 Selection or access loss cancels the prepared action, and the state owner drops late bytes. The
 feature never creates object URLs or upgrades the server's safe media disposition.
+The shared composer mounts the PDF picker and attachment tray. A send freezes at most ten unique
+ready asset ids into the same retry-stable message command. Failed or ambiguous sends keep the draft,
+selection, and command key; while that exact retry is pending, the picker and selection controls stay
+locked so the visible files remain the files that will be sent. Only a confirmed save clears that captured asset set. Processing files
+remain visible and block submission until the bounded asset-state refresh observes Ready or Failed.
 
 Personal chats show **Recent activity** with readable work statuses and a **Refresh activity**
 control. The presenter maps the personal-run store without exposing execution identifiers. **Open
@@ -59,6 +64,9 @@ retry, or execution control. Repeated facts for one call coalesce at the newest 
 tool-call coordinates, result coordinates, arguments, nor result payloads enter the presentation. This same
 history contract applies to personal Agent sessions and shared company-child chats; personal Recent activity
 remains a separate private run index.
+Immutable artifact blocks render through the existing asset card only when the current authorized
+asset projection matches artifact id, artifact revision id, and message id. Missing or conflicting
+coordinates produce a non-actionable unavailable card rather than a filename-based join.
 
 A person can select their own posted group message and choose **Ask company assistant**. The picker
 uses the server's permitted company-assistant directory; an empty directory explains that an

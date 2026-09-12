@@ -7,13 +7,14 @@ import { ConversationAssetContentCommandStates, ConversationAssetDisposition, Co
 import { ConversationAttachmentTrayComponent } from "../attachment-tray/conversation-attachment-tray.component";
 import { ConversationAssetCardComponent } from "../asset-card/conversation-asset-card.component";
 import { ConversationFilesPanelComponent } from "../files-panel/conversation-files-panel.component";
+import { ConversationPdfPickerComponent } from "../pdf-picker/conversation-pdf-picker.component";
 import { __ConversationAssetSelectionFeedback } from "../conversation-asset-presentation";
 import { ConversationAssetPresentationStates, type ConversationAssetPresentation } from "../conversation-asset-presentation.types";
 
 /** Build one deterministic browser-safe visual fixture. */
 function _Item(id: string, displayName: string, state: ConversationAssetPresentationStates, overrides: Partial<ConversationAssetPresentation> = {}): ConversationAssetPresentation
 {
-	return { id, messageId: "message-1", provenance: ConversationAssetProvenance.ParticipantUpload, displayName, mediaType: "application/pdf", byteLength: 1_258_291, disposition: ConversationAssetDisposition.Preview, state, detail: _Detail(state), canRetry: state === ConversationAssetPresentationStates.Failed, canRemove: state === ConversationAssetPresentationStates.Selected, uploadProgressPercent: null, contentState: ConversationAssetContentCommandStates.Idle, contentDetail: null, ...overrides };
+	return { id, messageId: "message-1", artifactId: null, artifactRevisionId: null, provenance: ConversationAssetProvenance.ParticipantUpload, displayName, mediaType: "application/pdf", byteLength: 1_258_291, disposition: ConversationAssetDisposition.Preview, state, detail: _Detail(state), canRetry: state === ConversationAssetPresentationStates.Failed, canRemove: state === ConversationAssetPresentationStates.Selected, uploadProgressPercent: null, contentState: ConversationAssetContentCommandStates.Idle, contentDetail: null, ...overrides };
 }
 
 /** Plain-language fixture state labels. */
@@ -42,7 +43,7 @@ const meta: Meta<ConversationFilesPanelComponent> = {
 	component: ConversationFilesPanelComponent,
 	tags: ["autodocs"],
 	parameters: { docs: { description: { component: "Display-only conversation file primitives. Parents own navigation and commands; removal and retry controls appear only when the server or local pre-admission state grants them." } } },
-	decorators: [moduleMetadata({ imports: [ConversationAttachmentTrayComponent, ConversationAssetCardComponent] })]
+	decorators: [moduleMetadata({ imports: [ConversationAttachmentTrayComponent, ConversationAssetCardComponent, ConversationPdfPickerComponent] })]
 };
 
 export default meta;
@@ -54,6 +55,41 @@ export const AttachmentTray: Story = {
 	parameters: { docs: { description: { story: "Covers selected, preparing, indeterminate upload progress, scanning, ready, and failed attachments plus the two composer actions." } } },
 	render: function render() { return { props: { items: [_Item("local-1", "notes.pdf", ConversationAssetPresentationStates.Selected), _Item("local-2", "budget.xlsx", ConversationAssetPresentationStates.Creating), _Item("asset-2", "photos.zip", ConversationAssetPresentationStates.Uploading, { mediaType: "application/zip", disposition: ConversationAssetDisposition.Download }), _Item("asset-3", "interviews.mp3", ConversationAssetPresentationStates.Processing, { mediaType: "audio/mpeg" }), _Item("asset-ready", "brief.pdf", ConversationAssetPresentationStates.Ready), _Item("asset-4", "deck.key", ConversationAssetPresentationStates.Failed, { mediaType: "application/pdf" })], actionCount: 0 }, template: `<div style="max-width:760px;padding:20px;background:var(--oc-surface-paper)"><wo-conversation-attachment-tray [items]="items" (actionRequested)="actionCount = actionCount + 1" /><output data-testid="action-count" [attr.data-count]="actionCount"></output></div>` }; },
 	play: async function play({ canvasElement }) { const canvas = within(canvasElement); await userEvent.click(canvas.getByRole("button", { name: "Retry" })); await userEvent.click(canvas.getByRole("button", { name: "Remove notes.pdf" })); await expect(canvas.getByTestId("action-count")).toHaveAttribute("data-count", "2"); }
+};
+
+/** Composer selection keeps durable Ready and Failed PDFs dismissible without deleting either file. */
+export const MessageAttachmentSelection: Story = {
+	tags: ["visual-test", "visual-test-narrow"],
+	parameters: { docs: { description: { story: "The editable message tray distinguishes local deselection from durable file removal, including after processing fails." } } },
+	render: function render() { return { props: { items: [_Item("asset-ready", "brief.pdf", ConversationAssetPresentationStates.Ready), _Item("asset-failed", "appendix.pdf", ConversationAssetPresentationStates.Failed, { canRetry: false, canRemove: false })], actionCount: 0 }, template: `<div style="width:320px;padding:12px;background:var(--oc-surface-paper)"><wo-conversation-attachment-tray [items]="items" [canDeselect]="true" (actionRequested)="actionCount = actionCount + 1" /><output data-testid="action-count" [attr.data-count]="actionCount"></output></div>` }; },
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		await userEvent.click(canvas.getByRole("button", { name: "Remove brief.pdf from message" }));
+		await userEvent.click(canvas.getByRole("button", { name: "Remove appendix.pdf from message" }));
+		await expect(canvas.getByTestId("action-count")).toHaveAttribute("data-count", "2");
+	}
+};
+
+/** The PDF picker accepts a supported browser file without reading its bytes. */
+export const PdfPicker: Story = {
+	tags: ["visual-test", "visual-test-narrow"],
+	parameters: { docs: { description: { story: "The native chooser emits a PDF batch to its parent and keeps unsupported-file feedback local." } } },
+	render: function render() { return { props: { fileCount: 0 }, template: `<div style="width:320px;padding:16px;background:var(--oc-surface-paper)"><wo-conversation-pdf-picker (filesSelected)="fileCount = $event.length" /><output data-testid="file-count" [attr.data-count]="fileCount"></output></div>` }; },
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		const input = canvas.getByLabelText("Attach PDF") as HTMLInputElement;
+		await userEvent.upload(input, new File(["pdf"], "brief.pdf", { type: "application/pdf" }));
+		await expect(canvas.getByTestId("file-count")).toHaveAttribute("data-count", "1");
+	}
+};
+
+/** The picker reflects a conversation which cannot currently accept input. */
+export const PdfPickerDisabled: Story = {
+	tags: ["visual-test", "visual-test-narrow"],
+	render: function render() { return { template: `<div style="width:320px;padding:16px;background:var(--oc-surface-paper)"><wo-conversation-pdf-picker [disabled]="true" /></div>` }; },
+	play: async function play({ canvasElement }) { expect(within(canvasElement).getByLabelText("Attach PDF")).toBeDisabled(); }
 };
 
 /** Transcript cards keep participant and finalized assistant provenance visibly distinct. */

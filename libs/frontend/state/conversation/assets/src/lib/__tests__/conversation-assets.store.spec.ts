@@ -11,7 +11,7 @@ import { ConversationAssetTransferPhases, type ConversationAsset } from "../conv
 /** One safe server projection fixture. */
 function _Asset(state: ConversationAssetLifecycle = ConversationAssetLifecycle.Processing): ConversationAsset
 {
-	return { id: "asset-1", conversationId: "conversation-1", messageId: null, provenance: ConversationAssetProvenance.ParticipantUpload, state, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: state === ConversationAssetLifecycle.Uploading, createdAt: "2026-08-11T10:00:00.000Z" };
+	return { id: "asset-1", conversationId: "conversation-1", messageId: null, artifactId: null, artifactRevisionId: null, provenance: ConversationAssetProvenance.ParticipantUpload, state, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: state === ConversationAssetLifecycle.Uploading, createdAt: "2026-08-11T10:00:00.000Z" };
 }
 
 /** Minimal file with deterministic bytes for hashing in jsdom. */
@@ -46,7 +46,7 @@ function _Deferred<Value>(): { readonly promise: Promise<Value>; readonly resolv
 
 beforeAll(function _InitializeAngularTesting() { TestBed.initTestEnvironment(BrowserDynamicTestingModule, platformBrowserDynamicTesting()); });
 afterAll(function _ResetAngularTesting() { TestBed.resetTestEnvironment(); });
-afterEach(function _ResetTestBed() { TestBed.resetTestingModule(); });
+afterEach(function _ResetTestBed() { vi.useRealTimers(); TestBed.resetTestingModule(); });
 
 describe("ConversationAssetsStore", function _Suite()
 {
@@ -62,17 +62,134 @@ describe("ConversationAssetsStore", function _Suite()
 		await vi.waitFor(function _Reloaded() { expect(gateway.list).toHaveBeenCalledTimes(2); expect(store.assets.value()?.[0]?.state).toBe(ConversationAssetLifecycle.Ready); });
 	});
 
-	it("selects ready unbound participant uploads for one message only", async function _MessageSelection()
+	it("polls a selected Processing file until it becomes Ready and then stops", async function _ProcessingPoll()
 	{
-		const ready = _Asset(ConversationAssetLifecycle.Ready);
-		const gateway = { list: vi.fn().mockResolvedValue([ready]), reserve: vi.fn(), upload: vi.fn(), remove: vi.fn() };
+		vi.useFakeTimers();
+		const gateway = { list: vi.fn().mockResolvedValueOnce([]).mockResolvedValue([_Asset(ConversationAssetLifecycle.Ready)]), reserve: vi.fn().mockResolvedValue(_Asset(ConversationAssetLifecycle.Uploading)), upload: vi.fn().mockResolvedValue(_Asset()), remove: vi.fn() };
 		const store = _Store(gateway);
 		store.open("conversation-1");
 		await vi.waitFor(function _Loaded() { expect(store.assets.hasValue()).toBe(true); });
+		await store.select([_File("brief.pdf", "application/pdf", "brief")]);
+		TestBed.flushEffects();
+
+		await vi.advanceTimersByTimeAsync(5_000);
+		await vi.waitFor(function _Ready() { expect(store.messageAssetIds()).toEqual(["asset-1"]); });
+		await vi.advanceTimersByTimeAsync(60_000);
+
+		expect(gateway.list).toHaveBeenCalledTimes(2);
+	});
+
+	it("cancels a pending Processing refresh when conversation access is cleared", async function _ProcessingPollAccessEnd()
+	{
+		vi.useFakeTimers();
+		const gateway = { list: vi.fn().mockResolvedValue([_Asset()]), reserve: vi.fn(), upload: vi.fn(), remove: vi.fn() };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		await vi.waitFor(function _Loaded() { expect(store.assets.hasValue()).toBe(true); });
+		TestBed.flushEffects();
+		store.clear();
+
+		await vi.advanceTimersByTimeAsync(60_000);
+
+		expect(gateway.list).toHaveBeenCalledOnce();
+	});
+
+	it("stops Processing refresh after the bounded twelve attempts", async function _ProcessingPollBound()
+	{
+		vi.useFakeTimers();
+		const gateway = { list: vi.fn().mockResolvedValueOnce([]).mockResolvedValue([_Asset()]), reserve: vi.fn().mockResolvedValue(_Asset(ConversationAssetLifecycle.Uploading)), upload: vi.fn().mockResolvedValue(_Asset()), remove: vi.fn() };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		await vi.waitFor(function _Loaded() { expect(store.assets.hasValue()).toBe(true); });
+		await store.select([_File("brief.pdf", "application/pdf", "brief")]);
+		TestBed.flushEffects();
+
+		for (let attempt = 0; attempt < 13; attempt += 1)
+			await vi.advanceTimersByTimeAsync(5_000);
+
+		expect(gateway.list).toHaveBeenCalledTimes(13);
+	});
+
+	it("selects only files uploaded for this message and clears the captured set", async function _MessageSelection()
+	{
+		const ready = _Asset(ConversationAssetLifecycle.Ready);
+		const gateway = { list: vi.fn().mockResolvedValue([ready]), reserve: vi.fn().mockResolvedValue(ready), upload: vi.fn().mockResolvedValue(ready), remove: vi.fn() };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		await vi.waitFor(function _Loaded() { expect(store.assets.hasValue()).toBe(true); });
+		expect(store.messageAssetIds()).toEqual([]);
+		await store.select([_File("brief.pdf", "application/pdf", "brief")]);
 
 		expect(store.messageAssetIds()).toEqual([ready.id]);
 		store.clearMessageSelection([ready.id]);
 		expect(store.messageAssetIds()).toEqual([]);
+	});
+
+	it("does not select unrelated unbound, bound, or agent files from the server list", async function _MessageSelectionScope()
+	{
+		const processing = _Asset();
+		const ready = { ..._Asset(ConversationAssetLifecycle.Ready), id: "asset-ready" };
+		const bound = { ...ready, id: "asset-bound", messageId: "message-1" };
+		const agent = { ...ready, id: "asset-agent", provenance: ConversationAssetProvenance.AgentOutput };
+		const gateway = { list: vi.fn().mockResolvedValue([processing, ready, bound, agent]), reserve: vi.fn(), upload: vi.fn(), remove: vi.fn() };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		await vi.waitFor(function _Loaded() { expect(store.assets.hasValue()).toBe(true); });
+
+		expect(store.messageAssets()).toEqual([]);
+		expect(store.messageAssetIds()).toEqual([]);
+	});
+
+	it("counts completed sequential uploads and refuses an eleventh reservation", async function _SequentialLimit()
+	{
+		let assetNumber = 0;
+		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn(async function _Reserve() { assetNumber += 1; return { ..._Asset(ConversationAssetLifecycle.Uploading), id: `asset-${assetNumber}` }; }), upload: vi.fn(async function _Upload(_conversationId: string, assetId: string) { return { ..._Asset(ConversationAssetLifecycle.Ready), id: assetId }; }), remove: vi.fn() };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		await vi.waitFor(function _Loaded() { expect(store.assets.hasValue()).toBe(true); });
+		for (let index = 0; index < 10; index += 1)
+			await store.select([_File(`brief-${index}.pdf`, "application/pdf", `brief-${index}`)]);
+
+		await store.select([_File("eleventh.pdf", "application/pdf", "eleventh")]);
+
+		expect(store.messageAssetIds()).toHaveLength(10);
+		expect(store.selectionFailure()).toBe("too_many_files");
+		expect(gateway.reserve).toHaveBeenCalledTimes(10);
+	});
+
+	it("counts selected durable bytes before admitting another pick", async function _DurableBytes()
+	{
+		const large = { ..._Asset(ConversationAssetLifecycle.Ready), byteLength: 150 * 1024 * 1024 };
+		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn().mockResolvedValue({ ...large, state: ConversationAssetLifecycle.Uploading }), upload: vi.fn().mockResolvedValue(large), remove: vi.fn() };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		await vi.waitFor(function _Loaded() { expect(store.assets.hasValue()).toBe(true); });
+		await store.select([_SizedFile("large.pdf", "application/pdf", 150 * 1024 * 1024)]);
+
+		await store.select([_SizedFile("too-large.pdf", "application/pdf", 51 * 1024 * 1024)]);
+
+		expect(store.selectionFailure()).toBe("total_too_large");
+		expect(gateway.reserve).toHaveBeenCalledOnce();
+	});
+
+	it("deselects a failed uploaded file without deleting it and resets selection on reopen", async function _DeselectFailed()
+	{
+		const processing = _Asset();
+		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn().mockResolvedValue({ ...processing, state: ConversationAssetLifecycle.Uploading }), upload: vi.fn().mockResolvedValue(processing), remove: vi.fn() };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		await vi.waitFor(function _Loaded() { expect(store.assets.hasValue()).toBe(true); });
+		await store.select([_File("brief.pdf", "application/pdf", "brief")]);
+		store.assets.set([{ ...processing, state: ConversationAssetLifecycle.Failed, failureCode: "preprocessing_failed", canRemove: false }]);
+		expect(store.messageAssets()).toHaveLength(1);
+
+		store.deselectMessageAsset(processing.id);
+
+		expect(store.messageAssets()).toEqual([]);
+		expect(gateway.remove).not.toHaveBeenCalled();
+		store.open("conversation-2");
+		store.open("conversation-1");
+		expect(store.messageAssets()).toEqual([]);
 	});
 	it("rejects an unsupported batch without reserving any file", async function _RejectsSelection()
 	{
@@ -156,6 +273,9 @@ describe("ConversationAssetsStore", function _Suite()
 		const failed = store.pendingUploads()[0];
 		if (failed === undefined) throw new Error("failed intent missing");
 		expect(failed.canRemove).toBe(false);
+		expect(store.assets.value()).toHaveLength(1);
+		expect(store.messageAssets()).toEqual([]);
+		expect(store.pendingUploads()).toHaveLength(1);
 
 		await store.retry(failed.idempotencyKey);
 

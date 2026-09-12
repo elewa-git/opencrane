@@ -20,6 +20,9 @@ participant authority ── authorised entry ──► history ◄── HERE
 A history conflict requires the caller to reload and recheck authority. Foreign-stream conflicts
 and unavailable storage remain errors. Private text is encrypted against its silo, conversation,
 author and payload reference; immutable events contain references and digests, never plaintext.
+An attachment-only message may have empty text. Its encrypted payload still records the retry
+identity and authenticates the same coordinates with a nonce and tag. The message authority rejects
+an empty command without attachments; the cipher does not invent placeholder text.
 
 ## Public surface
 
@@ -60,6 +63,11 @@ The caller supplies the history-store connection. Cipher creation requires a mou
 Live history proofs run with `KURRENTDB_INTEGRATION_URL` through
 `nx run backend-server-conversation-history:test:integration`. The participant package owns the
 separate turn-and-answer recovery proof because it also exercises turn reservations.
+
+`npm exec nx run backend-server-conversation-history:test:sql` proves empty-payload support and
+the retained nonce, tag, size, silo, uniqueness and immutability constraints on a fresh PostgreSQL
+baseline. Set `DATABASE_URL` to that disposable test database. Cryptographic tampering is covered
+by the cipher tests, because PostgreSQL validates the stored envelope rather than decrypting it.
 
 ## See also
 

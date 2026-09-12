@@ -58,6 +58,7 @@ describe("PrismaConversationHistoryRepository.createOrReadPayload", function _Cr
 		expect(harness.transaction.conversationPrivatePayload.create).not.toHaveBeenCalled();
 		expect(harness.transaction.conversation.update).not.toHaveBeenCalled();
 	});
+
 	it("denies an otherwise authorized child when its current parent grant ends", async function ()
 	{
 		const authorization = vi.spyOn(PrismaConversationProductAuthorizationRepository.prototype, "canAccess").mockImplementation(async (_caller, conversationId) => conversationId !== "parent");

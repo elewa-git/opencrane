@@ -1,10 +1,12 @@
-import { Injectable, computed, inject, resource, signal } from "@angular/core";
+import { DestroyRef, Injectable, computed, effect, inject, resource, signal } from "@angular/core";
 
 import { ConversationAssetLifecycle, ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
 
-import { _ConversationAssetContentAddress, _ConversationAssetFileMediaType, _DecideConversationAssetFiles } from "./conversation-asset-file";
+import { _ConversationAssetContentAddress, _ConversationAssetFileMediaType, _DecideConversationAssetSelection } from "./conversation-asset-file";
+import { ConversationAssetsProcessingPoll } from "./conversation-assets-processing-poll";
 import { CONVERSATION_ASSETS_GATEWAY } from "./conversation-assets-gateway.types";
 import { ConversationAssetTransferPhases, type ConversationAsset, type ConversationAssetSelectionFailure, type PendingConversationAssetUpload } from "./conversation-assets.types";
+import { _ConversationMessageAssets, _ReadyConversationMessageAssetIds } from "./conversation-message-assets";
 
 /**
  * One file the participant picked, tracked in the browser until the server owns it.
@@ -69,6 +71,8 @@ export class ConversationAssetsStore
 	 * file would be attached again to the next message the participant sends.
 	 */
 	private readonly _submittedMessageAssetIds = signal<ReadonlySet<string>>(new Set());
+	/** Server-held files the participant explicitly kept in the next message. */
+	private readonly _selectedMessageAssetIds = signal<ReadonlySet<string>>(new Set());
 	/**
 	 * Counts conversation switches. A command captures it before it starts and compares afterwards, so
 	 * a late response cannot land on the conversation that is open now. See `_isScopeCurrent`.
@@ -85,11 +89,15 @@ export class ConversationAssetsStore
 
 	/** The running transfers as the UI sees them, with the file bytes stripped out. */
 	public readonly pendingUploads = computed<readonly PendingConversationAssetUpload[]>(() => this._intents().map(_PendingUpload));
+	/** Server-held participant files still selected for the next message. */
+	public readonly messageAssets = computed<readonly ConversationAsset[]>(() => _ConversationMessageAssets(this.assets.hasValue() ? this.assets.value() : [], this._selectedMessageAssetIds(), this._submittedMessageAssetIds()));
 	/**
 	 * The asset ids to attach to the next message: participant uploads that finished, passed scanning,
 	 * and are not bound to a message yet.
 	 */
-	public readonly messageAssetIds = computed<readonly string[]>(this._MessageAssetIds.bind(this));
+	public readonly messageAssetIds = computed<readonly string[]>(() => _ReadyConversationMessageAssetIds(this.messageAssets()));
+	private readonly _processingPoll = new ConversationAssetsProcessingPoll(() => ({ conversationId: this._conversationId(), scopeGeneration: this._scopeGeneration, loaded: this.assets.hasValue(), processing: this.messageAssets().some(asset => asset.state === ConversationAssetLifecycle.Processing) }), this.assets.reload.bind(this.assets));
+	public constructor() { effect(this._processingPoll.reconcile.bind(this._processingPoll)); inject(DestroyRef).onDestroy(this._processingPoll.cancel.bind(this._processingPoll)); }
 
 	/**
 	 * Points the store at one conversation and starts reading its files.
@@ -110,7 +118,17 @@ export class ConversationAssetsStore
 	public open(conversationId: string): void
 	{
 		if (conversationId.trim().length === 0) throw new Error("Conversation id is required.");
-		if (this._conversationId() !== conversationId) { this._scopeGeneration += 1; this._observedAssetInvalidations = 0; this._intents.set([]); this._submittedMessageAssetIds.set(new Set()); this.selectionFailure.set(null); this._conversationId.set(conversationId); }
+		if (this._conversationId() !== conversationId)
+		{
+			this._processingPoll.reset();
+			this._scopeGeneration += 1;
+			this._observedAssetInvalidations = 0;
+			this._intents.set([]);
+			this._submittedMessageAssetIds.set(new Set());
+			this._selectedMessageAssetIds.set(new Set());
+			this.selectionFailure.set(null);
+			this._conversationId.set(conversationId);
+		}
 	}
 
 	/**
@@ -128,12 +146,14 @@ export class ConversationAssetsStore
 	 */
 	public clear(): void
 	{
+		this._processingPoll.reset();
 		this._scopeGeneration += 1;
 		this._observedAssetInvalidations = 0;
 		this._conversationId.set(undefined);
 		this._intents.set([]);
 		this._removingAssetIds.set(new Set());
 		this._submittedMessageAssetIds.set(new Set());
+		this._selectedMessageAssetIds.set(new Set());
 		this.selectionFailure.set(null);
 	}
 
@@ -155,7 +175,9 @@ export class ConversationAssetsStore
 	public async select(files: readonly File[]): Promise<void>
 	{
 		const currentIntents = this._intents();
-		const decision = _DecideConversationAssetFiles([...currentIntents.map(function _SelectedFile(intent) { return intent.file; }), ...files]);
+		const durable = this.messageAssets().map(function _SelectedAsset(asset) { return { mediaType: asset.mediaType, byteLength: asset.byteLength ?? Number.MAX_SAFE_INTEGER }; });
+		const pending = currentIntents.map(function _SelectedFile(intent) { return { mediaType: intent.mediaType, byteLength: intent.file.size }; });
+		const decision = _DecideConversationAssetSelection([...durable, ...pending], files);
 		if (!decision.accepted)
 		{
 			this.selectionFailure.set(decision.failureCode);
@@ -251,6 +273,13 @@ export class ConversationAssetsStore
 		}
 	}
 
+	/** Removes one file from this message while preserving any server-held upload in Files. */
+	public deselectMessageAsset(assetId: string): void
+	{
+		this._intents.update(current => current.filter(intent => intent.idempotencyKey !== assetId));
+		this._selectedMessageAssetIds.update(current => new Set([...current].filter(id => id !== assetId)));
+	}
+
 	/**
 	 * Re-reads the file list from the server.
 	 *
@@ -280,6 +309,7 @@ export class ConversationAssetsStore
 	{
 		if (assetIds.length === 0) return;
 		this._submittedMessageAssetIds.update(current => new Set([...current, ...assetIds]));
+		this._selectedMessageAssetIds.update(current => new Set([...current].filter(id => !assetIds.includes(id))));
 	}
 
 	/**
@@ -357,6 +387,7 @@ export class ConversationAssetsStore
 			if (!this._isScopeCurrent(conversationId, scopeGeneration)) return;
 			if (uploaded.conversationId !== conversationId) throw new Error("Conversation asset upload scope mismatch.");
 			this._adopt(uploaded, conversationId, scopeGeneration);
+			this._selectedMessageAssetIds.update(current => new Set([...current, uploaded.id]));
 			this._intents.update(current => current.filter(candidate => candidate.idempotencyKey !== idempotencyKey));
 		}
 		catch
@@ -404,22 +435,6 @@ export class ConversationAssetsStore
 	private _patch(idempotencyKey: string, patch: Partial<ConversationAssetUploadIntent>): void
 	{
 		this._intents.update(current => current.map(intent => intent.idempotencyKey === idempotencyKey ? { ...intent, ...patch } : intent));
-	}
-
-	/**
-	 * Works out which files the next message should carry.
-	 *
-	 * Four conditions have to hold, and each one excludes a real case: the file must be a participant
-	 * upload, so a file the agent produced is not sent back; it must be `Ready`, so bytes still
-	 * scanning or already rejected are never attached; its `messageId` must be null, so a file that
-	 * already belongs to an earlier message is not attached twice; and it must not be in the
-	 * locally-remembered sent set, which covers the window after a send before the list is re-read.
-	 */
-	private _MessageAssetIds(): readonly string[]
-	{
-		if (!this.assets.hasValue()) return [];
-		const submitted = this._submittedMessageAssetIds();
-		return this.assets.value().filter(asset => asset.provenance === ConversationAssetProvenance.ParticipantUpload && asset.state === ConversationAssetLifecycle.Ready && asset.messageId === null && !submitted.has(asset.id)).map(asset => asset.id);
 	}
 }
 

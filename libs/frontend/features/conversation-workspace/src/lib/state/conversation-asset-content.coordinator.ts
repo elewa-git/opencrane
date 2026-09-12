@@ -103,6 +103,7 @@ function _PreparedMode(kind: ConversationAssetActionKinds, disposition: Conversa
 				return PreparedFileOpenModes.Download;
 			return null;
 		case ConversationAssetActionKinds.Retry:
+		case ConversationAssetActionKinds.Deselect:
 		case ConversationAssetActionKinds.Remove:
 		case ConversationAssetActionKinds.FocusMessage:
 			return null;

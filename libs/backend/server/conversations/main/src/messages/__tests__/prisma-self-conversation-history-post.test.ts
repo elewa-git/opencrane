@@ -1,5 +1,5 @@
 import { ConversationMode, Prisma, type ConversationPrivatePayload } from "@prisma/client";
-import { ComputerLeaseStates } from "@opencrane/contracts";
+import { ComputerLeaseStates, type HumanConversationAuthor, type MessageEntry } from "@opencrane/contracts";
 import { ProductAuthorizationActions } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -13,7 +13,7 @@ import { ConversationMessageActivations } from "../self-conversation-history.typ
 import { _ConversationAuthorizationFixture } from "../../authorization/__tests__/conversation-authorization.fixtures";
 
 const _CALLER = { principalId: "principal-1", subjectId: "user-1", siloId: "silo-1", externalIssuer: "https://issuer.test", verifiedAuthenticationAt: "2026-09-08T00:00:00.000Z" };
-const _COMMAND = { idempotencyKey: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", activation: ConversationMessageActivations.None, text: "Private message text must stay outside SQL" };
+const _COMMAND = { idempotencyKey: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", activation: ConversationMessageActivations.None, text: "Private message text must stay outside SQL", assetIds: [] };
 
 /** Runs the real repositories, central authority and cipher with transactional delegate snapshots. */
 function _Fixture()
@@ -26,7 +26,7 @@ function _Fixture()
 			findFirst: vi.fn().mockResolvedValue({ mode: ConversationMode.Direct, computerId: null, computerAgentIdentityId: null, computerProfileRevisionId: null, participants: [{ visibleFromPosition: 0n }] }),
 			update: vi.fn(),
 		},
-		conversationPrivatePayload: { findUnique: vi.fn(), create: vi.fn() },
+		conversationPrivatePayload: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
 	};
 	const membership = { ...transaction.orgMembership, findUnique: vi.fn().mockResolvedValue({ status: "Active", displayName: "Human" }) };
 	const client = { ...transaction, orgMembership: membership };
@@ -38,7 +38,8 @@ function _Fixture()
 		const audits = [...state.audits];
 		let updates = state.updates;
 		client.auditDecision.create.mockImplementation(async function _Record({ data }: { data: object }) { events.push("admit"); audits.push(data); return {}; });
-		client.conversationPrivatePayload.findUnique.mockImplementation(async function _Read() { return payload; });
+		client.conversationPrivatePayload.findFirst.mockImplementation(async function _Read() { return payload; });
+		client.conversationPrivatePayload.findUnique.mockImplementation(async function _ReadParticipant() { return payload; });
 		client.conversationPrivatePayload.create.mockImplementation(async function _Create({ data }: { data: ConversationPrivatePayload }) { events.push("payload"); payload = data; return data; });
 		client.conversation.update.mockImplementation(async function _Order()
 		{
@@ -60,8 +61,10 @@ function _Fixture()
 	const append = vi.spyOn(ConversationHistoryAuthority.prototype, "append").mockImplementation(async function _Append() { events.push("append"); return { outcome: ConversationHistoryAppendOutcomes.Appended } as never; });
 	const cipher = new AesGcmConversationPrivatePayloadCipher("key-1", { "key-1": Buffer.alloc(32, 7).toString("base64url") });
 	const computerReader = { load: vi.fn() };
-	const authority = new PrismaSelfConversationHistoryUnitOfWork(prisma as never, history, { cipher, computerReader }, new ConversationHistoryAuthority(history));
-	return { authority, client, state, events, prisma, read, append, computerReader, history };
+	const bindOrVerify = vi.fn().mockResolvedValue({ attachments: [] });
+	const createAttachmentAdmission = vi.fn(function _Attachments() { return { bindOrVerify }; });
+	const authority = new PrismaSelfConversationHistoryUnitOfWork(prisma as never, history, { cipher, computerReader }, new ConversationHistoryAuthority(history), createAttachmentAdmission);
+	return { authority, client, state, events, prisma, read, append, computerReader, history, bindOrVerify, createAttachmentAdmission };
 }
 
 afterEach(function _Restore() { vi.restoreAllMocks(); });
@@ -74,7 +77,7 @@ describe("participant message transaction with the central authorization authori
 		await expect(f.authority.postMessage(_CALLER, "conversation-1", _COMMAND)).resolves.toMatchObject({ outcome: "accepted", position: "1" });
 		expect(f.events).toEqual(["admit", "payload", "order", "commit", "append"]);
 		expect(f.state.audits).toHaveLength(1);
-		expect(f.state.audits[0]).toMatchObject({ action: ProductAuthorizationActions.Use, argumentsDigest: ___DigestCanonicalJson({ payloadRef: f.state.payload!.id, ciphertextDigest: f.state.payload!.ciphertextDigest, idempotencyKey: _COMMAND.idempotencyKey, activation: _COMMAND.activation }) });
+		expect(f.state.audits[0]).toMatchObject({ action: ProductAuthorizationActions.Use, argumentsDigest: ___DigestCanonicalJson({ payloadRef: f.state.payload!.id, ciphertextDigest: f.state.payload!.ciphertextDigest, idempotencyKey: _COMMAND.idempotencyKey, activation: _COMMAND.activation, assetIds: [] }) });
 		expect(JSON.stringify([f.state.payload, f.state.audits, f.client.conversation.update.mock.calls])).not.toContain(_COMMAND.text);
 	});
 
@@ -123,6 +126,75 @@ describe("participant message transaction with the central authorization authori
 		expect(f.append).not.toHaveBeenCalled();
 	});
 
+	it("retries a proven Serializable rollback through the shared unit-of-work runner", async function _SerializableRetry()
+	{
+		const f = _Fixture();
+		const conflict = new Prisma.PrismaClientKnownRequestError("rolled back", { code: "P2034", clientVersion: "test" });
+		f.prisma.$transaction.mockRejectedValueOnce(conflict);
+
+		await expect(f.authority.postMessage(_CALLER, "conversation-1", _COMMAND)).resolves.toMatchObject({ outcome: "accepted" });
+		expect(f.prisma.$transaction).toHaveBeenCalledTimes(2);
+		expect(f.state.audits).toHaveLength(1);
+		expect(f.append).toHaveBeenCalledOnce();
+	});
+
+	it("rolls back message writes when attachment authority denies after payload creation", async function _AttachmentDenial()
+	{
+		const f = _Fixture();
+		f.bindOrVerify.mockResolvedValue(null);
+
+		await expect(f.authority.postMessage(_CALLER, "conversation-1", _COMMAND)).resolves.toBeNull();
+		expect(f.state.payload).toBeNull();
+		expect(f.state.audits).toEqual([]);
+		expect(f.state.updates).toBe(0);
+		expect(f.append).not.toHaveBeenCalled();
+	});
+
+	it("binds canonical attachments in the payload transaction and appends deterministic blocks", async function _AttachmentBlocks()
+	{
+		const f = _Fixture();
+		const command = { ..._COMMAND, assetIds: ["asset-a", "asset-z"] };
+		f.bindOrVerify.mockResolvedValue({ attachments: [
+			{ assetId: "asset-a", artifactId: "artifact-a", artifactRevisionId: "revision-a", name: "a.pdf", mediaType: "application/pdf" },
+			{ assetId: "asset-z", artifactId: "artifact-z", artifactRevisionId: "revision-z", name: "z.pdf", mediaType: "application/pdf" },
+		] });
+
+		await expect(f.authority.postMessage(_CALLER, "conversation-1", command)).resolves.toMatchObject({ outcome: "accepted" });
+		expect(f.createAttachmentAdmission).toHaveBeenCalledWith(f.client);
+		expect(f.bindOrVerify).toHaveBeenCalledWith({ caller: _CALLER, conversationId: "conversation-1", messageId: command.idempotencyKey, canonicalAssetIds: command.assetIds, payloadCreated: true });
+		const entry = f.append.mock.calls[0]![0].entry as MessageEntry;
+		expect(entry.blocks).toEqual([
+			expect.objectContaining({ kind: "text", payloadRef: f.state.payload!.id }),
+			{ id: expect.any(String), kind: "artifact", artifactId: "artifact-a", artifactRevisionId: "revision-a", name: "a.pdf", mediaType: "application/pdf" },
+			{ id: expect.any(String), kind: "artifact", artifactId: "artifact-z", artifactRevisionId: "revision-z", name: "z.pdf", mediaType: "application/pdf" },
+		]);
+		expect(new Set(entry.blocks.map(block => block.id)).size).toBe(3);
+	});
+
+	it("rejects noncanonical input and malformed attachment metadata without a partial commit", async function _MalformedAttachments()
+	{
+		const f = _Fixture();
+		await expect(f.authority.postMessage(_CALLER, "conversation-1", { ..._COMMAND, assetIds: ["asset-z", "asset-a"] })).rejects.toThrow("canonical order");
+		expect(f.prisma.$transaction).not.toHaveBeenCalled();
+
+		f.bindOrVerify.mockResolvedValue({ attachments: [{ assetId: "foreign-asset", artifactId: "artifact-a", artifactRevisionId: "revision-a", name: "a.pdf", mediaType: "application/pdf" }] });
+		await expect(f.authority.postMessage(_CALLER, "conversation-1", { ..._COMMAND, assetIds: ["asset-a"] })).rejects.toThrow("does not match");
+		expect(f.state.payload).toBeNull();
+		expect(f.state.audits).toEqual([]);
+		expect(f.append).not.toHaveBeenCalled();
+	});
+
+	it("rejects a message UUID already held by another participant before binding", async function _ForeignParticipant()
+	{
+		const f = _Fixture();
+		f.state.payload = { id: "payload-other", siloId: "silo-1", conversationId: "conversation-1", authorSubject: "other-user", idempotencyKey: _COMMAND.idempotencyKey, keyId: "key-1", nonce: Buffer.alloc(12), authTag: Buffer.alloc(16), ciphertext: Buffer.from([1]), ciphertextDigest: `sha256:${"a".repeat(64)}`, createdAt: new Date() };
+
+		await expect(f.authority.postMessage(_CALLER, "conversation-1", _COMMAND)).rejects.toThrow("different participant");
+		expect(f.state.audits).toEqual([]);
+		expect(f.bindOrVerify).not.toHaveBeenCalled();
+		expect(f.append).not.toHaveBeenCalled();
+	});
+
 	it("rejects activation that does not match the current conversation mode before admission", async function _Activation()
 	{
 		const f = _Fixture();
@@ -145,23 +217,32 @@ describe("participant message transaction with the central authorization authori
 	it.each(["activation", "requester", "participant"])("rejects a recovered history entry with a different %s", async function _ConflictingHistory(field)
 	{
 		const f = _Fixture();
-		const author = { kind: "human", principalId: _CALLER.principalId, participantId: _CALLER.subjectId };
+		await f.authority.postMessage(_CALLER, "conversation-1", _COMMAND);
+		const saved = f.append.mock.calls[0]![0].entry as MessageEntry;
+		let author = { ...saved.author } as HumanConversationAuthor;
 		if (field === "requester")
-			author.principalId = "other-principal";
+			author = { ...author, principalId: "other-principal" };
 		if (field === "participant")
-			author.participantId = "other-subject";
+			author = { ...author, participantId: "other-subject" };
 		const activation = field === "activation" ? ConversationMessageActivations.Stop : ConversationMessageActivations.None;
-		f.read.mockResolvedValue({ entries: [{ id: _COMMAND.idempotencyKey, kind: "message", position: "4", author, activation }], streamName: "conversation-conversation-1", genesis: {} } as never);
+		f.read.mockResolvedValue({ entries: [{ ...saved, author, activation }], streamName: "conversation-conversation-1", genesis: {} } as never);
 		await expect(f.authority.postMessage(_CALLER, "conversation-1", _COMMAND)).rejects.toThrow("different command");
-		expect(f.append).not.toHaveBeenCalled();
+		expect(f.append).toHaveBeenCalledOnce();
 	});
 
-	it("returns the saved position for an exact history retry without another append", async function _RecoveredHistory()
+	it("returns the saved position only when the recovered entry matches every frozen block", async function _RecoveredHistory()
 	{
 		const f = _Fixture();
-		f.read.mockResolvedValue({ entries: [{ id: _COMMAND.idempotencyKey, kind: "message", position: "4", author: { kind: "human", principalId: _CALLER.principalId, participantId: _CALLER.subjectId }, activation: _COMMAND.activation }], streamName: "conversation-conversation-1", genesis: {} } as never);
-		await expect(f.authority.postMessage(_CALLER, "conversation-1", _COMMAND)).resolves.toEqual({ outcome: "idempotent", position: "4" });
-		expect(f.append).not.toHaveBeenCalled();
+		await f.authority.postMessage(_CALLER, "conversation-1", _COMMAND);
+		const entry = f.append.mock.calls[0]![0].entry as MessageEntry;
+		f.read.mockResolvedValue({ entries: [entry], streamName: "conversation-conversation-1", genesis: {} } as never);
+
+		await expect(f.authority.postMessage(_CALLER, "conversation-1", _COMMAND)).resolves.toEqual({ outcome: "idempotent", position: "1" });
+		expect(f.bindOrVerify).toHaveBeenLastCalledWith(expect.objectContaining({ payloadCreated: false }));
+		expect(f.append).toHaveBeenCalledOnce();
+		f.read.mockResolvedValue({ entries: [{ ...entry, blocks: [{ ...entry.blocks[0], ciphertextDigest: "sha256:changed" }] }], streamName: "conversation-conversation-1", genesis: {} } as never);
+		await expect(f.authority.postMessage(_CALLER, "conversation-1", _COMMAND)).rejects.toThrow("different command");
+		expect(f.append).toHaveBeenCalledOnce();
 	});
 
 });

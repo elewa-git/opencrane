@@ -11,7 +11,7 @@ import { ConversationAssetContentCommandStates, type ConversationAsset } from ".
 /** Build one authorized Ready asset projection. */
 function _Asset(id = "asset-1", overrides: Partial<ConversationAsset> = {}): ConversationAsset
 {
-	return { id, conversationId: "conversation-1", messageId: null, provenance: ConversationAssetProvenance.ParticipantUpload, state: ConversationAssetLifecycle.Ready, displayName: `${id}.pdf`, mediaType: "application/pdf", byteLength: 5, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: false, createdAt: "2026-09-12T08:00:00.000Z", ...overrides };
+	return { id, conversationId: "conversation-1", messageId: null, artifactId: null, artifactRevisionId: null, provenance: ConversationAssetProvenance.ParticipantUpload, state: ConversationAssetLifecycle.Ready, displayName: `${id}.pdf`, mediaType: "application/pdf", byteLength: 5, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: false, createdAt: "2026-09-12T08:00:00.000Z", ...overrides };
 }
 
 /** Controlled promise for read and selection race tests. */

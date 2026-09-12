@@ -28,3 +28,6 @@ export { _CreateArtifactReadLeaseSigner } from "./service/artifact-read-lease-si
 export { _CreateArtifactServiceReadPort, _InternalArtifactServiceUrl } from "./service/artifact-service-read-port.factory";
 export { _CreateArtifactPreprocessSourceBroker } from "./service/artifact-preprocess-source-broker.factory";
 export { _CreateArtifactScanSourceBroker } from "./service/artifact-scan-source-broker.factory";
+export { PrismaScannedPdfTextRepository } from "./pdf-input/prisma-scanned-pdf-text-repository";
+export type { ScannedPdfTextLineage } from "./pdf-input/pdf-text-lineage.types";
+export type { ConversationAssetPreprocessLifecycleFactory, ConversationAssetPreprocessLifecycleRepository } from "./artifact-preprocess-conversation-lifecycle.types";

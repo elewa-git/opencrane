@@ -4,11 +4,13 @@ import { ConversationAssetDisposition, ConversationAssetLifecycle, ConversationA
 const _ConversationAssetSchema = {
 	type: "object",
 	additionalProperties: false,
-	required: ["id", "conversationId", "messageId", "provenance", "state", "displayName", "mediaType", "byteLength", "disposition", "failureCode", "canRemove", "createdAt"],
+	required: ["id", "conversationId", "messageId", "artifactId", "artifactRevisionId", "provenance", "state", "displayName", "mediaType", "byteLength", "disposition", "failureCode", "canRemove", "createdAt"],
 	properties: {
 		id: { type: "string" },
 		conversationId: { type: "string" },
 		messageId: { type: ["string", "null"] },
+		artifactId: { type: ["string", "null"] },
+		artifactRevisionId: { type: ["string", "null"] },
 		provenance: { type: "string", enum: [ConversationAssetProvenance.ParticipantUpload] },
 		state: { type: "string", enum: [ConversationAssetLifecycle.Uploading, ConversationAssetLifecycle.Processing, ConversationAssetLifecycle.Ready, ConversationAssetLifecycle.Failed, ConversationAssetLifecycle.Removed] },
 		displayName: { type: "string" },

@@ -1,7 +1,10 @@
 import { AvatarTones } from "@opencrane/elements/ui";
 import { ConversationMessageTones, ConversationStatusTones, type ConversationMessagePresentation, type ConversationRichTextPresentation, type ConversationStatusPresentation } from "@opencrane/elements/conversation";
-import { ConversationEntryKinds, ConversationMessageContentBlockKinds, type ConversationEntry, type ToolCallLogEntry } from "@opencrane/contracts";
+import { ConversationEntryKinds, ConversationMessageContentBlockKinds, type ArtifactMessageContentBlock, type ConversationEntry, type ToolCallLogEntry } from "@opencrane/contracts";
+import { ConversationAssetPresentationStates, type ConversationAssetPresentation } from "@opencrane/features/conversation-assets";
+import { ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
 import { toSanitizedMarkdownHtml, toStreamingMarkdownHtml } from "@opencrane/state/conversation/render";
+import { ConversationAssetContentCommandStates } from "@opencrane/state/conversation/assets";
 import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, MessageRoles, MessageStates, type ConversationCreationDirectory, type ConversationOnboardingHistory, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
 import { ConversationOnboardingDialogueSpeakers, ConversationSessionRailIconStates, ConversationSessionRailItemKinds, type ConversationOnboardingContinuationPresentation, type ConversationOnboardingDialogueEntryPresentation, type ConversationOnboardingHistoryPresentation, type ConversationRailIdentityPresentation, type ConversationSessionRailItemPresentation, type ConversationSummaryPresentation } from "./conversation-workspace-feature.types";
@@ -176,7 +179,7 @@ export function _ConversationOnboardingDialogueEntries(history: ConversationOnbo
 }
 
 /** Map immutable Kurrent messages and the latest fact for each tool call in canonical order. */
-export function _ConversationEntryViews(entries: readonly ConversationEntry[], payloads: Readonly<Record<string, string>>): readonly ConversationWorkspaceTranscriptEntry[]
+export function _ConversationEntryViews(entries: readonly ConversationEntry[], payloads: Readonly<Record<string, string>>, assets: readonly ConversationAssetPresentation[] = []): readonly ConversationWorkspaceTranscriptEntry[]
 {
 	const latestTools = new Map<string, ToolCallLogEntry>();
 	for (const entry of entries)
@@ -188,14 +191,15 @@ export function _ConversationEntryViews(entries: readonly ConversationEntry[], p
 			return latestTools.get(entry.toolCallId)?.id === entry.id ? [{ kind: ConversationWorkspaceTranscriptEntryKinds.ToolActivity, id: entry.id, status: _ConversationToolStatus(entry) }] : [];
 		if (entry.kind !== ConversationEntryKinds.Message)
 			return [];
-		const text = entry.blocks.map(function _Block(block): string
+		const text = entry.blocks.flatMap(function _Block(block): readonly string[]
 		{
 			if (block.kind === ConversationMessageContentBlockKinds.Text)
-				return payloads[block.payloadRef] ?? "[Message text unavailable]";
+				return [payloads[block.payloadRef] ?? "[Message text unavailable]"];
 			if (block.kind === ConversationMessageContentBlockKinds.Artifact)
-				return `[${block.name}]`;
-			return `[@${block.name}]`;
+				return [];
+			return [`[@${block.name}]`];
 		}).join("\n\n");
+		const attachments = entry.blocks.filter(function _Artifact(block): block is ArtifactMessageContentBlock { return block.kind === ConversationMessageContentBlockKinds.Artifact; }).map(block => _ConversationArtifact(block, entry.id, assets));
 		const authorName = entry.author.name;
 		const authorInitials = _Initials(authorName);
 		const authorPresentation = _EntryAuthorPresentation(entry.author.kind);
@@ -203,8 +207,17 @@ export function _ConversationEntryViews(entries: readonly ConversationEntry[], p
 		const avatarTone = authorPresentation.avatarTone;
 		const presentation: ConversationMessagePresentation = { id: entry.id, authorName, authorInitials, avatarTone, timestampLabel: _TimeLabel(entry.occurredAt), body: "", tone, accessibleStatus: entry.state === MessageStates.Completed ? undefined : entry.state };
 		const html = entry.state === MessageStates.Streaming ? toStreamingMarkdownHtml(text) : toSanitizedMarkdownHtml(text);
-		return [{ kind: ConversationWorkspaceTranscriptEntryKinds.Message, id: entry.id, message: presentation, richText: { messageId: entry.id, html, label: `${authorName} message` }, requestSource: null, shareSource: null, children: [] }];
+		return [{ kind: ConversationWorkspaceTranscriptEntryKinds.Message, id: entry.id, message: presentation, richText: { messageId: entry.id, html, label: `${authorName} message` }, requestSource: null, shareSource: null, children: [], attachments }];
 	});
+}
+
+/** Joins one immutable artifact block to a currently authorized asset without using display text as identity. */
+function _ConversationArtifact(block: ArtifactMessageContentBlock, messageId: string, assets: readonly ConversationAssetPresentation[]): ConversationAssetPresentation
+{
+	const matches = assets.filter(asset => asset.artifactId === block.artifactId && asset.artifactRevisionId === block.artifactRevisionId && asset.messageId === messageId);
+	if (matches.length === 1 && matches[0]?.displayName === block.name && matches[0].mediaType === block.mediaType)
+		return matches[0];
+	return { id: block.id, messageId, artifactId: block.artifactId, artifactRevisionId: block.artifactRevisionId, provenance: ConversationAssetProvenance.ParticipantUpload, displayName: block.name, mediaType: block.mediaType, byteLength: null, disposition: null, state: ConversationAssetPresentationStates.Unavailable, detail: "File unavailable", canRetry: false, canRemove: false, uploadProgressPercent: null, contentState: ConversationAssetContentCommandStates.Idle, contentDetail: null };
 }
 
 /** Translate a server-attested tool lifecycle fact without exposing arguments, results or coordinates. */

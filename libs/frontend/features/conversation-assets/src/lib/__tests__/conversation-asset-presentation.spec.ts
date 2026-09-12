@@ -15,14 +15,14 @@ describe("conversation asset presentation", function _Suite()
 		[ConversationAssetLifecycle.Removed, ConversationAssetPresentationStates.Removed]
 	] as const)("maps durable %s without predicting a later state", function _Maps(state, expected)
 	{
-		const result = __ConversationAssetPresentation({ id: "asset-1", conversationId: "conversation-1", messageId: null, provenance: ConversationAssetProvenance.ParticipantUpload, state, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 1024, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: state === ConversationAssetLifecycle.Uploading, createdAt: "2026-08-11T10:00:00.000Z" }, ConversationAssetContentCommandStates.Idle);
+		const result = __ConversationAssetPresentation({ id: "asset-1", conversationId: "conversation-1", messageId: null, artifactId: null, artifactRevisionId: null, provenance: ConversationAssetProvenance.ParticipantUpload, state, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 1024, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: state === ConversationAssetLifecycle.Uploading, createdAt: "2026-08-11T10:00:00.000Z" }, ConversationAssetContentCommandStates.Idle);
 		expect(result.state).toBe(expected);
 		expect(result.canRetry).toBe(false);
 	});
 
 	it("keeps content command feedback separate from durable Ready state", function _ContentState()
 	{
-		const asset = { id: "asset-1", conversationId: "conversation-1", messageId: null, provenance: ConversationAssetProvenance.ParticipantUpload, state: ConversationAssetLifecycle.Ready, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 1024, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: false, createdAt: "2026-08-11T10:00:00.000Z" } as const;
+		const asset = { id: "asset-1", conversationId: "conversation-1", messageId: null, artifactId: "artifact-1", artifactRevisionId: "revision-1", provenance: ConversationAssetProvenance.ParticipantUpload, state: ConversationAssetLifecycle.Ready, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 1024, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: false, createdAt: "2026-08-11T10:00:00.000Z" } as const;
 		expect(__ConversationAssetPresentation(asset, ConversationAssetContentCommandStates.Loading)).toMatchObject({ state: ConversationAssetPresentationStates.Ready, contentState: ConversationAssetContentCommandStates.Loading, contentDetail: null });
 		expect(__ConversationAssetPresentation(asset, ConversationAssetContentCommandStates.Failed)).toMatchObject({ state: ConversationAssetPresentationStates.Ready, contentState: ConversationAssetContentCommandStates.Failed, contentDetail: "The file could not be opened." });
 	});

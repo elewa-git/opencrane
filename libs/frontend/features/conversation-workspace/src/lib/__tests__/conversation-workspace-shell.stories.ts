@@ -2,7 +2,7 @@ import { Router } from "@angular/router";
 import { type Decorator, type Meta, moduleMetadata, type StoryObj } from "@storybook/angular";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 
-import { CONVERSATION_ELICITATION_VERSION, ConversationEntryKinds, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ApprovalLogEntry, type ConversationElicitation, type MessageEntry, type ToolCallLogEntry } from "@opencrane/contracts";
+import { CONVERSATION_ELICITATION_VERSION, ConversationAuthorKinds, ConversationEntryKinds, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ApprovalLogEntry, type ConversationElicitation, type MessageEntry, type ToolCallLogEntry } from "@opencrane/contracts";
 import { ConversationModes, ConversationLifecycles } from "@opencrane/models/conversations";
 import { PLATFORM_BRIDGE, PreparedFileOpenCompletionOutcomes, type PlatformBridge } from "@opencrane/platform";
 import { CONVERSATION_ASSETS_GATEWAY, ConversationAssetDisposition, ConversationAssetLifecycle, ConversationAssetProvenance, type ConversationAssetsGateway } from "@opencrane/state/conversation/assets";
@@ -41,6 +41,13 @@ const _ELICITATION: ConversationElicitation = { version: CONVERSATION_ELICITATIO
 
 /** Current immutable-history projection rendered by every responsive shell contract. */
 const _HISTORY: ConversationHistoryProjection = { ...__CreateConversationHistoryProjection(), entries: [_ENTRY], payloads: { "payload-1": _LONG_CONTENT }, nextPosition: "2" };
+
+/** Participant question whose artifact block binds the projected PDF by immutable coordinates. */
+const _PDF_ENTRY: MessageEntry = { ..._ENTRY, author: { kind: ConversationAuthorKinds.Human, principalId: "principal-self", participantId: "self", issuer: "https://issuer.test", authenticatedAt: "2026-09-05T19:29:50.000Z", name: "You", avatarArtifactRevisionId: null }, provenance: "human-authored", runId: null, blocks: [..._ENTRY.blocks, { id: "artifact-block-1", kind: "artifact", artifactId: "artifact-project-brief", artifactRevisionId: "artifact-revision-project-brief", name: "project-brief.pdf", mediaType: "application/pdf" }] };
+
+/** Full routed shell state for a saved question with its exact bound PDF. */
+const _PDF_ANSWER_ENTRY: MessageEntry = { ..._ENTRY, id: "7de3e61c-f3a1-43dc-899a-80b8dde7cb13", position: "2", idempotencyKey: "7de3e61c-f3a1-43dc-899a-80b8dde7cb13", blocks: [{ id: "block-pdf-answer", kind: "text", payloadRef: "payload-pdf-answer", ciphertextDigest: "sha256:pdf-answer" }] };
+const _PDF_HISTORY: ConversationHistoryProjection = { ..._HISTORY, entries: [_PDF_ENTRY, _PDF_ANSWER_ENTRY], payloads: { "payload-1": "Review the attached supplier brief and confirm the current account status.", "payload-pdf-answer": "The customer account is active." }, nextPosition: "3" };
 
 /** Cancelled work has no assistant answer because cancellation won the terminal race. */
 const _CANCELLED_HISTORY: ConversationHistoryProjection = __CreateConversationHistoryProjection();
@@ -108,8 +115,27 @@ const _FILE_OPEN_CALLS: string[] = [];
 /** One Ready server projection whose exact five bytes can complete the routed file action. */
 const _READY_ASSETS: ConversationAssetsGateway = {
 	..._ASSETS,
-	list: async function _List() { return [{ id: "asset-ready", conversationId: _DETAIL.id, messageId: _ENTRY.id, provenance: ConversationAssetProvenance.ParticipantUpload, state: ConversationAssetLifecycle.Ready, displayName: "project-brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: false, createdAt: "2026-09-05T19:30:00.000Z" }]; },
+	list: async function _List() { return [{ id: "asset-ready", conversationId: _DETAIL.id, messageId: _PDF_ENTRY.id, artifactId: "artifact-project-brief", artifactRevisionId: "artifact-revision-project-brief", provenance: ConversationAssetProvenance.ParticipantUpload, state: ConversationAssetLifecycle.Ready, displayName: "project-brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: false, createdAt: "2026-09-05T19:30:00.000Z" }]; },
 	read: async function _Read() { _FILE_OPEN_CALLS.push("read"); return new Blob(["brief"], { type: "application/pdf" }); }
+};
+/** Long participant filename proving the production composer wraps international text without losing its action. */
+const _NEXT_PDF_NAME = "Résumé – Nairobi supplier review 你好.pdf";
+/** Adds one newly uploaded PDF to the current message while retaining the earlier bound transcript asset. */
+const _PDF_COMPOSER_ASSETS: ConversationAssetsGateway = {
+	..._READY_ASSETS,
+	list: async function _List()
+	{
+		const bound = await _READY_ASSETS.list(_DETAIL.id);
+		return [...bound, { id: "asset-next-pdf", conversationId: _DETAIL.id, messageId: null, artifactId: "artifact-next-pdf", artifactRevisionId: "artifact-revision-next-pdf", provenance: ConversationAssetProvenance.ParticipantUpload, state: ConversationAssetLifecycle.Ready, displayName: _NEXT_PDF_NAME, mediaType: "application/pdf", byteLength: 8, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: false, createdAt: "2026-09-05T19:31:00.000Z" }];
+	},
+	reserve: async function _Reserve()
+	{
+		return { id: "asset-next-pdf", conversationId: _DETAIL.id, messageId: null, artifactId: null, artifactRevisionId: null, provenance: ConversationAssetProvenance.ParticipantUpload, state: ConversationAssetLifecycle.Uploading, displayName: _NEXT_PDF_NAME, mediaType: "application/pdf", byteLength: 8, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: false, createdAt: "2026-09-05T19:31:00.000Z" };
+	},
+	upload: async function _Upload()
+	{
+		return { id: "asset-next-pdf", conversationId: _DETAIL.id, messageId: null, artifactId: "artifact-next-pdf", artifactRevisionId: "artifact-revision-next-pdf", provenance: ConversationAssetProvenance.ParticipantUpload, state: ConversationAssetLifecycle.Ready, displayName: _NEXT_PDF_NAME, mediaType: "application/pdf", byteLength: 8, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: false, createdAt: "2026-09-05T19:31:00.000Z" };
+	}
 };
 /** Runtime fake that records prepared-file completion without opening a real browser target. */
 const _FILE_PLATFORM: PlatformBridge = {
@@ -122,6 +148,8 @@ const _FILE_PLATFORM: PlatformBridge = {
 };
 /** Supplies a completed personal status that links to the rendered history fixture. */
 const _PERSONAL_RUNS: ConversationPersonalRunsGateway = { listPersonalRuns: async function _List() { return [{ runId: "run-1", conversationId: _DETAIL.id, state: "completed", attempt: 1, agentRevisionId: "revision-1", acceptedAt: "2026-09-05T19:29:50.000Z", latestTool: null, finishedAt: _ENTRY.occurredAt }]; }, requestStop: async function _Stop() { return; } };
+/** Leaves the PDF history itself to show completion without consuming narrow composer space. */
+const _NO_PERSONAL_RUNS: ConversationPersonalRunsGateway = { listPersonalRuns: async function _List() { return []; }, requestStop: async function _Stop() { throw new Error("No work selected."); } };
 /** Keeps one personal run active after its accepted Stop message until authority catches up. */
 const _ACTIVE_PERSONAL_RUNS: ConversationPersonalRunsGateway = { listPersonalRuns: async function _List() { return [{ runId: "run-1", conversationId: _DETAIL.id, state: "running", attempt: 1, agentRevisionId: "revision-1", acceptedAt: "2026-09-05T19:29:50.000Z", latestTool: null, finishedAt: null }]; }, requestStop: async function _Stop() { return; } };
 /** Supplies the durable terminal state without a remaining Stop control. */
@@ -162,6 +190,24 @@ export const ReadyAssetOpen: Story = { tags: ["visual-test"], decorators: [_Prov
 	await userEvent.click(await canvas.findByRole("button", { name: "Open" }));
 	await waitFor(function _Completed() { expect(_FILE_OPEN_CALLS).toEqual(["prepare", "read", "complete"]); });
 } };
+
+/** Prepares the complete PDF-informed conversation after closing the optional context panel. */
+async function _ComposePdfJourney(canvasElement: HTMLElement): Promise<void>
+{
+	const canvas = within(canvasElement);
+	await userEvent.click(await canvas.findByRole("button", { name: /Close (?:activity|context) pane/u }));
+	expect(await canvas.findByText("project-brief.pdf", { exact: true })).toBeVisible();
+	const picker = canvas.getByLabelText("Attach PDF") as HTMLInputElement;
+	await userEvent.upload(picker, new File(["pdf-next"], _NEXT_PDF_NAME, { type: "application/pdf" }));
+	expect(await canvas.findByText(_NEXT_PDF_NAME, { exact: true })).toBeVisible();
+	expect(canvas.getByRole("button", { name: "Preview" })).toBeEnabled();
+}
+
+/** Renders the saved PDF and the next selected PDF throughout the desktop routed shell. */
+export const PdfInformedAnswer: Story = { tags: ["visual-test"], decorators: [_Providers(_PDF_HISTORY, _WORKSPACE_GATEWAY, _NO_ELICITATIONS, _NO_PERSONAL_RUNS, _PDF_COMPOSER_ASSETS, _FILE_PLATFORM)], play: async function _BoundPdf({ canvasElement }) { await _ComposePdfJourney(canvasElement); } };
+
+/** Keeps the informed PDF, fixed composer, and context panel reachable at the supported narrow viewport. */
+export const PdfInformedAnswerNarrow: Story = { ...PdfInformedAnswer, tags: ["visual-test", "visual-test-narrow"] };
 
 /** Shows durable tool evidence before the personal assistant's final saved answer. */
 export const PersonalToolResult: Story = { tags: ["visual-test"], decorators: [_Providers(_TOOL_RESULT_HISTORY)], play: async function _PersonalEvidence({ canvasElement })
@@ -210,7 +256,7 @@ export const PersonalToolApproval: Story = { tags: ["visual-test"], decorators: 
 	const transcriptBounds = transcript.getBoundingClientRect();
 	const approvalBounds = approval.getBoundingClientRect();
 	expect(transcriptBounds.height).toBeGreaterThan(0);
-	expect(approvalBounds.top).toBeGreaterThanOrEqual(transcriptBounds.bottom);
+	expect(transcriptBounds.bottom - approvalBounds.top).toBeLessThan(1);
 	expect(globalThis.getComputedStyle(scrollOwner).overflowY).toBe("auto");
 	expect(scrollOwner.clientHeight).toBeGreaterThan(0);
 	expect(scrollOwner.scrollHeight).toBeGreaterThan(scrollOwner.clientHeight);
@@ -241,7 +287,8 @@ export const PersonalToolApproval: Story = { tags: ["visual-test"], decorators: 
 		{
 			const bodyBounds = scrollOwner.getBoundingClientRect();
 			const bounds = approval.getBoundingClientRect();
-			expect(bounds.top).toBeGreaterThanOrEqual(bodyBounds.top);
+			// Chromium may round nested rem coordinates to adjacent subpixels; a whole pixel still indicates clipping.
+			expect(bounds.top).toBeGreaterThanOrEqual(bodyBounds.top - 1);
 			expect(bounds.top).toBeLessThan(bodyBounds.bottom);
 		});
 	}
