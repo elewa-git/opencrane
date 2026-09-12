@@ -20,6 +20,13 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Added
 
+- **Memory command integrations can preserve one operation across retries and restarts.** The
+  personal-memory repository retains the original source, command and provider receipts, adopts a
+  new dataset atomically, and hides a fact when Forget is admitted. Concurrent retries return the
+  saved operation; rejected transactions leave neither partial adoption nor a partial command.
+  Authenticated product commands, Absurd task admission and the complete memory journey remain
+  unfinished.
+
 - **Conversation participants can open ready uploaded files from the Files panel.** Supported
   previews and downloads use the current authorized content read, show loading and safe retry
   feedback, and discard pending results when the selected conversation or access changes.

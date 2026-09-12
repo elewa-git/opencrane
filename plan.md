@@ -1,5 +1,34 @@
 # OpenCrane — Active Plan
 
+## Durable personal memory operations — persistence and integration proof
+
+The operation repository now saves Remember, Correct and Forget command coordinates, encrypted
+source references, reserved workflow identity and monotonic provider receipts. Exact replay returns
+the original operation after dataset adoption or a fact revision change. Concurrent writers use
+the existing transaction helper and dataset → fact → operation lock order.
+
+A new personal dataset can remain Provisioning without a provider UUID. Adoption and the saved
+operation step commit together; recall selects only Active datasets with adopted UUIDs. Forget
+hides the fact in its admission transaction. PostgreSQL owns fact revision increments, and catalog
+completion requires matching durable fact evidence. Names derive from the immutable catalog ID
+through the shared gateway format; no second name column or remembered plaintext is stored.
+
+Local proof passes 38 package tests, seven real PostgreSQL repository cases, all 12 workspace SQL
+targets, package lint/type checks and the server build. The new SQL authority suite has 23
+assertions. Repository cases cover concurrent admission/adoption, exact replay after a new client,
+recovery evidence, Forget visibility for Active and Corrected facts, and rollback. Both the
+disposable database and test process use UTC, matching CI: local timezone offsets otherwise change
+the existing timestamp-without-time-zone authority fixtures. No fixture or authority check was
+weakened. Style, Prisma and ownership boundaries, module growth, release binding and fresh-baseline
+regeneration pass. Architecture preflight/post-review and independent review of the complete source
+overlay pass with no unresolved findings. Exact-head CI and live qualification remain separate.
+
+This is persistence infrastructure. The complete authenticated command transaction must still
+compose current authority, dataset/catalog mutations and typed Absurd task admission. Reserved task
+identifiers do not prove that a task was admitted. Catalog completion is deliberately unavailable
+through the standalone operation UoW until its exact mutation owner is composed. Gateway/client
+integration, product routes, permitted recall and live qualification remain unfinished.
+
 ## Recover interrupted memory indexing — source implementation
 
 This slice starts directly above #874 at `b7acc1f94e24a41d0c151da252592c36dc613582`.
@@ -29,8 +58,10 @@ failed. The candidate stopped on its first Add before any indexing-recovery requ
 tokenizer discovery exhausted the connection-test deadline before reaching the synthetic provider.
 The reviewed harness repair disables that external discovery while retaining the actual synthetic
 model and embedding connection tests. All eight focused harness tests and Cognee lint pass.
-Exact-image indexing recovery remains unqualified until the repaired commit passes CI; source
-checks do not promote the candidate image or establish testv5 readiness.
+The repaired candidate passed exact-image qualification at `320a16caff0fa6511825c396c91c4ce4371fb517`
+(run `34724401692`, job `103635957933`), including retained recovery evidence. The separate
+production-provider job still failed, so the overall workflow is not green. Candidate proof does
+not promote the image or establish testv5 readiness.
 
 ## Recover interrupted memory dataset permissions — implementation and validation
 
@@ -877,7 +908,7 @@ their own completion track; they are not silently bundled into the first tool PR
 | T1 — first permitted tool retrieval | IN PROGRESS — the server's one-tool continuation is implemented and now progresses through Absurd in #849. Company tool assignment is the first active follow-up. Connection activation, a real integration and participant result evidence remain required. |
 | T2 | IN PROGRESS: personal approval and durable resume pass local integration; company approval and real external-action qualification remain. |
 | U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
-| M1 | IN PROGRESS: the repaired candidate in #872 passes exact-image deletion, isolation and restart qualification. Dataset permission recovery, gateway integration and the product memory journeys remain. |
+| M1 | IN PROGRESS: the candidate in #875 passes exact-image deletion, isolation, permission recovery and interrupted-indexing qualification. Durable Remember/Correct/Forget persistence passes local database proof. Authenticated commands, Absurd admission, gateway/client integration and product memory journeys remain. The separate production-provider qualification still fails. |
 | U2 | PAUSED: partial runtime-question source awaits its separate explicit approval. |
 | F1 | IN PROGRESS: Ready-file Open/Preview/Download and PDF-informed answers pass exact-head CI in #868 and #869. Generated outputs and live qualification remain. |
 | D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |

@@ -5,3 +5,11 @@ export { PrismaRuntimePersonalMemoryEffectEligibilityAuthority } from "./prisma-
 export { PersonalMemoryDatasetResolutionDenialReasons, PersonalMemoryDatasetResolutionOutcomes } from "./personal-memory-dataset.types";
 export type { PersonalMemoryAdmissionRepository, PersonalMemoryDataset, ResolvePersonalMemoryDatasetCommand, ResolvePersonalMemoryDatasetResult } from "./personal-memory-dataset.types";
 export type { RuntimePersonalMemoryEffectEligibility, RuntimePersonalMemoryEffectEligibilityCommand } from "./runtime-personal-memory-effect-eligibility.types";
+export { __CreatePersonalMemoryOperationLifecycle, __PlanPersonalMemoryOperationLifecycle } from "./operations/personal-memory-operation-lifecycle";
+export { __PersonalMemoryProviderDatasetName } from "./operations/personal-memory-dataset-name";
+export { PersonalMemoryOperationKinds, PersonalMemoryOperationPhases, PersonalMemoryOperationEvents, PersonalMemoryOperationFailureCodes, PersonalMemoryOperationTransitionOutcomes, PersonalMemoryOperationTransitionDenialReasons } from "./operations/personal-memory-operation.types";
+export type { CreatePersonalMemoryOperationLifecycleCommand, PersonalMemoryOperationLifecycle, PersonalMemoryOperationEvent, PersonalMemoryOperationTransitionResult } from "./operations/personal-memory-operation.types";
+export { PersonalMemoryOperationAdmissionOutcomes, PersonalMemoryOperationPersistenceOutcomes, PersonalMemoryOperationReplayConflict, PersonalMemoryOperationInvalidState } from "./operations/personal-memory-operation-persistence.types";
+export type { AdmitPersonalMemoryOperationCommand, PersonalMemoryOperationMessageSource, PersonalMemoryOperationTaskIdentity, PersonalMemoryOperationRecord, PersonalMemoryOperationAdmissionResult, PersonalMemoryOperationPersistenceResult, PersonalMemoryOperationRepository, PersonalMemoryOperationUnitOfWork } from "./operations/personal-memory-operation-persistence.types";
+export { PrismaPersonalMemoryOperationRepository } from "./operations/prisma-personal-memory-operation-repository";
+export { PrismaPersonalMemoryOperationUnitOfWork } from "./operations/prisma-personal-memory-operation-unit-of-work";

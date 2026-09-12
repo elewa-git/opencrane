@@ -3,6 +3,13 @@
 	"owners": {
 		"repositories": [
 			{
+				"path": "libs/backend/agents/personal/memory/main/src/operations/prisma-personal-memory-operation-repository.ts",
+				"adapter": "PrismaPersonalMemoryOperationRepository",
+				"contract": "PersonalMemoryOperationRepository",
+				"contractImportPath": "./personal-memory-operation-persistence.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/server/iam/audit-writer/main/src/audit-decision.ts",
 				"adapter": "PrismaAuditDecisionWriterRepository",
 				"contract": "AuditDecisionWriterRepository",
@@ -1416,6 +1423,18 @@
 			}
 		],
 		"unitsOfWork": [
+			{
+				"path": "libs/backend/agents/personal/memory/main/src/operations/prisma-personal-memory-operation-unit-of-work.ts",
+				"adapter": "PrismaPersonalMemoryOperationUnitOfWork",
+				"contract": "PersonalMemoryOperationUnitOfWork",
+				"contractImportPath": "./personal-memory-operation-persistence.types",
+				"constructs": [
+					{
+						"adapter": "PrismaPersonalMemoryOperationRepository",
+						"importPath": "./prisma-personal-memory-operation-repository"
+					}
+				]
+			},
 			{
 				"path": "libs/backend/agents/execution/inputs/main/src/prompt/prisma-prompt-compiler-repository.ts",
 				"adapter": "PrismaPromptCompilerUnitOfWork",
