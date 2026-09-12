@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import tempfile
+import types
 import unittest
 import uuid
 from pathlib import Path
@@ -82,6 +83,51 @@ class _CommittedDeleteAdapter:
 
 
 class ProviderDeletion154Test(unittest.TestCase):
+    def test_path_probe_inherits_the_provider_cleanup_helper_chain(self) -> None:
+        calls = []
+
+        class ProviderAdapter:
+            def __init__(self) -> None:
+                raise AssertionError("Path probes must not create a database engine")
+
+            async def remove_data_file_if_unreferenced(self, location: str) -> None:
+                async with self.get_async_session() as session:
+                    await self._remove_data_file_if_unreferenced(session, location)
+
+            async def _remove_data_file_if_unreferenced(
+                self, session: object, location: str
+            ) -> None:
+                result = await session.execute(object())
+                if result.scalar() != 0:
+                    raise AssertionError("Path probes must stub only an absent reference")
+                calls.append(location)
+                # This double verifies method inheritance, not the provider's containment rule.
+                if location.endswith("/managed.bin"):
+                    MODULE._local_file_path(location).unlink()
+
+        module_name = (
+            "cognee.infrastructure.databases.relational.sqlalchemy.SqlAlchemyAdapter"
+        )
+        provider_module = types.ModuleType(module_name)
+        provider_module.SQLAlchemyAdapter = ProviderAdapter
+        with tempfile.TemporaryDirectory() as directory:
+            data_root = Path(directory) / "data"
+            data_root.mkdir()
+            with (
+                patch.dict("sys.modules", {module_name: provider_module}),
+                patch.dict(os.environ, {"DATA_ROOT_DIRECTORY": str(data_root)}),
+            ):
+                evidence = asyncio.run(MODULE._path_safety_probes())
+
+        self.assertEqual(len(calls), 7)
+        self.assertTrue(evidence["managedRemoved"])
+        self.assertTrue(evidence["substringSiblingRetained"])
+        self.assertTrue(evidence["substringDecoyRetained"])
+        self.assertEqual(
+            evidence["retainedCases"],
+            ["parentTraversal", "symlinkEscape", "storageRoot", "remoteFileHost", "remoteScheme"],
+        )
+
     def test_member_discovery_requires_camel_case_dataset_owner(self) -> None:
         dataset_id = str(uuid.uuid4())
         data_id = str(uuid.uuid4())

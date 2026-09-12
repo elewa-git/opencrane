@@ -37,7 +37,22 @@ Draft #872 publishes the candidate source. Its first exact-image run (`347031194
 during image construction: the upstream image's non-root user could not create the repair-evidence
 directory under `/opt`. The candidate Dockerfile now uses root only to install the source repairs
 and evidence, then returns to the upstream `cognee` user before the existing extension setup.
-The runtime-user smoke assertion remains unchanged; deletion qualification still awaits CI.
+The next exact-image run (`34703714519`, job `103579931845`) builds successfully, passes the
+non-root runtime smoke check and reports no source-attestation mismatches. It then stops in the
+path-safety fixture because its old adapter double cannot call the repaired provider's private
+cleanup helper. The fixture now inherits the installed adapter's helper chain and replaces only
+database construction and the reference-count query. Its seven focused tests pass, including a
+regression for that inherited call. All provider containment assertions remain required;
+deletion qualification still awaits a successful successor CI run.
+
+The candidate harness now also requires same-name dataset identity across repeated and concurrent
+creation, recovery of an unread create response through the saved name and owner, and the same
+coordinates after the existing provider restart. All 53 local Cognee tests and lint pass. These
+checks cover successful creation and response loss, not interruption between the provider's dataset
+commit and separate access grants. That partial-grant recovery gap remains a required provider
+repair before product provisioning; a lost synchronous cognify response also remains unresolved
+without correlated completion evidence. The next personal-memory source wave starts separately
+with stable gateway DTOs and gateway-only provider authentication.
 
 ## MCP readiness CI repair — 2026-09-12
 

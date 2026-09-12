@@ -41,11 +41,6 @@ class _NoReferenceSession:
         return _ScalarResult()
 
 
-class _NoReferenceAdapter:
-    def get_async_session(self) -> _NoReferenceSession:
-        return _NoReferenceSession()
-
-
 class _InjectedCleanupFailure(RuntimeError):
     pass
 
@@ -82,6 +77,16 @@ async def _path_safety_probes() -> dict[str, Any]:
         SQLAlchemyAdapter,
     )
 
+    class _PathSafetyAdapter(SQLAlchemyAdapter):
+        """Keep installed cleanup methods while replacing database construction and queries."""
+
+        def __init__(self) -> None:
+            # These probes require no database engine; only the reference count is synthetic.
+            pass
+
+        def get_async_session(self) -> _NoReferenceSession:
+            return _NoReferenceSession()
+
     data_root = Path(os.environ["DATA_ROOT_DIRECTORY"]).resolve()
     probe_id = uuid.uuid4().hex
     managed_directory = data_root / "opencrane-deletion-probes" / probe_id
@@ -100,8 +105,8 @@ async def _path_safety_probes() -> dict[str, Any]:
     substring_decoy.parent.mkdir(parents=True)
     substring_decoy.write_bytes(marker)
 
-    adapter = _NoReferenceAdapter()
-    cleanup = SQLAlchemyAdapter.remove_data_file_if_unreferenced
+    adapter = _PathSafetyAdapter()
+    cleanup = adapter.remove_data_file_if_unreferenced
     managed_location = managed_file.as_uri()
     sibling_location = outside_file.as_uri()
     traversal_location = (
@@ -109,11 +114,11 @@ async def _path_safety_probes() -> dict[str, Any]:
     )
     symlink_location = (symlink_path / outside_file.name).as_uri()
     try:
-        await cleanup(adapter, managed_location)
+        await cleanup(managed_location)
         if managed_file.exists():
             raise AssertionError("Installed cleanup helper did not remove a managed file")
 
-        await cleanup(adapter, sibling_location)
+        await cleanup(sibling_location)
         if not outside_file.is_file() or outside_file.read_bytes() != marker:
             raise AssertionError("Data-root substring matching removed an external sibling file")
         if not substring_decoy.is_file() or substring_decoy.read_bytes() != marker:
@@ -127,7 +132,7 @@ async def _path_safety_probes() -> dict[str, Any]:
             ("remoteFileHost", "file://other-host/provider-owned.bin"),
             ("remoteScheme", "s3://provider-bucket/provider-owned.bin"),
         ):
-            await cleanup(adapter, location)
+            await cleanup(location)
             retained.append(name)
         if outside_file.read_bytes() != marker:
             raise AssertionError("A containment probe changed the external file")

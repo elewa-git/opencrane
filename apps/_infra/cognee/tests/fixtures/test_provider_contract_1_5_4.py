@@ -246,6 +246,11 @@ class CandidateDatasetIdentityTest(unittest.TestCase):
             with (
                 patch.object(provider_contract, "_arguments", return_value=arguments),
                 patch.object(provider_contract, "ProviderApi", _AuthenticatedApi),
+                patch.object(
+                    provider_contract,
+                    "verify_dataset_provisioning_after_restart",
+                    return_value={},
+                ),
                 patch.object(provider_contract, "recover_identity", _fail_recovery),
                 self.assertRaisesRegex(AssertionError, "distinct chunks"),
             ):

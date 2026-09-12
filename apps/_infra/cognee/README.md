@@ -155,6 +155,12 @@ storage or independent stores sharing files. The build and runtime evidence reta
 hashes and separately verify each patch, its base image and its resulting source. Interrupted cleanup, restart and concurrent
 add/delete checks must pass before this candidate can replace the production image.
 
+The authenticated candidate also checks dataset creation with a saved opaque name: repeated and
+concurrent requests must return the same dataset and owner, and a lost response must be recoverable
+by listing that name without sending another create. The existing provider restart then checks all
+saved coordinates again. This does not prove recovery after partial access grants; that separate
+provider defect must be repaired before personal dataset provisioning can be activated.
+
 ## See also
 
 - Parent index: [_infra](../README.md)

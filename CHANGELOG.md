@@ -35,7 +35,8 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 - **Operators can evaluate a proposed Cognee replacement independently of the deployed image.** The
   separate 1.5.4 qualification uses fresh disposable storage and retains evidence for image identity,
-  isolation, recovery and deletion. Explicit candidate repairs preserve the official source hashes
+  isolation, recovery and deletion. Dataset checks retain the saved name, owner and identifier across
+  concurrent creation, a lost creation response and provider restart. Explicit candidate repairs preserve the official source hashes
   and separately verify their patch artifacts, base image and running source. It cannot publish a
   candidate or replace the existing production provider gate. The candidate and personal memory
   journeys remain under qualification.
