@@ -1,19 +1,20 @@
-import { ConversationAssetDisposition, ConversationAssetLifecycle, ConversationAssetProvenance, ConversationAssetSelectionFailures, ConversationAssetTransferPhases, type ConversationAsset, type ConversationAssetSelectionFailure, type PendingConversationAssetUpload } from "@opencrane/state/conversation/assets";
+import { ConversationAssetContentCommandStates, ConversationAssetDisposition, ConversationAssetLifecycle, ConversationAssetProvenance, ConversationAssetSelectionFailures, ConversationAssetTransferPhases, type ConversationAsset, type ConversationAssetSelectionFailure, type PendingConversationAssetUpload } from "@opencrane/state/conversation/assets";
 
 import { ConversationAssetPresentationStates, type ConversationAssetPresentation, type ConversationAssetSelectionFeedback } from "./conversation-asset-presentation.types";
 
 /** Map one durable server asset to finite presentation without predicting a later state. */
-export function __ConversationAssetPresentation(asset: ConversationAsset): ConversationAssetPresentation
+export function __ConversationAssetPresentation(asset: ConversationAsset, contentState: ConversationAssetContentCommandStates): ConversationAssetPresentation
 {
 	const state = _DurableState(asset.state);
-	return { id: asset.id, messageId: asset.messageId, provenance: asset.provenance, displayName: asset.displayName, mediaType: asset.mediaType, byteLength: asset.byteLength, disposition: asset.disposition, state, detail: _StateDetail(state), canRetry: false, canRemove: asset.canRemove, uploadProgressPercent: null };
+	const currentContentState = state === ConversationAssetPresentationStates.Ready ? contentState : ConversationAssetContentCommandStates.Idle;
+	return { id: asset.id, messageId: asset.messageId, provenance: asset.provenance, displayName: asset.displayName, mediaType: asset.mediaType, byteLength: asset.byteLength, disposition: asset.disposition, state, detail: _StateDetail(state), canRetry: false, canRemove: asset.canRemove, uploadProgressPercent: null, contentState: currentContentState, contentDetail: _ContentDetail(currentContentState) };
 }
 
 /** Map one browser-local intent while omitting its retained File bytes. */
 export function __PendingConversationAssetPresentation(upload: PendingConversationAssetUpload): ConversationAssetPresentation
 {
 	const state = _PendingState(upload.phase);
-	return { id: upload.idempotencyKey, messageId: null, provenance: ConversationAssetProvenance.ParticipantUpload, displayName: upload.displayName, mediaType: upload.mediaType, byteLength: upload.byteLength, disposition: _Disposition(upload.mediaType), state, detail: _StateDetail(state), canRetry: state === ConversationAssetPresentationStates.Failed, canRemove: upload.canRemove, uploadProgressPercent: upload.uploadProgressPercent };
+	return { id: upload.idempotencyKey, messageId: null, provenance: ConversationAssetProvenance.ParticipantUpload, displayName: upload.displayName, mediaType: upload.mediaType, byteLength: upload.byteLength, disposition: _Disposition(upload.mediaType), state, detail: _StateDetail(state), canRetry: state === ConversationAssetPresentationStates.Failed, canRemove: upload.canRemove, uploadProgressPercent: upload.uploadProgressPercent, contentState: ConversationAssetContentCommandStates.Idle, contentDetail: null };
 }
 
 /** Map typed selection rejection to stable user-facing feedback without transport details. */
@@ -96,4 +97,10 @@ function _StateDetail(state: ConversationAssetPresentationStates): string
 		case ConversationAssetPresentationStates.Removed: return "Removed";
 		case ConversationAssetPresentationStates.Unavailable: return "File unavailable";
 	}
+}
+
+/** Safe command feedback that reveals no transport, storage, or authority detail. */
+function _ContentDetail(state: ConversationAssetContentCommandStates): string | null
+{
+	return state === ConversationAssetContentCommandStates.Failed ? "The file could not be opened." : null;
 }

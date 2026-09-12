@@ -10,6 +10,7 @@ import { CONVERSATION_CURRENT_SUBJECT, ConversationGroupChildStore, Conversation
 import { _GroupRequestSource, _GroupShareSource } from "./conversation-group.mapper";
 import { _PersonalRunActivity } from "./conversation-personal-run-activity.mapper";
 import { _ConversationRunActions } from "./conversation-run-actions.mapper";
+import { ConversationAssetContentCoordinator } from "./state/conversation-asset-content.coordinator";
 
 import { _ConversationEntryViews, _ConversationOnboardingContinuationPresentation, _ConversationOnboardingDialogueEntries, _ConversationOnboardingHistoryPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation } from "./conversation-workspace.mapper";
 import { _ComposerState, _ComputerStatus, _ConnectionStatus } from "./presentation/conversation-workspace-status.mapper";
@@ -28,6 +29,8 @@ export class ConversationWorkspacePresenter
 	private readonly _subject = inject(CONVERSATION_CURRENT_SUBJECT);
 	/** Existing asset state scoped to the selected conversation. */
 	public readonly assetsStore = inject(ConversationAssetsStore);
+	/** Coordinates authorized asset reads with runtime-owned file actions. */
+	private readonly _assetContent = inject(ConversationAssetContentCoordinator);
 	/** Component-scoped active-computer review state. */
 	public readonly reviewStore = inject(ConversationComputerReviewStore);
 	/** Reads recent personal work independently from the selected transcript. */
@@ -132,9 +135,10 @@ export class ConversationWorkspacePresenter
 	public async assetAction(intent: ConversationAssetActionIntent): Promise<void>
 	{
 		if (intent.kind === ConversationAssetActionKinds.Retry)
-			await this.assetsStore.retry(intent.assetId);
+			{ await this.assetsStore.retry(intent.assetId); return; }
 		if (intent.kind === ConversationAssetActionKinds.Remove)
-			{ this.assetsStore.removeLocal(intent.assetId); await this.assetsStore.remove(intent.assetId); }
+			{ this.assetsStore.removeLocal(intent.assetId); await this.assetsStore.remove(intent.assetId); return; }
+		await this._assetContent.open(intent);
 	}
 
 	/** Prevent a dismissed workspace dialog from reopening after authority is rechecked. */
@@ -242,7 +246,7 @@ export class ConversationWorkspacePresenter
 	/** Merge durable and browser-private asset transfers without retaining File bytes here. */
 	private _Assets(): readonly ConversationAssetPresentation[]
 	{
-		const durable = this.assetsStore.assets.hasValue() ? this.assetsStore.assets.value().map(__ConversationAssetPresentation) : [];
+		const durable = this.assetsStore.assets.hasValue() ? this.assetsStore.assets.value().map(asset => __ConversationAssetPresentation(asset, this._assetContent.state(asset.id))) : [];
 		return [...durable, ...this.assetsStore.pendingUploads().map(__PendingConversationAssetPresentation)];
 	}
 

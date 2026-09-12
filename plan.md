@@ -1,5 +1,39 @@
 # OpenCrane — Active Plan
 
+## Ready conversation file access — 2026-09-12
+
+The active F1 source slice starts directly above #867 at
+`d1d783e482276ef5c8924117b611fb554c69d14c` on
+`feat/0.12-conversation-asset-downloads`. It connects the existing Files panel's Open action to
+the authenticated Ready-asset content reader. The reusable asset card gains matching loading and
+error states in Storybook; the production transcript does not yet mount that card.
+The server's projected disposition remains authoritative: PDF, MP3 and PNG may preview; supported
+download-only files cannot become previews because their returned bytes claim another media type.
+
+Implementation uses a selected-conversation content store, a small file-action coordinator and the
+existing platform bridge. Pending reads have per-file loading and safe retry feedback. Switching
+conversations, losing access or destroying the workspace cancels pending browser reservations and
+discards late results. Preview reserves its blank tab during the user action, before awaiting bytes;
+the platform owns that tab, download anchors and bounded object-URL cleanup. Blob content is never
+retained in application state.
+
+Architecture and component preflight pass. The frozen source passes 106 focused tests across the
+platform, asset state, asset presentation and workspace packages; their lint/type checks; all 177
+Storybook behavior checks; three macOS visual checks; and the production UI build. The three new
+visual references have independent inspection. Style and Prisma boundaries pass with no errors or
+warnings; module growth has no errors and identifies the two focused state owners for review.
+Independent source review, architecture post-review and component post-review pass with no
+outstanding findings. Linux CI remains pending. This slice changes no backend route, upload contract,
+model request, credential path or runtime-question behavior. Scanned document input and generated
+file production remain separate F1 slices. Testv5 and live file access remain unqualified.
+
+Draft [#868](https://github.com/elewa-git/opencrane/pull/868) publishes this source at
+`37c7fdf9a15b502b960d74c9c55067e8f14a8dc7`. CI run `34679624105` passes affected build/test/lint,
+database authority, real Kurrent, stack and Storybook behavior checks. Its visual failure names
+only three missing Linux references. All three captures from artifact `10292992544` passed
+independent inspection and are copied unchanged into those new reference paths; existing images
+and comparison tolerances are unchanged. The follow-up commit still requires exact-head CI.
+
 ## Execution checkpoint — 2026-09-11
 
 Draft #858 is fully green at `3cb899d68c851bfb0073c42933fc77fba3fe0e17`:
@@ -211,8 +245,8 @@ remain separate gates.
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry, durable resume and visible decision controls are implemented in draft #857. Company approver/connection binding and real action qualification remain. |
 | 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: qualify the pinned provider's isolation, identity, restart and deletion contracts on disposable CI data before implementing personal dataset provisioning and explicit Remember. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass independent review and exact-head CI in draft #862; qualify the live journey. Other-participant controls remain a separate actor-policy decision. |
-| 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | Complete the existing server-issued interaction and presentation contracts. |
-| 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | Connect existing upload/scan, model input and artifact finalisation owners. |
+| 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | PAUSED: runtime-question source work awaits its separate explicit approval; partial implementation is not validated delivery. Structured results and A2UI remain. |
+| 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: wire Ready-file Open/Preview/Download through the existing authorized reader. Document-informed answers and generated file production follow as separate slices. |
 | 7 | D1 — autonomous delegation | A bounded child works with explicit context and narrower authority, then returns one durable result. | Follow [#845](https://github.com/elewa-git/opencrane/issues/845): root budgets, depth/fan-out, cancellation and result brokering. |
 | 8 | S1 — scheduled work | A reviewed routine fires under current authority with explicit overlap, retry and missed-run policy. | Follow [#848](https://github.com/elewa-git/opencrane/issues/848) through Absurd and existing admission. |
 | 9 | A2 — complete administration | Operators configure agents, connections, models, permissions and budgets, and inspect effective access and actual usage. | Complete protected settings over the owners established by the earlier tracks. |
@@ -525,7 +559,9 @@ their own completion track; they are not silently bundled into the first tool PR
 | T2 | IN PROGRESS: personal approval and durable resume pass local integration; company approval and real external-action qualification remain. |
 | U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
 | M1 | IN PROGRESS: #863 qualifies the exact provider image. Isolation and restart recovery pass in the authenticated candidate, but final-reference deletion leaves original source bytes; provider repair and product memory journeys remain. |
-| U2, F1, D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |
+| U2 | PAUSED: partial runtime-question source awaits its separate explicit approval. |
+| F1 | IN PROGRESS: existing Ready-file access is being connected to the conversation UI; document input and generated outputs remain. |
+| D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |
 | Q1 — operational acceptance | CONTINUOUS — source checks and CI do not replace fresh-install or real-account acceptance. |
 
 The 10 September priority order supersedes the earlier overnight sequencing and morning handoff.

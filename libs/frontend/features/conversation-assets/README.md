@@ -9,6 +9,10 @@ contains attachment chips and trays for the composer, transcript asset cards, an
 panel. Every component receives a browser-safe presentation and emits typed intent; none calls the
 server or predicts scan completion.
 
+Ready cards and file rows also render the component-scoped content command separately from the
+durable file state. One file can show an opening indicator or safe retry feedback without blocking
+independent files or exposing a transport error.
+
 Participant uploads use a plain paper edge. Finalized assistant output uses the teal folded-corner
 treatment and remains openable after the run or message ends. Scanning, ready, failed, inaccessible,
 expired, removed, and unavailable states remain visibly distinct without revealing storage or scan
@@ -20,6 +24,7 @@ details.
 - `ConversationAssetCardComponent`.
 - `ConversationFilesPanelComponent` and `ConversationFileRowComponent`.
 - Pure presentation mappers and typed retry/remove/open/preview/download/focus intents.
+- Required per-asset content-command presentation for idle, loading, and failed reads.
 
 The tray also presents empty-batch selection feedback and an indeterminate progressbar when the
 browser transport cannot report a reliable upload percentage.

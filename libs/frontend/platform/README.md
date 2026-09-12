@@ -5,8 +5,9 @@
 ## What it owns
 
 This is a frontend **platform** package: the seam that isolates runtime-specific browser and future
-desktop behavior. Capabilities include picking a native folder and opening and observing an
-authentication window. Rather than let feature code call runtime globals or branch on "am I on
+desktop behavior. Capabilities include picking a native folder, opening and observing an
+authentication window, and preparing a browser file preview or download before an asynchronous
+read. Rather than let feature code call runtime globals or branch on "am I on
 desktop?", this package defines a `PlatformBridge` interface and each app supplies its implementation.
 
 That indirection is the whole point: the web app binds the browser implementation, where
@@ -26,8 +27,13 @@ may appear. Keep them out of features, and the frontend stays portable across sh
 
 ## Public surface
 
-- `PlatformBridge` — the runtime-capability interface (`isDesktop`, `bindFolder(projectId)`, and
-  `openAuthenticationWindow(path, onClosed)`) plus its result types.
+- `PlatformBridge` — the runtime-capability interface (`isDesktop`, `bindFolder(projectId)`,
+  `openAuthenticationWindow(path, onClosed)`, and `prepareFileOpen(mode)`) plus its result types.
+- `PreparedFileOpenReservation` — a short-lived preview or download reservation. The web
+  implementation opens a blank preview target before an asynchronous read, creates object URLs only
+  from caller-supplied `Blob` bytes, and revokes each created URL exactly once. An unused reservation
+  expires after 30 seconds; a completed action retains its object URL for at most 60 seconds so the
+  browser can consume it, while explicit cancellation cleans it up sooner.
 - `PLATFORM_BRIDGE` — the injection token features depend on.
 - `provideWebPlatform()` — binds `WebPlatformBridge` (desktop-only methods reject as unsupported).
 
