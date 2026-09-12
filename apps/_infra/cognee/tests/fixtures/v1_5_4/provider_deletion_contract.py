@@ -208,6 +208,7 @@ async def _lock_and_generator_probes() -> dict[str, Any]:
     holder_runner = (
         "import asyncio\n"
         "from cognee.infrastructure.locks import managed_data_file_lock\n"
+        "print('ready', flush=True)\n"
         "async def hold():\n"
         "    async with managed_data_file_lock(1):\n"
         "        print('acquired', flush=True)\n"
@@ -224,6 +225,10 @@ async def _lock_and_generator_probes() -> dict[str, Any]:
     try:
         if holder.stdout is None:
             raise AssertionError("Synthetic lock holder did not expose its output pipe")
+        # Importing the installed provider can take longer than acquiring an uncontended lock.
+        ready_signal = await asyncio.wait_for(holder.stdout.readline(), timeout=30)
+        if ready_signal != b"ready\n":
+            raise AssertionError("Synthetic child did not finish provider startup")
         acquired_signal = await asyncio.wait_for(holder.stdout.readline(), timeout=2)
         if acquired_signal != b"acquired\n":
             raise AssertionError("Synthetic child did not acquire the managed-file lock")

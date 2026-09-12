@@ -54,6 +54,15 @@ repair before product provisioning; a lost synchronous cognify response also rem
 without correlated completion evidence. The next personal-memory source wave starts separately
 with stable gateway DTOs and gateway-only provider authentication.
 
+At `36e1717bbc0bd395c474b2e1534958630f34e020`, exact-image run `34705105949`, candidate job
+`103583745894`, passes dataset identity/replay/response-loss and restart checks, scoped search,
+document identity and add recovery, and first/last-reference deletion. It then times out waiting
+two seconds for a synthetic lock-holder process to import Cognee and signal acquisition. The fixture
+now waits up to 30 seconds for an explicit post-import readiness signal, then retains the separate
+two-second acquisition deadline and termination/reacquisition assertions. This changes the process
+test's startup allowance, not the provider lock or its deadline; full interrupted-deletion and
+concurrency qualification still require a successful successor run.
+
 ## MCP readiness CI repair — 2026-09-12
 
 The first exact-head run for draft #871 found missing readiness data in existing conversation test
