@@ -60,6 +60,7 @@ _cleanup()
       --positive "$output_dir/positive-recovery.json" \
       --stub-log "$output_dir/stub-requests.jsonl" \
       --drop-log "$output_dir/commit-then-drop.jsonl" \
+      --expected-drop-path /api/v1/add \
       --output "$output_dir/evidence.json" \
       --failure-status "$status" \
       --failed-case "$current_case" \
@@ -217,6 +218,7 @@ python3 "$fixture_dir/evidence_summary.py" \
   --positive "$output_dir/positive-recovery.json" \
   --stub-log "$output_dir/stub-requests.jsonl" \
   --drop-log "$output_dir/commit-then-drop.jsonl" \
+  --expected-drop-path /api/v1/add \
   --output "$output_dir/evidence.json" \
   | tee "$output_dir/evidence-summary.log"
 

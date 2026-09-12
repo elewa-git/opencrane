@@ -1,22 +1,64 @@
 --- a/cognee/api/v1/datasets/routers/get_datasets_router.py
 +++ b/cognee/api/v1/datasets/routers/get_datasets_router.py
-@@ -17,7 +17,6 @@
- from cognee.api.v1.datasets.dto import DataDTO
- from cognee.infrastructure.databases.relational import get_relational_engine
- from cognee.modules.data.methods import get_authorized_existing_datasets
+@@ -17 +17 @@
+-from cognee.api.v1.datasets.dto import DataDTO
++from cognee.api.v1.datasets.dto import CognifyInputEvidenceDTO, DataDTO
+@@ -20 +19,0 @@
 -from cognee.modules.data.methods import get_datasets_by_name
- from cognee.modules.data.methods import get_datasets_graph_counts
- from cognee.modules.data.methods.create_authorized_dataset import create_authorized_dataset
- from cognee.shared.logging_utils import get_logger
-@@ -209,11 +208,6 @@
-         )
- 
-         try:
+@@ -212,5 +210,0 @@
 -            datasets = await get_datasets_by_name([dataset_data.name], user.id)
 -
 -            if datasets:
 -                return datasets[0]
 -
-             dataset = await create_authorized_dataset(dataset_data.name, user)
- 
-             return dataset
+@@ -364 +358 @@
+-        response_model=list[DataDTO],
++        response_model=Union[list[DataDTO], CognifyInputEvidenceDTO],
+@@ -373,0 +367,4 @@
++        include_cognify_evidence: bool = Query(
++            default=False,
++            description="Return one locked, opaque Cognify input snapshot.",
++        ),
+@@ -414,2 +412,2 @@
+-        # Verify user has permission to read dataset
+-        dataset = await get_authorized_existing_datasets([dataset_id], "read", user)
++        permission = "write" if include_cognify_evidence else "read"
++        dataset = await get_authorized_existing_datasets([dataset_id], permission, user)
+@@ -425 +423,36 @@
+-        dataset_id = dataset[0].id
++        dataset = dataset[0]
++        dataset_id = dataset.id
++
++        if include_cognify_evidence:
++            from cognee.infrastructure.locks import get_dataset_lock
++            from cognee.modules.pipelines.operations.cognify_input_evidence import (
++                build_cognify_input_evidence,
++            )
++
++            async with await get_dataset_lock(dataset_id):
++                authorized = await get_authorized_existing_datasets(
++                    [dataset_id], "write", user
++                )
++                if len(authorized) != 1:
++                    return JSONResponse(
++                        status_code=404,
++                        content=ErrorResponseDTO(message="Dataset is unavailable.").model_dump(),
++                    )
++                dataset_data = await get_dataset_data(dataset_id=dataset_id)
++                evidence_digest, evidence_rows = await build_cognify_input_evidence(
++                    authorized[0], user, dataset_data
++                )
++                evidence_by_id = {row["document_id"]: row for row in evidence_rows}
++                return {
++                    "dataset_id": dataset_id,
++                    "input_evidence_digest": evidence_digest,
++                    "data": [
++                        {
++                            **jsonable_encoder(data),
++                            "dataset_id": dataset_id,
++                            "content_digest": evidence_by_id[str(data.id)]["content_digest"],
++                            "byte_length": evidence_by_id[str(data.id)]["byte_length"],
++                        }
++                        for data in dataset_data
++                    ],
++                }

@@ -16,6 +16,7 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--positive", required=True)
     parser.add_argument("--stub-log", required=True)
     parser.add_argument("--drop-log", required=True)
+    parser.add_argument("--expected-drop-path", action="append", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--failure-status", type=int)
     parser.add_argument("--failed-case")
@@ -49,6 +50,28 @@ def _optional_json(path: str):
         return _read_json(path)
     except json.JSONDecodeError:
         return {"outcome": "invalid-json"}
+
+
+def _validate_commit_then_drop(records: list[dict], expected_paths: list[str]) -> None:
+    if not expected_paths or len(set(expected_paths)) != len(expected_paths):
+        raise AssertionError("Commit-then-drop expectation must name unique recovery boundaries")
+    if len(records) != len(expected_paths):
+        raise AssertionError("Commit-then-drop proxy did not record both recovery boundaries")
+    actual_paths = []
+    for record in records:
+        if set(record) != {"method", "path", "upstreamStatus", "responseDropped"}:
+            raise AssertionError("Commit-then-drop evidence contains an unsafe or incomplete field set")
+        if (
+            record["method"] != "POST"
+            or record["responseDropped"] is not True
+            or not isinstance(record["upstreamStatus"], int)
+            or not 200 <= record["upstreamStatus"] < 300
+            or not isinstance(record["path"], str)
+        ):
+            raise AssertionError("Commit-then-drop evidence did not prove a completed dropped response")
+        actual_paths.append(record["path"])
+    if sorted(actual_paths) != sorted(expected_paths):
+        raise AssertionError("Commit-then-drop evidence did not identify every expected recovery boundary")
 
 
 def main() -> None:
@@ -92,8 +115,7 @@ def main() -> None:
         "stubRequests": _read_json_lines(args.stub_log),
         "commitThenDrop": _read_json_lines(args.drop_log),
     }
-    if len(receipt["commitThenDrop"]) != 1:
-        raise AssertionError("Commit-then-drop proxy did not record exactly one committed add")
+    _validate_commit_then_drop(receipt["commitThenDrop"], args.expected_drop_path)
     Path(args.output).write_text(
         json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )

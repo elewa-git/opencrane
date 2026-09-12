@@ -50,6 +50,18 @@ def _load_managed_lock() -> types.ModuleType:
 
 
 class CandidatePatch154Test(unittest.TestCase):
+    def test_candidate_runner_keeps_connection_test_and_tokenizer_offline(self) -> None:
+        runner = (
+            REPOSITORY_ROOT / "apps/_infra/cognee/tests/memory-contract-1.5.4.sh"
+        ).read_text(encoding="utf-8")
+        start = runner.index("_start_cognee()")
+        end = runner.index('current_case="acl_disabled_negative_control"', start)
+        start_cognee = runner[start:end]
+
+        self.assertIn("--env HF_HUB_OFFLINE=1", start_cognee)
+        self.assertIn("--env TRANSFORMERS_OFFLINE=1", start_cognee)
+        self.assertNotIn("COGNEE_SKIP_CONNECTION_TEST", start_cognee)
+
     def test_patch_applier_rejects_context_drift(self) -> None:
         patch = "--- a/example.py\n+++ b/example.py\n@@ -1 +1 @@\n-old\n+new\n"
         self.assertEqual(APPLIER._apply_unified_patch("old\n", patch), "new\n")

@@ -1,0 +1,14 @@
+--- a/cognee/modules/pipelines/operations/log_pipeline_run_complete.py
++++ b/cognee/modules/pipelines/operations/log_pipeline_run_complete.py
+@@ -24,0 +24 @@
++    run_evidence: Optional[dict[str, str]] = None,
+@@ -26,0 +27,4 @@
++
++    run_info = {"data": data_info}
++    if run_evidence is not None:
++        run_info["opencrane_cognify"] = dict(run_evidence)
+@@ -33,3 +38 @@
+-        run_info={
+-            "data": data_info,
+-        },
++        run_info=run_info,

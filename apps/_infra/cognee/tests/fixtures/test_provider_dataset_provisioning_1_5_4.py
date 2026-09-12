@@ -121,6 +121,11 @@ class ProviderDatasetProvisioning154Test(unittest.TestCase):
                     "prepare_identity",
                     side_effect=lambda _api, evidence, _proxy: evidence,
                 ),
+                patch.object(
+                    provider_contract,
+                    "prepare_cognify_recovery",
+                    return_value={"operationId": str(uuid.uuid4())},
+                ),
             ):
                 provider_contract.main()
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Forward one add request, consume its successful response, and drop the caller connection."""
+"""Forward one admitted provider mutation, then drop its successful response."""
 
 import http.client
 import json
@@ -28,7 +28,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def do_POST(self) -> None:
-        if self.path != "/api/v1/add":
+        if self.path not in ("/api/v1/add", "/api/v1/cognify"):
             self.send_error(404)
             return
         length = int(self.headers.get("content-length", "0"))
@@ -36,7 +36,7 @@ class _Handler(BaseHTTPRequestHandler):
         connection = http.client.HTTPConnection(
             os.environ.get("UPSTREAM_HOST", "cognee"),
             int(os.environ.get("UPSTREAM_PORT", "8000")),
-            timeout=300,
+            timeout=600 if self.path == "/api/v1/cognify" else 300,
         )
         forwarded_headers = {
             "accept": "application/json",

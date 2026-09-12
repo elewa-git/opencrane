@@ -267,6 +267,11 @@ class CandidateDatasetIdentityTest(unittest.TestCase):
                     "verify_dataset_acl_recovery_after_restart",
                     _verify_acl,
                 ),
+                patch.object(
+                    provider_contract,
+                    "verify_cognify_recovery_after_restart",
+                    return_value={},
+                ),
                 patch.object(provider_contract, "recover_identity", _fail_recovery),
                 self.assertRaisesRegex(AssertionError, "distinct chunks"),
             ):

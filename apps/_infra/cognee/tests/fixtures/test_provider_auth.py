@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from commit_then_drop_proxy import _Handler as DropProxyHandler
+from evidence_summary import _validate_commit_then_drop
 from provider_api import ProviderApi
 
 
@@ -138,6 +139,25 @@ class ProviderAuthenticationTest(unittest.TestCase):
             )
             self.assertNotIn("test-bearer", metadata.read_text(encoding="utf-8"))
         self.assertEqual(_ProviderHandler.requests[-1][2], "Bearer test-bearer")
+
+    def test_evidence_summary_requires_the_runner_owned_recovery_boundaries(self) -> None:
+        records = [
+            {"method": "POST", "path": "/api/v1/add", "upstreamStatus": 200, "responseDropped": True},
+            {"method": "POST", "path": "/api/v1/cognify", "upstreamStatus": 200, "responseDropped": True},
+        ]
+        _validate_commit_then_drop(records[:1], ["/api/v1/add"])
+        _validate_commit_then_drop(records, ["/api/v1/add", "/api/v1/cognify"])
+        invalid = [
+            (records, ["/api/v1/add"]),
+            (records[:1], ["/api/v1/add", "/api/v1/cognify"]),
+            ([records[0], records[0]], ["/api/v1/add", "/api/v1/cognify"]),
+            ([records[0], {**records[1], "responseDropped": False}], ["/api/v1/add", "/api/v1/cognify"]),
+            ([records[0], {**records[1], "authorization": "secret"}], ["/api/v1/add", "/api/v1/cognify"]),
+        ]
+        for value, expected in invalid:
+            with self.subTest(value=value, expected=expected):
+                with self.assertRaises(AssertionError):
+                    _validate_commit_then_drop(value, expected)
 
 
 if __name__ == "__main__":

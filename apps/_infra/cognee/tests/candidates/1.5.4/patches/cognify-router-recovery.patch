@@ -1,0 +1,30 @@
+--- a/cognee/api/v1/cognify/routers/get_cognify_router.py
++++ b/cognee/api/v1/cognify/routers/get_cognify_router.py
+@@ -39,0 +39,4 @@
++from cognee.modules.pipelines.operations.cognify_run_recovery import (
++    CognifyOperationConflictError,
++    CognifyRecoveryRequiredError,
++)
+@@ -118,0 +122,8 @@
++    )
++    operation_id: Optional[UUID] = Field(
++        default=None,
++        description="Caller-saved UUID used only for exact blocking-run recovery.",
++    )
++    expected_input_evidence_digest: Optional[str] = Field(
++        default=None,
++        description="Opaque dataset evidence saved before the first recovered call.",
+@@ -255,0 +267,2 @@
++                operation_id=payload.operation_id,
++                expected_input_evidence_digest=payload.expected_input_evidence_digest,
+@@ -286,0 +300,10 @@
++            )
++        except CognifyRecoveryRequiredError:
++            return JSONResponse(
++                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
++                content=ErrorResponse(error="Cognify recovery required").model_dump(),
++            )
++        except CognifyOperationConflictError:
++            return JSONResponse(
++                status_code=status.HTTP_409_CONFLICT,
++                content=ErrorResponse(error="Cognify operation conflicts").model_dump(),

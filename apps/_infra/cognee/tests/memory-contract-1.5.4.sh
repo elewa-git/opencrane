@@ -83,6 +83,8 @@ _write_failure_receipt()
     --positive "$positive_receipt" \
     --stub-log "$output_dir/stub-requests.jsonl" \
     --drop-log "$output_dir/commit-then-drop.jsonl" \
+    --expected-drop-path /api/v1/add \
+    --expected-drop-path /api/v1/cognify \
     --output "$output_dir/evidence.json" \
     --failure-status "$status" \
     --failed-case "$current_case" \
@@ -224,6 +226,8 @@ _start_cognee()
     --env "ENABLE_BACKEND_ACCESS_CONTROL=$access_control" \
     --env "REQUIRE_AUTHENTICATION=$require_authentication" \
     --env AUTO_FEEDBACK=false \
+    --env HF_HUB_OFFLINE=1 \
+    --env TRANSFORMERS_OFFLINE=1 \
     --env DATA_ROOT_DIRECTORY=/cognee-storage/data \
     --env SYSTEM_ROOT_DIRECTORY=/cognee-storage/system \
     --env LLM_PROVIDER=openai \
@@ -307,6 +311,8 @@ python3 "$fixture_dir/evidence_summary.py" \
   --positive "$output_dir/positive-deletion-restart.json" \
   --stub-log "$output_dir/stub-requests.jsonl" \
   --drop-log "$output_dir/commit-then-drop.jsonl" \
+  --expected-drop-path /api/v1/add \
+  --expected-drop-path /api/v1/cognify \
   --output "$output_dir/evidence.json" \
   | tee "$output_dir/evidence-summary.log"
 

@@ -1,5 +1,37 @@
 # OpenCrane — Active Plan
 
+## Recover interrupted memory indexing — source implementation
+
+This slice starts directly above #874 at `b7acc1f94e24a41d0c151da252592c36dc613582`.
+It extends the disposable Cognee candidate's existing dataset-data and Cognify boundaries so an
+indexing operation is identified before dispatch. A bounded document-list receipt binds the exact
+raw content and processing metadata. Under the existing dataset lock, first admission compares
+that snapshot before saving Started; recovery reads the complete ordered history for the exact
+operation. Completed work replays its original receipt. Started, missing or contradictory history
+remains recovery-required and cannot start another indexing run.
+
+The repair adds no queue, workflow engine, persistence model or provider activation. It preserves
+the candidate's one-worker, one-replica and local-store restriction. Absurd and the OpenCrane
+operation owner will save the command; the gateway remains the provider and credential boundary.
+Gateway protocol/client integration and the complete Remember, Recall, Correct and Forget journey
+remain separate source work.
+
+All 68 local Cognee tests, including the 43 focused candidate tests, and Cognee lint pass. The patch
+applier reproduces the declared postimages from the pinned upstream source. Architecture post-review
+and independent correctness review pass. Production and candidate qualification each require
+their own exact dropped-response evidence; neither accepts the other profile.
+Installed-image tests count actual model and embedding requests across lost-response, concurrent and
+restarted replay, and reject a changed snapshot before first dispatch.
+
+The first exact-image run on draft #875 (`331f80a2500d8d5e1eac113e5bc33d4ced42a2de`)
+passed affected build/test/lint, database authority, KurrentDB and review topology. Both provider jobs
+failed. The candidate stopped on its first Add before any indexing-recovery request: external
+tokenizer discovery exhausted the connection-test deadline before reaching the synthetic provider.
+The reviewed harness repair disables that external discovery while retaining the actual synthetic
+model and embedding connection tests. All eight focused harness tests and Cognee lint pass.
+Exact-image indexing recovery remains unqualified until the repaired commit passes CI; source
+checks do not promote the candidate image or establish testv5 readiness.
+
 ## Recover interrupted memory dataset permissions — implementation and validation
 
 The deletion-repair candidate now passes its complete exact-image qualification in #872 at
@@ -30,7 +62,11 @@ preimage hashes as declarations of new modules. The correction adds their verifi
 1.5.4 hashes to that map. A regression loads the actual candidate declaration and image profile;
 it reproduces the failure before the correction. All 16 source-evidence tests and Cognee lint pass
 after the correction. The verifier and provider patches are unchanged.
-Candidate runtime qualification remains pending on the corrected commit.
+The manifest correction is pushed at `b7acc1f94e24a41d0c151da252592c36dc613582`.
+Successor run `34719384285`, candidate job `103622387219`, passes the complete exact-image
+qualification, including interrupted permission recovery, deletion recovery, isolation and restart.
+The separate production-provider job `103622387188` still fails; the candidate result does not
+promote the production image or qualify the product memory journey.
 
 Gateway HTTP handlers, provider operations and the server client are being prepared in parallel.
 Automatic approval review rejected deletion of the old client and tests, citing integration risk.
