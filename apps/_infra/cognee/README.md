@@ -158,8 +158,16 @@ add/delete checks must pass before this candidate can replace the production ima
 The authenticated candidate also checks dataset creation with a saved opaque name: repeated and
 concurrent requests must return the same dataset and owner, and a lost response must be recoverable
 by listing that name without sending another create. The existing provider restart then checks all
-saved coordinates again. This does not prove recovery after partial access grants; that separate
-provider defect must be repaired before personal dataset provisioning can be activated.
+saved coordinates again.
+
+The candidate dataset route always passes an authenticated create or same-name retry through the
+authorised-dataset owner. That owner holds Cognee's existing per-dataset lock while it ensures the
+owner's `read`, `write`, `delete` and `share` grants. A restart retry can therefore complete grants
+that stopped after the dataset row or any one grant. This lock is process-local: the qualification
+is limited to the candidate's one-worker, one-replica SQLite profile and does not establish safety
+for a multi-worker or shared provider. The exact candidate image must still pass the five fault
+boundaries, foreign-owner isolation, concurrent uniqueness and public list/add/search/delete proof
+before personal dataset provisioning can be activated.
 
 ## See also
 

@@ -10,7 +10,7 @@ import uuid
 from collections import Counter
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from v1_5_4 import provider_contract
 from v1_5_4 import provider_dataset_provisioning_contract as contract
@@ -76,6 +76,7 @@ class ProviderDatasetProvisioning154Test(unittest.TestCase):
                 "ownerId": OWNER_ID,
             }
         }
+        acl_evidence = {"faults": [], "concurrent": dataset_evidence["stable"]}
 
         class _AuthenticatedApi:
             def __init__(self, _base_url: str) -> None:
@@ -107,6 +108,11 @@ class ProviderDatasetProvisioning154Test(unittest.TestCase):
                 ),
                 patch.object(
                     provider_contract,
+                    "prepare_dataset_acl_recovery",
+                    AsyncMock(return_value=acl_evidence),
+                ),
+                patch.object(
+                    provider_contract,
                     "prepare_isolation",
                     return_value={"authorizedDatasetId": str(uuid.uuid4())},
                 ),
@@ -121,6 +127,7 @@ class ProviderDatasetProvisioning154Test(unittest.TestCase):
             state = json.loads(state_path.read_text(encoding="utf-8"))
             output = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(state["datasetProvisioning"], dataset_evidence)
+            self.assertEqual(state["datasetAclRecovery"], acl_evidence)
             self.assertEqual(output, state)
 
     def test_qualification_uses_one_saved_name_for_each_effect(self) -> None:

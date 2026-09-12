@@ -1,0 +1,52 @@
+--- a/cognee/modules/data/methods/create_authorized_dataset.py
++++ b/cognee/modules/data/methods/create_authorized_dataset.py
+@@ -1,5 +1,6 @@
+ import logging
+ 
++from cognee.infrastructure.locks import dataset_lock
+ from cognee.infrastructure.databases.relational import get_relational_engine
+ from cognee.infrastructure.databases.exceptions import EntityNotFoundError
+ from cognee.modules.users.models import User
+@@ -32,24 +33,25 @@
+     async with db_engine.get_async_session() as session:
+         new_dataset = await create_dataset(dataset_name, user, session)
+ 
+-    for permission in _DATASET_PERMISSIONS:
+-        await give_permission_on_dataset(user, new_dataset.id, permission)
+-
+-    parent_user_id = getattr(user, "parent_user_id", None)
+-    if parent_user_id is not None and parent_user_id != user.id:
+-        try:
+-            parent = await get_user(parent_user_id)
+-        except EntityNotFoundError:
+-            logger.warning(
+-                "parent_user_id %s on user %s does not resolve to a user; "
+-                "skipping auto-share of dataset %s",
+-                parent_user_id,
+-                user.id,
+-                new_dataset.id,
+-            )
+-        else:
+-            for permission in _DATASET_PERMISSIONS:
+-                await give_permission_on_dataset(parent, new_dataset.id, permission)
++    async with dataset_lock(new_dataset.id):
++        for permission in _DATASET_PERMISSIONS:
++            await give_permission_on_dataset(user, new_dataset.id, permission)
++
++        parent_user_id = getattr(user, "parent_user_id", None)
++        if parent_user_id is not None and parent_user_id != user.id:
++            try:
++                parent = await get_user(parent_user_id)
++            except EntityNotFoundError:
++                logger.warning(
++                    "parent_user_id %s on user %s does not resolve to a user; "
++                    "skipping auto-share of dataset %s",
++                    parent_user_id,
++                    user.id,
++                    new_dataset.id,
++                )
++            else:
++                for permission in _DATASET_PERMISSIONS:
++                    await give_permission_on_dataset(parent, new_dataset.id, permission)
+ 
+     return new_dataset

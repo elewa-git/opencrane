@@ -30,6 +30,18 @@
         "postimageSha256": "df8872f1f864b50640f7a083e62c33d29a1c704a8f9df9918702d0b712dedc7b",
         "patchPath": "/opt/opencrane/cognee-repair/run-tasks-data-item.patch",
         "receiptPath": "/opt/opencrane/cognee-repair/run-tasks-data-item.json"
+      },
+      "cognee.api.v1.datasets.routers.get_datasets_router": {
+        "patchSha256": "ab4abb197a4e7fa3c7d04288ca56f16dab7c4d8a42d51a0ab89c929db63ddad7",
+        "postimageSha256": "0f6226908897c14c97c17a449f715e461201e801a8bab5832b7fd0f8766a551e",
+        "patchPath": "/opt/opencrane/cognee-repair/dataset-route-acl-recovery.patch",
+        "receiptPath": "/opt/opencrane/cognee-repair/dataset-route-acl-recovery.json"
+      },
+      "cognee.modules.data.methods.create_authorized_dataset": {
+        "patchSha256": "0831738dec01b161c78f5198b1c9bc6307efa56eeb3fd82f8941be2d4de48690",
+        "postimageSha256": "a3e261dbf13831b044cbf190fb9ac204150c88afc771b761a259c2430fbdb26b",
+        "patchPath": "/opt/opencrane/cognee-repair/create-authorized-dataset-acl-recovery.patch",
+        "receiptPath": "/opt/opencrane/cognee-repair/create-authorized-dataset-acl-recovery.json"
       }
     }
   },

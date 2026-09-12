@@ -59,6 +59,24 @@ RUN package_root="$(python -c 'import cognee, pathlib; print(pathlib.Path(cognee
     --preimage-sha256 bf994bdf10d4d132ea75db57bd64ea64ced0615cf0177f1e5562f5d71b199ae7 \
     --patch-sha256 7eb15e93fa0986d225ce0a3c89001f1c1b671db72c4254a690141edd4c4be312 \
     --postimage-sha256 df8872f1f864b50640f7a083e62c33d29a1c704a8f9df9918702d0b712dedc7b && \
+  python /tmp/apply-cognee-source-patch.py \
+    --source "$package_root/api/v1/datasets/routers/get_datasets_router.py" \
+    --patch /opt/opencrane/cognee-repair/dataset-route-acl-recovery.patch \
+    --receipt /opt/opencrane/cognee-repair/dataset-route-acl-recovery.json \
+    --module cognee.api.v1.datasets.routers.get_datasets_router \
+    --base-image-digest sha256:a52b0c2669e28932b53d677a6adf6d6487b03886732a5db07b58f3b869647b10 \
+    --preimage-sha256 87b3ff9da756bbf730237197cdedcd26278f27e0c17f19ae887b77c9c0ccc241 \
+    --patch-sha256 ab4abb197a4e7fa3c7d04288ca56f16dab7c4d8a42d51a0ab89c929db63ddad7 \
+    --postimage-sha256 0f6226908897c14c97c17a449f715e461201e801a8bab5832b7fd0f8766a551e && \
+  python /tmp/apply-cognee-source-patch.py \
+    --source "$package_root/modules/data/methods/create_authorized_dataset.py" \
+    --patch /opt/opencrane/cognee-repair/create-authorized-dataset-acl-recovery.patch \
+    --receipt /opt/opencrane/cognee-repair/create-authorized-dataset-acl-recovery.json \
+    --module cognee.modules.data.methods.create_authorized_dataset \
+    --base-image-digest sha256:a52b0c2669e28932b53d677a6adf6d6487b03886732a5db07b58f3b869647b10 \
+    --preimage-sha256 cbdf60978470b0cba30fdb53aae00f4b4657390ae37294bcc9d31460150a91c9 \
+    --patch-sha256 0831738dec01b161c78f5198b1c9bc6307efa56eeb3fd82f8941be2d4de48690 \
+    --postimage-sha256 a3e261dbf13831b044cbf190fb9ac204150c88afc771b761a259c2430fbdb26b && \
   rm /tmp/apply-cognee-source-patch.py
 
 USER cognee
