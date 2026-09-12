@@ -21,6 +21,10 @@ warnings explain unavailable Agent setup without inventing provisioning state in
 An ordinary selected conversation may compose one feature-local context panel from the existing Activity and
 Files components. The page owns whether that panel is open and restores keyboard focus to the header trigger
 when it closes. Direct and group conversations can expose Files but never adopt stale Agent-run Activity.
+Ready file intents pass through a feature-local coordinator: it reserves the platform-owned Preview
+or Download action during the click, then asks the component-scoped asset state for authorized bytes.
+Selection or access loss cancels the prepared action, and the state owner drops late bytes. The
+feature never creates object URLs or upgrades the server's safe media disposition.
 
 Personal chats show **Recent activity** with readable work statuses and a **Refresh activity**
 control. The presenter maps the personal-run store without exposing execution identifiers. **Open
@@ -113,6 +117,10 @@ connection bar emits a reconnect intent; the workspace store owns the replacemen
 the draft and accepted live projection. It never treats a display role as identity and never renders
 secrets. A2UI returned by an Agent remains unavailable in this phase because its actions have no
 server-owned capability or audit path.
+
+The platform bridge is the sole owner of browser popup, anchor, and object-URL effects. The file
+coordinator prepares that capability before awaiting the existing participant-authorized read and
+reports blocked or expired actions through the current asset's local command state.
 
 Agent sessions with an active computer compose a bounded review pane for files, diffs, allowlisted
 commands, private browser pages and screenshots, and allowlisted localhost previews.

@@ -4,8 +4,8 @@ import { expect, userEvent, waitFor, within } from "storybook/test";
 
 import { CONVERSATION_ELICITATION_VERSION, ConversationEntryKinds, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ApprovalLogEntry, type ConversationElicitation, type MessageEntry, type ToolCallLogEntry } from "@opencrane/contracts";
 import { ConversationModes, ConversationLifecycles } from "@opencrane/models/conversations";
-import { PLATFORM_BRIDGE } from "@opencrane/platform";
-import { CONVERSATION_ASSETS_GATEWAY } from "@opencrane/state/conversation/assets";
+import { PLATFORM_BRIDGE, PreparedFileOpenCompletionOutcomes, type PlatformBridge } from "@opencrane/platform";
+import { CONVERSATION_ASSETS_GATEWAY, ConversationAssetDisposition, ConversationAssetLifecycle, ConversationAssetProvenance, type ConversationAssetsGateway } from "@opencrane/state/conversation/assets";
 import { ELICITATION_GATEWAY, type ConversationElicitationGateway } from "@opencrane/state/conversation/elicitation";
 import { __CreateConversationHistoryProjection, ConversationEventStreamStatuses, type ConversationEventStream, type ConversationHistoryProjection, type StreamConversationEventsCommand } from "@opencrane/state/conversation/stream";
 import { CONVERSATION_CURRENT_SUBJECT, CONVERSATION_PERSONAL_RUNS_GATEWAY, CONVERSATION_GROUP_CHILD_GATEWAY, CONVERSATION_COMPUTER_REVIEW_GATEWAY, CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationPersonalRunsGateway, type ConversationCreationDirectory, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
@@ -96,13 +96,30 @@ function _Stream(history: ConversationHistoryProjection): ConversationEventStrea
 }
 
 /** Test-only ports that keep unrelated file and computer controls inert. */
-const _ASSETS = { list: async function _List() { return []; }, read: async function _Read() { throw new Error("No asset selected."); }, reserve: async function _Reserve() { throw new Error("Story command unavailable."); }, upload: async function _Upload() { throw new Error("Story command unavailable."); }, remove: async function _Remove() { throw new Error("Story command unavailable."); } };
+const _ASSETS: ConversationAssetsGateway = { list: async function _List() { return []; }, read: async function _Read() { throw new Error("No asset selected."); }, reserve: async function _Reserve() { throw new Error("Story command unavailable."); }, upload: async function _Upload() { throw new Error("Story command unavailable."); }, remove: async function _Remove() { throw new Error("Story command unavailable."); } };
 /** Rejects computer review because the visual contract has no active computer. */
 const _REVIEW = { readComputerFile: async function _ReadFile() { throw new Error("Story command unavailable."); }, readComputerDiff: async function _ReadDiff() { throw new Error("Story command unavailable."); }, runComputerCommand: async function _Run() { throw new Error("Story command unavailable."); }, listComputerBrowserTargets: async function _Targets() { return []; }, openComputerBrowserPage: async function _OpenPage() { return; }, captureComputerScreenshot: async function _Screenshot() { throw new Error("Story command unavailable."); }, readComputerPreview: async function _Preview() { throw new Error("Story command unavailable."); } };
 /** Accepts route changes without giving the isolated story a browser URL. */
 const _ROUTER = { navigate: async function _Navigate() { return true; } };
 /** Keeps desktop and sign-in capabilities unavailable in the browser story. */
-const _PLATFORM = { isDesktop: false, bindFolder: async function _BindFolder() { throw new Error("Story command unavailable."); }, openAuthenticationWindow: function _OpenAuthenticationWindow() { return null; } };
+const _PLATFORM: PlatformBridge = { isDesktop: false, bindFolder: async function _BindFolder() { throw new Error("Story command unavailable."); }, openAuthenticationWindow: function _OpenAuthenticationWindow() { return null; }, prepareFileOpen: function _PrepareFileOpen() { return null; } };
+/** Observable calls proving the routed file action prepares before its byte read. */
+const _FILE_OPEN_CALLS: string[] = [];
+/** One Ready server projection whose exact five bytes can complete the routed file action. */
+const _READY_ASSETS: ConversationAssetsGateway = {
+	..._ASSETS,
+	list: async function _List() { return [{ id: "asset-ready", conversationId: _DETAIL.id, messageId: _ENTRY.id, provenance: ConversationAssetProvenance.ParticipantUpload, state: ConversationAssetLifecycle.Ready, displayName: "project-brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: false, createdAt: "2026-09-05T19:30:00.000Z" }]; },
+	read: async function _Read() { _FILE_OPEN_CALLS.push("read"); return new Blob(["brief"], { type: "application/pdf" }); }
+};
+/** Runtime fake that records prepared-file completion without opening a real browser target. */
+const _FILE_PLATFORM: PlatformBridge = {
+	..._PLATFORM,
+	prepareFileOpen: function _PrepareFileOpen()
+	{
+		_FILE_OPEN_CALLS.push("prepare");
+		return { complete: function _Complete() { _FILE_OPEN_CALLS.push("complete"); return PreparedFileOpenCompletionOutcomes.Completed; }, cancel: function _Cancel() { _FILE_OPEN_CALLS.push("cancel"); } };
+	}
+};
 /** Supplies a completed personal status that links to the rendered history fixture. */
 const _PERSONAL_RUNS: ConversationPersonalRunsGateway = { listPersonalRuns: async function _List() { return [{ runId: "run-1", conversationId: _DETAIL.id, state: "completed", attempt: 1, agentRevisionId: "revision-1", acceptedAt: "2026-09-05T19:29:50.000Z", latestTool: null, finishedAt: _ENTRY.occurredAt }]; }, requestStop: async function _Stop() { return; } };
 /** Keeps one personal run active after its accepted Stop message until authority catches up. */
@@ -117,9 +134,9 @@ const _ELICITATIONS = { listOpen: async function _List() { return [_ELICITATION]
 const _NO_ELICITATIONS = { listOpen: async function _List() { return []; }, read: async function _Read() { throw new Error("No elicitation selected."); }, respond: async function _Respond() { throw new Error("Story command unavailable."); }, listActivity: async function _Activity() { return []; } };
 
 /** Supplies explicit test-only ports around the real routed workspace shell. */
-function _Providers(history: ConversationHistoryProjection, workspace: ConversationWorkspaceGateway = _WORKSPACE_GATEWAY, elicitations: ConversationElicitationGateway = _NO_ELICITATIONS, personalRuns: ConversationPersonalRunsGateway = _PERSONAL_RUNS): Decorator
+function _Providers(history: ConversationHistoryProjection, workspace: ConversationWorkspaceGateway = _WORKSPACE_GATEWAY, elicitations: ConversationElicitationGateway = _NO_ELICITATIONS, personalRuns: ConversationPersonalRunsGateway = _PERSONAL_RUNS, assets: ConversationAssetsGateway = _ASSETS, platform: PlatformBridge = _PLATFORM): Decorator
 {
-	return moduleMetadata({ providers: [{ provide: CONVERSATION_CURRENT_SUBJECT, useValue: function _Subject() { return "self"; } }, { provide: CONVERSATION_PERSONAL_RUNS_GATEWAY, useValue: personalRuns }, { provide: CONVERSATION_GROUP_CHILD_GATEWAY, useValue: {} }, { provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: workspace }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useValue: _Stream(history) }, { provide: CONVERSATION_ASSETS_GATEWAY, useValue: _ASSETS }, { provide: ELICITATION_GATEWAY, useValue: elicitations }, { provide: CONVERSATION_COMPUTER_REVIEW_GATEWAY, useValue: _REVIEW }, { provide: Router, useValue: _ROUTER }, { provide: PLATFORM_BRIDGE, useValue: _PLATFORM }] });
+	return moduleMetadata({ providers: [{ provide: CONVERSATION_CURRENT_SUBJECT, useValue: function _Subject() { return "self"; } }, { provide: CONVERSATION_PERSONAL_RUNS_GATEWAY, useValue: personalRuns }, { provide: CONVERSATION_GROUP_CHILD_GATEWAY, useValue: {} }, { provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: workspace }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useValue: _Stream(history) }, { provide: CONVERSATION_ASSETS_GATEWAY, useValue: assets }, { provide: ELICITATION_GATEWAY, useValue: elicitations }, { provide: CONVERSATION_COMPUTER_REVIEW_GATEWAY, useValue: _REVIEW }, { provide: Router, useValue: _ROUTER }, { provide: PLATFORM_BRIDGE, useValue: platform }] });
 }
 
 /** Defines the routed workspace viewport contracts without replacing its production stores. */
@@ -136,6 +153,15 @@ export const IntermediateLongContent: Story = { tags: ["visual-test"], decorator
 
 /** Wide desktop width keeps rail, transcript, composer, and context panel in one viewport. */
 export const WideLongContent: Story = { tags: ["visual-test"], decorators: [_Providers(_HISTORY)] };
+
+/** The production Files row reaches the prepared browser capability before reading authorized bytes. */
+export const ReadyAssetOpen: Story = { tags: ["visual-test"], decorators: [_Providers(_HISTORY, _WORKSPACE_GATEWAY, _NO_ELICITATIONS, _PERSONAL_RUNS, _READY_ASSETS, _FILE_PLATFORM)], play: async function _OpenReadyAsset({ canvasElement })
+{
+	_FILE_OPEN_CALLS.splice(0);
+	const canvas = within(canvasElement);
+	await userEvent.click(await canvas.findByRole("button", { name: "Open" }));
+	await waitFor(function _Completed() { expect(_FILE_OPEN_CALLS).toEqual(["prepare", "read", "complete"]); });
+} };
 
 /** Shows durable tool evidence before the personal assistant's final saved answer. */
 export const PersonalToolResult: Story = { tags: ["visual-test"], decorators: [_Providers(_TOOL_RESULT_HISTORY)], play: async function _PersonalEvidence({ canvasElement })

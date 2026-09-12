@@ -2,7 +2,7 @@ import { moduleMetadata } from "@storybook/angular";
 import type { Meta, StoryObj } from "@storybook/angular";
 import { expect, userEvent, within } from "storybook/test";
 
-import { ConversationAssetDisposition, ConversationAssetProvenance, ConversationAssetSelectionFailures } from "@opencrane/state/conversation/assets";
+import { ConversationAssetContentCommandStates, ConversationAssetDisposition, ConversationAssetProvenance, ConversationAssetSelectionFailures } from "@opencrane/state/conversation/assets";
 
 import { ConversationAttachmentTrayComponent } from "../attachment-tray/conversation-attachment-tray.component";
 import { ConversationAssetCardComponent } from "../asset-card/conversation-asset-card.component";
@@ -13,7 +13,7 @@ import { ConversationAssetPresentationStates, type ConversationAssetPresentation
 /** Build one deterministic browser-safe visual fixture. */
 function _Item(id: string, displayName: string, state: ConversationAssetPresentationStates, overrides: Partial<ConversationAssetPresentation> = {}): ConversationAssetPresentation
 {
-	return { id, messageId: "message-1", provenance: ConversationAssetProvenance.ParticipantUpload, displayName, mediaType: "application/pdf", byteLength: 1_258_291, disposition: ConversationAssetDisposition.Preview, state, detail: _Detail(state), canRetry: state === ConversationAssetPresentationStates.Failed, canRemove: state === ConversationAssetPresentationStates.Selected, uploadProgressPercent: null, ...overrides };
+	return { id, messageId: "message-1", provenance: ConversationAssetProvenance.ParticipantUpload, displayName, mediaType: "application/pdf", byteLength: 1_258_291, disposition: ConversationAssetDisposition.Preview, state, detail: _Detail(state), canRetry: state === ConversationAssetPresentationStates.Failed, canRemove: state === ConversationAssetPresentationStates.Selected, uploadProgressPercent: null, contentState: ConversationAssetContentCommandStates.Idle, contentDetail: null, ...overrides };
 }
 
 /** Plain-language fixture state labels. */
@@ -64,6 +64,26 @@ export const TranscriptCards: Story = {
 	play: async function play({ canvasElement }) { const canvas = within(canvasElement); await userEvent.click(canvas.getByRole("button", { name: "Preview" })); await userEvent.click(canvas.getAllByRole("button", { name: "Download" })[0] as HTMLElement); await expect(canvas.getByTestId("action-count")).toHaveAttribute("data-count", "2"); }
 };
 
+/** Transcript cards use the same command progress and retry feedback as the Files index. */
+export const TranscriptContentCommands: Story = {
+	tags: ["visual-test"],
+	parameters: { docs: { description: { story: "A Ready card shows one pending file action or safe retry feedback without changing its durable state." } } },
+	render: function render()
+	{
+		return {
+			props: { loading: _Item("card-loading", "customer-summary.pdf", ConversationAssetPresentationStates.Ready, { contentState: ConversationAssetContentCommandStates.Loading }), failed: _Item("card-failed", "approved-report.docx", ConversationAssetPresentationStates.Ready, { provenance: ConversationAssetProvenance.AgentOutput, mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", disposition: ConversationAssetDisposition.Download, contentState: ConversationAssetContentCommandStates.Failed, contentDetail: "The file could not be opened." }) },
+			template: `<div style="display:grid;gap:12px;max-width:620px;padding:20px;background:var(--oc-surface-paper)"><wo-conversation-asset-card [item]="loading" /><wo-conversation-asset-card [item]="failed" /></div>`
+		};
+	},
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		expect(canvas.getByRole("button", { name: "Opening file" })).toBeDisabled();
+		expect(canvas.getByRole("alert")).toHaveTextContent("The file could not be opened.");
+		expect(canvas.getByRole("button", { name: "Download" })).toBeEnabled();
+	}
+};
+
 /** Files panel groups provenance and preserves canonical message-link actions. */
 export const FilesPanel: Story = {
 	tags: ["visual-test"],
@@ -71,6 +91,21 @@ export const FilesPanel: Story = {
 	args: { items: [_READY, _Item("asset-zip", "photos.zip", ConversationAssetPresentationStates.Uploading, { mediaType: "application/zip", disposition: ConversationAssetDisposition.Download }), _AGENT, _Item("asset-chart", "timeline-chart.png", ConversationAssetPresentationStates.Failed, { provenance: ConversationAssetProvenance.AgentOutput, mediaType: "image/png" })] },
 	render: function render(args) { return { props: { ...args, actionCount: 0 }, template: `<div style="width:360px;padding:12px;background:var(--oc-surface-paper)"><wo-conversation-files-panel [items]="items" (actionRequested)="actionCount = actionCount + 1" /><output data-testid="action-count" [attr.data-count]="actionCount"></output></div>` }; },
 	play: async function play({ canvasElement }) { const canvas = within(canvasElement); await userEvent.click(canvas.getAllByRole("button", { name: "Open" })[0] as HTMLElement); await userEvent.click(canvas.getAllByRole("button", { name: "Show brief-v2.pdf in conversation" })[0] as HTMLElement); await expect(canvas.getByTestId("action-count")).toHaveAttribute("data-count", "2"); }
+};
+
+/** Ready file reads keep progress and safe retry feedback with the file that owns the command. */
+export const ContentCommandsNarrow: Story = {
+	tags: ["visual-test", "visual-test-narrow"],
+	parameters: { docs: { description: { story: "A pending file read disables only that file's open controls, while a failed read keeps the action available with safe retry feedback." } } },
+	args: { items: [_Item("asset-loading", "supplier-brief.pdf", ConversationAssetPresentationStates.Ready, { contentState: ConversationAssetContentCommandStates.Loading }), _Item("asset-error", "approved-budget.xlsx", ConversationAssetPresentationStates.Ready, { mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", disposition: ConversationAssetDisposition.Download, contentState: ConversationAssetContentCommandStates.Failed, contentDetail: "The file could not be opened." })] },
+	render: function render(args) { return { props: args, template: `<div style="width:320px;padding:8px;background:var(--oc-surface-paper)"><wo-conversation-files-panel [items]="items" /></div>` }; },
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		expect(canvas.getByRole("button", { name: "Opening file" })).toBeDisabled();
+		expect(canvas.getByRole("alert")).toHaveTextContent("The file could not be opened.");
+		expect(canvas.getByRole("button", { name: "Open" })).toBeEnabled();
+	}
 };
 
 /** Non-disclosing edge states share labels but never expose scanner or storage coordinates. */

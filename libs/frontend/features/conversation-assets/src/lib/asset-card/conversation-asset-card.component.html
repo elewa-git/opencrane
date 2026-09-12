@@ -12,11 +12,18 @@
 		<span>{{ item().provenance === provenance.AgentOutput ? 'Created by your assistant' : 'You attached' }} · {{ byteLabel() }}</span>
 	</div>
 	<div class="wo-asset-card__actions">
-		@if (item().state === states.Ready && item().disposition === dispositions.Preview) {
-			<p-button label="Preview" severity="contrast" [link]="true" size="small" (onClick)="act(actions.Preview)" />
-		}
-		@if (item().state === states.Ready) {
-			<p-button label="Download" severity="contrast" [link]="true" size="small" (onClick)="act(actions.Download)" />
+		@if (item().state === states.Ready && item().disposition !== null) {
+			@if (item().contentState === contentStates.Loading) {
+				<p-button label="Opening file" severity="contrast" [link]="true" size="small" [loading]="true" [disabled]="true" />
+			} @else {
+				@if (item().disposition === dispositions.Preview) {
+					<p-button label="Preview" severity="contrast" [link]="true" size="small" (onClick)="act(actions.Preview)" />
+				}
+				<p-button label="Download" severity="contrast" [link]="true" size="small" (onClick)="act(actions.Download)" />
+			}
+			@if (item().contentDetail !== null) {
+				<span class="wo-asset-card__content-error" role="alert">{{ item().contentDetail }}</span>
+			}
 		} @else if (item().canRetry) {
 			<p-button label="Retry" severity="contrast" [link]="true" size="small" (onClick)="act(actions.Retry)" />
 		} @else {

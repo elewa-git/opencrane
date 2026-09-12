@@ -1,8 +1,10 @@
 import { Injectable, effect, inject } from "@angular/core";
 import { ConversationComputerStates, ConversationEntryKinds, type ConversationEntry } from "@opencrane/contracts";
-import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
+import { ConversationAssetContentStore, ConversationAssetsStore, type ConversationAsset } from "@opencrane/state/conversation/assets";
 import { ConversationElicitationStore } from "@opencrane/state/conversation/elicitation";
 import { ConversationComputerReviewStore, ConversationGroupChildStore, ConversationModes, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
+
+import { ConversationAssetContentCoordinator } from "./conversation-asset-content.coordinator";
 
 /** Coordinates selection lifetimes across stores without owning rendering or domain commands. */
 @Injectable()
@@ -14,6 +16,10 @@ export class ConversationWorkspaceSelectionCoordinator
 	private readonly groupStore = inject(ConversationGroupChildStore);
 	/** Owns private file transfers for the current selection. */
 	private readonly assetsStore = inject(ConversationAssetsStore);
+	/** Owns scoped reads of the current asset list without retaining returned bytes. */
+	private readonly assetContentStore = inject(ConversationAssetContentStore);
+	/** Cancels prepared browser actions when the selected authority scope changes. */
+	private readonly assetContentCoordinator = inject(ConversationAssetContentCoordinator);
 	/** Owns review state for the currently admitted computer generation. */
 	private readonly reviewStore = inject(ConversationComputerReviewStore);
 	/** Owns the current participant approval and its local draft. */
@@ -39,6 +45,8 @@ export class ConversationWorkspaceSelectionCoordinator
 			this._composedConversationId = null;
 			this._approvalInvalidationSequence = null;
 			this.assetsStore.clear();
+			this.assetContentCoordinator.clear();
+			this.assetContentStore.clear();
 			this.elicitationStore.clear();
 			this.reviewStore.select(null);
 			return;
@@ -46,6 +54,8 @@ export class ConversationWorkspaceSelectionCoordinator
 		if (this._composedConversationId !== selected.id)
 		{
 			this.assetsStore.clear();
+			this.assetContentCoordinator.clear();
+			this.assetContentStore.clear();
 			this.elicitationStore.clear();
 			this._composedConversationId = selected.id;
 			this._approvalInvalidationSequence = _ApprovalInvalidationSequence(this.store.live().entries);
@@ -58,10 +68,17 @@ export class ConversationWorkspaceSelectionCoordinator
 			void this.elicitationStore.refresh(selected.id);
 		}
 		this.assetsStore.open(selected.id);
+		this.assetContentStore.open(selected.id, this._CurrentAssets.bind(this));
 		const computer = this.store.live().computer;
 		const reviewConversationId = selected.mode === ConversationModes.AgentSession && computer?.state === ConversationComputerStates.Warm ? selected.id : null;
 		const generationKey = computer === null ? null : `${computer.id}:${computer.leaseGeneration}`;
 		this.reviewStore.select(reviewConversationId, generationKey);
+	}
+
+	/** Return the latest authorized asset list, or null until its current read completes. */
+	private _CurrentAssets(): readonly ConversationAsset[] | null
+	{
+		return this.assetsStore.assets.hasValue() ? this.assetsStore.assets.value() : null;
 	}
 
 }

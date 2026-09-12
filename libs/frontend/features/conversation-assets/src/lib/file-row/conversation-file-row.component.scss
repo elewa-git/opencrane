@@ -21,6 +21,7 @@
 	&__type { color: var(--oc-ink-muted); font-size: var(--oc-text-2xs); }
 	&__name { overflow: hidden; color: var(--oc-ink-strong); font-size: var(--oc-text-xs); text-overflow: ellipsis; white-space: nowrap; }
 	&__state { color: var(--oc-ink-muted); font-size: var(--oc-text-2xs); }
+	&__state--error { color: var(--oc-danger); }
 }
 
 @media (max-width: 520px) {

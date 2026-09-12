@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, afterRenderEffect, effect, inject, input, output, signal, untracked } from "@angular/core";
-import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
+import { ConversationAssetContentStore, ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import { ConversationElicitationStore, type ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
 import { ConversationElicitationCardComponent } from "@opencrane/features/conversation-elicitation";
 import { ConversationGroupChildStore, ConversationComputerReviewStore, ConversationOnboardingHistoryStore, ConversationPersonalRunsStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
 import { ConversationSessionRailItemKinds, type ConversationSessionRailSelectionIntent } from "../../conversation-workspace-feature.types";
 import { ConversationWorkspacePresenter } from "../../conversation-workspace.presenter";
+import { ConversationAssetContentCoordinator } from "../../state/conversation-asset-content.coordinator";
 import { ConversationWorkspaceSelectionCoordinator } from "../../state/conversation-workspace-selection.coordinator";
 import { ConversationWorkspaceHeaderComponent } from "../conversation-workspace-header/conversation-workspace-header.component";
 import { CONVERSATION_WORKSPACE_PAGE_IMPORTS } from "./conversation-workspace-page.imports";
@@ -26,7 +27,7 @@ import { CONVERSATION_WORKSPACE_PAGE_IMPORTS } from "./conversation-workspace-pa
  *
  * Called by: feature-local `ConversationWorkspaceRouteComponent`, which owns the child chat URLs.
  */
-@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: CONVERSATION_WORKSPACE_PAGE_IMPORTS, templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationWorkspacePresenter, ConversationWorkspaceSelectionCoordinator, ConversationGroupChildStore, ConversationAssetsStore, ConversationComputerReviewStore, ConversationElicitationStore, ConversationOnboardingHistoryStore, ConversationPersonalRunsStore, ConversationWorkspaceStore] })
+@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: CONVERSATION_WORKSPACE_PAGE_IMPORTS, templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationWorkspacePresenter, ConversationWorkspaceSelectionCoordinator, ConversationAssetContentCoordinator, ConversationGroupChildStore, ConversationAssetContentStore, ConversationAssetsStore, ConversationComputerReviewStore, ConversationElicitationStore, ConversationOnboardingHistoryStore, ConversationPersonalRunsStore, ConversationWorkspaceStore] })
 export class ConversationWorkspacePageComponent
 {
 	/** Composes read-only presentation and typed store intents without class inheritance. */

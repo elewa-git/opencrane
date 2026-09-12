@@ -1,4 +1,4 @@
-import type { ConversationAssetDisposition, ConversationAssetProvenance, ConversationAssetSelectionFailure } from "@opencrane/state/conversation/assets";
+import type { ConversationAssetContentCommandStates, ConversationAssetDisposition, ConversationAssetProvenance, ConversationAssetSelectionFailure } from "@opencrane/state/conversation/assets";
 
 /** Finite visible file states, including non-disclosing reference failures. */
 export enum ConversationAssetPresentationStates
@@ -41,6 +41,10 @@ export interface ConversationAssetPresentation
 	readonly canRetry: boolean;
 	readonly canRemove: boolean;
 	readonly uploadProgressPercent: number | null;
+	/** Component-scoped byte-read state; it does not change the durable asset lifecycle. */
+	readonly contentState: ConversationAssetContentCommandStates;
+	/** Safe retry feedback set only when the current content command failed. */
+	readonly contentDetail: string | null;
 }
 
 /** Safe plain-language feedback for a rejected message-level file selection. */
