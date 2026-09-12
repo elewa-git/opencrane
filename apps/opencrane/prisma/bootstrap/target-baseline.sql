@@ -149,13 +149,25 @@ CREATE TYPE "McpApprovalStatus" AS ENUM ('pending-review', 'approved', 'publishe
 CREATE TYPE "McpConnectionStatus" AS ENUM ('needs-credential', 'credentialless');
 
 -- CreateEnum
-CREATE TYPE "MemoryDatasetState" AS ENUM ('active', 'retired');
+CREATE TYPE "MemoryDatasetState" AS ENUM ('provisioning', 'active', 'retired');
 
 -- CreateEnum
 CREATE TYPE "MemoryFactState" AS ENUM ('active', 'corrected', 'forget_pending', 'forgotten');
 
 -- CreateEnum
 CREATE TYPE "MemoryConsentState" AS ENUM ('explicit', 'confirmed');
+
+-- CreateEnum
+CREATE TYPE "PersonalMemoryOperationKind" AS ENUM ('remember', 'correct', 'forget');
+
+-- CreateEnum
+CREATE TYPE "PersonalMemoryOperationPhase" AS ENUM ('dataset_ensure_pending', 'document_add_pending', 'cognify_pending', 'catalog_commit_pending', 'prior_document_delete_pending', 'document_delete_pending', 'catalog_finalize_pending', 'recovery_required', 'completed');
+
+-- CreateEnum
+CREATE TYPE "PersonalMemoryOperationFailureCode" AS ENUM ('authority_ended', 'dataset_unavailable', 'source_unavailable', 'document_conflict', 'index_input_changed', 'indexing_unavailable', 'catalog_conflict', 'deletion_unavailable');
+
+-- CreateEnum
+CREATE TYPE "PersonalMemoryOperationDeliveryState" AS ENUM ('proven_not_sent', 'ambiguous');
 
 -- CreateEnum
 CREATE TYPE "OrgRole" AS ENUM ('owner', 'admin', 'member');
@@ -1168,7 +1180,7 @@ CREATE TABLE "memory_datasets" (
     "boundary_kind" "AuthorizationBoundaryKind" NOT NULL,
     "boundary_group_id" TEXT,
     "boundary_principal_id" TEXT,
-    "cognee_dataset_id" TEXT NOT NULL,
+    "cognee_dataset_id" TEXT,
     "state" "MemoryDatasetState" NOT NULL DEFAULT 'active',
     "created_by" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1183,6 +1195,7 @@ CREATE TABLE "memory_fact_catalog" (
     "dataset_id" TEXT NOT NULL,
     "cognee_external_id" TEXT NOT NULL,
     "content_digest" TEXT NOT NULL,
+    "revision" INTEGER NOT NULL DEFAULT 1,
     "state" "MemoryFactState" NOT NULL DEFAULT 'active',
     "consent_state" "MemoryConsentState" NOT NULL,
     "sensitivity" TEXT NOT NULL,
@@ -1197,6 +1210,46 @@ CREATE TABLE "memory_fact_catalog" (
     "forgotten_at" TIMESTAMP(3),
 
     CONSTRAINT "memory_fact_catalog_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "personal_memory_operations" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "dataset_id" TEXT NOT NULL,
+    "actor_principal_id" TEXT NOT NULL,
+    "idempotency_key_digest" TEXT NOT NULL,
+    "command_digest" TEXT NOT NULL,
+    "kind" "PersonalMemoryOperationKind" NOT NULL,
+    "phase" "PersonalMemoryOperationPhase" NOT NULL,
+    "recovery_phase" "PersonalMemoryOperationPhase",
+    "revision" INTEGER NOT NULL DEFAULT 1,
+    "source_conversation_id" TEXT,
+    "source_message_id" TEXT,
+    "source_message_position" BIGINT,
+    "source_payload_ref" TEXT,
+    "source_ciphertext_digest" TEXT,
+    "source_author_principal_id" TEXT,
+    "content_digest" TEXT,
+    "target_fact_id" TEXT,
+    "target_document_id" TEXT,
+    "expected_fact_revision" INTEGER,
+    "admitted_provider_dataset_id" TEXT,
+    "provider_dataset_id" TEXT,
+    "provider_document_id" TEXT,
+    "indexing_operation_id" TEXT,
+    "expected_input_evidence_digest" TEXT,
+    "pipeline_run_id" TEXT,
+    "failure_code" "PersonalMemoryOperationFailureCode",
+    "delivery_state" "PersonalMemoryOperationDeliveryState",
+    "workflow_task_id" TEXT NOT NULL,
+    "workflow_task_name" TEXT NOT NULL,
+    "workflow_task_key" TEXT NOT NULL,
+    "admitted_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "recovery_recorded_at" TIMESTAMP(3),
+    "completed_at" TIMESTAMP(3),
+
+    CONSTRAINT "personal_memory_operations_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -2467,6 +2520,21 @@ CREATE UNIQUE INDEX "memory_fact_catalog_dataset_id_cognee_external_id_key" ON "
 CREATE UNIQUE INDEX "memory_fact_catalog_id_dataset_id_key" ON "memory_fact_catalog"("id", "dataset_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "personal_memory_operations_workflow_task_id_key" ON "personal_memory_operations"("workflow_task_id");
+
+-- CreateIndex
+CREATE INDEX "personal_memory_operations_dataset_id_phase_idx" ON "personal_memory_operations"("dataset_id", "phase");
+
+-- CreateIndex
+CREATE INDEX "personal_memory_operations_target_fact_id_dataset_id_idx" ON "personal_memory_operations"("target_fact_id", "dataset_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "personal_memory_operations_replay_key" ON "personal_memory_operations"("silo_id", "idempotency_key_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "personal_memory_operations_workflow_task_key" ON "personal_memory_operations"("workflow_task_name", "workflow_task_key");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "model_routing_defaults_id_silo_id_key" ON "model_routing_defaults"("id", "silo_id");
 
 -- CreateIndex
@@ -3046,6 +3114,12 @@ ALTER TABLE "memory_fact_catalog" ADD CONSTRAINT "memory_fact_catalog_dataset_id
 
 -- AddForeignKey
 ALTER TABLE "memory_fact_catalog" ADD CONSTRAINT "memory_fact_catalog_supersedes_fact_id_fkey" FOREIGN KEY ("supersedes_fact_id") REFERENCES "memory_fact_catalog"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "personal_memory_operations" ADD CONSTRAINT "personal_memory_operations_dataset_id_fkey" FOREIGN KEY ("dataset_id") REFERENCES "memory_datasets"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "personal_memory_operations" ADD CONSTRAINT "personal_memory_operations_target_fact_id_dataset_id_fkey" FOREIGN KEY ("target_fact_id", "dataset_id") REFERENCES "memory_fact_catalog"("id", "dataset_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "persona_questions" ADD CONSTRAINT "persona_questions_question_set_id_question_set_version_fkey" FOREIGN KEY ("question_set_id", "question_set_version") REFERENCES "persona_question_sets"("question_set_id", "version") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -5860,9 +5934,51 @@ END;
 $$;
 CREATE FUNCTION "enforce_memory_dataset_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'MemoryDataset catalog rows cannot be deleted'; END IF;
-    IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."boundary_kind" IS DISTINCT FROM OLD."boundary_kind" OR NEW."boundary_group_id" IS DISTINCT FROM OLD."boundary_group_id" OR NEW."boundary_principal_id" IS DISTINCT FROM OLD."boundary_principal_id" OR NEW."cognee_dataset_id" IS DISTINCT FROM OLD."cognee_dataset_id" OR NEW."created_by" IS DISTINCT FROM OLD."created_by" OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN RAISE EXCEPTION 'MemoryDataset authority is immutable'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."state" = 'retired' THEN RAISE EXCEPTION 'retired MemoryDataset is closed'; END IF;
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'MemoryDataset catalog rows cannot be deleted';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."state" = 'provisioning' AND (
+            NEW."boundary_kind" IS DISTINCT FROM 'personal'::"AuthorizationBoundaryKind"
+            OR NEW."boundary_group_id" IS NOT NULL
+            OR NEW."boundary_principal_id" IS NULL
+            OR NEW."created_by" IS DISTINCT FROM NEW."boundary_principal_id") THEN
+            RAISE EXCEPTION 'MemoryDataset must bind its creating personal principal';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW IS NOT DISTINCT FROM OLD THEN
+        RETURN NEW;
+    END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id"
+        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."boundary_kind" IS DISTINCT FROM OLD."boundary_kind"
+        OR NEW."boundary_group_id" IS DISTINCT FROM OLD."boundary_group_id"
+        OR NEW."boundary_principal_id" IS DISTINCT FROM OLD."boundary_principal_id"
+        OR NEW."created_by" IS DISTINCT FROM OLD."created_by"
+        OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+        RAISE EXCEPTION 'MemoryDataset authority is immutable';
+    END IF;
+    IF OLD."state" = 'retired' THEN
+        RAISE EXCEPTION 'retired MemoryDataset is closed';
+    END IF;
+    IF OLD."state" = 'provisioning' THEN
+        IF NEW."state" IS DISTINCT FROM 'active'::"MemoryDatasetState"
+            OR OLD."cognee_dataset_id" IS NOT NULL
+            OR NEW."cognee_dataset_id" IS NULL
+            OR NEW."retired_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'Provisioning MemoryDataset may only adopt one provider UUID';
+        END IF;
+    ELSIF OLD."state" = 'active' THEN
+        IF NEW."state" IS DISTINCT FROM 'retired'::"MemoryDatasetState"
+            OR NEW."cognee_dataset_id" IS DISTINCT FROM OLD."cognee_dataset_id"
+            OR NEW."retired_at" IS NULL
+            OR NEW."retired_at" < OLD."created_at" THEN
+            RAISE EXCEPTION 'Active MemoryDataset may only retire with immutable provider identity';
+        END IF;
+    ELSE
+        RAISE EXCEPTION 'invalid MemoryDataset lifecycle state';
+    END IF;
     RETURN NEW;
 END;
 $$;
@@ -5870,7 +5986,7 @@ CREATE FUNCTION "enforce_memory_fact_lifecycle"() RETURNS trigger LANGUAGE plpgs
 DECLARE prior_dataset TEXT; prior_state "MemoryFactState"; dataset_silo_id TEXT; source_silo_id TEXT;
 BEGIN
     IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'active' THEN RAISE EXCEPTION 'MemoryFact catalog entry must begin Active'; END IF;
+        IF NEW."state" <> 'active' OR NEW."revision" <> 1 THEN RAISE EXCEPTION 'MemoryFact catalog entry must begin Active at revision 1'; END IF;
         SELECT "silo_id" INTO dataset_silo_id FROM "memory_datasets" WHERE "id" = NEW."dataset_id" AND "state" = 'active' FOR UPDATE;
         IF dataset_silo_id IS NULL THEN RAISE EXCEPTION 'MemoryFact requires an active MemoryDataset'; END IF;
         IF NEW."source_artifact_revision_id" IS NOT NULL THEN
@@ -5889,6 +6005,8 @@ BEGIN
         RETURN NEW;
     END IF;
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'MemoryFact catalog rows use explicit forget lifecycle'; END IF;
+    IF NEW IS NOT DISTINCT FROM OLD THEN RETURN NEW; END IF;
+    IF NEW."revision" IS DISTINCT FROM OLD."revision" THEN RAISE EXCEPTION 'MemoryFact revision is database-owned'; END IF;
     IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."dataset_id" IS DISTINCT FROM OLD."dataset_id" OR NEW."cognee_external_id" IS DISTINCT FROM OLD."cognee_external_id" OR NEW."content_digest" IS DISTINCT FROM OLD."content_digest" OR NEW."consent_state" IS DISTINCT FROM OLD."consent_state" OR NEW."sensitivity" IS DISTINCT FROM OLD."sensitivity" OR NEW."provenance" IS DISTINCT FROM OLD."provenance" OR NEW."source_artifact_revision_id" IS DISTINCT FROM OLD."source_artifact_revision_id" OR NEW."source_message_id" IS DISTINCT FROM OLD."source_message_id" OR NEW."supersedes_fact_id" IS DISTINCT FROM OLD."supersedes_fact_id" OR NEW."recorded_by" IS DISTINCT FROM OLD."recorded_by" OR NEW."recorded_at" IS DISTINCT FROM OLD."recorded_at" THEN RAISE EXCEPTION 'MemoryFact content and provenance are immutable'; END IF;
     IF OLD."corrected_at" IS NOT NULL AND NEW."corrected_at" IS DISTINCT FROM OLD."corrected_at" THEN RAISE EXCEPTION 'MemoryFact correction evidence is immutable'; END IF;
     IF OLD."forget_requested_at" IS NOT NULL AND NEW."forget_requested_at" IS DISTINCT FROM OLD."forget_requested_at" THEN RAISE EXCEPTION 'MemoryFact forget request evidence is immutable'; END IF;
@@ -5898,6 +6016,169 @@ BEGIN
         OR (OLD."state" = 'corrected' AND NEW."state" IN ('corrected', 'forget_pending'))
         OR (OLD."state" = 'forget_pending' AND NEW."state" IN ('forget_pending', 'forgotten'))
         OR (OLD."state" = 'forgotten' AND NEW."state" = 'forgotten')) THEN RAISE EXCEPTION 'invalid MemoryFact forget lifecycle'; END IF;
+    NEW."revision" := OLD."revision" + 1;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_personal_memory_operation_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    dataset_row "memory_datasets"%ROWTYPE;
+    target_row "memory_fact_catalog"%ROWTYPE;
+    target_changed_in_transaction BOOLEAN := FALSE;
+    active_phase "PersonalMemoryOperationPhase";
+    prior_active_phase "PersonalMemoryOperationPhase";
+    valid_transition BOOLEAN := FALSE;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'PersonalMemoryOperation rows cannot be deleted';
+    END IF;
+    SELECT * INTO dataset_row FROM "memory_datasets" WHERE "id" = NEW."dataset_id" FOR UPDATE;
+    IF dataset_row."id" IS NULL
+        OR dataset_row."silo_id" IS DISTINCT FROM NEW."silo_id"
+        OR dataset_row."boundary_kind" IS DISTINCT FROM 'personal'::"AuthorizationBoundaryKind"
+        OR dataset_row."boundary_group_id" IS NOT NULL
+        OR dataset_row."boundary_principal_id" IS DISTINCT FROM NEW."actor_principal_id" THEN
+        RAISE EXCEPTION 'PersonalMemoryOperation requires its actor-owned personal dataset';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."revision" <> 1
+            OR NEW."phase" IS DISTINCT FROM (CASE NEW."kind"
+                WHEN 'remember' THEN 'dataset_ensure_pending'::"PersonalMemoryOperationPhase"
+                WHEN 'correct' THEN 'document_add_pending'::"PersonalMemoryOperationPhase"
+                WHEN 'forget' THEN 'document_delete_pending'::"PersonalMemoryOperationPhase"
+            END) THEN
+            RAISE EXCEPTION 'PersonalMemoryOperation must begin at revision 1 in its exact initial phase';
+        END IF;
+        IF NEW."source_author_principal_id" IS NOT NULL
+            AND NEW."source_author_principal_id" IS DISTINCT FROM NEW."actor_principal_id" THEN
+            RAISE EXCEPTION 'PersonalMemoryOperation source author must be its actor';
+        END IF;
+        IF NEW."kind" = 'remember' THEN
+            IF dataset_row."state" NOT IN ('provisioning', 'active')
+                OR NEW."admitted_provider_dataset_id" IS DISTINCT FROM dataset_row."cognee_dataset_id"
+                OR NEW."provider_dataset_id" IS DISTINCT FROM dataset_row."cognee_dataset_id" THEN
+                RAISE EXCEPTION 'Remember admission requires the current personal dataset identity';
+            END IF;
+        ELSE
+            SELECT * INTO target_row FROM "memory_fact_catalog" fact
+            WHERE fact."id" = NEW."target_fact_id" AND fact."dataset_id" = NEW."dataset_id" FOR UPDATE;
+            SELECT fact.xmin = pg_current_xact_id()::xid INTO target_changed_in_transaction FROM "memory_fact_catalog" fact
+            WHERE fact."id" = NEW."target_fact_id" AND fact."dataset_id" = NEW."dataset_id";
+            IF dataset_row."state" IS DISTINCT FROM 'active'::"MemoryDatasetState"
+                OR NEW."admitted_provider_dataset_id" IS DISTINCT FROM dataset_row."cognee_dataset_id"
+                OR NEW."provider_dataset_id" IS DISTINCT FROM dataset_row."cognee_dataset_id"
+                OR target_row."id" IS NULL
+                OR target_row."cognee_external_id" IS DISTINCT FROM NEW."target_document_id"
+                OR (NEW."kind" = 'correct' AND (target_row."state" IS DISTINCT FROM 'active'::"MemoryFactState" OR target_row."revision" IS DISTINCT FROM NEW."expected_fact_revision"))
+                OR (NEW."kind" = 'forget' AND (target_row."state" IS DISTINCT FROM 'forget_pending'::"MemoryFactState" OR target_row."revision" IS DISTINCT FROM NEW."expected_fact_revision" + 1 OR target_changed_in_transaction IS DISTINCT FROM TRUE)) THEN
+                RAISE EXCEPTION 'existing-fact admission requires its exact current target and provider dataset';
+            END IF;
+        END IF;
+    ELSE
+        IF NEW IS NOT DISTINCT FROM OLD THEN RETURN NEW; END IF;
+        IF NEW."id" IS DISTINCT FROM OLD."id"
+            OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+            OR NEW."dataset_id" IS DISTINCT FROM OLD."dataset_id"
+            OR NEW."actor_principal_id" IS DISTINCT FROM OLD."actor_principal_id"
+            OR NEW."idempotency_key_digest" IS DISTINCT FROM OLD."idempotency_key_digest"
+            OR NEW."command_digest" IS DISTINCT FROM OLD."command_digest"
+            OR NEW."kind" IS DISTINCT FROM OLD."kind"
+            OR NEW."source_conversation_id" IS DISTINCT FROM OLD."source_conversation_id"
+            OR NEW."source_message_id" IS DISTINCT FROM OLD."source_message_id"
+            OR NEW."source_message_position" IS DISTINCT FROM OLD."source_message_position"
+            OR NEW."source_payload_ref" IS DISTINCT FROM OLD."source_payload_ref"
+            OR NEW."source_ciphertext_digest" IS DISTINCT FROM OLD."source_ciphertext_digest"
+            OR NEW."source_author_principal_id" IS DISTINCT FROM OLD."source_author_principal_id"
+            OR NEW."content_digest" IS DISTINCT FROM OLD."content_digest"
+            OR NEW."target_fact_id" IS DISTINCT FROM OLD."target_fact_id"
+            OR NEW."target_document_id" IS DISTINCT FROM OLD."target_document_id"
+            OR NEW."expected_fact_revision" IS DISTINCT FROM OLD."expected_fact_revision"
+            OR NEW."admitted_provider_dataset_id" IS DISTINCT FROM OLD."admitted_provider_dataset_id"
+            OR NEW."workflow_task_id" IS DISTINCT FROM OLD."workflow_task_id"
+            OR NEW."workflow_task_name" IS DISTINCT FROM OLD."workflow_task_name"
+            OR NEW."workflow_task_key" IS DISTINCT FROM OLD."workflow_task_key"
+            OR NEW."admitted_at" IS DISTINCT FROM OLD."admitted_at" THEN
+            RAISE EXCEPTION 'PersonalMemoryOperation admission, source, target, and task evidence are immutable';
+        END IF;
+        IF OLD."phase" = 'completed' THEN RAISE EXCEPTION 'completed PersonalMemoryOperation is closed'; END IF;
+        IF NEW."revision" IS DISTINCT FROM OLD."revision" + 1 THEN RAISE EXCEPTION 'PersonalMemoryOperation must advance exactly one revision'; END IF;
+        prior_active_phase := CASE WHEN OLD."phase" = 'recovery_required' THEN OLD."recovery_phase" ELSE OLD."phase" END;
+        valid_transition := NEW."phase" = 'recovery_required' AND NEW."recovery_phase" = prior_active_phase;
+        IF NOT valid_transition THEN
+            valid_transition := CASE NEW."kind"
+                WHEN 'remember' THEN
+                    (prior_active_phase = 'dataset_ensure_pending' AND NEW."phase" = 'document_add_pending') OR
+                    (prior_active_phase = 'document_add_pending' AND NEW."phase" = 'cognify_pending') OR
+                    (prior_active_phase = 'cognify_pending' AND NEW."phase" IN ('cognify_pending', 'catalog_commit_pending')) OR
+                    (prior_active_phase = 'catalog_commit_pending' AND NEW."phase" = 'completed')
+                WHEN 'correct' THEN
+                    (prior_active_phase = 'document_add_pending' AND NEW."phase" = 'cognify_pending') OR
+                    (prior_active_phase = 'cognify_pending' AND NEW."phase" IN ('cognify_pending', 'catalog_commit_pending')) OR
+                    (prior_active_phase = 'catalog_commit_pending' AND NEW."phase" = 'prior_document_delete_pending') OR
+                    (prior_active_phase = 'prior_document_delete_pending' AND NEW."phase" = 'completed')
+                WHEN 'forget' THEN
+                    (prior_active_phase = 'document_delete_pending' AND NEW."phase" = 'catalog_finalize_pending') OR
+                    (prior_active_phase = 'catalog_finalize_pending' AND NEW."phase" = 'completed')
+            END;
+        END IF;
+        IF NOT COALESCE(valid_transition, FALSE) THEN RAISE EXCEPTION 'invalid PersonalMemoryOperation phase progression'; END IF;
+        IF OLD."provider_dataset_id" IS NOT NULL AND NEW."provider_dataset_id" IS DISTINCT FROM OLD."provider_dataset_id" THEN RAISE EXCEPTION 'PersonalMemoryOperation provider dataset receipt is immutable'; END IF;
+        IF OLD."provider_document_id" IS NOT NULL AND NEW."provider_document_id" IS DISTINCT FROM OLD."provider_document_id" THEN RAISE EXCEPTION 'PersonalMemoryOperation document receipt is immutable'; END IF;
+        IF OLD."indexing_operation_id" IS NOT NULL AND NEW."indexing_operation_id" IS DISTINCT FROM OLD."indexing_operation_id" THEN RAISE EXCEPTION 'PersonalMemoryOperation indexing identity is immutable'; END IF;
+        IF OLD."expected_input_evidence_digest" IS NOT NULL AND NEW."expected_input_evidence_digest" IS DISTINCT FROM OLD."expected_input_evidence_digest" THEN RAISE EXCEPTION 'PersonalMemoryOperation indexing evidence is immutable'; END IF;
+        IF OLD."pipeline_run_id" IS NOT NULL AND NEW."pipeline_run_id" IS DISTINCT FROM OLD."pipeline_run_id" THEN RAISE EXCEPTION 'PersonalMemoryOperation pipeline receipt is immutable'; END IF;
+        IF OLD."provider_dataset_id" IS NULL AND NEW."provider_dataset_id" IS NOT NULL AND prior_active_phase <> 'dataset_ensure_pending' THEN RAISE EXCEPTION 'PersonalMemoryOperation adopted a provider dataset outside ensure'; END IF;
+        IF OLD."provider_document_id" IS NULL AND NEW."provider_document_id" IS NOT NULL AND prior_active_phase <> 'document_add_pending' THEN RAISE EXCEPTION 'PersonalMemoryOperation adopted a document outside add'; END IF;
+        IF OLD."indexing_operation_id" IS NULL AND NEW."indexing_operation_id" IS NOT NULL AND prior_active_phase <> 'cognify_pending' THEN RAISE EXCEPTION 'PersonalMemoryOperation adopted indexing evidence outside Cognify'; END IF;
+        IF OLD."pipeline_run_id" IS NULL AND NEW."pipeline_run_id" IS NOT NULL AND (prior_active_phase <> 'cognify_pending' OR NEW."phase" <> 'catalog_commit_pending') THEN RAISE EXCEPTION 'PersonalMemoryOperation adopted a pipeline receipt outside Cognify completion'; END IF;
+    END IF;
+
+    active_phase := CASE WHEN NEW."phase" = 'recovery_required' THEN NEW."recovery_phase" ELSE NEW."phase" END;
+    IF ((NEW."kind" = 'remember' AND active_phase IN ('dataset_ensure_pending', 'document_add_pending', 'cognify_pending', 'catalog_commit_pending', 'completed'))
+        OR (NEW."kind" = 'correct' AND active_phase IN ('document_add_pending', 'cognify_pending', 'catalog_commit_pending', 'prior_document_delete_pending', 'completed'))
+        OR (NEW."kind" = 'forget' AND active_phase IN ('document_delete_pending', 'catalog_finalize_pending', 'completed'))) IS NOT TRUE THEN
+        RAISE EXCEPTION 'PersonalMemoryOperation phase does not match command kind';
+    END IF;
+    IF (NEW."phase" = 'recovery_required') IS DISTINCT FROM (NEW."recovery_phase" IS NOT NULL AND NEW."failure_code" IS NOT NULL AND NEW."recovery_recorded_at" IS NOT NULL AND NEW."completed_at" IS NULL)
+        OR (NEW."phase" <> 'recovery_required' AND (NEW."recovery_phase" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."delivery_state" IS NOT NULL OR NEW."recovery_recorded_at" IS NOT NULL))
+        OR (NEW."phase" = 'recovery_required' AND active_phase IN ('recovery_required', 'completed'))
+        OR (NEW."phase" = 'completed') IS DISTINCT FROM (NEW."completed_at" IS NOT NULL) THEN
+        RAISE EXCEPTION 'PersonalMemoryOperation recovery or completion evidence is malformed';
+    END IF;
+    IF NEW."phase" = 'recovery_required' AND (
+        (NEW."delivery_state" = 'ambiguous' AND ((active_phase = 'dataset_ensure_pending' AND NEW."failure_code" = 'dataset_unavailable') OR (active_phase = 'document_add_pending' AND NEW."failure_code" = 'document_conflict') OR (active_phase = 'cognify_pending' AND NEW."failure_code" = 'indexing_unavailable') OR (active_phase IN ('prior_document_delete_pending', 'document_delete_pending') AND NEW."failure_code" = 'deletion_unavailable'))) OR
+        (NEW."delivery_state" IS NULL AND ((active_phase = 'dataset_ensure_pending' AND NEW."failure_code" IN ('authority_ended', 'dataset_unavailable')) OR (active_phase = 'document_add_pending' AND NEW."failure_code" IN ('authority_ended', 'source_unavailable', 'document_conflict')) OR (active_phase = 'cognify_pending' AND NEW."failure_code" IN ('authority_ended', 'dataset_unavailable', 'index_input_changed', 'indexing_unavailable')) OR (active_phase = 'catalog_commit_pending' AND NEW."failure_code" IN ('authority_ended', 'catalog_conflict')) OR (active_phase IN ('prior_document_delete_pending', 'document_delete_pending') AND NEW."failure_code" IN ('authority_ended', 'deletion_unavailable')) OR (active_phase = 'catalog_finalize_pending' AND NEW."failure_code" IN ('authority_ended', 'catalog_conflict'))))
+    ) IS NOT TRUE THEN RAISE EXCEPTION 'PersonalMemoryOperation failure evidence does not match recovery phase'; END IF;
+    IF (NEW."kind" = 'forget') IS DISTINCT FROM (NEW."source_conversation_id" IS NULL AND NEW."source_message_id" IS NULL AND NEW."source_message_position" IS NULL AND NEW."source_payload_ref" IS NULL AND NEW."source_ciphertext_digest" IS NULL AND NEW."source_author_principal_id" IS NULL AND NEW."content_digest" IS NULL)
+        OR (NEW."kind" <> 'forget' AND (NEW."source_conversation_id" IS NULL OR btrim(NEW."source_conversation_id") = '' OR NEW."source_message_id" IS NULL OR btrim(NEW."source_message_id") = '' OR NEW."source_message_position" IS NULL OR NEW."source_message_position" < 0 OR NEW."source_payload_ref" IS NULL OR btrim(NEW."source_payload_ref") = '' OR NEW."source_ciphertext_digest" !~ '^sha256:[0-9a-f]{64}$' OR NEW."source_author_principal_id" IS DISTINCT FROM NEW."actor_principal_id" OR NEW."content_digest" !~ '^sha256:[0-9a-f]{64}$')) THEN
+        RAISE EXCEPTION 'PersonalMemoryOperation source evidence does not match command kind';
+    END IF;
+    IF (NEW."kind" = 'remember') IS DISTINCT FROM (NEW."target_fact_id" IS NULL AND NEW."target_document_id" IS NULL AND NEW."expected_fact_revision" IS NULL)
+        OR (NEW."kind" <> 'remember' AND (NEW."target_fact_id" IS NULL OR btrim(NEW."target_fact_id") = '' OR NEW."target_document_id" IS NULL OR NEW."expected_fact_revision" IS NULL OR NEW."expected_fact_revision" <= 0)) THEN
+        RAISE EXCEPTION 'PersonalMemoryOperation target evidence does not match command kind';
+    END IF;
+    IF NEW."admitted_provider_dataset_id" IS NOT NULL AND NEW."provider_dataset_id" IS DISTINCT FROM NEW."admitted_provider_dataset_id" THEN RAISE EXCEPTION 'PersonalMemoryOperation changed its admitted provider dataset'; END IF;
+    IF NOT (NEW."kind" = 'remember' AND active_phase = 'dataset_ensure_pending') AND NEW."provider_dataset_id" IS NULL THEN RAISE EXCEPTION 'PersonalMemoryOperation phase requires a provider dataset'; END IF;
+    IF NEW."provider_dataset_id" IS NOT NULL AND (dataset_row."state" <> 'active' OR dataset_row."cognee_dataset_id" IS DISTINCT FROM NEW."provider_dataset_id") THEN RAISE EXCEPTION 'PersonalMemoryOperation provider dataset is not current'; END IF;
+    IF NEW."kind" <> 'forget' AND active_phase NOT IN ('dataset_ensure_pending', 'document_add_pending') AND NEW."provider_document_id" IS NULL THEN RAISE EXCEPTION 'PersonalMemoryOperation phase requires a document receipt'; END IF;
+    IF (NEW."kind" = 'forget' OR active_phase IN ('dataset_ensure_pending', 'document_add_pending')) AND NEW."provider_document_id" IS NOT NULL THEN RAISE EXCEPTION 'PersonalMemoryOperation phase cannot retain a new document receipt'; END IF;
+    IF (NEW."indexing_operation_id" IS NULL) IS DISTINCT FROM (NEW."expected_input_evidence_digest" IS NULL) THEN RAISE EXCEPTION 'PersonalMemoryOperation indexing identity and evidence must be paired'; END IF;
+    IF NEW."kind" = 'forget' AND (NEW."indexing_operation_id" IS NOT NULL OR NEW."pipeline_run_id" IS NOT NULL) THEN RAISE EXCEPTION 'Forget cannot retain indexing evidence'; END IF;
+    IF NEW."kind" <> 'forget' AND active_phase IN ('catalog_commit_pending', 'prior_document_delete_pending', 'completed') AND (NEW."indexing_operation_id" IS NULL OR NEW."pipeline_run_id" IS NULL) THEN RAISE EXCEPTION 'PersonalMemoryOperation phase requires exact indexing completion'; END IF;
+    IF NEW."kind" <> 'forget' AND active_phase NOT IN ('catalog_commit_pending', 'prior_document_delete_pending', 'completed') AND NEW."pipeline_run_id" IS NOT NULL THEN RAISE EXCEPTION 'PersonalMemoryOperation phase cannot retain a pipeline receipt'; END IF;
+
+    IF TG_OP = 'UPDATE' AND prior_active_phase = 'catalog_commit_pending' AND NEW."phase" IN ('completed', 'prior_document_delete_pending') THEN
+        IF NEW."kind" = 'remember' THEN
+            PERFORM 1 FROM "memory_fact_catalog" fact WHERE fact."dataset_id" = NEW."dataset_id" AND fact."cognee_external_id" = NEW."provider_document_id" AND fact."content_digest" = NEW."content_digest" AND fact."state" = 'active' AND fact."recorded_by" = NEW."actor_principal_id" AND fact."source_message_id" IS NOT DISTINCT FROM NEW."source_message_id" AND fact.xmin = pg_current_xact_id()::xid;
+        ELSE
+            PERFORM 1 FROM "memory_fact_catalog" fact JOIN "memory_fact_catalog" prior ON prior."id" = NEW."target_fact_id" AND prior."dataset_id" = NEW."dataset_id" WHERE fact."dataset_id" = NEW."dataset_id" AND fact."supersedes_fact_id" = NEW."target_fact_id" AND fact."cognee_external_id" = NEW."provider_document_id" AND fact."content_digest" = NEW."content_digest" AND fact."state" = 'active' AND fact."recorded_by" = NEW."actor_principal_id" AND fact."source_message_id" IS NOT DISTINCT FROM NEW."source_message_id" AND prior."state" = 'corrected' AND prior."revision" = NEW."expected_fact_revision" + 1 AND fact.xmin = pg_current_xact_id()::xid AND prior.xmin = pg_current_xact_id()::xid;
+        END IF;
+        IF NOT FOUND THEN RAISE EXCEPTION 'CatalogCommitted requires its exact same-transaction fact evidence'; END IF;
+    END IF;
+    IF TG_OP = 'UPDATE' AND NEW."kind" = 'forget' AND prior_active_phase = 'catalog_finalize_pending' AND NEW."phase" = 'completed' THEN
+        PERFORM 1 FROM "memory_fact_catalog" fact WHERE fact."id" = NEW."target_fact_id" AND fact."dataset_id" = NEW."dataset_id" AND fact."cognee_external_id" = NEW."target_document_id" AND fact."state" = 'forgotten' AND fact."revision" = NEW."expected_fact_revision" + 2 AND fact.xmin = pg_current_xact_id()::xid;
+        IF NOT FOUND THEN RAISE EXCEPTION 'CatalogFinalized requires its exact same-transaction Forgotten fact'; END IF;
+    END IF;
     RETURN NEW;
 END;
 $$;
@@ -6342,13 +6623,18 @@ ALTER TABLE "skill_revisions" ADD CONSTRAINT "skill_revisions_review_check" CHEC
          AND "signature" IS NOT NULL AND btrim("signature") <> '' AND "signer_key_id" IS NOT NULL AND btrim("signer_key_id") <> '')
     );
 ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_identity_check" CHECK (
-		btrim("silo_id") <> '' AND btrim("cognee_dataset_id") <> '' AND btrim("created_by") <> '' AND
-		(("boundary_kind" = 'group' AND "boundary_group_id" IS NOT NULL AND "boundary_principal_id" IS NULL) OR
-		 ("boundary_kind" = 'personal' AND "boundary_group_id" IS NULL AND "boundary_principal_id" IS NOT NULL))
+		(btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("created_by") <> '' AND
+		 (("boundary_kind" = 'group' AND "boundary_group_id" IS NOT NULL AND btrim("boundary_group_id") <> '' AND "boundary_principal_id" IS NULL) OR
+		  ("boundary_kind" = 'personal' AND "boundary_group_id" IS NULL AND "boundary_principal_id" IS NOT NULL AND btrim("boundary_principal_id") <> ''))) IS TRUE
 	);
-ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_retirement_check" CHECK (("state" = 'retired' AND "retired_at" IS NOT NULL) OR ("state" = 'active' AND "retired_at" IS NULL));
+ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_retirement_check" CHECK ((
+        ("state" = 'provisioning' AND "boundary_kind" = 'personal' AND "boundary_principal_id" = "created_by" AND "cognee_dataset_id" IS NULL AND "retired_at" IS NULL) OR
+        ("state" = 'active' AND "cognee_dataset_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' AND "retired_at" IS NULL) OR
+        ("state" = 'retired' AND "cognee_dataset_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' AND "retired_at" IS NOT NULL AND "retired_at" >= "created_at")
+    ) IS TRUE);
 ALTER TABLE "memory_fact_catalog" ADD CONSTRAINT "memory_fact_catalog_valid_check" CHECK (
-        btrim("cognee_external_id") <> '' AND "content_digest" ~ '^sha256:[0-9a-f]{64}$'
+        btrim("id") <> '' AND btrim("dataset_id") <> '' AND "revision" > 0
+        AND btrim("cognee_external_id") <> '' AND "content_digest" ~ '^sha256:[0-9a-f]{64}$'
         AND btrim("sensitivity") <> '' AND jsonb_typeof("provenance") = 'object' AND btrim("recorded_by") <> ''
         AND ((CASE WHEN "source_artifact_revision_id" IS NOT NULL THEN 1 ELSE 0 END)
             + (CASE WHEN "source_message_id" IS NOT NULL THEN 1 ELSE 0 END)
@@ -6361,6 +6647,25 @@ ALTER TABLE "memory_fact_catalog" ADD CONSTRAINT "memory_fact_catalog_forget_che
         ("state" = 'forget_pending' AND "forget_requested_at" IS NOT NULL AND "forgotten_at" IS NULL) OR
         ("state" = 'forgotten' AND "forget_requested_at" IS NOT NULL AND "forgotten_at" IS NOT NULL)
     );
+ALTER TABLE "personal_memory_operations" ADD CONSTRAINT "personal_memory_operations_identity_check" CHECK ((
+        "id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        AND btrim("silo_id") <> '' AND btrim("dataset_id") <> '' AND btrim("actor_principal_id") <> ''
+        AND "idempotency_key_digest" ~ '^sha256:[0-9a-f]{64}$' AND "command_digest" ~ '^sha256:[0-9a-f]{64}$'
+        AND "revision" > 0
+        AND "workflow_task_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        AND btrim("workflow_task_name") <> '' AND length("workflow_task_name") <= 128
+        AND btrim("workflow_task_key") <> '' AND length("workflow_task_key") <= 256
+        AND "admitted_at" IS NOT NULL
+        AND ("admitted_provider_dataset_id" IS NULL OR "admitted_provider_dataset_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+        AND ("provider_dataset_id" IS NULL OR "provider_dataset_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+        AND ("provider_document_id" IS NULL OR "provider_document_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+        AND ("target_document_id" IS NULL OR "target_document_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+        AND ("indexing_operation_id" IS NULL OR "indexing_operation_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+        AND ("pipeline_run_id" IS NULL OR "pipeline_run_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+        AND ("expected_input_evidence_digest" IS NULL OR "expected_input_evidence_digest" ~ '^sha256:[0-9a-f]{64}$')
+        AND ("recovery_recorded_at" IS NULL OR "recovery_recorded_at" >= "admitted_at")
+        AND ("completed_at" IS NULL OR "completed_at" >= "admitted_at")
+    ) IS TRUE);
 ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_identity_check" CHECK (btrim("silo_id") <> '' AND btrim("capability_jti") <> '' AND btrim("media_type") <> '' AND strpos("media_type", '/') > 1);
 ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_expected_content_check" CHECK ("expected_content_address" IS NULL OR "expected_content_address" ~ '^sha256:[0-9a-f]{64}$');
 ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_expected_length_check" CHECK ("expected_byte_length" IS NULL OR "expected_byte_length" >= 0);
@@ -6617,8 +6922,9 @@ CREATE CONSTRAINT TRIGGER "skill_artifact_revisions_remain_published" AFTER UPDA
     DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "protect_skill_artifact_revision"();
 CREATE TRIGGER "agent_revision_skill_assignments_same_silo" BEFORE INSERT OR UPDATE ON "agent_revision_skill_assignments"
     FOR EACH ROW EXECUTE FUNCTION "enforce_agent_skill_assignment_silo"();
-CREATE TRIGGER "memory_datasets_closed_lifecycle" BEFORE UPDATE OR DELETE ON "memory_datasets" FOR EACH ROW EXECUTE FUNCTION "enforce_memory_dataset_lifecycle"();
+CREATE TRIGGER "memory_datasets_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "memory_datasets" FOR EACH ROW EXECUTE FUNCTION "enforce_memory_dataset_lifecycle"();
 CREATE TRIGGER "memory_fact_catalog_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "memory_fact_catalog" FOR EACH ROW EXECUTE FUNCTION "enforce_memory_fact_lifecycle"();
+CREATE TRIGGER "personal_memory_operations_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "personal_memory_operations" FOR EACH ROW EXECUTE FUNCTION "enforce_personal_memory_operation_lifecycle"();
 CREATE CONSTRAINT TRIGGER "corrected_memory_facts_require_successor" AFTER INSERT OR UPDATE OF "state" ON "memory_fact_catalog"
     DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_corrected_memory_successor"();
 CREATE TRIGGER "artifact_upload_leases_silo_and_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "artifact_upload_leases" FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_upload_lease_silo_and_lifecycle"();

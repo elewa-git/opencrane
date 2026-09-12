@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { PrismaPersonalMemoryAdmissionRepository } from "../prisma-personal-memory-admission-repository";
 
 /** Builds the smallest transaction fake with the two tables these reads use. */
-function _Transaction(dataset: { readonly id: string; readonly cogneeDatasetId: string } | null, facts: readonly unknown[] = [])
+function _Transaction(dataset: { readonly id: string; readonly cogneeDatasetId: string | null } | null, facts: readonly unknown[] = [])
 {
 	return { memoryDataset: { findFirst: vi.fn().mockResolvedValue(dataset) }, memoryFactCatalog: { findMany: vi.fn().mockResolvedValue(facts) } };
 }
@@ -32,5 +32,16 @@ describe("Prisma personal memory admission repository", function _DescribePrisma
 	it("returns no preference facts when the exact active personal scope is absent", async function _ReturnsMissingScope()
 	{
 		await expect(new PrismaPersonalMemoryAdmissionRepository(_Transaction(null) as never).findActivePreferenceFactIds({ siloId: "silo-1", principalId: "principal-1", subjectId: "user-1" })).resolves.toEqual([]);
+	});
+
+	it("refuses a dataset without an adopted provider id before reading any facts", async function _RejectsUnprovisionedDataset()
+	{
+		const transaction = _Transaction({ id: "dataset-pending", cogneeDatasetId: null });
+		const repository = new PrismaPersonalMemoryAdmissionRepository(transaction as never);
+		const command = { siloId: "silo-1", principalId: "principal-1", subjectId: "user-1" };
+
+		await expect(repository.findActivePersonalDataset(command)).resolves.toBeNull();
+		await expect(repository.findActivePreferenceFactIds(command)).resolves.toEqual([]);
+		expect(transaction.memoryFactCatalog.findMany).not.toHaveBeenCalled();
 	});
 });

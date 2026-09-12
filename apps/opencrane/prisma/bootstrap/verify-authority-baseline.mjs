@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 
 const _BASELINE = new URL("./target-baseline.sql", import.meta.url);
-const _MINIMUM_FUNCTIONS = 79;
-const _MINIMUM_TRIGGERS = 89;
-const _MINIMUM_CONSTRAINTS = 227;
+const _MINIMUM_FUNCTIONS = 80;
+const _MINIMUM_TRIGGERS = 90;
+const _MINIMUM_CONSTRAINTS = 228;
 const _REQUIRED_AUTHORITY_MARKERS = [
 	'ADD CONSTRAINT "mcp_servers_credentialless_schema_check"',
 	'ADD CONSTRAINT "mcp_servers_oci_credential_requirement_check"',
@@ -122,7 +122,15 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'ALTER TABLE "tool_result_deliveries" ADD CONSTRAINT "tool_result_deliveries_exact_check"',
 	'CREATE TYPE "PersonalMemoryPermissionReceiptState" AS ENUM (\'active\', \'consumed\');',
 	'CREATE UNIQUE INDEX "memory_datasets_exact_boundary_key"',
-	'NEW."boundary_kind" IS DISTINCT FROM OLD."boundary_kind" OR NEW."boundary_group_id" IS DISTINCT FROM OLD."boundary_group_id" OR NEW."boundary_principal_id" IS DISTINCT FROM OLD."boundary_principal_id"',
+	'CREATE FUNCTION "enforce_personal_memory_operation_lifecycle"()',
+	'CREATE TRIGGER "personal_memory_operations_closed_lifecycle"',
+	'ALTER TABLE "personal_memory_operations" ADD CONSTRAINT "personal_memory_operations_identity_check"',
+	'PersonalMemoryOperation requires its actor-owned personal dataset',
+	'CatalogCommitted requires its exact same-transaction fact evidence',
+	'CatalogFinalized requires its exact same-transaction Forgotten fact',
+	'MemoryFact revision is database-owned',
+	'Provisioning MemoryDataset may only adopt one provider UUID',
+	'MemoryDataset authority is immutable',
 	'CREATE FUNCTION "enforce_personal_memory_permission_authority"()',
 	'WHERE "run_id" = NEW."run_id"\n      AND "attempt" = NEW."attempt"\n      AND "input_digest" = NEW."input_snapshot_digest"',
 	'CREATE TRIGGER "personal_memory_permission_receipts_authority"',
