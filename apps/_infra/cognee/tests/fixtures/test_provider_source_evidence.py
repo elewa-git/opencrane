@@ -14,6 +14,18 @@ from unittest.mock import patch
 import source_repair_evidence as REPAIRS
 
 
+class CandidateSourceDeclarationTest(unittest.TestCase):
+    """Check the shipped candidate declaration before an image build reaches attestation."""
+
+    def test_candidate_repairs_match_upstream_modules_and_image_profile(self) -> None:
+        candidate = Path(__file__).resolve().parent.parent / "candidates" / "1.5.4"
+        expected = json.loads((candidate / "expected-source-hashes.json").read_text())
+        profile = json.loads((candidate / "profile.json").read_text())
+        repairs = REPAIRS.validated_repairs(expected, profile)
+        self.assertTrue(repairs)
+        self.assertEqual(repairs, expected["repairs"])
+
+
 class ProviderSourceEvidenceTest(unittest.TestCase):
     """Exercise repair validation and the complete attestation driver using synthetic files."""
 

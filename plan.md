@@ -20,7 +20,17 @@ Qualification injects interruption after the row and after each grant, restarts 
 retries each saved name. It must prove the original identity, four unique owner grants, foreign-owner
 isolation and successful public list/add/search/delete operations. All 61 local Cognee tests pass,
 including 38 candidate fixture tests and 15 dataset tests. Cognee lint, both exact upstream patch
-applications and independent review pass. The new exact-image run remains a separate gate.
+applications and independent review pass.
+
+Draft #874 publishes this repair at `9c541ddc5e36917bb97f0d7554d851d57aa3ff18`.
+Its first exact-image run `34708526857`, candidate job `103593018371`, stops during
+source attestation before exercising the permission-recovery cases. The two repaired modules
+were absent from the upstream module map, so the verifier correctly rejected their non-null
+preimage hashes as declarations of new modules. The correction adds their verified official
+1.5.4 hashes to that map. A regression loads the actual candidate declaration and image profile;
+it reproduces the failure before the correction. All 16 source-evidence tests and Cognee lint pass
+after the correction. The verifier and provider patches are unchanged.
+Candidate runtime qualification remains pending on the corrected commit.
 
 Gateway HTTP handlers, provider operations and the server client are being prepared in parallel.
 Automatic approval review rejected deletion of the old client and tests, citing integration risk.
