@@ -5,6 +5,10 @@ const _MINIMUM_FUNCTIONS = 79;
 const _MINIMUM_TRIGGERS = 89;
 const _MINIMUM_CONSTRAINTS = 227;
 const _REQUIRED_AUTHORITY_MARKERS = [
+	'ADD CONSTRAINT "mcp_servers_credentialless_schema_check"',
+	'ADD CONSTRAINT "mcp_servers_oci_credential_requirement_check"',
+	'"credential_requirement" <> \'credentialless\' OR "credential_schema" = \'[]\'::jsonb',
+	'"transport" <> \'oci-image\' OR "credential_requirement" = \'credentialless\'',
 	'CREATE VIEW "agent_run_authority_clock" AS',
     'CREATE FUNCTION "enforce_agent_run_cancellation"()',
     'CREATE TRIGGER "agent_runs_cancellation_authority"',

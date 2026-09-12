@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 
+import { McpCredentialRequirement } from "@opencrane/contracts";
+
 import type { IMcpOperatorRepository, McpOperatorServerRecord, McpOperatorTransaction, McpOperatorUnitOfWork, McpRemoteServerRegistrationRecord } from "../core/mcp-operator-repository.types";
 import { McpRemoteServerRegistrationValidationError, registerRemoteServer } from "../era-probe/mcp-remote-registration";
 import { McpEraProbeStates, McpRemoteServerRegistrationOutcomes } from "../era-probe/mcp-era-probe.types";
@@ -10,36 +12,38 @@ import type { McpEraProbeWorkflow, McpRemoteServerRegistrationCommand } from "..
 /** Return one valid admin registration command. */
 function _Command(): McpRemoteServerRegistrationCommand
 {
-	return { idempotencyKey: "registration-1", name: "Example MCP", description: "Public tools", endpoint: "https://mcp.example.test/" };
+	return { idempotencyKey: "registration-1", name: "Example MCP", description: "Public tools", endpoint: "https://mcp.example.test/", credentialRequirement: McpCredentialRequirement.PrincipalCredential };
 }
 
 /** Build a draft row from normalized registration fields. */
 function _Server(registration: McpRemoteServerRegistrationRecord): McpOperatorServerRecord
 {
-	return { id: "server-1", name: registration.name, description: registration.description, publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "PendingReview", status: "Draft", latestReadyRevision: null, credentialSchema: [], entitlementSummary: null, endpoint: registration.endpoint, registrationKeyDigest: registration.registrationKeyDigest, registrationDigest: registration.registrationDigest, eraProbeStatus: McpEraProbeStates.Pending, eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 };
+	return { id: "server-1", name: registration.name, description: registration.description, publisher: null, glyph: null, serverType: "MultiUser", credentialRequirement: "PrincipalCredential", approvalStatus: "PendingReview", status: "Draft", latestReadyRevision: null, credentialSchema: [], entitlementSummary: null, endpoint: registration.endpoint, registrationKeyDigest: registration.registrationKeyDigest, registrationDigest: registration.registrationDigest, eraProbeStatus: McpEraProbeStates.Pending, eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 };
 }
 
 /** Return a stateful transaction that identifies a retried registration without another audit. */
-function _Harness(): { unitOfWork: McpOperatorUnitOfWork; workflow: McpEraProbeWorkflow; audit: ReturnType<typeof vi.fn>; admit: ReturnType<typeof vi.fn> }
+function _Harness(): { unitOfWork: McpOperatorUnitOfWork; workflow: McpEraProbeWorkflow; authorize: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn>; audit: ReturnType<typeof vi.fn>; admit: ReturnType<typeof vi.fn> }
 {
 	let stored: McpOperatorServerRecord | null = null;
 	const audit = vi.fn().mockResolvedValue(undefined);
+	const create = vi.fn().mockImplementation(function _Create(registration: McpRemoteServerRegistrationRecord)
+	{
+		if (stored)
+			return Promise.resolve({ created: false, server: stored });
+		stored = _Server(registration);
+		return Promise.resolve({ created: true, server: stored });
+	});
 	const repository = {
-		createOrFindRemoteServer: vi.fn().mockImplementation(function _Create(registration: McpRemoteServerRegistrationRecord)
-		{
-			if (stored)
-				return Promise.resolve({ created: false, server: stored });
-			stored = _Server(registration);
-			return Promise.resolve({ created: true, server: stored });
-		}),
+		createOrFindRemoteServer: create,
 		appendAudit: audit,
 	} as unknown as IMcpOperatorRepository;
 	const workflowTransaction: IWorkflowTransaction = { client: {} };
-	const authorization = { admitPrincipal: vi.fn().mockResolvedValue({ outcome: "allow", reason: "winning_allow", grantIds: ["grant-1"], evidence: { decisionDigest: `sha256:${"a".repeat(64)}`, policyRevisionHash: `sha256:${"b".repeat(64)}`, effectiveAuthorizationDigest: `sha256:${"c".repeat(64)}` } }) };
+	const authorize = vi.fn().mockResolvedValue({ outcome: "allow", reason: "winning_allow", grantIds: ["grant-1"], evidence: { decisionDigest: `sha256:${"a".repeat(64)}`, policyRevisionHash: `sha256:${"b".repeat(64)}`, effectiveAuthorizationDigest: `sha256:${"c".repeat(64)}` } });
+	const authorization = { admitPrincipal: authorize };
 	const transaction = { mcp: repository, authorization, workflowTransaction } as unknown as McpOperatorTransaction;
 	const unitOfWork: McpOperatorUnitOfWork = { execute: async function _Execute<Result>(operation: (value: McpOperatorTransaction) => Promise<Result>): Promise<Result> { return await operation(transaction); } };
 	const admit = vi.fn().mockResolvedValue({ taskKey: "task-key", receipt: { taskId: "task-1", taskName: "mcp-era-probe.probe", idempotencyKey: "task-key" } });
-	return { unitOfWork, workflow: { admit }, audit, admit };
+	return { unitOfWork, workflow: { admit }, authorize, create, audit, admit };
 }
 
 describe("remote MCP registration", function _RemoteRegistrationSuite()
@@ -56,6 +60,8 @@ describe("remote MCP registration", function _RemoteRegistrationSuite()
 		expect(first.outcome).toBe(McpRemoteServerRegistrationOutcomes.Registered);
 		expect(harness.audit).toHaveBeenCalledTimes(1);
 		expect(harness.audit).toHaveBeenCalledWith("silo-1", "Created", "McpServer/server-1", "Remote MCP server server-1 registered for protocol check", "admin-1");
+		expect(harness.create).toHaveBeenCalledWith(expect.objectContaining({ credentialRequirement: McpCredentialRequirement.PrincipalCredential }));
+		expect(harness.authorize).toHaveBeenCalledWith(expect.objectContaining({ argumentsDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) }));
 		expect(harness.admit).toHaveBeenCalledTimes(2);
 		expect(harness.admit.mock.calls[0][1]).toEqual(harness.admit.mock.calls[1][1]);
 	});
@@ -72,6 +78,20 @@ describe("remote MCP registration", function _RemoteRegistrationSuite()
 		expect(harness.admit).toHaveBeenCalledTimes(1);
 	});
 
+	it("returns a conflict when the same key changes its credential requirement", async function _RejectsChangedRequirement()
+	{
+		const harness = _Harness();
+		const caller = { siloId: "silo-1", principalId: "admin-1" };
+
+		await registerRemoteServer(harness.unitOfWork, harness.workflow, caller, _Command());
+		const firstAuthorizationDigest = harness.authorize.mock.calls[0][0].argumentsDigest;
+		const result = await registerRemoteServer(harness.unitOfWork, harness.workflow, caller, { ..._Command(), credentialRequirement: McpCredentialRequirement.SharedCredential });
+
+		expect(result.outcome).toBe(McpRemoteServerRegistrationOutcomes.Conflict);
+		expect(harness.authorize.mock.calls[1][0].argumentsDigest).not.toBe(firstAuthorizationDigest);
+		expect(harness.admit).toHaveBeenCalledTimes(1);
+	});
+
 	it.each([
 		["malformed URL", { endpoint: "not a URL" }],
 		["query", { endpoint: "https://mcp.example.test/?token=no" }],
@@ -79,10 +99,13 @@ describe("remote MCP registration", function _RemoteRegistrationSuite()
 		["short idempotency key", { idempotencyKey: "short" }],
 		["IP literal", { endpoint: "https://127.0.0.1/" }],
 		["private host name", { endpoint: "https://service.internal/" }],
+		["missing credential requirement", { credentialRequirement: undefined }],
+		["unknown credential requirement", { credentialRequirement: "delegated-token" }],
 	] as const)("rejects a %s before a transaction starts", function _RejectsUnsafeInput(_name, override)
 	{
 		const harness = _Harness();
-		expect(function _Register() { return registerRemoteServer(harness.unitOfWork, harness.workflow, { siloId: "silo-1", principalId: "admin-1" }, { ..._Command(), ...override }); }).toThrow(McpRemoteServerRegistrationValidationError);
+		const command = { ..._Command(), ...override } as McpRemoteServerRegistrationCommand;
+		expect(function _Register() { return registerRemoteServer(harness.unitOfWork, harness.workflow, { siloId: "silo-1", principalId: "admin-1" }, command); }).toThrow(McpRemoteServerRegistrationValidationError);
 		expect(harness.admit).not.toHaveBeenCalled();
 		expect(harness.audit).not.toHaveBeenCalled();
 	});

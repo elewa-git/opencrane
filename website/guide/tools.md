@@ -21,8 +21,10 @@ definitions. Consult the [API reference](/reference/api) for current payloads an
 [OCI MCP guide](/integrators/oci-mcp-runtime) for the supported package format.
 
 Decide which tools are needed, who may use them, which company connection owns their credentials,
-and which actions require approval. Registration alone does not grant access. An install labelled
-`shared-key` does not prove that company credentials are configured or that a provider call works.
+and which actions require approval. Registration alone does not grant access. A `credentialless`
+install needs no provider credential, but that status alone does not prove a provider call works.
+Servers that need a Principal or shared organisation credential remain unavailable until the
+separate credential activation journey is implemented.
 
 ## The intended action journey
 

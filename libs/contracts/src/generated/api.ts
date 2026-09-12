@@ -1785,16 +1785,21 @@ export interface components {
             /** @description Frontend icon key for the server. */
             glyph?: string;
             /**
-             * @description How the server is configured for connection: single-user requires a caller-owned credential through an external custody flow, multi-user uses an administrator-managed shared key, and remote-oauth requires an OAuth handshake outside this API.
+             * @description How the catalogue presents the connection. This value does not grant installation readiness.
              * @enum {string}
              */
             type?: "single-user" | "multi-user" | "remote-oauth";
+            /**
+             * @description Credential custody required for execution. Only credentialless installations can execute through the current API; the other requirements await a governed activation flow.
+             * @enum {string}
+             */
+            credentialRequirement: "credentialless" | "principal-credential" | "shared-credential";
             /**
              * @description Organisation-admin review state. Only published servers appear in the user-facing catalogue; approved servers remain hidden until publication.
              * @enum {string}
              */
             approvalStatus?: "pending-review" | "approved" | "published" | "disabled";
-            /** @description Input fields required by an external custody flow for a single-user connection. This API describes requested values but neither receives nor returns credential material. */
+            /** @description Fields declared by the server for credential setup, independent of its presentation type. This API describes the fields but neither receives nor returns credential values; activation remains unavailable. */
             credentialSchema?: components["schemas"]["CredentialField"][];
             /** @description Human-readable summary of access grants, returned for the governance view. */
             entitlementSummary?: string;
@@ -1826,7 +1831,7 @@ export interface components {
              */
             readiness: "ready";
         };
-        /** @description One input an external custody flow requires to connect a single-user MCP server. This API describes the input but neither receives nor returns its value. */
+        /** @description One field declared by an MCP server for credential setup. This API describes the field but neither receives nor returns its value. */
         CredentialField: {
             /** @description Stable submission key for the value. */
             key: string;
@@ -1846,10 +1851,10 @@ export interface components {
             /** @description Identifier of the installed server. */
             serverId: string;
             /**
-             * @description Recorded activation requirement: needs-credential requires an external custody flow, while shared-key records an administrator-managed shared key. This API does not activate either state.
+             * @description Persisted installation state. Needs-credential is unavailable until activation exists; credentialless requires no provider credential and still needs current execution authority.
              * @enum {string}
              */
-            connectionStatus?: "needs-credential" | "shared-key";
+            connectionStatus: "needs-credential" | "credentialless";
             /**
              * Format: date-time
              * @description ISO-8601 timestamp of the server's last use, or null when it has never been used.
@@ -2519,6 +2524,8 @@ export interface operations {
                     description?: string;
                     /** Format: uri */
                     endpoint: string;
+                    /** @enum {string} */
+                    credentialRequirement: "credentialless" | "principal-credential" | "shared-credential";
                 };
             };
         };

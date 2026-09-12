@@ -6,6 +6,7 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
+import { PrismaMcpConnectionReadinessRepository } from "../connections/prisma-mcp-connection-readiness-repository";
 import { PrismaMcpTaskToolInvocationLifecycleRepository } from "../mcp-tasks/prisma-mcp-task-tool-invocation-lifecycle";
 import { PrismaMcpTaskWorkflowExhaustionRepository } from "../mcp-tasks/prisma-mcp-task-workflow-exhaustion-repository";
 import type { McpTaskWorkflowInput, McpTaskWorkflowResult, McpTaskWorkflowRuntime } from "../mcp-tasks/mcp-task.types";
@@ -135,11 +136,12 @@ export class PrismaMcpRuntimeUnitOfWork implements McpRuntimeAuthority, McpTaskW
 						const mcpTasks = new PrismaMcpTaskToolInvocationLifecycleRepository(transaction);
 						const toolInvocations = dependencies.toolInvocations.__ForTransaction(transaction, mcpTasks);
 						const authorization = new PrismaAuthorizationAuthority(transaction);
+						const connectionReadiness = new PrismaMcpConnectionReadinessRepository(transaction);
 						const repositories = {
 							ociPromotion: new PrismaMcpOciServerPromotionRepository(transaction, authorization, dependencies.options),
-							invocationAdmission: new PrismaMcpToolInvocationAdmissionRepository(transaction, toolInvocations, dependencies.options),
+							invocationAdmission: new PrismaMcpToolInvocationAdmissionRepository(transaction, toolInvocations, connectionReadiness, dependencies.options),
 							controller: new PrismaMcpRuntimeControllerRepository(transaction, dependencies.options),
-							companion: new PrismaMcpRuntimeCompanionRepository(transaction, toolInvocations, dependencies.options),
+							companion: new PrismaMcpRuntimeCompanionRepository(transaction, toolInvocations, connectionReadiness, dependencies.options),
 							workflowExhaustion: new PrismaMcpTaskWorkflowExhaustionRepository(transaction, toolInvocations),
 						};
 

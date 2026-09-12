@@ -140,10 +140,13 @@ CREATE TYPE "McpServerStatus" AS ENUM ('active', 'degraded', 'draft');
 CREATE TYPE "McpServerType" AS ENUM ('single-user', 'multi-user', 'remote-oauth');
 
 -- CreateEnum
+CREATE TYPE "McpCredentialRequirement" AS ENUM ('credentialless', 'principal-credential', 'shared-credential');
+
+-- CreateEnum
 CREATE TYPE "McpApprovalStatus" AS ENUM ('pending-review', 'approved', 'published', 'disabled');
 
 -- CreateEnum
-CREATE TYPE "McpConnectionStatus" AS ENUM ('needs-credential', 'shared-key');
+CREATE TYPE "McpConnectionStatus" AS ENUM ('needs-credential', 'credentialless');
 
 -- CreateEnum
 CREATE TYPE "MemoryDatasetState" AS ENUM ('active', 'retired');
@@ -929,6 +932,7 @@ CREATE TABLE "mcp_servers" (
     "publisher" TEXT,
     "glyph" TEXT,
     "server_type" "McpServerType" NOT NULL DEFAULT 'single-user',
+    "credential_requirement" "McpCredentialRequirement" NOT NULL,
     "approval_status" "McpApprovalStatus" NOT NULL DEFAULT 'pending-review',
     "credential_schema" JSONB NOT NULL DEFAULT '[]',
     "entitlement_summary" TEXT,
@@ -3175,6 +3179,15 @@ ALTER TABLE "user_onboarding_bootstrap_answers" ADD CONSTRAINT "user_onboarding_
 ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_registration_digest_check" CHECK (
     ("registration_key_digest" IS NULL AND "registration_digest" IS NULL)
     OR ("registration_key_digest" ~ '^sha256:[0-9a-f]{64}$' AND "registration_digest" ~ '^sha256:[0-9a-f]{64}$')
+);
+
+-- Credentialless servers cannot ask callers for a credential. The uploaded-image executor has no
+-- credential or provider-egress path, so only credentialless servers may select that transport.
+ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_credentialless_schema_check" CHECK (
+    "credential_requirement" <> 'credentialless' OR "credential_schema" = '[]'::jsonb
+);
+ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_oci_credential_requirement_check" CHECK (
+    "transport" <> 'oci-image' OR "credential_requirement" = 'credentialless'
 );
 
 ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_era_probe_evidence_check" CHECK (

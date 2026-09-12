@@ -6,6 +6,7 @@ import type { ExecutionSubject } from "@opencrane/models/agents";
 
 import { ConversationToolComputerEvidenceReader } from "../conversation-tool-computer-evidence";
 import type { ConversationToolDispatchDependencies } from "../conversation-tool-dispatch.types";
+import { _ConversationToolAssignment } from "../prisma-conversation-tool-access";
 import { PrismaConversationToolRunEvidenceRepository } from "../prisma-conversation-tool-run-evidence";
 
 /** Fixed observation time for the saved run and its history. */
@@ -47,6 +48,15 @@ function _fixture()
 
 describe("saved conversation tool run evidence", function _RunEvidence()
 {
+	it("binds managed tool readiness to the execution Principal rather than the requester", async function _ManagedExecutionOwner()
+	{
+		const f = _fixture();
+		const run = (await f.runs.load(f.invocation, _NOW))!;
+		const managed = { ...run, subject: { ...run.subject, principalId: "service-principal-1", requester: { ...run.subject.requester, requesterPrincipalId: "admin-principal-1" } } };
+
+		expect(_ConversationToolAssignment(managed)).toEqual({ siloId: "silo", agentServiceId: "service", agentRevisionId: "revision", toolRevisionId: "tool", ownerPrincipalId: "service-principal-1" });
+	});
+
 	it("accepts the already-counted invocation at the exact allowance", async function _ExactAllowance()
 	{
 		const f = _fixture();

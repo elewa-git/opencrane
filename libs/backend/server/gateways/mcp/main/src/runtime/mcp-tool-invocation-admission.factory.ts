@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 
 import type { McpToolInvocationTransactionParticipantFactory } from "@opencrane/backend/server/iam/authorization";
 
+import { PrismaMcpConnectionReadinessRepository } from "../connections/prisma-mcp-connection-readiness-repository";
 import type { McpRuntimeAuthorityOptions, McpToolInvocationAdmission } from "./mcp-runtime.types";
 import { PrismaMcpToolInvocationAdmissionRepository } from "./prisma-mcp-tool-invocation-admission-repository";
 
@@ -15,7 +16,9 @@ export function _CreateMcpToolInvocationAdmission(participants: McpToolInvocatio
 {
 	return async function _AdmitInTransaction(transaction, invocationRowId): Promise<boolean>
 	{
-		const repository = new PrismaMcpToolInvocationAdmissionRepository(transaction as Prisma.TransactionClient, participants.__ForTransaction(transaction), options);
+		const prismaTransaction = transaction as Prisma.TransactionClient;
+		const readiness = new PrismaMcpConnectionReadinessRepository(prismaTransaction);
+		const repository = new PrismaMcpToolInvocationAdmissionRepository(prismaTransaction, participants.__ForTransaction(transaction), readiness, options);
 		const result = await repository.admitInvocation(invocationRowId);
 		return result === "admitted" || result === "idempotent";
 	};

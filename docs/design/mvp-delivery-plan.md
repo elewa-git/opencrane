@@ -53,10 +53,10 @@ Recheck live ancestry before publishing each PR; do not duplicate an open predec
    assignments to inherit their parent service. Qualify transaction rollback, concurrent editors,
    removed/revoked grants and the separate company/human authority through unit and real SQL tests.
 2. **Establish one working connection.** Inventory the authorized test environment and select a
-   dedicated read-only integration and record. The current installation contract records
-   `NeedsCredential` or `SharedKey` but provides no credential activation command. Define personal
+   dedicated read-only integration and record. The installation contract distinguishes explicit credentialless readiness from
+   `NeedsCredential`; it still provides no credential activation command. Define personal
    versus company ownership, authorized activation/reconnection and execution binding through the
-   existing credential owner. A shared-key label alone is not connectivity proof. Keep secrets out
+   existing credential owner. An installation label alone is not connectivity proof. Keep secrets out
    of chat, workflow input and the ConversationComputer Pod. Missing setup produces an explicit
    content-free waiting state.
 3. **Keep the retrieved evidence with the conversation.** Use the existing invocation result and

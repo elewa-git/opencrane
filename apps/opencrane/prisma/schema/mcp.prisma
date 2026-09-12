@@ -103,12 +103,26 @@ enum McpServerStatus {
   Draft    @map("draft")
 }
 
-// Consumption shape advertised to the operator API: how a caller connects a
-// downstream MCP server (single-user secret, org-wide shared key, or remote OAuth).
+// Presentation of a downstream MCP connection. Credential requirements are recorded separately;
+// this value never makes an installation usable.
 enum McpServerType {
+  /// Presents a connection configured by an individual user.
   SingleUser  @map("single-user")
+  /// Presents a connection intended for multiple users.
   MultiUser   @map("multi-user")
+  /// Presents a remote connection configured through OAuth.
   RemoteOauth @map("remote-oauth")
+}
+
+/// Records the credential custody a server requires independently of its connection presentation.
+/// Registration must select a requirement explicitly; installing a server never activates a credential.
+enum McpCredentialRequirement {
+  /// The server can execute without any provider credential.
+  Credentialless      @map("credentialless")
+  /// Execution requires a credential bound to the exact execution Principal.
+  PrincipalCredential @map("principal-credential")
+  /// Execution requires a governed credential shared by the owning organisation.
+  SharedCredential    @map("shared-credential")
 }
 
 // Governance lifecycle gated by org admins (P1 catalogue review). Only `published`
@@ -120,14 +134,13 @@ enum McpApprovalStatus {
   Disabled      @map("disabled")
 }
 
-// Records whether an MCP install awaits external credential activation or is usable through an
-// administrator-managed shared key. The operator API returns these persisted values but exposes no
-// credential or OAuth activation command; changing either mapped value requires a data migration.
+// Records whether an MCP install needs credential activation or explicitly requires no credential.
+// The current API has no activation command, so credential-requiring installs remain unavailable.
 enum McpConnectionStatus {
-  // The install remains unusable until a custody flow outside the current API activates it.
+  /// The install cannot execute because its required credential has not been activated.
   NeedsCredential @map("needs-credential")
-  // The install is usable through an administrator-managed key and needs no caller credential.
-  SharedKey       @map("shared-key")
+  /// The installed server requires no credential; execution still checks current authority.
+  Credentialless  @map("credentialless")
 }
 
 model McpServer {
@@ -143,6 +156,7 @@ model McpServer {
   publisher              String?
   glyph                  String?
   serverType             McpServerType       @default(SingleUser) @map("server_type")
+  credentialRequirement  McpCredentialRequirement @map("credential_requirement")
   approvalStatus         McpApprovalStatus   @default(PendingReview) @map("approval_status")
   credentialSchema       Json                @default("[]") @map("credential_schema")
   entitlementSummary     String?             @map("entitlement_summary")

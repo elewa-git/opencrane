@@ -165,6 +165,12 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Fixed
 
+- **Installed tools report whether they need credentials without inferring readiness from server type.**
+  The source under review requires an explicit credential requirement; credentialed installations
+  remain unavailable, and credentialless installations show “No credential required”. Dispatch checks
+  the executing person's or company assistant's own installation. Remote credential activation,
+  hosted provider access and live qualification remain unfinished.
+
 - **Completed setup can recover an unused personal assistant whose computer profile is no longer configured.**
   The repair keeps setup answers, identity and revision history, requires current edit permission,
   and refuses any assistant with prior conversations or runs. Live qualification remains separate.

@@ -3,7 +3,7 @@ import { signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@angular/platform-browser-dynamic/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { McpApprovalStatus, McpConnectionStatus, McpServerType, type McpServer } from "@opencrane/core";
+import { McpApprovalStatus, McpConnectionStatus, McpCredentialRequirement, McpServerType, type McpServer } from "@opencrane/core";
 import { MCP_GATEWAY, type McpGateway } from "@opencrane/state/mcp/adapter";
 import { ModelProvider, PROVIDER_KEY_GATEWAY, type ProviderKeyGateway } from "@opencrane/state/provider-key/adapter";
 import { SessionStore } from "@opencrane/state/core";
@@ -20,7 +20,7 @@ afterAll(function _ResetEnvironment() { TestBed.resetTestEnvironment(); });
 /** Produces server-owned status without credentials. */
 function _Server(id: string): McpServer
 {
-	return { id, name: id, description: "Farm reporting", publisher: "Elewa", glyph: "FR", type: McpServerType.MultiUser, approvalStatus: McpApprovalStatus.PendingReview, credentialSchema: [], entitlementSummary: "Workspace" };
+	return { id, name: id, description: "Farm reporting", publisher: "Elewa", glyph: "FR", type: McpServerType.MultiUser, credentialRequirement: McpCredentialRequirement.Credentialless, approvalStatus: McpApprovalStatus.PendingReview, credentialSchema: [], entitlementSummary: "Workspace" };
 }
 
 /** Creates the complete gateway while each test controls its asynchronous command. */
@@ -58,11 +58,11 @@ describe("tools route stores", function _Stores()
 		const b = store.install("b");
 		await store.install("a");
 		expect(gateway.install).toHaveBeenCalledTimes(2);
-		first.resolve({ serverId: "a", connectionStatus: McpConnectionStatus.SharedKey, lastUsed: null });
+		first.resolve({ serverId: "a", connectionStatus: McpConnectionStatus.Credentialless, lastUsed: null });
 		await a;
 		expect(store.busy().has("a")).toBe(false);
 		expect(store.busy().has("b")).toBe(true);
-		second.resolve({ serverId: "b", connectionStatus: McpConnectionStatus.SharedKey, lastUsed: null });
+		second.resolve({ serverId: "b", connectionStatus: McpConnectionStatus.Credentialless, lastUsed: null });
 		await b;
 		expect(store.busy().size).toBe(0);
 	});
@@ -151,7 +151,7 @@ describe("tools presentation mapping", function _Mapping()
 {
 	it("joins only currently entitled catalogue records", function _AuthorizedJoin()
 	{
-		const records = ["visible", "hidden"].map(serverId => ({ serverId, connectionStatus: McpConnectionStatus.SharedKey, lastUsed: null }));
+		const records = ["visible", "hidden"].map(serverId => ({ serverId, connectionStatus: McpConnectionStatus.Credentialless, lastUsed: null }));
 		expect(_InstalledToolRows([_Server("visible")], records).map(row => row.server.id)).toEqual(["visible"]);
 	});
 	it("combines browser text and connection filters without changing source data", function _Filters()

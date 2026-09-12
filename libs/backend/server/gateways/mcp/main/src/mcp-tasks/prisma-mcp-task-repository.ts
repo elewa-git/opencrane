@@ -1,13 +1,17 @@
 import { createHash } from "node:crypto";
 
 import Ajv from "ajv";
-import { ExternalActionRecoveryMode, McpApprovalStatus, McpExecutorCommandState, McpExecutorWorkloadState, McpServerRevisionState, McpServerStatus, McpTaskState, Prisma, ToolInvocationState } from "@prisma/client";
+import { ExternalActionRecoveryMode, McpExecutorCommandState, McpExecutorWorkloadState, McpTaskState, Prisma, ToolInvocationState } from "@prisma/client";
 
 import { PrismaManagedAuthorizationGrantRepository, type AuthorizationAuthority, type ManagedAuthorizationGrantRepository, type ManagedAuthorizationGrantSpec } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
+
+import { PrismaMcpConnectionReadinessRepository } from "../connections/prisma-mcp-connection-readiness-repository";
+import type { McpConnectionReadiness } from "../connections/mcp-connection-readiness.types";
+import { _MCP_CONNECTION_UNAVAILABLE } from "../connections/mcp-connection-readiness";
 import { MCP_ERA_PROTOCOL_VERSION } from "../era-probe/mcp-era-probe.types";
 import { _McpTerminalWorkloadState } from "../runtime/mcp-runtime-terminal-workload-state";
-import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _McpTaskCancellationConflictError, type McpTaskCreateResult, type McpTaskRepository, type McpTaskSubmissionRecord, type McpTaskWorkflowBinding } from "./mcp-task-repository.types";
 import { McpTaskStates, type McpTaskInputRequest, type McpTaskInputResponse, type McpTaskRecord } from "./mcp-task.types";
@@ -150,13 +154,16 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 	private readonly _authorization: AuthorizationAuthority;
 	/** Shared grant writer that projects the creator relation inside this transaction. */
 	private readonly _managedGrants: ManagedAuthorizationGrantRepository;
+	/** Current installation readiness bound to this transaction. */
+	private readonly _connectionReadiness: McpConnectionReadiness;
 
 	/** Bind task and product authorization operations to one caller-owned database transaction. */
-	constructor(transaction: Prisma.TransactionClient, authorization: AuthorizationAuthority, managedGrants: ManagedAuthorizationGrantRepository | null = null)
+	constructor(transaction: Prisma.TransactionClient, authorization: AuthorizationAuthority, managedGrants: ManagedAuthorizationGrantRepository | null = null, connectionReadiness: McpConnectionReadiness | null = null)
 	{
 		this._transaction = transaction;
 		this._authorization = authorization;
 		this._managedGrants = managedGrants ?? new PrismaManagedAuthorizationGrantRepository(transaction);
+		this._connectionReadiness = connectionReadiness ?? new PrismaMcpConnectionReadinessRepository(transaction);
 	}
 
 	/** Create or replay one exact installed Ready MCP tool task. */
@@ -180,17 +187,11 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 				id: submission.toolRevisionId,
 				siloId: submission.siloId,
 				serverRevisionId: submission.serverRevisionId,
-				serverRevision: {
-					is: {
-						state: McpServerRevisionState.Ready,
-						protocolVersion: MCP_ERA_PROTOCOL_VERSION,
-						server: { is: { status: McpServerStatus.Active, approvalStatus: McpApprovalStatus.Published, installs: { some: { principalId: submission.principalId } } } },
-					},
-				},
 			},
 			select: { inputSchema: true },
 		});
-		if (tool === null)
+		const readiness = { siloId: submission.siloId, toolRevisionId: submission.toolRevisionId, ownerPrincipalId: submission.principalId };
+		if (tool === null || !await this._connectionReadiness.isReady(readiness))
 			return null;
 		if (submission.inputRequest === null && !_ArgumentsAreValid(tool.inputSchema, submission.arguments))
 			return null;
@@ -293,6 +294,12 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 			return _Record(task);
 		if (task.state === McpTaskState.Cancelled || task.state === McpTaskState.Failed || task.state === McpTaskState.RecoveryRequired || task.state === McpTaskState.Completed)
 			return _Record(task);
+		const readiness = { siloId: task.siloId, toolRevisionId: task.toolRevisionId, ownerPrincipalId: task.principalId };
+		if (!await this._connectionReadiness.isReady(readiness))
+		{
+			const failed = await this._transaction.mcpTask.update({ where: { id: task.id }, data: { state: McpTaskState.Failed, failureCode: _MCP_CONNECTION_UNAVAILABLE, completedAt: new Date() }, select: _TASK_SELECT });
+			return _Record(failed);
+		}
 		const effectiveArguments = _EffectiveArguments(task);
 		if (effectiveArguments === null || !_ArgumentsAreValid(task.toolRevision.inputSchema, effectiveArguments))
 		{
@@ -353,13 +360,19 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 				approvalRequired: false,
 				recoveryMode: ExternalActionRecoveryMode.Manual,
 				recoveryKey: null,
-				state: ToolInvocationState.Ready,
+				state: ToolInvocationState.Preparing,
 				retryDeadlineAt,
 				nextPreparationAttemptAt: now,
 				createdAt: now,
 			},
 			select: { id: true },
 		});
+		const prepared = await this._transaction.toolInvocation.updateMany({
+			where: { id: invocation.id, mcpTaskId: task.id, state: ToolInvocationState.Preparing, revision: 0 },
+			data: { state: ToolInvocationState.Ready, preparationAttempt: { increment: 1 }, revision: { increment: 1 } },
+		});
+		if (prepared.count !== 1)
+			throw new Error("MCP task lost its provider-free preparation fence");
 		const queued = await this._transaction.mcpTask.update({ where: { id: task.id }, data: { state: McpTaskState.Queued, failureCode: null }, select: _TASK_SELECT });
 		if (queued.toolInvocation?.id !== invocation.id)
 			throw new Error("MCP task lost its ToolInvocation ownership binding");

@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 
-import { McpApprovalStatus, McpServerRevisionState, McpServerStatus, Prisma } from "@prisma/client";
+import { McpApprovalStatus, McpCredentialRequirement as PrismaMcpCredentialRequirement, McpServerRevisionState, McpServerStatus, Prisma } from "@prisma/client";
 import type { McpEraProbeStatus } from "@prisma/client";
+
+import { McpCredentialRequirement } from "@opencrane/contracts";
 
 import { McpEraProbeDecisions, McpEraProbeStates } from "../era-probe/mcp-era-probe.types";
 import type { McpEraProbeTaskResult } from "../era-probe/mcp-era-probe.types";
@@ -15,6 +17,7 @@ const _SERVER_SELECT = {
 	publisher: true,
 	glyph: true,
 	serverType: true,
+	credentialRequirement: true,
 	approvalStatus: true,
 	status: true,
 	credentialSchema: true,
@@ -50,6 +53,13 @@ type _ServerProjection = Prisma.McpServerGetPayload<{ select: typeof _SERVER_SEL
 
 /** Prisma projection returned when a protocol-check worker loads its target. */
 type _EraProbeTargetProjection = Prisma.McpServerGetPayload<{ select: typeof _ERA_PROBE_TARGET_SELECT }>;
+
+/** Maps the public credential vocabulary to Prisma's enum member names. */
+const _PRISMA_CREDENTIAL_REQUIREMENT: Readonly<Record<McpCredentialRequirement, PrismaMcpCredentialRequirement>> = {
+	[McpCredentialRequirement.Credentialless]: PrismaMcpCredentialRequirement.Credentialless,
+	[McpCredentialRequirement.PrincipalCredential]: PrismaMcpCredentialRequirement.PrincipalCredential,
+	[McpCredentialRequirement.SharedCredential]: PrismaMcpCredentialRequirement.SharedCredential,
+};
 
 /** Derive a fixed-width claim identity without retaining a server name or client key. */
 function _ClaimDigest(kind: "key" | "name", value: string): string
@@ -168,7 +178,15 @@ export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 		if (existingByName)
 			return null;
 
-		const server = await this._transaction.mcpServer.create({ data: { ...registration, transport: "StreamableHttp", eraProbeStatus: McpEraProbeStates.Pending }, select: _SERVER_SELECT });
+		const server = await this._transaction.mcpServer.create({
+			data: {
+				...registration,
+				credentialRequirement: _PRISMA_CREDENTIAL_REQUIREMENT[registration.credentialRequirement],
+				transport: "StreamableHttp",
+				eraProbeStatus: McpEraProbeStates.Pending,
+			},
+			select: _SERVER_SELECT,
+		});
 		return { created: true, server: _ServerRecord(server) };
 	}
 

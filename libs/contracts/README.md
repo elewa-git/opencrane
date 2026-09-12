@@ -33,6 +33,11 @@ client sends its retry key and conversation ID; the server selects and saves the
 eligible turn. Message admission does not mean cleanup has finished: personal status reports
 `cancelling` until it can report `cancelled`, or `completed` if the answer was already committed.
 
+MCP catalogue entries require `credentialRequirement`, independently of their connection type.
+Installed entries always return their saved `connectionStatus`: `credentialless` requires no
+provider credential, while `needs-credential` remains unavailable until activation exists.
+Neither catalogue visibility nor an installation grants permission to execute a tool.
+
 ```
  apps/opencrane server ....... emits OpenAPI 3.1 spec (dist/apps/opencrane/openapi.json)
         │  openapi-typescript

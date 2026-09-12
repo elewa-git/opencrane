@@ -1,5 +1,6 @@
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
+import type { McpCredentialRequirement } from "@opencrane/contracts";
 import type { OciImageValidationRepository } from "../oci-image-validation/oci-image-validation-repository.types";
 import type { McpTaskRepository } from "../mcp-tasks/mcp-task-repository.types";
 
@@ -49,8 +50,10 @@ export interface McpOperatorServerRecord
 	readonly publisher: string | null;
 	/** Holds the optional glyph that a client may show for this server. */
 	readonly glyph: string | null;
-	/** Carries the persisted server type that selects the install connection status. */
+	/** Carries the persisted server type presented to catalogue clients. */
 	readonly serverType: string;
+	/** Carries the explicit credential requirement that selects initial install readiness. */
+	readonly credentialRequirement: string;
 	/** Carries the persisted approval state that controls catalog visibility. */
 	readonly approvalStatus: string;
 	/** Carries the persisted server state that controls whether assignments may select its tools. */
@@ -90,6 +93,8 @@ export interface McpRemoteServerRegistrationRecord
 	readonly description: string;
 	/** Public HTTPS endpoint checked by the worker. */
 	readonly endpoint: string;
+	/** Credential custody required before an installation can execute. */
+	readonly credentialRequirement: McpCredentialRequirement;
 	/** Digest of the client key used to find a retried registration. */
 	readonly registrationKeyDigest: string;
 	/** Digest of every registration field that must remain unchanged on retry. */
