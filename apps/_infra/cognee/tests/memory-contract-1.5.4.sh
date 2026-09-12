@@ -205,6 +205,7 @@ _start_cognee()
   local volume="$2"
   local access_control="$3"
   local require_authentication="$4"
+  # This storage contract sends fixed queries, so vector search must receive them unchanged.
   docker run -d \
     --name "$container" \
     --network "$network" \
@@ -216,6 +217,7 @@ _start_cognee()
     --env PORT=8000 \
     --env "ENABLE_BACKEND_ACCESS_CONTROL=$access_control" \
     --env "REQUIRE_AUTHENTICATION=$require_authentication" \
+    --env AUTO_FEEDBACK=false \
     --env DATA_ROOT_DIRECTORY=/cognee-storage/data \
     --env SYSTEM_ROOT_DIRECTORY=/cognee-storage/system \
     --env LLM_PROVIDER=openai \

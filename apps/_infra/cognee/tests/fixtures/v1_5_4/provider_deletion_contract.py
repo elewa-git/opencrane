@@ -74,7 +74,7 @@ async def _path_safety_probes() -> dict[str, Any]:
     """Invoke the installed cleanup helper with only its count query stubbed."""
 
     from cognee.infrastructure.databases.relational.sqlalchemy.SqlAlchemyAdapter import (
-        SqlAlchemyAdapter,
+        SQLAlchemyAdapter,
     )
 
     data_root = Path(os.environ["DATA_ROOT_DIRECTORY"]).resolve()
@@ -92,7 +92,7 @@ async def _path_safety_probes() -> dict[str, Any]:
     symlink_path.symlink_to(outside_directory, target_is_directory=True)
 
     adapter = _NoReferenceAdapter()
-    cleanup = SqlAlchemyAdapter.remove_data_file_if_unreferenced
+    cleanup = SQLAlchemyAdapter.remove_data_file_if_unreferenced
     managed_location = managed_file.as_uri()
     sibling_location = outside_file.as_uri()
     traversal_location = (
@@ -124,7 +124,7 @@ async def _path_safety_probes() -> dict[str, Any]:
 
         return {
             "scope": (
-                "Exact installed SqlAlchemyAdapter.remove_data_file_if_unreferenced and "
+                "Exact installed SQLAlchemyAdapter.remove_data_file_if_unreferenced and "
                 "LocalFileStorage path resolution; only the relational count query returned zero."
             ),
             "managedLocation": managed_location,
