@@ -44,8 +44,9 @@ There is no importable application code.
 
 ## Boundary
 
-OpenCrane owns how Cognee is built, deployed, reached, and isolated. The vendor owns Cognee's
-behaviour and data model. Only the release-local memory gateway may connect to the Cognee Service.
+OpenCrane owns how Cognee is built, deployed, reached, and isolated. Cognee owns memory storage and
+its data model; candidate-only source repairs remain inside that provider. Only the release-local
+memory gateway may connect to the Cognee Service.
 Cognee may reach release-local LiteLLM, cluster DNS, and optional local telemetry, but not
 `extension.ladybugdb.com` at runtime.
 
@@ -144,6 +145,15 @@ The candidate changes dataset and native-database behavior, so its qualification
 full provider journey and deletion recovery. A successful ordinary delete alone does not establish
 safe local file ownership or recovery after an interrupted cleanup. Selecting a production image,
 changing chart defaults and enabling personal memory are later reviewed changes.
+
+The 1.5.4 candidate includes an explicit deletion repair under `tests/candidates/1.5.4/patches/`.
+It retains the document record until unreferenced local files have been removed, so a failed cleanup
+can resume through the same public document coordinate. Ingestion and deletion share a provider-owned
+file lock to protect shared references. Qualification covers fresh installations on Linux with local
+file storage, the default SQLite store and one shared local volume; it makes no claim for remote
+storage or independent stores sharing files. The build and runtime evidence retain the official source
+hashes and separately verify each patch, its base image and its resulting source. Interrupted cleanup, restart and concurrent
+add/delete checks must pass before this candidate can replace the production image.
 
 ## See also
 

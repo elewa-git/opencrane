@@ -32,6 +32,8 @@ if [[ "${1:-}" == "image" && "${2:-}" == "inspect" ]]; then
         "ai.opencrane.cognee.source-commit": "20e0bd88746de2d96e99b4b122361dfc3dad21bc",
         "ai.opencrane.cognee.base-index-digest": "sha256:68b755bebae2a19f482069b5efcbe8e4bdf717a68f6afb6fef80c3c352c37015",
         "ai.opencrane.cognee.base-linux-amd64-digest": "sha256:a52b0c2669e28932b53d677a6adf6d6487b03886732a5db07b58f3b869647b10",
+        "ai.opencrane.cognee.repair-patch-sha256": "08d46750e34abdc9a0cd76d37318fa886b027ef50bb792b0f25f27f526574b50",
+        "ai.opencrane.cognee.repair-postimage-sha256": "3d7f8fdc029226ba33919838a522b0325e616d3c3c7820fde828f90c68c8daaf",
         "ai.opencrane.ladybug-json.sha256": "39c51fa9b1915590a500eef732c76913aeb10cd942e46e1c259497e609b97426"
       }
     }

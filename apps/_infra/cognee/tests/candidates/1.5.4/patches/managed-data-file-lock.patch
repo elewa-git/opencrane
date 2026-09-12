@@ -1,0 +1,94 @@
+--- /dev/null	2026-09-12 18:08:39
++++ /private/tmp/cognee-patch-b/cognee/infrastructure/locks/managed_data_file_lock.py	2026-09-12 18:05:59
+@@ -0,0 +1,91 @@
++"""Cross-process lifecycle lock for provider-managed local data files."""
++
++import asyncio
++import fcntl
++import hashlib
++import os
++import stat
++from collections.abc import AsyncIterator
++from contextlib import asynccontextmanager
++from contextvars import ContextVar
++from pathlib import Path
++
++from cognee.infrastructure.files.storage import get_storage_config
++
++
++_POLL_INTERVAL_SECONDS = 0.05
++_holder: ContextVar[tuple[int, asyncio.Task] | None] = ContextVar(
++    "managed_data_file_lock_holder", default=None
++)
++
++
++def _lock_path() -> Path:
++    data_root = Path(get_storage_config()["data_root_directory"]).expanduser().resolve()
++    digest = hashlib.sha256(str(data_root).encode("utf-8")).hexdigest()
++    return data_root.parent / f".cognee-managed-data-{digest}.lock"
++
++
++def _open_lock_file(path: Path) -> int:
++    path.parent.mkdir(parents=True, exist_ok=True)
++    flags = os.O_CREAT | os.O_RDWR | os.O_CLOEXEC
++    if hasattr(os, "O_NOFOLLOW"):
++        flags |= os.O_NOFOLLOW
++    descriptor = os.open(path, flags, 0o600)
++    metadata = os.fstat(descriptor)
++    if not stat.S_ISREG(metadata.st_mode):
++        os.close(descriptor)
++        raise RuntimeError("Managed data lock is not a regular file")
++    if metadata.st_uid != os.geteuid():
++        os.close(descriptor)
++        raise RuntimeError("Managed data lock has an unexpected owner")
++    if stat.S_IMODE(metadata.st_mode) != 0o600:
++        os.close(descriptor)
++        raise RuntimeError("Managed data lock has an unexpected mode")
++    return descriptor
++
++
++async def _acquire(descriptor: int, timeout_seconds: float) -> None:
++    if timeout_seconds <= 0:
++        raise ValueError("Managed data lock timeout must be positive")
++    loop = asyncio.get_running_loop()
++    deadline = loop.time() + timeout_seconds
++    while True:
++        try:
++            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
++            return
++        except BlockingIOError:
++            if loop.time() >= deadline:
++                raise TimeoutError("Managed data file lock timed out")
++            await asyncio.sleep(min(_POLL_INTERVAL_SECONDS, deadline - loop.time()))
++
++
++@asynccontextmanager
++async def managed_data_file_lock(timeout_seconds: float = 120.0) -> AsyncIterator[None]:
++    """Serialize local managed-file writes and their relational commits.
++
++    Reentrancy applies only to the same asyncio task in the same process. Child
++    tasks inherit context variables but still acquire their own kernel lock.
++    """
++
++    task = asyncio.current_task()
++    if task is None:
++        raise RuntimeError("Managed data file lock requires an asyncio task")
++    identity = (os.getpid(), task)
++    if _holder.get() == identity:
++        yield
++        return
++
++    descriptor = _open_lock_file(_lock_path())
++    acquired = False
++    token = None
++    try:
++        await _acquire(descriptor, timeout_seconds)
++        acquired = True
++        token = _holder.set(identity)
++        yield
++    finally:
++        if token is not None:
++            _holder.reset(token)
++        if acquired:
++            fcntl.flock(descriptor, fcntl.LOCK_UN)
++        os.close(descriptor)

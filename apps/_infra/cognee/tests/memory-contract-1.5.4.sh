@@ -31,6 +31,7 @@ rm -f \
   "$output_dir/source-evidence.json" \
   "$output_dir/negative-control.json" \
   "$output_dir/positive-initial.json" \
+  "$output_dir/positive-deletion-restart.json" \
   "$output_dir/positive-recovery.json" \
   "$output_dir/positive-state.json" \
   "$output_dir/negative-state.json" \
@@ -69,13 +70,17 @@ _sync_output()
 _write_failure_receipt()
 {
   local status="$1"
+  local positive_receipt="$output_dir/positive-deletion-restart.json"
+  if [[ ! -f "$positive_receipt" ]]; then
+    positive_receipt="$output_dir/positive-recovery.json"
+  fi
   python3 "$fixture_dir/evidence_summary.py" \
     --image "$image" \
     --image-inspect "$output_dir/image-inspect.json" \
     --source "$output_dir/source-evidence.json" \
     --negative "$output_dir/negative-control.json" \
     --positive-initial "$output_dir/positive-initial.json" \
-    --positive "$output_dir/positive-recovery.json" \
+    --positive "$positive_receipt" \
     --stub-log "$output_dir/stub-requests.jsonl" \
     --drop-log "$output_dir/commit-then-drop.jsonl" \
     --output "$output_dir/evidence.json" \
@@ -164,6 +169,7 @@ docker run --rm \
   --entrypoint python \
   "$image" /contract/source_evidence.py \
   --expected /candidate/expected-source-hashes.json \
+  --profile /candidate/profile.json \
   --output /contract-output/source-evidence.json \
   | tee "$output_dir/source-evidence.log"
 
@@ -287,7 +293,7 @@ docker exec "$positive" python /contract/v1_5_4/provider_contract.py \
   --mode acl-enabled \
   --namespace "$run_suffix" \
   --state /contract-output/positive-state.json \
-  --output /contract-output/positive-recovery.json \
+  --output /contract-output/positive-deletion-restart.json \
   | tee "$output_dir/deletion-restart.log"
 
 current_case="machine_readable_evidence_receipt"
@@ -298,7 +304,7 @@ python3 "$fixture_dir/evidence_summary.py" \
   --source "$output_dir/source-evidence.json" \
   --negative "$output_dir/negative-control.json" \
   --positive-initial "$output_dir/positive-initial.json" \
-  --positive "$output_dir/positive-recovery.json" \
+  --positive "$output_dir/positive-deletion-restart.json" \
   --stub-log "$output_dir/stub-requests.jsonl" \
   --drop-log "$output_dir/commit-then-drop.jsonl" \
   --output "$output_dir/evidence.json" \
