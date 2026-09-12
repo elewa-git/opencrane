@@ -269,6 +269,7 @@ describe("ConversationAssetsStore", function _Suite()
 		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn().mockResolvedValue(asset), upload: vi.fn().mockRejectedValueOnce(new Error("reset")).mockResolvedValueOnce(asset), remove: vi.fn() };
 		const store = _Store(gateway);
 		store.open("conversation-1");
+		await vi.waitFor(function _Loaded() { expect(store.assets.hasValue()).toBe(true); });
 		await store.select([_File("brief.pdf", "application/pdf", "brief")]);
 		const failed = store.pendingUploads()[0];
 		if (failed === undefined) throw new Error("failed intent missing");

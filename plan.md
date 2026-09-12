@@ -91,6 +91,16 @@ visual review accepts twenty Linux captures. Two PDF filename captures lack Chin
 remain rejected until the bounded CI font installation produces new evidence. The filename fixture
 and screenshot tolerances are unchanged. No live PDF answer or testv5 qualification is claimed.
 
+Exact-head run `34687912995` on `f3f4f35a254a3bd1d9423f677a7e24904f78c9be` passes the real
+Kurrent attachment recovery cases, database authority and generated API checks. Its only visual
+failures are the two deliberately absent PDF shell references. The new desktop and narrow captures
+from artifact `10296043961` render the Chinese filename correctly and pass independent inspection;
+they are now accepted without changing fixtures or tolerances. One asset-store unit case assumed the
+initial list was loaded before testing byte-upload retry. It now waits for that existing precondition;
+all 47 asset-state tests pass, with the original retry assertions unchanged. A new CI run must
+confirm these test/reference corrections; production source is unchanged.
+
+
 ## Execution checkpoint — 2026-09-11
 
 Draft #858 is fully green at `3cb899d68c851bfb0073c42933fc77fba3fe0e17`:
