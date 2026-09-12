@@ -874,3 +874,12 @@ fresh-install or release qualification.
 
 Version-to-version upgrades return with an explicit MVP upgrade contract. Until then, preserve one
 clean baseline and delete superseded code in its owning replacement slice; use git for history.
+
+### Memory candidate path-safety harness correction — 2026-09-12
+
+The exact #870 head `6a12061dd5265c99433f929b015bdc0eef076c33` reached the path-safety phase in
+run `34687912613`, then stopped before those assertions with an import error. The installed and
+source-attested class is `SQLAlchemyAdapter`; the fixture imported `SqlAlchemyAdapter`. The fixture
+now uses the exact installed class name. Path ownership, interrupted deletion and all earlier
+provider assertions remain required. This is a harness correction, not provider qualification or
+permission to enable personal memory. The production 1.2.1 deletion failure remains unchanged.
