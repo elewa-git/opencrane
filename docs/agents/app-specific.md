@@ -54,6 +54,7 @@ app's source.
 | [`libs/backend/server/infra/oci-registry`](../../libs/backend/server/infra/oci-registry/README.md) | Digest-checked OCI Distribution client used by image admission. |
 | [`libs/backend/server/infra/organization-membership-gateway`](../../libs/backend/server/infra/organization-membership-gateway/README.md) | HTTPS and projected-token transport to Fleet membership and billing authority. |
 | [`libs/backend/observability`](../../libs/backend/observability/README.md) | Cross-cutting structured logging and execution tracing. |
+| [`libs/backend/memory-gateway/main`](../../libs/backend/memory-gateway/main/README.md) | Private memory provider authentication and protocol handling, composed only by the memory-gateway app. |
 | [`libs/backend/conversation-computer/review-surface`](../../libs/backend/conversation-computer/review-surface/README.md) | Sandbox-local, lease-authenticated file, command, preview, and Chromium review adapters. |
 
 The durable product authority is `Conversation -> immutable KurrentDB entry stream`. An

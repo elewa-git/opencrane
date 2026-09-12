@@ -337,6 +337,9 @@
       ],
       "@opencrane/backend/server/infra/agent-sandbox": [
         "./libs/backend/server/infra/agent-sandbox/src/index.ts"
+      ],
+      "@opencrane/backend/memory-gateway": [
+        "./libs/backend/memory-gateway/main/src/index.ts"
       ]
     }
   },

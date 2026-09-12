@@ -79,6 +79,14 @@ only a finite phase; its strict validator rejects unknown phases and added field
 means no invocation in this attempt, not a failed progress read. It never authorizes a call or exposes
 a tool's identity, arguments or result.
 
+The `memory/gateway/` folder owns the private HTTP contract between the OpenCrane server and the
+memory gateway. Its eight routes cover dataset lookup, bounded document storage and recovery,
+blocking processing, passage search, and exact document deletion. Strict validators keep Cognee field
+aliases, credentials, owner records, storage locations, and provider errors outside this contract.
+Mutation errors always state whether provider delivery is known; read errors cannot carry that
+evidence. A dataset or processing receipt reports only that gateway operation and never activates a
+personal-memory dataset or adopts a fact.
+
 ## Public surface
 
 - `RunToolProgress`, `RunToolProgressPhases` and `___RunToolProgressSchema` — the safe phase shared by personal status and its activity presenter.
@@ -138,6 +146,10 @@ a tool's identity, arguments or result.
 - `MemoryFactProvenanceSourceKinds` and `ExecutionSubject` — stable memory-source vocabulary and the
   evidence-bound agent identity, principal, membership, capability, run, computer-lease, requester,
   and admission coordinates shared by run snapshots and service gates.
+- `MEMORY_GATEWAY_ROUTE_PATHS`, the `MemoryGateway*` request/response DTOs, and their
+  `___MemoryGateway*Schema` validators — the strict private server-to-gateway contract. It carries
+  only opaque dataset and document coordinates, bounded fact/query text, digests, and fixed failure
+  evidence; provider credentials and storage details never cross it.
 - `AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE`, `AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME`, and
   `AgentControllerRunAttempt*` — the private controller handshake for claiming one authorised run,
   reporting the Kubernetes-issued Job identity, and committing that identity under the same database

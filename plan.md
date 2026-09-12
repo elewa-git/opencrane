@@ -1,5 +1,56 @@
 # OpenCrane — Active Plan
 
+## Personal memory journey — implementation started
+
+This M1 wave starts from draft #872 at `c35f6de574cd3282574d897ac428a6dd71eac3bc`
+on `feat/0.12-personal-memory-journey`. The accepted first outcome is an explicit Remember
+from an already encrypted user message, followed by separately consented recall in another
+conversation. Correct and Forget must also pass before M1 is complete.
+
+The memory adoption preflight passes for implementation. Production activation remains blocked
+until the repaired Cognee candidate passes its exact-image suite. Earlier run `34703714519`,
+candidate job `103579931845`, passed image build, non-root runtime and source attestation, then
+failed in a test adapter before deletion qualification finished. The correction is reviewed and
+pushed in #872, with all 53 local tests passing. Successor run `34705105949` passes dataset recovery,
+scoped search, document identity, Add recovery and final-reference deletion, then fails in synthetic
+process startup. The separate reviewed startup-handshake correction is now pushed at the base above.
+Source review and local tests do not substitute for completed provider qualification.
+
+The detailed protocol handoff found two further recovery boundaries. Cognee currently commits a
+dataset before its separate access grants, and an existing-name retry does not restore unfinished
+grants. Dataset activation must wait for candidate repair and interruption tests. A lost synchronous
+cognify response also lacks correlated completion evidence; it must remain RecoveryRequired until
+controlled replay or a provider status receipt is proven. Shared DTOs and provider authentication
+can be implemented independently, but neither enables memory writes.
+
+The shared gateway contract and provider authentication foundation are implemented locally. Thirteen
+contract tests and sixteen authentication/HTTP tests pass, along with both package type checks,
+dependency lint and workload ownership checks. Provider credentials and responses stay within the
+new gateway library; it has no app consumer or enabled route yet. Independent source reviews and
+architecture post-review pass with no remaining findings. The workload boundary's negative tests
+also pass, and all four module-growth candidates have been reviewed for responsibility and cohesion.
+Dataset/document adapters, the server client replacement, consent, personal workflow/catalog
+adoption and production composition remain the next implementation work.
+
+Implementation owners and dependency order:
+
+1. Settle stable gateway request/response contracts and keep provider authentication and protocol
+   handling in a dedicated library composed by `apps/memory-gateway`.
+2. Implement gateway-only provider credentials and authenticated dataset/document operations in
+   parallel with the server client. Both consume the shared contract; neither saves workflow state.
+3. Add personal dataset provisioning, metadata-only fact adoption, and active-document recall
+   filtering under the personal-memory domain. The existing Absurd engine owns operation keys,
+   retries and saved progress. PostgreSQL receives source coordinates and digests, never fact text.
+4. Bind Remember to explicit operation consent and an authorized encrypted source. Compose the
+   workflow and recall delivery through the existing conversation owners.
+5. Adopt the qualified image/authentication/storage profile, then prove Remember, restart and
+   cross-conversation recall before extending the same saved document coordinates to Correct and
+   Forget. This source wave does not authorize deployment or testv5 changes.
+
+The server keeps its audience-bound gateway token. Cognee credentials remain in the gateway, and
+the frozen personal dataset determines every recall. The gateway performs protocol translation;
+it does not gain a database, outbox, scheduler or authority to choose a person's dataset.
+
 ## Recover interrupted memory deletion — source reviewed, local checks passed
 
 This independent M1 slice starts directly from draft #871 at
