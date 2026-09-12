@@ -252,9 +252,10 @@ passes and independent source review passes. Exact-head CI run `34681268225` at
 graph contains 12 chunks for its distinct document, while its scoped CHUNKS response returns 20
 coordinates and none for that document. Follow-up confirms the fixture query was replaced by the
 synthetic model's literal `query_to_answer` during automatic feedback preparation. That ranked
-response does not prove missing vectors or a provider retrieval defect. The next correction must
-keep the requested query stable in the disposable harness and rerun the unchanged useful-retrieval
-and deletion gates. The candidate remains unqualified; deletion checks have not been reached.
+response does not prove missing vectors or a provider retrieval defect. The candidate harness now
+disables that query rewriting so its fixed synthetic query reaches vector search unchanged. Every
+useful-retrieval, isolation, restart and deletion assertion remains unchanged; the corrected harness
+still needs exact-image CI. The candidate remains unqualified; deletion checks have not been reached.
 
 The candidate keeps a separate disposable lifecycle because its non-root storage, evidence volume
 and additional restart differ from 1.2.1; API, stub, proxy, attestation and summary helpers remain

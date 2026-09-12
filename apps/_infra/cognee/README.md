@@ -135,6 +135,11 @@ text. Use them to distinguish missing document association from a search-ranking
 search response cannot enumerate every chunk belonging to a document. This evidence does not relax
 the candidate's existing assertions or qualify the provider by itself.
 
+The candidate harness disables Cognee's automatic session feedback. These storage tests send fixed
+synthetic queries and require vector search to receive them unchanged; model-driven query rewriting
+is outside this provider qualification. The useful-retrieval, dataset, graph, restart and deletion
+assertions remain required.
+
 The candidate changes dataset and native-database behavior, so its qualification must include the
 full provider journey and deletion recovery. A successful ordinary delete alone does not establish
 safe local file ownership or recovery after an interrupted cleanup. Selecting a production image,
