@@ -14,10 +14,12 @@ from v1_5_4.provider_isolation_contract import (
     dataset_members,
     document_id,
     documents_for,
+    graph_document_chunk_coordinates,
     graph_snapshot,
     local_storage_paths,
     member_by_digest,
     report_case,
+    safe_search_coordinates,
 )
 
 
@@ -86,8 +88,30 @@ def recover_identity(api: ProviderApi, state: dict[str, Any]) -> dict[str, Any]:
     shared_document_id = document_id(member_by_digest(api, foreign_id, AUTHORIZED))
     if shared_document_id == authorized_document_id:
         raise AssertionError("Identical content reused one document id across two datasets")
-    shared_chunks = documents_for(
-        api.search(foreign_id, "authorized-memory", top_k=20), shared_document_id
+    search_top_k = 20
+    graph_coordinates = graph_document_chunk_coordinates(api, foreign_id, shared_document_id)
+    search_coordinates = safe_search_coordinates(
+        api.search(foreign_id, "authorized-memory", top_k=search_top_k)
+    )
+    shared_chunks = [
+        coordinate["chunkId"]
+        for coordinate in search_coordinates
+        if coordinate["documentId"] == shared_document_id
+    ]
+    shared_retrieval_evidence = {
+        "datasetId": foreign_id,
+        "documentId": shared_document_id,
+        "topK": search_top_k,
+        "graphAssociatedCount": len({coordinate["chunkId"] for coordinate in graph_coordinates}),
+        "returnedAssociatedCount": len(set(shared_chunks)),
+        "graphCoordinates": graph_coordinates,
+        "searchCoordinates": search_coordinates,
+    }
+    state.update(
+        {
+            "sharedDocumentId": shared_document_id,
+            "sharedRetrievalEvidence": shared_retrieval_evidence,
+        }
     )
     if len(set(shared_chunks)) < 2:
         raise AssertionError("Second dataset membership did not retain distinct chunks")
@@ -164,6 +188,7 @@ def recover_identity(api: ProviderApi, state: dict[str, Any]) -> dict[str, Any]:
         "recoveryChunkIds": sorted(set(recovery_chunks)),
         "sharedChunkIds": sorted(set(shared_chunks)),
         "sharedDocumentId": shared_document_id,
+        "sharedRetrievalEvidence": shared_retrieval_evidence,
         "sourceStoragePathsRemoved": storage_paths,
         "sourceGraphDelta": source_graph_delta,
         "unknownDeleteId": unknown_id,

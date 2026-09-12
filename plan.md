@@ -116,7 +116,7 @@ and interrupted deletion. Every failed proof stays visible; a candidate pass nev
 image or enables personal memory by itself.
 
 The bounded source slice is implemented and independently reviewed. Local Cognee test/lint passes
-with 18 Python tests, image contracts and a regression rejecting a smoke run with no execution
+with 23 Python tests, image contracts and a regression rejecting a smoke run with no execution
 receipt. All 24 affected-deployable tests and the relevant ownership, style, Prisma, module-growth
 and release checks pass.
 
@@ -126,7 +126,27 @@ stopped on a response-field mismatch: Cognee's HTTP dataset records use `dataset
 fixture read the internal Python field name `dataset_id`. This did not prove a foreign listing.
 The bounded correction reads the exact HTTP field and keeps dataset ownership strict in both
 control and authenticated modes. Search, authenticated recovery and deletion were not reached;
-the corrected candidate still requires exact-image CI.
+the corrected candidate then required another exact-image run.
+
+The corrected run `34678289718` at `d1d783e482276ef5c8924117b611fb554c69d14c`
+passes image/native-store checks, all 47 source hashes, the ACL-disabled negative control,
+authenticated dataset isolation, identity and committed-response/restart recovery. It stops at
+identical content in a second dataset: that dataset has its own byte-proven document row, but the
+CHUNKS response does not establish the required useful retrieval for that document. The returned
+chunk/document coordinates were not retained. Source and log follow-up show that session
+preparation replaced the requested query with the synthetic model's `query_to_answer`; a ranked
+top-20 response to that query cannot prove complete document association. The next proof must
+separate graph association from useful retrieval and retain only safe chunk/document coordinates.
+This result does not establish lost chunks. Deletion, path containment and interrupted-deletion
+checks were not reached. The
+candidate remains unqualified; no production image or memory availability changes.
+
+The diagnostic follow-up records graph document/chunk association separately from the ordered
+CHUNKS coordinates, with duplicate results preserved and distinct counts reported. The evidence
+is saved before the existing two-chunk assertion, so a repeat failure can be classified without
+retaining source text or relaxing that gate. Fast tests cover malformed coordinates, exact target
+selection, duplicate preservation and evidence retention on assertion failure. Cognee test/lint
+passes and independent source review passes. The additional evidence still needs exact-image CI.
 
 The candidate keeps a separate disposable lifecycle because its non-root storage, evidence volume
 and additional restart differ from 1.2.1; API, stub, proxy, attestation and summary helpers remain

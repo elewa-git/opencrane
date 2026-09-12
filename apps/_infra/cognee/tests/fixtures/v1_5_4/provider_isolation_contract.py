@@ -92,6 +92,49 @@ def documents_for(results: list[dict[str, Any]], source_id: str) -> list[str]:
     return [chunk for chunk, document in map(chunk_coordinates, results) if document == source_id]
 
 
+def safe_search_coordinates(results: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Keep ranked chunk ownership coordinates without retaining provider content."""
+    return [
+        {"chunkId": chunk_id, "documentId": document_id}
+        for chunk_id, document_id in map(chunk_coordinates, results)
+    ]
+
+
+def graph_document_chunk_coordinates(
+    api: ProviderApi, dataset_id: str, expected_document_id: str
+) -> list[dict[str, str]]:
+    """Read exact graph chunk ownership for one document without retaining node properties."""
+    uuid.UUID(expected_document_id)
+    graph = api.graph(dataset_id)
+    if not isinstance(graph, dict):
+        raise AssertionError("Dataset graph response is not an object")
+    nodes = graph.get("nodes")
+    edges = graph.get("edges")
+    if not isinstance(nodes, list) or not isinstance(edges, list):
+        raise AssertionError("Dataset graph response does not contain node and edge lists")
+    if not all(isinstance(item, dict) for item in [*nodes, *edges]):
+        raise AssertionError("Dataset graph contains a non-object node or edge")
+
+    coordinates = []
+    for node in nodes:
+        if node.get("type") != "DocumentChunk":
+            continue
+        chunk_id = node.get("id")
+        properties = node.get("properties")
+        if not isinstance(chunk_id, str) or not isinstance(properties, dict):
+            raise AssertionError("DocumentChunk graph node has invalid id or properties")
+        document_id = properties.get("document_id")
+        if not isinstance(document_id, str):
+            raise AssertionError("DocumentChunk graph node has no document_id")
+        uuid.UUID(chunk_id)
+        uuid.UUID(document_id)
+        if chunk_id == document_id:
+            raise AssertionError("DocumentChunk graph node uses its document id as its chunk id")
+        if document_id == expected_document_id:
+            coordinates.append({"chunkId": chunk_id, "documentId": document_id})
+    return sorted(coordinates, key=lambda coordinate: coordinate["chunkId"])
+
+
 def graph_snapshot(api: ProviderApi, dataset_id: str) -> list[str]:
     graph = api.graph(dataset_id)
     if not isinstance(graph, dict):
