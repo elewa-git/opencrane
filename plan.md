@@ -1,5 +1,32 @@
 # OpenCrane — Active Plan
 
+## Recover interrupted memory dataset permissions — implementation and validation
+
+The deletion-repair candidate now passes its complete exact-image qualification in #872 at
+`c35f6de574cd3282574d897ac428a6dd71eac3bc` (run `34705958601`, candidate job
+`103586018265`). The same candidate passes above it in #873 at
+`925ecf4b57d06ce1b36daad23ebff31b79e94711` (run `34706149600`, job `103586556227`).
+Both workflow runs still fail the separate production-provider contract. Passing the repaired
+candidate does not promote its image, enable memory, or qualify testv5.
+
+The next provider repair starts from #873. A dataset can survive interruption before its four
+permission grants finish. The existing-name route previously returned that incomplete row without
+restoring its grants. The candidate now always enters the existing creation authority and serializes
+its grant sequence with the provider's dataset lock. The scope remains one provider worker and
+replica, one local SQLite store, and the dedicated gateway service user. The source patch and its
+receipt hashes extend the existing image attestation; production configuration stays unchanged.
+
+Qualification injects interruption after the row and after each grant, restarts the provider, then
+retries each saved name. It must prove the original identity, four unique owner grants, foreign-owner
+isolation and successful public list/add/search/delete operations. All 61 local Cognee tests pass,
+including 38 candidate fixture tests and 15 dataset tests. Cognee lint, both exact upstream patch
+applications and independent review pass. The new exact-image run remains a separate gate.
+
+Gateway HTTP handlers, provider operations and the server client are being prepared in parallel.
+Automatic approval review rejected deletion of the old client and tests, citing integration risk.
+The replacement is being tested and its exact removal proposal prepared; the rejected deletion is
+unapplied, and no compatibility or dual protocol is accepted as the finished implementation.
+
 ## Personal memory journey — implementation started
 
 This M1 wave starts from draft #872 at `c35f6de574cd3282574d897ac428a6dd71eac3bc`
@@ -7,14 +34,15 @@ on `feat/0.12-personal-memory-journey`. The accepted first outcome is an explici
 from an already encrypted user message, followed by separately consented recall in another
 conversation. Correct and Forget must also pass before M1 is complete.
 
-The memory adoption preflight passes for implementation. Production activation remains blocked
-until the repaired Cognee candidate passes its exact-image suite. Earlier run `34703714519`,
+The memory adoption preflight passes for implementation. The deletion-repair candidate has now
+passed its exact-image suite, as recorded above. Earlier run `34703714519`,
 candidate job `103579931845`, passed image build, non-root runtime and source attestation, then
 failed in a test adapter before deletion qualification finished. The correction is reviewed and
 pushed in #872, with all 53 local tests passing. Successor run `34705105949` passes dataset recovery,
 scoped search, document identity, Add recovery and final-reference deletion, then fails in synthetic
 process startup. The separate reviewed startup-handshake correction is now pushed at the base above.
-Source review and local tests do not substitute for completed provider qualification.
+The subsequent exact-image run passes the complete suite. Dataset ACL recovery and product
+integration still require their own evidence before memory activation.
 
 The detailed protocol handoff found two further recovery boundaries. Cognee currently commits a
 dataset before its separate access grants, and an existing-name retry does not restore unfinished
@@ -488,7 +516,7 @@ remain separate gates.
 | --- | --- | --- | --- |
 | 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection and participant terminal-result history are implemented. Explicit connection readiness and execution fencing pass source review and local database proof. Standard remote activation/discovery/calls, hosted MCP execution and real integration qualification remain. |
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry, durable resume and visible decision controls are implemented in draft #857. Company approver/connection binding and real action qualification remain. |
-| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: both the pinned provider and unpatched 1.5.4 candidate fail safe deletion. The candidate repair retains restart coordinates and coordinates shared-file ingestion/deletion; 45 local tests and independent review pass, with exact-image CI still required. Product Remember, recall, correction and Forget remain unimplemented. |
+| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: the repaired 1.5.4 candidate passes exact-image deletion, isolation and restart qualification. Interrupted dataset permission recovery is the next candidate repair. Gateway contracts/authentication are published in #873; product Remember, recall, correction and Forget remain unfinished. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass independent review and exact-head CI in draft #862; qualify the live journey. Other-participant controls remain a separate actor-policy decision. |
 | 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | PAUSED: runtime-question source work awaits its separate explicit approval; partial implementation is not validated delivery. Structured results and A2UI remain. |
 | 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file Open/Preview/Download is implemented and exact-head CI passes in #868. PDF-informed answers are source complete in #869 and exact-head CI passes, including real-store recovery and Linux visuals; live qualification remains. Generated file production follows. |
@@ -803,9 +831,9 @@ their own completion track; they are not silently bundled into the first tool PR
 | T1 — first permitted tool retrieval | IN PROGRESS — the server's one-tool continuation is implemented and now progresses through Absurd in #849. Company tool assignment is the first active follow-up. Connection activation, a real integration and participant result evidence remain required. |
 | T2 | IN PROGRESS: personal approval and durable resume pass local integration; company approval and real external-action qualification remain. |
 | U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
-| M1 | IN PROGRESS: #863 qualifies the exact provider image. Isolation and restart recovery pass in the authenticated candidate, but final-reference deletion leaves original source bytes; provider repair and product memory journeys remain. |
+| M1 | IN PROGRESS: the repaired candidate in #872 passes exact-image deletion, isolation and restart qualification. Dataset permission recovery, gateway integration and the product memory journeys remain. |
 | U2 | PAUSED: partial runtime-question source awaits its separate explicit approval. |
-| F1 | IN PROGRESS: Ready-file Open/Preview/Download passes exact-head CI in #868. PDF-informed answers are being integrated and reviewed; generated outputs follow. |
+| F1 | IN PROGRESS: Ready-file Open/Preview/Download and PDF-informed answers pass exact-head CI in #868 and #869. Generated outputs and live qualification remain. |
 | D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |
 | Q1 — operational acceptance | CONTINUOUS — source checks and CI do not replace fresh-install or real-account acceptance. |
 

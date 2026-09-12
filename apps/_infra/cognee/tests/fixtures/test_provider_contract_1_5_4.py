@@ -217,12 +217,23 @@ class CandidateDatasetIdentityTest(unittest.TestCase):
         }
 
         class _AuthenticatedApi:
+            instances = 0
+
             def __init__(self, _base_url: str):
-                pass
+                self.index = self.instances
+                _AuthenticatedApi.instances += 1
 
             def authenticate(self, _email: str, _password: str, register: bool) -> None:
-                if register:
+                if register and self.index == 0:
                     raise AssertionError("Recovery attempted to register another user")
+
+        async def _verify_acl(
+            _api: object,
+            _state: object,
+            _namespace: str,
+            _foreign_api: object,
+        ) -> dict:
+            return {}
 
         def _fail_recovery(_api: object, state: dict) -> dict:
             state["sharedRetrievalEvidence"] = evidence
@@ -250,6 +261,11 @@ class CandidateDatasetIdentityTest(unittest.TestCase):
                     provider_contract,
                     "verify_dataset_provisioning_after_restart",
                     return_value={},
+                ),
+                patch.object(
+                    provider_contract,
+                    "verify_dataset_acl_recovery_after_restart",
+                    _verify_acl,
                 ),
                 patch.object(provider_contract, "recover_identity", _fail_recovery),
                 self.assertRaisesRegex(AssertionError, "distinct chunks"),

@@ -1,0 +1,22 @@
+--- a/cognee/api/v1/datasets/routers/get_datasets_router.py
++++ b/cognee/api/v1/datasets/routers/get_datasets_router.py
+@@ -17,7 +17,6 @@
+ from cognee.api.v1.datasets.dto import DataDTO
+ from cognee.infrastructure.databases.relational import get_relational_engine
+ from cognee.modules.data.methods import get_authorized_existing_datasets
+-from cognee.modules.data.methods import get_datasets_by_name
+ from cognee.modules.data.methods import get_datasets_graph_counts
+ from cognee.modules.data.methods.create_authorized_dataset import create_authorized_dataset
+ from cognee.shared.logging_utils import get_logger
+@@ -209,11 +208,6 @@
+         )
+ 
+         try:
+-            datasets = await get_datasets_by_name([dataset_data.name], user.id)
+-
+-            if datasets:
+-                return datasets[0]
+-
+             dataset = await create_authorized_dataset(dataset_data.name, user)
+ 
+             return dataset
