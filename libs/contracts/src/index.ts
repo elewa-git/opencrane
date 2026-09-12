@@ -15,6 +15,8 @@ export type * from "@opencrane/models/authorization";
 export * from "./organization/cluster-tenant.types";
 export * from "./organization/group.types";
 export * from "./memory/memory.types";
+export * from "./memory/gateway/memory-gateway.types";
+export * from "./memory/gateway/memory-gateway.validator";
 export * from "./mcp/mcp-operator.types";
 export * from "./mcp/mcp-executor-identity.types";
 export * from "./model-routing/model-routing.types";

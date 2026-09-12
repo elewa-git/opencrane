@@ -23,6 +23,7 @@ libs/backend/
     src/core/                 domain services and use cases
     src/__tests__/             capability tests
   server/infra/<capability>/   server runtime and external-I/O seams
+  memory-gateway/main/        private provider authentication and protocol handling
   observability/               structured logging and execution tracing
 ```
 
@@ -74,3 +75,4 @@ new source-only backend library does not need its own Dockerfile.
 - Agent capabilities: [agents](./agents/README.md)
 - Server runtime seams: [server/infra](./server/infra/README.md)
 - Telemetry: [observability](./observability/README.md)
+- Private memory provider: [memory gateway](./memory-gateway/README.md)
