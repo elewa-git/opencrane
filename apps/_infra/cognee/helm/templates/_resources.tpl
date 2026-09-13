@@ -91,9 +91,13 @@ spec:
               value: "0.0.0.0"
             - name: PORT
               value: {{ .Values.clustertenantManager.cognee.service.port | quote }}
-            # Cognee is not an application authorization boundary in this deployment. The
-            # authenticated memory gateway is its only NetworkPolicy-admitted caller, so disable
-            # Cognee's user-login middleware explicitly instead of relying on vendor defaults.
+            # Decided target: both switches "true" (ADR 0017). Cognee only confines a search to
+            # the requested dataset in access-control mode, and it refuses that mode without a login,
+            # so the memory gateway signs in with one service user per silo. NetworkPolicy still
+            # decides who may call Cognee; it cannot stop a search from reading another dataset.
+            # These values flip together with the authenticated isolation proof from the provider
+            # contract. Until then this renders the known-leaky setting and personal memory stays
+            # unavailable.
             - name: ENABLE_BACKEND_ACCESS_CONTROL
               value: "false"
             - name: REQUIRE_AUTHENTICATION

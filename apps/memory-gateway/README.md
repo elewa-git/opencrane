@@ -14,8 +14,12 @@ private Cognee plane: identity (TokenReview of the server's audience-bound proje
 (only bounded search), and the payload contract (exactly one validated query, the `CHUNKS` search
 type, exactly one UUID dataset, and a bounded `top_k`). Anything outside that shape is refused with
 `422 invalid_search` before a byte reaches Cognee, and only a canonical re-serialization of the
-validated fields is forwarded. That boundary is why Cognee's own RBAC stays off in this private
-deployment: the gateway is Cognee's only network caller and its only admission decision.
+validated fields is forwarded. The gateway is Cognee's only network caller and its only admission
+decision. It is also Cognee's only login: Cognee runs in access-control mode because that is the only
+mode in which a search stays inside the one dataset the gateway names, and Cognee requires a logged-in
+user for that mode. The gateway signs in with one service user per silo and never shares that session
+with callers. See
+[ADR 0017](../../docs/adr/0017-cognee-access-control-mode-and-gateway-service-user.md).
 
 ```
  OpenCrane server  ─ projected caller token ──────────┐
@@ -46,10 +50,13 @@ through ingress.
 
 ## Boundary
 
-This app owns workload authentication and private transport, not human permissions, memory dataset
-selection, persistence, or Cognee credentials. The OpenCrane server remains the policy enforcement
-point. Cognee is intentionally unauthenticated in this one private deployment design because the
-gateway's authenticated identity and network isolation form its wall.
+This app owns workload authentication, private transport and the Cognee service-user session. It does
+not own human permissions, memory dataset selection or persistence. The OpenCrane server remains the
+policy enforcement point. The service-user credential is mounted from an application-owned Secret,
+used only for Cognee login or first-install registration, and never logged, persisted or returned.
+Every dataset belongs to that one user, so Cognee's permissions do not separate employees; the
+server's dataset selection does, and Cognee's access-control mode makes that selection hold at
+retrieval. Network isolation remains the transport wall around this exchange.
 
 ## Dependency direction
 
@@ -70,8 +77,9 @@ Service and backing endpoints supplied through `memoryGateway.kubernetesApiServe
 local telemetry collector. The app-owned deploy script discovers and supplies both address lists; the
 chart refuses any render that omits them or disables NetworkPolicy.
 
-`clustertenantManager.cognee.install` must remain `true`. **TODO:** support an authenticated BYO or
-non-private Cognee transport before allowing that mode; the chart currently fails closed instead.
+`clustertenantManager.cognee.install` must remain `true`. A shared or external Cognee is unsupported
+because the per-silo service user and NetworkPolicy both assume a private instance; the chart fails
+closed instead of allowing that mode.
 
 ## See also
 
