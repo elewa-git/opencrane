@@ -1,5 +1,20 @@
 # OpenCrane — Active Plan
 
+## Governed MCP chart rendering — validation and review
+
+Hosted generated-file qualification exposed a missing YAML document separator between the
+agent-controller NetworkPolicy and the MCP ValidatingAdmissionPolicy. The enabled controller
+render fails YAML parsing before deployment. This prerequisite starts directly above draft #882
+at `ad3123f3b0b9235c368509cec9401bae94acd246` on
+`feat/0.12-mcp-admission-chart-documents`. It restores the document boundary without changing
+network rules or admission expressions. The owning Helm contract now parses the complete manifest
+and checks that the controller network policy, MCP admission policy and binding remain separate
+resources. The isolated controller tests and Helm lint pass, as do workload-ownership, release
+baseline and module-growth checks. Independent review of the five-file overlay passes with no
+findings. Exact-commit CI remains pending publication.
+The full hosted journey, pending certificate/provider setup and testv5 qualification remain
+separate work; this repair does not qualify a live tool invocation.
+
 ## Personal MCP tool selection — source implemented and tested
 
 This T1 slice starts above draft #881 at `001bd730244727a37d47c3f82455f45fec9fd39f`

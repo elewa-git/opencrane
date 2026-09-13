@@ -13,6 +13,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ## [Unreleased]
 
+### Fixed
+
+- **Operators can render governed MCP execution with both network and admission policies.**
+  The chart keeps these as separate Kubernetes resources, and the controller test parses the
+  complete manifest to catch malformed document boundaries before deployment. Hosted execution
+  and live installation qualification remain separate.
+
 Personal and group-assistant text journeys and recent personal activity have passed integration
 CI and earlier live testv5 checks. Current testv5 onboarding is blocked by an unused personal
 assistant's outdated computer profile; its data-preserving repair remains under qualification.
