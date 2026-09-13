@@ -1,0 +1,25 @@
+							<td>
+								<div class="wo-mono wo-admin__name">{{ server().name }}</div>
+								<div class="wo-admin__desc">{{ server().description }}</div>
+							</td>
+							<td class="wo-admin__muted">{{ server().publisher }}</td>
+							<td><wo-scope-chip [label]="typeChips[server().type].label" [tone]="typeChips[server().type].tone" /></td>
+							<td class="wo-admin__muted">{{ server().entitlementSummary }}</td>
+							<td><wo-scope-chip [label]="approvalChips[server().approvalStatus].label" [tone]="approvalChips[server().approvalStatus].tone" /></td>
+							<td class="wo-admin__actions">
+								@switch (server().approvalStatus) {
+									@case (status.PendingReview) {
+										<button [disabled]="busy()" type="button" class="wo-tools__act" (click)="approveRequested.emit()">Approve</button>
+										<button [disabled]="busy()" type="button" class="wo-tools__act wo-tools__act--muted" (click)="rejectRequested.emit()">Reject</button>
+									}
+									@case (status.Approved) {
+										<button [disabled]="busy()" type="button" class="wo-tools__act" (click)="publishRequested.emit()">Publish</button>
+									}
+									@case (status.Published) {
+										<button [disabled]="busy()" type="button" class="wo-tools__act wo-tools__act--muted" (click)="enabledRequested.emit(false)">Disable</button>
+									}
+									@case (status.Disabled) {
+										<button [disabled]="busy()" type="button" class="wo-tools__act" (click)="enabledRequested.emit(true)">Re-enable</button>
+									}
+								}
+							</td>

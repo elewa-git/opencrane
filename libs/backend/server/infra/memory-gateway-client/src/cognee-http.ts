@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import { ___DoWithoutTrace } from "@opencrane/backend/observability";
 
-import { MemoryGatewayProtocolError } from "./personal-memory-record";
+import { MemoryGatewayProtocolError } from "./personal-memory-record-receipt";
 import type { CogneeFetch, CogneeMemoryGatewayHttpOptions, CogneeSession, MemoryGatewayTransportFailureCode } from "./http-cognee-memory-gateway-client.types";
 
 /** Maximum body accepted from one Cognee exchange. */
@@ -107,7 +107,7 @@ function _CreateServerTokenReader(tokenFile: string): () => Promise<string>
  * gateway is the only thing that ever authorizes a search. Every fetch runs with automatic child
  * tracing switched off so the bearer header and the remote address cannot become span attributes;
  * the caller's own memory-gateway span stays active. The token audience is
- * `MEMORY_GATEWAY_PROJECTED_TOKEN_AUDIENCE` in libs/contracts/src/memory.types.ts.
+ * `MEMORY_GATEWAY_PROJECTED_TOKEN_AUDIENCE` in libs/contracts/src/memory/memory.types.ts.
  *
  * Called by: http-cognee-memory-gateway-client.ts, which builds one session per client.
  *

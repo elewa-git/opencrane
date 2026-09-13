@@ -64,6 +64,7 @@ function _Materializer(prisma: never, logger?: never): _PersonalConfigurationMat
 			admitInitialPublication: vi.fn().mockResolvedValue(undefined),
 			admitRevisionSelection: vi.fn().mockResolvedValue(undefined),
 			admitRevisionPublication: vi.fn().mockResolvedValue(undefined),
+			admitUnusedProfileChange: vi.fn().mockResolvedValue(undefined),
 		};
 	}), logger);
 }
@@ -191,7 +192,7 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 					}],
 				},
 				mcpToolAssignments: {
-					create: [{ toolRevisionId: "mcp-tool-revision-1", agentServiceId: "service-1", siloId: "silo-1" }],
+					create: [{ toolRevisionId: "mcp-tool-revision-1", siloId: "silo-1" }],
 				},
 				boundaryAttachments: {
 					create: [{

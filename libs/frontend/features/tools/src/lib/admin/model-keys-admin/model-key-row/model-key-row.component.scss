@@ -1,0 +1,14 @@
+
+.wo-keys__name {
+	font-size: var(--oc-text-sm);
+}
+
+.wo-keys__input {
+	width: 100%;
+	max-width: 18rem;
+	font-size: var(--oc-text-sm);
+
+	&:disabled {
+		opacity: var(--oc-opacity-disabled);
+	}
+}

@@ -1,0 +1,231 @@
+import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
+import { describe, expect, it } from "vitest";
+
+import { PROMPT_COMPILER_VERSION, type CompiledModelRoute, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
+
+import { __AppendCompiledTool, __CompileRunInput } from "../prompt-compiler";
+import type { PromptCompilerRepositories } from "../prompt-compiler.types";
+
+/** Build one schema-bound snapshot tool definition. */
+function _snapshotTool(name: string)
+{
+	const parametersSchema = { type: "object", additionalProperties: false } as const;
+	return { name, description: `${name} description`, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
+}
+
+/** Builds one exact immutable MCP tool snapshot. */
+function _mcpTool(toolRevisionId: string, name: string)
+{
+	const inputSchema = { type: "object", additionalProperties: false } as const;
+	return { toolRevisionId, name, description: `${name} description`, inputSchema, inputSchemaDigest: ___DigestCanonicalJson(inputSchema) };
+}
+
+/** Build a snapshot fixture whose references the fake repositories can resolve. */
+function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
+{
+	return {
+		runId: "run-1",
+		attempt: 1,
+		siloId: "silo-1",
+		agentServiceId: "svc-1",
+		agentRevisionId: "rev-1",
+		snapshotVersion: 1,
+		conversationId: "conversation-1",
+		messageIds: ["m-1", "m-2"],
+		personaRevisionId: "persona-1",
+		preferenceFactIds: [],
+		artifactRevisionIds: ["art-2", "art-1"],
+		skillRevisionIds: ["skill-1"],
+		memoryQueryPolicy: {},
+		mcpTools: [_mcpTool("mcp-tool-revision-b", "write"), _mcpTool("mcp-tool-revision-a", "read")],
+		modelRoute: { alias: "silo-default" },
+		budgetPolicy: { maxModelTurns: 4, maxCompletionTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 },
+		executionSubject: _executionSubject(),
+		promptCompilerVersion: PROMPT_COMPILER_VERSION,
+		digest: "sha256:snap",
+		compiledAt: "2026-07-20T00:00:00.000Z",
+		...overrides,
+	};
+}
+
+/** Builds the required evidence-bound subject without affecting prompt compilation. */
+function _executionSubject(): RunInputSnapshot["executionSubject"]
+{
+	return { schemaVersion: 1, siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1", identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: "silo-1", headRevision: "0", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-decision-1", verifiedAt: "2026-07-20T00:00:00.000Z" }, membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "principal-1", siloId: "silo-1", revision: 1, assertionId: "membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision-1", trustedUntil: "2026-08-20T00:00:00.000Z" }, capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-decision-1", decidedAt: "2026-07-20T00:00:00.000Z" }, runScope: { siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1" }, computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 }, requester: { siloId: "silo-1", requesterPrincipalId: "principal-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-07-20T00:00:00.000Z", membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "principal-1", siloId: "silo-1", revision: 1, assertionId: "membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision-1", trustedUntil: "2026-08-20T00:00:00.000Z" } }, admission: { authorizingPrincipalId: "principal-1", decisionEvidenceId: "admission-decision-1", admittedAt: "2026-07-20T00:00:00.000Z" } };
+}
+
+/** Two tool definitions returned in grant order to prove model-name ordering is applied. */
+function _tools(): readonly CompiledToolDefinition[]
+{
+	return [
+		{ name: "zulu.source", modelName: "model_alpha", toolRevisionId: "tr-z", description: "first by model name", requiresApproval: false, parametersSchema: _snapshotTool("zulu").parametersSchema, parametersSchemaDigest: _snapshotTool("zulu").parametersSchemaDigest },
+		{ name: "alpha.source", modelName: "model_zulu", toolRevisionId: "tr-a", description: "last by model name", requiresApproval: true, parametersSchema: _snapshotTool("alpha").parametersSchema, parametersSchemaDigest: _snapshotTool("alpha").parametersSchemaDigest },
+	];
+}
+
+/** Build fake repositories that echo their inputs deterministically for compiler assertions. */
+function _repositories(overrides: Partial<PromptCompilerRepositories> = {}): PromptCompilerRepositories
+{
+	const model: CompiledModelRoute = { modelAlias: "silo-default", maxOutputTokens: 1024, generatedOutputCapabilities: [] };
+	return {
+		loadPersonaInstructions: async function _persona(id): Promise<string> { return id === null ? "" : "You are a careful assistant."; },
+		loadMessages: async function _messages(ids): Promise<readonly { role: "user"; content: string }[]> { return ids.map(function _turn(id): { role: "user"; content: string } { return { role: "user", content: `msg:${id}` }; }); },
+		loadToolDefinitions: async function _toolDefs(): Promise<readonly CompiledToolDefinition[]> { return _tools(); },
+		loadArtifactSummaries: async function _artifacts(ids): Promise<readonly string[]> { return ids.map(function _summary(id): string { return `artifact ${id}`; }); },
+		loadSkillSummaries: async function _skills(ids): Promise<readonly string[]> { return ids.map(function _summary(id): string { return `skill ${id}`; }); },
+		resolveModelRoute: async function _route(): Promise<CompiledModelRoute> { return model; },
+		...overrides,
+	};
+}
+
+describe("__CompileRunInput", function _describeCompiler()
+{
+	it("stamps the compiler version and preserves message order", async function _stampsVersion()
+	{
+		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories());
+
+		expect(compiled.promptCompilerVersion).toBe(PROMPT_COMPILER_VERSION);
+		expect(compiled.messages.map(function _content(m): string { return m.content; })).toEqual(["msg:m-1", "msg:m-2"]);
+	});
+
+	it("orders tools by provider name regardless of integration-assignment iteration order", async function _ordersTools()
+	{
+		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories());
+
+		expect(compiled.tools.map(function _Name(t): string { return t.modelName; })).toEqual(["model_alpha", "model_zulu"]);
+	});
+
+	it("does not offer approval-gated tools to a managed assistant", async function _HidesCompanyApprovals()
+	{
+		const subject = _executionSubject();
+		const managed = { ...subject, principalId: "company-principal", identity: { ...subject.identity, principalId: "company-principal" }, membership: { kind: ExecutionSubjectMembershipKinds.Managed, principalId: "company-principal", siloId: subject.siloId, agentServiceId: "svc-1", agentRevisionId: "rev-1", agentRevisionDigest: "sha256:revision", decisionEvidenceId: "sha256:decision", trustedUntil: "2099-01-01T00:00:00.000Z" } } as const;
+		const compiled = await __CompileRunInput(_snapshot({ executionSubject: managed }), 1, _repositories());
+
+		expect(compiled.tools.map(function _Name(t): string { return t.name; })).toEqual(["zulu.source"]);
+	});
+
+	it("passes exact immutable MCP tool revisions to the tool-definition port", async function _PassesMcpToolRevisions()
+	{
+		let received: RunInputSnapshot["mcpTools"] | null = null;
+		const snapshot = _snapshot({ mcpTools: [_mcpTool("mcp-tool-revision-z", "write"), _mcpTool("mcp-tool-revision-y", "read")] });
+
+		await __CompileRunInput(snapshot, 1, _repositories({ loadToolDefinitions: async function _toolDefinitions(assignments): Promise<readonly CompiledToolDefinition[]> { received = assignments; return []; } }));
+
+		expect(received).toEqual(snapshot.mcpTools);
+	});
+
+	it("resolves literal budget numbers from the opaque budget policy", async function _resolvesBudget()
+	{
+		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories());
+
+		expect(compiled.budget).toEqual({ maxModelTurns: 4, maxCompletionTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 });
+	});
+
+	it("nulls malformed or absent budget limits rather than inventing them", async function _nullsBadBudget()
+	{
+		const compiled = await __CompileRunInput(_snapshot({ budgetPolicy: { maxCompletionTokens: "lots" as unknown as JsonValue } }), 1, _repositories());
+
+		expect(compiled.budget).toEqual({ maxModelTurns: null, maxCompletionTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null });
+	});
+
+	it("assembles persona, artifact, and skill sections without memory content", async function _assembles()
+	{
+		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories());
+
+		expect(compiled.instructions).toBe(
+			"You are a careful assistant.\n\n"
+			+ "Artifacts available for this run:\n- artifact art-1\n- artifact art-2\n\n"
+			+ "Skills available for this run:\n- skill skill-1",
+		);
+		expect(JSON.stringify(compiled)).not.toContain("fact-1");
+	});
+
+	it("produces byte-identical output for the same snapshot across repeated compilations", async function _deterministic()
+	{
+		const first = await __CompileRunInput(_snapshot(), 1, _repositories());
+		const second = await __CompileRunInput(_snapshot(), 1, _repositories());
+
+		expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+		expect(second.digest).toBe(first.digest);
+		expect(first.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+	});
+
+	it("produces the same order and digest when repository iteration order changes", async function _StableRepositoryOrder()
+	{
+		const first = await __CompileRunInput(_snapshot(), 1, _repositories());
+		const restarted = await __CompileRunInput(_snapshot(), 1, _repositories({ loadToolDefinitions: async function _Reordered(): Promise<readonly CompiledToolDefinition[]> { return [..._tools()].reverse(); } }));
+
+		expect(restarted.tools).toEqual(first.tools);
+		expect(restarted.digest).toBe(first.digest);
+	});
+
+	it("allows repeated source names when immutable revisions have distinct model names", async function _AllowsRepeatedSourceNames()
+	{
+		const definitions = _tools().map(tool => ({ ...tool, name: "files.export" }));
+		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories({ loadToolDefinitions: async function _RepeatedNames(): Promise<readonly CompiledToolDefinition[]> { return definitions; } }));
+
+		expect(compiled.tools.map(function _Name(tool): string { return tool.name; })).toEqual(["files.export", "files.export"]);
+		expect(compiled.tools.map(function _ModelName(tool): string { return tool.modelName; })).toEqual(["model_alpha", "model_zulu"]);
+	});
+
+	it("rejects duplicate revisions and provider-facing names before sealing", async function _RejectsAmbiguousTools()
+	{
+		const tools = _tools();
+		const duplicateRevision = [tools[0]!, { ...tools[1]!, toolRevisionId: tools[0]!.toolRevisionId }];
+		const duplicateModelName = [tools[0]!, { ...tools[1]!, modelName: tools[0]!.modelName }];
+
+		await expect(__CompileRunInput(_snapshot(), 1, _repositories({ loadToolDefinitions: async function _DuplicateRevision(): Promise<readonly CompiledToolDefinition[]> { return duplicateRevision; } }))).rejects.toThrow(/unique model names and revision identifiers/);
+		await expect(__CompileRunInput(_snapshot(), 1, _repositories({ loadToolDefinitions: async function _DuplicateModelName(): Promise<readonly CompiledToolDefinition[]> { return duplicateModelName; } }))).rejects.toThrow(/unique model names and revision identifiers/);
+	});
+
+	it("seals the immutable snapshot attempt and refuses a mismatched live attempt", async function _BindsLiveAttempt()
+	{
+		const snapshot = _snapshot({ snapshotVersion: 1 });
+		const first = await __CompileRunInput(snapshot, 1, _repositories());
+
+		expect(first.attempt).toBe(1);
+		await expect(__CompileRunInput(snapshot, 2, _repositories())).rejects.toThrow(/live attempt to match/);
+		expect(snapshot.snapshotVersion).toBe(1);
+	});
+
+	it("rejects a malformed live attempt", async function _RejectsMalformedAttempt()
+	{
+		await expect(__CompileRunInput(_snapshot(), 0, _repositories())).rejects.toThrow(/live attempt to match/);
+	});
+
+	it("changes the digest when any compiled input changes", async function _digestSensitive()
+	{
+		const base = await __CompileRunInput(_snapshot(), 1, _repositories());
+		const changed = await __CompileRunInput(_snapshot(), 1, _repositories({ loadPersonaInstructions: async function _other(): Promise<string> { return "Different persona."; } }));
+
+		expect(changed.digest).not.toBe(base.digest);
+	});
+
+	it("fails closed when the snapshot targets a different compiler version", async function _versionMismatch()
+	{
+		await expect(__CompileRunInput(_snapshot({ promptCompilerVersion: "opencrane.prompt-compiler/other" }), 1, _repositories())).rejects.toThrow(/cannot compile snapshot version/);
+	});
+});
+
+describe("__AppendCompiledTool", function _describeAppend()
+{
+	it("orders the added first-party tool and reseals the changed payload", async function _Reseals()
+	{
+		const input = await __CompileRunInput(_snapshot(), 1, _repositories());
+		const tool = _snapshotTool("upgrade_session");
+		const updated = __AppendCompiledTool(input, { name: "upgrade_session", modelName: "upgrade_session", toolRevisionId: "opencrane:personal:upgrade_session:v1", description: "future change", requiresApproval: false, parametersSchema: tool.parametersSchema, parametersSchemaDigest: tool.parametersSchemaDigest });
+
+		expect(updated.tools.map(function _Name(tool): string { return tool.modelName; })).toEqual(["model_alpha", "model_zulu", "upgrade_session"]);
+		expect(updated.digest).not.toBe(input.digest);
+	});
+
+	it("rejects a duplicate provider name so an MCP descriptor cannot shadow a first-party tool", async function _RejectsDuplicateName()
+	{
+		const input = await __CompileRunInput(_snapshot(), 1, _repositories());
+		const tool = _snapshotTool("alpha");
+		expect(function _appendDuplicateName(): void { __AppendCompiledTool(input, { name: "another.source", modelName: "model_alpha", toolRevisionId: "opencrane:personal:upgrade_session:v1", description: "shadow", requiresApproval: false, parametersSchema: tool.parametersSchema, parametersSchemaDigest: tool.parametersSchemaDigest }); }).toThrow(/already contains model tool/);
+		expect(function _appendInvalidModelName(): void { __AppendCompiledTool(input, { name: "first.party", modelName: "first.party", toolRevisionId: "opencrane:first-party:v1", description: "invalid provider name", requiresApproval: false, parametersSchema: tool.parametersSchema, parametersSchemaDigest: tool.parametersSchemaDigest }); }).toThrow(/valid unique model names/);
+		expect(function _appendMissingModelName(): void { __AppendCompiledTool(input, { name: "first_party", modelName: undefined as unknown as string, toolRevisionId: "opencrane:first-party:v2", description: "missing provider name", requiresApproval: false, parametersSchema: tool.parametersSchema, parametersSchemaDigest: tool.parametersSchemaDigest }); }).toThrow(/valid unique model names/);
+	});
+});

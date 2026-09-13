@@ -131,7 +131,7 @@ export type FailArtifactPreprocessJobResult = { readonly status: "retryable" | "
  * one serializable database transaction opened by the unit of work, never by the caller.
  *
  * Called by: `_CreateArtifactPreprocessSourceBroker` in
- * apps/opencrane/src/infra/artifacts/artifact-preprocess-source-broker.factory.ts.
+ * libs/backend/server/agents/artifacts/main/src/service/artifact-preprocess-source-broker.factory.ts.
  */
 export interface ArtifactPreprocessSourceLeaseIssuer
 {
@@ -158,9 +158,9 @@ export interface ArtifactPreprocessSourceLeaseIssuer
  * `PrismaArtifactPreprocessRepository` (runs the SQL inside one). Build it with
  * `_CreateArtifactPreprocessAuthority`.
  *
- * Called by: `_CreateOptionalRuntimeComposition` in apps/opencrane/src/app/runtime-composition.ts
+ * Called by: `_CreateOptionalRuntimeComposition` in apps/opencrane/src/bootstrap/process/runtime-composition.ts
  * passes it to the router; `_CreateArtifactPreprocessOutputBroker` in
- * apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts uses it for output and completion.
+ * service/artifact-preprocess-output-broker.factory.ts uses it for output and completion.
  */
 export interface ArtifactPreprocessRepository extends ArtifactPreprocessControllerAuthority, ArtifactPreprocessSourceLeaseIssuer
 {
@@ -226,7 +226,7 @@ export interface ReviewedArtifactPreprocessorIdentity
  * is supplied by the app so this package never holds a Kubernetes client.
  *
  * Called by: `_CreateArtifactPreprocessorTokenReviewer` in
- * libs/backend/server/infra/workload-identity/src/projected-token-reviewer.ts supplies the
+ * The workload-identity package supplies the
  * implementation; `_IsPreprocessor` in artifact-preprocessing.router.ts calls it on every request.
  */
 export interface ArtifactPreprocessorTokenReviewer
@@ -271,7 +271,7 @@ export interface ArtifactPreprocessSourceRead
  *
  * Called by: the `POST /jobs/:jobId/source` handler in artifact-preprocessing.router.ts.
  * Implemented by `_CreateArtifactPreprocessSourceBroker` in
- * apps/opencrane/src/infra/artifacts/artifact-preprocess-source-broker.factory.ts.
+ * libs/backend/server/agents/artifacts/main/src/service/artifact-preprocess-source-broker.factory.ts.
  */
 export interface ArtifactPreprocessSourceBroker
 {
@@ -297,7 +297,7 @@ export interface ArtifactPreprocessSourceBroker
  *
  * Called by: the `PUT /jobs/:jobId/output` handler in artifact-preprocessing.router.ts.
  * Implemented by `_CreateArtifactPreprocessOutputBroker` in
- * apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts.
+ * service/artifact-preprocess-output-broker.factory.ts.
  */
 export interface ArtifactPreprocessOutputBroker
 {
@@ -331,7 +331,7 @@ export interface ArtifactPreprocessorLogger
  * call. Because the brokers sit here rather than in the worker, no storage address or lease is
  * ever rendered into a response.
  *
- * Called by: `_CreateOptionalRuntimeComposition` in apps/opencrane/src/app/runtime-composition.ts.
+ * Called by: `_CreateOptionalRuntimeComposition` in apps/opencrane/src/bootstrap/process/runtime-composition.ts.
  */
 export interface ArtifactPreprocessorRouterDependencies
 {

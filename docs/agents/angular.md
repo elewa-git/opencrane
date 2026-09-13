@@ -34,6 +34,19 @@ Always create reusable UI components before writing repeated page-level markup.
 - Page components should focus on orchestration and data flow; display logic belongs in shared components.
 - Check these rules after every implementation cycle.
 
+Reuse is not a reason to keep an interactive region inside a large page until a second consumer
+appears. A feature-local component is warranted by its own inputs, outputs, interaction states,
+or independent rendering tests. Inspect the component class, template, styles, and any inherited
+presenter together; moving complexity into a base class does not decompose the screen.
+
+Before removing a component or component infrastructure, record its selectors and exports, live
+consumers, supported states, projected-content slots, keyboard/focus behaviour, and tests/stories.
+Name the surviving owner for each capability that the product still needs. Migrate its consumers
+and state coverage in the same change. No current import is insufficient evidence that a reusable
+contract is obsolete: inspect recent deletions and the feature replacing it. Do not inline a
+component's markup into pages or delete its stories to make a cleanup pass. Remove an obsolete
+component completely once the replacement preserves its needed capabilities; do not keep shims.
+
 ## Component-manager collaboration gate
 
 Pair frontend implementation with the `component-manager` agent in
@@ -67,6 +80,13 @@ directive. Class inheritance is reserved for a genuine stable non-visual behavio
 - `features/`: routed screens and panes that compose `elements/` and consume `state/` ports.
 - `platform/`: browser/desktop runtime-capability seam supplied by the app.
 - `apps/opencrane-ui`: thin browser composition and routing root.
+
+Inside each feature, group files by screen or cohesive visual component. Keep a component's class,
+template, styles, story, and `__tests__/` together; place its store and pure presentation mapper
+beside the screen that owns them. A large flat directory, a catch-all presenter, or one component
+per route is not the target structure. Feature stores use named commands and own read/refresh,
+mutation admission, stale-completion handling, and authoritative result adoption. Shared elements
+receive values and emit intents; they never acquire those command responsibilities.
 
 ## Routed Page Responsibility Gate
 

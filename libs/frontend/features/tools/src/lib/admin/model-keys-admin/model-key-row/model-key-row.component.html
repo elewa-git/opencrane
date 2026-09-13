@@ -1,0 +1,46 @@
+							<td>
+								<div class="wo-keys__name">{{ row().label }}</div>
+								<div class="wo-mono wo-admin__muted">{{ row().provider }}</div>
+							</td>
+							<td>
+								@if (row().configured) {
+									<wo-scope-chip label="configured" [tone]="chipTones.Success" />
+								} @else {
+									<wo-scope-chip label="not set" [tone]="chipTones.Neutral" />
+								}
+							</td>
+							<td><wo-scope-chip [label]="badgeStyle().label" [tone]="badgeStyle().tone" [appearance]="chipAppearances.Soft" /></td>
+							<td class="wo-admin__muted">{{ row().updatedAtLabel }}</td>
+							<td>
+								<input
+									class="wo-text-input wo-keys__input"
+									type="password"
+									[attr.aria-label]="row().label + ' API key'"
+									autocomplete="off"
+									placeholder="Paste API key"
+									[disabled]="busy()"
+									[value]="draft()"
+									(input)="editDraft($event)"
+									(keyup.enter)="submitted.emit()"
+								/>
+							</td>
+							<td class="wo-admin__actions">
+								<button
+									type="button"
+									class="wo-tools__act"
+									[disabled]="busy() || draft().trim().length === 0"
+									(click)="submitted.emit()"
+								>
+									{{ row().configured ? "Refresh" : "Save" }}
+								</button>
+								@if (row().configured) {
+									<button
+										type="button"
+										class="wo-tools__act wo-tools__act--muted"
+										[disabled]="busy()"
+										(click)="removeRequested.emit()"
+									>
+										Remove
+									</button>
+								}
+							</td>

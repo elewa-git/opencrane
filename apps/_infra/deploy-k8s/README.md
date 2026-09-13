@@ -150,6 +150,12 @@ package imports it.
   exists, because a `sub` is scoped to its original OIDC issuer. Later upgrades must restate that
   same `--oidc-issuer-url`; they may not use chart `--values` or `--reset-values`, which could
   replace or erase the binding.
+- `OPENCRANE_MCP_CONNECTION_MATERIAL_SECRET` selects the server's MCP credential-verification keyring
+  Secret (default `opencrane-mcp-connection-material`). The app-owned
+  `apps/opencrane/deploy/ensure-mcp-material-keyring.sh` creates it only when absent. Failed reads
+  stop deployment; existing keys are preserved. Connection credentials live separately in the
+  release-owned namespace that permits no Pods. Keep old verification keys during rotation so
+  previously admitted connection commands remain verifiable.
 - `platform/provider-key-secrets.sh` — creates only missing fixed-name provider Secret placeholders.
   Authenticated durable provider commands later fill or clear them; redeployment never overwrites a
   previously admitted key.
@@ -178,6 +184,27 @@ package imports it.
   requests use fast local-path storage; storage-sensitive changes, manual k3d qualification, and
   every `develop` push also prove pinned expandable storage. Neither tier substitutes for
   backup/recovery or production qualification.
+- Hosted generated-file qualification is being connected to that same disposable smoke lifecycle.
+  Its fixtures supply two generated test identities, a login service, a synthetic model provider,
+  and an authenticated TLS registry. The existing instance LiteLLM owns model and credential
+  administration; the deployment wrapper creates its master and encryption keys. The fixtures
+  use a fixed public marker for the synthetic provider and a separate random evidence key. No
+  confidential upstream key is generated or accepted. The public client creates the
+  requester through a real invitation and configures
+  their personal agent before uploading, importing and assigning the producer tool. The server
+  remains the only durable workflow worker. The runner checks the disposable context and resource
+  ownership before forwarding the database or restarting services; its private database URL reaches
+  only the identity lookup and exact test prerequisite grant. After restart, the public checks must
+  prove replay, identical downloads and denial after the Owner removes the requester.
+- `npm exec -- nx run deploy-k8s:test:hosted-generated-file` runs the offline protocol, runner and
+  evidence-collection checks. The ordinary deployment test target includes the same contract.
+  CI retains only named public evidence and image/byte digests under
+  `.nx/test-results/hosted-generated-file`; credentials, setup state and file contents stay outside
+  that artifact. The smoke first renders the actual server certificate-trust configuration and
+  stops before creating a cluster or credentials when that support is absent. Optional server
+  certificate trust remains pending, and the public-marker client integration is under validation.
+  Offline checks do not prove a hosted conversation or
+  authorise a testv5 deployment.
 
 ## Sub-docs (the deep detail)
 

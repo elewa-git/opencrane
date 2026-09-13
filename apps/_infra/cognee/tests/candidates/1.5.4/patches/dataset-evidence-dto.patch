@@ -1,0 +1,21 @@
+--- a/cognee/api/v1/datasets/dto.py
++++ b/cognee/api/v1/datasets/dto.py
+@@ -10 +10 @@
+-from typing import Optional
++from typing import List, Optional
+@@ -27,0 +27,15 @@
++
++
++class CognifyEvidenceDataDTO(DataDTO):
++    """Safe document coordinates returned with one locked Cognify snapshot."""
++
++    content_digest: str
++    byte_length: int
++
++
++class CognifyInputEvidenceDTO(OutDTO):
++    """Opaque input evidence plus the documents observed in the same lock."""
++
++    dataset_id: UUID
++    input_evidence_digest: str
++    data: List[CognifyEvidenceDataDTO]

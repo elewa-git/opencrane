@@ -4,6 +4,10 @@
 
 ## What it owns
 
+`src/service/` owns the private ArtifactStore transport, mounted key readers, upload gateway and
+preprocessing brokers. Callers receive published bytes or verified receipts; credentials remain
+inside these adapters.
+
 An *artifact* is any file an agent produces or consumes — a skill bundle, a document, a build
 output. OpenCrane splits an artifact into two halves: the **bytes** (stored once, addressed by a
 SHA-256 content address, which is a fingerprint computed from the bytes themselves) and the
@@ -64,14 +68,25 @@ trusted server process:
         └── derived text revision + immutable lineage ◄── broker text bytes
 ```
 
+`src/quarantine/` owns the shared receipt-to-scan transaction for conversation files. It checks the
+exact silo, artifact, lease, byte digest, size and media type, spends the unexpired lease, and saves
+one Quarantined revision plus one scan job. Exact receipt replay reuses that same revision even
+after scanning progresses. It never changes the current-revision pointer; only the scanner may
+publish these bytes. Participant uploads now use this owner, and generated-file publication uses
+the same boundary after capture and current requester authorization.
+
 Conversation uploads instead enter a quarantined revision. The dedicated scanner receives only a
 fenced attempt and brokered bytes. A clean verdict publishes the exact revision; a rejection or
 terminal scanner failure leaves it unavailable and gives the participant only a stable failure.
+For a conversation PDF, clean scanning leaves the file Processing until the workflow controller
+consumes the conversion receipt. Its Completed job and Ready file commit together. Terminal worker
+or controller failure marks the file Failed in the same transaction; a retryable failure leaves it
+Processing. General artifact conversions have no conversation file to update.
 
 **In this flow:** [skills](../../skills/main/README.md) · [agent-services](../../agent-services/main/README.md) *(both pin artifacts)*
 
-Invariant: this domain never touches artifact bytes — no upload, no download, no hashing of content
-here. It commits revision metadata, the current-revision pointer, the lease consumption, and the
+The repositories commit metadata; `src/service/` owns byte transport and content hashing outside
+those transactions. Publication commits the revision, current-revision pointer, lease consumption and
 outbox event in one transaction, keyed by an idempotency key so a retried finalize returns the same
 result instead of creating a duplicate. A stale, replayed, or already-consumed receipt fails closed.
 Read leases contain only facts reloaded from the catalogue; caller-provided digests, byte counts,
@@ -96,6 +111,15 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
 
 ## Public surface
 
+- `_CreateArtifactUploadGateway` composes lease signing and verified publication.
+- `_CreatePublishedArtifactReader` returns bytes only after reloading immutable catalogue metadata.
+  Its optional abort signal lets the calling use case bound the private byte-store read.
+- `PrismaScannedPdfTextRepository` resolves one clean, current PDF through its completed conversion,
+  exact generated text revision and sole source parent. The caller authorizes the source Artifact
+  before using these internal coordinates; the hidden derivative supplies no independent grant.
+- `_CreateArtifactPreprocessOutputBroker`, `_CreateArtifactPreprocessSourceBroker` and
+  `_CreateArtifactScanSourceBroker` bind worker operations to authorised artifact coordinates.
+
 - `__FinalizeArtifactRevision` — commit promoted bytes into a visible, immutable revision.
 - `__IssueArtifactReadLease` — reload an active artifact's exact published revision and issue one
   internal read lease that expires after at most five minutes.
@@ -113,6 +137,12 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
   bounded retries, and the TokenReview-protected scanner protocol. App composition supplies a
   conversation-lifecycle repository factory; the unit of work binds it and the scan repository to
   the same transaction without making the artifact package an owner of conversation rows.
+  Generated files recheck current authorization before a clean scan publishes them. Publication
+  requires their Processing asset to become Ready in that transaction. The conversation owner saves
+  task wakes only after the asset, revision and terminal scan outcome agree; a failed wake aborts
+  completion. An already failed generated asset keeps its first failure and cannot be published.
+- `_CreateArtifactUploadCryptoPort` shares the mounted lease signer and receipt verifier with
+  participant uploads and generated-file promotion; it introduces no new keys or signing protocol.
 - `_CreateArtifactCatalogueRepository` — read-only active/published catalogue facts for internal
   lease issuance; it never acquires publication or preprocessing locks.
 - `ArtifactPreprocessSourceLeaseIssuer` — the narrow durable port that lets app composition issue
@@ -182,6 +212,13 @@ Owns `Artifact`, `ArtifactRevision`, `ArtifactRevisionParent`, `ArtifactUploadLe
 `tests/artifact-authority.sql` proves job fencing, exact output binding, lease finalization, and
 immutable source lineage. Production TypeScript uses only typed Prisma delegates; the
 PostgreSQL-specific database clock remains in the reviewed clean target baseline.
+
+## Runtime & config
+
+Service factories accept a deployment environment with `ARTIFACT_SERVICE_URL`,
+`ARTIFACT_LEASE_PRIVATE_KEY_PATH` and `ARTIFACT_RECEIPT_PUBLIC_KEY_PATH`. The service URL must name
+a credential-free, cluster-local HTTP service. Keys are loaded from mounted files, never returned
+through the public API. Tests inject these inputs and transport responses.
 
 ## See also
 

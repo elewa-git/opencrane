@@ -2,6 +2,7 @@ import { TestBed } from "@angular/core/testing";
 import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@angular/platform-browser-dynamic/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { OrganizationMemberDirectoryStore } from "../organization-member-directory.store";
 import { ORGANIZATION_MEMBERS_GATEWAY } from "../organization-members.gateway";
 import type { OrganizationMembersGateway } from "../organization-members-gateway.types";
 import { OrganizationInvitationResendStore } from "../organization-invitation-resend.store";
@@ -19,7 +20,7 @@ afterAll(function _ResetAngularEnvironment(): void { TestBed.resetTestEnvironmen
 /** Build a complete gateway mock while the test controls only resend. */
 function _Gateway(): OrganizationMembersGateway
 {
-	return { load: vi.fn(), validate: vi.fn(), invite: vi.fn(), resend: vi.fn(), accept: vi.fn() };
+	return { remove: vi.fn(), load: vi.fn().mockResolvedValue({ members: [], invitations: [], activeCount: 0, pendingCount: 0 }), validate: vi.fn(), invite: vi.fn(), resend: vi.fn(), accept: vi.fn() };
 }
 
 describe("organization invitation resend store", function _InvitationResendStoreSuite()
@@ -30,7 +31,7 @@ describe("organization invitation resend store", function _InvitationResendStore
 		const invitation = { invitationId: "invite-1", email: "alex@example.com", role: OrganizationMemberRoles.Member, status: OrganizationInvitationStatuses.Pending, expiresAt: "2026-09-08T00:00:00.000Z", invitedAt: "2026-09-01T00:00:00.000Z", invitedByDisplayName: "Jente" } as const;
 		const inviteLink = "https://example.com/invitations/rotated";
 		vi.mocked(gateway.resend).mockResolvedValue({ invitation, inviteLink });
-		TestBed.configureTestingModule({ providers: [OrganizationInvitationResendStore, { provide: ORGANIZATION_MEMBERS_GATEWAY, useValue: gateway }] });
+		TestBed.configureTestingModule({ providers: [OrganizationMemberDirectoryStore, OrganizationInvitationResendStore, { provide: ORGANIZATION_MEMBERS_GATEWAY, useValue: gateway }] });
 		const store = TestBed.inject(OrganizationInvitationResendStore);
 
 		expect(await store.resend("invite-1")).toBe(true);

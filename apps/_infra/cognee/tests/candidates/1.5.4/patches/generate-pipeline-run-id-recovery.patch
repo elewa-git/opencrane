@@ -1,0 +1,15 @@
+--- a/cognee/modules/pipelines/utils/generate_pipeline_run_id.py
++++ b/cognee/modules/pipelines/utils/generate_pipeline_run_id.py
+@@ -1 +1 @@
+-from uuid import UUID, uuid4
++from uuid import UUID, uuid4, uuid5
+@@ -4,2 +4,7 @@
+-def generate_pipeline_run_id(pipeline_id: UUID, dataset_id: UUID):
+-    # pipeline_run_id must be unique per execution; keep args for API compatibility.
++def generate_pipeline_run_id(
++    pipeline_id: UUID, dataset_id: UUID, *, operation_id: UUID | None = None
++):
++    """Return a caller-stable run id only when an operation identity is supplied."""
++    if operation_id is not None:
++        return uuid5(pipeline_id, str(operation_id))
++    # Legacy callers still receive one unique id for every execution.

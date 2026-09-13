@@ -1,0 +1,17 @@
+				<div class="wo-cat__card">
+					<div class="wo-cat__card-top">
+						<span class="wo-cat__glyph wo-mono">{{ server().glyph }}</span>
+						<div class="wo-cat__card-text">
+							<p class="wo-cat__name wo-mono">{{ server().name }}</p>
+							<p class="wo-cat__desc">{{ server().description }}</p>
+						</div>
+					</div>
+					<div class="wo-cat__card-foot">
+						<wo-scope-chip [label]="typeChips[server().type].label" [tone]="typeChips[server().type].tone" />
+						@if (installed()) {
+							<span class="wo-cat__installed"><i class="pi pi-check"></i> Installed</span>
+						} @else {
+							<button type="button" class="wo-tools__act" [disabled]="busy()" (click)="installRequested.emit()">Install</button>
+						}
+					</div>
+				</div>

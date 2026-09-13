@@ -28,6 +28,23 @@ Personal-session, ordinary chat, group-child and reviewed-share requests require
 uncertain response and supply a new UUID for a new command. Group-child responses identify their
 parent request and Pending, Ready or Unavailable state; parent metadata never grants child access.
 
+`ConversationMessageActivations.Stop` requests cancellation through the same message API. The
+client sends its retry key and conversation ID; the server selects and saves the original requester's
+eligible turn. Message admission does not mean cleanup has finished: personal status reports
+`cancelling` until it can report `cancelled`, or `completed` if the answer was already committed.
+
+MCP catalogue entries require `credentialRequirement`, independently of their connection type.
+Installed entries return their saved `connectionStatus`: `credentialless` requires no provider
+credential, while `needs-credential` remains unavailable until its connection is activated.
+Their separate `lifecycleState` records installed, removing or removed. Removal may be accepted
+with HTTP 202 while current work and credential cleanup finish; removed rows are omitted from
+installation lists, and reinstall cannot proceed while removal is pending.
+Neither catalogue visibility nor an installation grants permission to execute a tool.
+
+Connection setup commands carry the generation observed before the request, or `null` before
+any connection generation exists. Disconnect commands carry the generation to revoke. Retries
+keep that original value and their command key so a delayed request cannot change newer work.
+
 ```
  apps/opencrane server ....... emits OpenAPI 3.1 spec (dist/apps/opencrane/openapi.json)
         │  openapi-typescript
@@ -48,8 +65,11 @@ record of one run's frozen persona, transcript, memory references, tools, budget
 verified identity provenance; it carries only immutable coordinates and canonical JSON, never
 provider credentials or mutable source objects. Its `mcpTools` list records immutable MCP tool
 revision identifiers plus each saved name, description, exact input JSON Schema, and canonical
-schema digest. Registry and provider credentials remain entirely behind server-owned execution
-boundaries and never enter the snapshot or conversation computer. The compiled model
+schema digest. Compilation keeps that exact source name for disclosure and MCP dispatch, while it
+adds a provider-compatible `modelName` derived from the immutable revision identifier. The alias is
+sealed into the compiled input; it is neither stored in the snapshot nor used as permission.
+Registry and provider credentials remain entirely behind server-owned execution boundaries and
+never enter the snapshot or conversation computer. The compiled model
 route also freezes the model registry's generated-output allowlist; the executor
 cannot infer image-generation authority from a prompt or provider response. The compiled budget
 preserves the admitted model-turn limit alongside token, cost, tool, and wall-clock ceilings.
@@ -64,8 +84,24 @@ and identity checks still run at admission. A stored snapshot never grants curre
 the deterministic compiler. A revision that names another version is not admissible, preventing a
 runtime from silently interpreting a frozen snapshot with different assembly rules.
 
+The `tool-progress/` folder owns the small personal run-status projection. `RunToolProgress` carries
+only a finite phase; its strict validator rejects unknown phases and added fields. `latestTool: null`
+means no invocation in this attempt, not a failed progress read. It never authorizes a call or exposes
+a tool's identity, arguments or result.
+
+The `memory/gateway/` folder owns the private HTTP contract between the OpenCrane server and the
+memory gateway. Its eight routes cover dataset lookup, bounded document storage and recovery,
+blocking processing, passage search, and exact document deletion. A locked document snapshot carries
+per-document byte evidence and one digest for the complete input. The blocking processing receipt
+binds that digest and the caller's saved operation to one provider pipeline run. Strict validators keep Cognee field
+aliases, credentials, owner records, storage locations, and provider errors outside this contract.
+Mutation errors always state whether provider delivery is known; read errors cannot carry that
+evidence. A dataset or processing receipt reports only that gateway operation and never activates a
+personal-memory dataset or adopts a fact.
+
 ## Public surface
 
+- `RunToolProgress`, `RunToolProgressPhases` and `___RunToolProgressSchema` — the safe phase shared by personal status and its activity presenter.
 - `___CreateControlPlaneClient`, `ControlPlaneClient`, `paths` — the typed HTTP client and its path map.
 - `API_ERROR_LIMITS`, `ApiErrorEnvelope`, `ApiValidationIssue`, `ApiValidationIssueLocations`, and
   `___ParseApiErrorEnvelope` — the generated public error contract and bounded runtime parser used
@@ -79,8 +115,14 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   immutable history and generation-fenced computer vocabulary shared by server and browser.
 - `ConversationToolProposal`, `___ConversationToolProposalSchema` and
   `ConversationToolProposalReceipt` — the private workload request for one frozen tool revision
-  and bounded JSON arguments. It accepts no caller-selected identity or approval. A receipt
-  confirms storage only; it contains no provider result or execution claim.
+  and bounded JSON arguments. It accepts no caller-selected identity; its approval requirement is
+  copied from the frozen tool definition and remains a proposal until server-owned IAM decides it.
+  A receipt confirms storage only; it contains no provider result or execution claim.
+- `ElicitationApprovalBody.proposedArguments` — the saved arguments which the participant may
+  review. An object contains the proposal; null makes the request denial-only because secret fields
+  prevented disclosure. Other approval purposes omit it. `___ConversationToolArgumentsSchema`
+  shares the proposal's JSON size and nesting limits with browser validation; IAM still decides
+  what may be disclosed. The browser submits a decision and cannot change the saved arguments.
 - `___ConversationComputerSchema` validates the existing public computer shape, lease generation,
   and checkpoint metadata without admitting private extensions. Readers still bind its conversation
   coordinate to the authenticated request.
@@ -116,6 +158,10 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 - `MemoryFactProvenanceSourceKinds` and `ExecutionSubject` — stable memory-source vocabulary and the
   evidence-bound agent identity, principal, membership, capability, run, computer-lease, requester,
   and admission coordinates shared by run snapshots and service gates.
+- `MEMORY_GATEWAY_ROUTE_PATHS`, the `MemoryGateway*` request/response DTOs, and their
+  `___MemoryGateway*Schema` validators — the strict private server-to-gateway contract. It carries
+  only opaque dataset, document, operation and pipeline coordinates, bounded fact/query text, digests, and fixed failure
+  evidence; provider credentials and storage details never cross it.
 - `AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE`, `AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME`, and
   `AgentControllerRunAttempt*` — the private controller handshake for claiming one authorised run,
   reporting the Kubernetes-issued Job identity, and committing that identity under the same database
@@ -151,9 +197,20 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 
 ## Boundary
 
-The one contract surface for public control-plane calls and first-party workload protocols; callers
-import it instead of duplicating wire shapes. It defines types, validates first-party wire models,
-and builds a client — it holds no business policy, persistence, or server state. Runtime and controller frames remain private workload
+Hand-written contracts are grouped by capability under `src/`: `api`, `agents`, `artifacts`,
+`conversations`, `inputs`, `knowledge`, `mcp`, `memory`, `model-routing`, `organization`, and `skills`.
+Tests live with their capability; cross-contract acceptance tests stay in `src/__tests__`.
+`generated/api.ts` remains generated output. The public `src/index.ts` composes these owners, so
+callers keep importing `@opencrane/contracts` without depending on internal file layout.
+
+The one contract surface for public control-plane calls, first-party workload protocols and the
+external MCP 2026-07-28 wire format; callers import it instead of duplicating wire shapes. The
+`mcp/protocol` folder builds stateless discovery, tool-list and tool-call requests, mirrors required
+HTTP metadata, and decodes bounded JSON or request-scoped SSE responses. It validates optional tool
+metadata before projecting the durable tool and result fields OpenCrane stores. Fetch, sockets,
+credentials, DNS policy, retries and lifecycle remain with the calling adapter.
+
+It defines types, validates first-party wire models, and builds a client — it holds no business policy, persistence, or server state. Runtime and controller frames remain private workload
 contracts rather than public browser endpoints. External proprietary frontends should generate their
 client from the released spec (see below), keeping a clean process/network boundary.
 

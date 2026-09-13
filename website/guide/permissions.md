@@ -26,6 +26,23 @@ The server checks current permission before protected actions. Removing access a
 decisions and must not be bypassed by an assistant's earlier configuration. Records of completed
 actions remain available to authorised reviewers.
 
+## Remove a company member
+
+The current follow-up adds **Remove access** to **Settings → Members** for standalone installations.
+An authorised administrator chooses another active member, reviews the confirmation and removes
+that person's access. The member remains listed as suspended so the organisation retains the record.
+The interface explains why an unavailable action cannot be used; people cannot remove themselves
+or the organisation Owner. Fleet-managed removal remains unsupported.
+
+Protected product requests check the member's current status. An open chat clears its cached list,
+history, draft and onboarding transcript when access loss is detected. Existing live subscriptions
+check authority every ten seconds; detection is therefore bounded rather than instantaneous.
+Delayed requests cannot restore the cleared content. Removing membership does not delete the
+organisation's conversation history or restore access through an old invitation.
+
+This follow-up is under review. Its real-account removal journey is still awaiting live
+qualification; see [Development status](/guide/status).
+
 Agent-driven tool execution and shared-agent scheduling still need their complete product
 journeys; permission infrastructure alone does not make those features available.
 

@@ -23,11 +23,23 @@ export interface ConversationRunLifecycleCommand
 	readonly lease: LeaseScope;
 }
 
+/** Closed lifecycle events whose state rules are owned by the runs package. */
+export enum ConversationRunLifecycleEvents
+{
+	/** Bootstrap reached the exact admitted computer lease. */
+	Start = "start",
+	/** A saved paid request has no recoverable response. */
+	EnterRecoveryRequired = "enter_recovery_required",
+	/** Durable assistant output and its receipt are complete. */
+	Complete = "complete",
+}
+
 /**
  * Persists a fenced run transition inside a transaction its implementation owns or receives.
  *
  * Implementations must treat an already-reached target state as success and reject every other
- * source state; restart recovery relies on that distinction instead of replaying side effects.
+ * source state. Starting an exact run already in RecoveryRequired also succeeds without resuming it,
+ * so a saved uncertain model response can reach its recovery workflow after process restart.
  * Called by: `PrismaConversationRunLifecycleUnitOfWork`.
  */
 export interface ConversationRunLifecycleRepository
@@ -35,12 +47,10 @@ export interface ConversationRunLifecycleRepository
 	/**
 	 * Verify the saved execution subject, then move the run from the required source state.
 	 * @param command - Run, attempt, and lease coordinates that must match the saved subject.
-	 * @param from - State required before this transition may begin.
-	 * @param to - State that counts as an idempotent replay or the successful transition target.
-	 * @param terminal - Whether the transition records successful terminal evidence.
+	 * @param event - Closed event whose state and write projection are defined by this owner.
 	 * @throws When the attempt, lease fence, or current state does not match the transition.
 	 */
-	transition(command: ConversationRunLifecycleCommand, from: string, to: string, terminal: boolean): Promise<void>;
+	transition(command: ConversationRunLifecycleCommand, event: ConversationRunLifecycleEvents): Promise<void>;
 }
 
 /**
@@ -55,13 +65,19 @@ export interface ConversationRunLifecycleAuthority
 	/**
 	 * Record that bootstrap reached the admitted computer and the run may execute.
 	 * @param command - Fence copied from the admitted execution subject.
-	 * @throws When the admitted attempt is absent, no longer Accepted, or bound to another lease.
+	 * @throws When the attempt is neither Accepted nor a restart-safe Running or RecoveryRequired state, or when its lease fence differs.
 	 */
 	start(command: ConversationRunLifecycleCommand): Promise<void>;
 	/**
+	 * Preserve a paid model response ambiguity on the exact admitted attempt and lease.
+	 * @param command - Fence copied from the admitted execution subject.
+	 * @throws When the attempt is neither Running nor already RecoveryRequired, or when its lease fence differs.
+	 */
+	enterRecoveryRequired(command: ConversationRunLifecycleCommand): Promise<void>;
+	/**
 	 * Record success after the assistant output and its restart receipt are durable.
 	 * @param command - Fence copied from the admitted execution subject.
-	 * @throws When the admitted attempt is absent, no longer Running, or bound to another lease.
+	 * @throws When the attempt is neither Running nor already Completed, or when its lease fence differs.
 	 */
 	complete(command: ConversationRunLifecycleCommand): Promise<void>;
 }

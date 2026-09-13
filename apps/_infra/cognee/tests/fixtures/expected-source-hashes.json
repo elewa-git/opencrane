@@ -1,0 +1,19 @@
+{
+  "version": "1.2.1-local",
+  "modules": {
+    "cognee.api.v1.datasets.datasets": "75ff6b78baedd292ec0d3b941295c6e064ce138bc0f2b3e6d00291bb4a6ebfe4",
+    "cognee.api.v1.datasets.routers.get_datasets_router": "5b2fc117c3a051d797032b283b28f00e2e031b044e53eb0f9daab2ed711eac57",
+    "cognee.infrastructure.databases.relational.sqlalchemy.SqlAlchemyAdapter": "138fb2e0badafe633692619771cd69b550ffbd67fd5f58dbfc4e0b8de05906d9",
+    "cognee.infrastructure.loaders.core.text_loader": "d9ad0d98f4498bae6067c7a53d6470bdf98b53bf2d4ccbb975327185ce7b896e",
+    "cognee.modules.chunking.TextChunker": "43a6ac5e9f132374c67f0d2527a22657d1546854f0adafddd39cc190d08c4c0c",
+    "cognee.modules.data.methods.get_unique_data_id": "82d8dc8b21b151722c6d72330a36f7671be0b09d2a9452c1a1e964f5285ccd3c",
+    "cognee.modules.data.models.Data": "af3d18f88ec85b4098e841bbdb6ecf97736925998538542653143d4750951af7",
+    "cognee.modules.graph.methods.delete_data_nodes_and_edges": "51d664fb69a5c280fd85025f9430536424202958be77a6c09704254ef915c3fc",
+    "cognee.modules.ingestion.save_data_to_file": "3c64136ddbff3e7f3fc5e1315bc49b922390e731fdc4958c4ba04c6847eb40ed",
+    "cognee.modules.retrieval.chunks_retriever": "7cb62960a65e39915a21a2b1a72e6dff89fa1dd4be65c18a9cd252bb2d328525",
+    "cognee.modules.search.methods.get_search_type_retriever_instance": "351dc564339b84e17efa3bbc3186f12e548bf7976cc485cc5b4697c21585ff2b",
+    "cognee.modules.search.methods.search": "12b71778370c71c99148e7db4281a212ddfb2c6192f926b56399e61d8caf85fd",
+    "cognee.tasks.ingestion.data_item_to_text_file": "55eb748c3f10ed775c115817621f6230e5cbf2c5f9f51a49fb37218a90dce6a4",
+    "cognee.tasks.ingestion.ingest_data": "3c4c4c98de77589a23053f77c3f2cbb35a980e8c7645d131ab0a5ee22d8046ab"
+  }
+}

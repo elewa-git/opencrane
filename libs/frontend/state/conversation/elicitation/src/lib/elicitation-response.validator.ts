@@ -1,4 +1,4 @@
-import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation, type ElicitationBody, type ElicitationChoice, type ElicitationResponseProjection } from "@opencrane/contracts";
+import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, ___ConversationToolArgumentsSchema, type ConversationElicitation, type ElicitationBody, type ElicitationChoice, type ElicitationResponseProjection } from "@opencrane/contracts";
 
 /** Parse one untrusted browser-safe request projection. */
 export function __ParseConversationElicitation(value: unknown): ConversationElicitation
@@ -10,6 +10,8 @@ export function __ParseConversationElicitation(value: unknown): ConversationElic
 	if (value["version"] !== CONVERSATION_ELICITATION_VERSION || !_Identifier(value["requestId"]) || !_Identifier(value["conversationId"]) || !_Identifier(value["runId"]) || !Number.isSafeInteger(value["attempt"]) || (value["attempt"] as number) < 1 || !_Identifier(value["assignedParticipantId"]) || !Object.values(ElicitationPurposes).includes(purpose as ElicitationPurposes) || !Object.values(ElicitationRequestStates).includes(state as ElicitationRequestStates) || typeof value["requiresStepUp"] !== "boolean" || !_Instant(value["requestedAt"]) || !_Instant(value["expiresAt"])) throw new TypeError("elicitation response has invalid coordinates");
 	if (value["resolvedAt"] !== undefined && !_Instant(value["resolvedAt"])) throw new TypeError("elicitation terminal time is invalid");
 	if (value["safeReason"] !== undefined && !_BoundedString(value["safeReason"], 200)) throw new TypeError("elicitation reason is invalid");
+	if (purpose === ElicitationPurposes.ToolApproval && body.kind === ElicitationBodyKinds.Approval && body.proposedArguments === undefined)
+		throw new TypeError("tool approval arguments are missing");
 	const resolvedAt = value["resolvedAt"] === undefined ? {} : { resolvedAt: value["resolvedAt"] as string };
 	const safeReason = value["safeReason"] === undefined ? {} : { safeReason: value["safeReason"] as string };
 	return { version: CONVERSATION_ELICITATION_VERSION, requestId: value["requestId"], conversationId: value["conversationId"], runId: value["runId"], attempt: value["attempt"] as number, assignedParticipantId: value["assignedParticipantId"], purpose: purpose as ElicitationPurposes, state: state as ElicitationRequestStates, body, requiresStepUp: value["requiresStepUp"], requestedAt: value["requestedAt"], expiresAt: value["expiresAt"], ...resolvedAt, ...safeReason };
@@ -30,13 +32,27 @@ function _Body(value: unknown): ElicitationBody
 	{
 		const externalSystem = _BoundedString(value["externalSystem"], 500) ? { externalSystem: value["externalSystem"] } : {};
 		const cost = _BoundedString(value["cost"], 500) ? { cost: value["cost"] } : {};
-		return { kind: value["kind"], prompt: value["prompt"], action: value["action"], target: value["target"], dataUse: value["dataUse"], consequence: value["consequence"], ...externalSystem, ...cost };
+		const proposedArguments = _ProposedArguments(value);
+		return { kind: value["kind"], prompt: value["prompt"], action: value["action"], target: value["target"], dataUse: value["dataUse"], consequence: value["consequence"], ...proposedArguments, ...externalSystem, ...cost };
 	}
 	const choices = _Choices(value["choices"]);
 	if (value["kind"] === ElicitationBodyKinds.SingleChoice && choices !== null) return { kind: value["kind"], prompt: value["prompt"], choices };
 	if (value["kind"] === ElicitationBodyKinds.MultipleChoice && choices !== null && Number.isSafeInteger(value["minimumSelections"]) && Number.isSafeInteger(value["maximumSelections"]) && (value["minimumSelections"] as number) >= 0 && (value["maximumSelections"] as number) >= (value["minimumSelections"] as number) && (value["maximumSelections"] as number) <= choices.length) return { kind: value["kind"], prompt: value["prompt"], choices, minimumSelections: value["minimumSelections"] as number, maximumSelections: value["maximumSelections"] as number };
 	if (value["kind"] === ElicitationBodyKinds.FreeText && Number.isSafeInteger(value["maximumLength"]) && (value["maximumLength"] as number) > 0 && (value["maximumLength"] as number) <= 20_000 && typeof value["allowEmpty"] === "boolean") return { kind: value["kind"], prompt: value["prompt"], maximumLength: value["maximumLength"] as number, allowEmpty: value["allowEmpty"] };
 	throw new TypeError("elicitation body kind is invalid");
+}
+
+/** Preserve omitted and explicitly hidden proposal arguments while validating every visible object. */
+function _ProposedArguments(value: Record<string, unknown>): Pick<Extract<ElicitationBody, { readonly kind: ElicitationBodyKinds.Approval }>, "proposedArguments"> | Record<string, never>
+{
+	if (!("proposedArguments" in value))
+		return {};
+	if (value["proposedArguments"] === null)
+		return { proposedArguments: null };
+	const parsed = ___ConversationToolArgumentsSchema.safeParse(value["proposedArguments"]);
+	if (!parsed.success)
+		throw new TypeError("elicitation approval arguments are invalid");
+	return { proposedArguments: parsed.data };
 }
 
 /** Parse a bounded unique choice list. */

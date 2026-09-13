@@ -1,0 +1,27 @@
+
+.wo-admin__name {
+	font-size: var(--oc-text-sm);
+}
+
+.wo-admin__desc {
+	font-size: var(--oc-text-xs);
+	color: var(--oc-ink-muted);
+	margin-top: var(--oc-chip-padding-block);
+}
+
+.wo-admin__muted {
+	color: var(--oc-ink-muted);
+}
+
+.wo-admin__actions {
+	text-align: right;
+	white-space: nowrap;
+
+	.wo-tools__act + .wo-tools__act {
+		margin-left: var(--oc-space-3);
+	}
+}
+
+:host(.wo-admin__row--off) {
+	background: var(--oc-surface-subtle);
+}

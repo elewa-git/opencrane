@@ -1,4 +1,4 @@
-import { CancelledTask, SuspendTask, type TaskContext } from "absurd-sdk";
+import { CancelledTask, SuspendTask, TimeoutError, type TaskContext } from "absurd-sdk";
 
 import { WorkflowError, WorkflowTaskCancelledError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowCheckpointOperation, IWorkflowCheckpointStep, IWorkflowTaskContext, IWorkflowTaskEvent, IWorkflowTaskReceipt, IWorkflowTaskSpawn } from "@opencrane/backend/server/infra/workflows/contract";
@@ -85,17 +85,22 @@ export class _AbsurdTaskContext implements IWorkflowTaskContext
 	}
 
 	/** Suspend durably until this task receives its private event name. */
-	async waitForEvent<TPayload>(eventName: string): Promise<IWorkflowTaskEvent<TPayload>>
+	async waitForEvent<TPayload>(eventName: string, options: { readonly timeoutAt?: Date } = {}): Promise<IWorkflowTaskEvent<TPayload>>
 	{
 		const acceptedName = _RequiredString("eventName", eventName);
+		const timeoutMilliseconds = options.timeoutAt === undefined ? null : options.timeoutAt.getTime() - Date.now();
+		if (timeoutMilliseconds !== null && (!Number.isFinite(timeoutMilliseconds) || timeoutMilliseconds < 0))
+			throw new WorkflowError("event wait timeout must be a future Date");
 		try
 		{
-			const payload = await this.context.awaitEvent(_AbsurdTaskEventName(this.task.taskId, acceptedName));
+			const payload = await this.context.awaitEvent(_AbsurdTaskEventName(this.task.taskId, acceptedName), timeoutMilliseconds === null ? undefined : { timeout: Math.ceil(timeoutMilliseconds / 1_000) });
 			return { eventName: acceptedName, payload: payload as unknown as TPayload };
 		}
 		catch (error)
 		{
-			return _NormalizeContextError(this.task.taskId, error);
+			if (error instanceof TimeoutError)
+				return { eventName: acceptedName, payload: null, timedOut: true };
+			throw _NormalizeContextError(this.task.taskId, error);
 		}
 	}
 

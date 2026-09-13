@@ -1,0 +1,62 @@
+--- a/cognee/api/v1/cognify/cognify.py
++++ b/cognee/api/v1/cognify/cognify.py
+@@ -16,0 +16,3 @@
++from cognee.modules.pipelines.operations.cognify_input_evidence import (
++    build_cognify_request_digest,
++)
+@@ -128,0 +131,2 @@
++    operation_id: Optional[UUID] = None,
++    expected_input_evidence_digest: Optional[str] = None,
+@@ -294,0 +299,44 @@
++    request_digest = None
++    if operation_id is None and expected_input_evidence_digest is not None:
++        raise ValueError("Cognify input evidence requires an operation id")
++    if operation_id is not None:
++        canonical = (
++            isinstance(datasets, list)
++            and len(datasets) == 1
++            and isinstance(datasets[0], UUID)
++            and user is not None
++            and graph_model is KnowledgeGraph
++            and chunker is TextChunker
++            and chunk_size == 128
++            and chunks_per_batch is None
++            and config is None
++            and vector_db_config is None
++            and graph_db_config is None
++            and run_in_background is False
++            and incremental_loading is True
++            and custom_prompt in (None, "")
++            and temporal_cognify is False
++            and functional_relationships is None
++            and data_per_batch == 20
++            and llm_config is None
++            and embedding_config is None
++            and data_cache is True
++            and dry_run is False
++            and raise_on_error is False
++            and chunk_attachment is None
++            and not kwargs
++            and expected_input_evidence_digest is not None
++        )
++        if not canonical:
++            raise ValueError("Operation-identified Cognify requires the fixed OpenCrane profile")
++        request_digest = build_cognify_request_digest(
++            {
++                "pipeline": "cognify_pipeline",
++                "chunkSize": 128,
++                "dataPerBatch": 20,
++                "incrementalLoading": True,
++                "dataCache": True,
++                "graphModel": "KnowledgeGraph",
++            }
++        )
++
+@@ -437,0 +486,7 @@
++                # Operation-identified calls use the actual admitted tasks as
++                # their provider check. Startup probes would run again after a
++                # process restart before exact history replay was decided.
++                skip_connection_test=operation_id is not None,
++                operation_id=operation_id,
++                expected_input_evidence_digest=expected_input_evidence_digest,
++                request_digest=request_digest,

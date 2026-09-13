@@ -87,16 +87,24 @@ describe("REDACT_PATHS", function _redactSuite()
     const { logger, records } = _redactingLogger();
     logger.info({
       reviewedToolArguments: { nested: { secret: "top-level-reviewed" } },
+      safeProposedArguments: { nested: { privateValue: "top-level-safe" } },
+      proposedArguments: { nested: { privateValue: "top-level-proposed" } },
       finalArguments: { nested: { secret: "top-level-final" } },
       approval: {
         reviewedToolArguments: { nested: { secret: "nested-reviewed" } },
+        safeProposedArguments: { nested: { privateValue: "nested-safe" } },
+        proposedArguments: { nested: { privateValue: "nested-proposed" } },
         finalArguments: { nested: { secret: "nested-final" } },
       },
     }, "approval");
     const approval = records[0]?.["approval"] as Record<string, unknown>;
     expect(records[0]?.["reviewedToolArguments"]).toBe("[Redacted]");
+    expect(records[0]?.["safeProposedArguments"]).toBe("[Redacted]");
+    expect(records[0]?.["proposedArguments"]).toBe("[Redacted]");
     expect(records[0]?.["finalArguments"]).toBe("[Redacted]");
     expect(approval["reviewedToolArguments"]).toBe("[Redacted]");
+    expect(approval["safeProposedArguments"]).toBe("[Redacted]");
+    expect(approval["proposedArguments"]).toBe("[Redacted]");
     expect(approval["finalArguments"]).toBe("[Redacted]");
   });
 

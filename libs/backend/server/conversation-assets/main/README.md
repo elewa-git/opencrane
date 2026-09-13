@@ -1,93 +1,155 @@
 # @opencrane/backend/server/conversation-assets — conversation file authority
 
-> [OpenCrane](../../../../../README.md) › [backend](../../../README.md) › conversation assets
+> [backend](../../../README.md) › [server](../../README.md) › conversation assets
 
 ## What it owns
 
-This package owns participant upload reservations, retry-stable agent-output tickets,
-server-authorized reservation removal, server-brokered promotion into quarantine, participant-
-authorized reads of checked bytes, browser-safe file views, and atomic binding of ready files to canonical messages. It applies the
-ten-file/200 MiB admission rule, creates quarantined revisions and scan jobs, and checks attachment
-readiness inside ordinary-chat and agent-session message transactions.
+This package lets a participant upload a file, follow its processing, attach a checked PDF to a
+message, and reopen an authorized file later. It owns conversation-file reservations and metadata;
+the artifact package owns stored revisions, scanning and PDF conversion.
 
 ```text
- file selection -> upload reservation -> quarantine + scan -> ready -> message attachment
- conversation computer -> output ticket -> quarantine + scan -> ready agent output
- active participant -> ready asset -> private byte broker -> preview or download
+participant file -> reservation -> quarantine -> clean scan -> PDF conversion
+                                                                |
+                                                                v
+                       message attachment <- Ready file -> preview/download
 ```
 
-In this flow: the [artifact authority](../../agents/artifacts/main/README.md) owns scanning and
-publication, while the [conversation authority](../../conversations/main/README.md) owns messages.
+A PDF stays Processing after its clean scan. Only a completed conversion with the exact source and
+text revisions makes it Ready. A terminal conversion failure makes it Failed in the same database
+transaction. Other supported media become Ready after their clean scan.
+
+Message attachment admission accepts at most ten participant-owned PDFs with a combined source
+size of 200 MiB. It binds their ids to the message in the same transaction that saves its encrypted
+payload. A retry must present the original set, including when that set was empty. A lost history
+response keeps the bindings reserved for the same message key.
+
+### Generated files
+
+MCP completion uses `_CreateConversationGeneratedFileResultParticipant` to validate the admitted
+`opencrane_files_create_csv` tool and its returned bytes. For a personal run, it rechecks the current requester and execution,
+then saves encrypted file content, stable asset coordinates and an Absurd task in the same
+transaction as the tool's metadata result. Failed capture cannot fall back to storing file text in
+the invocation. Other embedded resources are rejected; ordinary text results keep their existing path.
+Remote MCP completion uses the same result checks, but cannot supply the verified executor Job and
+companion claim required for capture. It therefore accepts only ordinary results and rejects both
+embedded resources and responses under the reserved CSV tool name. Rejection saves no raw file
+content and does not authorise another provider call.
+
+The internal `agent-output/custody` codec splits one non-empty generated file of at most one MiB
+into chunks that fit the existing encrypted conversation-payload limit. It base64-encodes each
+chunk, encrypts it with the conversation payload cipher, and returns a content-free manifest that
+binds the complete digest and length to every ordered ciphertext row.
+
+The payload references authenticate the silo, conversation, authoring agent identity, requester
+Principal and participant subject, source operation, chunk position and count, and full content
+digest. Each encrypted row records the agent identity as its author; requester coordinates remain
+separate ownership evidence. The first capture uses fresh encryption nonces. A retry must reuse its
+saved manifest and ciphertext rows, then validate canonical base64, exact ordering, every digest and
+the complete reconstructed bytes before release.
+
+The internal `agent-output/promotion` adapter accepts only those reconstructed bytes. Immediately
+before transfer it asks the transaction-owned generated-file authority for the original upload
+lease and checks the operation, silo, Artifact, reserved revision, digest, length, media type and
+unchanged deadline. It signs that saved lease through the existing Artifact crypto port, streams
+the bytes through the existing private Artifact service transport, and returns only a verified
+content-free receipt to the workflow checkpoint. It cannot reserve, replace or extend a lease.
+
+An authority-ended answer is terminal only after the transaction owner has marked the generated
+asset Failed and emitted the operation-scoped wake to both the generated-file task and its waiting
+conversation turn. This keeps an expired or revoked execution from leaving an Uploading asset with
+no owner.
+
+The server registers `_RegisterConversationGeneratedFileWorkflow` to recover promotion and wait for
+scanning. Each database step reuses current conversation and tool authorization through IAM's
+server system actor. It never borrows the MCP Pod's identity after that Pod exits. The scanner uses
+the same transaction-bound owner before publication and saves terminal task wakes after the asset,
+revision and scan outcome agree. A clean scan cannot publish a file whose authority already ended.
+
+Attaching the Ready revision to an assistant answer and proving the assembled download-after-restart
+journey remain unfinished.
 
 ## Public surface
 
-Import `@opencrane/backend/server/conversation-assets` for the participant and agent-output Prisma
-units of work, the private runtime output router, and the attachment factory injected into
-conversation message admission.
+- `_CreateConversationGeneratedFileResultParticipant` captures permitted CSV output during MCP completion.
+- `PrismaConversationGeneratedFileWorkflowUnitOfWork` and `GeneratedFileArtifactPromotionPort`
+  advance the saved file through the original upload lease and verified promotion receipt.
+- `_RegisterConversationGeneratedFileWorkflow` registers that progression with the existing engine.
+- `PrismaConversationGeneratedFileWorkflowRepository` binds current authority and terminal events
+  to the scanner transaction.
+- `PrismaConversationAssetUnitOfWork` owns upload, list, read and removal transactions.
+- `_CreateConversationAssetAuthority` composes uploads with scanner availability and private storage.
+- `_CreateConversationAssetContentBroker` opens exact published bytes for an authorized file read.
+- `PrismaConversationMessageAttachmentRepository` implements the conversation-owned attachment port
+  after that transaction has admitted Conversation Use; it checks each source Artifact before binding.
+- `PrismaConversationPromptDocumentRepository` resolves message-bound Ready PDFs through the current
+  participant, source Artifact and converted-text lineage checks used by prompt compilation.
+- `PrismaConversationAssetScanRepository` and `PrismaConversationAssetPreprocessRepository` apply file
+  lifecycle changes through the scanner or converter's existing transaction.
+- `__CreateConversationAssetRouter`, `_ResolveConversationAssetCaller` and
+  `_ConversationAssetsOpenapiPaths` expose the authenticated participant API.
+
+`src/service/` owns private byte brokers. `src/pdf-input/` owns the conversation checks around
+converted text; it delegates revision lineage to the artifact package.
+`src/agent-output/` groups resource validation, encrypted custody, capture persistence, promotion
+and workflow progression. Low-level codecs remain private to that owner.
 
 ## Boundary
 
-Browser projections omit leases, storage coordinates, receipts, and scan evidence. This package
-does not scan bytes or publish revisions; it delegates byte promotion through an app-owned broker
-and accepts only the artifact authority's durable ready state during message admission.
+Every protected operation uses central product authorization. Conversation participation and active
+organisation membership remain separate requirements. Source Artifact grants use the caller's
+current Principal and inherited Group permissions; ownership never substitutes for a grant.
 
-Every preview or download reloads active organisation membership, current conversation
-participation, the ready asset, and its exact published revision. The server consumes a short-lived
-read lease itself and streams the checked bytes with a safe inline-or-attachment header; neither the
-lease nor the storage address reaches the browser.
+The conversation authority checks current message Use permission and owns the surrounding
+Serializable transaction. Attachment admission checks each source's Read and Edit permission,
+requester ownership, Ready state and completed conversion. A denial must roll back the whole message,
+including encrypted payload and audit writes. This package never commits or unbinds independently.
 
-Artifact and conversation checks evaluate the represented Principal across its current personal and
-direct stored Group boundaries. Group grants therefore use the same central deny precedence,
-expiry, and revocation rules as direct Principal grants. Conversation participation remains a
-separate lifecycle condition for conversation-file routes, so a grant cannot invent timeline bounds
-or restore ended participant access.
+Browser views contain safe metadata and a nullable pair of artifact/revision ids so a file card can
+join an exact immutable message block. Those ids grant no read authority. Storage addresses, signed
+leases, scan evidence and converted text stay inside the server. Every preview or download checks
+current participant and source Artifact access before opening its exact published revision.
 
-Agent output requires the exact registered runtime pod, run attempt, and unique persisted assistant
-`message.started` event on every reserve and finalize operation. The runtime supplies its stable
-message id; the server resolves the database sequence and never trusts a caller-supplied sequence. A retry may reuse a ticket only
-with identical metadata and expected content. The runtime streams bytes through the private server
-broker; only a verified ArtifactStore receipt can create the quarantined revision and scan job.
-Ticket identity and its verified receipt are database-immutable, and a composite foreign key keeps
-every linked asset on the exact same silo, conversation, run, attempt, event, and message.
-When the scanner is not configured, both participant and runtime output admission return
-`scanner_unavailable` before a reservation or byte promotion begins. Existing Ready files remain
-readable; the server never accepts new work that would remain indefinitely in Processing.
+Prompt compilation resolves an exact message block, participant-owned source revision and completed
+conversion in a short transaction. It loads the converted bytes after that transaction ends, then
+repeats every coordinate and current-authority check inside the compiler transaction. The converted
+text remains an internal input and never becomes part of the browser asset projection.
 
-Participant reservations and generated outputs both require the represented owner's exact
-`ArtifactCollection/Create` grant. Runtime assignment proves which workload is acting; it does not
-replace product authorization. Creating the Artifact atomically projects exact owner grants for
-Discover, Read, Create and Edit. Finalization, attachment binding, upload-target reads and removal
-then use the central transaction-bound authority on that Artifact coordinate.
+Removal is limited to the creating participant's unlinked Uploading reservation with no revision.
+It revokes the write lease and queues the artifact for deletion. Bound files and uploaded content
+cannot be removed through that command. If the scanner is unavailable, new upload admission fails
+before promotion. Existing Ready-file reads remain available under current permissions.
 
-Processing, ready, and failed transitions append a payload-free `conversation.assets.changed`
-System timeline entry while the conversation is open. The ordinary authorized replay stream carries
-that invalidation; clients then reread the safe asset list instead of receiving storage or scan data.
-The scanner integration opens one transaction and constructs both the artifact scan repository and
-this package's output-lifecycle repository with that same transaction binding. Artifact code decides
-scan publication; conversation-assets code remains the sole owner of ConversationAsset and timeline
-mutations.
-
-Each projection includes caller-specific `canRemove` capability. Removal is limited
-to the creating participant's unlinked, not-yet-uploaded reservation; it revokes the write lease,
-queues the artifact for deletion, and returns a sanitized tombstone. Linked history, uploaded bytes,
-and assistant-created output cannot be removed through this command.
+Generated files enter through the existing MCP completion boundary. Their Pods cannot schedule
+server work. Artifact publication remains in the artifact package; task wakes contain operation
+identifiers and outcomes, never file content or read credentials. The UI refreshes the authorized
+file list while selected PDFs are Processing.
 
 ## Dependency direction
 
 Tagged `scope:conversation-assets` and `layer:backend`, it may depend on conversations, artifacts,
-execution-run references, shared contracts, and the pure conversation-file policy. Apps compose it;
-frontend and unrelated server domains do not import its persistence adapters.
+execution-run references, verified workload identity, shared contracts and pure conversation-file policy. Apps compose it;
+frontend code consumes API contracts, not these persistence adapters.
 
 ## Data & persistence
 
-Owns `ConversationAsset` and `ConversationAssetOutputTicket` in
-`apps/opencrane/prisma/schema/conversation-assets.prisma`. Output tickets are structurally tied to
-their immutable execution subject; finalization stores the content and receipt proof exactly once. The package creates the quarantined `ArtifactRevision` and `ArtifactScanJob`
-through the artifact domain's reviewed schema and transaction contract rather than taking ownership
-of those models.
+Owns `ConversationAsset`, `ConversationGeneratedFile` and its ordered encrypted chunk references in `apps/opencrane/prisma/schema/conversation-assets.prisma`. Artifact,
+revision, lease, scan and conversion records keep their artifact-domain ownership. The application
+uses the reviewed fresh-install baseline; this package provides no database upgrade path.
 
 ## See also
 
+- [Server](../../README.md)
 - [Conversation authority](../../conversations/main/README.md)
 - [Artifact authority](../../agents/artifacts/main/README.md)
 - [Shared file policy](../../../../models/conversation-assets/main/README.md)
+
+`PrismaConversationGeneratedFileResultRepository` projects a file outcome for the conversation
+result reader in the same transaction. It selects the operation through the actual invocation row,
+compares the complete captured metadata and returns Pending, Ready, Failed or Unavailable. Ready
+requires a clean published revision and the original requester's current Artifact read permission.
+
+`PrismaConversationGeneratedFileOutputLinkUnitOfWork` reloads the real turn receipt and binds the generated
+asset to its exact message. A new link rechecks the current invocation and file read authority in
+one transaction. An exact existing link is recovery evidence and does not require new execution
+authority. Different output coordinates or a different existing message fail closed.

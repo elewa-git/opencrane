@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from "@angular/core";
 import { ButtonModule } from "primeng/button";
 
-import { ConversationAssetProvenance } from "@opencrane/state/conversation/assets";
+import { ConversationAssetContentCommandStates, ConversationAssetProvenance } from "@opencrane/state/conversation/assets";
 
 import { __ConversationAssetTypeLabel } from "../conversation-asset-presentation";
 import { ConversationAssetActionKinds, ConversationAssetPresentationStates, type ConversationAssetActionIntent, type ConversationAssetPresentation } from "../conversation-asset-presentation.types";
@@ -21,6 +21,7 @@ export class ConversationFileRowComponent
 	public readonly actionRequested = output<ConversationAssetActionIntent>();
 	public readonly states = ConversationAssetPresentationStates;
 	public readonly provenance = ConversationAssetProvenance;
+	public readonly contentStates = ConversationAssetContentCommandStates;
 	public readonly actions = ConversationAssetActionKinds;
 
 	public typeLabel(): string { const item = this.item(); return __ConversationAssetTypeLabel(item.displayName, item.mediaType); }

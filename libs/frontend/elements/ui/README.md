@@ -64,6 +64,11 @@ The package's index file (barrel) re-exports the components directly:
   presentation-only persona result with primary, secondary, modifier, and complete score-vector
   states.
 
+`ResourceFeedbackComponent` (`wo-resource-feedback`) presents pending reads and failure copy beside
+retained content. Its `loading`, `error` and `retryAvailable` inputs cover idle, initial loading,
+refreshing, failure and retry-pending states. `retryRequested` is a read intent; the element never
+calls gateways or repeats a mutation. The four tools routes use the same component and state stories.
+
 ## Boundary
 
 Consumed by feature packages such as `features/context`, onboarding, and conversation. It must not

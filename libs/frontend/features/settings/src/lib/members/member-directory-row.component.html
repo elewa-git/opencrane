@@ -4,12 +4,16 @@
 		<div class="member-identity__copy">
 			<strong>{{ row().name }} @if (row().isCurrentUser) { <span>· you</span> }</strong>
 			<small>{{ row().email }}</small>
+			@if (row().removalDetail) { <small>{{ row().removalDetail }}</small> }
 		</div>
 	</div>
 </td>
 <td><wo-scope-chip [label]="row().roleLabel" [tone]="row().roleTone" [appearance]="chipAppearances.Soft" [density]="chipDensities.Regular" /></td>
 <td><span class="member-detail">{{ row().detail }}</span></td>
 <td class="member-action">
+	@if (row().canRemove) {
+		<p-button label="Remove access" severity="danger" [text]="true" [loading]="row().removing" [disabled]="row().removing" [ariaLabel]="'Remove organization access for ' + row().name" (onClick)="removalRequested.emit(row().id)" />
+	}
 	@if (row().canResend) {
 		<p-button label="Refresh link" [text]="true" [loading]="row().resending" [disabled]="row().resending" [attr.aria-label]="'Refresh invitation link for ' + row().email" (onClick)="resendRequested.emit(row().id)" />
 	}

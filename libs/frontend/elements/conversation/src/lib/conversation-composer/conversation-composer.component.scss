@@ -6,4 +6,9 @@ textarea:focus-visible { outline: var(--oc-focus-width) solid var(--oc-focus-rin
 footer { display: flex; align-items: center; gap: .75rem; }
 .conversation-composer__footer { flex: 1; min-width: 0; }
 .conversation-composer__leading:empty, .conversation-composer__footer:empty { display: none; }
+@media (max-width: 32rem) {
+	footer { flex-wrap: wrap; }
+	.conversation-composer__footer { flex-basis: 100%; }
+	p-button { margin-inline-start: auto; }
+}
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; } }

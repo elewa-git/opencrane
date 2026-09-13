@@ -97,11 +97,17 @@ derived from their governed Global resource, so a late first POST cannot create 
   one frozen completion ceiling must exist. The request aborts by the earliest supplied deadline,
   compiled run deadline or 25 seconds, including time spent reading the body.
 
-The first request can offer the frozen tools that need no approval. Names must be unique and legal,
-with parameters matching their saved schema digests. The model may return text or propose exactly
-one offered tool. The shared declaration retains the provider call id, original argument string
-and accompanying text. Arguments must contain a bounded JSON object; the conversation and IAM
-owners still validate the actual schema and current permission before any execution.
+The first request can offer every frozen tool definition, including tools that need owner approval.
+Each definition's `modelName` must be unique and legal, with parameters matching their saved schema
+digests. The compiler derives MCP model names from immutable tool revisions; this adapter sends
+that frozen name without deriving or normalizing another one. The original MCP `name` can contain
+dots or exceed the provider's name limit, and stays out of function declarations. Responses and
+continuations must use an offered `modelName`; the original runtime name is never a fallback. The model may
+return text or propose exactly one offered tool. The shared declaration retains the provider call
+id, original argument string and accompanying text. Arguments must contain a bounded JSON object;
+the conversation and IAM owners still validate the actual schema and current permission before any
+execution. Managed company runs filter approval-gated tools before model selection until an entitled
+human resolver exists; personal runs can park the exact proposal in deferred approval.
 
 A continuation supplies that saved declaration and its authorized result. The adapter appends an
 assistant tool-call message and a tool-result message with the same provider call id after the

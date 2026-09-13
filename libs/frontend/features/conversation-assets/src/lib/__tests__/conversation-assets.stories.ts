@@ -2,18 +2,19 @@ import { moduleMetadata } from "@storybook/angular";
 import type { Meta, StoryObj } from "@storybook/angular";
 import { expect, userEvent, within } from "storybook/test";
 
-import { ConversationAssetDisposition, ConversationAssetProvenance, ConversationAssetSelectionFailures } from "@opencrane/state/conversation/assets";
+import { ConversationAssetContentCommandStates, ConversationAssetDisposition, ConversationAssetProvenance, ConversationAssetSelectionFailures } from "@opencrane/state/conversation/assets";
 
 import { ConversationAttachmentTrayComponent } from "../attachment-tray/conversation-attachment-tray.component";
 import { ConversationAssetCardComponent } from "../asset-card/conversation-asset-card.component";
 import { ConversationFilesPanelComponent } from "../files-panel/conversation-files-panel.component";
+import { ConversationPdfPickerComponent } from "../pdf-picker/conversation-pdf-picker.component";
 import { __ConversationAssetSelectionFeedback } from "../conversation-asset-presentation";
 import { ConversationAssetPresentationStates, type ConversationAssetPresentation } from "../conversation-asset-presentation.types";
 
 /** Build one deterministic browser-safe visual fixture. */
 function _Item(id: string, displayName: string, state: ConversationAssetPresentationStates, overrides: Partial<ConversationAssetPresentation> = {}): ConversationAssetPresentation
 {
-	return { id, messageId: "message-1", provenance: ConversationAssetProvenance.ParticipantUpload, displayName, mediaType: "application/pdf", byteLength: 1_258_291, disposition: ConversationAssetDisposition.Preview, state, detail: _Detail(state), canRetry: state === ConversationAssetPresentationStates.Failed, canRemove: state === ConversationAssetPresentationStates.Selected, uploadProgressPercent: null, ...overrides };
+	return { id, messageId: "message-1", artifactId: null, artifactRevisionId: null, provenance: ConversationAssetProvenance.ParticipantUpload, displayName, mediaType: "application/pdf", byteLength: 1_258_291, disposition: ConversationAssetDisposition.Preview, state, detail: _Detail(state), canRetry: state === ConversationAssetPresentationStates.Failed, canRemove: state === ConversationAssetPresentationStates.Selected, uploadProgressPercent: null, contentState: ConversationAssetContentCommandStates.Idle, contentDetail: null, ...overrides };
 }
 
 /** Plain-language fixture state labels. */
@@ -42,7 +43,7 @@ const meta: Meta<ConversationFilesPanelComponent> = {
 	component: ConversationFilesPanelComponent,
 	tags: ["autodocs"],
 	parameters: { docs: { description: { component: "Display-only conversation file primitives. Parents own navigation and commands; removal and retry controls appear only when the server or local pre-admission state grants them." } } },
-	decorators: [moduleMetadata({ imports: [ConversationAttachmentTrayComponent, ConversationAssetCardComponent] })]
+	decorators: [moduleMetadata({ imports: [ConversationAttachmentTrayComponent, ConversationAssetCardComponent, ConversationPdfPickerComponent] })]
 };
 
 export default meta;
@@ -56,12 +57,67 @@ export const AttachmentTray: Story = {
 	play: async function play({ canvasElement }) { const canvas = within(canvasElement); await userEvent.click(canvas.getByRole("button", { name: "Retry" })); await userEvent.click(canvas.getByRole("button", { name: "Remove notes.pdf" })); await expect(canvas.getByTestId("action-count")).toHaveAttribute("data-count", "2"); }
 };
 
+/** Composer selection keeps durable Ready and Failed PDFs dismissible without deleting either file. */
+export const MessageAttachmentSelection: Story = {
+	tags: ["visual-test", "visual-test-narrow"],
+	parameters: { docs: { description: { story: "The editable message tray distinguishes local deselection from durable file removal, including after processing fails." } } },
+	render: function render() { return { props: { items: [_Item("asset-ready", "brief.pdf", ConversationAssetPresentationStates.Ready), _Item("asset-failed", "appendix.pdf", ConversationAssetPresentationStates.Failed, { canRetry: false, canRemove: false })], actionCount: 0 }, template: `<div style="width:320px;padding:12px;background:var(--oc-surface-paper)"><wo-conversation-attachment-tray [items]="items" [canDeselect]="true" (actionRequested)="actionCount = actionCount + 1" /><output data-testid="action-count" [attr.data-count]="actionCount"></output></div>` }; },
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		await userEvent.click(canvas.getByRole("button", { name: "Remove brief.pdf from message" }));
+		await userEvent.click(canvas.getByRole("button", { name: "Remove appendix.pdf from message" }));
+		await expect(canvas.getByTestId("action-count")).toHaveAttribute("data-count", "2");
+	}
+};
+
+/** The PDF picker accepts a supported browser file without reading its bytes. */
+export const PdfPicker: Story = {
+	tags: ["visual-test", "visual-test-narrow"],
+	parameters: { docs: { description: { story: "The native chooser emits a PDF batch to its parent and keeps unsupported-file feedback local." } } },
+	render: function render() { return { props: { fileCount: 0 }, template: `<div style="width:320px;padding:16px;background:var(--oc-surface-paper)"><wo-conversation-pdf-picker (filesSelected)="fileCount = $event.length" /><output data-testid="file-count" [attr.data-count]="fileCount"></output></div>` }; },
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		const input = canvas.getByLabelText("Attach PDF") as HTMLInputElement;
+		await userEvent.upload(input, new File(["pdf"], "brief.pdf", { type: "application/pdf" }));
+		await expect(canvas.getByTestId("file-count")).toHaveAttribute("data-count", "1");
+	}
+};
+
+/** The picker reflects a conversation which cannot currently accept input. */
+export const PdfPickerDisabled: Story = {
+	tags: ["visual-test", "visual-test-narrow"],
+	render: function render() { return { template: `<div style="width:320px;padding:16px;background:var(--oc-surface-paper)"><wo-conversation-pdf-picker [disabled]="true" /></div>` }; },
+	play: async function play({ canvasElement }) { expect(within(canvasElement).getByLabelText("Attach PDF")).toBeDisabled(); }
+};
+
 /** Transcript cards keep participant and finalized assistant provenance visibly distinct. */
 export const TranscriptCards: Story = {
 	tags: ["visual-test"],
 	parameters: { docs: { description: { story: "Participant attachments and finalized assistant outputs expose preview/download intents without owning navigation." } } },
 	render: function render() { return { props: { ready: _READY, agent: _AGENT, actionCount: 0 }, template: `<div style="display:grid;gap:12px;max-width:620px;padding:20px;background:var(--oc-surface-paper)"><wo-conversation-asset-card [item]="ready" (actionRequested)="actionCount = actionCount + 1" /><wo-conversation-asset-card [item]="agent" (actionRequested)="actionCount = actionCount + 1" /><output data-testid="action-count" [attr.data-count]="actionCount"></output></div>` }; },
 	play: async function play({ canvasElement }) { const canvas = within(canvasElement); await userEvent.click(canvas.getByRole("button", { name: "Preview" })); await userEvent.click(canvas.getAllByRole("button", { name: "Download" })[0] as HTMLElement); await expect(canvas.getByTestId("action-count")).toHaveAttribute("data-count", "2"); }
+};
+
+/** Transcript cards use the same command progress and retry feedback as the Files index. */
+export const TranscriptContentCommands: Story = {
+	tags: ["visual-test"],
+	parameters: { docs: { description: { story: "A Ready card shows one pending file action or safe retry feedback without changing its durable state." } } },
+	render: function render()
+	{
+		return {
+			props: { loading: _Item("card-loading", "customer-summary.pdf", ConversationAssetPresentationStates.Ready, { contentState: ConversationAssetContentCommandStates.Loading }), failed: _Item("card-failed", "approved-report.docx", ConversationAssetPresentationStates.Ready, { provenance: ConversationAssetProvenance.AgentOutput, mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", disposition: ConversationAssetDisposition.Download, contentState: ConversationAssetContentCommandStates.Failed, contentDetail: "The file could not be opened." }) },
+			template: `<div style="display:grid;gap:12px;max-width:620px;padding:20px;background:var(--oc-surface-paper)"><wo-conversation-asset-card [item]="loading" /><wo-conversation-asset-card [item]="failed" /></div>`
+		};
+	},
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		expect(canvas.getByRole("button", { name: "Opening file" })).toBeDisabled();
+		expect(canvas.getByRole("alert")).toHaveTextContent("The file could not be opened.");
+		expect(canvas.getByRole("button", { name: "Download" })).toBeEnabled();
+	}
 };
 
 /** Files panel groups provenance and preserves canonical message-link actions. */
@@ -71,6 +127,21 @@ export const FilesPanel: Story = {
 	args: { items: [_READY, _Item("asset-zip", "photos.zip", ConversationAssetPresentationStates.Uploading, { mediaType: "application/zip", disposition: ConversationAssetDisposition.Download }), _AGENT, _Item("asset-chart", "timeline-chart.png", ConversationAssetPresentationStates.Failed, { provenance: ConversationAssetProvenance.AgentOutput, mediaType: "image/png" })] },
 	render: function render(args) { return { props: { ...args, actionCount: 0 }, template: `<div style="width:360px;padding:12px;background:var(--oc-surface-paper)"><wo-conversation-files-panel [items]="items" (actionRequested)="actionCount = actionCount + 1" /><output data-testid="action-count" [attr.data-count]="actionCount"></output></div>` }; },
 	play: async function play({ canvasElement }) { const canvas = within(canvasElement); await userEvent.click(canvas.getAllByRole("button", { name: "Open" })[0] as HTMLElement); await userEvent.click(canvas.getAllByRole("button", { name: "Show brief-v2.pdf in conversation" })[0] as HTMLElement); await expect(canvas.getByTestId("action-count")).toHaveAttribute("data-count", "2"); }
+};
+
+/** Ready file reads keep progress and safe retry feedback with the file that owns the command. */
+export const ContentCommandsNarrow: Story = {
+	tags: ["visual-test", "visual-test-narrow"],
+	parameters: { docs: { description: { story: "A pending file read disables only that file's open controls, while a failed read keeps the action available with safe retry feedback." } } },
+	args: { items: [_Item("asset-loading", "supplier-brief.pdf", ConversationAssetPresentationStates.Ready, { contentState: ConversationAssetContentCommandStates.Loading }), _Item("asset-error", "approved-budget.xlsx", ConversationAssetPresentationStates.Ready, { mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", disposition: ConversationAssetDisposition.Download, contentState: ConversationAssetContentCommandStates.Failed, contentDetail: "The file could not be opened." })] },
+	render: function render(args) { return { props: args, template: `<div style="width:320px;padding:8px;background:var(--oc-surface-paper)"><wo-conversation-files-panel [items]="items" /></div>` }; },
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		expect(canvas.getByRole("button", { name: "Opening file" })).toBeDisabled();
+		expect(canvas.getByRole("alert")).toHaveTextContent("The file could not be opened.");
+		expect(canvas.getByRole("button", { name: "Open" })).toBeEnabled();
+	}
 };
 
 /** Non-disclosing edge states share labels but never expose scanner or storage coordinates. */

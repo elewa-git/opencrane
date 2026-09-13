@@ -106,8 +106,8 @@ spec:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
     {{- if .Values.agentSandbox.enabled }}
-    # Conversation computers exchange only their Pod-bound bootstrap and one safe output through
-    # the private listener. TokenReview and the durable lease fence remain the authority gates.
+    # Conversation computers use the private listener only for lease-fenced review credentials and
+    # checkpoint transport. TokenReview and the durable lease fence remain the authority gates.
     - from:
         - namespaceSelector:
             matchLabels:

@@ -2,6 +2,7 @@ import type { IWorkflowEngine, IWorkflowTaskReceipt, IWorkflowTransaction } from
 import type { JsonValue } from "@opencrane/util";
 
 import type { McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
+import type { McpInvocationExecutor } from "../runtime/remote-mcp-invocation.types";
 
 /** Public lifecycle values saved for one asynchronous OCI-backed MCP tool call. */
 export enum McpTaskStates
@@ -113,6 +114,8 @@ export interface McpTaskRecord
 	readonly failureCode: string | null;
 	/** Authorization-owned ToolInvocation row after durable admission. */
 	readonly toolInvocationRowId: string | null;
+	/** Public tool call id resolved with this task's owner coordinates. */
+	readonly toolInvocationId: string | null;
 	/** Absurd task receipt after transaction-bound admission. */
 	readonly workflowTask: IWorkflowTaskReceipt | null;
 }
@@ -164,8 +167,10 @@ export interface McpTaskWorkflowOptions
 	readonly execution: IWorkflowEngine;
 	/** Product transaction owner for task state and ToolInvocation admission. */
 	readonly unitOfWork: McpOperatorUnitOfWork;
-	/** Existing OCI MCP runtime authority that admits work and closes exhausted attempts. */
+	/** MCP runtime authority that admits the saved OCI or remote execution strategy. */
 	readonly runtime: McpTaskWorkflowRuntime;
+	/** Progresses remote work through the server while leaving OCI work to its companion. */
+	readonly invocationExecutor: McpInvocationExecutor;
 	/** Durable wait between runtime status reads. */
 	readonly statusPollMilliseconds: number;
 }

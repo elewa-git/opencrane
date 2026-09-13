@@ -1,10 +1,17 @@
 import { AvatarTones } from "@opencrane/elements/ui";
-import { ConversationMessageTones, type ConversationMessagePresentation, type ConversationRichTextPresentation } from "@opencrane/elements/conversation";
-import type { ConversationEntry, MessageEntry } from "@opencrane/contracts";
+import { ConversationMessageTones, ConversationStatusTones, type ConversationMessagePresentation, type ConversationRichTextPresentation, type ConversationStatusPresentation } from "@opencrane/elements/conversation";
+import { ConversationEntryKinds, ConversationMessageContentBlockKinds, type ArtifactMessageContentBlock, type ConversationEntry, type ToolCallLogEntry } from "@opencrane/contracts";
+import { ConversationAssetPresentationStates, type ConversationAssetPresentation } from "@opencrane/features/conversation-assets";
+import { ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
 import { toSanitizedMarkdownHtml, toStreamingMarkdownHtml } from "@opencrane/state/conversation/render";
-import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, MessageRoles, type ConversationCreationDirectory, type ConversationOnboardingHistory, type ConversationSummary } from "@opencrane/state/conversation/workspace";
+import { ConversationAssetContentCommandStates } from "@opencrane/state/conversation/assets";
+import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, MessageRoles, MessageStates, type ConversationCreationDirectory, type ConversationOnboardingHistory, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
-import { ConversationOnboardingDialogueSpeakers, ConversationSessionRailIconStates, ConversationSessionRailItemKinds, type ConversationMessageView, type ConversationOnboardingContinuationPresentation, type ConversationOnboardingDialogueEntryPresentation, type ConversationOnboardingHistoryPresentation, type ConversationRailIdentityPresentation, type ConversationSessionRailItemPresentation, type ConversationSummaryPresentation } from "./conversation-workspace-feature.types";
+import { ConversationOnboardingDialogueSpeakers, ConversationSessionRailIconStates, ConversationSessionRailItemKinds, type ConversationOnboardingContinuationPresentation, type ConversationOnboardingDialogueEntryPresentation, type ConversationOnboardingHistoryPresentation, type ConversationRailIdentityPresentation, type ConversationSessionRailItemPresentation, type ConversationSummaryPresentation } from "./conversation-workspace-feature.types";
+import { ConversationWorkspaceTranscriptEntryKinds, type ConversationWorkspaceTranscriptEntry } from "./presentation/conversation-workspace-presentation.types";
+
+/** Schema-owned discriminant for the canonical tool-call log variant. */
+const _TOOL_CALL_LOG_KIND: ToolCallLogEntry["logKind"] = "tool_call";
 
 /**
  * Uses the current directory to name conversations in both the rail and selected header.
@@ -171,29 +178,65 @@ export function _ConversationOnboardingDialogueEntries(history: ConversationOnbo
 	});
 }
 
-/** Map immutable Kurrent history messages with server-resolved private payload text. */
-export function _ConversationEntryViews(entries: readonly ConversationEntry[], payloads: Readonly<Record<string, string>>): readonly ConversationMessageView[]
+/** Map immutable Kurrent messages and the latest fact for each tool call in canonical order. */
+export function _ConversationEntryViews(entries: readonly ConversationEntry[], payloads: Readonly<Record<string, string>>, assets: readonly ConversationAssetPresentation[] = []): readonly ConversationWorkspaceTranscriptEntry[]
 {
-	return entries.filter(function _Message(entry): entry is MessageEntry { return entry.kind === "message"; }).map(function _Entry(entry): ConversationMessageView
+	const latestTools = new Map<string, ToolCallLogEntry>();
+	for (const entry of entries)
+		if (entry.kind === ConversationEntryKinds.Log && entry.logKind === _TOOL_CALL_LOG_KIND)
+			latestTools.set(entry.toolCallId, entry);
+	return entries.flatMap(function _Entry(entry): readonly ConversationWorkspaceTranscriptEntry[]
 	{
-		const text = entry.blocks.map(function _Block(block): string
+		if (entry.kind === ConversationEntryKinds.Log && entry.logKind === _TOOL_CALL_LOG_KIND)
+			return latestTools.get(entry.toolCallId)?.id === entry.id ? [{ kind: ConversationWorkspaceTranscriptEntryKinds.ToolActivity, id: entry.id, status: _ConversationToolStatus(entry) }] : [];
+		if (entry.kind !== ConversationEntryKinds.Message)
+			return [];
+		const text = entry.blocks.flatMap(function _Block(block): readonly string[]
 		{
-			if (block.kind === "text")
-				return payloads[block.payloadRef] ?? "[Message text unavailable]";
-			if (block.kind === "artifact")
-				return `[${block.name}]`;
-			return `[@${block.name}]`;
+			if (block.kind === ConversationMessageContentBlockKinds.Text)
+				return [payloads[block.payloadRef] ?? "[Message text unavailable]"];
+			if (block.kind === ConversationMessageContentBlockKinds.Artifact)
+				return [];
+			return [`[@${block.name}]`];
 		}).join("\n\n");
+		const attachments = entry.blocks.filter(function _Artifact(block): block is ArtifactMessageContentBlock { return block.kind === ConversationMessageContentBlockKinds.Artifact; }).map(block => _ConversationArtifact(block, entry.id, assets));
 		const authorName = entry.author.name;
 		const authorInitials = _Initials(authorName);
 		const authorPresentation = _EntryAuthorPresentation(entry.author.kind);
 		const tone = authorPresentation.tone;
 		const avatarTone = authorPresentation.avatarTone;
-		const presentation: ConversationMessagePresentation = { id: entry.id, authorName, authorInitials, avatarTone, timestampLabel: _TimeLabel(entry.occurredAt), body: "", tone, accessibleStatus: entry.state === "completed" ? undefined : entry.state };
-		const html = entry.state === "streaming" ? toStreamingMarkdownHtml(text) : toSanitizedMarkdownHtml(text);
-		return { message: presentation, richText: { messageId: entry.id, html, label: `${authorName} message` } };
+		const presentation: ConversationMessagePresentation = { id: entry.id, authorName, authorInitials, avatarTone, timestampLabel: _TimeLabel(entry.occurredAt), body: "", tone, accessibleStatus: entry.state === MessageStates.Completed ? undefined : entry.state };
+		const html = entry.state === MessageStates.Streaming ? toStreamingMarkdownHtml(text) : toSanitizedMarkdownHtml(text);
+		return [{ kind: ConversationWorkspaceTranscriptEntryKinds.Message, id: entry.id, message: presentation, richText: { messageId: entry.id, html, label: `${authorName} message` }, requestSource: null, shareSource: null, children: [], attachments }];
 	});
 }
+
+/** Joins one immutable artifact block to a currently authorized asset without using display text as identity. */
+function _ConversationArtifact(block: ArtifactMessageContentBlock, messageId: string, assets: readonly ConversationAssetPresentation[]): ConversationAssetPresentation
+{
+	const matches = assets.filter(asset => asset.artifactId === block.artifactId && asset.artifactRevisionId === block.artifactRevisionId && asset.messageId === messageId);
+	if (matches.length === 1 && matches[0]?.displayName === block.name && matches[0].mediaType === block.mediaType)
+		return matches[0];
+	return { id: block.id, messageId, artifactId: block.artifactId, artifactRevisionId: block.artifactRevisionId, provenance: ConversationAssetProvenance.ParticipantUpload, displayName: block.name, mediaType: block.mediaType, byteLength: null, disposition: null, state: ConversationAssetPresentationStates.Unavailable, detail: "File unavailable", canRetry: false, canRemove: false, uploadProgressPercent: null, contentState: ConversationAssetContentCommandStates.Idle, contentDetail: null };
+}
+
+/** Translate a server-attested tool lifecycle fact without exposing arguments, results or coordinates. */
+export function _ConversationToolStatus(entry: ToolCallLogEntry): ConversationStatusPresentation
+{
+	switch (entry.phase)
+	{
+		case "requested": return { label: "Tool requested", detail: `${entry.toolName}: preparing to start.`, tone: ConversationStatusTones.Neutral };
+		case "running": return { label: "Tool running", detail: `${entry.toolName}: waiting for a result.`, tone: ConversationStatusTones.Neutral };
+		case "completed": return { label: "Tool result received", detail: `${entry.toolName}: result received. The assistant may still be preparing its answer.`, tone: ConversationStatusTones.Neutral };
+		case "failed": return { label: "Tool could not finish", detail: `${entry.toolName}: no usable result was received.`, tone: ConversationStatusTones.Danger };
+		case "cancelled": return { label: "Tool stopped", detail: `${entry.toolName}: ended without a result.`, tone: ConversationStatusTones.Danger };
+		case "recovery_required": return { label: "Tool needs attention", detail: `${entry.toolName}: the outcome is uncertain. OpenCrane will not repeat it automatically.`, tone: ConversationStatusTones.Attention };
+		default: return _UnsupportedToolPhase(entry.phase);
+	}
+}
+
+/** Reject a phase that escaped the shared history validator instead of rendering an empty status. */
+function _UnsupportedToolPhase(phase: never): never { throw new Error(`Unsupported tool-call phase: ${String(phase)}`); }
 
 /** Map a stamped author kind to presentation only; the server-stamped name remains authoritative history. */
 function _EntryAuthorPresentation(kind: ConversationEntry["author"]["kind"]): { readonly avatarTone: AvatarTones; readonly tone: ConversationMessageTones }

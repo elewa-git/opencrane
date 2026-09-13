@@ -172,6 +172,47 @@
           }
         }
       },
+      "OrganizationMemberRemovalCapability": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "available"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "reason"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "const": "unavailable"
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "self",
+                  "owner",
+                  "inactive",
+                  "authority_unsupported",
+                  "not_authorized"
+                ]
+              }
+            }
+          }
+        ]
+      },
       "OrganizationMember": {
         "type": "object",
         "additionalProperties": false,
@@ -182,7 +223,8 @@
           "role",
           "status",
           "joinedAt",
-          "isCurrentUser"
+          "isCurrentUser",
+          "removal"
         ],
         "properties": {
           "membershipId": {
@@ -216,6 +258,9 @@
           },
           "isCurrentUser": {
             "type": "boolean"
+          },
+          "removal": {
+            "$ref": "#/components/schemas/OrganizationMemberRemovalCapability"
           }
         }
       },
@@ -402,12 +447,151 @@
           }
         }
       },
+      "RemoveOrganizationMemberResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "member"
+        ],
+        "properties": {
+          "member": {
+            "$ref": "#/components/schemas/OrganizationMember"
+          }
+        }
+      },
+      "McpConnectionCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "idempotencyKey",
+          "expectedGeneration",
+          "credential"
+        ],
+        "properties": {
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128,
+            "description": "Caller key that returns the same admitted generation after an uncertain response."
+          },
+          "expectedGeneration": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "Generation observed before this command, or null before any generation. An identical retry must retain this value; a new command cannot replace a different current generation."
+          },
+          "credential": {
+            "description": "Material matching the registered server's explicit credential requirement. The token is write-only and never appears in responses or workflow input.",
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind"
+                ],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "none"
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "token"
+                ],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "bearer"
+                    ]
+                  },
+                  "token": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192,
+                    "writeOnly": true,
+                    "description": "Bearer token used only for the exact admitted credential custody operation."
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "McpConnectionProjection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "connectionStatus",
+          "connectionGeneration",
+          "credentialUpdatedAt",
+          "failureCode"
+        ],
+        "properties": {
+          "connectionStatus": {
+            "type": "string",
+            "enum": [
+              "needs-credential",
+              "credentialless",
+              "activating",
+              "active",
+              "recovery-required"
+            ],
+            "description": "Current connection state. Every effect independently rechecks authority and the saved generation."
+          },
+          "connectionGeneration": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Current admitted generation, or null before connection setup."
+          },
+          "credentialUpdatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Time exact credential custody committed, or null when no credential was stored."
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "authority-ended",
+              "endpoint-changed",
+              "credential-conflict",
+              "credential-unavailable",
+              "authentication-rejected",
+              "unsupported-protocol",
+              "discovery-rejected",
+              "workflow-exhausted",
+              null
+            ],
+            "description": "Safe failure category without provider responses, secret coordinates or material."
+          }
+        }
+      },
       "McpCatalogServer": {
         "type": "object",
-        "description": "An MCP server exposed by the operator API. Display metadata is optional because this shape serves both the entitled catalogue and the organisation-admin governance view; tools is always present and empty when no Ready OCI revision exists.",
+        "description": "An MCP server exposed by the operator API. Display metadata is optional because this shape serves both the entitled catalogue and the organisation-admin governance view; tools is always present and empty when no entitled Ready revision exists.",
         "required": [
           "id",
-          "tools"
+          "tools",
+          "credentialRequirement"
         ],
         "properties": {
           "id": {
@@ -437,7 +621,16 @@
               "multi-user",
               "remote-oauth"
             ],
-            "description": "How the server is configured for connection: single-user requires a caller-owned credential through an external custody flow, multi-user uses an administrator-managed shared key, and remote-oauth requires an OAuth handshake outside this API."
+            "description": "How the catalogue presents the connection. This value does not grant installation readiness."
+          },
+          "credentialRequirement": {
+            "type": "string",
+            "enum": [
+              "credentialless",
+              "principal-credential",
+              "shared-credential"
+            ],
+            "description": "Credential custody required for execution. Credential-requiring installations become usable only after an authorized exact-generation activation."
           },
           "approvalStatus": {
             "type": "string",
@@ -451,7 +644,7 @@
           },
           "credentialSchema": {
             "type": "array",
-            "description": "Input fields required by an external custody flow for a single-user connection. This API describes requested values but neither receives nor returns credential material.",
+            "description": "Fields declared by the server for credential setup, independent of its presentation type. Catalogue reads describe the fields and never return credential values. The separate write-only activation command supports the declared authentication profile.",
             "items": {
               "$ref": "#/components/schemas/CredentialField"
             }
@@ -462,7 +655,7 @@
           },
           "tools": {
             "type": "array",
-            "description": "Tools from the newest Ready OCI server revision. User catalogue rows are entitlement-filtered; administrator visibility never grants execution permission.",
+            "description": "Tools from the newest entitled Ready server revision. User catalogue rows are entitlement-filtered; administrator visibility never grants execution permission.",
             "items": {
               "$ref": "#/components/schemas/McpAssignableToolRevision"
             }
@@ -471,7 +664,7 @@
       },
       "McpAssignableToolRevision": {
         "type": "object",
-        "description": "An immutable OCI-backed MCP tool schema selected from the newest Ready server revision. Governance eligibility does not replace caller authorization.",
+        "description": "An immutable MCP tool schema selected from the newest Ready server revision. Governance eligibility does not replace caller authorization.",
         "required": [
           "toolRevisionId",
           "serverRevisionId",
@@ -528,7 +721,7 @@
       },
       "CredentialField": {
         "type": "object",
-        "description": "One input an external custody flow requires to connect a single-user MCP server. This API describes the input but neither receives nor returns its value.",
+        "description": "One field declared by an MCP server for credential setup. This API describes the field but neither receives nor returns its value.",
         "required": [
           "key",
           "label",
@@ -566,20 +759,71 @@
         "type": "object",
         "description": "An MCP server installed by the calling user, with its current connection state.",
         "required": [
-          "serverId"
+          "serverId",
+          "lifecycleState",
+          "connectionStatus",
+          "connectionGeneration",
+          "credentialUpdatedAt",
+          "failureCode"
         ],
         "properties": {
-          "serverId": {
-            "type": "string",
-            "description": "Identifier of the installed server."
-          },
           "connectionStatus": {
             "type": "string",
             "enum": [
               "needs-credential",
-              "shared-key"
+              "credentialless",
+              "activating",
+              "active",
+              "recovery-required"
             ],
-            "description": "Recorded activation requirement: needs-credential requires an external custody flow, while shared-key records an administrator-managed shared key. This API does not activate either state."
+            "description": "Safe installation and connection state; current authority and exact generation still govern every execution."
+          },
+          "connectionGeneration": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Current admitted generation, or null before connection setup."
+          },
+          "credentialUpdatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Time exact credential custody committed, or null when no credential was stored."
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "authority-ended",
+              "endpoint-changed",
+              "credential-conflict",
+              "credential-unavailable",
+              "authentication-rejected",
+              "unsupported-protocol",
+              "discovery-rejected",
+              "workflow-exhausted",
+              null
+            ],
+            "description": "Safe failure category without provider responses, secret coordinates or material."
+          },
+          "serverId": {
+            "type": "string",
+            "description": "Identifier of the installed server."
+          },
+          "lifecycleState": {
+            "type": "string",
+            "enum": [
+              "installed",
+              "removing",
+              "removed"
+            ],
+            "description": "Durable installation and removal state. Removed installations are omitted from lists."
           },
           "lastUsed": {
             "type": [
@@ -757,7 +1001,7 @@
       },
       "McpTaskSubmission": {
         "type": "object",
-        "description": "One idempotent asynchronous call of a discovered tool on an installed OCI-backed MCP server.",
+        "description": "One idempotent asynchronous call of a discovered tool on an installed MCP server.",
         "required": [
           "idempotencyKey",
           "serverRevisionId",
@@ -794,7 +1038,7 @@
       },
       "McpTask": {
         "type": "object",
-        "description": "Caller-visible durable state for one OCI-backed MCP tool call. Arguments, workflow receipts, and executor identifiers are never returned.",
+        "description": "Caller-visible durable state for one MCP tool call. Arguments, workflow receipts, and executor identifiers are never returned.",
         "required": [
           "id",
           "serverRevisionId",
@@ -814,7 +1058,7 @@
           },
           "serverRevisionId": {
             "type": "string",
-            "description": "Immutable OCI-backed MCP server revision."
+            "description": "Immutable MCP server revision."
           },
           "toolRevisionId": {
             "type": "string",
@@ -1679,7 +1923,8 @@
           "conversationId",
           "agentRevisionId",
           "acceptedAt",
-          "finishedAt"
+          "finishedAt",
+          "latestTool"
         ],
         "properties": {
           "runId": {
@@ -1698,9 +1943,30 @@
               "running",
               "waiting_for_input",
               "recovery_required",
+              "cancelling",
+              "cancelled",
               "completed",
               "failed"
             ]
+          },
+          "latestTool": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": false,
+            "required": [
+              "phase"
+            ],
+            "properties": {
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "queued",
+                  "running",
+                  "result_received",
+                  "needs_attention"
+                ]
+              }
+            }
           },
           "conversationId": {
             "type": "string",
@@ -2000,6 +2266,336 @@
     }
   },
   "paths": {
+    "/mcp/installed/{serverId}/connection": {
+      "put": {
+        "operationId": "activatePersonalMcpConnection",
+        "summary": "Activate or replace the calling person's exact MCP connection",
+        "tags": [
+          "MCP Operator"
+        ],
+        "parameters": [
+          {
+            "name": "serverId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpConnectionCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The exact connection command is saved. Its safe status may remain pending while custody or discovery completes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpConnectionProjection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The connection command is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The connection is unavailable to this caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The command conflicts with saved connection work.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "revokePersonalMcpConnection",
+        "summary": "Revoke the calling person's connection before credential cleanup",
+        "tags": [
+          "MCP Operator"
+        ],
+        "parameters": [
+          {
+            "name": "serverId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "commandId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "expectedGeneration",
+            "in": "query",
+            "required": true,
+            "description": "Connection generation the caller intends to revoke. An identical retry must retain this value.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "The exact connection command is saved. Its safe status may remain pending while custody or discovery completes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpConnectionProjection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The connection command is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The connection is unavailable to this caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The command conflicts with saved connection work.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp/servers/{serverId}/service-connections/{agentServiceId}": {
+      "put": {
+        "operationId": "activateServiceMcpConnection",
+        "summary": "Activate the managed assistant's exact connection with current organisation administration",
+        "tags": [
+          "MCP Operator"
+        ],
+        "parameters": [
+          {
+            "name": "serverId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "agentServiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpConnectionCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The exact connection command is saved. Its safe status may remain pending while custody or discovery completes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpConnectionProjection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The connection command is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The connection is unavailable to this caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The command conflicts with saved connection work.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "revokeServiceMcpConnection",
+        "summary": "Revoke the managed assistant's connection with current organisation administration",
+        "tags": [
+          "MCP Operator"
+        ],
+        "parameters": [
+          {
+            "name": "serverId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "agentServiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "commandId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "expectedGeneration",
+            "in": "query",
+            "required": true,
+            "description": "Connection generation the caller intends to revoke. An identical retry must retain this value.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "The exact connection command is saved. Its safe status may remain pending while custody or discovery completes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpConnectionProjection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The connection command is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The connection is unavailable to this caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The command conflicts with saved connection work.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/mcp/catalog": {
       "get": {
         "operationId": "listMcpCatalog",
@@ -2101,6 +2697,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Installation removal is still in progress.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2123,6 +2729,9 @@
           }
         ],
         "responses": {
+          "202": {
+            "description": "Removal accepted. The installed list retains a Removing row until execution and credential cleanup finish."
+          },
           "204": {
             "description": "Server uninstalled."
           },
@@ -2188,7 +2797,8 @@
                 "required": [
                   "idempotencyKey",
                   "name",
-                  "endpoint"
+                  "endpoint",
+                  "credentialRequirement"
                 ],
                 "properties": {
                   "idempotencyKey": {
@@ -2209,6 +2819,14 @@
                     "type": "string",
                     "format": "uri",
                     "maxLength": 2048
+                  },
+                  "credentialRequirement": {
+                    "type": "string",
+                    "enum": [
+                      "credentialless",
+                      "principal-credential",
+                      "shared-credential"
+                    ]
                   }
                 }
               }
@@ -4722,6 +5340,17 @@
                                   },
                                   "cost": {
                                     "type": "string"
+                                  },
+                                  "proposedArguments": {
+                                    "oneOf": [
+                                      {
+                                        "type": "object",
+                                        "additionalProperties": true
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
                                   }
                                 }
                               },
@@ -4896,6 +5525,318 @@
         }
       }
     },
+    "/me/conversations/{conversationId}/elicitations": {
+      "get": {
+        "operationId": "listMyOpenConversationElicitations",
+        "summary": "List pending participant-input requests",
+        "description": "Returns at most fifty unexpired requests assigned to the authenticated participant in the selected readable conversation. Protected purpose payloads, credentials, and resume material are never returned.",
+        "tags": [
+          "Conversations"
+        ],
+        "parameters": [
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Conversation containing the request."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current owned requests in oldest-first order.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "elicitations"
+                  ],
+                  "properties": {
+                    "elicitations": {
+                      "type": "array",
+                      "maxItems": 50,
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "version",
+                          "requestId",
+                          "conversationId",
+                          "runId",
+                          "attempt",
+                          "assignedParticipantId",
+                          "purpose",
+                          "state",
+                          "body",
+                          "requiresStepUp",
+                          "requestedAt",
+                          "expiresAt"
+                        ],
+                        "properties": {
+                          "version": {
+                            "const": "opencrane.elicitation.v1"
+                          },
+                          "requestId": {
+                            "type": "string"
+                          },
+                          "conversationId": {
+                            "type": "string"
+                          },
+                          "runId": {
+                            "type": "string"
+                          },
+                          "attempt": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "assignedParticipantId": {
+                            "type": "string"
+                          },
+                          "purpose": {
+                            "type": "string",
+                            "enum": [
+                              "runtime_input",
+                              "tool_approval",
+                              "personal_memory_permission",
+                              "a2ui_action"
+                            ]
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "requested",
+                              "answered",
+                              "declined",
+                              "expired",
+                              "cancelled"
+                            ]
+                          },
+                          "body": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "prompt",
+                                  "action",
+                                  "target",
+                                  "dataUse",
+                                  "consequence"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "approval"
+                                  },
+                                  "prompt": {
+                                    "type": "string"
+                                  },
+                                  "action": {
+                                    "type": "string"
+                                  },
+                                  "target": {
+                                    "type": "string"
+                                  },
+                                  "dataUse": {
+                                    "type": "string"
+                                  },
+                                  "externalSystem": {
+                                    "type": "string"
+                                  },
+                                  "consequence": {
+                                    "type": "string"
+                                  },
+                                  "cost": {
+                                    "type": "string"
+                                  },
+                                  "proposedArguments": {
+                                    "oneOf": [
+                                      {
+                                        "type": "object",
+                                        "additionalProperties": true
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "prompt",
+                                  "choices"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "single_choice"
+                                  },
+                                  "prompt": {
+                                    "type": "string"
+                                  },
+                                  "choices": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": false,
+                                      "required": [
+                                        "value",
+                                        "label"
+                                      ],
+                                      "properties": {
+                                        "value": {
+                                          "type": "string"
+                                        },
+                                        "label": {
+                                          "type": "string"
+                                        },
+                                        "description": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "prompt",
+                                  "choices",
+                                  "minimumSelections",
+                                  "maximumSelections"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "multiple_choice"
+                                  },
+                                  "prompt": {
+                                    "type": "string"
+                                  },
+                                  "choices": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": false,
+                                      "required": [
+                                        "value",
+                                        "label"
+                                      ],
+                                      "properties": {
+                                        "value": {
+                                          "type": "string"
+                                        },
+                                        "label": {
+                                          "type": "string"
+                                        },
+                                        "description": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "minimumSelections": {
+                                    "type": "integer"
+                                  },
+                                  "maximumSelections": {
+                                    "type": "integer"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "prompt",
+                                  "maximumLength",
+                                  "allowEmpty"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "free_text"
+                                  },
+                                  "prompt": {
+                                    "type": "string"
+                                  },
+                                  "maximumLength": {
+                                    "type": "integer"
+                                  },
+                                  "allowEmpty": {
+                                    "type": "boolean"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "requiresStepUp": {
+                            "type": "boolean"
+                          },
+                          "requestedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "expiresAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "resolvedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "safeReason": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The selected conversation coordinate is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No authenticated browser session owns the request list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The elicitation authority is temporarily unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/me/conversations/{conversationId}/elicitations/{requestId}": {
       "get": {
         "operationId": "getMyConversationElicitation",
@@ -5029,6 +5970,17 @@
                                 },
                                 "cost": {
                                   "type": "string"
+                                },
+                                "proposedArguments": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "additionalProperties": true
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
                                 }
                               }
                             },
@@ -8593,6 +9545,8 @@
                           "id",
                           "conversationId",
                           "messageId",
+                          "artifactId",
+                          "artifactRevisionId",
                           "provenance",
                           "state",
                           "displayName",
@@ -8616,10 +9570,23 @@
                               "null"
                             ]
                           },
+                          "artifactId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "artifactRevisionId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
                           "provenance": {
                             "type": "string",
                             "enum": [
-                              "participant_upload"
+                              "participant_upload",
+                              "agent_output"
                             ]
                           },
                           "state": {
@@ -8771,6 +9738,8 @@
                         "id",
                         "conversationId",
                         "messageId",
+                        "artifactId",
+                        "artifactRevisionId",
                         "provenance",
                         "state",
                         "displayName",
@@ -8794,10 +9763,23 @@
                             "null"
                           ]
                         },
+                        "artifactId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "artifactRevisionId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "provenance": {
                           "type": "string",
                           "enum": [
-                            "participant_upload"
+                            "participant_upload",
+                            "agent_output"
                           ]
                         },
                         "state": {
@@ -8880,6 +9862,8 @@
                         "id",
                         "conversationId",
                         "messageId",
+                        "artifactId",
+                        "artifactRevisionId",
                         "provenance",
                         "state",
                         "displayName",
@@ -8903,10 +9887,23 @@
                             "null"
                           ]
                         },
+                        "artifactId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "artifactRevisionId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "provenance": {
                           "type": "string",
                           "enum": [
-                            "participant_upload"
+                            "participant_upload",
+                            "agent_output"
                           ]
                         },
                         "state": {
@@ -9150,6 +10147,8 @@
                         "id",
                         "conversationId",
                         "messageId",
+                        "artifactId",
+                        "artifactRevisionId",
                         "provenance",
                         "state",
                         "displayName",
@@ -9173,10 +10172,23 @@
                             "null"
                           ]
                         },
+                        "artifactId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "artifactRevisionId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "provenance": {
                           "type": "string",
                           "enum": [
-                            "participant_upload"
+                            "participant_upload",
+                            "agent_output"
                           ]
                         },
                         "state": {
@@ -9328,6 +10340,8 @@
                         "id",
                         "conversationId",
                         "messageId",
+                        "artifactId",
+                        "artifactRevisionId",
                         "provenance",
                         "state",
                         "displayName",
@@ -9351,10 +10365,23 @@
                             "null"
                           ]
                         },
+                        "artifactId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "artifactRevisionId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
                         "provenance": {
                           "type": "string",
                           "enum": [
-                            "participant_upload"
+                            "participant_upload",
+                            "agent_output"
                           ]
                         },
                         "state": {
@@ -10110,6 +11137,103 @@
           },
           "503": {
             "description": "Personal asset metadata could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/organization/members/{membershipId}/remove": {
+      "post": {
+        "operationId": "removeOrganizationMember",
+        "summary": "Remove another non-Owner member's current access",
+        "description": "Standalone retains the suspended membership and records removal atomically. Authorized retries return that state. Self-removal and Owner removal are refused. Fleet removal is unsupported and never falls back to local writes.",
+        "tags": [
+          "Organization members"
+        ],
+        "parameters": [
+          {
+            "name": "membershipId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^\\S+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Removed access or recovered an authorized retry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemoveOrganizationMemberResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Organization membership authority refused or could not complete the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Organization membership authority refused or could not complete the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Organization membership authority refused or could not complete the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Organization membership authority refused or could not complete the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Organization membership authority refused or could not complete the request.",
             "content": {
               "application/json": {
                 "schema": {
@@ -11972,7 +13096,7 @@
       "post": {
         "operationId": "postMyConversationMessage",
         "summary": "Post one encrypted participant message",
-        "description": "Encrypts plaintext before PostgreSQL persistence and appends only an opaque payload reference and ciphertext digest to KurrentDB.",
+        "description": "Encrypts plaintext and atomically binds up to ten selected Ready PDF assets before appending opaque text and artifact coordinates to KurrentDB. Text may be empty only when at least one asset is selected. Exact retries preserve the original text, asset set, author and activation.",
         "tags": [
           "Conversations"
         ],
@@ -11996,6 +13120,7 @@
                 "required": [
                   "idempotencyKey",
                   "text",
+                  "assetIds",
                   "activation"
                 ],
                 "properties": {
@@ -12005,16 +13130,31 @@
                   },
                   "text": {
                     "type": "string",
-                    "minLength": 1,
-                    "maxLength": 65536
+                    "maxLength": 65536,
+                    "description": "Participant text limited to 65536 UTF-8 bytes; it may be empty only when assetIds is non-empty."
+                  },
+                  "assetIds": {
+                    "type": "array",
+                    "minItems": 0,
+                    "maxItems": 10,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[\\x21-\\x7E]+$"
+                    },
+                    "description": "Unique conversation asset identifiers; the server stores them in ASCII order."
                   },
                   "activation": {
                     "type": "string",
                     "enum": [
                       "none",
                       "start",
-                      "interrupt"
-                    ]
+                      "interrupt",
+                      "stop"
+                    ],
+                    "description": "Stop requests cancellation of the original requester's current turn without starting another turn. Admission is not cancellation completion."
                   }
                 }
               }
@@ -12081,10 +13221,10 @@
             "description": "Authentication required."
           },
           "404": {
-            "description": "Conversation is unavailable to the current participant."
+            "description": "Conversation or selected asset is unavailable to the current participant."
           },
           "409": {
-            "description": "Idempotency or activation conflict."
+            "description": "Idempotency, asset binding or activation conflict."
           },
           "503": {
             "description": "Conversation history or private payload authority unavailable."
@@ -12691,6 +13831,154 @@
         }
       }
     },
+    "/organization/company-assistant/tools": {
+      "get": {
+        "operationId": "getCompanyAssistantTools",
+        "summary": "Read the company assistant's current tool selection",
+        "tags": [
+          "Organization assistants"
+        ],
+        "description": "Requires current Organization Administer. Returns the exact active immutable revision and sorted tool revision IDs. This read does not record effect admission or supply external credentials.",
+        "responses": {
+          "200": {
+            "description": "Current selection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "agentServiceId",
+                    "activeRevisionId",
+                    "toolRevisionIds"
+                  ],
+                  "properties": {
+                    "agentServiceId": {
+                      "type": "string"
+                    },
+                    "activeRevisionId": {
+                      "type": "string"
+                    },
+                    "toolRevisionIds": {
+                      "type": "array",
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "403": {
+            "description": "Current administrator permission denied."
+          },
+          "404": {
+            "description": "Active published company assistant unavailable."
+          },
+          "503": {
+            "description": "Selection dependency unavailable."
+          }
+        }
+      },
+      "put": {
+        "operationId": "setCompanyAssistantTools",
+        "summary": "Replace the company assistant's tool selection",
+        "tags": [
+          "Organization assistants"
+        ],
+        "description": "Requires current Organization Administer and Assign on every selected same-silo ready tool revision of an active published server. Publishes an immutable successor and reconciles only the company's own Use/Invoke grants for removed and selected tools. A current unchanged selection is a no-op after fresh authorization. A stale expected revision always returns 409, including a retry after an uncertain successful commit; GET the authoritative selection before editing again. Empty selection removes all tools. This API creates no install or external credential binding and cannot borrow human private credentials.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedActiveRevisionId",
+                  "toolRevisionIds"
+                ],
+                "properties": {
+                  "expectedActiveRevisionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "^\\S(?:.*\\S)?$"
+                  },
+                  "toolRevisionIds": {
+                    "type": "array",
+                    "maxItems": 32,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200,
+                      "pattern": "^\\S(?:.*\\S)?$"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed successor or unchanged current selection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "agentServiceId",
+                    "activeRevisionId",
+                    "toolRevisionIds"
+                  ],
+                  "properties": {
+                    "agentServiceId": {
+                      "type": "string"
+                    },
+                    "activeRevisionId": {
+                      "type": "string"
+                    },
+                    "toolRevisionIds": {
+                      "type": "array",
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid tool selection."
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "403": {
+            "description": "Current assignment permission or selected tool unavailable."
+          },
+          "404": {
+            "description": "Active published company assistant unavailable."
+          },
+          "409": {
+            "description": "Active revision changed; read current selection before another edit."
+          },
+          "503": {
+            "description": "Assignment dependency unavailable; a failed response may follow a commit, so read current selection."
+          }
+        }
+      }
+    },
     "/organization/company-assistant": {
       "post": {
         "operationId": "provisionCompanyAssistant",
@@ -12825,6 +14113,154 @@
           },
           "503": {
             "description": "Setup dependency unavailable; the same request may be retried."
+          }
+        }
+      }
+    },
+    "/me/agent/tools": {
+      "get": {
+        "operationId": "getPersonalAgentTools",
+        "summary": "Read the personal agent's current tool selection",
+        "tags": [
+          "Personal agent"
+        ],
+        "description": "Requires current Edit on the caller's unique active personal AgentService. Returns its immutable active revision and sorted tool revision IDs without recording effect admission or exposing credentials.",
+        "responses": {
+          "200": {
+            "description": "Current selection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "agentServiceId",
+                    "activeRevisionId",
+                    "toolRevisionIds"
+                  ],
+                  "properties": {
+                    "agentServiceId": {
+                      "type": "string"
+                    },
+                    "activeRevisionId": {
+                      "type": "string"
+                    },
+                    "toolRevisionIds": {
+                      "type": "array",
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "403": {
+            "description": "Current personal-agent permission denied."
+          },
+          "404": {
+            "description": "Unique active published personal agent unavailable."
+          },
+          "503": {
+            "description": "Selection dependency unavailable."
+          }
+        }
+      },
+      "put": {
+        "operationId": "setPersonalAgentTools",
+        "summary": "Replace the personal agent's tool selection",
+        "tags": [
+          "Personal agent"
+        ],
+        "description": "Requires current AgentService Edit and Assign on every selected same-silo ready tool revision of an active published MCP server. Publishes an immutable successor while preserving its persona, model, skills, budget and boundaries, and reconciles only the owner's exact personal Use and Invoke grants. A stale expected revision returns 409, including a retry after an uncertain successful commit. Empty selection removes all tools.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedActiveRevisionId",
+                  "toolRevisionIds"
+                ],
+                "properties": {
+                  "expectedActiveRevisionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^\\S(?:.*\\S)?$"
+                  },
+                  "toolRevisionIds": {
+                    "type": "array",
+                    "maxItems": 32,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^\\S(?:.*\\S)?$"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed successor or authorized unchanged selection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "agentServiceId",
+                    "activeRevisionId",
+                    "toolRevisionIds"
+                  ],
+                  "properties": {
+                    "agentServiceId": {
+                      "type": "string"
+                    },
+                    "activeRevisionId": {
+                      "type": "string"
+                    },
+                    "toolRevisionIds": {
+                      "type": "array",
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid tool selection."
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "403": {
+            "description": "Current Edit, selected Assign, or selected tool availability denied."
+          },
+          "404": {
+            "description": "Unique active published personal agent unavailable."
+          },
+          "409": {
+            "description": "Active revision changed; read the current selection before another edit."
+          },
+          "503": {
+            "description": "Assignment dependency unavailable; read current selection after an uncertain response."
           }
         }
       }

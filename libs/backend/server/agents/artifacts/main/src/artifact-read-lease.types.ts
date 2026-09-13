@@ -12,8 +12,8 @@ import type { ArtifactReadLeaseClaims } from "@opencrane/backend/artifacts/autho
  *
  * These strings are serialized, so they are part of the contract, not a local detail.
  *
- * Called by: `_CreateSkillAuthoringArtifactReader` in
- * apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts, which throws
+ * Called by: `_CreatePublishedArtifactReader` in
+ * service/artifact-upload.factory.ts, which throws
  * "artifact read lease denied" for any outcome other than `Issued`.
  *
  * @see {@link IssueArtifactReadLeaseResult} for the payload attached to each outcome.
@@ -91,8 +91,8 @@ export interface PublishedArtifactReadTarget
  * `_CreateArtifactCatalogueRepository`.
  *
  * Called by: `__IssueArtifactReadLease` in artifact-read-lease.ts, which is in turn called by
- * `_CreateSkillAuthoringArtifactReader` in
- * apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts.
+ * `_CreatePublishedArtifactReader` in
+ * service/artifact-upload.factory.ts.
  */
 export interface ArtifactReadLeaseRepository
 {
@@ -115,7 +115,7 @@ export interface ArtifactReadLeaseRepository
  * implementation in, which keeps the key out of every module that only needs a signature.
  *
  * Called by: satisfied inline as `{ sign: signLease }` in
- * apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts, where `signLease` comes from
+ * service/artifact-upload.factory.ts, where `signLease` comes from
  * `_CreateArtifactReadLeaseSigner`.
  */
 export interface ArtifactReadLeaseSigner

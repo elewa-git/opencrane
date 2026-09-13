@@ -1,4 +1,4 @@
-import { ___DecideConversationAssetBatch, type ConversationAssetBatchDecision } from "@opencrane/models/conversation-assets";
+import { ___DecideConversationAssetBatch, type ConversationAssetBatchDecision, type ConversationAssetBatchItem } from "@opencrane/models/conversation-assets";
 
 const _MEDIA_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
 	".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -24,6 +24,12 @@ export function _ConversationAssetFileMediaType(file: File): string
 export function _DecideConversationAssetFiles(files: readonly File[]): ConversationAssetBatchDecision
 {
 	return ___DecideConversationAssetBatch(files.map(function _Item(file) { return { mediaType: _ConversationAssetFileMediaType(file), byteLength: file.size }; }));
+}
+
+/** Applies the message policy to the selected server rows, transfers, and new files together. */
+export function _DecideConversationAssetSelection(current: readonly ConversationAssetBatchItem[], files: readonly File[]): ConversationAssetBatchDecision
+{
+	return ___DecideConversationAssetBatch([...current, ...files.map(function _Item(file) { return { mediaType: _ConversationAssetFileMediaType(file), byteLength: file.size }; })]);
 }
 
 /** Compute the immutable content address used for exact retry identity. */

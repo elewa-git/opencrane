@@ -47,6 +47,8 @@ export interface OrganizationMember
 	readonly joinedAt: string;
 	/** Whether this row represents the verified caller. */
 	readonly isCurrentUser: boolean;
+	/** Describes whether this caller can request removal; the server rechecks on submission. */
+	readonly removal: import("./removal.types").OrganizationMemberRemovalCapability;
 }
 
 /** Authoritative member and invitation directory for one host-selected organisation. */

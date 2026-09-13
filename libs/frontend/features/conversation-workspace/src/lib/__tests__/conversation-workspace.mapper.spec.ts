@@ -1,8 +1,13 @@
-import type { MessageEntry } from "@opencrane/contracts";
+import { ConversationStatusTones } from "@opencrane/elements/conversation";
+import type { MessageEntry, ToolCallLogEntry } from "@opencrane/contracts";
+import { ConversationAssetPresentationStates, type ConversationAssetPresentation } from "@opencrane/features/conversation-assets";
+import { ConversationAssetDisposition, ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
+import { ConversationAssetContentCommandStates } from "@opencrane/state/conversation/assets";
 import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, type ConversationCreationDirectory, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
-import { _ConversationEntryViews, _ConversationOnboardingContinuationPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation } from "../conversation-workspace.mapper";
+import { _ConversationEntryViews, _ConversationOnboardingContinuationPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation, _ConversationToolStatus } from "../conversation-workspace.mapper";
 import { ConversationSessionRailIconStates } from "../conversation-workspace-feature.types";
+import { ConversationWorkspaceTranscriptEntryKinds } from "../presentation/conversation-workspace-presentation.types";
 
 /** Builds a direct-conversation summary without introducing display names. */
 function _Summary(): ConversationSummary
@@ -20,6 +25,24 @@ function _Directory(): ConversationCreationDirectory
 function _Message(): MessageEntry
 {
 	return { schemaVersion: 1, id: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", conversationId: "conversation-1", position: "1", author: { kind: "human", principalId: "principal-1", participantId: "participant-1", issuer: "https://issuer.example", authenticatedAt: "2026-08-12T11:08:00.000Z", name: "Jente Rosseel", avatarArtifactRevisionId: null }, provenance: "human-authored", visibility: { audience: "conversation" }, runId: null, causationId: "command-1", correlationId: "request-1", idempotencyKey: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", occurredAt: "2026-08-12T11:08:00.000Z", attestation: null, kind: "message", state: "completed", blocks: [{ id: "block-1", kind: "text", payloadRef: "payload-1", ciphertextDigest: "sha256:digest" }], replyToEntryId: null, addressedAgentIdentityId: null, activation: "none" };
+}
+
+/** Builds the currently authorized asset projection for one immutable message artifact block. */
+function _Asset(): ConversationAssetPresentation
+{
+	return { id: "asset-1", messageId: _Message().id, artifactId: "artifact-1", artifactRevisionId: "revision-1", provenance: ConversationAssetProvenance.ParticipantUpload, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 1_024, disposition: ConversationAssetDisposition.Preview, state: ConversationAssetPresentationStates.Ready, detail: "Ready", canRetry: false, canRemove: false, uploadProgressPercent: null, contentState: ConversationAssetContentCommandStates.Idle, contentDetail: null };
+}
+
+/** Builds the currently authorized Ready projection for one generated CSV. */
+function _GeneratedCsvAsset(overrides: Partial<ConversationAssetPresentation> = {}): ConversationAssetPresentation
+{
+	return { id: "generated-asset-1", messageId: _Message().id, artifactId: "generated-artifact-1", artifactRevisionId: "generated-revision-1", provenance: ConversationAssetProvenance.AgentOutput, displayName: "county-totals.csv", mediaType: "text/csv;charset=utf-8", byteLength: 27, disposition: ConversationAssetDisposition.Download, state: ConversationAssetPresentationStates.Ready, detail: "Ready", canRetry: false, canRemove: false, uploadProgressPercent: null, contentState: ConversationAssetContentCommandStates.Idle, contentDetail: null, ...overrides };
+}
+
+/** Builds one canonical tool lifecycle fact without any result payload. */
+function _Tool(phase: ToolCallLogEntry["phase"], position: string, toolName = "Customer records"): ToolCallLogEntry
+{
+	return { schemaVersion: 1, id: `tool-entry-${position}`, conversationId: "conversation-1", position, author: { kind: "system", systemId: "opencrane", name: "OpenCrane" }, provenance: "service-attested", visibility: { audience: "conversation" }, runId: "run-private", causationId: "cause-private", correlationId: "correlation-private", idempotencyKey: `tool-entry-${position}`, occurredAt: "2026-08-12T11:08:01.000Z", attestation: null, kind: "log", summary: "Tool status", detailsRef: null, logKind: "tool_call", toolCallId: "tool-call-private", toolKind: "mcp", toolName, phase, resultArtifactRevisionId: phase === "completed" ? "artifact-private" : null };
 }
 
 describe("Conversation workspace presentation", function _ConversationWorkspacePresentation()
@@ -75,9 +98,98 @@ describe("Conversation workspace presentation", function _ConversationWorkspaceP
 	it("sanitizes message markup and keeps authorship generic", function _SafeMessage()
 	{
 		const view = _ConversationEntryViews([_Message()], { "payload-1": "Hello <script>alert('secret')</script>" })[0]!;
+		expect(view.kind).toBe(ConversationWorkspaceTranscriptEntryKinds.Message);
+		if (view.kind !== ConversationWorkspaceTranscriptEntryKinds.Message)
+			throw new Error("Expected a message presentation.");
 		expect(view.message.authorName).toBe("Jente Rosseel");
 		expect(view.richText.html).not.toContain("<script");
 		expect(view.richText.html).toContain("Hello");
+	});
+
+	it("shows a PDF only when its immutable artifact coordinates and message binding match", function _ArtifactIdentity()
+	{
+		const artifact = { id: "artifact-block-1", kind: "artifact" as const, artifactId: "artifact-1", artifactRevisionId: "revision-1", name: "brief.pdf", mediaType: "application/pdf" };
+		const message = { ..._Message(), blocks: [..._Message().blocks, artifact] };
+		const matched = _ConversationEntryViews([message], { "payload-1": "Read this" }, [_Asset()])[0];
+		const wrongMessage = _ConversationEntryViews([message], { "payload-1": "Read this" }, [{ ..._Asset(), messageId: "another-message" }])[0];
+		if (matched?.kind !== ConversationWorkspaceTranscriptEntryKinds.Message || wrongMessage?.kind !== ConversationWorkspaceTranscriptEntryKinds.Message)
+			throw new Error("Expected message presentations.");
+
+		expect(matched.attachments).toEqual([_Asset()]);
+		expect(wrongMessage.attachments).toMatchObject([{ state: ConversationAssetPresentationStates.Unavailable, canRemove: false, disposition: null }]);
+		expect(matched.richText.html).not.toContain("brief.pdf");
+	});
+
+	it("does not grant file actions from names, partial coordinates, or duplicate projections", function _ArtifactMismatch()
+	{
+		const artifact = { id: "artifact-block-1", kind: "artifact" as const, artifactId: "artifact-1", artifactRevisionId: "revision-1", name: "brief.pdf", mediaType: "application/pdf" };
+		const message = { ..._Message(), blocks: [artifact] };
+		const variants = [[{ ..._Asset(), artifactRevisionId: "another-revision" }], [{ ..._Asset(), artifactId: null, artifactRevisionId: null }], [_Asset(), { ..._Asset(), id: "asset-duplicate" }]];
+
+		for (const assets of variants)
+		{
+			const view = _ConversationEntryViews([message], {}, assets)[0];
+			if (view?.kind !== ConversationWorkspaceTranscriptEntryKinds.Message)
+				throw new Error("Expected a message presentation.");
+			expect(view.attachments).toMatchObject([{ state: ConversationAssetPresentationStates.Unavailable, disposition: null, canRemove: false }]);
+		}
+	});
+
+	it("joins a refreshed Ready AgentOutput CSV only through its exact message and Artifact coordinates", function _GeneratedArtifactIdentity()
+	{
+		const artifact = { id: "generated-artifact-block-1", kind: "artifact" as const, artifactId: "generated-artifact-1", artifactRevisionId: "generated-revision-1", name: "county-totals.csv", mediaType: "text/csv;charset=utf-8" };
+		const message = { ..._Message(), author: { kind: "agent", agentIdentityId: "agent-1", agentServiceId: "service-1", name: "Nova", avatarArtifactRevisionId: null }, provenance: "agent-authored", runId: "run-1", blocks: [artifact] } satisfies MessageEntry;
+		const generated = _GeneratedCsvAsset();
+		const matched = _ConversationEntryViews([message], {}, [generated])[0];
+		const wrongRevision = _ConversationEntryViews([message], {}, [{ ...generated, artifactRevisionId: "another-revision" }])[0];
+		const denied = _ConversationEntryViews([message], {}, [])[0];
+		if (matched?.kind !== ConversationWorkspaceTranscriptEntryKinds.Message || wrongRevision?.kind !== ConversationWorkspaceTranscriptEntryKinds.Message || denied?.kind !== ConversationWorkspaceTranscriptEntryKinds.Message)
+			throw new Error("Expected message presentations.");
+
+		expect(ConversationAssetProvenance.AgentOutput).toBe("agent_output");
+		expect(matched.attachments).toEqual([generated]);
+		expect(matched.attachments[0]).toMatchObject({ provenance: ConversationAssetProvenance.AgentOutput, state: ConversationAssetPresentationStates.Ready, disposition: ConversationAssetDisposition.Download });
+		expect(wrongRevision.attachments).toMatchObject([{ state: ConversationAssetPresentationStates.Unavailable, disposition: null }]);
+		expect(denied.attachments).toMatchObject([{ state: ConversationAssetPresentationStates.Unavailable, disposition: null }]);
+	});
+
+	it("maps every tool phase without claiming that a final answer exists", function _ToolPhases()
+	{
+		const phases: readonly ToolCallLogEntry["phase"][] = ["requested", "running", "completed", "failed", "cancelled", "recovery_required"];
+		const views = phases.map((phase, index) => _ConversationEntryViews([_Tool(phase, `${index + 1}`)], {})[0]!);
+		expect(views.map(view => view.kind)).toEqual(phases.map(() => ConversationWorkspaceTranscriptEntryKinds.ToolActivity));
+		expect(views.map(view => view.kind === ConversationWorkspaceTranscriptEntryKinds.ToolActivity ? view.status.label : null)).toEqual(["Tool requested", "Tool running", "Tool result received", "Tool could not finish", "Tool stopped", "Tool needs attention"]);
+		expect(views.map(view => view.kind === ConversationWorkspaceTranscriptEntryKinds.ToolActivity ? view.status.tone : null)).toEqual([ConversationStatusTones.Neutral, ConversationStatusTones.Neutral, ConversationStatusTones.Neutral, ConversationStatusTones.Danger, ConversationStatusTones.Danger, ConversationStatusTones.Attention]);
+		expect(views[2]!.kind === ConversationWorkspaceTranscriptEntryKinds.ToolActivity ? views[2]!.status.detail : "").toContain("may still be preparing its answer");
+		expect(views.every(view => view.kind !== ConversationWorkspaceTranscriptEntryKinds.ToolActivity || view.status.detail?.startsWith("Customer records:") === true)).toBe(true);
+	});
+
+	it("preserves a long display-safe tool name as text for the presentation component to escape", function _ToolName()
+	{
+		const toolName = `${"Customer records archive ".repeat(6)}<review>`;
+		const view = _ConversationEntryViews([_Tool("completed", "1", toolName)], {})[0]!;
+		expect(view.kind).toBe(ConversationWorkspaceTranscriptEntryKinds.ToolActivity);
+		if (view.kind !== ConversationWorkspaceTranscriptEntryKinds.ToolActivity)
+			throw new Error("Expected tool activity presentation.");
+		expect(view.status.detail).toBe(`${toolName}: result received. The assistant may still be preparing its answer.`);
+	});
+
+	it("rejects an unsupported tool phase instead of returning an empty status", function _FutureToolPhase()
+	{
+		expect(function _MapFuturePhase() { return _ConversationToolStatus({ ..._Tool("completed", "1"), phase: "future-phase" as never }); }).toThrow("Unsupported tool-call phase: future-phase");
+	});
+
+	it("coalesces each tool call at its latest chronological position without exposing coordinates", function _LatestToolFact()
+	{
+		const answer = { ..._Message(), id: "answer", position: "4", author: { kind: "agent", agentIdentityId: "agent-1", agentServiceId: "service-1", name: "Company assistant", avatarArtifactRevisionId: null }, runId: "run-private", blocks: [{ ..._Message().blocks[0]!, id: "answer-block" }] } satisfies MessageEntry;
+		const views = _ConversationEntryViews([_Message(), _Tool("running", "2"), _Tool("completed", "3"), answer], { "payload-1": "Saved answer" });
+		expect(views.map(view => view.kind)).toEqual([ConversationWorkspaceTranscriptEntryKinds.Message, ConversationWorkspaceTranscriptEntryKinds.ToolActivity, ConversationWorkspaceTranscriptEntryKinds.Message]);
+		expect(views[1]).toMatchObject({ kind: ConversationWorkspaceTranscriptEntryKinds.ToolActivity, status: { label: "Tool result received" } });
+		const rendered = JSON.stringify(views);
+		expect(rendered).not.toContain("tool-call-private");
+		expect(rendered).not.toContain("artifact-private");
+		expect(rendered).not.toContain("run-private");
+		expect(rendered).toContain("Customer records");
 	});
 
 	it("places completed onboarding inside one session rail without a fake conversation id", function _UnifiedRail()

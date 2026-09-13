@@ -123,6 +123,7 @@ DECLARE
     current_run "agent_runs"%ROWTYPE;
     current_invocation "tool_invocations"%ROWTYPE;
     bound_request "approval_requests"%ROWTYPE;
+    admitted_stop_cleanup BOOLEAN := FALSE;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ApprovalRequest rows cannot be deleted'; END IF;
     IF TG_OP = 'UPDATE' THEN
@@ -162,8 +163,13 @@ BEGIN
     bound_request := CASE WHEN TG_OP = 'INSERT' THEN NEW ELSE OLD END;
     SELECT * INTO current_run FROM "agent_runs" WHERE "id" = bound_request."run_id" FOR UPDATE;
     SELECT * INTO current_invocation FROM "tool_invocations" WHERE "id" = bound_request."tool_invocation_row_id" FOR UPDATE;
+    -- Only the saved cancellation winner may close approvals after lease or membership expiry.
+    admitted_stop_cleanup := TG_OP = 'UPDATE' AND NEW."state" = 'cancelled'
+        AND current_run."state" = 'cancelling'
+        AND current_run."cancellation_decision" = 'cancellation_won'
+        AND current_run."cancellation_command_id" IS NOT NULL;
     IF current_run."attempt" IS DISTINCT FROM bound_request."attempt"
-        OR current_run."state" IS DISTINCT FROM 'waiting_for_input'::"AgentRunState"
+        OR (current_run."state" IS DISTINCT FROM 'waiting_for_input'::"AgentRunState" AND NOT COALESCE(admitted_stop_cleanup, FALSE))
         OR current_invocation."state" IS DISTINCT FROM 'awaiting_approval'::"ToolInvocationState"
         OR current_invocation."run_id" IS DISTINCT FROM bound_request."run_id"
         OR current_invocation."attempt" IS DISTINCT FROM bound_request."attempt"
@@ -180,17 +186,19 @@ BEGIN
         OR COALESCE(current_run."execution_subject"->'computerScope'->>'leaseGeneration', '') !~ '^[1-9][0-9]*$' THEN
         RAISE EXCEPTION 'ApprovalRequest requires the current waiting run and its exact computer-lease invocation';
     END IF;
-    PERFORM 1 FROM "conversation_computer_active_leases"
-    WHERE "computer_id" = current_run."execution_subject"->'computerScope'->>'computerId'
-      AND "silo_id" = current_run."silo_id"
-      AND "conversation_id" = current_run."conversation_id"
-      AND "agent_identity_id" = current_run."agent_identity_id"
-      AND "lease_id" = current_run."execution_subject"->'computerScope'->>'leaseId'
-      AND "lease_generation" = (current_run."execution_subject"->'computerScope'->>'leaseGeneration')::INTEGER
-      AND "expires_at" > decision_time
-    FOR UPDATE;
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'ApprovalRequest requires its exact active conversation computer lease';
+    IF NOT COALESCE(admitted_stop_cleanup, FALSE) THEN
+        PERFORM 1 FROM "conversation_computer_active_leases"
+        WHERE "computer_id" = current_run."execution_subject"->'computerScope'->>'computerId'
+          AND "silo_id" = current_run."silo_id"
+          AND "conversation_id" = current_run."conversation_id"
+          AND "agent_identity_id" = current_run."agent_identity_id"
+          AND "lease_id" = current_run."execution_subject"->'computerScope'->>'leaseId'
+          AND "lease_generation" = (current_run."execution_subject"->'computerScope'->>'leaseGeneration')::INTEGER
+          AND "expires_at" > decision_time
+        FOR UPDATE;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'ApprovalRequest requires its exact active conversation computer lease';
+        END IF;
     END IF;
     IF TG_OP = 'INSERT' THEN
         IF NEW."state" <> 'pending' OR NEW."decided_at" IS NOT NULL OR NEW."decided_by" IS NOT NULL THEN
@@ -202,6 +210,9 @@ BEGIN
         RETURN NEW;
     END IF;
     IF NEW."state" = 'cancelled' THEN
+        IF NEW."final_arguments" IS NOT NULL OR NEW."final_arguments_digest" IS NOT NULL THEN
+            RAISE EXCEPTION 'ApprovalRequest cancellation cannot approve final arguments';
+        END IF;
         IF NEW."decided_at" IS NULL OR NEW."decided_at" > decision_time OR NEW."decided_at" < OLD."created_at" THEN
             RAISE EXCEPTION 'ApprovalRequest cancellation requires a caller-supplied decision time between creation and now';
         END IF;

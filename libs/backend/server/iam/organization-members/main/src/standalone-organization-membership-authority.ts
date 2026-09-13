@@ -8,6 +8,7 @@ import type { StandaloneOrganizationMembershipConfig } from "./deployment.types"
 import { OrganizationInvitationStatuses, type AcceptOrganizationInvitationCommand, type AcceptOrganizationInvitationResult, type CreateOrganizationInvitationsCommand, type CreateOrganizationInvitationsResult, type OrganizationInvitation, type OrganizationInviteValidationResult, type ResendOrganizationInvitationCommand, type ResendOrganizationInvitationResult, type ValidateOrganizationInvitationsCommand } from "./invitations.types";
 import type { OrganizationInvitationTokenAuthority } from "./invitation-token.types";
 import { OrganizationMembershipError, OrganizationMembershipErrorKinds } from "./organization-members.errors";
+import type { RemoveOrganizationMemberCommand, RemoveOrganizationMemberResult } from "./removal.types";
 import type { OrganizationInvitationRecord, OrganizationMemberRepository } from "./organization-member-repository.types";
 
 /** Maximum recipients admitted in one idempotent request. */
@@ -79,6 +80,19 @@ export class StandaloneOrganizationMembershipAuthority implements OrganizationMe
 		const now = new Date();
 		const invitations = records.invitations.map(record => _projectInvitation(record, now));
 		return { members: records.members, invitations, activeCount: records.activeCount, pendingCount: records.pendingCount };
+	}
+
+	/** Removes current access while the repository retains the subject's membership and audit. */
+	async remove(command: RemoveOrganizationMemberCommand): Promise<RemoveOrganizationMemberResult>
+	{
+		if (!command.membershipId.trim() || command.membershipId.length > 128 || /\s/u.test(command.membershipId))
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Invalid, "membershipId is invalid");
+		const repository = this.repository;
+		const member = await ___DoWithTrace("organization.member.remove", { siloId: command.caller.siloId, membershipId: command.membershipId, mode: "standalone" }, async function _Remove()
+		{
+			return repository.remove({ ...command, removedAt: new Date() });
+		});
+		return { member };
 	}
 
 	/** @inheritdoc */

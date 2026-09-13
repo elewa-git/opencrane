@@ -5,12 +5,12 @@
 ## What it owns
 
 This package defines the browser-side port for reading an organisation directory, validating and
-creating invitations, refreshing an invitation link, and accepting an invitation. Four independent
+creating invitations, refreshing an invitation link, accepting an invitation, and removing another member’s organization access. A directory and four command
 stores own those lifecycles so a read refresh cannot erase an in-flight command and one command
 failure cannot contaminate another.
 
 ```
- settings feature ──intents──► directory · create · resend · acceptance stores
+ settings feature ──intents──► directory · create · resend · acceptance · removal stores
                                       │             ◄── HERE
                                       ▼
                               members gateway port
@@ -25,10 +25,16 @@ Stores preserve successful mutation results while the directory catches up, reus
 key for an unchanged retry, and convert typed server failures into safe display copy. They do not
 calculate seat availability, payment plans, invitation expiry, or access policy.
 
+A successful removal is adopted by the directory immediately and cannot be overwritten by an older
+read. Temporary refresh failures may retain rows with a warning; a proven access denial purges rows,
+invitation links and command state. The access generation prevents old responses from returning
+private data even after a later authorized reload.
+
 ## Public surface
 
 - `ORGANIZATION_MEMBERS_GATEWAY` and `OrganizationMembersGateway` — injectable transport port.
 - `OrganizationMemberDirectoryStore` — directory load, refresh, and retained-data state.
+- `OrganizationMemberRemovalStore` — exact per-target removal, busy locks and server-returned Suspended rows.
 - `OrganizationInvitationCreateStore` — validation, creation, retry identity, issues, and links.
 - `OrganizationInvitationResendStore` — per-invitation refresh-link state.
 - `OrganizationInviteAcceptanceStore` — public-token acceptance lifecycle.

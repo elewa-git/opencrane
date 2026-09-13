@@ -3,7 +3,7 @@ import { Injectable, inject } from "@angular/core";
 import type { GroupChildCreateCommand, GroupChildShareCommand, GroupChildView } from "@opencrane/models/conversations";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { _ParseConversationPersonalRuns, type ConversationPersonalRun, type ConversationPersonalRunsGateway, _ParseConversationGroupChildren, _ParseConversationGroupChild, _ParseConversationGroupShare, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationComputerBrowserTarget, type ConversationComputerCommandResult, type ConversationCreationDirectory, type ConversationOnboardingHistoryProjection, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type SubmitConversationMessageCommand } from "@opencrane/state/conversation/workspace";
+import { _ParseConversationPersonalRuns, type ConversationPersonalRun, type ConversationPersonalRunsGateway, type ConversationWorkStopCommand, _ParseConversationGroupChildren, _ParseConversationGroupChild, _ParseConversationGroupShare, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationComputerBrowserTarget, type ConversationComputerCommandResult, type ConversationCreationDirectory, type ConversationOnboardingHistoryProjection, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type SubmitConversationMessageCommand } from "@opencrane/state/conversation/workspace";
 
 import { _ConversationComputerBrowserPage, _ConversationComputerBrowserTargets, _ConversationComputerCommandResult, _ConversationDetail, _ConversationOnboardingHistory, _ConversationSummary, _ConversationWorkspaceDirectory } from "./conversation-workspace.dto";
 
@@ -44,6 +44,14 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 		catch { throw _InvalidResponse(); }
 	}
 
+	/** Append an explicit Stop control message without starting a replacement turn. */
+	public async requestStop(command: ConversationWorkStopCommand): Promise<void>
+	{
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: command.conversationId } }, body: { idempotencyKey: command.idempotencyKey, text: "Stop", assetIds: [], activation: "stop" } });
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(result.response?.status);
+	}
+
 	/** Reads currently visible children and rejects a response for another parent. */
 	public async listChildren(parentConversationId: string, signal: AbortSignal): Promise<readonly GroupChildView[]>
 	{
@@ -78,8 +86,9 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	public async directory(): Promise<ConversationCreationDirectory>
 	{
 		const result = await this._api.client.GET("/me/conversations/directory");
-		if (result.data === undefined)
-			throw _InvalidResponse();
+		const status = result.response?.status;
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(status);
 		try { return _ConversationWorkspaceDirectory(result.data.directory); }
 		catch { throw _InvalidResponse(); }
 	}
@@ -95,8 +104,9 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	public async list(): Promise<readonly ConversationSummary[]>
 	{
 		const result = await this._api.client.GET("/me/conversations", { params: { query: { includeArchived: true } } });
-		if (result.data === undefined)
-			throw _InvalidResponse();
+		const status = result.response?.status;
+		if (result.error !== undefined || result.data === undefined)
+			throw _Failure(status);
 		try { return result.data.conversations.map(_ConversationSummary); }
 		catch { throw _InvalidResponse(); }
 	}
@@ -152,7 +162,7 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	/** @inheritdoc */
 	public async send(command: SubmitConversationMessageCommand): Promise<void>
 	{
-		const result = await this._api.client.POST("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: command.conversationId } }, body: { idempotencyKey: command.idempotencyKey, text: command.text, activation: command.activation } });
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: command.conversationId } }, body: { idempotencyKey: command.idempotencyKey, text: command.text, assetIds: [...command.assetIds], activation: command.activation } });
 		if (result.error !== undefined || result.data === undefined)
 			throw _Failure(result.response?.status);
 	}

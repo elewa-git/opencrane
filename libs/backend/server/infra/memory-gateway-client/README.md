@@ -29,12 +29,17 @@ It is the future transport seam between the personal-agent backend and the priva
 boundary *(forwards only authorised reads)* · Cognee *(holds facts and mints fact references)*
 
 It owns: the `MemoryGatewayClient` interface (`query` / `recordPersonalFact` / `correct` / `forget`
-for a subject's personal memory, plus `recallScoped` / `injectScoped` for a shared knowledge SCOPE); the request/result
-types, where recall returns only gateway-originated facts and a fact reference is only ever real if
-the gateway minted it; and a **fail-closed** default implementation,
+for a subject's personal memory, plus `recallScoped` / `injectScoped` for a shared knowledge scope);
+the request/result types, where recall keeps Cognee's separate document and chunk UUIDs; and a
+**fail-closed** default implementation,
 `__UnavailableMemoryGatewayClient`, which throws `MemoryGatewayUnavailableError` for every call. That
 default remains available for non-production composition, while the authenticated transport never
 invents an empty recall or a fake write.
+
+Cognee's CHUNKS response identifies the returned passage with `cogneeChunkId` and its source Data row
+with `cogneeDocumentId`. Only the document UUID paired with the admitted `cogneeDatasetId` may become
+a future correction or forgetting coordinate. A chunk UUID is recall evidence and never a mutation
+target.
 
 A managed agent accesses shared knowledge scopes only through this port. Every scoped write command
 still carries mandatory `MemoryProvenance`; the guard runs before the current transport refuses the
@@ -73,11 +78,12 @@ ephemeral return channel, and every write path remains fail-closed.
 ## Public surface
 
 - `MemoryGatewayClient` — the runtime-neutral query/record/correct/forget + recallScoped/injectScoped contract.
-- `MemoryQueryCommand`, `MemoryQueryResult`, `MemoryFact`, `MemoryCorrectionCommand`, `MemoryForgetCommand` — the personal-memory I/O types.
-- `PersonalMemoryRecordCommand` / `PersonalMemoryRecordResult` — the retained write contract; the
-  authenticated transport refuses it until durable delivery and mutation semantics are implemented.
-- `__AssertPersonalMemoryRecordResult` / `MemoryGatewayProtocolError` — the future write-response
-  guard and the live read-response protocol error.
+- `MemoryQueryCommand`, `MemoryQueryResult`, `MemoryFact`, `MemoryCorrectionCommand`, `MemoryForgetCommand` — the personal-memory input/output types with separate dataset, document and chunk coordinates.
+- `PersonalMemoryRecordCommand` / `PersonalMemoryRecordReceipt` — the retained write contract; a
+  receipt is transport evidence and does not claim catalog adoption or completed indexing.
+- `__AssertPersonalMemoryRecordReceipt` / `MemoryGatewayMutationProtocolError` — the strict future
+  receipt guard and its ambiguous-delivery failure.
+- `MemoryGatewayProtocolError` — the live read-response protocol error.
 - `MemoryProvenance`, `ScopedMemoryRecallCommand`, `ScopedMemoryRecallResult`, `ScopedMemoryFact`, `ScopedMemoryInjectionCommand` — the scoped read/write I/O types.
 - `__AssertMemoryProvenanceComplete`, `MemoryProvenanceIncompleteError` — the provenance guard and its error.
 - `__UnavailableMemoryGatewayClient`, `MemoryGatewayUnavailableError` — the fail-closed default and its error.
@@ -94,7 +100,8 @@ while the OpenCrane
 memory catalog's internal id stays at the catalog boundary. A runtime supplies that query id only
 from its immutable personal-memory policy; no tool argument or subject id may select another
 dataset. That prevents a caller from treating an OpenCrane row as proof that the gateway accepted
-the fact content.
+the fact content. The existing durable workflow owns operation keys, conflict decisions and recovery;
+this package adds no outbox, queue, scheduler or idempotency store.
 
 ## Dependency direction
 
