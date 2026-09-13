@@ -17,15 +17,31 @@ export interface PersonalMemoryOperationMessageSource
 	readonly authorPrincipalId: string;
 }
 
-/** Reserves the workflow identity that a later product admission must create atomically. */
-export interface PersonalMemoryOperationTaskIdentity
+/** Immutable workflow coordinates expected by personal-memory operation admission. */
+export interface PersonalMemoryOperationTaskCoordinates
 {
-	/** UUID chosen before admission; its presence does not prove a workflow task exists. */
-	readonly taskId: string;
-	/** Workflow definition name the later composition root must admit. */
+	/** Workflow definition name the transaction-bound callback must admit. */
 	readonly taskName: string;
-	/** Idempotency key passed to that workflow definition. */
+	/** Domain key that makes repeated admission select the same workflow task. */
 	readonly taskKey: string;
+}
+
+/** Actual workflow receipt returned inside the transaction that saves the operation. */
+export interface PersonalMemoryOperationTaskIdentity extends PersonalMemoryOperationTaskCoordinates
+{
+	/** Engine-owned UUID proving that the callback admitted a task in this transaction. */
+	readonly taskId: string;
+}
+
+/** Admits the expected workflow coordinates through the caller's open transaction. */
+export interface PersonalMemoryOperationTaskAdmission
+{
+	/**
+	 * Admits one task after operation replay and target locks have been resolved.
+	 * @param coordinates - Exact task name and domain idempotency key saved with a new operation.
+	 * @returns The transaction-bound workflow receipt whose coordinates must match the request.
+	 */
+	(coordinates: PersonalMemoryOperationTaskCoordinates): Promise<PersonalMemoryOperationTaskIdentity>;
 }
 
 /** Complete secret-free command evidence needed to save one personal-memory operation. */
@@ -57,8 +73,8 @@ export interface AdmitPersonalMemoryOperationCommand
 	readonly expectedFactRevision: number | null;
 	/** Provider dataset already adopted by Correct or Forget; Remember may still ensure it. */
 	readonly providerDatasetId: string | null;
-	/** Workflow identity reserved with this row but not asserted to exist. */
-	readonly task: PersonalMemoryOperationTaskIdentity;
+	/** Workflow coordinates to admit only if this transaction creates the operation. */
+	readonly task: PersonalMemoryOperationTaskCoordinates;
 	/** Time the authenticated command was admitted. */
 	readonly admittedAt: Date;
 }
@@ -82,7 +98,7 @@ export interface PersonalMemoryOperationRecord extends PersonalMemoryOperationLi
 	readonly expectedFactRevision: number | null;
 	/** Provider dataset coordinate admitted with the command before later lifecycle adoption. */
 	readonly admittedProviderDatasetId: string | null;
-	/** Workflow identity reserved at admission without claiming the task exists. */
+	/** Actual transaction-bound workflow receipt saved with this operation. */
 	readonly task: PersonalMemoryOperationTaskIdentity;
 	/** Time the command row was first admitted. */
 	readonly admittedAt: Date;
@@ -95,7 +111,7 @@ export interface PersonalMemoryOperationRecord extends PersonalMemoryOperationLi
 /** States whether admission inserted a new operation or returned an exact replay. */
 export enum PersonalMemoryOperationAdmissionOutcomes
 {
-	/** This transaction inserted the operation and its reserved task identity. */
+	/** This transaction admitted the workflow task and inserted the operation. */
 	Created = "created",
 	/** The same command was already admitted, so the existing operation is returned. */
 	Replayed = "replayed",
@@ -138,13 +154,22 @@ export interface PersonalMemoryOperationPersistenceResult
 export interface PersonalMemoryOperationRepository
 {
 	/**
+	 * Reads immutable admitted coordinates for composite replay preparation without claiming authority.
+	 * The later {@link admit} call reacquires every dataset, fact, and operation lock before deciding replay.
+	 * @param siloId - Trusted silo containing the replay key.
+	 * @param idempotencyKeyDigest - Digest of the caller's command retry key.
+	 * @returns The validated saved operation, or null when this silo has no matching key.
+	 */
+	findByReplayKey(siloId: string, idempotencyKeyDigest: string): Promise<PersonalMemoryOperationRecord | null>;
+	/**
 	 * Inserts one operation or returns its exact replay under the documented lock order.
-	 * @param command - Secret-free command evidence and reserved workflow identity.
+	 * @param command - Secret-free command evidence and expected workflow coordinates.
+	 * @param admitTask - Callback bound to this repository's transaction that returns the real task receipt.
 	 * @returns The validated created operation or existing exact replay.
 	 * @throws {@link PersonalMemoryOperationReplayConflict} when the replay key names different evidence.
 	 * @throws {@link PersonalMemoryOperationInvalidState} when input or a saved row is invalid.
 	 */
-	admit(command: AdmitPersonalMemoryOperationCommand): Promise<PersonalMemoryOperationAdmissionResult>;
+	admit(command: AdmitPersonalMemoryOperationCommand, admitTask: PersonalMemoryOperationTaskAdmission): Promise<PersonalMemoryOperationAdmissionResult>;
 	/**
 	 * Plans and saves one event through the reviewed lifecycle policy.
 	 * @param event - Event bound to the operation UUID, kind, and expected revision.
@@ -155,11 +180,9 @@ export interface PersonalMemoryOperationRepository
 	apply(event: PersonalMemoryOperationEvent, recordedAt: Date): Promise<PersonalMemoryOperationPersistenceResult>;
 }
 
-/** Opens serializable operation transactions and binds each repository to the callback client. */
+/** Opens serializable lifecycle transactions and binds each repository to the callback client. */
 export interface PersonalMemoryOperationUnitOfWork
 {
-	/** Admits one operation in a fresh serializable transaction. */
-	admit(command: AdmitPersonalMemoryOperationCommand): Promise<PersonalMemoryOperationAdmissionResult>;
 	/** Applies one lifecycle event in a fresh serializable transaction. */
 	apply(event: PersonalMemoryOperationEvent, recordedAt: Date): Promise<PersonalMemoryOperationPersistenceResult>;
 }

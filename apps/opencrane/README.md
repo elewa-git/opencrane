@@ -165,6 +165,11 @@ Database triggers protect lifecycle and proof bindings that Prisma cannot expres
 holds canonical conversation and computer lifecycle evidence; Agent Sandbox realizes only the
 currently admitted computer generation.
 
+The app-owned `test:sql` target includes real PostgreSQL and Absurd memory-admission proofs.
+They verify that an operation and its task commit or roll back together, and that concurrent or
+restarted callers recover the same receipt. These fixtures run no memory worker or provider call;
+authenticated product memory commands still require their separate integration.
+
 ## Runtime & config
 
 The Helm unit supplies the database, OpenID Connect (OIDC) sign-in settings, namespaces, membership

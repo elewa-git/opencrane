@@ -3,6 +3,25 @@
 	"owners": {
 		"repositories": [
 			{
+				"path": "libs/backend/server/conversations/main/src/memory/source/prisma-personal-memory-message-source-repository.ts",
+				"adapter": "PrismaPersonalMemoryMessageSourceRepository",
+				"contract": "PersonalMemoryMessageSourceRevalidator",
+				"contractImportPath": "./personal-memory-message-source.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationHistoryRepository",
+						"importPath": "../../messages/db/prisma-conversation-history-repository"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/agents/personal/memory/main/src/commands/prisma-personal-memory-command-context.ts",
+				"adapter": "PrismaPersonalMemoryCommandContextRepository",
+				"contract": "PersonalMemoryCommandContextRepository",
+				"contractImportPath": "./personal-memory-command-context.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/agents/personal/memory/main/src/operations/prisma-personal-memory-operation-repository.ts",
 				"adapter": "PrismaPersonalMemoryOperationRepository",
 				"contract": "PersonalMemoryOperationRepository",

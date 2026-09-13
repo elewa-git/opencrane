@@ -1,7 +1,7 @@
 import { MemoryMutationDeliveryStates } from "@opencrane/contracts";
 
 import { ___PersonalMemoryOperationRecordSchema } from "./personal-memory-operation-persistence.validator";
-import { PersonalMemoryOperationInvalidState, type AdmitPersonalMemoryOperationCommand, type PersonalMemoryOperationMessageSource, type PersonalMemoryOperationRecord } from "./personal-memory-operation-persistence.types";
+import { PersonalMemoryOperationInvalidState, type AdmitPersonalMemoryOperationCommand, type PersonalMemoryOperationMessageSource, type PersonalMemoryOperationRecord, type PersonalMemoryOperationTaskIdentity } from "./personal-memory-operation-persistence.types";
 import { PersonalMemoryOperationFailureCodes, PersonalMemoryOperationKinds, PersonalMemoryOperationPhases, type PersonalMemoryOperationLifecycle } from "./personal-memory-operation.types";
 
 /** Prisma command values accepted from the generated operation row. */
@@ -192,8 +192,8 @@ export function _PersonalMemoryOperationLifecycle(record: PersonalMemoryOperatio
 	};
 }
 
-/** Builds the Prisma insert from validated command and lifecycle evidence. */
-export function _PersonalMemoryOperationCreateData(command: AdmitPersonalMemoryOperationCommand, lifecycle: PersonalMemoryOperationLifecycle)
+/** Builds the Prisma insert from validated command, lifecycle, and admitted workflow receipt. */
+export function _PersonalMemoryOperationCreateData(command: AdmitPersonalMemoryOperationCommand, lifecycle: PersonalMemoryOperationLifecycle, task: PersonalMemoryOperationTaskIdentity)
 {
 	return {
 		id: command.operationId,
@@ -217,9 +217,9 @@ export function _PersonalMemoryOperationCreateData(command: AdmitPersonalMemoryO
 		expectedFactRevision: command.expectedFactRevision,
 		admittedProviderDatasetId: command.providerDatasetId,
 		providerDatasetId: lifecycle.providerDatasetId,
-		workflowTaskId: command.task.taskId,
-		workflowTaskName: command.task.taskName,
-		workflowTaskKey: command.task.taskKey,
+		workflowTaskId: task.taskId,
+		workflowTaskName: task.taskName,
+		workflowTaskKey: task.taskKey,
 		admittedAt: command.admittedAt,
 	};
 }

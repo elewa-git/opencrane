@@ -6,8 +6,9 @@
 
 This package owns personal-memory dataset selection, consented fact metadata, and the durable
 operation state for Remember, Correct, and Forget. Existing run-input reads receive the caller's
-admission transaction. The operation repository receives its own caller-supplied transaction and
-stores only encrypted source coordinates, provider identifiers, fixed failure evidence, and digests.
+admission transaction. The operation repository receives the composite command transaction and
+stores only encrypted source coordinates, provider identifiers, fixed failure evidence, workflow
+receipt, and digests.
 
 ```
  verified user identity + RunAdmissionTransaction
@@ -51,20 +52,30 @@ not reinterpret old values.
   `PersonalMemoryOperationEvents` / `PersonalMemoryOperationFailureCodes` — stable lifecycle
   vocabulary, transition outcomes, denial reasons, and their public command and event types.
 - `PersonalMemoryOperationAdmissionOutcomes` / `PersonalMemoryOperationPersistenceOutcomes` —
-  stable replay and persistence results, errors, records, repository ports, and UnitOfWork ports.
+  stable replay and persistence results, errors, records, repository ports, and lifecycle UnitOfWork
+  ports. Task coordinates omit an engine ID until the transaction-bound callback returns the actual
+  workflow receipt.
 - `PrismaPersonalMemoryOperationRepository` — transaction-scoped replay, locking, validation, and
-  lifecycle CAS for a future product command owner.
-- `PrismaPersonalMemoryOperationUnitOfWork` — persistence-only serializable wrapper; it does not
-  admit authorization, workflow, or provider effects.
+  lifecycle CAS for the product command owner. Its scoped replay-key read returns validated immutable
+  evidence without claiming authority; admission reacquires every lock before deciding replay.
+- `PrismaPersonalMemoryOperationUnitOfWork` — serializable lifecycle wrapper. Admission stays in the
+  composite conversation transaction that also creates or selects the dataset, records authority,
+  and admits the workflow task.
+- `PrismaPersonalMemoryCommandContextRepository` — selects the exact personal dataset and its
+  target fact inside the caller's transaction. It returns domain states without exposing Prisma
+  enums. Creation requires prior collection Create authority and returns a Provisioning dataset
+  with no provider UUID; the caller must grant access and admit the command in the same transaction.
 - `__PersonalMemoryProviderDatasetName` — derives the opaque provider name from an immutable local
   dataset ID without storing a user or tenant coordinate in that name.
 
 The `operations/` module owns the reviewed lifecycle, persistence validator,
 transaction-scoped `PrismaPersonalMemoryOperationRepository`, and
 `PrismaPersonalMemoryOperationUnitOfWork`. The repository locks the local dataset, referenced facts
-in sorted ID order, and then the operation. Exact command replays return the first row; conflicting
-evidence fails. Accepted events use the shared lifecycle planner and a revision compare-and-set, and
-a lost compare-and-set returns the validated row that won.
+in sorted ID order, and then the operation. Exact command replays return the first row and its saved
+task without calling task admission. For a new command, the repository calls the transaction-bound
+task admission once after those locks, validates the returned UUID/name/key, and inserts that exact
+receipt. Conflicting command or task evidence fails. Accepted events use the shared lifecycle planner
+and a revision compare-and-set, and a lost compare-and-set returns the validated row that won.
 
 ## Boundary
 
@@ -88,12 +99,13 @@ UUID. The future dataset owner derives the provider name as
 `opencrane-memory-${sha256(dataset.id)}` through `__PersonalMemoryProviderDatasetName`; the name is
 not stored.
 
-The persistence UnitOfWork saves a reserved workflow task UUID with the operation, but it does not
-admit an Absurd task or prove current product authority. The future product command transaction must
-compose dataset creation, authorization audit, the transaction-scoped repository, and workflow
+The command supplies only the expected workflow task name and idempotency key. A new operation is
+inserted only after a callback bound to the same transaction returns the actual task receipt. The
+repository does not itself prove current product authority; the composite conversation owner must
+compose dataset creation, authorization audit, this transaction-scoped repository, and workflow
 admission. Bare catalog completion events fail closed until that transaction also proves the exact
-catalog mutation. Forget admission hides its exact Active or Corrected target as `ForgetPending` in the same
-database transaction; the database owns the fact revision increment.
+catalog mutation. Forget admission hides its exact Active or Corrected target as `ForgetPending` in
+the same database transaction; the database owns the fact revision increment.
 
 ## Dependency direction
 
@@ -105,8 +117,8 @@ Tagged `scope:personal-memory`, this backend package may depend only on its own 
 Owns `MemoryDataset`, `MemoryFactCatalog`, and `PersonalMemoryOperation` in `memory.prisma`.
 `MemoryDataset` distinguishes explicit `Provisioning` from `Active` and `Retired`, and its provider
 UUID is nullable only until the exact DatasetEnsured event adopts it. `MemoryFactCatalog.revision`
-fences target commands. The operation stores immutable replay, source, target, and reserved task
-evidence plus write-once provider receipts and current lifecycle recovery fields. No memory outbox,
+fences target commands. The operation stores immutable replay, source, target, and actual workflow
+receipt evidence plus write-once provider receipts and current lifecycle recovery fields. No memory outbox,
 queue, scheduler, route, provider call, or plaintext store is introduced.
 
 ## See also

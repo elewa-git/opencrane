@@ -4,7 +4,7 @@ import { MemoryMutationDeliveryStates } from "@opencrane/contracts";
 
 import { PersonalMemoryOperationKinds, PersonalMemoryOperationPhases, PersonalMemoryOperationFailureCodes, type PersonalMemoryOperationLifecycle } from "./personal-memory-operation.types";
 import { ___PersonalMemoryOperationLifecycleSchema } from "./personal-memory-operation.validator";
-import type { AdmitPersonalMemoryOperationCommand, PersonalMemoryOperationRecord } from "./personal-memory-operation-persistence.types";
+import type { AdmitPersonalMemoryOperationCommand, PersonalMemoryOperationRecord, PersonalMemoryOperationTaskCoordinates, PersonalMemoryOperationTaskIdentity } from "./personal-memory-operation-persistence.types";
 
 const _Identifier = z.string().trim().min(1).max(128);
 const _Uuid = z.string().uuid();
@@ -19,7 +19,14 @@ const _MessageSource = z.object({
 	ciphertextDigest: _Digest,
 	authorPrincipalId: _Identifier,
 }).strict();
-const _TaskIdentity = z.object({ taskId: _Uuid, taskName: _Identifier, taskKey: _Identifier }).strict();
+/** Validates the immutable task coordinates supplied before workflow admission. */
+export const ___PersonalMemoryOperationTaskCoordinatesSchema: z.ZodType<PersonalMemoryOperationTaskCoordinates> = z.object({ taskName: _Identifier, taskKey: _Identifier }).strict();
+
+/** Validates the actual workflow receipt before it can be saved with an operation. */
+export const ___PersonalMemoryOperationTaskIdentitySchema: z.ZodType<PersonalMemoryOperationTaskIdentity> = z.object({ taskId: _Uuid, taskName: _Identifier, taskKey: _Identifier }).strict();
+
+/** Validates the silo-scoped replay lookup performed before composite admission. */
+export const ___PersonalMemoryOperationReplayLookupSchema = z.object({ siloId: _Identifier, idempotencyKeyDigest: _Digest }).strict();
 
 /** Validates secret-free admission evidence before any lock or database write occurs. */
 export const ___AdmitPersonalMemoryOperationCommandSchema: z.ZodType<AdmitPersonalMemoryOperationCommand> = z.object({
@@ -36,7 +43,7 @@ export const ___AdmitPersonalMemoryOperationCommandSchema: z.ZodType<AdmitPerson
 	targetDocumentId: _Uuid.nullable(),
 	expectedFactRevision: _Revision.nullable(),
 	providerDatasetId: _Uuid.nullable(),
-	task: _TaskIdentity,
+	task: ___PersonalMemoryOperationTaskCoordinatesSchema,
 	admittedAt: _Timestamp,
 }).strict().superRefine(function _CommandShape(command, context)
 {
@@ -81,7 +88,7 @@ export const ___PersonalMemoryOperationRecordSchema: z.ZodType<PersonalMemoryOpe
 	source: _MessageSource.nullable(),
 	expectedFactRevision: _Revision.nullable(),
 	admittedProviderDatasetId: _Uuid.nullable(),
-	task: _TaskIdentity,
+	task: ___PersonalMemoryOperationTaskIdentitySchema,
 	admittedAt: _Timestamp,
 	recoveryRecordedAt: _Timestamp.nullable(),
 	completedAt: _Timestamp.nullable(),

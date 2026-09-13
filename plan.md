@@ -1,5 +1,44 @@
 # OpenCrane — Active Plan
 
+## Personal memory command preparation and atomic task admission
+
+This slice starts directly above draft #876 at
+`7c1bd4c5df998dc95fd3b145a77de20a02c6c2c0` on
+`feat/0.12-personal-memory-command-admission`. The existing conversations package owns exact human
+message selection and command composition; the personal-memory package retains lifecycle and
+persistence policy. The workflow input contains only the silo and operation identifiers.
+
+Source preparation now accepts strict Remember, Correct and Forget commands. It reads one selected,
+completed human message through current conversation access, limits the source to one non-empty
+64-KiB text block, and retains only encrypted coordinates and digests for SQL. Transaction-bound
+revalidation checks current access and the selected payload without rejecting unrelated later
+conversation entries. Dataset and target lookups stay in the personal-memory package.
+
+New operation admission takes the dataset and fact locks, resolves exact command replay, and calls
+the existing workflow engine only when inserting new work. Absurd chooses the task ID; the returned
+receipt and operation commit together. The former standalone reservation-only admission method is
+removed. Four real PostgreSQL/Absurd tests prove concurrent admission, replay with a new engine and
+database client, invalid-receipt rollback, and rollback after operation insertion. They start no
+worker and do not prove authenticated product command admission or provider execution.
+
+The complete authenticated command transaction and worker remain unfinished. First-dataset
+creation needs the proposed self-only MemoryScopeCollection Create grant; automatic approval
+review rejected that permission expansion and its explicit source approval is pending. No grant,
+route or production task registration is added by this preparation slice. Existing-dataset paths
+must not substitute for the missing authorization design.
+
+The gateway audit also identifies the next protocol bridge: document-list evidence and Cognify must
+carry the provider-created input digest and exact saved indexing-operation receipt. The current
+dataset-only gateway response cannot prove indexing completion. The client replacement remains a
+separate pending approval; admission work does not activate it or add another memory transport.
+
+Local validation passes 591 conversation tests, 45 personal-memory tests, 114 server tests, all three
+package lint/type checks, seven personal-memory SQL cases and the server SQL target including the
+four actual Absurd cases. The SQL fixture and test processes use UTC. Server build/OpenAPI,
+style, Prisma ownership, module growth, workload/domain guards and their negative tests, release
+binding and live stack preflight pass. Architecture preflight/post-review and the independent
+33-file review pass with no findings. Exact-head CI and live qualification remain separate gates.
+
 ## Durable personal memory operations — persistence and integration proof
 
 The operation repository now saves Remember, Correct and Forget command coordinates, encrypted
@@ -21,7 +60,9 @@ disposable database and test process use UTC, matching CI: local timezone offset
 the existing timestamp-without-time-zone authority fixtures. No fixture or authority check was
 weakened. Style, Prisma and ownership boundaries, module growth, release binding and fresh-baseline
 regeneration pass. Architecture preflight/post-review and independent review of the complete source
-overlay pass with no unresolved findings. Exact-head CI and live qualification remain separate.
+overlay pass with no unresolved findings. Draft #876's exact-head CI at
+`7c1bd4c5df998dc95fd3b145a77de20a02c6c2c0` passes in run `34725808689`, including database,
+KurrentDB, API generation and component checks. Live qualification remains separate.
 
 This is persistence infrastructure. The complete authenticated command transaction must still
 compose current authority, dataset/catalog mutations and typed Absurd task admission. Reserved task
@@ -593,7 +634,7 @@ remain separate gates.
 | --- | --- | --- | --- |
 | 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection and participant terminal-result history are implemented. Explicit connection readiness and execution fencing pass source review and local database proof. Standard remote activation/discovery/calls, hosted MCP execution and real integration qualification remain. |
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry, durable resume and visible decision controls are implemented in draft #857. Company approver/connection binding and real action qualification remain. |
-| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: the repaired 1.5.4 candidate passes exact-image deletion, isolation and restart qualification. Interrupted dataset permission recovery is the next candidate repair. Gateway contracts/authentication are published in #873; product Remember, recall, correction and Forget remain unfinished. |
+| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: the repaired 1.5.4 candidate passes exact-image deletion, isolation, dataset permission and indexing recovery qualification. Durable operation persistence is published in #876 with passing CI. Command/source preparation and actual Absurd admission are locally tested; authenticated composition, gateway/client wiring and product Remember, recall, Correct and Forget remain unfinished. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass independent review and exact-head CI in draft #862; qualify the live journey. Other-participant controls remain a separate actor-policy decision. |
 | 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | PAUSED: runtime-question source work awaits its separate explicit approval; partial implementation is not validated delivery. Structured results and A2UI remain. |
 | 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file Open/Preview/Download is implemented and exact-head CI passes in #868. PDF-informed answers are source complete in #869 and exact-head CI passes, including real-store recovery and Linux visuals; live qualification remains. Generated file production follows. |
@@ -908,7 +949,7 @@ their own completion track; they are not silently bundled into the first tool PR
 | T1 — first permitted tool retrieval | IN PROGRESS — the server's one-tool continuation is implemented and now progresses through Absurd in #849. Company tool assignment is the first active follow-up. Connection activation, a real integration and participant result evidence remain required. |
 | T2 | IN PROGRESS: personal approval and durable resume pass local integration; company approval and real external-action qualification remain. |
 | U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
-| M1 | IN PROGRESS: the candidate in #875 passes exact-image deletion, isolation, permission recovery and interrupted-indexing qualification. Durable Remember/Correct/Forget persistence passes local database proof. Authenticated commands, Absurd admission, gateway/client integration and product memory journeys remain. The separate production-provider qualification still fails. |
+| M1 | IN PROGRESS: the candidate in #875 passes exact-image deletion, isolation, permission recovery and interrupted-indexing qualification. Durable Remember/Correct/Forget persistence is published in #876 with passing CI. Command/source preparation and transaction-bound Absurd admission pass local proof. Authenticated composition, gateway/client integration and product memory journeys remain. The separate production-provider qualification still fails. |
 | U2 | PAUSED: partial runtime-question source awaits its separate explicit approval. |
 | F1 | IN PROGRESS: Ready-file Open/Preview/Download and PDF-informed answers pass exact-head CI in #868 and #869. Generated outputs and live qualification remain. |
 | D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |
