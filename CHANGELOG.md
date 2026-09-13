@@ -67,7 +67,9 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 - **Operators can evaluate a proposed Cognee replacement independently of the deployed image.** The
   separate 1.5.4 qualification uses fresh disposable storage and retains evidence for image identity,
-  isolation, recovery and deletion. Dataset checks retain the saved name, owner and identifier across
+  isolation, recovery and deletion. Concurrent add/delete qualification now checks that both
+  datasets use the same owner-scoped storage lock; the candidate's public cleanup also takes that
+  lock before opening a database session. Dataset checks retain the saved name, owner and identifier across
   concurrent creation, a lost creation response and provider restart. Indexing recovery checks that a
   lost response returns the exact saved operation receipt, including after restart, while unfinished
   work refuses repeat dispatch. The receipt binds the document content and processing inputs saved

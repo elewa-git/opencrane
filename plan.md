@@ -1,5 +1,29 @@
 # OpenCrane — Active Plan
 
+## Memory candidate shared-file coordination — source repair under review
+
+This M1 repair starts above draft #880 at `949ab198db37b7dceb7325857cc00f8daf26076f` on
+`feat/0.12-memory-candidate-shared-file-lock`. The production memory provider remains unqualified.
+The 1.5.4 replacement candidate passed run `34740821230`, but a prior identical candidate run
+returned HTTP 500 for a missing shared source file. Offline diagnosis found a concrete mismatch:
+the delete-first fixture locked the global storage root while an authenticated server add locked
+its owner's root. Its timing check did not establish that the add was waiting on that lock.
+
+The repair now resolves both dataset contexts through the provider's owner-scoped storage root.
+A distinct task must time out when it tries to take the target dataset's lock while the source
+dataset's lock is held. The public cleanup wrapper takes that same existing reentrant lock before
+opening its database session. All earlier shared-file, source-byte, deletion, isolation and restart
+assertions remain. Patch and resulting-source attestations are updated together in the candidate
+profile, expected hashes, Dockerfile and image-smoke fixtures. The production image, base-image
+digests, source preimage, gateway, permissions and existing databases remain unchanged.
+
+Architecture preflight passes. The frozen implementation passes 72 offline Cognee tests and lint;
+architecture post-review and independent source review pass with no findings. Style and module-growth
+checks contain no production TypeScript/Python files because the runtime change is an attested
+candidate patch; reviewers must inspect that patch and its resulting source explicitly. Release
+binding remains coherent. Exact-image qualification must run in disposable CI after publication;
+local tests do not qualify the provider or the complete personal-memory journey.
+
 ## MCP tool names across model selection and runtime execution — implementation
 
 This T1 slice starts directly above draft #879 at `774940fb7479e0529c738a265f8de7d2cfa82809`
@@ -23,7 +47,15 @@ Server build, full dependency lint, style, Prisma ownership, module growth, rele
 prerequisite check passes; its complete case is skipped without Kurrent and must execute in CI.
 The integration now follows the real compiler, model transport, saved selection/custody, IAM
 admission and companion claim, then recovers with fresh clients without repeating the model call,
-invocation or runtime execution. This source checkpoint still needs its incremental draft PR and CI.
+invocation or runtime execution. Draft [#880](https://github.com/elewa-git/opencrane/pull/880) publishes the source at
+`949ab198db37b7dceb7325857cc00f8daf26076f`, directly above #879. Exact-head CI run
+`34742576506` passes source checks, database authority, KurrentDB recovery, generated API,
+Storybook and selected image smoke/publication jobs. Its actual PostgreSQL/Kurrent log proves one
+MCP model-name integration case and four generated-file recovery cases executed and passed; no
+real case was skipped. Each suite's inverse services-unset sentinel was skipped as expected.
+Memory-provider qualification and live k3d checks were unaffected and skipped. Replacement
+topology run `34742697410` and the live post-push stack check pass. This does not qualify remote
+or hosted MCP operation on testv5.
 
 The parent CSV correction's exact-head CI run `34740821230` passes its combined PostgreSQL/Kurrent
 generated-file recovery step, source checks, database authority, API, Storybook and image smokes.
@@ -826,10 +858,10 @@ remain separate gates.
 | --- | --- | --- | --- |
 | 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection and participant terminal-result history are implemented. Explicit connection readiness and execution fencing pass source review and local database proof. Standard remote activation/discovery/calls, hosted MCP execution and real integration qualification remain. |
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry, durable resume and visible decision controls are implemented in draft #857. Company approver/connection binding and real action qualification remain. |
-| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: the 1.5.4 candidate previously passed its complete contract, but the latest shared-file add returns HTTP 500 and repeatable provider qualification remains blocked. Durable operation persistence is published in #876 with passing CI. Command/source preparation and actual Absurd admission are published in #877 with passing CI; catalog completion is published in #878 with passing CI; authenticated composition, gateway/client wiring and product Remember, recall, Correct and Forget remain unfinished. |
+| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: durable persistence, Absurd admission and catalog completion pass CI in #876–#878. The candidate shared-file coordination repair passes 72 offline tests, architecture post-review and independent review; fresh image qualification remains. The production provider is still unqualified. Authenticated composition, gateway/client wiring and product Remember, recall, Correct and Forget remain unfinished. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass independent review and exact-head CI in draft #862; qualify the live journey. Other-participant controls remain a separate actor-policy decision. |
 | 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | PAUSED: runtime-question source work awaits its separate explicit approval; partial implementation is not validated delivery. Structured results and A2UI remain. |
-| 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file Open/Preview/Download is implemented and exact-head CI passes in #868. PDF-informed answers are source complete in #869 and exact-head CI passes, including real-store recovery and Linux visuals; live qualification remains. Generated file production follows. |
+| 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV production, encrypted capture, scanning and answer-link recovery are implemented in #879; all four combined recovery cases pass again in #880. The pending message-link SQL guard and governed hosted execution through authorized download remain to qualify. |
 | 7 | D1 — autonomous delegation | A bounded child works with explicit context and narrower authority, then returns one durable result. | Follow [#845](https://github.com/elewa-git/opencrane/issues/845): root budgets, depth/fan-out, cancellation and result brokering. |
 | 8 | S1 — scheduled work | A reviewed routine fires under current authority with explicit overlap, retry and missed-run policy. | Follow [#848](https://github.com/elewa-git/opencrane/issues/848) through Absurd and existing admission. |
 | 9 | A2 — complete administration | Operators configure agents, connections, models, permissions and budgets, and inspect effective access and actual usage. | Complete protected settings over the owners established by the earlier tracks. |
@@ -1148,9 +1180,9 @@ their own completion track; they are not silently bundled into the first tool PR
 | T1 — first permitted tool retrieval | IN PROGRESS — the server's one-tool continuation is implemented and now progresses through Absurd in #849. Company tool assignment is the first active follow-up. Connection activation, a real integration and participant result evidence remain required. |
 | T2 | IN PROGRESS: personal approval and durable resume pass local integration; company approval and real external-action qualification remain. |
 | U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
-| M1 | IN PROGRESS: the candidate in #875 previously passed exact-image recovery qualification, but the latest shared-file add fails with HTTP 500; provider qualification remains open. Durable Remember/Correct/Forget persistence is published in #876 with passing CI. Command/source preparation and transaction-bound Absurd admission are published in #877 with passing CI; catalog completion is published in #878 with passing CI. Authenticated composition, gateway/client integration and product memory journeys remain. The separate production-provider qualification still fails. |
+| M1 | IN PROGRESS: persistence, transaction-bound Absurd admission and catalog completion pass CI in #876–#878. The candidate shared-file coordination repair passes offline tests, architecture post-review and independent review; fresh exact-image qualification remains. Authenticated composition, gateway/client integration and product memory journeys remain. The separate production-provider qualification still fails. |
 | U2 | PAUSED: partial runtime-question source awaits its separate explicit approval. |
-| F1 | IN PROGRESS: Ready-file Open/Preview/Download and PDF-informed answers pass exact-head CI in #868 and #869. Generated outputs and live qualification remain. |
+| F1 | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV capture, scanning and answer-link recovery are implemented in #879 and pass four real-store cases in #880. The pending SQL guard and complete hosted execution/download qualification remain. |
 | D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |
 | Q1 — operational acceptance | CONTINUOUS — source checks and CI do not replace fresh-install or real-account acceptance. |
 

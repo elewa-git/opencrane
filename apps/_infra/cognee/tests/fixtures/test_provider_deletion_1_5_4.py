@@ -83,6 +83,51 @@ class _CommittedDeleteAdapter:
 
 
 class ProviderDeletion154Test(unittest.TestCase):
+    def test_shared_storage_identity_accepts_canonical_match_and_rejects_mismatch(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shared = root / "shared"
+            shared.mkdir()
+            identity = MODULE._require_shared_storage_identity(
+                str(shared), str(shared / ".." / "shared")
+            )
+
+            self.assertEqual(
+                identity,
+                MODULE.hashlib.sha256(str(shared.resolve()).encode("utf-8")).hexdigest(),
+            )
+            with self.assertRaisesRegex(AssertionError, "one shared storage root"):
+                MODULE._require_shared_storage_identity(
+                    str(shared), str(root / "different")
+                )
+
+    def test_delete_first_probe_uses_a_target_context_lock_contender(self) -> None:
+        source = MODULE_PATH.read_text(encoding="utf-8")
+
+        self.assertNotIn("await asyncio.sleep(0.1)", source)
+        self.assertNotIn("add_task.done()", source)
+        self.assertIn("async def contend_from_target_context()", source)
+        self.assertIn("await asyncio.create_task(contend_from_target_context())", source)
+
+    def test_candidate_patch_locks_public_cleanup_before_its_session(self) -> None:
+        patch_source = (
+            MODULE_PATH.parents[2]
+            / "candidates/1.5.4/patches/sqlalchemy-delete-recovery.patch"
+        ).read_text(encoding="utf-8")
+        public_wrapper = patch_source.split(
+            "     async def remove_data_file_if_unreferenced", 1
+        )[1].split("+    async def _remove_data_file_if_unreferenced", 1)[0]
+
+        self.assertIn(
+            "+        async with managed_data_file_lock(), self.get_async_session() as session:",
+            public_wrapper,
+        )
+        self.assertNotIn(
+            "+        async with self.get_async_session() as session:", public_wrapper
+        )
+
     def test_path_probe_inherits_the_provider_cleanup_helper_chain(self) -> None:
         calls = []
 

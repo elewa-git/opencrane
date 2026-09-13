@@ -149,8 +149,10 @@ changing chart defaults and enabling personal memory are later reviewed changes.
 The 1.5.4 candidate includes an explicit deletion repair under `tests/candidates/1.5.4/patches/`.
 It retains the document record until unreferenced local files have been removed, so a failed cleanup
 can resume through the same public document coordinate. Ingestion and deletion share a provider-owned
-file lock to protect shared references. Qualification covers fresh installations on Linux with local
-file storage, the default SQLite store and one shared local volume; it makes no claim for remote
+file lock to protect shared references. Qualification compares the owner-resolved storage identity
+for both datasets and exercises the public cleanup wrapper under that lock. It covers fresh
+installations on Linux with local file storage, the default SQLite store and one shared local volume;
+it makes no claim for remote
 storage or independent stores sharing files. The build and runtime evidence retain the official source
 hashes and separately verify each patch, its base image and its resulting source. Interrupted cleanup, restart and concurrent
 add/delete checks must pass before this candidate can replace the production image.

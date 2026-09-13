@@ -84,7 +84,7 @@
          shared by design — two rows with identical payloads point at one object
          — so the reference count spans both location columns of every dataset.
          """
-+        async with self.get_async_session() as session:
++        async with managed_data_file_lock(), self.get_async_session() as session:
 +            await self._remove_data_file_if_unreferenced(session, file_location)
 +
 +    async def _remove_data_file_if_unreferenced(

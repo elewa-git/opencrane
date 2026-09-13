@@ -71,8 +71,8 @@
     "cognee.infrastructure.databases.relational.sqlalchemy.SqlAlchemyAdapter": {
       "baseImageDigest": "sha256:a52b0c2669e28932b53d677a6adf6d6487b03886732a5db07b58f3b869647b10",
       "preimageSha256": "d64bd2d7214a0c69c8aa40268a0c2536d46cc54bade51b643341f82cb2f078e9",
-      "patchSha256": "08d46750e34abdc9a0cd76d37318fa886b027ef50bb792b0f25f27f526574b50",
-      "postimageSha256": "3d7f8fdc029226ba33919838a522b0325e616d3c3c7820fde828f90c68c8daaf",
+      "patchSha256": "245054c9c81a1dafad5b3250a5b7534b3f25cf47fb4ae4d01452e30e96fa3436",
+      "postimageSha256": "2310b46b7ab6f5479fc4c4a27c35feaaffd6afdc989213645792b7c86eebb77a",
       "patchPath": "/opt/opencrane/cognee-repair/sqlalchemy-delete-recovery.patch",
       "receiptPath": "/opt/opencrane/cognee-repair/sqlalchemy-delete-recovery.json"
     },

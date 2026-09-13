@@ -7,8 +7,8 @@ LABEL org.opencontainers.image.source="https://github.com/topoteretes/cognee" \
   ai.opencrane.cognee.source-commit="20e0bd88746de2d96e99b4b122361dfc3dad21bc" \
   ai.opencrane.cognee.base-index-digest="sha256:68b755bebae2a19f482069b5efcbe8e4bdf717a68f6afb6fef80c3c352c37015" \
   ai.opencrane.cognee.base-linux-amd64-digest="sha256:a52b0c2669e28932b53d677a6adf6d6487b03886732a5db07b58f3b869647b10" \
-  ai.opencrane.cognee.repair-patch-sha256="08d46750e34abdc9a0cd76d37318fa886b027ef50bb792b0f25f27f526574b50" \
-  ai.opencrane.cognee.repair-postimage-sha256="3d7f8fdc029226ba33919838a522b0325e616d3c3c7820fde828f90c68c8daaf" \
+  ai.opencrane.cognee.repair-patch-sha256="245054c9c81a1dafad5b3250a5b7534b3f25cf47fb4ae4d01452e30e96fa3436" \
+  ai.opencrane.cognee.repair-postimage-sha256="2310b46b7ab6f5479fc4c4a27c35feaaffd6afdc989213645792b7c86eebb77a" \
   ai.opencrane.ladybug-json.sha256="39c51fa9b1915590a500eef732c76913aeb10cd942e46e1c259497e609b97426"
 
 # Installing the source repair and its evidence needs build-time write access to the image.
@@ -30,8 +30,8 @@ RUN package_root="$(python -c 'import cognee, pathlib; print(pathlib.Path(cognee
     --module cognee.infrastructure.databases.relational.sqlalchemy.SqlAlchemyAdapter \
     --base-image-digest sha256:a52b0c2669e28932b53d677a6adf6d6487b03886732a5db07b58f3b869647b10 \
     --preimage-sha256 d64bd2d7214a0c69c8aa40268a0c2536d46cc54bade51b643341f82cb2f078e9 \
-    --patch-sha256 08d46750e34abdc9a0cd76d37318fa886b027ef50bb792b0f25f27f526574b50 \
-    --postimage-sha256 3d7f8fdc029226ba33919838a522b0325e616d3c3c7820fde828f90c68c8daaf && \
+    --patch-sha256 245054c9c81a1dafad5b3250a5b7534b3f25cf47fb4ae4d01452e30e96fa3436 \
+    --postimage-sha256 2310b46b7ab6f5479fc4c4a27c35feaaffd6afdc989213645792b7c86eebb77a && \
   python /tmp/apply-cognee-source-patch.py \
     --source "$package_root/infrastructure/locks/__init__.py" \
     --patch /opt/opencrane/cognee-repair/locks-export.patch \

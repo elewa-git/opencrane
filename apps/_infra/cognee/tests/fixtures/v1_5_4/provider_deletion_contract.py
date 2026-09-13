@@ -70,6 +70,30 @@ def _require_owned_path(path: Path, root: Path, *, must_exist: bool = True) -> P
     return resolved_path
 
 
+def _require_shared_storage_identity(source_root: str, target_root: str) -> str:
+    """Return a content-free identity only when both contexts resolve one storage root."""
+
+    resolved_source = Path(source_root).expanduser().resolve()
+    resolved_target = Path(target_root).expanduser().resolve()
+    if resolved_source != resolved_target:
+        raise AssertionError("Dataset contexts did not resolve one shared storage root")
+    return hashlib.sha256(str(resolved_source).encode("utf-8")).hexdigest()
+
+
+async def _dataset_storage_root(dataset_id: str) -> str:
+    """Read Cognee's owner-resolved storage root inside the dataset context."""
+
+    from cognee.context_global_variables import set_database_global_context_variables
+    from cognee.infrastructure.files.storage import get_storage_config
+
+    async with set_database_global_context_variables(uuid.UUID(dataset_id)):
+        return str(
+            Path(get_storage_config()["data_root_directory"])
+            .expanduser()
+            .resolve()
+        )
+
+
 async def _path_safety_probes() -> dict[str, Any]:
     """Invoke the installed cleanup helper with only its count query stubbed."""
 
@@ -369,6 +393,7 @@ async def _shared_location_concurrency_probes(
 ) -> dict[str, Any]:
     """Prove shared files survive either serialized add/delete order."""
 
+    from cognee.context_global_variables import set_database_global_context_variables
     from cognee.infrastructure.databases.relational import get_relational_engine
     from cognee.infrastructure.locks import managed_data_file_lock
 
@@ -411,21 +436,44 @@ async def _shared_location_concurrency_probes(
             f"opencrane-delete-first-target-{namespace}-{uuid.uuid4().hex}",
         ))["id"]
     )
-    async with managed_data_file_lock(timeout_seconds=1):
-        add_task = asyncio.create_task(
-            asyncio.to_thread(
-                api.add,
-                delete_first_target,
-                "shared.txt",
-                delete_first_marker,
+    storage_identity = _require_shared_storage_identity(
+        await _dataset_storage_root(delete_first_source[0]),
+        await _dataset_storage_root(delete_first_target),
+    )
+    target_context_timed_out = False
+    async with set_database_global_context_variables(
+        uuid.UUID(delete_first_source[0])
+    ):
+        async with managed_data_file_lock(timeout_seconds=1):
+            async def contend_from_target_context() -> None:
+                async with set_database_global_context_variables(
+                    uuid.UUID(delete_first_target)
+                ):
+                    async with managed_data_file_lock(timeout_seconds=0.1):
+                        raise AssertionError(
+                            "Target dataset context bypassed the source-context lock"
+                        )
+
+            try:
+                await asyncio.create_task(contend_from_target_context())
+            except TimeoutError:
+                target_context_timed_out = True
+            if not target_context_timed_out:
+                raise AssertionError(
+                    "Source and target dataset contexts did not contend on one lock"
+                )
+            add_task = asyncio.create_task(
+                asyncio.to_thread(
+                    api.add,
+                    delete_first_target,
+                    "shared.txt",
+                    delete_first_marker,
+                )
             )
-        )
-        await asyncio.sleep(0.1)
-        if add_task.done():
-            raise AssertionError("Add pipeline bypassed the managed-file lock")
-        await get_relational_engine().delete_data_entity(
-            uuid.UUID(delete_first_source[1]), uuid.UUID(delete_first_source[0])
-        )
+            await get_relational_engine().delete_data_entity(
+                uuid.UUID(delete_first_source[1]),
+                uuid.UUID(delete_first_source[0]),
+            )
     await add_task
     await _require_document_absent(api, delete_first_source[0], delete_first_source[1])
     delete_first_target_id = await asyncio.to_thread(
@@ -475,7 +523,10 @@ async def _shared_location_concurrency_probes(
     return {
         "contentSha256": hashlib.sha256(marker).hexdigest(),
         "deleteDeleteSerialized": True,
-        "deleteFirstAddBlocked": True,
+        "deleteFirstSerialized": True,
+        "ownerStorageIdentityMatched": True,
+        "ownerStorageIdentitySha256": storage_identity,
+        "targetContextContenderTimedOut": target_context_timed_out,
         "deleteFirstCommittedSource": True,
         "addFirstRetainedSharedSource": True,
         "sharedFileRemovedAfterLastDelete": True,
