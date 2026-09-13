@@ -8,6 +8,8 @@ import { ___MemoryGatewayDatasetCognifyRequestSchema, ___MemoryGatewayDatasetCog
 const _IDS = {
 	dataset: "926bde93-cf68-4d4f-8bf5-a6e177730767",
 	document: "0f95e716-a573-465c-95e2-4cb763bfb4c2",
+	operation: "9b5ca72c-eab9-48cd-9d24-da3c6e970b5a",
+	pipeline: "17a46d0a-8704-403a-b84e-1887ea3b842c",
 	chunk: "0bbf22d8-8b88-40d8-a9ea-d162748fbf52",
 	secondDocument: "a9ea54f3-c174-44ed-b656-b1ed13308585",
 	secondChunk: "1a44c7c2-2797-4526-b0a3-806f6ce47a5d",
@@ -19,10 +21,10 @@ const _DATASET_NAME = "a".repeat(MEMORY_GATEWAY_LIMITS.DatasetNameMinimumCharact
 /** SHA-256 value accepted by digest fields. */
 const _DIGEST = `sha256:${"a".repeat(64)}`;
 
-/** Return a valid document metadata projection. */
-function _Document(documentId: string = _IDS.document): { readonly documentId: string; readonly name: string; readonly mimeType: string }
+/** Return valid content-free evidence for one document. */
+function _Document(documentId: string = _IDS.document): { readonly documentId: string; readonly name: string; readonly mimeType: string; readonly contentDigest: string; readonly byteLength: number }
 {
-	return { documentId, name: "fact-a.txt", mimeType: "text/plain" };
+	return { documentId, name: "fact-a.txt", mimeType: "text/plain", contentDigest: _DIGEST, byteLength: 4 };
 }
 
 /** Return one valid ranked fact. */
@@ -74,11 +76,13 @@ describe("memory gateway document contracts", function _DescribeDocuments()
 		expect(___MemoryGatewayDocumentAddRequestSchema.parse({ datasetId: _IDS.dataset, content: "fact", contentDigest: _DIGEST })).toEqual({ datasetId: _IDS.dataset, content: "fact", contentDigest: _DIGEST });
 		expect(___MemoryGatewayDocumentAddResponseSchema.parse({ datasetId: _IDS.dataset, documentId: _IDS.document, contentDigest: _DIGEST })).toEqual({ datasetId: _IDS.dataset, documentId: _IDS.document, contentDigest: _DIGEST });
 		expect(___MemoryGatewayDocumentListRequestSchema.parse({ datasetId: _IDS.dataset })).toEqual({ datasetId: _IDS.dataset });
-		expect(___MemoryGatewayDocumentListResponseSchema.parse({ datasetId: _IDS.dataset, documents: [_Document()] })).toEqual({ datasetId: _IDS.dataset, documents: [_Document()] });
+		expect(___MemoryGatewayDocumentListResponseSchema.parse({ datasetId: _IDS.dataset, inputEvidenceDigest: _DIGEST, documents: [_Document()] })).toEqual({ datasetId: _IDS.dataset, inputEvidenceDigest: _DIGEST, documents: [_Document()] });
 		expect(___MemoryGatewayDocumentRawDigestRequestSchema.parse({ datasetId: _IDS.dataset, documentId: _IDS.document })).toEqual({ datasetId: _IDS.dataset, documentId: _IDS.document });
 		expect(___MemoryGatewayDocumentRawDigestResponseSchema.parse({ datasetId: _IDS.dataset, documentId: _IDS.document, contentDigest: _DIGEST, byteLength: 4 })).toEqual({ datasetId: _IDS.dataset, documentId: _IDS.document, contentDigest: _DIGEST, byteLength: 4 });
-		expect(___MemoryGatewayDatasetCognifyRequestSchema.parse({ datasetId: _IDS.dataset })).toEqual({ datasetId: _IDS.dataset });
-		expect(___MemoryGatewayDatasetCognifyResponseSchema.parse({ datasetId: _IDS.dataset })).toEqual({ datasetId: _IDS.dataset });
+		const cognifyRequest = { datasetId: _IDS.dataset, operationId: _IDS.operation, expectedInputEvidenceDigest: _DIGEST };
+		const cognifyResponse = { datasetId: _IDS.dataset, operationId: _IDS.operation, inputEvidenceDigest: _DIGEST, pipelineRunId: _IDS.pipeline };
+		expect(___MemoryGatewayDatasetCognifyRequestSchema.parse(cognifyRequest)).toEqual(cognifyRequest);
+		expect(___MemoryGatewayDatasetCognifyResponseSchema.parse(cognifyResponse)).toEqual(cognifyResponse);
 		expect(___MemoryGatewayDocumentDeleteRequestSchema.parse({ datasetId: _IDS.dataset, documentId: _IDS.document })).toEqual({ datasetId: _IDS.dataset, documentId: _IDS.document });
 	});
 
@@ -92,13 +96,26 @@ describe("memory gateway document contracts", function _DescribeDocuments()
 
 	it("rejects duplicate documents, oversized lists, paths, storage fields, and raw content", function _RejectUnsafeDocumentShapes()
 	{
-		const duplicates = { datasetId: _IDS.dataset, documents: [_Document(), _Document()] };
-		const oversized = { datasetId: _IDS.dataset, documents: Array.from({ length: MEMORY_GATEWAY_LIMITS.DocumentResultsMaximum + 1 }, function _MakeDocument(_value, index) { return _Document(`${String(index).padStart(8, "0")}-0000-4000-8000-000000000000`); }) };
+		const duplicates = { datasetId: _IDS.dataset, inputEvidenceDigest: _DIGEST, documents: [_Document(), _Document()] };
+		const caseVariantDuplicates = { datasetId: _IDS.dataset, inputEvidenceDigest: _DIGEST, documents: [_Document(), _Document(_IDS.document.toUpperCase())] };
+		const oversized = { datasetId: _IDS.dataset, inputEvidenceDigest: _DIGEST, documents: Array.from({ length: MEMORY_GATEWAY_LIMITS.DocumentResultsMaximum + 1 }, function _MakeDocument(_value, index) { return _Document(`${String(index).padStart(8, "0")}-0000-4000-8000-000000000000`); }) };
 		expect(___MemoryGatewayDocumentListResponseSchema.safeParse(duplicates).success).toBe(false);
+		expect(___MemoryGatewayDocumentListResponseSchema.safeParse(caseVariantDuplicates).success).toBe(false);
 		expect(___MemoryGatewayDocumentListResponseSchema.safeParse(oversized).success).toBe(false);
-		expect(___MemoryGatewayDocumentListResponseSchema.safeParse({ datasetId: _IDS.dataset, documents: [{ ..._Document(), name: "../fact.txt" }] }).success).toBe(false);
-		expect(___MemoryGatewayDocumentListResponseSchema.safeParse({ datasetId: _IDS.dataset, documents: [{ ..._Document(), rawDataLocation: "file:///secret" }] }).success).toBe(false);
+		expect(___MemoryGatewayDocumentListResponseSchema.safeParse({ datasetId: _IDS.dataset, inputEvidenceDigest: _DIGEST, documents: [{ ..._Document(), name: "../fact.txt" }] }).success).toBe(false);
+		expect(___MemoryGatewayDocumentListResponseSchema.safeParse({ datasetId: _IDS.dataset, inputEvidenceDigest: _DIGEST, documents: [{ ..._Document(), rawDataLocation: "file:///secret" }] }).success).toBe(false);
+		expect(___MemoryGatewayDocumentListResponseSchema.safeParse({ datasetId: _IDS.dataset, inputEvidenceDigest: _DIGEST, documents: [{ ..._Document(), content: "fact" }] }).success).toBe(false);
 		expect(___MemoryGatewayDocumentRawDigestResponseSchema.safeParse({ datasetId: _IDS.dataset, documentId: _IDS.document, contentDigest: _DIGEST, byteLength: 4, content: "fact" }).success).toBe(false);
+	});
+
+	it("rejects incomplete or altered Cognify recovery coordinates", function _RejectCognifyReceipts()
+	{
+		const request = { datasetId: _IDS.dataset, operationId: _IDS.operation, expectedInputEvidenceDigest: _DIGEST };
+		const response = { datasetId: _IDS.dataset, operationId: _IDS.operation, inputEvidenceDigest: _DIGEST, pipelineRunId: _IDS.pipeline };
+		expect(___MemoryGatewayDatasetCognifyRequestSchema.safeParse({ datasetId: _IDS.dataset }).success).toBe(false);
+		expect(___MemoryGatewayDatasetCognifyRequestSchema.safeParse({ ...request, operationId: "operation" }).success).toBe(false);
+		expect(___MemoryGatewayDatasetCognifyResponseSchema.safeParse({ ...response, inputEvidenceDigest: "sha256:changed" }).success).toBe(false);
+		expect(___MemoryGatewayDatasetCognifyResponseSchema.safeParse({ ...response, status: "PipelineRunStarted" }).success).toBe(false);
 	});
 
 	it("rejects provider aliases, malformed digests, and invalid coordinates", function _RejectDocumentAliases()

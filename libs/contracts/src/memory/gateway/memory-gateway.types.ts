@@ -84,7 +84,7 @@ export interface MemoryGatewayDatasetListResponse
 	readonly datasets: readonly MemoryGatewayDataset[];
 }
 
-/** Safe metadata for one document listed inside an admitted dataset. */
+/** Content-free evidence for one document in a locked provider input snapshot. */
 export interface MemoryGatewayDocument
 {
 	/** Provider Data UUID used with its containing dataset for raw reads and deletion. */
@@ -93,6 +93,10 @@ export interface MemoryGatewayDocument
 	readonly name: string;
 	/** Media type reported for this document. */
 	readonly mimeType: string;
+	/** SHA-256 digest calculated from the complete raw document bytes under the provider lock. */
+	readonly contentDigest: string;
+	/** Number of raw bytes covered by the content digest. */
+	readonly byteLength: number;
 }
 
 /** Request to add one bounded text document to an exact dataset. */
@@ -124,12 +128,14 @@ export interface MemoryGatewayDocumentListRequest
 	readonly datasetId: string;
 }
 
-/** Bounded document metadata for one exact dataset. */
+/** Content-free snapshot of the documents that a later Cognify request may process. */
 export interface MemoryGatewayDocumentListResponse
 {
 	/** Dataset UUID whose membership was read. */
 	readonly datasetId: string;
-	/** Documents with unique identities; content and storage locations never appear here. */
+	/** Digest that binds the provider's locked document snapshot. */
+	readonly inputEvidenceDigest: string;
+	/** Documents with unique identities and complete-byte evidence; content and storage paths stay private. */
 	readonly documents: readonly MemoryGatewayDocument[];
 }
 
@@ -160,13 +166,23 @@ export interface MemoryGatewayDatasetCognifyRequest
 {
 	/** Provider dataset UUID selected by OpenCrane authority. */
 	readonly datasetId: string;
+	/** Caller-saved UUID that identifies this recoverable indexing operation. */
+	readonly operationId: string;
+	/** Provider-created digest from the locked document snapshot saved before first dispatch. */
+	readonly expectedInputEvidenceDigest: string;
 }
 
-/** Transport receipt for one immediately completed blocking cognify call. */
+/** Transport receipt for one completed or replayed blocking Cognify operation. */
 export interface MemoryGatewayDatasetCognifyResponse
 {
-	/** Provider dataset UUID processed by the completed call. This receipt grants no local activation. */
+	/** Provider dataset UUID processed by the completed operation. This receipt grants no local activation. */
 	readonly datasetId: string;
+	/** Caller-saved operation UUID returned only after the provider binds it to this run. */
+	readonly operationId: string;
+	/** Provider-created digest of the document snapshot processed by this run. */
+	readonly inputEvidenceDigest: string;
+	/** Provider pipeline UUID that remains stable when this completed operation is replayed. */
+	readonly pipelineRunId: string;
 }
 
 /** Request to retrieve stored passages from one exact dataset. */

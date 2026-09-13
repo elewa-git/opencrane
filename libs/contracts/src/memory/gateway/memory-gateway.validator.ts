@@ -35,10 +35,10 @@ function _HasUtf8Bytes(value: string, minimum: number, maximum: number): boolean
 	return length >= minimum && length <= maximum;
 }
 
-/** Return whether every selected string is unique. */
-function _HasUniqueStrings(values: readonly string[]): boolean
+/** Return whether every UUID is unique after canonical case normalization. */
+function _HasUniqueUuids(values: readonly string[]): boolean
 {
-	return new Set(values).size === values.length;
+	return new Set(values.map(function _CanonicalUuid(value): string { return value.toLowerCase(); })).size === values.length;
 }
 
 /** Bounded fact text that preserves the caller's exact bytes, including whitespace. */
@@ -80,7 +80,7 @@ export const ___MemoryGatewayDatasetListResponseSchema: z.ZodType<MemoryGatewayD
 		.max(MEMORY_GATEWAY_LIMITS.DatasetResultsMaximum)
 		.refine(function _HasUniqueDatasetIds(datasets): boolean
 		{
-			return _HasUniqueStrings(datasets.map(dataset => dataset.datasetId));
+			return _HasUniqueUuids(datasets.map(dataset => dataset.datasetId));
 		}),
 }).strict();
 
@@ -89,6 +89,8 @@ export const ___MemoryGatewayDocumentSchema: z.ZodType<MemoryGatewayDocument> = 
 	documentId: z.string().uuid(),
 	name: _DocumentNameSchema,
 	mimeType: _MimeTypeSchema,
+	contentDigest: _ContentDigestSchema,
+	byteLength: z.number().int().min(0).max(MEMORY_GATEWAY_LIMITS.TextMaximumBytes),
 }).strict();
 
 /** Strict request schema for adding one bounded text document. */
@@ -116,11 +118,12 @@ export const ___MemoryGatewayDocumentListRequestSchema: z.ZodType<MemoryGatewayD
 /** Strict response schema for bounded, unique document metadata. */
 export const ___MemoryGatewayDocumentListResponseSchema: z.ZodType<MemoryGatewayDocumentListResponse> = z.object({
 	datasetId: z.string().uuid(),
+	inputEvidenceDigest: _ContentDigestSchema,
 	documents: z.array(___MemoryGatewayDocumentSchema)
 		.max(MEMORY_GATEWAY_LIMITS.DocumentResultsMaximum)
 		.refine(function _HasUniqueDocumentIds(documents): boolean
 		{
-			return _HasUniqueStrings(documents.map(document => document.documentId));
+			return _HasUniqueUuids(documents.map(document => document.documentId));
 		}),
 }).strict().refine(function _UsesSeparateListedDocumentIdentities(response): boolean
 {
@@ -150,11 +153,16 @@ export const ___MemoryGatewayDocumentRawDigestResponseSchema: z.ZodType<MemoryGa
 /** Strict request schema for blocking dataset processing. */
 export const ___MemoryGatewayDatasetCognifyRequestSchema: z.ZodType<MemoryGatewayDatasetCognifyRequest> = z.object({
 	datasetId: z.string().uuid(),
+	operationId: z.string().uuid(),
+	expectedInputEvidenceDigest: _ContentDigestSchema,
 }).strict();
 
-/** Strict response schema for an immediately completed cognify call. */
+/** Strict response schema for a completed or replayed Cognify operation. */
 export const ___MemoryGatewayDatasetCognifyResponseSchema: z.ZodType<MemoryGatewayDatasetCognifyResponse> = z.object({
 	datasetId: z.string().uuid(),
+	operationId: z.string().uuid(),
+	inputEvidenceDigest: _ContentDigestSchema,
+	pipelineRunId: z.string().uuid(),
 }).strict();
 
 /** Strict request schema for one bounded dataset search. */
@@ -181,7 +189,7 @@ export const ___MemoryGatewaySearchResponseSchema: z.ZodType<MemoryGatewaySearch
 		.max(MEMORY_GATEWAY_LIMITS.SearchResultsMaximum)
 		.refine(function _HasUniqueChunkIds(facts): boolean
 		{
-			return _HasUniqueStrings(facts.map(fact => fact.chunkId));
+			return _HasUniqueUuids(facts.map(fact => fact.chunkId));
 		}),
 }).strict().refine(function _UsesSeparateSearchIdentities(response): boolean
 {

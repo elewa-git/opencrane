@@ -1,5 +1,24 @@
 # OpenCrane — Active Plan
 
+## Memory indexing receipts — source reviewed
+
+This M1 slice starts above draft #884 at `7e2c3f523e719de7c72354551edcea6b9aeb5829`
+on `feat/0.12-memory-cognify-receipts`. It is independent of the unpublished remote MCP
+integration. The gateway's locked document snapshot now carries metadata and a content digest;
+indexing requests and completed receipts retain the caller-saved operation and provider pipeline.
+The adapter rejects mismatched and unfinished responses without exposing fact text or storage paths.
+
+Independent review found that valid uppercase UUIDs conflicted with the provider's lowercase
+responses. The correction normalises UUIDs before sending or comparing them, rejects document
+duplicates across letter case, and checks result-map cardinality before normalisation. Contract
+tests (136), gateway tests (29) and both package type checks pass. Independent review closes the
+UUID finding with no remaining issues. Final style, Prisma boundaries and module-growth checks
+pass. The reviewed source is prepared for a draft checkpoint above the unchanged #884 head.
+
+Client cutover, first-dataset grants, credentials, chart promotion, provider calls and product
+activation remain outside this slice. Remember, cross-conversation recall, Correct and Forget
+still need their complete product and provider integration.
+
 ## Hosted generated-file journey — source implementation and prerequisites
 
 This F1/T1 qualification slice starts directly above draft #883 at

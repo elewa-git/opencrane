@@ -69,6 +69,9 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   fact for Correct, or finalizes Forget together with the operation's progress. A failed transaction
   preserves both prior states; retries cannot publish another correction successor. The catalog
   keeps consent, personal sensitivity and message provenance without remembered text.
+  Gateway adapters can now associate an indexing result with the saved operation and document
+  snapshot. They retain the provider's pipeline receipt and reject mismatched or unfinished
+  responses; document evidence contains identifiers, content digests and sizes without fact text.
   Authenticated product command composition, worker/provider wiring and the complete memory
   journey remain unfinished.
 

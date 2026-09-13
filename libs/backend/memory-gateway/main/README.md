@@ -7,7 +7,9 @@
 This library supplies the private memory gateway's provider connection. Its authentication client
 logs in to Cognee, holds the login token in memory and refreshes it once when the provider rejects
 an expired session. Its HTTP client bounds requests and responses and removes provider details from
-errors. Dataset/document translation and app composition remain in progress.
+errors. Its document reader returns a locked, content-free snapshot with byte digests, and its
+blocking Cognify operation binds that snapshot to the caller's saved operation and the provider's
+stable pipeline receipt. The other gateway operations and app composition remain in progress.
 
 ```text
 OpenCrane server ── authenticated gateway request ──► memory-gateway app
@@ -31,8 +33,11 @@ response must remain a failure: it cannot become an empty recall or trigger an u
 ## Public surface
 
 The library has no published runtime exports yet. The internal `_CreateCogneeProviderSession`
-factory supplies `ensureReady()` and `exchange()` to the future request handler. These methods use
-an injected credential reader; callers receive response bytes and status, never the login token.
+factory supplies `ensureReady()` and `exchange()` to the future request handler. The internal
+document and Cognify operations reject duplicate or altered snapshot evidence, nonterminal runs and
+receipts that do not echo the saved dataset, operation and digest. A replay of a completed operation
+returns the same provider pipeline coordinate. Callers receive projected metadata and failure
+classes, never the login token, provider storage path or provider response content.
 
 ## Boundary
 
