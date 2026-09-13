@@ -25,6 +25,12 @@ vi.mock("@opencrane/backend/server/agents/artifacts", async function _MockArtifa
 
 
 
+/** Fails if these router-construction tests unexpectedly access generated-file persistence. */
+function _GeneratedFiles()
+{
+	return { scanAssets() { throw new Error("scanner persistence is outside this composition test"); } };
+}
+
 /** Build the smallest valid workload-facing configuration used by composition tests. */
 function _RuntimeConfig(): InternalRuntimeConfig
 {
@@ -56,7 +62,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 
 	it("keeps disabled optional planes unmounted while composing every mandatory caller plane", function _composesRequiredPlanes()
 	{
-		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig());
+		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig(), _GeneratedFiles());
 
 		expect(composition.skillAuthoringValidationController).toEqual(expect.any(Function));
 		expect(composition.skillAuthoringValidationWorker).toEqual(expect.any(Function));
@@ -73,14 +79,14 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 	{
 		const config = { ..._RuntimeConfig(), artifactPreprocessorEnabled: true, artifactPreprocessorNamespace: "opencrane-server" };
 
-		expect(function _composeCrossedWorkerPlane() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config); }).toThrow(/different from POD_NAMESPACE/);
+		expect(function _composeCrossedWorkerPlane() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, _GeneratedFiles()); }).toThrow(/different from POD_NAMESPACE/);
 	});
 
 	it("refuses an enabled scanner plane that crosses into the trusted server namespace", function _rejectsCrossedScannerPlane()
 	{
 		const config = { ..._RuntimeConfig(), artifactScannerEnabled: true, artifactScannerNamespace: "opencrane-server" };
 
-		expect(function _composeCrossedScannerPlane() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config); }).toThrow(/different from POD_NAMESPACE/);
+		expect(function _composeCrossedScannerPlane() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, _GeneratedFiles()); }).toThrow(/different from POD_NAMESPACE/);
 	});
 
 	it("composes both optional planes only after their concrete boundaries are configured", function _composesOptionalPlanes()
@@ -95,7 +101,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 			artifactScannerNamespace: "artifact-scanner",
 		};
 
-		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config);
+		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, _GeneratedFiles());
 
 		expect(composition.artifactPreprocessor).toEqual(expect.any(Function));
 		expect(composition.artifactPreprocessController).toEqual(expect.any(Function));
@@ -106,14 +112,14 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 	{
 		const config = { ..._RuntimeConfig(), artifactScannerEnabled: true, artifactScannerNamespace: undefined };
 
-		expect(function _composeScannerWithoutNamespace() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config); }).toThrow(/restricted workload namespace must be valid/);
+		expect(function _composeScannerWithoutNamespace() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, _GeneratedFiles()); }).toThrow(/restricted workload namespace must be valid/);
 	});
 
 	it("refuses an enabled worker plane without a separate namespace", function _rejectsWorkerWithoutNamespace()
 	{
 		const config = { ..._RuntimeConfig(), artifactPreprocessorEnabled: true, artifactPreprocessorNamespace: undefined };
 
-		expect(function _composeWorkerWithoutNamespace() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config); }).toThrow(/restricted workload namespace must be valid/);
+		expect(function _composeWorkerWithoutNamespace() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, _GeneratedFiles()); }).toThrow(/restricted workload namespace must be valid/);
 	});
 
 });

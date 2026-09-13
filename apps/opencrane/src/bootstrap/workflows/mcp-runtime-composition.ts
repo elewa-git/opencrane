@@ -17,15 +17,18 @@ import type { InternalRuntimeConfig } from "../configuration/config.types";
 import { _log } from "../process/log";
 import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
 import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
+import { _CreateConversationGeneratedFileResultParticipant } from "@opencrane/backend/server/conversation-assets";
+import { AesGcmConversationPrivatePayloadCipher, _ReadConversationPrivatePayloadKeyring } from "@opencrane/backend/server/conversations/history";
 
 /** Polling cadence for durable public task completion after runtime admission. */
 const _MCP_TASK_STATUS_POLL_MILLISECONDS = 250;
 
 /** Compose the sole database and HTTP authority for OCI-backed MCP execution. */
-export function _CreateMcpRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, workflows: McpWorkflowComposition, history: HistoryStore): McpRuntimeComposition
+export function _CreateMcpRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, workflows: McpWorkflowComposition, history: HistoryStore, keyringPath: string): McpRuntimeComposition
 {
 	const executorNamespace = _ValidateIsolatedWorkloadNamespace(config.mcpExecutorNamespace, config.serverNamespace);
 	const dispatchDependencies = _CreateConversationToolDispatchDependencies(history, _CreateHumanMembershipEvidenceConfig());
+	const cipher = AesGcmConversationPrivatePayloadCipher.fromDocument(_ReadConversationPrivatePayloadKeyring(keyringPath));
 	const participantFactory = __CreatePrismaMcpToolInvocationParticipantFactory(
 		new PrismaToolInvocationLifecycleEventUnitOfWork(prisma, async function _EmitTurnEvent(transaction, event)
 		{
@@ -50,10 +53,17 @@ export function _CreateMcpRuntimeComposition(prisma: PrismaClient, authApi: k8s.
 		companionClaimLeaseMilliseconds: config.mcpCompanionClaimLeaseMilliseconds,
 		log: _log,
 	};
-	const authority = new PrismaMcpRuntimeUnitOfWork(prisma, { toolInvocations: participantFactory, options });
+	const invocationResults = { __ForTransaction: function _Results(transactionValue: unknown)
+	{
+		const transaction = transactionValue as Prisma.TransactionClient;
+		const dispatch = new PrismaConversationToolDispatchAuthority(transaction, dispatchDependencies);
+		return _CreateConversationGeneratedFileResultParticipant(transaction, cipher, workflows.execution, dispatch, config.artifactScannerEnabled);
+	} };
+	const authority = new PrismaMcpRuntimeUnitOfWork(prisma, { toolInvocations: participantFactory, invocationResults, options });
 	const taskWorkflow = __CreateMcpTaskWorkflow({ execution: workflows.execution, unitOfWork: workflows.unitOfWork, runtime: authority, statusPollMilliseconds: _MCP_TASK_STATUS_POLL_MILLISECONDS });
 	return {
 		authority,
+		invocationParticipants: participantFactory,
 		admitToolInvocationInTransaction: _CreateMcpToolInvocationAdmission(participantFactory, options),
 		taskWorkflow,
 		promotion: __CreateMcpOciServerPromotionRouter({

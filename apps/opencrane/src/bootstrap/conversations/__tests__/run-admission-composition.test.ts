@@ -217,10 +217,10 @@ function _StandaloneComputerFixture()
 			};
 	const workload = { subject: "system:serviceaccount:test:computer", namespace: "test", serviceAccountName: "computer", podUid: "pod-1" };
 	const computer = new ConversationComputerTurnAuthorityService({
-		logger: { warn: vi.fn() }, modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() }, toolResults: { read: vi.fn(), consume: vi.fn() }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") }, model: { request: vi.fn() },
+		logger: { warn: vi.fn() }, modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() }, generatedFiles: { link: vi.fn() }, toolResults: { read: vi.fn(), consume: vi.fn() }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") }, model: { request: vi.fn() },
 		toolProposals: { admit: vi.fn() },
 		siloId: "silo-1", endpoint: "http://gateway.test", credentials: { issueOnce, reuseExact: vi.fn(), revoke: vi.fn() },
-		reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, outputPayloads: { store: vi.fn() }, writers: { create: vi.fn() },
+		reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, outputPayloads: { store: vi.fn() }, writers: { confirmSaved: vi.fn(), create: vi.fn() },
 		runLifecycle: { start: vi.fn(), complete: vi.fn() },
 		store: { reserveModel: vi.fn(), selectTool: vi.fn(), reserveContinuation: vi.fn(), loadActive: async function _Active() { return stored; }, createOrRead: async function _Freeze(turn) { stored = turn; return turn; }, load: async function _Load() { return stored; }, markOutput: vi.fn(), settle: vi.fn() },
 		candidates: {

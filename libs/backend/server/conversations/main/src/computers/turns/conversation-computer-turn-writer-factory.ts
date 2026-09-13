@@ -1,4 +1,4 @@
-import { BoundConversationWriter } from "@opencrane/backend/server/conversations/history";
+import { BoundConversationWriter, _ConfirmBoundConversationWriterIntent } from "@opencrane/backend/server/conversations/history";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
@@ -11,6 +11,14 @@ export class ConversationComputerTurnWriterFactory implements ConversationComput
 {
 	/** Keeps the generic writer's checks available while the turn authority owns the atomic commit. */
 	public constructor(private readonly history: Pick<HistoryStore, "append" | "readStream">, private readonly turns: Pick<ConversationComputerTurnStore, "load">, private readonly candidates: Pick<ConversationComputerTurnCandidateResolver, "assertCurrent">, private readonly toolResults: Pick<ConversationComputerToolResults, "read">) {}
+
+	/** Confirm only the saved event after the generated attachment linker has verified its durable link. */
+	public async confirmSaved(turn: FrozenConversationComputerTurn): Promise<void>
+	{
+		if (turn.outputReceipt === null)
+			throw new Error("Conversation computer output receipt is missing");
+		await _ConfirmBoundConversationWriterIntent(this.history, { ...turn.binding, expectedRevision: BigInt(turn.outputReceipt.expectedRevision) }, turn.outputReceipt);
+	}
 
 	/** Builds a writer that prepares an answer and can confirm its exact participant event. */
 	public create(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity): BoundConversationWriter

@@ -22,6 +22,12 @@ vi.mock("@opencrane/backend/server/agents/artifacts", async function _MockArtifa
 	};
 });
 
+/** Fails if these router-construction tests unexpectedly access generated-file persistence. */
+function _GeneratedFiles()
+{
+	return { scanAssets() { throw new Error("scanner persistence is outside this composition test"); } };
+}
+
 /** Build valid disabled-worker configuration for transport-parser tests. */
 function _RuntimeConfig(): InternalRuntimeConfig
 {
@@ -47,14 +53,14 @@ function _RuntimeConfig(): InternalRuntimeConfig
 /** Supply inert MCP routers because this test owns only the internal body parser. */
 function _McpRuntime(): McpRuntimeComposition
 {
-	return { authority: {} as McpRuntimeComposition["authority"], admitToolInvocationInTransaction: vi.fn(), promotion: Router(), controller: Router(), companion: Router(), taskWorkflow: {} as McpRuntimeComposition["taskWorkflow"] };
+	return { authority: {} as McpRuntimeComposition["authority"], invocationParticipants: {} as McpRuntimeComposition["invocationParticipants"], admitToolInvocationInTransaction: vi.fn(), promotion: Router(), controller: Router(), companion: Router(), taskWorkflow: {} as McpRuntimeComposition["taskWorkflow"] };
 }
 
 describe("internal workload app", function _Suite()
 {
 	it("rejects scanner JSON above the private command ceiling before route dispatch", async function _RejectsLargeScannerCommand()
 	{
-		const app = _CreateInternalApp({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig(), _McpRuntime());
+		const app = _CreateInternalApp({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig(), _McpRuntime(), _GeneratedFiles());
 		const response = await request(app).put("/api/internal/artifact-scanner/jobs/job-1/result").set("x-request-id", "scanner-parser-request").set("content-type", "application/json").send({ scannerVersion: "x".repeat(20 * 1_024) });
 
 		expect(response.status).toBe(413);
@@ -75,7 +81,7 @@ describe("internal workload app", function _Suite()
 		}
 		turn.get("/review-credential", _ObservedRequest);
 		checkpoint.post("/export", _ObservedRequest);
-		const app = _CreateInternalApp({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig(), _McpRuntime(), undefined, turn, checkpoint);
+		const app = _CreateInternalApp({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig(), _McpRuntime(), _GeneratedFiles(), undefined, turn, checkpoint);
 		const pending = method === "GET"
 			? request(app).get(`/api/internal/conversation-computer${path}`)
 			: request(app).post(`/api/internal/conversation-computer${path}`).send({ text: "private-output" });

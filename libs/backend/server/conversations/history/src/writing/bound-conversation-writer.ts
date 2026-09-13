@@ -113,18 +113,10 @@ export class BoundConversationWriter
 		finally { this.inFlight = false; }
 	}
 
-	/** Read only the frozen next position and compare the complete application event envelope. */
-	private async _IsAccepted(intent: BoundConversationWriterIntent): Promise<boolean>
+	/** Read only the exact saved event through the shared confirmation reader. */
+	private _IsAccepted(intent: BoundConversationWriterIntent): Promise<boolean>
 	{
-		let accepted = false;
-		for await (const event of this.historyStore.readStream({ streamName: intent.streamName, fromRevision: this.binding.expectedRevision + 1n, maxCount: 1 }))
-		{
-			if (accepted || event.streamName !== intent.streamName || event.revision !== this.binding.expectedRevision + 1n
-				|| ___DigestCanonicalJson({ id: event.id, type: event.type, data: event.data, metadata: event.metadata } as JsonValue) !== ___DigestCanonicalJson(intent.event as unknown as JsonValue))
-				throw new Error("Bound conversation writer found different history at its saved output position");
-			accepted = true;
-		}
-		return accepted;
+		return _IsBoundConversationIntentAccepted(this.historyStore, this.binding, intent);
 	}
 
 	/** Stamp identity and position from the binding, and read the server clock exactly once. */
@@ -170,4 +162,31 @@ export function _ReadBoundConversationWriterIntent(binding: BoundConversationWri
 	if (___DigestCanonicalJson(intent as unknown as JsonValue) !== ___DigestCanonicalJson(candidate as unknown as JsonValue))
 		throw new Error("Bound conversation writer saved intent has a different event envelope");
 	return intent;
+}
+
+/**
+ * Confirm an already committed output without constructing a writer or authorizing another append.
+ * The recovery caller supplies the binding and intent read from its saved turn. An empty slot or
+ * different event fails closed; this function only reads history and never uses an execution lease.
+ */
+export async function _ConfirmBoundConversationWriterIntent(history: Pick<HistoryStore, "readStream">, binding: BoundConversationWriterBinding, saved: BoundConversationWriterIntent): Promise<ConversationEntry>
+{
+	const intent = _ReadBoundConversationWriterIntent(binding, saved);
+	if (!await _IsBoundConversationIntentAccepted(history, binding, intent))
+		throw new Error("Bound conversation writer cannot confirm its atomically committed output");
+	return intent.event.data.entry;
+}
+
+/** Compare the complete event at the one position fixed by the saved binding. */
+async function _IsBoundConversationIntentAccepted(history: Pick<HistoryStore, "readStream">, binding: BoundConversationWriterBinding, intent: BoundConversationWriterIntent): Promise<boolean>
+{
+	let accepted = false;
+	for await (const event of history.readStream({ streamName: intent.streamName, fromRevision: binding.expectedRevision + 1n, maxCount: 1 }))
+	{
+		if (accepted || event.streamName !== intent.streamName || event.revision !== binding.expectedRevision + 1n
+			|| ___DigestCanonicalJson({ id: event.id, type: event.type, data: event.data, metadata: event.metadata } as JsonValue) !== ___DigestCanonicalJson(intent.event as unknown as JsonValue))
+			throw new Error("Bound conversation writer found different history at its saved output position");
+		accepted = true;
+	}
+	return accepted;
 }

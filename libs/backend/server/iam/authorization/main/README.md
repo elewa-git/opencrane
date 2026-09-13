@@ -96,6 +96,10 @@ the ordinary exact boundary-matching rules.
   KurrentDB records cancellation as the terminal winner. Dispatched or uncertain outcomes remain
   durable; expired claims may shed their lease while their recovery state is preserved.
 
+`ToolInvocationRecord.requestIdentity` groups the runtime instance, command and candidate ids read
+from their immutable database columns. JSON projection fields cannot replace those coordinates.
+Consumers use them to match the current invocation to its original MCP execution.
+
 Run-owned tool result reads use `__ReadRunToolResultInTransaction`. The caller supplies all saved
 run, attempt, computer, command, public invocation and fingerprint coordinates. IAM checks the
 current run and the full immutable terminal payload and digest, then returns the existing invocation

@@ -41,7 +41,7 @@ Startup proceeds in five visible stages:
 1. initialise telemetry before any instrumented dependency loads;
 2. freeze process configuration and construct Prisma and Kubernetes clients;
 3. register the Absurd-owned conversation-turn workflow with the bounded personal run-admission
-   port, then start activation only after the handler exists. Admission rechecks Kurrent identity,
+   port and generated-file workflow, then start activation only after the handlers exist. Admission rechecks Kurrent identity,
    lease and message history plus every immutable compiler input;
 4. build the public and internal Express applications; and
 5. start the workflow runtime and bounded background workers, then open both listeners under one
@@ -84,7 +84,7 @@ All other production source lives in `src/bootstrap/`:
 | --- | --- |
 | `configuration/` | Read and type deployment configuration once. |
 | `http/` | Assemble authenticated public and workload-facing routers. |
-| `conversations/` | Connect conversation history and computer lifecycle; register the durable turn workflow and mount its review credential route. |
+| `conversations/` | Connect conversation history and computer lifecycle; register turn and generated-file workflows, share generated-file authority with the scanner, and mount the review credential route. |
 | `workflows/` | Compose MCP transport and declare workflow tasks. |
 | `process/` | Initialise telemetry and clients, then start, drain, and close resources. |
 
@@ -170,6 +170,12 @@ They verify that an operation and its task commit or roll back together, and tha
 restarted callers recover the same receipt. These fixtures run no memory worker or provider call;
 authenticated product memory commands still require their separate integration.
 
+The uncached `test:generated-file-integration` target uses PostgreSQL and KurrentDB together to
+exercise captured and scanned file results, atomic answer attachments, and recovery of the exact
+asset/message link. The history-store CI job supplies both services. Local runs without both
+`DATABASE_URL` and `KURRENTDB_INTEGRATION_URL` skip these cases; a skipped run is not recovery proof.
+The target does not qualify a deployed MCP image, a real scanner, or a browser download.
+
 ## Runtime & config
 
 The Helm unit supplies the database, OpenID Connect (OIDC) sign-in settings, namespaces, membership
@@ -251,3 +257,7 @@ remote authority path.
   [server infrastructure](../../libs/backend/server/infra/README.md)
 - Sibling apps: [opencrane-ui](../opencrane-ui/README.md) ·
   [agent-controller](../agent-controller/README.md)
+
+Generated-file composition supplies the scanner, turn result reader and saved-output linker with
+the same workflow and authorization owners. Conversation bootstrap injects those ports into the
+existing turn workflow; it does not select files or query their lifecycle directly.

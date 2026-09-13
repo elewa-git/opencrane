@@ -1,8 +1,14 @@
 import type { ToolInvocationRecord } from "./tool-invocation.types";
 
 /** Complete stored row required to verify authorization evidence before returning an invocation. */
-export interface ToolInvocationRow extends Omit<ToolInvocationRecord, "authorizationEvidence" | "recoveryMode" | "state" | "claimKind" | "arguments" | "effectiveArguments" | "result">
+export interface ToolInvocationRow extends Omit<ToolInvocationRecord, "authorizationEvidence" | "requestIdentity" | "recoveryMode" | "state" | "claimKind" | "arguments" | "effectiveArguments" | "result">
 {
+	/** Runtime instance persisted in its authority-owned column. */
+	readonly runtimeInstanceId: string;
+	/** Runtime command persisted in its authority-owned column. */
+	readonly commandId: string;
+	/** Candidate persisted in its authority-owned column. */
+	readonly candidateId: string;
 	/** Stored lifecycle name, converted to the public invocation state. */
 	readonly state: string;
 	/** Stored recovery mode, converted to the public recovery mode. */

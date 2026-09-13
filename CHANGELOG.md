@@ -20,6 +20,15 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Added
 
+- **Integrators can build a credentialless MCP that produces CSV files from tabular values.** The
+  isolated producer and server validator share the same filename, formula-safety and serialization
+  rules. Server validation rejects output that differs from the admitted arguments. The encrypted
+  file codec preserves up to 1 MiB through ordered chunks without increasing ordinary message
+  limits. MCP completion now requires capture before saving metadata in place of file contents.
+  Server workflow progression rechecks current authority, and a clean scan cannot publish a file
+  whose authority ended. The complete capture-to-answer/download journey is still being assembled;
+  this does not enable generated files on testv5.
+
 - **Memory command integrations can preserve one operation across retries and restarts.** The
   personal-memory repository retains the original source, command and provider receipts, adopts a
   new dataset atomically, and hides a fact when Forget is admitted. Concurrent retries return the

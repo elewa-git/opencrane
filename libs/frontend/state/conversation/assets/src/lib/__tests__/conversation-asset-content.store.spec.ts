@@ -14,6 +14,12 @@ function _Asset(id = "asset-1", overrides: Partial<ConversationAsset> = {}): Con
 	return { id, conversationId: "conversation-1", messageId: null, artifactId: null, artifactRevisionId: null, provenance: ConversationAssetProvenance.ParticipantUpload, state: ConversationAssetLifecycle.Ready, displayName: `${id}.pdf`, mediaType: "application/pdf", byteLength: 5, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: false, createdAt: "2026-09-12T08:00:00.000Z", ...overrides };
 }
 
+/** Builds one authorized generated CSV published against immutable Artifact coordinates. */
+function _GeneratedCsvAsset(overrides: Partial<ConversationAsset> = {}): ConversationAsset
+{
+	return _Asset("generated-asset-1", { messageId: "agent-message-1", artifactId: "generated-artifact-1", artifactRevisionId: "generated-revision-1", provenance: ConversationAssetProvenance.AgentOutput, displayName: "county-totals.csv", mediaType: "text/csv;charset=utf-8", byteLength: 5, disposition: ConversationAssetDisposition.Download, ...overrides });
+}
+
 /** Controlled promise for read and selection race tests. */
 function _Deferred<Value>(): { readonly promise: Promise<Value>; readonly resolve: (value: Value) => void; readonly reject: (reason: unknown) => void }
 {
@@ -56,6 +62,36 @@ describe("ConversationAssetContentStore", function _Suite()
 		expect(result).toMatchObject({ displayName: "asset-1.pdf", mediaType: "application/pdf", byteLength: 5, disposition: ConversationAssetDisposition.Preview });
 		expect(result?.blob).toBeInstanceOf(Blob);
 		expect(store.state("asset-1")).toBe(ConversationAssetContentCommandStates.Idle);
+	});
+
+	it("downloads a refreshed Ready AgentOutput CSV through the current authorized asset read", async function _GeneratedDownload()
+	{
+		const read = vi.fn().mockResolvedValue(new Blob(["a,b\r\n"], { type: "text/csv;charset=utf-8" }));
+		const store = _Store(read);
+		const generated = _GeneratedCsvAsset();
+		store.open("conversation-1", function _Assets() { return [generated]; });
+
+		const result = await store.read(generated.id);
+
+		expect(ConversationAssetProvenance.AgentOutput).toBe("agent_output");
+		expect(read).toHaveBeenCalledWith("conversation-1", generated.id);
+		expect(result).toMatchObject({ displayName: "county-totals.csv", mediaType: "text/csv;charset=utf-8", byteLength: 5, disposition: ConversationAssetDisposition.Download });
+		expect(result?.blob).toBeInstanceOf(Blob);
+	});
+
+	it("does not read generated output that is no longer Ready or authorized after refresh", async function _GeneratedReadFence()
+	{
+		const read = vi.fn();
+		const store = _Store(read);
+		let assets: readonly ConversationAsset[] = [_GeneratedCsvAsset({ state: ConversationAssetLifecycle.Processing })];
+		store.open("conversation-1", function _Assets() { return assets; });
+
+		expect(store.disposition("generated-asset-1")).toBeNull();
+		expect(await store.read("generated-asset-1")).toBeNull();
+		assets = [];
+		expect(store.disposition("generated-asset-1")).toBeNull();
+		expect(await store.read("generated-asset-1")).toBeNull();
+		expect(read).not.toHaveBeenCalled();
 	});
 
 	it("refuses a duplicate before transport while independent assets continue", async function _Duplicate()

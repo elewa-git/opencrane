@@ -340,6 +340,9 @@
       ],
       "@opencrane/backend/memory-gateway": [
         "./libs/backend/memory-gateway/main/src/index.ts"
+      ],
+      "@opencrane/backend/agents/runtime/mcp-file-generator": [
+        "./libs/backend/agents/runtime/mcp-file-generator/main/src/index.ts"
       ]
     }
   },

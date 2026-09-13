@@ -1,6 +1,7 @@
 /**
  * @opencrane/backend/server/gateways/mcp — public barrel.
  */
+export { McpCompanionCommandKinds } from "@opencrane/backend/agents/runtime/mcp-executor/companion";
 export * from "./core/mcp-operator.logic";
 export type * from "./core/mcp-operator.logic.types";
 export type * from "./core/mcp-operator-repository.types";
@@ -28,6 +29,7 @@ export { __CreateMcpOciServerPromotionRouter } from "./runtime/mcp-oci-server-pr
 export { __CreateMcpRuntimeCompanionRouter } from "./runtime/mcp-runtime-companion.router";
 export { __CreateMcpRuntimeControllerRouter } from "./runtime/mcp-runtime-controller.router";
 export { PrismaMcpRuntimeUnitOfWork } from "./runtime/prisma-mcp-runtime-authority";
+export type { McpInvocationResultParticipant, McpInvocationResultParticipantFactory } from "./runtime/mcp-invocation-result.types";
 export { PrismaMcpToolInvocationAdmissionRepository } from "./runtime/prisma-mcp-tool-invocation-admission-repository";
 export { PrismaRuntimeMcpEffectEligibilityAuthority } from "./runtime/prisma-runtime-mcp-effect-eligibility";
 export type { RuntimeMcpEffectEligibility, RuntimeMcpEffectEligibilityCommand } from "./runtime/runtime-mcp-effect-eligibility.types";

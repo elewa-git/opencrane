@@ -83,7 +83,7 @@ export { CurrentConversationToolResultNotificationEvidenceReader } from "./compu
 export { ConversationComputerToolResultOutcomes } from "./computers/turns/conversation-computer-continuation.types";
 export type { ConversationComputerContinuationReservation, ConversationComputerModelCustody, ConversationComputerToolDeclaration, ConversationComputerToolSelection, ConversationComputerToolResults } from "./computers/turns/conversation-computer-continuation.types";
 export { PrismaConversationToolDispatchAuthority } from "./computers/tools/dispatch/prisma-conversation-tool-dispatch-authority";
-export type { ConversationToolDispatchAuthority, ConversationToolDispatchDependencies, ConversationToolExecutionEvidence, ConversationToolAssignmentAuthority, ConversationToolAssignmentCommand } from "./computers/tools/dispatch/conversation-tool-dispatch.types";
+export type { ConversationToolDispatchAdmission, ConversationToolExecutionAdmissionAuthority, ConversationToolSystemExecutionAdmissionAuthority, ConversationToolDispatchAuthority, ConversationToolDispatchDependencies, ConversationToolExecutionEvidence, ConversationToolAssignmentAuthority, ConversationToolAssignmentCommand } from "./computers/tools/dispatch/conversation-tool-dispatch.types";
 export { PrismaConversationToolProposalUnitOfWork, PrismaConversationToolProposalRepository } from "./computers/tools/proposal/prisma-conversation-tool-proposal";
 export { ConversationToolProposalRefusal } from "./computers/tools/proposal/conversation-tool-proposal-refusal";
 export { ConversationToolProposalRefusals } from "./computers/tools/proposal/conversation-tool-proposal.types";
@@ -110,3 +110,7 @@ export { PrismaConversationComputerStopLifecycleUnitOfWork } from "./computers/i
 export { PrismaConversationComputerStopTargetUnitOfWork } from "./computers/interruptions/prisma-conversation-computer-stop-target-reader";
 export { KurrentConversationComputerStopPublisher } from "./computers/interruptions/kurrent-conversation-computer-stop-publisher";
 export { KurrentConversationComputerStopActiveTurnReader } from "./computers/interruptions/kurrent-conversation-computer-stop-active-turn-reader";
+
+export { ConversationGeneratedFileResultStates, type ConversationGeneratedFileContinuation, type ConversationGeneratedFileResult, type ConversationGeneratedFileResultCommand, type ConversationGeneratedFileResultRepository, type ConversationGeneratedFileResultRepositoryFactory } from "./computers/tools/results/conversation-generated-file-result.types";
+export type { ConversationGeneratedFileOutputLinker } from "./computers/turns/generated-output/conversation-generated-file-output.types";
+export { __ReadConversationGeneratedFileOutput } from "./computers/turns/generated-output/conversation-generated-file-output";

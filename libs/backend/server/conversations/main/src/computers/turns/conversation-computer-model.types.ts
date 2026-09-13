@@ -1,8 +1,10 @@
 import type { ConversationModelRequest, ConversationModelResponse, ConversationModelToolModes } from "@opencrane/contracts";
+import type { ConversationComputerToolResultOutcomes } from "./conversation-computer-continuation.types";
 /** Server workflow outcome after one evidence-driven progression pass. */
 export type ConversationComputerModelProgress =
 	| { readonly outcome: "completed" | "response_unavailable" | "authority_ended" | "retry" }
 	| { readonly outcome: "model_pending"; readonly notBeforeEpochMs: number; readonly ordinal: 1 | 2 }
+	| { readonly outcome: ConversationComputerToolResultOutcomes.GeneratedFilePending; readonly operationId: string; readonly notAfterEpochMs: number }
 	| { readonly outcome: "tool_pending"; readonly toolInvocationId: string; readonly waitFor?: "approval" | "result"; readonly waitUntilEpochMs?: number };
 
 /**

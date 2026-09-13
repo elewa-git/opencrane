@@ -110,7 +110,7 @@ async function _ClaimCompanion(client: PrismaClient, fixture: Awaited<ReturnType
 		const taskLifecycle = new PrismaMcpTaskToolInvocationLifecycleRepository(transaction);
 		const participant = participants.__ForTransaction(transaction, taskLifecycle);
 		const readiness = new PrismaMcpConnectionReadinessRepository(transaction);
-		const companion = new PrismaMcpRuntimeCompanionRepository(transaction, participant, readiness, options);
+		const companion = new PrismaMcpRuntimeCompanionRepository(transaction, participant, readiness, options, { async prepare(command) { return command.result; } });
 		const identity = { subject: "system:serviceaccount:mcp-executors:mcp-executor-default", namespace: "mcp-executors", serviceAccountName: "mcp-executor-default", podUid: `pod-${fixture.executionId}` };
 		return companion.claim(identity, fixture.executionReference);
 	}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });

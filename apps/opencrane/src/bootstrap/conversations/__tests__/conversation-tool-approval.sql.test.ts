@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { PrismaElicitationRepository, PrismaElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
 import { ElicitationBodyKinds, CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import { __FakeWorkflowEngine } from "@opencrane/backend/server/infra/workflows/testing";
-import { ConversationApprovalNotificationOutcomes, PrismaConversationComputerTurnWorkflowEventRepository, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, _RegisterConversationComputerTurnWorkflow, CONVERSATION_COMPUTER_TURN_TASK } from "@opencrane/backend/server/conversations";
+import { ConversationGeneratedFileResultStates, ConversationApprovalNotificationOutcomes, PrismaConversationComputerTurnWorkflowEventRepository, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, _RegisterConversationComputerTurnWorkflow, CONVERSATION_COMPUTER_TURN_TASK } from "@opencrane/backend/server/conversations";
 import { ToolInvocationEventTypes } from "@opencrane/backend/server/iam/authorization";
 import type { IWorkflowTaskReceipt, IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 import { ___DigestCanonicalJson } from "@opencrane/util";
@@ -213,7 +213,7 @@ function _EventPort(workflows: __FakeWorkflowEngine, emitted: string[], taskAlia
 
 function _ResultReader(f: Awaited<ReturnType<typeof _SeedConversationToolProposalSqlFixture>>, invocation: { readonly toolInvocationId: string; readonly requestFingerprint: string }, resultDigest: string): PrismaConversationToolResultsUnitOfWork
 {
-	return new PrismaConversationToolResultsUnitOfWork(_First, f.siloId, { load: async function _Load() { return _ResultTurn(f, invocation.toolInvocationId, invocation.requestFingerprint, resultDigest); } } as never, { admit: async function _Admit() {} }, f.dependencies);
+	return new PrismaConversationToolResultsUnitOfWork(_First, f.siloId, { load: async function _Load() { return _ResultTurn(f, invocation.toolInvocationId, invocation.requestFingerprint, resultDigest); } } as never, { admit: async function _Admit() {} }, f.dependencies, function _Files() { return { async read() { return { state: ConversationGeneratedFileResultStates.NotGenerated }; } }; });
 }
 
 function _ResultTurn(f: Awaited<ReturnType<typeof _SeedConversationToolProposalSqlFixture>>, proposalId: string, requestFingerprint: string, resultDigest: string): unknown

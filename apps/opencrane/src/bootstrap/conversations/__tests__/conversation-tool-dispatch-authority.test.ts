@@ -113,13 +113,23 @@ describe("current conversation tool dispatch authority", function _Suite()
 	it("rechecks central permission, membership and assignment for the saved execution principal", async function _AllowsCurrentWork()
 	{
 		const f = _Fixture();
-		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBe(_NOW.getTime() + 5_000);
+		await expect(f.authority.admit(f.invocation, _NOW, _WORKLOAD)).resolves.toMatchObject({ requesterSubjectId: "user-1", notAfterEpochMs: _NOW.getTime() + 5_000 });
 		expect(f.transaction.agentRun.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ state: "Running", attempt: 1, principalId: "principal-1" }) }));
 		expect(f.transaction.mcpServerInstall.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ principalId: "principal-1", connectionStatus: "Credentialless" }) }));
 		expect(f.transaction.orgMembership.findUnique).toHaveBeenCalledOnce();
 		expect(f.transaction.agentRevisionMcpToolAssignment.findFirst).toHaveBeenCalledOnce();
 		expect(f.transaction.auditDecision.create).toHaveBeenCalledTimes(3);
 		expect(f.transaction.auditDecision.create).toHaveBeenCalledWith({ data: expect.objectContaining({ actorKind: "Workload", actorId: _WORKLOAD.podUid, audience: _WORKLOAD.audience, namespace: _WORKLOAD.namespace, serviceAccountName: _WORKLOAD.serviceAccountName, workloadKind: "Job", workloadUid: _WORKLOAD.workloadUid, podUid: _WORKLOAD.podUid, runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1" }) });
+	});
+
+	it("returns the current Principal subject for Fleet membership", async function _FleetRequesterSubject()
+	{
+		const f = _Fixture();
+		const membership = { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "principal-1", siloId: "silo-1", revision: 7, assertionId: "assertion-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-evidence", trustedUntil: new Date(_NOW.getTime() + 5_000).toISOString() } as const;
+		const executionEvidence = { loadPersonal: vi.fn().mockResolvedValue({ outcome: "loaded", value: { membership } }), loadManaged: vi.fn() };
+		const authority = new PrismaConversationToolDispatchAuthority(f.transaction as never, { ...f.dependencies, executionEvidence: function _FleetEvidence() { return executionEvidence; } });
+		await expect(authority.admit(f.invocation, _NOW, _WORKLOAD)).resolves.toMatchObject({ requesterSubjectId: "user-1", notAfterEpochMs: _NOW.getTime() + 5_000 });
+		expect(f.transaction.principal.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "principal-1", siloId: "silo-1" }, select: { subject: true, issuer: true } }));
 	});
 
 	it("denies a saved tool when its execution principal no longer has a ready installation", async function _MissingInstallation()

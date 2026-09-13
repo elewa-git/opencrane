@@ -453,6 +453,31 @@
       "path": "apps/conversation-computer/src/main.py",
       "owner": "apps/conversation-computer",
       "classification": "process-entrypoint"
+    },
+    {
+      "path": "apps/mcp-file-generator/src/index.ts",
+      "owner": "apps/mcp-file-generator",
+      "classification": "process-entrypoint"
+    },
+    {
+      "path": "apps/mcp-file-generator/src/instrument.ts",
+      "owner": "apps/mcp-file-generator",
+      "classification": "process-instrumentation"
+    },
+    {
+      "path": "apps/mcp-file-generator/src/log.ts",
+      "owner": "apps/mcp-file-generator",
+      "classification": "process-logging"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/conversations/conversation-generated-file-workflow-composition.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/conversations/conversation-generated-file-workflow-composition.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
     }
   ],
   "requiredTaggedProjects": [
@@ -473,6 +498,8 @@
     "libs/backend/server/iam/identity/main/project.json",
     "libs/backend/server/infra/api/project.json",
     "libs/backend/server/infra/auth/project.json",
-    "libs/backend/server/infra/http/project.json"
+    "libs/backend/server/infra/http/project.json",
+    "apps/mcp-file-generator/project.json",
+    "libs/backend/agents/runtime/mcp-file-generator/main/project.json"
   ]
 }

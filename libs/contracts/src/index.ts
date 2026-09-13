@@ -19,6 +19,8 @@ export * from "./memory/gateway/memory-gateway.types";
 export * from "./memory/gateway/memory-gateway.validator";
 export * from "./mcp/mcp-operator.types";
 export * from "./mcp/mcp-executor-identity.types";
+export * from "./mcp/generated-file-result.types";
+export { ___GeneratedFileEventName } from "./mcp/generated-file-events";
 export * from "./model-routing/model-routing.types";
 export * from "./model-routing/model-routing.validator";
 export type * from "./inputs/compiled-run-input.types";

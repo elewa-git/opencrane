@@ -474,6 +474,9 @@ jobs:
       - name: Prove conversation conflicts and saved answer recovery
         run: npx nx run backend-server-conversations:test:integration
 
+      - name: Prove generated file capture and saved answer recovery
+        run: npx nx run opencrane:test:generated-file-integration
+
   # The API contract check builds the full server, so when the contract changed it added
   # minutes to the test job. It only needs the prepare outputs and runs beside it instead.
   api_contract:

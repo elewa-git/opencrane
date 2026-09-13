@@ -1,3 +1,4 @@
+import type { ConversationGeneratedFileWorkflowComposition } from "../conversations/conversation-generated-file-workflow-composition.types";
 import { _CreateResourceShareCallerResolver } from "@opencrane/backend/server/iam/grants";
 import { Router, type Express, type Request } from "express";
 import type { Prisma, PrismaClient } from "@prisma/client";
@@ -160,9 +161,9 @@ export function _CreateRateLimitedResourceSharesRouter(prisma: PrismaClient, opt
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen workload-facing configuration shared with workers and body parsing.
  */
-export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, mcpRuntime: McpRuntimeComposition, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction">): void
+export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, mcpRuntime: McpRuntimeComposition, generatedFiles: Pick<ConversationGeneratedFileWorkflowComposition, "scanAssets">, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction">): void
 {
-	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, workflowExecution);
+	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, generatedFiles, workflowExecution);
 	const internalControllerRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillAuthoringValidationController },
 		{ method: "use", path: "/api/internal/agent-controller", handler: mcpRuntime.controller },

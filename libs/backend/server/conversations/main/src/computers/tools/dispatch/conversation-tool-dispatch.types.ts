@@ -62,3 +62,32 @@ export interface ConversationToolDispatchAuthority
 	/** Return the admitted absolute expiry in epoch milliseconds, null for refusal, or throw on unavailable evidence. */
 	admitUntil(invocation: ToolInvocationRecord, now: Date, workload: ProductAuthorizationWorkloadContext): Promise<number | null>;
 }
+
+/** Current conversation evidence returned after the same checks used for tool dispatch. */
+export interface ConversationToolDispatchAdmission
+{
+	/** Conversation attached to the still-running attempt. */
+	readonly conversationId: string;
+	/** OIDC subject loaded from the Principal used for current requester participation and access. */
+	readonly requesterSubjectId: string;
+	/** Checked current identity; consumers can restrict their own feature to personal execution. */
+	readonly identity: AgentIdentity;
+	/** Immutable admitted run, requester and computer coordinates that current evidence still supports. */
+	readonly subject: ExecutionSubject;
+	/** Earliest original-budget, lease or membership expiry; reading it never extends permission. */
+	readonly notAfterEpochMs: number;
+}
+
+/** Allows a result consumer to reuse current tool authority without reimplementing its rules. */
+export interface ConversationToolExecutionAdmissionAuthority
+{
+	/** Return checked evidence or null; unavailable history throws and aborts the caller's transaction. */
+	admit(invocation: ToolInvocationRecord, now: Date, workload: ProductAuthorizationWorkloadContext): Promise<ConversationToolDispatchAdmission | null>;
+}
+
+/** Allows a trusted server workflow to reuse current tool authority after its worker exits. */
+export interface ConversationToolSystemExecutionAdmissionAuthority
+{
+	/** Attribute the new authorization evidence to one fixed in-process system profile. */
+	admitSystem(invocation: ToolInvocationRecord, now: Date, actorId: string): Promise<ConversationToolDispatchAdmission | null>;
+}

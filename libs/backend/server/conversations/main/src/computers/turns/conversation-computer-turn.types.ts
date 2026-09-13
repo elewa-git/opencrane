@@ -1,3 +1,4 @@
+import type { ConversationGeneratedFileOutputLinker } from "./generated-output/conversation-generated-file-output.types";
 import type { ConversationComputerContinuationReservation, ConversationComputerModelCustody, ConversationComputerToolResults, ConversationComputerToolSelection } from "./conversation-computer-continuation.types";
 import type { ConversationComputerModelProgress, ConversationComputerModelReservation, ConversationComputerModelTransport } from "./conversation-computer-model.types";
 import type { ConversationToolProposalAdmission } from "../tools/proposal/conversation-tool-proposal.types";
@@ -341,6 +342,8 @@ export interface ConversationComputerOutputPayloadStore
 /** Creates the single-use writer whose binding was frozen with the bootstrap. */
 export interface ConversationComputerBoundWriterFactory
 {
+	/** Confirm the exact already-saved answer after its generated file link is committed. No append occurs. */
+	confirmSaved(turn: FrozenConversationComputerTurn): Promise<void>;
 	create(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity): Pick<BoundConversationWriter, "prepare" | "confirm">;
 }
 
@@ -363,6 +366,8 @@ export interface ConversationComputerTurnAuthorityDependencies
 	readonly logger: Pick<Logger, "warn">;
 	/** Derives the review gateway secret under the server-only key. */
 	readonly reviewCredentials: ConversationComputerReviewCredentialDeriver;
+	/** Links the exact generated attachment after its answer is saved and before run completion. */
+	readonly generatedFiles: ConversationGeneratedFileOutputLinker;
 	readonly outputPayloads: ConversationComputerOutputPayloadStore;
 	readonly store: ConversationComputerTurnStore;
 	readonly writers: ConversationComputerBoundWriterFactory;

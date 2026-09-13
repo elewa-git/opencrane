@@ -81,8 +81,8 @@ export interface ToolInvocationRecord
 	readonly attempt: number | null;
 	/** Caller-owned MCP task when this invocation does not belong to an AgentRun. */
 	readonly mcpTaskId: string | null;
-	/** Candidate id accepted with the invocation. */
-	readonly candidateId: string;
+	/** Immutable runtime, command and candidate identity reconstructed from authority-owned columns. */
+	readonly requestIdentity: ToolInvocationRequestIdentity;
 	/** Id the runtime gave this tool call; repeat calls with the same id must not run twice. */
 	readonly toolInvocationId: string;
 	/** Immutable tool revision. */

@@ -1,3 +1,4 @@
+import { _AssertSameConversationGeneratedFile, _ConversationComputerAnswerBlocks, __ReadConversationGeneratedFileOutput } from "./generated-output/conversation-generated-file-output";
 import { _AdvanceConversationComputerModel, _ConversationModelReservationStatus } from "./conversation-computer-model-flow";
 import { _ConversationFailureDiagnostic } from "../../messages/conversation-failure-diagnostic";
 import type { ConversationComputerModelProgress } from "./conversation-computer-model.types";
@@ -110,7 +111,7 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 				throw new Error("Conversation computer turn already has a different output");
 			const payload = await this.dependencies.outputPayloads.store(turn, command.sourceCommandId, command.text);
 			const entry = turn.outputReceipt.event.data.entry;
-			if (entry.kind !== ConversationEntryKinds.Message || entry.blocks.length !== 1 || entry.blocks[0].kind !== ConversationMessageContentBlockKinds.Text
+			if (entry.kind !== ConversationEntryKinds.Message || entry.blocks[0].kind !== ConversationMessageContentBlockKinds.Text
 				|| entry.blocks[0].id !== payload.blockId || entry.blocks[0].payloadRef !== payload.payloadRef || entry.blocks[0].ciphertextDigest !== payload.ciphertextDigest)
 				throw new Error("Conversation computer output retry has a different saved payload");
 			await this._FinishOutput(turn);
@@ -125,9 +126,10 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 			const notAfter = Math.min(command.modelNotAfterEpochMs, authority.notAfterEpochMs);
 			const commitTurn = { ...turn, binding: authority.candidate.binding };
 			const writer = this.dependencies.writers.create(commitTurn, execution.workload);
-			const receipt = await writer.prepare({ sourceCommandId: command.sourceCommandId, entry: { kind: "message", state: "completed", blocks: [{ id: payload.blockId, kind: "text", payloadRef: payload.payloadRef, ciphertextDigest: payload.ciphertextDigest }], replyToEntryId: turn.latestPendingEntryId, addressedAgentIdentityId: null, activation: "none", visibility: { audience: "conversation" }, causationId: turn.latestPendingEntryId, correlationId: turn.latestPendingEntryId } });
+			const receipt = await writer.prepare({ sourceCommandId: command.sourceCommandId, entry: { kind: "message", state: "completed", blocks: _ConversationComputerAnswerBlocks({ id: payload.blockId, kind: ConversationMessageContentBlockKinds.Text, payloadRef: payload.payloadRef, ciphertextDigest: payload.ciphertextDigest }, authority.generatedFile), replyToEntryId: turn.latestPendingEntryId, addressedAgentIdentityId: null, activation: "none", visibility: { audience: "conversation" }, causationId: turn.latestPendingEntryId, correlationId: turn.latestPendingEntryId } });
 			const finalExecution = await this.dependencies.candidates.assertCurrentForWorkflow(turn);
 			const finalAuthority = await __AssertConversationComputerAnswerAuthority(turn, finalExecution.workload, this.dependencies);
+			_AssertSameConversationGeneratedFile(authority.generatedFile, finalAuthority.generatedFile);
 			if (finalAuthority.candidate.binding.expectedRevision !== commitTurn.binding.expectedRevision)
 				continue;
 			if (Date.now() >= Math.min(reservation.dispatchDeadlineEpochMs, notAfter, finalAuthority.notAfterEpochMs))
@@ -151,9 +153,17 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 	{
 		if (turn.outputReceipt === null)
 			throw new Error("Conversation computer output receipt is missing");
-		const workload = await this.dependencies.candidates.assertLeaseForWorkflow(turn);
-		const writer = this.dependencies.writers.create(_TurnAtOutputPosition(turn), workload);
-		await writer.confirm(turn.outputReceipt);
+		if (__ReadConversationGeneratedFileOutput(turn) !== null)
+		{
+			await this.dependencies.generatedFiles.link(turn);
+			await this.dependencies.writers.confirmSaved(turn);
+		}
+		else
+		{
+			const workload = await this.dependencies.candidates.assertLeaseForWorkflow(turn);
+			const writer = this.dependencies.writers.create(_TurnAtOutputPosition(turn), workload);
+			await writer.confirm(turn.outputReceipt);
+		}
 		await this.dependencies.runLifecycle.complete(_RunLifecycleCommand(turn));
 		await this.dependencies.credentials.revoke(turn.bootstrapId);
 		await this.dependencies.store.settle(turn);

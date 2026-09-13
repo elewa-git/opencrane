@@ -4,13 +4,34 @@ import { expect } from "vitest";
 import { MCP_EXECUTOR_PROFILE_NAME, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 import { PrismaToolInvocationLifecycleEventUnitOfWork, PrismaToolInvocationRunRecoveryAuthority, PrismaToolRecoveryEventReporter } from "@opencrane/backend/agents/execution/runs";
 import { PrismaConversationToolDispatchAuthority } from "@opencrane/backend/server/conversations";
-import { PrismaMcpRuntimeUnitOfWork, _CreateMcpToolInvocationAdmission } from "@opencrane/backend/server/gateways/mcp";
+import { PrismaMcpRuntimeUnitOfWork, _CreateMcpToolInvocationAdmission, type McpInvocationResultParticipantFactory } from "@opencrane/backend/server/gateways/mcp";
 import { __CreatePrismaMcpToolInvocationParticipantFactory } from "@opencrane/backend/server/iam/authorization";
+import type { JsonValue } from "@opencrane/util";
 
 import type { _SeedConversationToolProposalSqlFixture } from "./conversation-tool-proposal.sql-fixture";
 
+/** Reject generated resources from SQL cases whose result owner is deliberately scalar-only. */
+function _IsEmbeddedResource(value: JsonValue): boolean
+{
+	return typeof value === "object" && value !== null && !Array.isArray(value) && "type" in value && value.type === "resource";
+}
+
+/** Build the explicit ordinary-result participant used outside generated-file composition proofs. */
+function _ScalarInvocationResults(): McpInvocationResultParticipantFactory
+{
+	return { __ForTransaction: function _ForTransaction()
+	{
+		return { async prepare(command)
+		{
+			if (command.result.content.some(_IsEmbeddedResource))
+				throw new Error("Scalar MCP result fixture rejects embedded resources");
+			return command.result;
+		} };
+	} };
+}
+
 /** Wire the actual transaction owners without constructing a Kubernetes client or a provider. */
-export function _ToolHandoffSqlRuntime(client: PrismaClient, fixture: Awaited<ReturnType<typeof _SeedConversationToolProposalSqlFixture>>, companionLeaseMs = 300_000)
+export function _ToolHandoffSqlRuntime(client: PrismaClient, fixture: Awaited<ReturnType<typeof _SeedConversationToolProposalSqlFixture>>, companionLeaseMs = 300_000, invocationResults: McpInvocationResultParticipantFactory = _ScalarInvocationResults())
 {
 	const observed = { notAfter: null as number | null };
 	const participants = __CreatePrismaMcpToolInvocationParticipantFactory(new PrismaToolInvocationLifecycleEventUnitOfWork(client), new PrismaToolRecoveryEventReporter(), new PrismaToolInvocationRunRecoveryAuthority(), {
@@ -21,7 +42,7 @@ export function _ToolHandoffSqlRuntime(client: PrismaClient, fixture: Awaited<Re
 		},
 	});
 	const options = { siloId: fixture.siloId, executorNamespace: "mcp-executors", executorServiceAccountName: MCP_EXECUTOR_SERVICE_ACCOUNT_NAME, profileName: MCP_EXECUTOR_PROFILE_NAME, controllerClaimLeaseMilliseconds: 30_000, companionClaimLeaseMilliseconds: companionLeaseMs, log: { info: function _QuietFixture() {} } as never };
-	const authority = new PrismaMcpRuntimeUnitOfWork(client, { toolInvocations: participants, options });
+	const authority = new PrismaMcpRuntimeUnitOfWork(client, { toolInvocations: participants, invocationResults, options });
 	const admission = _CreateMcpToolInvocationAdmission(participants, options);
 	let claim: Awaited<ReturnType<typeof authority.claimNextController>> = null;
 	let release: Awaited<ReturnType<typeof authority.claimNextRelease>> = null;
@@ -52,7 +73,7 @@ export function _ToolHandoffSqlRuntime(client: PrismaClient, fixture: Awaited<Re
 		}
 		return { executionId: execution.id, executionReference: execution.executionReference, identity: { subject: `system:serviceaccount:${options.executorNamespace}:${options.executorServiceAccountName}`, namespace: options.executorNamespace, serviceAccountName: options.executorServiceAccountName, podUid }, workloadUid };
 	}
-	return { admission, authority, observed, register: _Register };
+	return { admission, authority, observed, participants, register: _Register };
 }
 
 /** Wait against the real database clock with a fixed ceiling; never change immutable run evidence. */

@@ -11,7 +11,7 @@ const _ConversationAssetSchema = {
 		messageId: { type: ["string", "null"] },
 		artifactId: { type: ["string", "null"] },
 		artifactRevisionId: { type: ["string", "null"] },
-		provenance: { type: "string", enum: [ConversationAssetProvenance.ParticipantUpload] },
+		provenance: { type: "string", enum: [ConversationAssetProvenance.ParticipantUpload, ConversationAssetProvenance.AgentOutput] },
 		state: { type: "string", enum: [ConversationAssetLifecycle.Uploading, ConversationAssetLifecycle.Processing, ConversationAssetLifecycle.Ready, ConversationAssetLifecycle.Failed, ConversationAssetLifecycle.Removed] },
 		displayName: { type: "string" },
 		mediaType: { type: "string" },

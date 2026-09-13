@@ -153,7 +153,17 @@ ServiceAccount and Pod UID to the registered execution. It supplies that Pod and
 UID to current dispatch admission, so the audit identifies the executor actually requesting the
 external effect. Missing Job coordinates cannot reach the provider claim.
 
+Invocation completion now requires a result participant bound to the same database transaction.
+It receives the current claim, admitted tool revision and TokenReviewed execution coordinates. The
+conversation-file participant may replace an embedded CSV with metadata only after saving its
+capture and workflow admission. A participant failure, expired claim or conflicting invocation
+completion aborts the transaction; raw resource content is never used as a fallback. The complete
+original companion request remains the retry digest, even when its stored result is projected.
+
 ## Public surface
+
+`McpCompanionCommandKinds` exposes the existing companion command discriminant used by the public
+runtime completion port. Server callers can construct that command through this package's facade.
 
 `_ResolveMcpOciServerPromotionCaller` maps the verified browser principal to image-promotion authority.
 

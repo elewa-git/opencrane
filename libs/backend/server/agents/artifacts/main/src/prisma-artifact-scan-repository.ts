@@ -7,7 +7,7 @@ import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 import { ArtifactScannerVerdict, type ArtifactScannerFailureCommand, type ArtifactScannerJobClaim, type ArtifactScannerResultCommand } from "@opencrane/contracts";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
-import { ConversationAssetScanLifecycleStates, type ArtifactScanRepository, type ArtifactScanSourceRead, type ConversationAssetScanLifecycleRepository } from "./artifact-scanning.types";
+import { ConversationAssetCleanPublicationDecisions, ConversationAssetScanLifecycleStates, type ArtifactScanRepository, type ArtifactScanSourceRead, type ConversationAssetScanLifecycleRepository } from "./artifact-scanning.types";
 import { __CreateAndAdmitArtifactPreprocessWorkflow } from "./artifact-preprocess-workflow-admission";
 import { PrismaArtifactPreprocessWorkflowRepository } from "./prisma-artifact-preprocess-workflow-admission";
 
@@ -46,12 +46,14 @@ export class PrismaArtifactScanRepository implements ArtifactScanRepository
 	{
 		const now = await this._databaseNow();
 		const job = await this.transaction.artifactScanJob.findFirst({ where: { artifactRevision: { state: ArtifactRevisionState.Quarantined }, OR: [{ state: ArtifactScanJobState.Pending }, { state: ArtifactScanJobState.RetryableFailed, nextAttemptAt: { lte: now } }, { state: ArtifactScanJobState.Claimed, claimExpiresAt: { lte: now } }] }, include: { artifactRevision: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
-		if (job === null) return null;
+		if (job === null)
+			return null;
 		const attempt = job.attempt + 1;
 		const claimFence = randomUUID();
 		const expiresAt = new Date(now.getTime() + this.claimLeaseMilliseconds);
 		const changed = await this.transaction.artifactScanJob.updateMany({ where: { id: job.id, attempt: job.attempt, state: job.state }, data: { state: ArtifactScanJobState.Claimed, attempt, claimFence, claimExpiresAt: expiresAt, nextAttemptAt: null, failureCode: null } });
-		if (changed.count !== 1) throw new Error("Artifact scan claim conflict");
+		if (changed.count !== 1)
+			throw new Error("Artifact scan claim conflict");
 		return { lease: { jobId: job.id, attempt, claimFence, expiresAt: expiresAt.toISOString() }, sourceByteLength: Number(job.artifactRevision.byteLength) };
 	}
 
@@ -61,9 +63,11 @@ export class PrismaArtifactScanRepository implements ArtifactScanRepository
 		const now = await this._databaseNow();
 		const job = await this.transaction.artifactScanJob.findFirst({ where: { id: command.jobId, state: ArtifactScanJobState.Claimed, attempt: command.attempt, claimFence: command.claimFence, claimExpiresAt: { gt: now } }, include: { artifactRevision: { include: { artifact: true } } } });
 		const byteLength = job === null ? 0 : Number(job.artifactRevision.byteLength);
-		if (job === null || job.claimExpiresAt === null || job.artifactRevision.state !== ArtifactRevisionState.Quarantined || job.artifactRevision.artifact.state !== ArtifactState.Active || !___IsSha256ContentAddress(job.artifactRevision.contentAddress) || !Number.isSafeInteger(byteLength) || byteLength <= 0) return null;
+		if (job === null || job.claimExpiresAt === null || job.artifactRevision.state !== ArtifactRevisionState.Quarantined || job.artifactRevision.artifact.state !== ArtifactState.Active || !___IsSha256ContentAddress(job.artifactRevision.contentAddress) || !Number.isSafeInteger(byteLength) || byteLength <= 0)
+			return null;
 		const expiresAtEpochSeconds = Math.floor(job.claimExpiresAt.getTime() / 1_000);
-		if (expiresAtEpochSeconds <= Math.floor(now.getTime() / 1_000)) return null;
+		if (expiresAtEpochSeconds <= Math.floor(now.getTime() / 1_000))
+			return null;
 		return {
 			readLease: {
 				leaseId: randomUUID(),
@@ -85,14 +89,24 @@ export class PrismaArtifactScanRepository implements ArtifactScanRepository
 	async complete(command: ArtifactScannerResultCommand): Promise<"completed" | "idempotent" | "stale">
 	{
 		const job = await this.transaction.artifactScanJob.findUnique({ where: { id: command.jobId }, include: { artifactRevision: { include: { artifact: true } } } });
-		if (job === null) return "stale";
-		if (job.state === ArtifactScanJobState.Clean || job.state === ArtifactScanJobState.Rejected) return "idempotent";
+		if (job === null)
+			return "stale";
+		if (job.state === ArtifactScanJobState.Clean || job.state === ArtifactScanJobState.Rejected)
+			return "idempotent";
 		const now = await this._databaseNow();
-		if (job.state !== ArtifactScanJobState.Claimed || job.attempt !== command.attempt || job.claimFence !== command.claimFence || job.claimExpiresAt === null || job.claimExpiresAt <= now || job.artifactRevision.state !== ArtifactRevisionState.Quarantined) return "stale";
-		if (command.verdict === ArtifactScannerVerdict.Clean) await this._publishClean(job, now);
-		else await this._rejectUnsafe(job);
+		if (job.state !== ArtifactScanJobState.Claimed || job.attempt !== command.attempt || job.claimFence !== command.claimFence || job.claimExpiresAt === null || job.claimExpiresAt <= now || job.artifactRevision.state !== ArtifactRevisionState.Quarantined)
+			return "stale";
+		if (command.verdict === ArtifactScannerVerdict.Clean)
+		{
+			const publication = await this.conversationAssets.beforeCleanPublication({ revisionId: job.artifactRevisionId, now });
+			if (publication !== ConversationAssetCleanPublicationDecisions.Denied)
+				await this._publishClean(job, now, publication === ConversationAssetCleanPublicationDecisions.PublishGenerated);
+		}
+		else
+			await this._rejectUnsafe(job);
 		const state = command.verdict === ArtifactScannerVerdict.Clean ? ArtifactScanJobState.Clean : ArtifactScanJobState.Rejected;
 		await this.transaction.artifactScanJob.update({ where: { id: job.id }, data: { state, scannerVersion: command.scannerVersion, claimFence: null, claimExpiresAt: null, completedAt: now } });
+		await this.conversationAssets.afterScanSettlement(job.artifactRevisionId);
 		return "completed";
 	}
 
@@ -100,16 +114,23 @@ export class PrismaArtifactScanRepository implements ArtifactScanRepository
 	async fail(command: ArtifactScannerFailureCommand): Promise<"failed" | "idempotent" | "stale">
 	{
 		const job = await this.transaction.artifactScanJob.findUnique({ where: { id: command.jobId } });
-		if (job === null) return "stale";
-		if (job.state === ArtifactScanJobState.RetryableFailed || job.state === ArtifactScanJobState.TerminalFailed) return "idempotent";
+		if (job === null)
+			return "stale";
+		if (job.state === ArtifactScanJobState.RetryableFailed || job.state === ArtifactScanJobState.TerminalFailed)
+			return "idempotent";
 		const now = await this._databaseNow();
-		if (job.state !== ArtifactScanJobState.Claimed || job.attempt !== command.attempt || job.claimFence !== command.claimFence || job.claimExpiresAt === null || job.claimExpiresAt <= now) return "stale";
+		if (job.state !== ArtifactScanJobState.Claimed || job.attempt !== command.attempt || job.claimFence !== command.claimFence || job.claimExpiresAt === null || job.claimExpiresAt <= now)
+			return "stale";
 		const terminal = job.attempt >= 3;
 		const state = terminal ? ArtifactScanJobState.TerminalFailed : ArtifactScanJobState.RetryableFailed;
 		const nextAttemptAt = terminal ? null : new Date(now.getTime() + 5_000);
 		const completedAt = terminal ? now : null;
 		await this.transaction.artifactScanJob.update({ where: { id: job.id }, data: { state, claimFence: null, claimExpiresAt: null, failureCode: command.failureCode, nextAttemptAt, completedAt } });
-		if (terminal) await this.conversationAssets.report({ revisionId: job.artifactRevisionId, state: ConversationAssetScanLifecycleStates.Failed, failureCode: "scan_failed" });
+		if (terminal)
+		{
+			await this.conversationAssets.report({ revisionId: job.artifactRevisionId, state: ConversationAssetScanLifecycleStates.Failed, failureCode: "scan_failed" });
+			await this.conversationAssets.afterScanSettlement(job.artifactRevisionId);
+		}
 		return "failed";
 	}
 
@@ -119,12 +140,16 @@ export class PrismaArtifactScanRepository implements ArtifactScanRepository
 	 * A PDF's preprocessing record and task receipt are saved before the clean result commits, so a
 	 * published PDF cannot be left without conversion work when task admission fails.
 	 */
-	private async _publishClean(job: { readonly id: string; readonly artifactRevisionId: string; readonly artifactRevision: { readonly artifactId: string; readonly byteLength: bigint; readonly mediaType: string; readonly artifact: { readonly siloId: string } } }, _now: Date): Promise<void>
+	private async _publishClean(job: { readonly id: string; readonly artifactRevisionId: string; readonly artifactRevision: { readonly artifactId: string; readonly byteLength: bigint; readonly mediaType: string; readonly artifact: { readonly siloId: string } } }, _now: Date, requireGeneratedAsset: boolean): Promise<void>
 	{
 		await this.transaction.artifactRevision.update({ where: { id: job.artifactRevisionId }, data: { state: ArtifactRevisionState.Published } });
 		await this.transaction.artifact.update({ where: { id: job.artifactRevision.artifactId }, data: { currentRevisionId: job.artifactRevisionId } });
 		if (job.artifactRevision.mediaType !== "application/pdf")
-			await this.conversationAssets.report({ revisionId: job.artifactRevisionId, state: ConversationAssetScanLifecycleStates.Ready, failureCode: null });
+		{
+			const reported = await this.conversationAssets.report({ revisionId: job.artifactRevisionId, state: ConversationAssetScanLifecycleStates.Ready, failureCode: null });
+			if (requireGeneratedAsset && !reported)
+				throw new Error("Generated conversation asset lost its clean publication transition");
+		}
 		await this.transaction.artifactOutboxEvent.create({ data: { artifactId: job.artifactRevision.artifactId, revisionId: job.artifactRevisionId, kind: "RevisionPublished", idempotencyKey: `scan:${job.id}`, payload: { byteLength: Number(job.artifactRevision.byteLength), mediaType: job.artifactRevision.mediaType } } });
 		if (job.artifactRevision.mediaType === "application/pdf")
 		{
@@ -143,7 +168,8 @@ export class PrismaArtifactScanRepository implements ArtifactScanRepository
 	private async _databaseNow(): Promise<Date>
 	{
 		const clock = await this.transaction.artifactAuthorityClock.findUnique({ where: { singleton: 1 }, select: { now: true } });
-		if (clock === null) throw new Error("Artifact scan database clock unavailable");
+		if (clock === null)
+			throw new Error("Artifact scan database clock unavailable");
 		return clock.now;
 	}
 }

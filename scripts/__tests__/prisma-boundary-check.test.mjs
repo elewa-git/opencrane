@@ -281,6 +281,18 @@ test("accepts only checker-pinned live raw procedure sources", function _AllowsP
 	assert.equal(validateRawProcedureDeclarations(procedure.path, source, changedProcedures).some(function _Policy(finding) { return finding.rule === "PRISMA-POLICY-RAW-PROCEDURE"; }), true);
 });
 
+test("accepts the previous pinned event procedure only as an exact historical declaration", function _PreviousEventProcedure()
+{
+	const policy = _LivePolicy();
+	const event = policy.rawProcedureCalls.find(function _Event(procedure) { return procedure.adapter === "WorkflowTaskEventAdmission"; });
+	const previous = { ...event, sqlTemplate: "SELECT absurd.emit_event(${this.queueName}, ${acceptedEventName}, ${serializedPayload}::jsonb)", sourceSha256: "fd789bf1efe78a9b0134f75e9ef1446cd6eebbc295bd328b7c3451ea88b01625" };
+	const historical = { ...policy, rawProcedureCalls: [previous] };
+	assert.doesNotThrow(function _HistoricalBase() { validatePolicy(historical, true); });
+	assert.throws(function _CurrentPolicy() { validatePolicy(historical); }, /invalid raw procedure call/u);
+	for (const change of [{ sourceSha256: "0".repeat(64) }, { sqlTemplate: `${previous.sqlTemplate} LIMIT 1` }, { method: "$queryRawUnsafe" }, { contractImportPath: "./lookalike" }])
+		assert.throws(function _ChangedHistory() { validatePolicy({ ...historical, rawProcedureCalls: [{ ...previous, ...change }] }, true); }, /invalid raw procedure call/u);
+});
+
 test("requires transaction-scoped repository construction to match the owning policy entry", function _RejectsUndeclaredConstruction()
 {
 	const undeclared = { ..._OWNERS, unitsOfWork: [{ ..._OWNERS.unitsOfWork[0], constructs: [] }] };

@@ -10,6 +10,7 @@ import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { ConversationComputerToolResultOutcomes, type ConversationComputerToolResult, type ConversationComputerToolResults } from "../../turns/conversation-computer-continuation.types";
 import type { ConversationComputerTurnCandidateResolver, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "../../turns/conversation-computer-turn.types";
 import type { ConversationToolDispatchDependencies } from "../dispatch/conversation-tool-dispatch.types";
+import { ConversationGeneratedFileResultStates, type ConversationGeneratedFileResultRepository, type ConversationGeneratedFileResultRepositoryFactory } from "./conversation-generated-file-result.types";
 import { PrismaConversationToolDispatchAuthority } from "../dispatch/prisma-conversation-tool-dispatch-authority";
 
 /** Signals that the complete transaction must roll back before reporting unavailable content. */
@@ -35,7 +36,7 @@ function _sameTurn(expected: FrozenConversationComputerTurn, stored: FrozenConve
 export class PrismaConversationToolResultsRepository implements ConversationComputerToolResults
 {
 	/** Keep the result owner and existing dispatch authority on this transaction. */
-	public constructor(private readonly transaction: Prisma.TransactionClient, private readonly dependencies: ConversationToolDispatchDependencies) {}
+	public constructor(private readonly transaction: Prisma.TransactionClient, private readonly dependencies: ConversationToolDispatchDependencies, private readonly generatedFiles: ConversationGeneratedFileResultRepository) {}
 
 	/** Return the exact terminal content only while the original run and current tool authority agree. */
 	public read(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity): Promise<ConversationComputerToolResult>
@@ -69,12 +70,23 @@ export class PrismaConversationToolResultsRepository implements ConversationComp
 			return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
 		const authority = new PrismaConversationToolDispatchAuthority(this.transaction, this.dependencies);
 		const auditedWorkload = { audience: CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, namespace: workload.namespace, serviceAccountName: workload.serviceAccountName, workloadKind: "pod" as const, workloadUid: workload.podUid, podUid: workload.podUid };
-		const admittedUntil = await authority.admitUntil(result.invocation, new Date(), auditedWorkload);
-		if (admittedUntil === null)
+		const admission = await authority.admit(result.invocation, new Date(), auditedWorkload);
+		if (admission === null)
 			return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
+		const admittedUntil = admission.notAfterEpochMs;
 		const notAfterEpochMs = Math.min(admittedUntil, turn.modelReservation?.authorityExpiresAtEpochMs ?? 0, reservation?.authorityExpiresAtEpochMs ?? admittedUntil, consume ? reservation?.dispatchDeadlineEpochMs ?? 0 : admittedUntil);
 		if (!Number.isSafeInteger(notAfterEpochMs) || notAfterEpochMs <= Date.now())
 			return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
+		const generated = await this.generatedFiles.read({ turn, invocation: result.invocation, payload: result.payload, admission });
+		if (generated.state === ConversationGeneratedFileResultStates.Unavailable)
+			return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
+		if (generated.state === ConversationGeneratedFileResultStates.Pending)
+		{
+			if (consume)
+				return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
+			return { outcome: ConversationComputerToolResultOutcomes.GeneratedFilePending, operationId: generated.operationId, notAfterEpochMs: Math.min(notAfterEpochMs, generated.notAfterEpochMs) };
+		}
+		const generatedFile = generated.state === ConversationGeneratedFileResultStates.NotGenerated ? undefined : generated;
 		if (consume)
 		{
 			if (reservation === null)
@@ -85,7 +97,7 @@ export class PrismaConversationToolResultsRepository implements ConversationComp
 		}
 		if (notAfterEpochMs <= Date.now())
 			throw new _ResultAuthorityEnded();
-		return { outcome: ConversationComputerToolResultOutcomes.Available, payload: result.payload, payloadDigest: result.payloadDigest, toolRevisionId: result.invocation.toolRevisionId, occurredAt: result.occurredAt, notAfterEpochMs };
+		return { outcome: ConversationComputerToolResultOutcomes.Available, payload: result.payload, payloadDigest: result.payloadDigest, toolRevisionId: result.invocation.toolRevisionId, occurredAt: result.occurredAt, notAfterEpochMs, ...(generatedFile === undefined ? {} : { generatedFile }) };
 	}
 }
 
@@ -98,7 +110,7 @@ export class PrismaConversationToolResultsRepository implements ConversationComp
 export class PrismaConversationToolResultsUnitOfWork implements ConversationComputerToolResults
 {
 	/** Bind the installation, real turn store, current Pod checks and existing tool authority. */
-	public constructor(private readonly prisma: PrismaClient, private readonly siloId: string, private readonly store: ConversationComputerTurnStore, private readonly candidates: Pick<ConversationComputerTurnCandidateResolver, "admit">, private readonly dependencies: ConversationToolDispatchDependencies) {}
+	public constructor(private readonly prisma: PrismaClient, private readonly siloId: string, private readonly store: ConversationComputerTurnStore, private readonly candidates: Pick<ConversationComputerTurnCandidateResolver, "admit">, private readonly dependencies: ConversationToolDispatchDependencies, private readonly generatedFiles: ConversationGeneratedFileResultRepositoryFactory) {}
 
 	/** Support both pending continuation and saved-output recovery while the run remains Running. */
 	public read(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity): Promise<ConversationComputerToolResult>
@@ -117,7 +129,7 @@ export class PrismaConversationToolResultsUnitOfWork implements ConversationComp
 	{
 		const expected = structuredClone(turn);
 		const reviewedWorkload = structuredClone(workload);
-		const { prisma, siloId, store, candidates, dependencies } = this;
+		const { prisma, siloId, store, candidates, dependencies, generatedFiles } = this;
 		return ___DoWithTrace("conversation.tool_result.read", {}, async function _ReadResult()
 		{
 			try
@@ -135,7 +147,7 @@ export class PrismaConversationToolResultsUnitOfWork implements ConversationComp
 						|| ___DigestCanonicalJson(expected.continuationReservation as unknown as JsonValue) !== ___DigestCanonicalJson(stored.continuationReservation as unknown as JsonValue)))
 						return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
 					await candidates.admit({ computerId: stored.computerId, lease: stored.lease, workload: reviewedWorkload });
-					const repository = new PrismaConversationToolResultsRepository(transaction, dependencies);
+					const repository = new PrismaConversationToolResultsRepository(transaction, dependencies, generatedFiles(transaction));
 					return consume ? repository.consume(stored, reviewedWorkload) : repository.read(stored, reviewedWorkload);
 				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, operation: "conversation tool result", attemptLimit: 3, timeout: 10_000 });
 			}

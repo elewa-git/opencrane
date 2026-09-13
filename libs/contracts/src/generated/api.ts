@@ -5958,7 +5958,7 @@ export interface operations {
                             artifactId: string | null;
                             artifactRevisionId: string | null;
                             /** @enum {string} */
-                            provenance: "participant_upload";
+                            provenance: "participant_upload" | "agent_output";
                             /** @enum {string} */
                             state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
@@ -6027,7 +6027,7 @@ export interface operations {
                             artifactId: string | null;
                             artifactRevisionId: string | null;
                             /** @enum {string} */
-                            provenance: "participant_upload";
+                            provenance: "participant_upload" | "agent_output";
                             /** @enum {string} */
                             state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
@@ -6059,7 +6059,7 @@ export interface operations {
                             artifactId: string | null;
                             artifactRevisionId: string | null;
                             /** @enum {string} */
-                            provenance: "participant_upload";
+                            provenance: "participant_upload" | "agent_output";
                             /** @enum {string} */
                             state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
@@ -6195,7 +6195,7 @@ export interface operations {
                             artifactId: string | null;
                             artifactRevisionId: string | null;
                             /** @enum {string} */
-                            provenance: "participant_upload";
+                            provenance: "participant_upload" | "agent_output";
                             /** @enum {string} */
                             state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
@@ -6269,7 +6269,7 @@ export interface operations {
                             artifactId: string | null;
                             artifactRevisionId: string | null;
                             /** @enum {string} */
-                            provenance: "participant_upload";
+                            provenance: "participant_upload" | "agent_output";
                             /** @enum {string} */
                             state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;

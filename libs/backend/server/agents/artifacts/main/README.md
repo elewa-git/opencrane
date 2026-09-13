@@ -68,6 +68,13 @@ trusted server process:
         └── derived text revision + immutable lineage ◄── broker text bytes
 ```
 
+`src/quarantine/` owns the shared receipt-to-scan transaction for conversation files. It checks the
+exact silo, artifact, lease, byte digest, size and media type, spends the unexpired lease, and saves
+one Quarantined revision plus one scan job. Exact receipt replay reuses that same revision even
+after scanning progresses. It never changes the current-revision pointer; only the scanner may
+publish these bytes. Participant uploads now use this owner, and generated-file publication uses
+the same boundary after capture and current requester authorization.
+
 Conversation uploads instead enter a quarantined revision. The dedicated scanner receives only a
 fenced attempt and brokered bytes. A clean verdict publishes the exact revision; a rejection or
 terminal scanner failure leaves it unavailable and gives the participant only a stable failure.
@@ -130,6 +137,12 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
   bounded retries, and the TokenReview-protected scanner protocol. App composition supplies a
   conversation-lifecycle repository factory; the unit of work binds it and the scan repository to
   the same transaction without making the artifact package an owner of conversation rows.
+  Generated files recheck current authorization before a clean scan publishes them. Publication
+  requires their Processing asset to become Ready in that transaction. The conversation owner saves
+  task wakes only after the asset, revision and terminal scan outcome agree; a failed wake aborts
+  completion. An already failed generated asset keeps its first failure and cannot be published.
+- `_CreateArtifactUploadCryptoPort` shares the mounted lease signer and receipt verifier with
+  participant uploads and generated-file promotion; it introduces no new keys or signing protocol.
 - `_CreateArtifactCatalogueRepository` — read-only active/published catalogue facts for internal
   lease issuance; it never acquires publication or preprocessing locks.
 - `ArtifactPreprocessSourceLeaseIssuer` — the narrow durable port that lets app composition issue

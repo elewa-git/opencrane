@@ -1,12 +1,12 @@
 import type { Prisma } from "@prisma/client";
 
 import type { AgentIdentity } from "@opencrane/contracts";
-import { PrismaAuthorizationAuthority, type ProductAuthorizationWorkloadContext } from "@opencrane/backend/server/iam/authorization";
+import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
 import { PrismaGroupChildAccessRepository } from "../../../children/db/prisma-group-child-access-repository";
 import type { ConversationToolAssignmentCommand, ConversationToolDispatchDependencies } from "./conversation-tool-dispatch.types";
-import type { ConversationToolCurrentAccess, ConversationToolCurrentMembership, ConversationToolRunEvidence } from "./conversation-tool-dispatch-evidence.types";
+import type { ConversationToolAuthorizationActor, ConversationToolCurrentAccess, ConversationToolCurrentAccessAdmission, ConversationToolCurrentMembership, ConversationToolRunEvidence } from "./conversation-tool-dispatch-evidence.types";
 
 /** Rechecks who may use this conversation and tool, recording decisions in the existing transaction. */
 export class PrismaConversationToolAccessAuthority implements ConversationToolCurrentAccess
@@ -15,17 +15,18 @@ export class PrismaConversationToolAccessAuthority implements ConversationToolCu
 	public constructor(private readonly transaction: Prisma.TransactionClient, private readonly dependencies: ConversationToolDispatchDependencies) {}
 
 	/** Keep the agent's membership and the requesting person's membership as separate expiry limits. */
-	public async admitUntil(run: ConversationToolRunEvidence, identity: AgentIdentity, workload: ProductAuthorizationWorkloadContext, decisionTime: number): Promise<number | null>
+	public async admitUntil(run: ConversationToolRunEvidence, identity: AgentIdentity, actor: ConversationToolAuthorizationActor, decisionTime: number): Promise<ConversationToolCurrentAccessAdmission | null>
 	{
 		const authorization = new PrismaAuthorizationAuthority(this.transaction);
 		const membership = await this._LoadMembership(run, identity, authorization, decisionTime);
 		if (membership === null)
 			return null;
-		if (!await this._AdmitRequester(run, membership, authorization, decisionTime))
+		const requesterSubjectId = await this._AdmitRequester(run, membership, authorization, decisionTime);
+		if (requesterSubjectId === null)
 			return null;
-		if (!await this._AdmitTool(run, workload, authorization, decisionTime))
+		if (!await this._AdmitTool(run, actor, authorization, decisionTime))
 			return null;
-		return Math.min(Date.parse(membership.requester.trustedUntil), Date.parse(membership.executionTrustedUntil));
+		return { requesterSubjectId, notAfterEpochMs: Math.min(Date.parse(membership.requester.trustedUntil), Date.parse(membership.executionTrustedUntil)) };
 	}
 
 	/** Ask agent-services to check the identity's existing personal or company membership rules. */
@@ -52,14 +53,14 @@ export class PrismaConversationToolAccessAuthority implements ConversationToolCu
 	}
 
 	/** Require both current participation and current permission, including a child chat's parent access. */
-	private async _AdmitRequester(run: ConversationToolRunEvidence, membership: ConversationToolCurrentMembership, authorization: PrismaAuthorizationAuthority, decisionTime: number): Promise<boolean>
+	private async _AdmitRequester(run: ConversationToolRunEvidence, membership: ConversationToolCurrentMembership, authorization: PrismaAuthorizationAuthority, decisionTime: number): Promise<string | null>
 	{
 		const requester = await this.transaction.principal.findFirst({
 			where: { id: run.subject.requester.requesterPrincipalId, siloId: run.siloId },
 			select: { subject: true, issuer: true },
 		});
 		if (requester === null)
-			return false;
+			return null;
 		const caller = {
 			siloId: run.siloId, principalId: run.subject.requester.requesterPrincipalId,
 			subjectId: requester.subject, externalIssuer: requester.issuer,
@@ -71,7 +72,7 @@ export class PrismaConversationToolAccessAuthority implements ConversationToolCu
 		});
 		const childAccess = new PrismaGroupChildAccessRepository(this.transaction);
 		if (participant === null || !await childAccess.mayAccess(caller, run.conversationId))
-			return false;
+			return null;
 		const decision = await authorization.admitPrincipal({
 			siloId: run.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId,
 			resource: { kind: ProductAuthorizationResourceKinds.Conversation, id: run.conversationId },
@@ -79,11 +80,11 @@ export class PrismaConversationToolAccessAuthority implements ConversationToolCu
 			membershipRevision: this.dependencies.membershipRevision(membership.requester),
 			nowEpochMs: Math.max(decisionTime, Date.now()),
 		});
-		return decision.outcome === AuthorizationDecisionOutcomes.Allow && decision.evidence !== null;
+		return decision.outcome === AuthorizationDecisionOutcomes.Allow && decision.evidence !== null ? requester.subject : null;
 	}
 
 	/** Recheck assignment and every saved permission; the verified executor identity owns the audit entry. */
-	private async _AdmitTool(run: ConversationToolRunEvidence, workload: ProductAuthorizationWorkloadContext, authorization: PrismaAuthorizationAuthority, decisionTime: number): Promise<boolean>
+	private async _AdmitTool(run: ConversationToolRunEvidence, actor: ConversationToolAuthorizationActor, authorization: PrismaAuthorizationAuthority, decisionTime: number): Promise<boolean>
 	{
 		const scope = run.subject.runScope;
 		const eligibility = this.dependencies.toolEligibility(this.transaction);
@@ -95,7 +96,7 @@ export class PrismaConversationToolAccessAuthority implements ConversationToolCu
 		for (const coordinate of run.authorization.coordinates)
 		{
 			const decision = await authorization.admitPrincipal({
-				siloId: run.siloId, principalId: run.subject.principalId, actorKind: "workload", actorId: workload.podUid, workload,
+				siloId: run.siloId, principalId: run.subject.principalId, ...actor,
 				run: { runId: scope.runId, attempt: scope.attempt, agentServiceId: scope.agentServiceId, agentRevisionId: scope.agentRevisionId },
 				...coordinate, argumentsDigest: run.argumentsDigest, nowEpochMs: Math.max(decisionTime, Date.now()),
 			});

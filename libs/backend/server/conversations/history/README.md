@@ -73,3 +73,8 @@ by the cipher tests, because PostgreSQL validates the stored envelope rather tha
 
 - [Conversations](../README.md)
 - [Participant authority](../main/README.md) · [Computer history](../computers/README.md)
+
+`_ConfirmBoundConversationWriterIntent` verifies the complete saved event at its exact history
+position without a writer or execution lease. Recovery may use it after proving that the output
+and generated-file link already committed. It never appends an event or authorizes new work. The
+bound writer uses the same event comparison for its own confirmation and replay checks.

@@ -2,12 +2,15 @@ import type { Router } from "express";
 
 import type { McpRuntimeAuthority, McpTaskWorkflow } from "@opencrane/backend/server/gateways/mcp";
 import type { ConversationToolProposalRuntimeAdmission } from "@opencrane/backend/server/conversations";
+import type { McpToolInvocationTransactionParticipantFactory } from "@opencrane/backend/server/iam/authorization";
 
 /** One process-owned OCI MCP authority and its three authenticated HTTP adapters. */
 export interface McpRuntimeComposition
 {
 	/** Durable class-specific MCP execution authority shared by the app's controller and companion routes. */
 	readonly authority: McpRuntimeAuthority;
+	/** Rebind the same IAM owner when server workflows read a captured invocation after executor exit. */
+	readonly invocationParticipants: McpToolInvocationTransactionParticipantFactory;
 	/** Admit executor work inside the conversation proposal's existing transaction. */
 	readonly admitToolInvocationInTransaction: ConversationToolProposalRuntimeAdmission;
 	/** Browser administrator route that starts immutable-image discovery. */

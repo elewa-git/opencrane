@@ -18,6 +18,8 @@ root version in the same slice. Documentation-only changes do not advance an app
 | [`apps/memory-gateway`](../../apps/memory-gateway/README.md) | Private Cognee transport boundary that TokenReviews the server identity. |
 | [`apps/agent-controller`](../../apps/agent-controller/README.md) | Sole Kubernetes mutator for governed one-shot Jobs. |
 | [`apps/mcp-executor`](../../apps/mcp-executor/README.md) | One-shot token-holding companion for OCI-backed MCP Jobs. |
+| [`apps/mcp-file-generator`](../../apps/mcp-file-generator/README.md) | Thin process and OCI image for credentialless CSV generation; logic lives in its runtime library. |
+| [`libs/backend/agents/runtime/mcp-file-generator/main`](../../libs/backend/agents/runtime/mcp-file-generator/main/README.md) | Strict CSV arguments, deterministic bytes and the loopback MCP endpoint. |
 | [`apps/artifact-service`](../../apps/artifact-service/README.md) | Governed artifact byte promotion and receipt service. |
 | [`apps/artifact-preprocessor`](../../apps/artifact-preprocessor/README.md) | Broker-only document extraction worker. |
 | [`apps/artifact-scanner`](../../apps/artifact-scanner/README.md) | Broker-only malware scanner for quarantined revisions. |

@@ -33,6 +33,12 @@ function _Asset(): ConversationAssetPresentation
 	return { id: "asset-1", messageId: _Message().id, artifactId: "artifact-1", artifactRevisionId: "revision-1", provenance: ConversationAssetProvenance.ParticipantUpload, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 1_024, disposition: ConversationAssetDisposition.Preview, state: ConversationAssetPresentationStates.Ready, detail: "Ready", canRetry: false, canRemove: false, uploadProgressPercent: null, contentState: ConversationAssetContentCommandStates.Idle, contentDetail: null };
 }
 
+/** Builds the currently authorized Ready projection for one generated CSV. */
+function _GeneratedCsvAsset(overrides: Partial<ConversationAssetPresentation> = {}): ConversationAssetPresentation
+{
+	return { id: "generated-asset-1", messageId: _Message().id, artifactId: "generated-artifact-1", artifactRevisionId: "generated-revision-1", provenance: ConversationAssetProvenance.AgentOutput, displayName: "county-totals.csv", mediaType: "text/csv;charset=utf-8", byteLength: 27, disposition: ConversationAssetDisposition.Download, state: ConversationAssetPresentationStates.Ready, detail: "Ready", canRetry: false, canRemove: false, uploadProgressPercent: null, contentState: ConversationAssetContentCommandStates.Idle, contentDetail: null, ...overrides };
+}
+
 /** Builds one canonical tool lifecycle fact without any result payload. */
 function _Tool(phase: ToolCallLogEntry["phase"], position: string, toolName = "Customer records"): ToolCallLogEntry
 {
@@ -127,6 +133,24 @@ describe("Conversation workspace presentation", function _ConversationWorkspaceP
 				throw new Error("Expected a message presentation.");
 			expect(view.attachments).toMatchObject([{ state: ConversationAssetPresentationStates.Unavailable, disposition: null, canRemove: false }]);
 		}
+	});
+
+	it("joins a refreshed Ready AgentOutput CSV only through its exact message and Artifact coordinates", function _GeneratedArtifactIdentity()
+	{
+		const artifact = { id: "generated-artifact-block-1", kind: "artifact" as const, artifactId: "generated-artifact-1", artifactRevisionId: "generated-revision-1", name: "county-totals.csv", mediaType: "text/csv;charset=utf-8" };
+		const message = { ..._Message(), author: { kind: "agent", agentIdentityId: "agent-1", agentServiceId: "service-1", name: "Nova", avatarArtifactRevisionId: null }, provenance: "agent-authored", runId: "run-1", blocks: [artifact] } satisfies MessageEntry;
+		const generated = _GeneratedCsvAsset();
+		const matched = _ConversationEntryViews([message], {}, [generated])[0];
+		const wrongRevision = _ConversationEntryViews([message], {}, [{ ...generated, artifactRevisionId: "another-revision" }])[0];
+		const denied = _ConversationEntryViews([message], {}, [])[0];
+		if (matched?.kind !== ConversationWorkspaceTranscriptEntryKinds.Message || wrongRevision?.kind !== ConversationWorkspaceTranscriptEntryKinds.Message || denied?.kind !== ConversationWorkspaceTranscriptEntryKinds.Message)
+			throw new Error("Expected message presentations.");
+
+		expect(ConversationAssetProvenance.AgentOutput).toBe("agent_output");
+		expect(matched.attachments).toEqual([generated]);
+		expect(matched.attachments[0]).toMatchObject({ provenance: ConversationAssetProvenance.AgentOutput, state: ConversationAssetPresentationStates.Ready, disposition: ConversationAssetDisposition.Download });
+		expect(wrongRevision.attachments).toMatchObject([{ state: ConversationAssetPresentationStates.Unavailable, disposition: null }]);
+		expect(denied.attachments).toMatchObject([{ state: ConversationAssetPresentationStates.Unavailable, disposition: null }]);
 	});
 
 	it("maps every tool phase without claiming that a final answer exists", function _ToolPhases()

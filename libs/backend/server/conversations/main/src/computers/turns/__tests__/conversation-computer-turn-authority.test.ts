@@ -92,7 +92,7 @@ function _Harness() {
       revoke: vi.fn().mockResolvedValue(undefined),
     },
     modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() },
-    toolResults: { read: vi.fn(), consume: vi.fn() }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") },
+    generatedFiles: { link: vi.fn() }, toolResults: { read: vi.fn(), consume: vi.fn() }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") },
     endpoint: "http://litellm.testv5.svc.cluster.local:4000",
     outputPayloads: {
       store: vi
@@ -141,7 +141,7 @@ function _Harness() {
       }),
       settle: vi.fn(async function _Settle() { active = false; }),
     },
-    writers: { create: vi.fn((turn: FrozenConversationComputerTurn) => ({ confirm: append, prepare: async function _Prepare(command: BoundConversationWriterAppend) { return _PrepareBoundDraft(turn.binding, command); } })) },
+    writers: { confirmSaved: vi.fn(), create: vi.fn((turn: FrozenConversationComputerTurn) => ({ confirm: append, prepare: async function _Prepare(command: BoundConversationWriterAppend) { return _PrepareBoundDraft(turn.binding, command); } })) },
   };
   dependencies.candidates.assertCurrentForWorkflow.mockImplementation(() => dependencies.candidates.resolveForWorkflow());
   dependencies.candidates.assertCurrent.mockImplementation(async () => (await dependencies.candidates.resolveForWorkflow()).candidate);

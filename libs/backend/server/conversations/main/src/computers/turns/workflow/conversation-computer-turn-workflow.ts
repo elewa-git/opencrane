@@ -1,5 +1,7 @@
 import { WorkflowTaskRetryableError, type IWorkflowEngine, type IWorkflowTaskContext } from "@opencrane/backend/server/infra/workflows/contract";
+import { ___GeneratedFileEventName } from "@opencrane/contracts";
 
+import { ConversationComputerToolResultOutcomes } from "../conversation-computer-continuation.types";
 import { CONVERSATION_COMPUTER_TURN_TASK } from "./conversation-computer-turn-task";
 import type { ConversationComputerTurnTaskInput, ConversationComputerTurnWorkflowDependencies, ConversationComputerTurnWorkflowResult } from "./conversation-computer-turn-workflow.types";
 
@@ -50,6 +52,11 @@ export function _RegisterConversationComputerTurnWorkflow(workflows: IWorkflowEn
 						return { outcome: progress.outcome, turnId: turn.bootstrapId };
 					case "model_pending":
 						await context.sleepUntil(new Date(progress.notBeforeEpochMs), `model-${progress.ordinal}-deadline`);
+						break;
+					case ConversationComputerToolResultOutcomes.GeneratedFilePending:
+						if (!Number.isSafeInteger(progress.notAfterEpochMs) || progress.notAfterEpochMs <= 0)
+							throw new Error("Generated file wait requires the original authority deadline");
+						await context.waitForEvent(___GeneratedFileEventName(progress.operationId), { timeoutAt: new Date(progress.notAfterEpochMs) });
 						break;
 					case "tool_pending":
 					{

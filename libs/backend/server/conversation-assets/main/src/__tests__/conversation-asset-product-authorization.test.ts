@@ -53,4 +53,13 @@ describe("conversation asset product authorization", function _Suite()
 
 		expect(_authorization.admitPrincipal.mock.calls[0]?.[0]).not.toHaveProperty("boundary");
 	});
+
+	it("keeps the requesting Principal separate from the actual workload actor", async function _AdmitsGeneratedFile()
+	{
+		const repository = new PrismaConversationAssetProductAuthorizationRepository({} as never);
+		const workload = { audience: "opencrane-mcp-executor", namespace: "mcp", serviceAccountName: "executor", workloadKind: "job", workloadUid: "job-uid", podUid: "pod-uid" } as const;
+		const run = { runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1" };
+		await expect(repository.admitWorkload(_CALLER, { workload, run }, { kind: ProductAuthorizationResourceKinds.ArtifactCollection, id: "silo-1" }, ProductAuthorizationActions.Create, { operationId: "file-1" })).resolves.toBe(true);
+		expect(_authorization.admitPrincipal).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ principalId: _CALLER.principalId, actorKind: "workload", actorId: "pod-uid", workload, run }));
+	});
 });

@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { ToolInvocationEventTypes, type ToolInvocationLifecycleEvent } from "@opencrane/backend/server/iam/authorization";
+import { ___GeneratedFileEventName } from "@opencrane/contracts";
 
 import { CONVERSATION_COMPUTER_TURN_TASK } from "../conversation-computer-turn-task";
 import { PrismaConversationComputerTurnWorkflowEventRepository } from "../prisma-conversation-computer-turn-workflow-events";
@@ -90,5 +91,49 @@ describe("Prisma conversation computer turn workflow events", function _Suite()
 			{ taskId: "task-1", taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: "activation-1" },
 			{ eventName: "tool-approval:call-approval", payload: { runId: "run-1", attempt: 2, toolInvocationId: "call-approval" } },
 		);
+	});
+
+	it("emits one identifier-only generated-file event through the saved parent receipt", async function _GeneratedFileWake()
+	{
+		const transaction = _Transaction();
+		const emitEventInTransaction = vi.fn().mockResolvedValue({ eventId: "event-generated-file" });
+		const repository = new PrismaConversationComputerTurnWorkflowEventRepository(transaction, { emitEventInTransaction });
+		const payload = { operationId: "operation-1", state: "ready" };
+		const event = { eventName: ___GeneratedFileEventName(payload.operationId), payload };
+
+		await repository.emitGeneratedFile("run-1", 2, event);
+
+		expect(transaction.agentRun.findUnique).toHaveBeenCalledWith({ where: { id_attempt: { id: "run-1", attempt: 2 } }, select: { workflowTaskId: true, workflowTaskName: true, workflowTaskKey: true } });
+		expect(emitEventInTransaction).toHaveBeenCalledExactlyOnceWith(
+			{ client: transaction },
+			{ taskId: "task-1", taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: "activation-1" },
+			{ eventName: event.eventName, payload: { operationId: "operation-1" } },
+		);
+	});
+
+	it.each([
+		{ name: "a missing run", receipt: null },
+		{ name: "an unbound run", receipt: { workflowTaskId: null, workflowTaskName: null, workflowTaskKey: null } },
+		{ name: "a different workflow", receipt: { workflowTaskId: "other-task", workflowTaskName: "another-task", workflowTaskKey: "other-key" } },
+	])("rejects $name before claiming that both generated-file wakes committed", async function _MissingGeneratedFileOwner({ receipt })
+	{
+		const transaction = _Transaction(receipt);
+		const emitEventInTransaction = vi.fn();
+		const repository = new PrismaConversationComputerTurnWorkflowEventRepository(transaction, { emitEventInTransaction });
+		const event = { eventName: ___GeneratedFileEventName("operation-1"), payload: { operationId: "operation-1" } };
+
+		await expect(repository.emitGeneratedFile("run-1", 2, event)).rejects.toThrow("receipt was not found");
+		expect(emitEventInTransaction).not.toHaveBeenCalled();
+	});
+
+	it("rejects a mismatched generated-file event before reading the parent receipt", async function _MismatchedGeneratedFileEvent()
+	{
+		const transaction = _Transaction();
+		const emitEventInTransaction = vi.fn();
+		const repository = new PrismaConversationComputerTurnWorkflowEventRepository(transaction, { emitEventInTransaction });
+
+		await expect(repository.emitGeneratedFile("run-1", 2, { eventName: ___GeneratedFileEventName("other-operation"), payload: { operationId: "operation-1" } })).rejects.toThrow("event is invalid");
+		expect(transaction.agentRun.findUnique).not.toHaveBeenCalled();
+		expect(emitEventInTransaction).not.toHaveBeenCalled();
 	});
 });

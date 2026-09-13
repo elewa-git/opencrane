@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { McpExecutorCommandState, McpExecutorWorkloadState, McpRuntimeExecutionKind, McpServerRevisionState, McpServerStatus, Prisma } from "@prisma/client";
 
 import { McpCompanionCommandKinds, type McpCompanionClaimResponse, type McpCompanionCompletionRequest, type McpCompanionFailureRequest } from "@opencrane/backend/agents/runtime/mcp-executor/companion";
-import { ExternalActionClaimKinds, ToolInvocationClaimOutcomes, ToolInvocationCompletionOutcomes, ToolInvocationStates, type McpToolInvocationTransactionParticipant, type ToolInvocationClaim, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
+import { ExternalActionClaimKinds, ToolInvocationClaimOutcomes, ToolInvocationStates, type McpToolInvocationTransactionParticipant, type ToolInvocationClaim, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import { MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
@@ -12,6 +12,8 @@ import { _MCP_CONNECTION_UNAVAILABLE, _McpConnectionOwnerPrincipalId } from "../
 import type { McpConnectionReadiness } from "../connections/mcp-connection-readiness.types";
 import { _McpRuntimeLeaseExpiryProposal, _McpRuntimeTimestampProposal } from "./mcp-runtime-timestamps";
 import { McpRuntimeCompanionClaimOutcomes, type McpRuntimeAuthorityOptions, type McpRuntimeCompanionRepository } from "./mcp-runtime.types";
+import type { McpInvocationResultParticipant } from "./mcp-invocation-result.types";
+import { PrismaMcpInvocationCompletionRepository } from "./prisma-mcp-invocation-completion-repository";
 
 /** Claims companion commands and closes their MCP and ToolInvocation state atomically. */
 export class PrismaMcpRuntimeCompanionRepository implements McpRuntimeCompanionRepository
@@ -24,14 +26,17 @@ export class PrismaMcpRuntimeCompanionRepository implements McpRuntimeCompanionR
 	private readonly _connectionReadiness: McpConnectionReadiness;
 	/** Fixed identity and lease policy for the MCP executor class. */
 	private readonly _options: McpRuntimeAuthorityOptions;
+	/** Coordinates result capture and IAM terminal persistence on this transaction. */
+	private readonly _invocationCompletion: PrismaMcpInvocationCompletionRepository;
 
 	/** Bind MCP and ToolInvocation changes to one serializable transaction. */
-	constructor(transaction: Prisma.TransactionClient, toolInvocations: McpToolInvocationTransactionParticipant, connectionReadiness: McpConnectionReadiness, options: McpRuntimeAuthorityOptions)
+	constructor(transaction: Prisma.TransactionClient, toolInvocations: McpToolInvocationTransactionParticipant, connectionReadiness: McpConnectionReadiness, options: McpRuntimeAuthorityOptions, results: McpInvocationResultParticipant)
 	{
 		this._transaction = transaction;
 		this._toolInvocations = toolInvocations;
 		this._connectionReadiness = connectionReadiness;
 		this._options = options;
+		this._invocationCompletion = new PrismaMcpInvocationCompletionRepository(this._transaction, toolInvocations, results);
 	}
 
 	/** Claim at most one command for the exact TokenReview-confirmed Pod. */
@@ -151,13 +156,15 @@ export class PrismaMcpRuntimeCompanionRepository implements McpRuntimeCompanionR
 		if (execution.kind === McpRuntimeExecutionKind.Invocation && request.completion.kind === McpCompanionCommandKinds.Invocation)
 		{
 			const claim = _ToolClaim(execution);
-			if (claim === null)
+			if (claim === null || execution.workloadState !== McpExecutorWorkloadState.Registered || execution.workloadUid === null || execution.companionClaimExpiresAt === null)
 				return "conflict";
-			const result = request.completion.result as unknown as JsonValue;
-			const completed = await this._toolInvocations.completeSucceeded(claim, result, now);
-			if (completed.outcome === ToolInvocationCompletionOutcomes.Missing)
-				return "conflict";
-			if (completed.outcome === ToolInvocationCompletionOutcomes.Winner && (completed.invocation.state !== ToolInvocationStates.Succeeded || completed.invocation.result === null || ___DigestCanonicalJson(completed.invocation.result) !== ___DigestCanonicalJson(result)))
+			const completed = await this._invocationCompletion.complete({
+				claimFence: request.claimFence, companionNotAfterEpochMs: execution.companionClaimExpiresAt.getTime(),
+				executionId: execution.id, executionReference: request.executionReference, podUid: identity.podUid,
+				result: request.completion.result, serverRevisionId: execution.serverRevisionId, siloId: execution.siloId,
+				toolClaim: claim, workload: identity, workloadUid: execution.workloadUid,
+			}, now);
+			if (!completed)
 				return "conflict";
 			await this._CloseSucceeded(execution.id, request.claimFence, digest);
 			return "completed";

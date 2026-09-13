@@ -4,7 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 import { _CreateArtifactPreprocessAuthority, PrismaArtifactScanUnitOfWork, __CreateArtifactPreprocessControllerRouter, __CreateArtifactPreprocessorRouter, __CreateArtifactScannerRouter } from "@opencrane/backend/server/agents/artifacts";
 import { PrismaSkillAuthoringValidationControllerUnitOfWork, PrismaSkillAuthoringValidationWorkerUnitOfWork, __CreateSkillAuthoringValidationControllerRouter, __CreateSkillAuthoringValidationWorkerRouter } from "@opencrane/backend/server/agents/skills";
 import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateSkillAuthoringValidationTokenReviewer, _ValidateIsolatedWorkloadNamespace } from "@opencrane/backend/server/infra/workload-identity";
-import { PrismaConversationAssetScanRepository, PrismaConversationAssetPreprocessRepository } from "@opencrane/backend/server/conversation-assets";
+import { PrismaConversationAssetPreprocessRepository } from "@opencrane/backend/server/conversation-assets";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _CreateArtifactPreprocessSourceBroker } from "@opencrane/backend/server/agents/artifacts";
@@ -12,6 +12,7 @@ import { _CreateArtifactScanSourceBroker } from "@opencrane/backend/server/agent
 import { _CreateArtifactPreprocessOutputBroker, _CreatePublishedArtifactReader } from "@opencrane/backend/server/agents/artifacts";
 import type { InternalRuntimeConfig } from "../configuration/config.types";
 import { _log } from "./log";
+import type { ConversationGeneratedFileWorkflowComposition } from "../conversations/conversation-generated-file-workflow-composition.types";
 import type { ControllerRuntimeComposition, InternalRuntimeComposition, OptionalRuntimeComposition } from "./runtime-composition.types";
 
 /** Rejects workflow admission only in isolated composition tests that do not supply the process engine. */
@@ -64,7 +65,7 @@ function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: Inter
  * @param serverNamespace - Namespace containing the trusted server identity.
  * @returns Optional artifact-preprocessor and scanner routers.
  */
-function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, serverNamespace: string, controllerTokenReviewer: ReturnType<typeof _CreateAgentControllerTokenReviewer>, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction">): OptionalRuntimeComposition
+function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, serverNamespace: string, controllerTokenReviewer: ReturnType<typeof _CreateAgentControllerTokenReviewer>, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction">, generatedFiles: Pick<ConversationGeneratedFileWorkflowComposition, "scanAssets">): OptionalRuntimeComposition
 {
 	const artifactPreprocessorNamespace = config.artifactPreprocessorEnabled
 		? _ValidateIsolatedWorkloadNamespace(config.artifactPreprocessorNamespace, serverNamespace)
@@ -96,7 +97,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 		artifactScanner: artifactScannerNamespace === null
 			? null
 			: __CreateArtifactScannerRouter({
-				authority: new PrismaArtifactScanUnitOfWork(prisma, config.artifactScannerClaimLeaseMilliseconds, function _ConversationAssets(transaction) { return new PrismaConversationAssetScanRepository(transaction); }, workflowExecution),
+				authority: new PrismaArtifactScanUnitOfWork(prisma, config.artifactScannerClaimLeaseMilliseconds, generatedFiles.scanAssets, workflowExecution),
 				tokenReviewer: _CreateArtifactScannerTokenReviewer(authApi, artifactScannerNamespace),
 				sourceBroker: _CreateArtifactScanSourceBroker(),
 				expectedNamespace: artifactScannerNamespace,
@@ -124,7 +125,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
  * @param config - Frozen startup configuration shared with the internal body parser and workers.
  * @returns Routers composed from controller, runtime, and optional-worker plane authorities.
  */
-export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction"> = _UnavailableWorkflowExecution): InternalRuntimeComposition
+export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, generatedFiles: Pick<ConversationGeneratedFileWorkflowComposition, "scanAssets">, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction"> = _UnavailableWorkflowExecution): InternalRuntimeComposition
 {
 	// 1. Create reviewers once and pass each only to its matching caller plane; neighbouring routes
 	// cannot silently reinterpret a controller, validation worker, or runtime identity.
@@ -136,6 +137,6 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 	return {
 		..._CreateControllerRuntimeComposition(prisma, config, serverNamespace, controllerTokenReviewer),
 		skillAuthoringValidationWorker,
-		..._CreateOptionalRuntimeComposition(prisma, authApi, config, serverNamespace, controllerTokenReviewer, workflowExecution),
+		..._CreateOptionalRuntimeComposition(prisma, authApi, config, serverNamespace, controllerTokenReviewer, workflowExecution, generatedFiles),
 	};
 }

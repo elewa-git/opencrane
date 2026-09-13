@@ -141,7 +141,7 @@ export class PrismaMcpRuntimeUnitOfWork implements McpRuntimeAuthority, McpTaskW
 							ociPromotion: new PrismaMcpOciServerPromotionRepository(transaction, authorization, dependencies.options),
 							invocationAdmission: new PrismaMcpToolInvocationAdmissionRepository(transaction, toolInvocations, connectionReadiness, dependencies.options),
 							controller: new PrismaMcpRuntimeControllerRepository(transaction, dependencies.options),
-							companion: new PrismaMcpRuntimeCompanionRepository(transaction, toolInvocations, connectionReadiness, dependencies.options),
+							companion: new PrismaMcpRuntimeCompanionRepository(transaction, toolInvocations, connectionReadiness, dependencies.options, dependencies.invocationResults.__ForTransaction(transaction)),
 							workflowExhaustion: new PrismaMcpTaskWorkflowExhaustionRepository(transaction, toolInvocations),
 						};
 

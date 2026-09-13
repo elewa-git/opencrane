@@ -3,7 +3,7 @@ import { vi } from "vitest";
 import { ConversationModelResponseKinds, ConversationToolProposalOutcomes } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
-import { ConversationComputerToolResultOutcomes } from "../conversation-computer-continuation.types";
+import { ConversationComputerToolResultOutcomes, type ConversationComputerToolResult } from "../conversation-computer-continuation.types";
 import type { ConversationComputerTurnAuthorityDependencies, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 import { AesGcmConversationPrivatePayloadCipher } from "@opencrane/backend/server/conversations/history";
 import { PrismaConversationModelCustodyUnitOfWork } from "../db/prisma-conversation-model-custody";
@@ -48,7 +48,7 @@ export async function _ToolContinuationHarness()
 	const occurredAt = new Date().toISOString();
 	const notifications = { publishTerminal: vi.fn().mockResolvedValue("published") };
 	const results = {
-		read: vi.fn(async function _Read(turn: FrozenConversationComputerTurn)
+		read: vi.fn(async function _Read(turn: FrozenConversationComputerTurn): Promise<ConversationComputerToolResult>
 		{
 			if (!flags.allowed)
 				return { outcome: ConversationComputerToolResultOutcomes.Unavailable } as const;

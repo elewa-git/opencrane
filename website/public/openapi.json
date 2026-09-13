@@ -9066,7 +9066,8 @@
                           "provenance": {
                             "type": "string",
                             "enum": [
-                              "participant_upload"
+                              "participant_upload",
+                              "agent_output"
                             ]
                           },
                           "state": {
@@ -9258,7 +9259,8 @@
                         "provenance": {
                           "type": "string",
                           "enum": [
-                            "participant_upload"
+                            "participant_upload",
+                            "agent_output"
                           ]
                         },
                         "state": {
@@ -9381,7 +9383,8 @@
                         "provenance": {
                           "type": "string",
                           "enum": [
-                            "participant_upload"
+                            "participant_upload",
+                            "agent_output"
                           ]
                         },
                         "state": {
@@ -9665,7 +9668,8 @@
                         "provenance": {
                           "type": "string",
                           "enum": [
-                            "participant_upload"
+                            "participant_upload",
+                            "agent_output"
                           ]
                         },
                         "state": {
@@ -9857,7 +9861,8 @@
                         "provenance": {
                           "type": "string",
                           "enum": [
-                            "participant_upload"
+                            "participant_upload",
+                            "agent_output"
                           ]
                         },
                         "state": {

@@ -2,6 +2,7 @@ import type { ConversationModelToolCall } from "@opencrane/contracts";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 import type { ToolResultDeliveryPayload } from "@opencrane/backend/server/iam/authorization";
 
+import type { ConversationGeneratedFileContinuation } from "../tools/results/conversation-generated-file-result.types";
 import type { ConversationComputerModelReservation } from "./conversation-computer-model.types";
 import type { FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 
@@ -96,6 +97,8 @@ export enum ConversationComputerToolResultOutcomes
 {
 	/** The original invocation has no usable terminal result yet. */
 	Pending = "pending",
+	/** Captured file bytes must finish promotion and scanning before this result can support continuation. */
+	GeneratedFilePending = "generated_file_pending",
 	/** Exact terminal content and current authority permit a bounded continuation. */
 	Available = "available",
 	/** Current authority or result integrity refuses further model work. */
@@ -105,7 +108,8 @@ export enum ConversationComputerToolResultOutcomes
 /** Supplies only validated result content after the same transaction checks current authority. */
 export type ConversationComputerToolResult =
 	| { readonly outcome: ConversationComputerToolResultOutcomes.Pending | ConversationComputerToolResultOutcomes.Unavailable; readonly waitFor?: "approval" | "result"; readonly waitUntilEpochMs?: number }
-	| { readonly outcome: ConversationComputerToolResultOutcomes.Available; readonly payload: ToolResultDeliveryPayload; readonly payloadDigest: string; readonly toolRevisionId: string; readonly occurredAt: string; readonly notAfterEpochMs: number };
+	| { readonly outcome: ConversationComputerToolResultOutcomes.GeneratedFilePending; readonly operationId: string; readonly notAfterEpochMs: number }
+	| { readonly outcome: ConversationComputerToolResultOutcomes.Available; readonly payload: ToolResultDeliveryPayload; readonly payloadDigest: string; readonly toolRevisionId: string; readonly occurredAt: string; readonly notAfterEpochMs: number; readonly generatedFile?: ConversationGeneratedFileContinuation };
 
 /**
  * Reads the original invocation under current authority without consuming its delivery.

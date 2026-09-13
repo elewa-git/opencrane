@@ -28,7 +28,8 @@ function _row(overrides: Readonly<Record<string, unknown>> = {}): Prisma.ToolInv
 		authorizationDecisionDigests: [`sha256:${"b".repeat(64)}`],
 		authorizationAssignmentDigest: `sha256:${"a".repeat(64)}`, authorizationEvidenceDigest: `sha256:${"c".repeat(64)}`,
 		runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1", toolRevisionId: "tool-revision-1", toolInvocationId: "tool-1",
-		arguments: { title: "Proposed" }, argumentsDigest: "sha256:arguments", effectiveArguments: { title: "Proposed" }, effectiveArgumentsDigest: "sha256:arguments", requestFingerprint: "sha256:fingerprint", requestIdentity: {}, approvalRequired: false,
+		arguments: { title: "Proposed" }, argumentsDigest: "sha256:arguments", effectiveArguments: { title: "Proposed" }, effectiveArgumentsDigest: "sha256:arguments", requestFingerprint: "sha256:fingerprint",
+		requestIdentity: { runtimeInstanceId: "foreign-runtime", commandId: "foreign-command", candidateId: "foreign-candidate" }, approvalRequired: false,
 		recoveryMode: ExternalActionRecoveryMode.Manual, recoveryKey: null, state: ToolInvocationState.Preparing, preparationAttempt: 0,
 		retryDeadlineAt: new Date("2026-08-29T10:05:00.000Z"), nextPreparationAttemptAt: new Date("2026-08-29T10:00:00.000Z"), claimAttempt: 0,
 		claimKind: null, claimFence: 0, claimExpiresAt: null, recoveryRequiredAt: null, result: null, failureCode: null, revision: 0,
@@ -53,7 +54,7 @@ describe("ToolInvocation Prisma mapping", function _suite()
 			decisionDigests: [`sha256:${"b".repeat(64)}`],
 			assignmentDigest: `sha256:${"a".repeat(64)}`,
 			evidenceDigest: `sha256:${"c".repeat(64)}`,
-		} }));
+		}, requestIdentity: { runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1" } }));
 	});
 
 	it("returns task authorization evidence without inventing AgentRun fields", async function _mapsTaskEvidence()

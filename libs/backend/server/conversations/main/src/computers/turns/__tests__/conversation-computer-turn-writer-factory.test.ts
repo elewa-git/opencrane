@@ -38,7 +38,7 @@ function _Fixture(turn = _TURN)
 	const assertCurrent = vi.fn().mockResolvedValue({ credentialExpiresAt: "2099-01-01T00:00:00Z" });
 	const read = vi.fn().mockResolvedValue({ outcome: ConversationComputerToolResultOutcomes.Available, payloadDigest: "sha256:result", notAfterEpochMs: Date.parse("2099-01-01T00:00:00Z") });
 	const factory = new ConversationComputerTurnWriterFactory(history, { load }, { assertCurrent }, { read });
-	return { append, load, assertCurrent, read, writer: factory.create(turn, _WORKLOAD) };
+	return { factory, append, load, assertCurrent, read, writer: factory.create(turn, _WORKLOAD) };
 }
 
 /** Bind the answer to the result consumed by the saved final model reservation. */
@@ -56,6 +56,33 @@ function _ToolTurn(): FrozenConversationComputerTurn
 
 describe("conversation computer output policy", function _Suite()
 {
+	it("confirms a saved event without acquiring a new lease or appending again", async function _ConfirmSaved()
+	{
+		const f = _Fixture();
+		const intent = await f.writer.prepare(_COMMAND);
+		await f.writer.append(intent);
+		f.assertCurrent.mockClear().mockRejectedValue(new Error("lease expired"));
+		await expect(f.factory.confirmSaved({ ..._TURN, outputReceipt: intent })).resolves.toBeUndefined();
+		expect(f.assertCurrent).not.toHaveBeenCalled();
+		expect(f.append).toHaveBeenCalledOnce();
+	});
+
+	it("refuses saved confirmation when the exact participant event is absent", async function _MissingSavedEvent()
+	{
+		const f = _Fixture();
+		const intent = await f.writer.prepare(_COMMAND);
+		await expect(f.factory.confirmSaved({ ..._TURN, outputReceipt: intent })).rejects.toThrow("cannot confirm");
+		expect(f.append).not.toHaveBeenCalled();
+	});
+
+	it("refuses saved confirmation when its participant event differs", async function _DifferentSavedEvent()
+	{
+		const f = _Fixture();
+		const intent = await f.writer.prepare(_COMMAND);
+		await f.append({ streamName: intent.streamName, events: [{ ...intent.event, metadata: { changed: "evidence" } }] });
+		await expect(f.factory.confirmSaved({ ..._TURN, outputReceipt: intent })).rejects.toThrow("different history");
+	});
+
 	it("checks the admitted output and current workload lease before appending to its bound stream", async function _Allowed()
 	{
 		const { writer, append, load, assertCurrent, read } = _Fixture();

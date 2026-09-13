@@ -6,7 +6,7 @@ import { vi } from "vitest";
 import { ConversationModelResponseKinds, ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryAtomicAppend, type HistoryReadRequest, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import { BoundConversationWriter } from "@opencrane/backend/server/conversations/history";
+import { BoundConversationWriter, _ConfirmBoundConversationWriterIntent } from "@opencrane/backend/server/conversations/history";
 import { ActiveConversationComputerTurnCandidateResolver } from "../conversation-computer-turn-candidate-resolver";
 import { ConversationComputerTurnAuthority } from "../conversation-computer-turn-authority";
 import { KurrentConversationComputerTurnStore } from "../conversation-computer-turn-store";
@@ -116,10 +116,16 @@ export async function _OutputRecoveryHarness(reserveOutput = true, overrides: Pa
 			throw new Error("run is already failed");
 		flags.runState = "completed";
 	}) };
+	const fileLinks = { link: vi.fn().mockResolvedValue(undefined) };
 	function _Restart()
 	{
 		const store = new KurrentConversationComputerTurnStore(history);
-		const dependencies: ConversationComputerTurnAuthorityDependencies = { logger: { warn: vi.fn() }, modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() }, toolResults: { read: vi.fn(), consume: vi.fn() }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") }, model, siloId: "silo-1", endpoint: "http://model.test", candidates, store, toolProposals: { admit: vi.fn() }, outputPayloads, credentials, runLifecycle, reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, writers: { create: function _Writer(turn, workload)
+		const dependencies: ConversationComputerTurnAuthorityDependencies = { logger: { warn: vi.fn() }, modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() }, generatedFiles: fileLinks, toolResults: { read: vi.fn(), consume: vi.fn() }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") }, model, siloId: "silo-1", endpoint: "http://model.test", candidates, store, toolProposals: { admit: vi.fn() }, outputPayloads, credentials, runLifecycle, reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, writers: { async confirmSaved(turn)
+		{
+			if (turn.outputReceipt === null)
+				throw new Error("Fixture requires a saved output");
+			await _ConfirmBoundConversationWriterIntent(history, { ...turn.binding, expectedRevision: BigInt(turn.outputReceipt.expectedRevision) }, turn.outputReceipt);
+		}, create: function _Writer(turn, workload)
 		{
 			return new BoundConversationWriter(history, turn.binding, { now: function _Now() { return new Date(Date.parse("2026-09-08T23:00:00.000Z") + flags.stamp++ * 1_000); } }, { assertMayAppend: async function _Rate() {} }, { assertMayUseVisibility: async function _Visibility()
 			{
@@ -137,5 +143,5 @@ export async function _OutputRecoveryHarness(reserveOutput = true, overrides: Pa
 	const output = { bootstrapId: turn!.bootstrapId, sourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", modelInvocationFence: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", modelNotAfterEpochMs: Date.parse("2099-01-01T00:00:00Z"), text: "A private chosen answer" };
 	if (reserveOutput)
 		await _ReserveConversationOutputFixture(new KurrentConversationComputerTurnStore(history), turn!.bootstrapId, output.sourceCommandId);
-	return { candidate, model, history, stream, current, flags, compiler, pods, candidates, payloads, outputPayloads, credentials, runLifecycle, command, workflowCommand, output, authority, restart: _Restart, store: new KurrentConversationComputerTurnStore(history) };
+	return { fileLinks, candidate, model, history, stream, current, flags, compiler, pods, candidates, payloads, outputPayloads, credentials, runLifecycle, command, workflowCommand, output, authority, restart: _Restart, store: new KurrentConversationComputerTurnStore(history) };
 }

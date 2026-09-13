@@ -12,13 +12,47 @@ import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _CreateConversationToolDispatchDependencies } from "../../workflows/mcp-runtime-composition";
 
+/** Optional immutable tool input for SQL journeys that exercise another real MCP contract. */
+interface _ToolFixture
+{
+	/** Tool arguments proposed by the synthetic model turn. */
+	readonly arguments: ConversationToolProposal["arguments"];
+	/** Description frozen in both the server revision and run snapshot. */
+	readonly description: string;
+	/** Strict JSON Schema frozen for proposal and dispatch validation. */
+	readonly inputSchema: JsonValue;
+	/** Name frozen by MCP discovery and the run snapshot. */
+	readonly name: string;
+}
+
+/** Lifetimes and optional tool contract used by one isolated SQL fixture. */
+interface _FixtureOptions
+{
+	/** Whether the admitted invocation pauses for human approval. */
+	readonly approvalRequired?: boolean;
+	/** Lifetime of the current computer lease. */
+	readonly currentLeaseLifetimeMs?: number;
+	/** Maximum age accepted by the current membership reader. */
+	readonly currentMembershipLifetimeMs?: number;
+	/** Frozen completion-token budget for original-allowance recovery proofs. */
+	readonly maximumCompletionTokens?: number;
+	/** Lifetime of the immutable run budget. */
+	readonly runLifetimeMs?: number;
+	/** Selects the existing hidden-argument fixture. */
+	readonly secretArguments?: boolean;
+	/** Lifetime of the frozen requester membership evidence. */
+	readonly trustLifetimeMs?: number;
+	/** Exact alternate tool contract for a focused integration journey. */
+	readonly tool?: _ToolFixture;
+}
+
 /**
  * Commits one isolated, trigger-valid fixture before independent Prisma clients race on admission.
  *
  * Immutable rows remain in the disposable CI database until its normal teardown. This helper
  * never disables constraints, deletes product history or connects to a Kubernetes database.
  */
-export async function _SeedConversationToolProposalSqlFixture(options: { readonly runLifetimeMs?: number; readonly trustLifetimeMs?: number; readonly currentLeaseLifetimeMs?: number; readonly currentMembershipLifetimeMs?: number; readonly approvalRequired?: boolean; readonly secretArguments?: boolean } = {})
+export async function _SeedConversationToolProposalSqlFixture(options: _FixtureOptions = {})
 {
 	const prefix = `tool-proof-${randomUUID()}`;
 	const id = (suffix: string) => `${prefix}-${suffix}`;
@@ -43,12 +77,12 @@ export async function _SeedConversationToolProposalSqlFixture(options: { readonl
 		runScope: { siloId, runId, attempt: 1, agentServiceId, agentRevisionId }, computerScope: { siloId, computerId, leaseId: lease.leaseId, leaseGeneration: 1 },
 		requester: { membership, siloId, requesterPrincipalId: principalId, requestIdempotencyKey: id("request"), authenticatedAt: now.toISOString() },
 		admission: { authorizingPrincipalId: principalId, decisionEvidenceId: id("admission-evidence"), admittedAt: now.toISOString() } });
-	const schema: JsonValue = options.secretArguments === true
+	const schema: JsonValue = options.tool?.inputSchema ?? (options.secretArguments === true
 		? { type: "object", required: ["token"], properties: { token: { type: "string", writeOnly: true } }, additionalProperties: false }
-		: { type: "object", required: ["query"], properties: { query: { type: "string" } }, additionalProperties: false };
-	const tool: CompiledToolDefinition = { name: "records.read", toolRevisionId: id("tool"), description: "Read a dedicated test record", requiresApproval: options.approvalRequired === true, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) };
+		: { type: "object", required: ["query"], properties: { query: { type: "string" } }, additionalProperties: false });
+	const tool: CompiledToolDefinition = { name: options.tool?.name ?? "records.read", toolRevisionId: id("tool"), description: options.tool?.description ?? "Read a dedicated test record", requiresApproval: options.approvalRequired === true, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) };
 	const serverName = "Records SQL proof";
-	const budgetPolicy = { maxModelTurns: 2, maxCompletionTokens: 1_024, maxToolInvocations: 1, wallClockDeadlineEpochMs: now.getTime() + (options.runLifetimeMs ?? 240_000) };
+	const budgetPolicy = { maxModelTurns: 2, maxCompletionTokens: options.maximumCompletionTokens ?? 1_024, maxToolInvocations: 1, wallClockDeadlineEpochMs: now.getTime() + (options.runLifetimeMs ?? 240_000) };
 	const snapshot: RunInputSnapshot = { runId, attempt: 1, siloId, agentServiceId, agentRevisionId, snapshotVersion: 1, conversationId, messageIds: [], personaRevisionId: id("persona"), preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [{ toolRevisionId: tool.toolRevisionId, name: tool.name, description: tool.description, inputSchema: schema, inputSchemaDigest: tool.parametersSchemaDigest }], modelRoute: { alias: modelId, modelDefinitionId: modelId, litellmModelId: `litellm-${modelId}`, maxOutputTokens: 512, generatedOutputCapabilities: [] }, budgetPolicy, executionSubject: subject, promptCompilerVersion: "tool-proof-v1", digest: "", compiledAt: now.toISOString() };
 	const snapshotDigest = __DigestRunInputSnapshot(snapshot);
 	const setup = new Client({ connectionString: process.env.DATABASE_URL });
@@ -105,7 +139,7 @@ export async function _SeedConversationToolProposalSqlFixture(options: { readonl
 	const compiledInput: CompiledRunInput = { promptCompilerVersion: "tool-proof-v1", runId, attempt: 1, instructions: "Read the requested test record.", messages: [], tools: [tool], model: { modelAlias: modelId, maxOutputTokens: 512, generatedOutputCapabilities: [] }, budget: { ...budgetPolicy, maxCostUsdMicros: null }, digest: ___DigestCanonicalJson(id("compiled-input")) };
 	const turn: FrozenConversationComputerTurn = { bootstrapId: randomUUID(), siloId, computerId, lease, binding, latestPendingEntryId: id("message"), latestPendingEntryPosition: "1", modelAlias: modelId, maximumBudgetUsd: 1, credentialLifetimeSeconds: 120, compile: { runId, attempt: 1, promptCompilerVersion: compiledInput.promptCompilerVersion, digest: compiledInput.digest }, outputSourceCommandId: null, outputReceipt: null, cancellationReceipt: null, toolSelection: null, continuationReservation: null, modelReservation: null };
 	const candidate: ConversationComputerTurnCandidate = { ...turn, compiledInput, credentialExpiresAt: trustedUntil };
-	const argumentsValue: ConversationToolProposal["arguments"] = options.secretArguments === true ? { token: "sql-secret-never-visible" } : { query: "dedicated record" };
+	const argumentsValue: ConversationToolProposal["arguments"] = options.tool?.arguments ?? (options.secretArguments === true ? { token: "sql-secret-never-visible" } : { query: "dedicated record" });
 	const proposal: ConversationToolProposal = { bootstrapId: turn.bootstrapId, toolRevisionId: tool.toolRevisionId, arguments: argumentsValue };
 	return { siloId, runId, principalId, subject, turn, candidate, dependencies, leaseExpiresAt, tool, serverName, proposal, toolGrantId: id(`grant-${ProductAuthorizationResourceKinds.McpToolRevision}`) };
 }

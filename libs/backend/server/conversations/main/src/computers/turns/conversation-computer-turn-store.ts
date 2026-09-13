@@ -1,3 +1,4 @@
+import { __ReadConversationGeneratedFileOutput } from "./generated-output/conversation-generated-file-output";
 import { _CONVERSATION_TOOL_SELECTED_EVENT, _ConversationToolSelectionEvent, _ReadConversationToolSelection } from "./conversation-computer-tool-selection";
 import type { ConversationComputerContinuationReservation, ConversationComputerToolSelection } from "./conversation-computer-continuation.types";
 import { _ConversationModelReservationEvent, _ReadConversationModelReservation, _ReadConversationContinuationReservation } from "./conversation-computer-model-reservation";
@@ -12,7 +13,7 @@ import { _ReadBoundConversationWriterIntent } from "@opencrane/backend/server/co
 import { _ConversationComputerActiveTurnStreamName } from "../lifecycle/conversation-computer-activity";
 import type { ConversationComputerOutputDecision, ConversationComputerTurnCancellationReceipt, ConversationComputerTurnOutputReceipt, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 import type { ConversationComputerLeaseCoordinates } from "@opencrane/backend/server/conversations/computers";
-import { ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates } from "@opencrane/contracts";
+import { ConversationEntryKinds, MessageStates } from "@opencrane/contracts";
 import { _ConversationComputerTurnCancellationReceiptSchema } from "./conversation-computer-turn-cancellation.validator";
 
 const _FROZEN_EVENT = "opencrane.conversation-computer-turn-frozen.v1";
@@ -442,10 +443,11 @@ function _OutputIntent(turn: FrozenConversationComputerTurn, value: unknown): Co
 		throw new Error("Conversation computer output decision has an invalid history position");
 	const intent = _ReadBoundConversationWriterIntent({ ...turn.binding, expectedRevision: BigInt(expectedRevision) }, value);
 	const entry = intent.event.data.entry;
-	if (intent.event.id !== _OutputReservation(turn).invocationFence || entry.kind !== ConversationEntryKinds.Message || entry.state !== MessageStates.Completed || entry.blocks.length !== 1 || entry.blocks[0].kind !== ConversationMessageContentBlockKinds.Text
+	if (intent.event.id !== _OutputReservation(turn).invocationFence || entry.kind !== ConversationEntryKinds.Message || entry.state !== MessageStates.Completed
 		|| entry.replyToEntryId !== turn.latestPendingEntryId || entry.addressedAgentIdentityId !== null || entry.activation !== "none"
 		|| entry.visibility.audience !== "conversation" || entry.causationId !== turn.latestPendingEntryId || entry.correlationId !== turn.latestPendingEntryId)
 		throw new Error("Conversation computer output decision has a different answer shape");
+	__ReadConversationGeneratedFileOutput({ ...turn, outputReceipt: intent });
 	return intent;
 }
 

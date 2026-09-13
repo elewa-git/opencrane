@@ -3,7 +3,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, ConversationModelToolModes } from "@opencrane/contracts";
-import { KurrentConversationComputerTurnStore, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, type ConversationComputerContinuationReservation, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
+import { ConversationGeneratedFileResultStates, KurrentConversationComputerTurnStore, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, type ConversationComputerContinuationReservation, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -110,7 +110,7 @@ function _Owner(client: PrismaClient, f: Awaited<ReturnType<typeof _Completed>>)
 	return new PrismaConversationToolResultsUnitOfWork(client, f.fixture.siloId, f.store, { async admit(command)
 	{
 		expect(command).toEqual({ computerId: f.turn.computerId, lease: f.turn.lease, workload: _WORKLOAD });
-	} }, f.fixture.dependencies);
+	} }, f.fixture.dependencies, function _Files() { return { async read() { return { state: ConversationGeneratedFileResultStates.NotGenerated }; } }; });
 }
 
 /** Let both independent transactions read the pending delivery before either acknowledges it. */

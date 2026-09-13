@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ArtifactScannerVerdict } from "@opencrane/contracts";
 
+import { ConversationAssetCleanPublicationDecisions } from "../artifact-scanning.types";
 import { PrismaArtifactScanRepository } from "../prisma-artifact-scan-repository";
 
 /** Database-owned time used by every scanner lifecycle test. */
@@ -45,8 +46,13 @@ function _ClaimedJob(overrides: Record<string, unknown> = {})
 
 describe("PrismaArtifactScanRepository", function _Suite()
 {
-	const lifecycle = { report: vi.fn() };
-	beforeEach(function _Reset() { lifecycle.report.mockReset(); });
+	const lifecycle = { beforeCleanPublication: vi.fn(), report: vi.fn(), afterScanSettlement: vi.fn() };
+	beforeEach(function _Reset()
+	{
+		lifecycle.beforeCleanPublication.mockReset().mockResolvedValue(ConversationAssetCleanPublicationDecisions.NotGenerated);
+		lifecycle.report.mockReset().mockResolvedValue(true);
+		lifecycle.afterScanSettlement.mockReset().mockResolvedValue(undefined);
+	});
 	it("uses the configured complete-operation lease when claiming work", async function _ClaimsWithConfiguredLease()
 	{
 		const transaction = _Transaction();
@@ -83,6 +89,9 @@ describe("PrismaArtifactScanRepository", function _Suite()
 		await expect(repository.fail({ jobId: "job-1", attempt, claimFence: `fence-${attempt}`, failureCode: "scanner_failed" })).resolves.toBe("failed");
 		expect(transaction.artifactScanJob.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: expectedState }) }));
 		expect(lifecycle.report).toHaveBeenCalledTimes(terminal ? 1 : 0);
+		expect(lifecycle.afterScanSettlement).toHaveBeenCalledTimes(terminal ? 1 : 0);
+		if (terminal)
+			expect(lifecycle.afterScanSettlement.mock.invocationCallOrder[0]).toBeGreaterThan(lifecycle.report.mock.invocationCallOrder[0]);
 	});
 
 	it("publishes a clean revision and its ready conversation asset atomically", async function _PublishesClean()
@@ -95,6 +104,34 @@ describe("PrismaArtifactScanRepository", function _Suite()
 		expect(transaction.artifactRevision.update).toHaveBeenCalledWith({ where: { id: "revision-1" }, data: { state: ArtifactRevisionState.Published } });
 		expect(transaction.artifact.update).toHaveBeenCalledWith({ where: { id: "artifact-1" }, data: { currentRevisionId: "revision-1" } });
 		expect(lifecycle.report).toHaveBeenCalledWith({ revisionId: "revision-1", state: "ready", failureCode: null });
+		expect(lifecycle.afterScanSettlement).toHaveBeenCalledExactlyOnceWith("revision-1");
+		expect(lifecycle.afterScanSettlement.mock.invocationCallOrder[0]).toBeGreaterThan(transaction.artifactScanJob.update.mock.invocationCallOrder[0]);
+	});
+
+	it("does not publish after generated-file authority ends", async function _DeniesEndedGeneratedFile()
+	{
+		const transaction = _Transaction();
+		transaction.artifactScanJob.findUnique.mockResolvedValue(_ClaimedJob());
+		lifecycle.beforeCleanPublication.mockResolvedValue(ConversationAssetCleanPublicationDecisions.Denied);
+		const repository = new PrismaArtifactScanRepository(transaction as never, 300_000, lifecycle, _Workflow());
+
+		await expect(repository.complete({ jobId: "job-1", attempt: 2, claimFence: "fence-2", verdict: ArtifactScannerVerdict.Clean, scannerVersion: "clamav-pinned" })).resolves.toBe("completed");
+		expect(transaction.artifactRevision.update).not.toHaveBeenCalled();
+		expect(transaction.artifact.update).not.toHaveBeenCalled();
+		expect(transaction.artifactOutboxEvent.create).not.toHaveBeenCalled();
+		expect(transaction.artifactScanJob.update).toHaveBeenCalledWith({ where: { id: "job-1" }, data: expect.objectContaining({ state: ArtifactScanJobState.Clean, claimFence: null, claimExpiresAt: null, completedAt: _NOW }) });
+	});
+
+	it("rolls generated publication back when its exact asset transition is lost", async function _RejectsLostGeneratedAsset()
+	{
+		const transaction = _Transaction();
+		transaction.artifactScanJob.findUnique.mockResolvedValue(_ClaimedJob());
+		lifecycle.beforeCleanPublication.mockResolvedValue(ConversationAssetCleanPublicationDecisions.PublishGenerated);
+		lifecycle.report.mockResolvedValue(false);
+		const repository = new PrismaArtifactScanRepository(transaction as never, 300_000, lifecycle, _Workflow());
+
+		await expect(repository.complete({ jobId: "job-1", attempt: 2, claimFence: "fence-2", verdict: ArtifactScannerVerdict.Clean, scannerVersion: "clamav-pinned" })).rejects.toThrow("lost its clean publication transition");
+		expect(transaction.artifactScanJob.update).not.toHaveBeenCalled();
 	});
 
 	it("admits PDF preprocessing in the same clean-scan transaction", async function _AdmitsPdfPreprocessing()
@@ -121,4 +158,14 @@ describe("PrismaArtifactScanRepository", function _Suite()
 		expect(transaction.artifact.update).not.toHaveBeenCalled();
 		expect(lifecycle.report).toHaveBeenCalledWith({ revisionId: "revision-1", state: "failed", failureCode: "unsafe_file" });
 	});
+	it("rejects scanner completion if saving the terminal wake fails", async function _RejectsUnrecordedWake()
+	{
+		const transaction = _Transaction();
+		transaction.artifactScanJob.findUnique.mockResolvedValue(_ClaimedJob());
+		lifecycle.afterScanSettlement.mockRejectedValue(new Error("task event was not saved"));
+		const repository = new PrismaArtifactScanRepository(transaction as never, 300_000, lifecycle, _Workflow());
+		await expect(repository.complete({ jobId: "job-1", attempt: 2, claimFence: "fence-2", verdict: ArtifactScannerVerdict.Clean, scannerVersion: "clamav-pinned" })).rejects.toThrow("task event was not saved");
+		expect(lifecycle.afterScanSettlement.mock.invocationCallOrder[0]).toBeGreaterThan(transaction.artifactScanJob.update.mock.invocationCallOrder[0]);
+	});
+
 });

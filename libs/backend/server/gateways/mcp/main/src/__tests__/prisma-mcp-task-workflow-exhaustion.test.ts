@@ -167,7 +167,7 @@ describe("Prisma MCP task workflow exhaustion", function _McpTaskWorkflowExhaust
 		const prisma = { $transaction: vi.fn().mockRejectedValueOnce(collision).mockImplementationOnce(async function _Transaction(operation) { return operation(transaction); }) };
 		const toolInvocations = { __ForTransaction: vi.fn().mockReturnValue({}) };
 		const options = { siloId: _INPUT.siloId, executorNamespace: "mcp-executors", executorServiceAccountName: "mcp-executor-default", profileName: "mcp-default", controllerClaimLeaseMilliseconds: 30_000, companionClaimLeaseMilliseconds: 60_000, log: { info: vi.fn() } as never };
-		const unitOfWork = new PrismaMcpRuntimeUnitOfWork(prisma as never, { toolInvocations: toolInvocations as never, options });
+		const unitOfWork = new PrismaMcpRuntimeUnitOfWork(prisma as never, { toolInvocations: toolInvocations as never, invocationResults: { __ForTransaction: vi.fn().mockReturnValue({ prepare: vi.fn() }) }, options });
 
 		await expect(unitOfWork.recordWorkflowExhaustion(_INPUT)).resolves.toEqual({ mcpTaskId: _INPUT.mcpTaskId, state: McpTaskStates.Completed });
 

@@ -3,7 +3,7 @@ export { __CompleteArtifactPreprocessJob, __FailArtifactPreprocessJob, __IssueAr
 export { __CreateArtifactPreprocessorRouter } from "./artifact-preprocessing.router";
 export { __CreateArtifactPreprocessControllerRouter } from "./artifact-preprocess-controller.router";
 export { __CreateArtifactScannerRouter } from "./artifact-scanning.router";
-export { ConversationAssetScanLifecycleStates } from "./artifact-scanning.types";
+export { ConversationAssetCleanPublicationDecisions, ConversationAssetScanLifecycleStates } from "./artifact-scanning.types";
 export { PrismaArtifactScanUnitOfWork } from "./prisma-artifact-scan-unit-of-work";
 export { __IssueArtifactReadLease } from "./artifact-read-lease";
 export { IssueArtifactReadLeaseOutcomes } from "./artifact-read-lease.types";
@@ -23,6 +23,7 @@ export type { ArtifactServicePromotionPort, ArtifactUploadCryptoPort, ArtifactUp
 export { _CreateArtifactUploadGateway, _CreatePublishedArtifactReader } from "./service/artifact-upload.factory";
 export { _CreateArtifactPreprocessOutputBroker } from "./service/artifact-preprocess-output-broker.factory";
 export { _CreateArtifactServicePromotionPort } from "./service/artifact-service-promotion-port";
+export { _CreateArtifactUploadCryptoPort } from "./service/artifact-upload-crypto.factory";
 export { _ReadArtifactMountedPem } from "./service/artifact-mounted-key.loader";
 export { _CreateArtifactReadLeaseSigner } from "./service/artifact-read-lease-signer.factory";
 export { _CreateArtifactServiceReadPort, _InternalArtifactServiceUrl } from "./service/artifact-service-read-port.factory";
@@ -31,3 +32,6 @@ export { _CreateArtifactScanSourceBroker } from "./service/artifact-scan-source-
 export { PrismaScannedPdfTextRepository } from "./pdf-input/prisma-scanned-pdf-text-repository";
 export type { ScannedPdfTextLineage } from "./pdf-input/pdf-text-lineage.types";
 export type { ConversationAssetPreprocessLifecycleFactory, ConversationAssetPreprocessLifecycleRepository } from "./artifact-preprocess-conversation-lifecycle.types";
+
+export { PrismaArtifactQuarantineRepository } from "./quarantine/prisma-artifact-quarantine-repository";
+export { ArtifactQuarantineOutcomes, type ArtifactQuarantineRepository, type QuarantineArtifactRevisionCommand } from "./quarantine/artifact-quarantine.types";

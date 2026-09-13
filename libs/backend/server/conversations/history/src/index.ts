@@ -6,6 +6,6 @@ export type { ConversationHistoryAppendCommand, ConversationHistoryAppendResult,
 export { ConversationHistoryReader } from "./timeline/conversation-history-reader";
 export type { ConversationHistoryGenesisReadCommand, ConversationHistoryReadCommand, ConversationHistoryReadResult, ConversationHistoryGenesis } from "./timeline/conversation-history-reader.types";
 export { ConversationHistoryModes } from "./timeline/conversation-history-reader.types";
-export { BoundConversationWriter, _ReadBoundConversationWriterIntent } from "./writing/bound-conversation-writer";
+export { BoundConversationWriter, _ReadBoundConversationWriterIntent, _ConfirmBoundConversationWriterIntent } from "./writing/bound-conversation-writer";
 export type { BoundConversationWriterBinding, BoundConversationWriterIntent, ComputerConversationEntryDraft, BoundConversationWriterAppend, BoundConversationWriterRateLimiter, BoundConversationWriterVisibilityPolicy, BoundConversationWriterLeaseFence, BoundConversationWriterClock } from "./writing/bound-conversation-writer.types";
 export { _ReadConversationPrivatePayloadKeyring } from "./payloads/conversation-private-payload-keyring";

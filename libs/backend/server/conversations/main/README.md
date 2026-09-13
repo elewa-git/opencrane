@@ -35,7 +35,7 @@ signed-in participant ──► main ◄── HERE ──► history
 | `computers/` | Separate activation, lifecycle, checkpoint, turn and review operation owners. |
 | `computers/tools/` | Proposal admission, current dispatch access and saved result consumption each have their own owner. |
 | `computers/interruptions/` | Select and admit requester-owned Stop commands, record their outcome and let Absurd recover cancellation cleanup. |
-| `computers/turns/workflow/` | Absurd task admission, saved run receipt binding, durable waits and terminal tool-result wakeups. |
+| `computers/turns/workflow/` | Absurd task admission, saved run receipt binding, durable waits, tool-result wakeups and generated-file outcome wakeups. |
 | `computers/turns/approval-notifications/` | Recheck the assigned participant and publish one receipt-backed requested-approval history fact before the durable wait. |
 | `computers/turns/tool-result-notifications/` | Publish a terminal tool status and its private recovery receipt before the remaining model call is reserved. |
 | `computers/turns/credentials/` | Credential issuance, exact recovery and cleanup use repositories supplied by the credential unit of work. |
@@ -129,6 +129,10 @@ Dispatch access is checked during proposal preparation, executor claim and termi
 The dispatch coordinator delegates saved run and budget evidence, current computer identity and
 conversation access to their owners. It does not decide the invocation lifecycle; central IAM owns
 those state transitions. A terminal result remains readable only while its original authority holds.
+Admission also returns the requester subject read from the current Principal, so downstream owners
+do not infer it from personal/Fleet membership formats. Trusted server workflows use `admitSystem`
+through the same evaluator; remote executors retain their TokenReviewed workload context. The
+system actor is audit attribution and grants no additional permission.
 MCP assignment checks receive the saved execution Principal: the human for a personal run or the
 managed service for a company run. The MCP owner checks that Principal's current installation; a
 requester's or administrator's connection cannot substitute for it.
@@ -182,3 +186,14 @@ tests use controlled ports.
 
 - [Conversations](../README.md) · [History](../history/README.md) · [Computers](../computers/README.md)
 - [Execution inputs](../../../agents/execution/inputs/main/README.md) · [Execution runs](../../../agents/execution/runs/main/README.md)
+
+Generated tool results wait on the saved file operation before consuming the original result. The
+file owner verifies the captured metadata, scanner outcome and current Artifact read permission.
+Continuation custody includes that publication outcome, and the dispatch rechecks it without
+changing the original IAM result digest or remaining call and token allowance.
+
+A generated-file answer contains encrypted Text and at most one server-selected Ready Artifact
+block. The turn owner compares the file decision before its atomic history commit, then asks the
+file owner to link the exact saved message. Link or settlement failures recover that same answer.
+Once the link is verified, exact-event confirmation and run settlement need no new execution lease;
+new file links still require current authority. Ordinary text recovery keeps its existing lease check.

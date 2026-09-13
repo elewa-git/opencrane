@@ -3,6 +3,7 @@ import type { RuntimeWorkloadBinding, RuntimeWorkloadClaim } from "@opencrane/ba
 import type { FixedServiceAccountTokenReviewer, RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 import type { McpToolInvocationTransactionParticipantFactory } from "@opencrane/backend/server/iam/authorization";
 import type { Logger } from "@opencrane/backend/observability";
+import type { McpInvocationResultParticipantFactory } from "./mcp-invocation-result.types";
 
 /**
  * Names the operation admitted into a saved MCP runtime execution.
@@ -216,6 +217,8 @@ export interface PrismaMcpRuntimeAuthorityDependencies
 {
 	/** Authorization-owned participant factory bound to each MCP transaction. */
 	readonly toolInvocations: McpToolInvocationTransactionParticipantFactory;
+	/** Captures governed resources before their terminal result commits on the same transaction. */
+	readonly invocationResults: McpInvocationResultParticipantFactory;
 	/** Fixed deployment and lease policy for this silo. */
 	readonly options: McpRuntimeAuthorityOptions;
 }

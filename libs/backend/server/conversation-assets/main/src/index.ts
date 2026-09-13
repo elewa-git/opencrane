@@ -11,3 +11,11 @@ export { _ResolveConversationAssetCaller } from "./http/conversation-asset-calle
 export { PrismaConversationAssetPreprocessRepository } from "./prisma-conversation-asset-preprocess-repository";
 export { PrismaConversationMessageAttachmentRepository } from "./prisma-conversation-message-attachment-repository";
 export { PrismaConversationPromptDocumentRepository } from "./pdf-input/prisma-conversation-prompt-document-repository";
+export { _CreateConversationGeneratedFileResultParticipant } from "./agent-output/persistence/prisma-conversation-generated-file-result.factory";
+export { PrismaConversationGeneratedFileWorkflowRepository } from "./agent-output/persistence/workflow/prisma-conversation-generated-file-workflow-repository";
+export { PrismaConversationGeneratedFileWorkflowUnitOfWork } from "./agent-output/persistence/workflow/prisma-conversation-generated-file-workflow-unit-of-work";
+export { GeneratedFileWorkflowFailureCodes, type GeneratedFileWorkflowPersistenceDependencies, type GeneratedFileTerminalEventRepository } from "./agent-output/persistence/workflow/generated-file-workflow-persistence.types";
+export { _RegisterConversationGeneratedFileWorkflow } from "./agent-output/workflow/conversation-generated-file-workflow";
+export { GeneratedFileArtifactPromotionPort } from "./agent-output/promotion/generated-file-artifact-promotion-port";
+export { PrismaConversationGeneratedFileResultRepository } from "./agent-output/result/prisma-conversation-generated-file-result-repository";
+export { PrismaConversationGeneratedFileOutputLinkUnitOfWork } from "./agent-output/output/prisma-conversation-generated-file-output-link-unit-of-work";

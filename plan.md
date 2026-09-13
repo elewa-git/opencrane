@@ -1,5 +1,104 @@
 # OpenCrane — Active Plan
 
+## Generated conversation files — implementation in progress
+
+F1 continues above draft #878 at `5acd38a6f6dec8a0dc4fa4e010bf7a9b9e73b37d` on
+`feat/0.12-conversation-generated-tool-files`. Completion means a permitted OCI tool produces a
+file, the server captures and scans it, the assistant attaches its published revision, and the
+requester can download identical bytes after refresh or restart. Producer tests alone do not close F1.
+
+The first producer is `opencrane.files.create_csv`, an actual credentialless MCP image owned by
+`apps/mcp-file-generator` with protocol and CSV logic under
+`libs/backend/agents/runtime/mcp-file-generator/main`. Existing OCI promotion, installation,
+revision assignment, invocation and workload fencing remain the execution boundary. This change
+adds no automatic installation, agent assignment, permission grant or cluster deployment.
+
+The producer implementation passes its focused build/test/lint checks, including 17 CSV/protocol
+and loopback HTTP tests plus the app image contract. CSV media policy passes five model tests and
+lint. Independent producer review passed before the shared CSV model extraction; the integrated review
+of that extraction, resource validation and encrypted custody passes. Capture persistence,
+metadata-only MCP completion, workflow persistence and scanner publication checks are implemented
+locally. The actual capture and scanner PostgreSQL/Absurd proofs pass; final answer integration remains unfinished.
+
+The server integration must preserve these ordering rules:
+
+1. While the original MCP completion claim is current, validate the admitted tool/revision and
+   personal requester authority, reserve stable artifact/asset/task coordinates, and capture bytes
+   encrypted in the same transaction as the metadata-only terminal tool result. The raw completion
+   digest remains the retry identity. Neither terminal JSON nor conversation events carry file text.
+2. Absurd owns promotion, receipt recovery and scan waiting. The MCP Pod can finish after capture;
+   it does not wait for publication or schedule the server's next model call. Publication starts
+   with a Quarantined revision and the existing scan job; only a clean scan can make it Ready.
+3. The turn waits for that saved file outcome, then uses its original remaining continuation
+   allowance. Output preparation and append recheck access and attach only the saved Ready revision.
+   Lost responses recover the same output intent and asset/message link.
+
+The shared CSV model now lets the server re-render admitted arguments and reject any changed
+file bytes, including formula injection, before capture. The producer no longer owns a separate
+copy of that policy.
+
+The existing private-payload cipher caps text at 64 KiB while files can be 1 MiB. The file custody
+implementation must preserve the ordinary text limit and authenticate the complete file's ordered
+payload references, length and content digest. The generic artifact upload finalizer publishes
+without scanning and cannot be used unchanged for these untrusted bytes.
+
+The process now registers the generated-file task and passes its transaction-bound authority to
+the scanner. That workflow uses IAM's existing server system actor; it does not retain the departed
+MCP Pod as its caller. Current run, requester, membership, assignment, computer generation and
+original deadline checks still apply. Scanner completion records task wakes after its final database
+state is readable. A wake failure aborts completion.
+
+Focused scanner tests pass (10 artifact cases and 8 conversation-asset cases), as do the 9 internal
+HTTP/composition tests and Prisma ownership checks. MCP completion passes 54 focused tests; the
+companion suites pass 22. The actual MCP capture suite now passes four PostgreSQL/Absurd cases, and the scanner suite passes
+15 cases with the real current-authority composition, both durable task wakes, expiry and rollback.
+Those tests exposed a shared Absurd adapter bug: Prisma cannot deserialize PostgreSQL void. The
+event adapter now executes the same function while returning a supported scalar; the real scanner
+proof passes with that correction.
+
+The generated-result reader now blocks continuation until the saved scan outcome is terminal and
+rechecks the original requester's Artifact read permission. The model sees a metadata-only publication
+outcome beside the original tool payload; the original result digest and remaining allowance stay
+unchanged. Focused continuation tests prove restart waiting and refusal of a changed saved outcome.
+Independent review of this result integration passes.
+
+The answer now saves Text plus at most one exact Ready Artifact using the existing atomic history
+commit. The link owner reloads that receipt and binds the asset before run completion. Focused tests
+cover link failure, changed attachments and settlement after an already-linked answer's lease
+expires. Frontend mapper and content-store tests cover refreshed AgentOutput CSV downloads.
+Independent final-output review passes with no findings. The assembled PostgreSQL/Kurrent proof
+is implemented and awaits CI execution.
+
+Final-output architecture post-review passes, including the seven module-growth candidates.
+The broad local source run passes 920 tests; the full server SQL target passes 73 cases plus its
+raw authority scripts on a new disposable database, preserving earlier fixture databases. Server
+build, regenerated OpenAPI/client artifacts, release binding, CI workflow regression checks and
+the live PR-stack preflight pass. The combined capture/scan/answer recovery suite compiles and is
+registered as `opencrane:test:generated-file-integration` in the existing PostgreSQL/Kurrent CI
+job. Its local run skips without both services and is not evidence that the combined proof passes.
+The suite starts from the saved first model dispatch and uses the production continuation path
+with a synthetic final model transport and candidate resolver. Its admitted 384-token allowance
+has already spent 128, leaving 256 below the model route's 512-token ceiling; the assertions require
+that exact remainder and one model dispatch across recovery. Current lease/Pod authority has its
+separate PostgreSQL proofs; this fixture does not replace them.
+
+The delivery audit found missing production dependencies in the CSV image workspace. They now
+match the bundle's external imports and use versions already locked by the repository. The new
+app-owned `image-smoke` builds and starts the production image without a network, then tests
+discovery, tool listing and exact CSV output over container loopback. Static checks and independent
+smoke review pass; real container execution belongs to CI. Authorization inventory now records
+the generated-file Create decision separately from participant asset mutations, and its checker
+and seven regression tests pass.
+The final full dependency check also passes after exposing the existing MCP completion command
+enum through its gateway facade and declaring the asset owner's workload-identity type dependency.
+
+The additional PostgreSQL once-only message-link guard is proposed but unapplied: automatic approval
+review requires explicit approval of that exact production baseline mutation. The concrete source
+proposal is `/private/tmp/opencrane-generated-file-message-link-source-proposal.md`. Existing testv5
+data is not part of this source proposal. Remaining work includes that guard and the assembled
+answer, download, restart and authority qualification. Hosted MCP, delegation and later priorities retain their existing scope.
+The full MVP goal stays active; testv5 and real uploaded-OCI qualification remain separate gates.
+
 ## Personal memory catalog completion — transaction integration
 
 This slice starts above draft #877 at `5618b277157b9601fdd3527c3fc423bcd1247f9e` on
@@ -29,7 +128,10 @@ and raw authority scripts. Package lint/type checks, server build/OpenAPI, style
 module growth and release binding pass. Architecture post-review and independent review of the
 complete nine-file change pass with no blocking findings. This source slice does not add a grant,
 public route, gateway transport or worker; the pending first-dataset permission and gateway
-replacement remain separate decisions. Publication and exact-head CI remain the next gates.
+replacement remain separate decisions. Draft [#878](https://github.com/elewa-git/opencrane/pull/878) publishes the change at
+`5acd38a6f6dec8a0dc4fa4e010bf7a9b9e73b37d`. Exact-head CI run `34729341100` passes
+affected source checks, database authority, KurrentDB recovery, generated API, component contracts,
+stack integrity and the server image. Unaffected provider and live smoke checks were skipped.
 
 ## Personal memory command preparation and atomic task admission
 
@@ -665,7 +767,7 @@ remain separate gates.
 | --- | --- | --- | --- |
 | 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection and participant terminal-result history are implemented. Explicit connection readiness and execution fencing pass source review and local database proof. Standard remote activation/discovery/calls, hosted MCP execution and real integration qualification remain. |
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry, durable resume and visible decision controls are implemented in draft #857. Company approver/connection binding and real action qualification remain. |
-| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: the repaired 1.5.4 candidate passes exact-image deletion, isolation, dataset permission and indexing recovery qualification. Durable operation persistence is published in #876 with passing CI. Command/source preparation and actual Absurd admission are published in #877 with passing CI; catalog completion now passes local unit and PostgreSQL proof; authenticated composition, gateway/client wiring and product Remember, recall, Correct and Forget remain unfinished. |
+| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: the repaired 1.5.4 candidate passes exact-image deletion, isolation, dataset permission and indexing recovery qualification. Durable operation persistence is published in #876 with passing CI. Command/source preparation and actual Absurd admission are published in #877 with passing CI; catalog completion is published in #878 with passing CI; authenticated composition, gateway/client wiring and product Remember, recall, Correct and Forget remain unfinished. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass independent review and exact-head CI in draft #862; qualify the live journey. Other-participant controls remain a separate actor-policy decision. |
 | 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | PAUSED: runtime-question source work awaits its separate explicit approval; partial implementation is not validated delivery. Structured results and A2UI remain. |
 | 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file Open/Preview/Download is implemented and exact-head CI passes in #868. PDF-informed answers are source complete in #869 and exact-head CI passes, including real-store recovery and Linux visuals; live qualification remains. Generated file production follows. |
@@ -980,7 +1082,7 @@ their own completion track; they are not silently bundled into the first tool PR
 | T1 — first permitted tool retrieval | IN PROGRESS — the server's one-tool continuation is implemented and now progresses through Absurd in #849. Company tool assignment is the first active follow-up. Connection activation, a real integration and participant result evidence remain required. |
 | T2 | IN PROGRESS: personal approval and durable resume pass local integration; company approval and real external-action qualification remain. |
 | U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
-| M1 | IN PROGRESS: the candidate in #875 passes exact-image deletion, isolation, permission recovery and interrupted-indexing qualification. Durable Remember/Correct/Forget persistence is published in #876 with passing CI. Command/source preparation and transaction-bound Absurd admission are published in #877 with passing CI; catalog completion passes local unit and PostgreSQL proof. Authenticated composition, gateway/client integration and product memory journeys remain. The separate production-provider qualification still fails. |
+| M1 | IN PROGRESS: the candidate in #875 passes exact-image deletion, isolation, permission recovery and interrupted-indexing qualification. Durable Remember/Correct/Forget persistence is published in #876 with passing CI. Command/source preparation and transaction-bound Absurd admission are published in #877 with passing CI; catalog completion is published in #878 with passing CI. Authenticated composition, gateway/client integration and product memory journeys remain. The separate production-provider qualification still fails. |
 | U2 | PAUSED: partial runtime-question source awaits its separate explicit approval. |
 | F1 | IN PROGRESS: Ready-file Open/Preview/Download and PDF-informed answers pass exact-head CI in #868 and #869. Generated outputs and live qualification remain. |
 | D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |

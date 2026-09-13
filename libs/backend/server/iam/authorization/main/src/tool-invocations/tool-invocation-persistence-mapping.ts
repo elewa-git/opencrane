@@ -65,7 +65,11 @@ export function _ToolInvocationRecord(row: ToolInvocationRow): ToolInvocationRec
 		runId: row.runId,
 		attempt: row.attempt,
 		mcpTaskId: row.mcpTaskId,
-		candidateId: row.candidateId,
+		requestIdentity: {
+			runtimeInstanceId: row.runtimeInstanceId,
+			commandId: row.commandId,
+			candidateId: row.candidateId,
+		},
 		toolInvocationId: row.toolInvocationId,
 		toolRevisionId: row.toolRevisionId,
 		arguments: row.arguments as unknown as JsonValue,

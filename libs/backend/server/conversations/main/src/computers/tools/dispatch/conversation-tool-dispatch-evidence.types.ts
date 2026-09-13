@@ -55,9 +55,23 @@ export interface ConversationToolCurrentMembership
 	readonly executionTrustedUntil: string;
 }
 
+/** Current requester identity and deadline returned after every access check succeeds. */
+export interface ConversationToolCurrentAccessAdmission
+{
+	/** OIDC subject loaded from the exact Principal used for current conversation participation. */
+	readonly requesterSubjectId: string;
+	/** Earliest current membership expiry; later owners may only shorten it. */
+	readonly notAfterEpochMs: number;
+}
+
+/** Physical actor that asks IAM to recheck the run's saved tool coordinates. */
+export type ConversationToolAuthorizationActor =
+	| { readonly actorKind: "workload"; readonly actorId: string; readonly workload: ProductAuthorizationWorkloadContext }
+	| { readonly actorKind: "system"; readonly actorId: string; readonly workload?: never };
+
 /** Rechecks current participation and permissions within the caller's transaction. */
 export interface ConversationToolCurrentAccess
 {
-	/** Return the current membership expiry only after every required permission is allowed. */
-	admitUntil(run: ConversationToolRunEvidence, identity: AgentIdentity, workload: ProductAuthorizationWorkloadContext, decisionTime: number): Promise<number | null>;
+	/** Return the current requester and membership expiry only after every required permission is allowed. */
+	admitUntil(run: ConversationToolRunEvidence, identity: AgentIdentity, actor: ConversationToolAuthorizationActor, decisionTime: number): Promise<ConversationToolCurrentAccessAdmission | null>;
 }

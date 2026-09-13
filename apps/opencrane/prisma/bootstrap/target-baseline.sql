@@ -74,7 +74,7 @@ CREATE TYPE "ToolResultDeliveryState" AS ENUM ('pending', 'consumed');
 CREATE TYPE "ToolInvocationAuthorizationActorKind" AS ENUM ('workload');
 
 -- CreateEnum
-CREATE TYPE "ConversationAssetProvenance" AS ENUM ('participant_upload');
+CREATE TYPE "ConversationAssetProvenance" AS ENUM ('participant_upload', 'agent_output');
 
 -- CreateEnum
 CREATE TYPE "ConversationAssetState" AS ENUM ('uploading', 'processing', 'ready', 'failed', 'removed');
@@ -678,6 +678,55 @@ CREATE TABLE "conversation_assets" (
     "removed_at" TIMESTAMP(3),
 
     CONSTRAINT "conversation_assets_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "conversation_generated_files" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
+    "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
+    "bootstrap_id" TEXT NOT NULL,
+    "computer_id" TEXT NOT NULL,
+    "lease_id" TEXT NOT NULL,
+    "lease_generation" INTEGER NOT NULL,
+    "agent_identity_id" TEXT NOT NULL,
+    "requester_principal_id" TEXT NOT NULL,
+    "requester_subject" TEXT NOT NULL,
+    "tool_invocation_row_id" TEXT NOT NULL,
+    "tool_invocation_id" TEXT NOT NULL,
+    "tool_revision_id" TEXT NOT NULL,
+    "server_revision_id" TEXT NOT NULL,
+    "raw_result_digest" TEXT NOT NULL,
+    "custody_manifest_version" TEXT NOT NULL,
+    "ciphertext_manifest_digest" TEXT NOT NULL,
+    "asset_id" TEXT NOT NULL,
+    "artifact_id" TEXT NOT NULL,
+    "revision_id" TEXT NOT NULL,
+    "upload_lease_id" TEXT NOT NULL,
+    "content_address" TEXT NOT NULL,
+    "byte_length" BIGINT NOT NULL,
+    "chunk_count" INTEGER NOT NULL,
+    "display_name" TEXT NOT NULL,
+    "media_type" TEXT NOT NULL,
+    "workflow_task_id" TEXT NOT NULL,
+    "workflow_task_name" TEXT NOT NULL,
+    "workflow_task_key" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "conversation_generated_files_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "conversation_generated_file_chunks" (
+    "operation_id" TEXT NOT NULL,
+    "index" INTEGER NOT NULL,
+    "payload_ref" TEXT NOT NULL,
+    "decoded_byte_length" INTEGER NOT NULL,
+    "ciphertext_digest" TEXT NOT NULL,
+
+    CONSTRAINT "conversation_generated_file_chunks_pkey" PRIMARY KEY ("operation_id","index")
 );
 
 -- CreateTable
@@ -2239,6 +2288,36 @@ CREATE UNIQUE INDEX "conversation_assets_conversation_id_id_key" ON "conversatio
 CREATE UNIQUE INDEX "conversation_assets_participant_idempotency_key" ON "conversation_assets"("conversation_id", "created_by_user_id", "idempotency_key");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "conversation_generated_files_tool_invocation_row_id_key" ON "conversation_generated_files"("tool_invocation_row_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_generated_files_asset_id_key" ON "conversation_generated_files"("asset_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_generated_files_artifact_id_key" ON "conversation_generated_files"("artifact_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_generated_files_revision_id_key" ON "conversation_generated_files"("revision_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_generated_files_upload_lease_id_key" ON "conversation_generated_files"("upload_lease_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_generated_files_workflow_task_id_key" ON "conversation_generated_files"("workflow_task_id");
+
+-- CreateIndex
+CREATE INDEX "conversation_generated_files_silo_id_conversation_id_create_idx" ON "conversation_generated_files"("silo_id", "conversation_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "conversation_generated_files_run_id_attempt_idx" ON "conversation_generated_files"("run_id", "attempt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_generated_files_workflow_task_name_workflow_ta_key" ON "conversation_generated_files"("workflow_task_name", "workflow_task_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_generated_file_chunks_payload_ref_key" ON "conversation_generated_file_chunks"("payload_ref");
+
+-- CreateIndex
 CREATE INDEX "conversations_silo_id_mode_lifecycle_updated_at_idx" ON "conversations"("silo_id", "mode", "lifecycle", "updated_at");
 
 -- CreateIndex
@@ -3006,6 +3085,12 @@ ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_artifact_i
 
 -- AddForeignKey
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_upload_lease_id_fkey" FOREIGN KEY ("upload_lease_id") REFERENCES "artifact_upload_leases"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_generated_files" ADD CONSTRAINT "conversation_generated_files_asset_id_fkey" FOREIGN KEY ("asset_id") REFERENCES "conversation_assets"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_generated_file_chunks" ADD CONSTRAINT "conversation_generated_file_chunks_operation_id_fkey" FOREIGN KEY ("operation_id") REFERENCES "conversation_generated_files"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -5248,8 +5333,85 @@ BEGIN
 END;
 $$;
 CREATE FUNCTION "enforce_artifact_revision_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    artifact_silo_id TEXT;
+    artifact_state "ArtifactState";
+    artifact_current_revision_id TEXT;
+    artifact_deleted_at TIMESTAMP(3);
+    upload_lease_row "artifact_upload_leases"%ROWTYPE;
+    generated_file_row "conversation_generated_files"%ROWTYPE;
+    scan_job_row "artifact_scan_jobs"%ROWTYPE;
+    matching_lease_count INTEGER;
 BEGIN
-    IF TG_OP = 'INSERT' AND NEW."state" <> 'published' THEN RAISE EXCEPTION 'ArtifactRevision becomes visible only through finalization'; END IF;
+    IF TG_OP = 'INSERT' AND NEW."state" = 'quarantined' THEN
+        SELECT "silo_id", "state", "current_revision_id", "deleted_at"
+          INTO artifact_silo_id, artifact_state, artifact_current_revision_id, artifact_deleted_at
+          FROM "artifacts" WHERE "id" = NEW."artifact_id" FOR UPDATE;
+        IF NOT FOUND OR artifact_silo_id IS NULL OR artifact_state IS DISTINCT FROM 'active'::"ArtifactState"
+            OR artifact_current_revision_id IS NOT NULL OR artifact_deleted_at IS NOT NULL THEN
+            RAISE EXCEPTION 'ArtifactRevision quarantine admission requires its active Artifact';
+        END IF;
+
+        IF NEW."provenance"->>'kind' = 'conversation_generated_file' THEN
+            SELECT * INTO generated_file_row FROM "conversation_generated_files"
+              WHERE "id" = NEW."provenance"->>'operationId' FOR UPDATE;
+            IF NOT FOUND OR generated_file_row."silo_id" IS DISTINCT FROM artifact_silo_id
+                OR generated_file_row."artifact_id" IS DISTINCT FROM NEW."artifact_id"
+                OR generated_file_row."revision_id" IS DISTINCT FROM NEW."id"
+                OR generated_file_row."requester_subject" IS DISTINCT FROM NEW."created_by"
+                OR generated_file_row."upload_lease_id" IS NULL THEN
+                RAISE EXCEPTION 'ArtifactRevision generated provenance does not bind its operation';
+            END IF;
+            SELECT * INTO upload_lease_row FROM "artifact_upload_leases"
+              WHERE "id" = generated_file_row."upload_lease_id" FOR UPDATE;
+        ELSE
+            SELECT count(*)::INTEGER INTO matching_lease_count
+              FROM "artifact_upload_leases"
+             WHERE "artifact_id" = NEW."artifact_id"
+               AND "silo_id" = artifact_silo_id
+               AND "state" = 'promoted'::"ArtifactUploadLeaseState"
+               AND "expected_content_address" = NEW."content_address"
+               AND "expected_byte_length" = NEW."byte_length"
+               AND "media_type" = NEW."media_type"
+               AND "promotion_receipt_digest" ~ '^sha256:[0-9a-f]{64}$'
+               AND "promoted_content_address" = NEW."content_address"
+               AND "promoted_byte_length" = NEW."byte_length"
+               AND "promoted_at" IS NOT NULL
+               AND "expires_at" > clock_timestamp();
+            IF matching_lease_count <> 1 THEN
+                RAISE EXCEPTION 'ArtifactRevision quarantine admission requires one promoted upload lease';
+            END IF;
+            SELECT * INTO upload_lease_row FROM "artifact_upload_leases"
+              WHERE "artifact_id" = NEW."artifact_id"
+                AND "silo_id" = artifact_silo_id
+                AND "state" = 'promoted'::"ArtifactUploadLeaseState"
+                AND "expected_content_address" = NEW."content_address"
+                AND "expected_byte_length" = NEW."byte_length"
+                AND "media_type" = NEW."media_type"
+                AND "promotion_receipt_digest" ~ '^sha256:[0-9a-f]{64}$'
+                AND "promoted_content_address" = NEW."content_address"
+                AND "promoted_byte_length" = NEW."byte_length"
+                AND "promoted_at" IS NOT NULL
+                AND "expires_at" > clock_timestamp()
+              LIMIT 1 FOR UPDATE;
+        END IF;
+        IF upload_lease_row."id" IS NULL OR upload_lease_row."artifact_id" IS DISTINCT FROM NEW."artifact_id"
+            OR upload_lease_row."silo_id" IS DISTINCT FROM artifact_silo_id
+            OR upload_lease_row."state" IS DISTINCT FROM 'promoted'::"ArtifactUploadLeaseState"
+            OR upload_lease_row."expected_content_address" IS DISTINCT FROM NEW."content_address"
+            OR upload_lease_row."expected_byte_length" IS DISTINCT FROM NEW."byte_length"
+            OR upload_lease_row."media_type" IS DISTINCT FROM NEW."media_type"
+            OR upload_lease_row."promotion_receipt_digest" IS NULL
+            OR upload_lease_row."promotion_receipt_digest" !~ '^sha256:[0-9a-f]{64}$'
+            OR upload_lease_row."promoted_content_address" IS DISTINCT FROM NEW."content_address"
+            OR upload_lease_row."promoted_byte_length" IS DISTINCT FROM NEW."byte_length"
+            OR upload_lease_row."promoted_at" IS NULL
+            OR upload_lease_row."expires_at" IS NULL OR upload_lease_row."expires_at" <= clock_timestamp() THEN
+            RAISE EXCEPTION 'ArtifactRevision quarantine admission requires its promoted upload lease';
+        END IF;
+    ELSIF TG_OP = 'INSERT' AND NEW."state" <> 'published' THEN
+        RAISE EXCEPTION 'ArtifactRevision becomes visible only through finalization';
+    END IF;
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ArtifactRevision metadata cannot be deleted'; END IF;
     IF TG_OP = 'UPDATE' THEN
         IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."artifact_id" IS DISTINCT FROM OLD."artifact_id" OR NEW."revision" IS DISTINCT FROM OLD."revision"
@@ -5259,10 +5421,57 @@ BEGIN
             OR NEW."created_by" IS DISTINCT FROM OLD."created_by" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
             RAISE EXCEPTION 'ArtifactRevision content and provenance are immutable';
         END IF;
-        IF NOT ((OLD."state" = 'published' AND NEW."state" IN ('published', 'deletion_pending')) OR (OLD."state" = 'deletion_pending' AND NEW."state" IN ('deletion_pending', 'purged')) OR (OLD."state" = 'purged' AND NEW."state" = 'purged')) THEN
+        IF NOT ((OLD."state" = 'quarantined' AND NEW."state" IN ('quarantined', 'published', 'rejected')) OR (OLD."state" = 'published' AND NEW."state" IN ('published', 'deletion_pending')) OR (OLD."state" = 'deletion_pending' AND NEW."state" IN ('deletion_pending', 'purged')) OR (OLD."state" = 'purged' AND NEW."state" = 'purged')) THEN
             RAISE EXCEPTION 'invalid ArtifactRevision lifecycle transition';
         END IF;
+        IF OLD."state" = 'quarantined' AND NEW."state" IN ('published', 'rejected') THEN
+            SELECT "state", "deleted_at" INTO artifact_state, artifact_deleted_at
+              FROM "artifacts" WHERE "id" = NEW."artifact_id" FOR UPDATE;
+            IF NOT FOUND OR artifact_state IS DISTINCT FROM 'active'::"ArtifactState" OR artifact_deleted_at IS NOT NULL THEN
+                RAISE EXCEPTION 'ArtifactRevision finalization requires its active Artifact';
+            END IF;
+            SELECT * INTO scan_job_row FROM "artifact_scan_jobs"
+              WHERE "artifact_revision_id" = NEW."id" FOR UPDATE;
+            IF NOT FOUND OR scan_job_row."state" IS DISTINCT FROM 'claimed'::"ArtifactScanJobState"
+                OR scan_job_row."attempt" <= 0 OR btrim(COALESCE(scan_job_row."claim_fence", '')) = ''
+                OR scan_job_row."claim_expires_at" IS NULL OR scan_job_row."claim_expires_at" <= clock_timestamp() THEN
+                RAISE EXCEPTION 'ArtifactRevision finalization requires its active scan claim';
+            END IF;
+        END IF;
         IF NEW."state" <> 'published' AND EXISTS (SELECT 1 FROM "artifact_preprocess_jobs" WHERE ("source_revision_id" = NEW."id" OR "derived_revision_id" = NEW."id") AND "state" IN ('pending', 'claimed', 'retryable_failed')) THEN RAISE EXCEPTION 'ArtifactRevision required by in-flight preprocessing cannot leave Published'; END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_artifact_revision_scan_admission"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    expected_scan_state "ArtifactScanJobState";
+    matching_scan_job_count INTEGER;
+BEGIN
+    IF TG_OP = 'INSERT' AND NEW."state" = 'quarantined' THEN
+        SELECT count(*)::INTEGER INTO matching_scan_job_count
+          FROM "artifact_scan_jobs"
+         WHERE "artifact_revision_id" = NEW."id" AND "state" = 'pending'::"ArtifactScanJobState";
+        IF matching_scan_job_count <> 1 THEN
+            RAISE EXCEPTION 'Quarantined ArtifactRevision requires one Pending scan job';
+        END IF;
+    ELSIF TG_OP = 'UPDATE' AND OLD."state" = 'quarantined' AND NEW."state" IN ('published', 'rejected') THEN
+        IF NEW."state" = 'published' THEN
+            expected_scan_state := 'clean'::"ArtifactScanJobState";
+        ELSE
+            expected_scan_state := 'rejected'::"ArtifactScanJobState";
+        END IF;
+        SELECT count(*)::INTEGER INTO matching_scan_job_count
+          FROM "artifact_scan_jobs"
+         WHERE "artifact_revision_id" = NEW."id"
+           AND "state" = expected_scan_state
+           AND btrim(COALESCE("scanner_version", '')) <> ''
+           AND "claim_fence" IS NULL
+           AND "claim_expires_at" IS NULL
+           AND "completed_at" IS NOT NULL;
+        IF matching_scan_job_count <> 1 THEN
+            RAISE EXCEPTION 'ArtifactRevision finalization requires its completed scan job';
+        END IF;
     END IF;
     RETURN NEW;
 END;
@@ -6587,7 +6796,7 @@ ALTER TABLE "artifact_revisions" ADD CONSTRAINT "artifact_revisions_content_chec
         AND btrim("media_type") <> '' AND strpos("media_type", '/') > 1 AND jsonb_typeof("provenance") = 'object' AND btrim("created_by") <> ''
     );
 ALTER TABLE "artifact_revisions" ADD CONSTRAINT "artifact_revisions_deletion_check" CHECK (
-        ("state" = 'published' AND "deletion_requested_at" IS NULL AND "purged_at" IS NULL) OR
+        ("state" IN ('quarantined', 'published', 'rejected') AND "deletion_requested_at" IS NULL AND "purged_at" IS NULL) OR
         ("state" = 'deletion_pending' AND "deletion_requested_at" IS NOT NULL AND "purged_at" IS NULL) OR
         ("state" = 'purged' AND "deletion_requested_at" IS NOT NULL AND "purged_at" IS NOT NULL)
     );
@@ -6907,6 +7116,8 @@ CREATE TRIGGER "artifact_revisions_silo_provenance" BEFORE INSERT OR UPDATE OF "
 CREATE TRIGGER "artifact_revisions_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "artifact_revisions" FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_revision_lifecycle"();
 CREATE TRIGGER "artifacts_closed_lifecycle" BEFORE UPDATE OR DELETE ON "artifacts" FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_lifecycle"();
 CREATE CONSTRAINT TRIGGER "current_artifact_revisions_remain_published" AFTER UPDATE OF "state" ON "artifact_revisions" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "protect_current_artifact_revision"();
+CREATE CONSTRAINT TRIGGER "artifact_revisions_scan_admission" AFTER INSERT OR UPDATE OF "state" ON "artifact_revisions"
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_revision_scan_admission"();
 CREATE TRIGGER "artifact_revision_parents_immutable" BEFORE UPDATE OR DELETE ON "artifact_revision_parents" FOR EACH ROW EXECUTE FUNCTION "reject_artifact_parent_mutation"();
 CREATE TRIGGER "artifact_revision_parents_same_silo" BEFORE INSERT ON "artifact_revision_parents"
     FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_parent_silo"();
@@ -7419,7 +7630,8 @@ ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_identity_c
     AND ("byte_length" IS NULL OR "byte_length" > 0)
 );
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_provenance_check" CHECK (
-    "provenance" = 'participant_upload' AND "created_by_user_id" IS NOT NULL
+    ("provenance" = 'participant_upload' AND "created_by_user_id" IS NOT NULL)
+    OR ("provenance" = 'agent_output' AND "created_by_user_id" IS NOT NULL)
 );
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_lifecycle_check" CHECK (
     ("state" = 'uploading' AND "upload_lease_id" IS NOT NULL AND "revision_id" IS NULL AND "failure_code" IS NULL)
@@ -10738,3 +10950,216 @@ SELECT absurd.create_queue('control-plane');
 SELECT absurd.create_queue('artifact-preprocessing');
 SELECT absurd.create_queue('skill-authoring');
 SELECT absurd.create_queue('agent-runs');
+
+-- Generated file capture authority
+ALTER TABLE "conversation_generated_file_chunks" ADD CONSTRAINT "conversation_generated_file_chunks_payload_ref_fkey"
+    FOREIGN KEY ("payload_ref") REFERENCES "conversation_private_payloads"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+ALTER TABLE "conversation_generated_files" ADD CONSTRAINT "conversation_generated_files_identity_check" CHECK (
+    btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("conversation_id") <> '' AND btrim("run_id") <> ''
+    AND "attempt" > 0 AND btrim("bootstrap_id") <> '' AND btrim("computer_id") <> '' AND btrim("lease_id") <> ''
+    AND "lease_generation" > 0 AND btrim("agent_identity_id") <> '' AND btrim("requester_principal_id") <> ''
+    AND btrim("requester_subject") <> '' AND btrim("tool_invocation_row_id") <> '' AND btrim("tool_invocation_id") <> ''
+    AND btrim("tool_revision_id") <> '' AND btrim("server_revision_id") <> ''
+    AND "raw_result_digest" ~ '^sha256:[0-9a-f]{64}$' AND "custody_manifest_version" = 'generated-file-custody.v1'
+    AND "ciphertext_manifest_digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("asset_id") <> '' AND btrim("artifact_id") <> ''
+    AND btrim("revision_id") <> '' AND btrim("upload_lease_id") <> '' AND "content_address" ~ '^sha256:[0-9a-f]{64}$'
+    AND "byte_length" BETWEEN 1 AND 1048576 AND "chunk_count" BETWEEN 1 AND 22
+    AND length(btrim("display_name")) BETWEEN 1 AND 128 AND "display_name" = btrim("display_name")
+    AND "media_type" = 'text/csv;charset=utf-8'
+    AND btrim("workflow_task_id") <> '' AND "workflow_task_name" = 'conversation-generated-file'
+    AND "workflow_task_key" ~ '^conversation-generated-file:[0-9a-f]{64}$'
+);
+ALTER TABLE "conversation_generated_file_chunks" ADD CONSTRAINT "conversation_generated_file_chunks_identity_check" CHECK (
+    btrim("operation_id") <> '' AND "index" >= 0 AND "decoded_byte_length" BETWEEN 1 AND 49152
+    AND "ciphertext_digest" ~ '^sha256:[0-9a-f]{64}$' AND "payload_ref" ~ '^generated-file-chunk:[0-9a-f]{64}$'
+);
+
+CREATE FUNCTION "enforce_conversation_generated_file_identity"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    asset_row "conversation_assets"%ROWTYPE;
+    artifact_silo_id TEXT;
+    artifact_owner_principal_id TEXT;
+    artifact_kind "ArtifactKind";
+    artifact_state "ArtifactState";
+    artifact_current_revision_id TEXT;
+    artifact_deleted_at TIMESTAMP(3);
+    invocation "tool_invocations"%ROWTYPE;
+    run_row "agent_runs"%ROWTYPE;
+    lease_row "conversation_computer_active_leases"%ROWTYPE;
+    upload_lease_row "artifact_upload_leases"%ROWTYPE;
+    runtime_row "mcp_runtime_executions"%ROWTYPE;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile rows cannot be deleted';
+    END IF;
+    IF TG_OP = 'UPDATE' THEN
+        IF NEW IS DISTINCT FROM OLD THEN
+            RAISE EXCEPTION 'ConversationGeneratedFile rows are immutable';
+        END IF;
+        RETURN NEW;
+    END IF;
+
+    SELECT * INTO asset_row FROM "conversation_assets" WHERE "id" = NEW."asset_id" FOR UPDATE;
+    IF NOT FOUND OR asset_row."silo_id" IS DISTINCT FROM NEW."silo_id"
+        OR asset_row."conversation_id" IS DISTINCT FROM NEW."conversation_id"
+        OR asset_row."provenance" IS DISTINCT FROM 'agent_output'::"ConversationAssetProvenance"
+        OR asset_row."state" IS DISTINCT FROM 'uploading'::"ConversationAssetState"
+        OR asset_row."artifact_id" IS DISTINCT FROM NEW."artifact_id"
+        OR asset_row."upload_lease_id" IS DISTINCT FROM NEW."upload_lease_id"
+        OR asset_row."byte_length" IS DISTINCT FROM NEW."byte_length"
+        OR asset_row."display_name" IS DISTINCT FROM NEW."display_name"
+        OR asset_row."media_type" IS DISTINCT FROM NEW."media_type"
+        OR asset_row."message_id" IS NOT NULL OR asset_row."revision_id" IS NOT NULL
+        OR asset_row."failure_code" IS NOT NULL OR asset_row."removed_at" IS NOT NULL
+        OR asset_row."idempotency_key" IS DISTINCT FROM NEW."id"
+        OR asset_row."created_by_user_id" IS DISTINCT FROM NEW."requester_subject" THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile requires its exact uploading AgentOutput asset';
+    END IF;
+    SELECT "silo_id", "owner_principal_id", "kind", "state", "current_revision_id", "deleted_at"
+      INTO artifact_silo_id, artifact_owner_principal_id, artifact_kind, artifact_state, artifact_current_revision_id, artifact_deleted_at
+      FROM "artifacts" WHERE "id" = NEW."artifact_id" FOR UPDATE;
+    IF artifact_silo_id IS DISTINCT FROM NEW."silo_id" OR artifact_owner_principal_id IS DISTINCT FROM NEW."requester_principal_id"
+        OR artifact_kind IS DISTINCT FROM 'generated'::"ArtifactKind"
+        OR artifact_state IS DISTINCT FROM 'active'::"ArtifactState"
+        OR artifact_current_revision_id IS NOT NULL OR artifact_deleted_at IS NOT NULL THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile requires its requester-owned Generated Artifact';
+    END IF;
+    SELECT * INTO upload_lease_row FROM "artifact_upload_leases" WHERE "id" = NEW."upload_lease_id" FOR UPDATE;
+    IF NOT FOUND OR upload_lease_row."artifact_id" IS DISTINCT FROM NEW."artifact_id"
+        OR upload_lease_row."silo_id" IS DISTINCT FROM NEW."silo_id"
+        OR upload_lease_row."state" IS DISTINCT FROM 'active'::"ArtifactUploadLeaseState"
+        OR upload_lease_row."expected_byte_length" IS DISTINCT FROM NEW."byte_length"
+        OR upload_lease_row."expected_content_address" IS DISTINCT FROM NEW."content_address"
+        OR upload_lease_row."media_type" IS DISTINCT FROM NEW."media_type"
+        OR upload_lease_row."expires_at" IS NULL OR upload_lease_row."expires_at" <= clock_timestamp() THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile requires its exact active upload lease';
+    END IF;
+    SELECT * INTO invocation FROM "tool_invocations" WHERE "id" = NEW."tool_invocation_row_id" FOR UPDATE;
+    IF NOT FOUND OR invocation."silo_id" IS DISTINCT FROM NEW."silo_id"
+        OR invocation."run_id" IS DISTINCT FROM NEW."run_id" OR invocation."attempt" IS DISTINCT FROM NEW."attempt"
+        OR invocation."agent_identity_id" IS DISTINCT FROM NEW."agent_identity_id"
+        OR invocation."principal_id" IS DISTINCT FROM NEW."requester_principal_id"
+        OR invocation."tool_invocation_id" IS DISTINCT FROM NEW."tool_invocation_id"
+        OR invocation."tool_revision_id" IS DISTINCT FROM NEW."tool_revision_id"
+        OR invocation."runtime_instance_id" IS DISTINCT FROM NEW."computer_id"
+        OR invocation."command_id" IS DISTINCT FROM NEW."bootstrap_id"
+        OR invocation."state" IS DISTINCT FROM 'claimed'::"ToolInvocationState"
+        OR invocation."claim_kind" IS DISTINCT FROM 'dispatch'::"ExternalActionClaimKind"
+        OR invocation."claim_expires_at" IS NULL OR invocation."claim_expires_at" <= clock_timestamp() THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile requires its exact tool invocation coordinates';
+    END IF;
+    SELECT * INTO runtime_row FROM "mcp_runtime_executions" WHERE "tool_invocation_id" = NEW."tool_invocation_row_id" FOR UPDATE;
+    IF NOT FOUND OR runtime_row."silo_id" IS DISTINCT FROM NEW."silo_id" OR runtime_row."server_revision_id" IS DISTINCT FROM NEW."server_revision_id"
+        OR runtime_row."kind" IS DISTINCT FROM 'invocation'::"McpRuntimeExecutionKind"
+        OR runtime_row."workload_state" IS DISTINCT FROM 'registered'::"McpExecutorWorkloadState"
+        OR runtime_row."command_state" IS DISTINCT FROM 'claimed'::"McpExecutorCommandState"
+        OR runtime_row."companion_claim_fence" IS NULL
+        OR runtime_row."companion_claim_expires_at" IS NULL OR runtime_row."companion_claim_expires_at" <= clock_timestamp()
+        OR runtime_row."tool_invocation_claim_fence" IS DISTINCT FROM invocation."claim_fence"
+        OR runtime_row."tool_invocation_claim_revision" IS DISTINCT FROM invocation."revision" THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile requires its exact active MCP invocation claim';
+    END IF;
+    SELECT * INTO run_row FROM "agent_runs" WHERE "id" = NEW."run_id" AND "attempt" = NEW."attempt" FOR UPDATE;
+    IF NOT FOUND OR run_row."silo_id" IS DISTINCT FROM NEW."silo_id"
+        OR run_row."conversation_id" IS DISTINCT FROM NEW."conversation_id"
+        OR run_row."state" IS DISTINCT FROM 'running'::"AgentRunState"
+        OR run_row."agent_identity_id" IS DISTINCT FROM NEW."agent_identity_id"
+        OR run_row."principal_id" IS DISTINCT FROM NEW."requester_principal_id"
+        OR run_row."execution_subject"->'requester'->>'requesterPrincipalId' IS DISTINCT FROM NEW."requester_principal_id"
+        OR run_row."execution_subject"->'requester'->'membership'->>'subjectId' IS DISTINCT FROM NEW."requester_subject"
+        OR run_row."execution_subject"->'runScope'->>'runId' IS DISTINCT FROM NEW."run_id"
+        OR run_row."execution_subject"->'runScope'->>'attempt' IS DISTINCT FROM NEW."attempt"::TEXT THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile requires its exact AgentRun and requester';
+    END IF;
+    SELECT * INTO lease_row FROM "conversation_computer_active_leases"
+      WHERE "computer_id" = NEW."computer_id" AND "silo_id" = NEW."silo_id" AND "conversation_id" = NEW."conversation_id"
+        AND "agent_identity_id" = NEW."agent_identity_id" AND "lease_id" = NEW."lease_id"
+        AND "lease_generation" = NEW."lease_generation" AND "expires_at" > clock_timestamp() FOR UPDATE;
+    IF NOT FOUND OR run_row."execution_subject"->'computerScope'->>'computerId' IS DISTINCT FROM NEW."computer_id"
+        OR run_row."execution_subject"->'computerScope'->>'leaseId' IS DISTINCT FROM NEW."lease_id"
+        OR run_row."execution_subject"->'computerScope'->>'leaseGeneration' IS DISTINCT FROM NEW."lease_generation"::TEXT
+        OR run_row."execution_subject"->'runScope'->>'siloId' IS DISTINCT FROM NEW."silo_id"
+        OR run_row."execution_subject"->'computerScope'->>'siloId' IS DISTINCT FROM NEW."silo_id" THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile requires the current exact computer lease';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION "enforce_conversation_generated_file_chunk_immutability"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    operation_row "conversation_generated_files"%ROWTYPE;
+    payload_row "conversation_private_payloads"%ROWTYPE;
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        SELECT * INTO operation_row FROM "conversation_generated_files" WHERE "id" = NEW."operation_id" FOR UPDATE;
+        IF NOT FOUND OR NEW."index" >= operation_row."chunk_count"
+            OR NEW."decoded_byte_length"::BIGINT IS DISTINCT FROM (CASE
+                WHEN NEW."index" < operation_row."chunk_count" - 1 THEN 49152::BIGINT
+                ELSE operation_row."byte_length" - (49152::BIGINT * (operation_row."chunk_count" - 1))
+            END) THEN
+            RAISE EXCEPTION 'ConversationGeneratedFileChunk requires an existing operation index';
+        END IF;
+        SELECT * INTO payload_row FROM "conversation_private_payloads" WHERE "id" = NEW."payload_ref" FOR UPDATE;
+        IF NOT FOUND OR payload_row."silo_id" IS DISTINCT FROM operation_row."silo_id"
+            OR payload_row."conversation_id" IS DISTINCT FROM operation_row."conversation_id"
+            OR payload_row."author_subject" IS DISTINCT FROM operation_row."agent_identity_id"
+            OR payload_row."idempotency_key" IS DISTINCT FROM NEW."payload_ref"
+            OR payload_row."ciphertext_digest" IS DISTINCT FROM NEW."ciphertext_digest" THEN
+            RAISE EXCEPTION 'ConversationGeneratedFileChunk requires its exact encrypted payload';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF TG_OP <> 'INSERT' THEN
+        RAISE EXCEPTION 'ConversationGeneratedFileChunk rows are immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION "enforce_conversation_generated_file_manifest"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    manifest_operation_id TEXT;
+    expected_count INTEGER;
+    actual_count INTEGER;
+    max_index INTEGER;
+    actual_byte_length BIGINT;
+BEGIN
+    IF TG_TABLE_NAME = 'conversation_generated_files' THEN
+        manifest_operation_id := NEW."id";
+    ELSE
+        manifest_operation_id := NEW."operation_id";
+    END IF;
+    SELECT "chunk_count" INTO expected_count FROM "conversation_generated_files" WHERE "id" = manifest_operation_id;
+    IF expected_count IS NULL THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile manifest has no operation';
+    END IF;
+    SELECT count(*)::INTEGER, max("index"), COALESCE(sum("decoded_byte_length"), 0)::BIGINT INTO actual_count, max_index, actual_byte_length
+      FROM "conversation_generated_file_chunks" WHERE "operation_id" = manifest_operation_id;
+    IF actual_count <> expected_count OR max_index <> expected_count - 1
+        OR actual_byte_length IS DISTINCT FROM (SELECT "byte_length" FROM "conversation_generated_files" WHERE "id" = manifest_operation_id)
+        OR EXISTS (SELECT 1 FROM "conversation_generated_file_chunks" chunk
+                   WHERE chunk."operation_id" = manifest_operation_id
+                     AND chunk."decoded_byte_length"::BIGINT IS DISTINCT FROM (CASE
+                         WHEN chunk."index" < expected_count - 1 THEN 49152::BIGINT
+                         ELSE (SELECT "byte_length" FROM "conversation_generated_files" WHERE "id" = manifest_operation_id)
+                              - (49152::BIGINT * (expected_count - 1))
+                     END))
+        OR EXISTS (SELECT 1 FROM generate_series(0, expected_count - 1) AS series("index")
+                  WHERE NOT EXISTS (SELECT 1 FROM "conversation_generated_file_chunks" chunk
+                                    WHERE chunk."operation_id" = manifest_operation_id AND chunk."index" = series."index")) THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile requires a contiguous complete chunk manifest';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER "conversation_generated_files_authority" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_generated_files"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_generated_file_identity"();
+CREATE TRIGGER "conversation_generated_file_chunks_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_generated_file_chunks"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_generated_file_chunk_immutability"();
+CREATE CONSTRAINT TRIGGER "conversation_generated_files_manifest_complete" AFTER INSERT ON "conversation_generated_files"
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_generated_file_manifest"();
+CREATE CONSTRAINT TRIGGER "conversation_generated_file_chunks_manifest_complete" AFTER INSERT ON "conversation_generated_file_chunks"
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_generated_file_manifest"();

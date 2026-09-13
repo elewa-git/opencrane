@@ -1,14 +1,12 @@
-import { createHash } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
-import { __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@opencrane/backend/artifacts/authorization";
 import { _CreateArtifactCatalogueRepository, _CreateArtifactUploadAuthority } from "../prisma-artifact-authority.composition";
 import { __IssueArtifactReadLease } from "../artifact-read-lease";
 import { __UploadArtifact } from "../artifact-upload";
 import { IssueArtifactReadLeaseOutcomes, type PublishedArtifactReadTarget } from "../artifact-read-lease.types";
 import type { ArtifactUploadResult, VerifiedArtifactUploadCommand } from "../artifact-upload.types";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { _ReadArtifactMountedPem } from "./artifact-mounted-key.loader";
+import { _CreateArtifactUploadCryptoPort } from "./artifact-upload-crypto.factory";
 import { _CreateArtifactReadLeaseSigner } from "./artifact-read-lease-signer.factory";
 import { _CreateArtifactServiceReadPort, _InternalArtifactServiceUrl } from "./artifact-service-read-port.factory";
 import { _CreateArtifactServicePromotionPort } from "./artifact-service-promotion-port";
@@ -30,17 +28,12 @@ import { _CreateArtifactServicePromotionPort } from "./artifact-service-promotio
 export function _CreateArtifactUploadGateway(prisma: PrismaClient, workflow: Pick<IWorkflowEngine, "spawn">, environment: NodeJS.ProcessEnv = process.env): { upload(command: VerifiedArtifactUploadCommand): Promise<ArtifactUploadResult> }
 {
 	const serviceUrl = _InternalArtifactServiceUrl(environment.ARTIFACT_SERVICE_URL ?? "");
-	const leasePrivateKey = _ReadArtifactMountedPem(environment.ARTIFACT_LEASE_PRIVATE_KEY_PATH, "ARTIFACT_LEASE_PRIVATE_KEY_PATH");
-	const receiptPublicKey = _ReadArtifactMountedPem(environment.ARTIFACT_RECEIPT_PUBLIC_KEY_PATH, "ARTIFACT_RECEIPT_PUBLIC_KEY_PATH");
+	const crypto = _CreateArtifactUploadCryptoPort(environment);
 	const repository = _CreateArtifactUploadAuthority(prisma, workflow);
 	return {
 		upload(command: VerifiedArtifactUploadCommand): Promise<ArtifactUploadResult>
 		{
-			return __UploadArtifact(repository, _CreateArtifactServicePromotionPort(serviceUrl), {
-				signLease(claims) { return __SignArtifactWriteLease(claims, leasePrivateKey, Math.floor(Date.now() / 1_000)); },
-				verifyReceipt(compact) { return __VerifyArtifactPromotionReceipt(compact, receiptPublicKey); },
-				digestReceipt(compact) { return `sha256:${createHash("sha256").update(compact, "utf8").digest("hex")}`; },
-			}, command);
+			return __UploadArtifact(repository, _CreateArtifactServicePromotionPort(serviceUrl), crypto, command);
 		},
 	};
 }

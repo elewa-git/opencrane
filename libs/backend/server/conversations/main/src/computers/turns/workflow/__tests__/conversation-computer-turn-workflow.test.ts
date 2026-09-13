@@ -27,6 +27,28 @@ function _Fixture(progress: readonly Record<string, unknown>[])
 
 describe("conversation computer turn workflow", function _Suite()
 {
+	it("waits separately for the captured file after the tool event has already arrived", async function _FileWake()
+	{
+		const deadline = Date.now() + 30_000;
+		const fixture = _Fixture([{ outcome: "tool_pending", toolInvocationId: "tool-1" }, { outcome: "generated_file_pending", operationId: "file-1", notAfterEpochMs: deadline }, { outcome: "completed" }]);
+		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "completed", turnId: "turn-1" });
+		expect(fixture.context.waitForEvent).toHaveBeenNthCalledWith(1, "tool-result:tool-1");
+		expect(fixture.context.waitForEvent).toHaveBeenNthCalledWith(2, "generated-output:file-1", { timeoutAt: new Date(deadline) });
+		expect(fixture.authority.advance).toHaveBeenCalledTimes(3);
+		expect(fixture.context.checkpoint).not.toHaveBeenCalled();
+		expect(fixture.context.sleepUntil).not.toHaveBeenCalled();
+	});
+
+	it("reloads saved authority after the file wait reaches its unchanged deadline", async function _FileDeadline()
+	{
+		const deadline = Date.now() + 30_000;
+		const fixture = _Fixture([{ outcome: "generated_file_pending", operationId: "file-1", notAfterEpochMs: deadline }, { outcome: "authority_ended" }]);
+		const wait = fixture.context.waitForEvent as unknown as ReturnType<typeof vi.fn>;
+		wait.mockResolvedValueOnce({ eventName: "generated-output:file-1", payload: null, timedOut: true });
+		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "authority_ended", turnId: "turn-1" });
+		expect(wait).toHaveBeenCalledExactlyOnceWith("generated-output:file-1", { timeoutAt: new Date(deadline) });
+	});
+
 	it("re-enters saved model progress after its fixed deadline without dispatch authority in a checkpoint", async function _DeadlineRecovery()
 	{
 		const deadline = Date.now() + 20_000;

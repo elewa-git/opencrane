@@ -11,6 +11,7 @@ import { KurrentConversationComputerTurnStore } from "../../../turns/conversatio
 import type { FrozenConversationComputerTurn } from "../../../turns/conversation-computer-turn.types";
 import type { ConversationToolDispatchDependencies } from "../../dispatch/conversation-tool-dispatch.types";
 import { PrismaConversationToolDispatchAuthority } from "../../dispatch/prisma-conversation-tool-dispatch-authority";
+import { ConversationGeneratedFileResultStates } from "../conversation-generated-file-result.types";
 import { PrismaConversationToolResultsUnitOfWork } from "../prisma-conversation-tool-results";
 import { _PrepareConversationOutputIntent } from "../../../turns/__tests__/conversation-output-intent.fixture";
 
@@ -139,16 +140,21 @@ async function _fixture(reserve = true)
 		if (command.workload.podUid !== _WORKLOAD.podUid)
 			throw new Error("Pod binding denied");
 	});
-	const guard = vi.spyOn(PrismaConversationToolDispatchAuthority.prototype, "admitUntil").mockImplementation(async function _Current(this: PrismaConversationToolDispatchAuthority, invocation, _now, workload)
+	const guard = vi.spyOn(PrismaConversationToolDispatchAuthority.prototype, "admit").mockImplementation(async function _Current(this: PrismaConversationToolDispatchAuthority, invocation, _now, workload)
 	{
 		expect((this as unknown as { transaction: unknown }).transaction).toBe(transaction);
 		expect(invocation).toMatchObject({ id: row.id, runId: saved.turn.compile.runId, attempt: saved.turn.compile.attempt });
 		expect(workload).toEqual({ audience: CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, namespace: _WORKLOAD.namespace, serviceAccountName: _WORKLOAD.serviceAccountName, workloadKind: "pod", workloadUid: _WORKLOAD.podUid, podUid: _WORKLOAD.podUid });
-		return controls.notAfter;
+		return controls.notAfter === null ? null : { notAfterEpochMs: controls.notAfter, conversationId: saved.turn.binding.conversationId, requesterSubjectId: "user", identity: {} as never, subject: {} as never };
 	});
 	const dependencies = {} as ConversationToolDispatchDependencies;
-	const unit = new PrismaConversationToolResultsUnitOfWork(prisma, "silo-1", saved.store, { admit }, dependencies);
-	return { ...saved, unit, run, guard, admit, controls, findFirst, updateMany, current: function _CurrentRow() { return row; } };
+	const readGeneratedFile = vi.fn().mockResolvedValue({ state: ConversationGeneratedFileResultStates.NotGenerated });
+	const unit = new PrismaConversationToolResultsUnitOfWork(prisma, "silo-1", saved.store, { admit }, dependencies, function _Files(tx)
+	{
+		expect(tx).toBe(transaction);
+		return { read: readGeneratedFile };
+	});
+	return { ...saved, unit, readGeneratedFile, run, guard, admit, controls, findFirst, updateMany, current: function _CurrentRow() { return row; } };
 }
 
 beforeEach(function _Clock() { vi.useFakeTimers(); vi.setSystemTime(_NOW); });
@@ -283,4 +289,34 @@ describe("saved conversation tool results", function _results()
 		f.current().run.state = AgentRunState.Completed;
 		await expect(f.unit.read(outputTurn, _WORKLOAD)).resolves.toEqual({ outcome: ConversationComputerToolResultOutcomes.Unavailable });
 	});
+	it("waits for captured files without consuming the original tool result", async function _GeneratedFileWait()
+	{
+		const f = await _fixture(false);
+		f.readGeneratedFile.mockResolvedValue({ state: ConversationGeneratedFileResultStates.Pending, operationId: "operation-1", notAfterEpochMs: _NOW.getTime() + 10_000 });
+		await expect(f.unit.read(f.turn, _WORKLOAD)).resolves.toEqual({ outcome: ConversationComputerToolResultOutcomes.GeneratedFilePending, operationId: "operation-1", notAfterEpochMs: _NOW.getTime() + 10_000 });
+		expect(f.updateMany).not.toHaveBeenCalled();
+		expect(f.readGeneratedFile).toHaveBeenCalledOnce();
+		expect(f.readGeneratedFile.mock.calls[0][0].turn.bootstrapId).toBe(f.turn.bootstrapId);
+		expect(f.readGeneratedFile.mock.calls[0][0].payload).toEqual(f.row.resultDelivery.payload);
+	});
+
+	it("rejects result use when generated metadata or current file access is unavailable", async function _GeneratedFileDenied()
+	{
+		const f = await _fixture();
+		f.readGeneratedFile.mockResolvedValue({ state: ConversationGeneratedFileResultStates.Unavailable });
+		await expect(f.unit.consume(f.turn, _WORKLOAD)).resolves.toEqual({ outcome: ConversationComputerToolResultOutcomes.Unavailable });
+		expect(f.updateMany).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		{ state: ConversationGeneratedFileResultStates.Ready, operationId: "operation-1", artifact: { id: "file-block", kind: "artifact", artifactId: "artifact-1", artifactRevisionId: "revision-1", name: "result.csv", mediaType: "text/csv;charset=utf-8" } },
+		{ state: ConversationGeneratedFileResultStates.Failed, operationId: "operation-1", failureCode: "unsafe_file" },
+	])("retains the original result digest alongside saved file state $state", async function _TerminalFileResult(generatedFile)
+	{
+		const f = await _fixture();
+		f.readGeneratedFile.mockResolvedValue(generatedFile);
+		await expect(f.unit.consume(f.turn, _WORKLOAD)).resolves.toMatchObject({ outcome: ConversationComputerToolResultOutcomes.Available, payload: f.row.resultDelivery.payload, payloadDigest: f.row.resultDelivery.payloadDigest, generatedFile });
+		expect(f.updateMany).toHaveBeenCalledTimes(1);
+	});
+
 });

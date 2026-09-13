@@ -126,7 +126,8 @@ export default [
             { sourceTag: "scope:history-store", onlyDependOnLibsWithTags: ["scope:history-store", "scope:shared"] },
             { sourceTag: "scope:workflows", onlyDependOnLibsWithTags: ["scope:shared", "scope:workflows"] },
             { sourceTag: "scope:runtime-workloads", onlyDependOnLibsWithTags: ["scope:runtime-workloads", "scope:shared"] },
-            { sourceTag: "scope:mcp-runtime", onlyDependOnLibsWithTags: ["scope:mcp-runtime", "scope:runtime-workloads", "scope:shared"] },
+            // The file-producing runtime reuses the pure conversation-assets CSV model.
+            { sourceTag: "scope:mcp-runtime", onlyDependOnLibsWithTags: ["scope:mcp-runtime", "scope:runtime-workloads", "scope:conversation-assets-model", "scope:shared"] },
 			{ sourceTag: "scope:artifact-preprocessor-launcher", onlyDependOnLibsWithTags: ["scope:artifact-preprocessor-launcher", "scope:shared"] },
 			{ sourceTag: "scope:artifact-preprocessor-controller", onlyDependOnLibsWithTags: ["scope:artifact-preprocessor-controller", "scope:artifact-preprocessor-launcher", "scope:artifacts-workflow-contract", "scope:runtime-workloads", "scope:shared", "scope:workflows"] },
             { sourceTag: "scope:skills-launcher", onlyDependOnLibsWithTags: ["scope:skills-launcher", "scope:shared"] },
@@ -134,7 +135,7 @@ export default [
             { sourceTag: "scope:agent-controller", onlyDependOnLibsWithTags: ["scope:agent-controller", "scope:artifact-preprocessor-controller", "scope:artifact-preprocessor-launcher", "scope:artifacts-workflow-contract", "scope:execution-runs", "scope:execution-runs-workflow-contract", "scope:runtime-workloads", "scope:skills-controller", "scope:skills-workflow-contract", "scope:mcp-runtime", "scope:shared", "scope:workflows"] },
             { sourceTag: "scope:cluster-tenants", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:k8s-api", "scope:shared"] },
 			{ sourceTag: "scope:conversations", onlyDependOnLibsWithTags: ["scope:execution-elicitation", "scope:agent-services", "scope:membership", "scope:agent-sandbox", "scope:agents", "scope:artifacts", "scope:auth", "scope:authorization", "scope:conversations", "scope:execution-inputs", "scope:execution-runs", "scope:history-store", "scope:identity", "scope:personal-memory", "scope:shared", "scope:workflows", "scope:workload-identity"] },
-			{ sourceTag: "scope:conversation-assets", onlyDependOnLibsWithTags: ["scope:artifacts", "scope:auth", "scope:authorization", "scope:conversations", "scope:conversation-assets", "scope:execution-runs", "scope:shared", "scope:web"] },
+			{ sourceTag: "scope:conversation-assets", onlyDependOnLibsWithTags: ["scope:artifacts", "scope:auth", "scope:authorization", "scope:conversations", "scope:conversation-assets", "scope:execution-runs", "scope:shared", "scope:web", "scope:workflows", "scope:workload-identity"] },
 			{ sourceTag: "scope:personal-configuration", onlyDependOnLibsWithTags: ["scope:agent-services", "scope:agents", "scope:auth", "scope:personal-configuration", "scope:shared"] },
 			{ sourceTag: "scope:user-onboarding", onlyDependOnLibsWithTags: ["scope:agent-services", "scope:auth", "scope:model-routing", "scope:personal-personas", "scope:user-onboarding", "scope:shared"] },
             { sourceTag: "scope:grants", onlyDependOnLibsWithTags: ["scope:identity", "scope:auth", "scope:authorization", "scope:grants", "scope:shared"] },

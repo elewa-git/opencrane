@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, ConversationModelResponseKinds, ConversationModelToolModes, ___ConversationModelContinuationSchema, ___ConversationToolProposalSchema, type ConversationModelToolCall } from "@opencrane/contracts";
 import { ___CanonicalizeJson, ___DigestCanonicalJson, ___ParseAndValidateJson, type JsonValue } from "@opencrane/util";
 
+import { _ConversationToolResultContent } from "./conversation-tool-result-content";
 import { _ConversationModelRequestDigest } from "./conversation-computer-model-reservation";
 import type { ConversationComputerModelProgress, ConversationComputerModelReservation } from "./conversation-computer-model.types";
 import { ConversationComputerToolResultOutcomes, type ConversationComputerContinuationReservation, type ConversationComputerPrivateModelReference, type ConversationComputerToolDeclaration } from "./conversation-computer-continuation.types";
@@ -61,11 +62,13 @@ async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: 
 	const workload = currentExecution.workload;
 	await dependencies.toolProposals.admit(selected, currentExecution.candidate, proposal.command, { audience: CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, namespace: workload.namespace, serviceAccountName: workload.serviceAccountName, workloadKind: "pod", workloadUid: workload.podUid, podUid: workload.podUid });
 	const result = await dependencies.toolResults.read(selected, workload);
+	if (result.outcome === ConversationComputerToolResultOutcomes.GeneratedFilePending)
+		return { outcome: ConversationComputerToolResultOutcomes.GeneratedFilePending, operationId: result.operationId, notAfterEpochMs: result.notAfterEpochMs };
 	if (result.outcome === ConversationComputerToolResultOutcomes.Pending)
 		return { outcome: "tool_pending", toolInvocationId: selection.proposalId, waitFor: result.waitFor, waitUntilEpochMs: result.waitUntilEpochMs };
 	if (result.outcome !== ConversationComputerToolResultOutcomes.Available)
 		return { outcome: "authority_ended" };
-	const pair = ___ConversationModelContinuationSchema.parse({ call: declaration.call, resultContent: ___CanonicalizeJson(result.payload) });
+	const pair = ___ConversationModelContinuationSchema.parse({ call: declaration.call, resultContent: _ConversationToolResultContent(result) });
 	if (___DigestCanonicalJson(result.payload) !== result.payloadDigest)
 		throw new Error("Conversation tool result differs from its immutable digest");
 	const continuation = { bootstrapId: turn.bootstrapId, runId: turn.compile.runId, attempt: turn.compile.attempt, compiledInputDigest: turn.compile.digest, declaration: reference, proposalId: selection.proposalId, resultDigest: result.payloadDigest, ...pair };
@@ -82,7 +85,7 @@ async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: 
 	if (consumed.outcome !== ConversationComputerToolResultOutcomes.Available || consumed.payloadDigest !== reservation.resultDigest)
 		throw new Error("Conversation tool result could not acknowledge its saved continuation");
 	const saved = await dependencies.modelCustody.loadContinuation(reserved, reservation.continuation);
-	if (saved.resultContent !== ___CanonicalizeJson(consumed.payload) || ___CanonicalizeJson(saved.call as unknown as JsonValue) !== ___CanonicalizeJson(declaration.call as unknown as JsonValue))
+	if (saved.resultContent !== _ConversationToolResultContent(consumed) || ___CanonicalizeJson(saved.call as unknown as JsonValue) !== ___CanonicalizeJson(declaration.call as unknown as JsonValue))
 		throw new Error("Conversation continuation differs from its accepted call and exact result");
 	const credential = await dependencies.credentials.reuseExact({ ..._CredentialCommand(reserved, current.candidate), expectedCredentialDigest: declaration.credentialDigest, expectedExpiresAt: declaration.credentialExpiresAt });
 	const dispatch = await _Current(reserved, dependencies);

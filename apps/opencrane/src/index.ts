@@ -9,6 +9,7 @@ import { _ReadAgentSandboxReleaseProfileConfig, _ReadProcessConfig } from "./boo
 import { _CreateHistoryStoreComposition } from "@opencrane/backend/server/infra/history-store";
 import { _AssertHistoryStoreSilo } from "@opencrane/backend/server/infra/history-store";
 import { _StartConversationComputerActivationWorker } from "@opencrane/backend/server/conversations";
+import { _CreateConversationGeneratedFileWorkflowComposition } from "./bootstrap/conversations/conversation-generated-file-workflow-composition";
 import { _CreateConversationComputerWorkflowComposition } from "./bootstrap/conversations/conversation-computer-workflow-composition";
 import { _CreateConversationComputerLifecycleComposition } from "./bootstrap/conversations/conversation-computer-lifecycle-composition";
 import { _CreateInternalApp } from "./bootstrap/http/internal-app";
@@ -48,11 +49,12 @@ async function _Main(): Promise<void>
 	const workflows = _CreateMcpWorkflowComposition(prisma, config.workflows);
 
 	// 3. Compose the retained workload authorities.
-	const mcpRuntime = _CreateMcpRuntimeComposition(prisma, kubernetes.authApi, config.runtime, workflows, historyStore.historyStore);
+	const mcpRuntime = _CreateMcpRuntimeComposition(prisma, kubernetes.authApi, config.runtime, workflows, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath);
+	const generatedFiles = _CreateConversationGeneratedFileWorkflowComposition(prisma, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, mcpRuntime.invocationParticipants, workflows.execution);
 	const providerEffects = _CreateProviderEffectCommandExecutor(prisma, kubernetes.coreApi, config.runtime.serverNamespace, _log);
 	const documentAuthorities = { create: function _CreatePromptDocumentAuthority(transaction: Prisma.TransactionClient) { return new PrismaConversationPromptDocumentRepository(transaction); } };
 	const conversationRunAdmission = _CreateProductionConversationRunAdmission(prisma, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, documentAuthorities, _CreatePublishedArtifactReader(prisma), config.runAdmission, _log);
-	const conversationComputerWorkflows = _CreateConversationComputerWorkflowComposition(prisma, historyStore.historyStore, kubernetes.authApi, kubernetes.coreApi, kubernetes.customApi, config.workflows.siloId, agentSandboxReleaseProfile, config.conversationPrivatePayloadKeyringPath, conversationRunAdmission, mcpRuntime.admitToolInvocationInTransaction, workflows.execution);
+	const conversationComputerWorkflows = _CreateConversationComputerWorkflowComposition(prisma, historyStore.historyStore, kubernetes.authApi, kubernetes.coreApi, kubernetes.customApi, config.workflows.siloId, agentSandboxReleaseProfile, config.conversationPrivatePayloadKeyringPath, conversationRunAdmission, mcpRuntime.admitToolInvocationInTransaction, workflows.execution, generatedFiles.resultReader, generatedFiles.outputLinker);
 	const conversationComputerActivations = await _StartConversationComputerActivationWorker(prisma, kubernetes.customApi, historyStore.historyStore, workflows.execution, config.workflows.siloId, agentSandboxReleaseProfile, { stopAuthority: conversationComputerWorkflows.stopAuthority, logger: _log, onExhausted: function _RequestProcessShutdown() { process.kill(process.pid, "SIGTERM"); } });
 	const conversationComputerLifecycle = _CreateConversationComputerLifecycleComposition(prisma, historyStore.historyStore, kubernetes.authApi, kubernetes.coreApi, kubernetes.customApi, config.workflows.siloId, agentSandboxReleaseProfile, config.conversationPrivatePayloadKeyringPath, workflows.execution);
 	const conversationComputerWorkers = { stop: async function _StopComputerWorkers(): Promise<void> { await Promise.all([conversationComputerActivations.stop(), conversationComputerLifecycle.worker.stop()]); } };
@@ -62,7 +64,7 @@ async function _Main(): Promise<void>
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
 	const publicApp = _CreatePublicApp(prisma, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);
-	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, mcpRuntime, workflows.execution, conversationComputerWorkflows.reviewCredentialRouter, conversationComputerLifecycle.router);
+	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, mcpRuntime, generatedFiles, workflows.execution, conversationComputerWorkflows.reviewCredentialRouter, conversationComputerLifecycle.router);
 	// 5. Start listeners and workers under one drain order so shared dependencies close exactly once.
 	await _StartProcessLifecycle(publicApp, internalApp, prisma, config, unbindConsole, mcpRuntime.authority, workflows.runtime, providerEffects, historyStore, conversationComputerWorkers);
 }
