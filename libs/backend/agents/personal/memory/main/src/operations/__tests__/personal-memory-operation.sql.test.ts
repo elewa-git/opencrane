@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 
-import { AuthorizationBoundaryKind, MemoryConsentState, MemoryDatasetState, MemoryFactState, PrincipalProvenance, Prisma, PrismaClient } from "@prisma/client";
+import { AuthorizationBoundaryKind, MemoryConsentState, MemoryDatasetState, MemoryFactState, PersonalMemoryOperationPhase as PrismaOperationPhase, PrincipalProvenance, Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { MemoryMutationDeliveryStates } from "@opencrane/contracts";
+import { MemoryFactProvenanceSourceKinds, MemoryMutationDeliveryStates } from "@opencrane/contracts";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 
 import { PersonalMemoryOperationAdmissionOutcomes, PersonalMemoryOperationInvalidState, PersonalMemoryOperationPersistenceOutcomes, type AdmitPersonalMemoryOperationCommand, type PersonalMemoryOperationTaskAdmission } from "../personal-memory-operation-persistence.types";
@@ -185,4 +185,159 @@ describe("personal-memory operations on fresh PostgreSQL", function _Suite()
 		expect(await _First.memoryFactCatalog.findUnique({ where: { id: factId } })).toMatchObject({ revision: expectedFactRevision + 1, state: MemoryFactState.ForgetPending });
 		expect(results.every(result => result.operation.expectedFactRevision === expectedFactRevision)).toBe(true);
 	});
+
+	it("publishes one Remember fact and replays the completed operation after restart", async function _RememberCatalogCompletion()
+	{
+		const pending = await _RememberAtCatalogPending();
+		const recordedAt = _CatalogRecordedAt(pending.command);
+		const owner = _Owner(_First);
+		await expect(owner.apply({ operationId: pending.command.operationId, kind: pending.command.kind, expectedRevision: 5, event: PersonalMemoryOperationEvents.CatalogCommitted }, recordedAt)).resolves.toMatchObject({ outcome: PersonalMemoryOperationPersistenceOutcomes.Advanced, operation: { phase: PersonalMemoryOperationPhases.Completed, revision: 6 } });
+
+		const restartedClient = new PrismaClient();
+		try
+		{
+			const operation = await restartedClient.personalMemoryOperation.findUniqueOrThrow({ where: { id: pending.command.operationId } });
+			const facts = await restartedClient.memoryFactCatalog.findMany({ where: { datasetId: pending.command.datasetId } });
+			expect(operation).toMatchObject({ phase: PrismaOperationPhase.Completed, revision: 6, completedAt: recordedAt });
+			expect(facts).toHaveLength(1);
+			expect(facts[0]).toMatchObject({ id: pending.command.operationId, datasetId: pending.command.datasetId, cogneeExternalId: pending.documentId, contentDigest: pending.command.contentDigest, state: MemoryFactState.Active, revision: 1, consentState: MemoryConsentState.Explicit, sensitivity: "personal", sourceArtifactRevisionId: null, sourceMessageId: pending.command.source?.messageId, supersedesFactId: null, recordedBy: pending.command.actorPrincipalId, recordedAt: recordedAt });
+			expect(facts[0]?.provenance).toEqual({ sourceKind: MemoryFactProvenanceSourceKinds.Message, operationId: pending.command.operationId, conversationId: pending.command.source?.conversationId, messagePosition: pending.command.source?.messagePosition.toString(), authorPrincipalId: pending.command.source?.authorPrincipalId });
+			await expect(_Owner(restartedClient).admit(pending.command)).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Replayed, operation: { phase: PersonalMemoryOperationPhases.Completed, revision: 6 } });
+		}
+		finally { await restartedClient.$disconnect(); }
+	});
+
+	it("publishes one Correct successor, fences its predecessor, and ignores duplicate completion", async function _CorrectCatalogCompletion()
+	{
+		const pending = await _CorrectAtCatalogPending();
+		const recordedAt = _CatalogRecordedAt(pending.command);
+		const event = { operationId: pending.command.operationId, kind: pending.command.kind, expectedRevision: 4, event: PersonalMemoryOperationEvents.CatalogCommitted } as const;
+		const results = await Promise.allSettled([_Owner(_First).apply(event, recordedAt), _Owner(_Second).apply(event, recordedAt)]);
+		expect(results.every(result => result.status === "fulfilled")).toBe(true);
+		expect(results.filter(result => result.status === "fulfilled" && result.value.outcome === PersonalMemoryOperationPersistenceOutcomes.Advanced)).toHaveLength(1);
+		const facts = await _First.memoryFactCatalog.findMany({ where: { datasetId: pending.command.datasetId } });
+		const predecessor = facts.find(fact => fact.id === pending.targetFactId);
+		const successors = facts.filter(fact => fact.supersedesFactId === pending.targetFactId);
+		expect(predecessor).toMatchObject({ state: MemoryFactState.Corrected, revision: 2 });
+		expect(successors).toHaveLength(1);
+		expect(successors[0]).toMatchObject({ id: pending.command.operationId, state: MemoryFactState.Active, revision: 1, cogneeExternalId: pending.documentId, contentDigest: pending.command.contentDigest, consentState: MemoryConsentState.Explicit, sensitivity: "personal", sourceMessageId: pending.command.source?.messageId, recordedBy: pending.command.actorPrincipalId });
+		expect(await _First.personalMemoryOperation.findUniqueOrThrow({ where: { id: pending.command.operationId } })).toMatchObject({ phase: PrismaOperationPhase.PriorDocumentDeletePending, revision: 5 });
+	});
+
+	it("finishes Forget at the database-owned revision after restart", async function _ForgetCatalogCompletion()
+	{
+		const pending = await _ForgetAtCatalogFinalizePending();
+		const recordedAt = _CatalogRecordedAt(pending.command);
+		await expect(_Owner(_First).apply({ operationId: pending.command.operationId, kind: pending.command.kind, expectedRevision: 2, event: PersonalMemoryOperationEvents.CatalogFinalized }, recordedAt)).resolves.toMatchObject({ outcome: PersonalMemoryOperationPersistenceOutcomes.Advanced, operation: { phase: PersonalMemoryOperationPhases.Completed, revision: 3 } });
+
+		const restartedClient = new PrismaClient();
+		try
+		{
+			const fact = await restartedClient.memoryFactCatalog.findUniqueOrThrow({ where: { id: pending.targetFactId } });
+			const operation = await restartedClient.personalMemoryOperation.findUniqueOrThrow({ where: { id: pending.command.operationId } });
+			expect(fact).toMatchObject({ state: MemoryFactState.Forgotten, revision: 3, forgottenAt: recordedAt });
+			expect(operation).toMatchObject({ phase: PrismaOperationPhase.Completed, revision: 3, completedAt: recordedAt });
+		}
+		finally { await restartedClient.$disconnect(); }
+	});
+
+	it("rolls back Remember catalog publication and operation advancement together", async function _RememberCatalogRollback()
+	{
+		const pending = await _RememberAtCatalogPending();
+		await expect(_First.$transaction(async function _Rollback(transaction)
+		{
+			await new PrismaPersonalMemoryOperationRepository(transaction).apply({ operationId: pending.command.operationId, kind: pending.command.kind, expectedRevision: 5, event: PersonalMemoryOperationEvents.CatalogCommitted }, _CatalogRecordedAt(pending.command));
+			throw new Error("synthetic Remember catalog rollback");
+		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })).rejects.toThrow("synthetic Remember catalog rollback");
+		expect(await _Second.memoryFactCatalog.count({ where: { datasetId: pending.command.datasetId } })).toBe(0);
+		expect(await _Second.personalMemoryOperation.findUniqueOrThrow({ where: { id: pending.command.operationId } })).toMatchObject({ phase: PrismaOperationPhase.CatalogCommitPending, revision: 5 });
+	});
+
+	it("rolls back Correct successor publication and predecessor transition together", async function _CorrectCatalogRollback()
+	{
+		const pending = await _CorrectAtCatalogPending();
+		await expect(_First.$transaction(async function _Rollback(transaction)
+		{
+			await new PrismaPersonalMemoryOperationRepository(transaction).apply({ operationId: pending.command.operationId, kind: pending.command.kind, expectedRevision: 4, event: PersonalMemoryOperationEvents.CatalogCommitted }, _CatalogRecordedAt(pending.command));
+			throw new Error("synthetic Correct catalog rollback");
+		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })).rejects.toThrow("synthetic Correct catalog rollback");
+		expect(await _Second.memoryFactCatalog.findUniqueOrThrow({ where: { id: pending.targetFactId } })).toMatchObject({ state: MemoryFactState.Active, revision: 1 });
+		expect(await _Second.memoryFactCatalog.count({ where: { datasetId: pending.command.datasetId } })).toBe(1);
+		expect(await _Second.personalMemoryOperation.findUniqueOrThrow({ where: { id: pending.command.operationId } })).toMatchObject({ phase: PrismaOperationPhase.CatalogCommitPending, revision: 4 });
+	});
+
+	it("rolls back Forget completion while retaining its admission hide", async function _ForgetCatalogRollback()
+	{
+		const pending = await _ForgetAtCatalogFinalizePending();
+		await expect(_First.$transaction(async function _Rollback(transaction)
+		{
+			await new PrismaPersonalMemoryOperationRepository(transaction).apply({ operationId: pending.command.operationId, kind: pending.command.kind, expectedRevision: 2, event: PersonalMemoryOperationEvents.CatalogFinalized }, _CatalogRecordedAt(pending.command));
+			throw new Error("synthetic Forget catalog rollback");
+		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })).rejects.toThrow("synthetic Forget catalog rollback");
+		expect(await _Second.memoryFactCatalog.findUniqueOrThrow({ where: { id: pending.targetFactId } })).toMatchObject({ state: MemoryFactState.ForgetPending, revision: 2 });
+		expect(await _Second.personalMemoryOperation.findUniqueOrThrow({ where: { id: pending.command.operationId } })).toMatchObject({ phase: PrismaOperationPhase.CatalogFinalizePending, revision: 2 });
+	});
 });
+
+/** Fixed digest for the synthetic indexing evidence used by every catalog fixture. */
+const _InputDigest = `sha256:${"d".repeat(64)}`;
+
+/** Derives a catalog timestamp after the command's live admission timestamp. */
+function _CatalogRecordedAt(command: AdmitPersonalMemoryOperationCommand): Date
+{
+	return new Date(command.admittedAt.getTime() + 1_000);
+}
+
+/** Drives a new Remember operation through provider and indexing receipts to catalog completion. */
+async function _RememberAtCatalogPending()
+{
+	const command = await _Fixture();
+	const owner = _Owner(_First);
+	await owner.admit(command);
+	const recordedAt = _CatalogRecordedAt(command);
+	const providerDatasetId = randomUUID();
+	const documentId = randomUUID();
+	await owner.apply({ operationId: command.operationId, kind: command.kind, expectedRevision: 1, event: PersonalMemoryOperationEvents.DatasetEnsured, providerDatasetId }, recordedAt);
+	await owner.apply({ operationId: command.operationId, kind: command.kind, expectedRevision: 2, event: PersonalMemoryOperationEvents.DocumentAdded, documentId, contentDigest: command.contentDigest! }, recordedAt);
+	await owner.apply({ operationId: command.operationId, kind: command.kind, expectedRevision: 3, event: PersonalMemoryOperationEvents.IndexEvidenceSaved, indexingOperationId: randomUUID(), expectedInputEvidenceDigest: _InputDigest }, recordedAt);
+	const operation = await _First.personalMemoryOperation.findUniqueOrThrow({ where: { id: command.operationId } });
+	await owner.apply({ operationId: command.operationId, kind: command.kind, expectedRevision: 4, event: PersonalMemoryOperationEvents.IndexingCompleted, indexingOperationId: operation.indexingOperationId!, expectedInputEvidenceDigest: operation.expectedInputEvidenceDigest!, pipelineRunId: randomUUID() }, recordedAt);
+	return { command, datasetId: command.datasetId, documentId };
+}
+
+/** Seeds one Active fact and drives a Correct operation to catalog completion. */
+async function _CorrectAtCatalogPending()
+{
+	const command = await _Fixture();
+	const providerDatasetId = randomUUID();
+	await _First.memoryDataset.update({ where: { id: command.datasetId }, data: { state: MemoryDatasetState.Active, cogneeDatasetId: providerDatasetId } });
+	const targetFactId = randomUUID();
+	const targetDocumentId = randomUUID();
+	await _First.memoryFactCatalog.create({ data: { id: targetFactId, datasetId: command.datasetId, cogneeExternalId: targetDocumentId, contentDigest: _ContentDigest, consentState: MemoryConsentState.Explicit, sensitivity: "personal", provenance: { sourceKind: MemoryFactProvenanceSourceKinds.Message }, sourceMessageId: command.source!.messageId, recordedBy: command.actorPrincipalId } });
+	const correct = { ...command, kind: PersonalMemoryOperationKinds.Correct, targetFactId, targetDocumentId, expectedFactRevision: 1, providerDatasetId };
+	const owner = _Owner(_First);
+	await owner.admit(correct);
+	const recordedAt = _CatalogRecordedAt(correct);
+	const documentId = randomUUID();
+	await owner.apply({ operationId: correct.operationId, kind: correct.kind, expectedRevision: 1, event: PersonalMemoryOperationEvents.DocumentAdded, documentId, contentDigest: correct.contentDigest! }, recordedAt);
+	await owner.apply({ operationId: correct.operationId, kind: correct.kind, expectedRevision: 2, event: PersonalMemoryOperationEvents.IndexEvidenceSaved, indexingOperationId: randomUUID(), expectedInputEvidenceDigest: _InputDigest }, recordedAt);
+	const indexed = await _First.personalMemoryOperation.findUniqueOrThrow({ where: { id: correct.operationId } });
+	await owner.apply({ operationId: correct.operationId, kind: correct.kind, expectedRevision: 3, event: PersonalMemoryOperationEvents.IndexingCompleted, indexingOperationId: indexed.indexingOperationId!, expectedInputEvidenceDigest: indexed.expectedInputEvidenceDigest!, pipelineRunId: randomUUID() }, recordedAt);
+	return { command: correct, datasetId: command.datasetId, documentId, targetFactId };
+}
+
+/** Seeds an Active target, admits Forget, and advances through exact provider absence. */
+async function _ForgetAtCatalogFinalizePending()
+{
+	const command = await _Fixture();
+	const providerDatasetId = randomUUID();
+	await _First.memoryDataset.update({ where: { id: command.datasetId }, data: { state: MemoryDatasetState.Active, cogneeDatasetId: providerDatasetId } });
+	const targetFactId = randomUUID();
+	const targetDocumentId = randomUUID();
+	await _First.memoryFactCatalog.create({ data: { id: targetFactId, datasetId: command.datasetId, cogneeExternalId: targetDocumentId, contentDigest: _ContentDigest, consentState: MemoryConsentState.Explicit, sensitivity: "personal", provenance: { sourceKind: MemoryFactProvenanceSourceKinds.Message }, sourceMessageId: command.source!.messageId, recordedBy: command.actorPrincipalId } });
+	const forget = { ...command, kind: PersonalMemoryOperationKinds.Forget, source: null, contentDigest: null, targetFactId, targetDocumentId, expectedFactRevision: 1, providerDatasetId };
+	const owner = _Owner(_First);
+	await owner.admit(forget);
+	await owner.apply({ operationId: forget.operationId, kind: forget.kind, expectedRevision: 1, event: PersonalMemoryOperationEvents.DocumentDeleted, documentId: targetDocumentId }, _CatalogRecordedAt(forget));
+	return { command: forget, targetFactId };
+}
