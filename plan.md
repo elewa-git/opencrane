@@ -2,6 +2,16 @@
 
 ## Standard remote MCP integration — source reviewed
 
+Draft [#886](https://github.com/elewa-git/opencrane/pull/886) publishes this source directly above
+#884. Its first database CI job stopped while creating test rows: the fixture's first-preparation
+time preceded its default creation time by milliseconds. Both fields now use the same database
+clock value. The corrected 15-case local SQL run passes 10 cases and reaches five remaining runtime
+failures: four remote claims still enter the existing OCI companion trigger; the invalid-revision
+case receives the earlier activation-authority rejection instead of the expected constraint name.
+These failures remain visible. No SQL guard, exception or test exclusion was added, and runtime
+acceptance is still incomplete. The existing proposal and its authority/error expectations must be
+qualified together when that source change is authorized.
+
 The preserved remote MCP implementation is being integrated directly above draft
 [#884](https://github.com/elewa-git/opencrane/pull/884), at immutable review base
 `7e2c3f523e719de7c72354551edcea6b9aeb5829`, on

@@ -131,7 +131,7 @@ async function _InvocationFixture()
 			authorizationEvidenceDigest: ___DigestCanonicalJson({ mcpTaskId, principalId: connection.principalId, coordinate, decisionDigest }), runtimeInstanceId: requestIdentity.runtimeInstanceId,
 			commandId: requestIdentity.commandId, candidateId: requestIdentity.candidateId, toolRevisionId: connection.toolRevisionId, toolInvocationId: publicInvocationId,
 			arguments: argumentsValue, argumentsDigest, effectiveArguments: argumentsValue, effectiveArgumentsDigest: argumentsDigest, requestFingerprint: ___DigestCanonicalJson([mcpTaskId, argumentsDigest]),
-			requestIdentity, approvalRequired: false, recoveryMode: ExternalActionRecoveryMode.Manual, state: ToolInvocationState.Preparing, retryDeadlineAt: new Date(clock.now.getTime() + 300_000), nextPreparationAttemptAt: clock.now,
+			requestIdentity, approvalRequired: false, recoveryMode: ExternalActionRecoveryMode.Manual, state: ToolInvocationState.Preparing, createdAt: clock.now, retryDeadlineAt: new Date(clock.now.getTime() + 300_000), nextPreparationAttemptAt: clock.now,
 		} });
 		await transaction.toolInvocation.update({ where: { id: invocationId }, data: { state: ToolInvocationState.Ready, preparationAttempt: { increment: 1 }, revision: { increment: 1 } } });
 		await transaction.mcpTask.update({ where: { id: mcpTaskId }, data: { state: McpTaskState.Queued } });
