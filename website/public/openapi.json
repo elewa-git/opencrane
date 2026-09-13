@@ -459,9 +459,135 @@
           }
         }
       },
+      "McpConnectionCommand": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "idempotencyKey",
+          "expectedGeneration",
+          "credential"
+        ],
+        "properties": {
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128,
+            "description": "Caller key that returns the same admitted generation after an uncertain response."
+          },
+          "expectedGeneration": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "Generation observed before this command, or null before any generation. An identical retry must retain this value; a new command cannot replace a different current generation."
+          },
+          "credential": {
+            "description": "Material matching the registered server's explicit credential requirement. The token is write-only and never appears in responses or workflow input.",
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind"
+                ],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "none"
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "token"
+                ],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "bearer"
+                    ]
+                  },
+                  "token": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8192,
+                    "writeOnly": true,
+                    "description": "Bearer token used only for the exact admitted credential custody operation."
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "McpConnectionProjection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "connectionStatus",
+          "connectionGeneration",
+          "credentialUpdatedAt",
+          "failureCode"
+        ],
+        "properties": {
+          "connectionStatus": {
+            "type": "string",
+            "enum": [
+              "needs-credential",
+              "credentialless",
+              "activating",
+              "active",
+              "recovery-required"
+            ],
+            "description": "Current connection state. Every effect independently rechecks authority and the saved generation."
+          },
+          "connectionGeneration": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Current admitted generation, or null before connection setup."
+          },
+          "credentialUpdatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Time exact credential custody committed, or null when no credential was stored."
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "authority-ended",
+              "endpoint-changed",
+              "credential-conflict",
+              "credential-unavailable",
+              "authentication-rejected",
+              "unsupported-protocol",
+              "discovery-rejected",
+              "workflow-exhausted",
+              null
+            ],
+            "description": "Safe failure category without provider responses, secret coordinates or material."
+          }
+        }
+      },
       "McpCatalogServer": {
         "type": "object",
-        "description": "An MCP server exposed by the operator API. Display metadata is optional because this shape serves both the entitled catalogue and the organisation-admin governance view; tools is always present and empty when no Ready OCI revision exists.",
+        "description": "An MCP server exposed by the operator API. Display metadata is optional because this shape serves both the entitled catalogue and the organisation-admin governance view; tools is always present and empty when no entitled Ready revision exists.",
         "required": [
           "id",
           "tools",
@@ -504,7 +630,7 @@
               "principal-credential",
               "shared-credential"
             ],
-            "description": "Credential custody required for execution. Only credentialless installations can execute through the current API; the other requirements await a governed activation flow."
+            "description": "Credential custody required for execution. Credential-requiring installations become usable only after an authorized exact-generation activation."
           },
           "approvalStatus": {
             "type": "string",
@@ -518,7 +644,7 @@
           },
           "credentialSchema": {
             "type": "array",
-            "description": "Fields declared by the server for credential setup, independent of its presentation type. This API describes the fields but neither receives nor returns credential values; activation remains unavailable.",
+            "description": "Fields declared by the server for credential setup, independent of its presentation type. Catalogue reads describe the fields and never return credential values. The separate write-only activation command supports the declared authentication profile.",
             "items": {
               "$ref": "#/components/schemas/CredentialField"
             }
@@ -529,7 +655,7 @@
           },
           "tools": {
             "type": "array",
-            "description": "Tools from the newest Ready OCI server revision. User catalogue rows are entitlement-filtered; administrator visibility never grants execution permission.",
+            "description": "Tools from the newest entitled Ready server revision. User catalogue rows are entitlement-filtered; administrator visibility never grants execution permission.",
             "items": {
               "$ref": "#/components/schemas/McpAssignableToolRevision"
             }
@@ -538,7 +664,7 @@
       },
       "McpAssignableToolRevision": {
         "type": "object",
-        "description": "An immutable OCI-backed MCP tool schema selected from the newest Ready server revision. Governance eligibility does not replace caller authorization.",
+        "description": "An immutable MCP tool schema selected from the newest Ready server revision. Governance eligibility does not replace caller authorization.",
         "required": [
           "toolRevisionId",
           "serverRevisionId",
@@ -634,20 +760,70 @@
         "description": "An MCP server installed by the calling user, with its current connection state.",
         "required": [
           "serverId",
-          "connectionStatus"
+          "lifecycleState",
+          "connectionStatus",
+          "connectionGeneration",
+          "credentialUpdatedAt",
+          "failureCode"
         ],
         "properties": {
-          "serverId": {
-            "type": "string",
-            "description": "Identifier of the installed server."
-          },
           "connectionStatus": {
             "type": "string",
             "enum": [
               "needs-credential",
-              "credentialless"
+              "credentialless",
+              "activating",
+              "active",
+              "recovery-required"
             ],
-            "description": "Persisted installation state. Needs-credential is unavailable until activation exists; credentialless requires no provider credential and still needs current execution authority."
+            "description": "Safe installation and connection state; current authority and exact generation still govern every execution."
+          },
+          "connectionGeneration": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "description": "Current admitted generation, or null before connection setup."
+          },
+          "credentialUpdatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Time exact credential custody committed, or null when no credential was stored."
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "authority-ended",
+              "endpoint-changed",
+              "credential-conflict",
+              "credential-unavailable",
+              "authentication-rejected",
+              "unsupported-protocol",
+              "discovery-rejected",
+              "workflow-exhausted",
+              null
+            ],
+            "description": "Safe failure category without provider responses, secret coordinates or material."
+          },
+          "serverId": {
+            "type": "string",
+            "description": "Identifier of the installed server."
+          },
+          "lifecycleState": {
+            "type": "string",
+            "enum": [
+              "installed",
+              "removing",
+              "removed"
+            ],
+            "description": "Durable installation and removal state. Removed installations are omitted from lists."
           },
           "lastUsed": {
             "type": [
@@ -825,7 +1001,7 @@
       },
       "McpTaskSubmission": {
         "type": "object",
-        "description": "One idempotent asynchronous call of a discovered tool on an installed OCI-backed MCP server.",
+        "description": "One idempotent asynchronous call of a discovered tool on an installed MCP server.",
         "required": [
           "idempotencyKey",
           "serverRevisionId",
@@ -862,7 +1038,7 @@
       },
       "McpTask": {
         "type": "object",
-        "description": "Caller-visible durable state for one OCI-backed MCP tool call. Arguments, workflow receipts, and executor identifiers are never returned.",
+        "description": "Caller-visible durable state for one MCP tool call. Arguments, workflow receipts, and executor identifiers are never returned.",
         "required": [
           "id",
           "serverRevisionId",
@@ -882,7 +1058,7 @@
           },
           "serverRevisionId": {
             "type": "string",
-            "description": "Immutable OCI-backed MCP server revision."
+            "description": "Immutable MCP server revision."
           },
           "toolRevisionId": {
             "type": "string",
@@ -2090,6 +2266,336 @@
     }
   },
   "paths": {
+    "/mcp/installed/{serverId}/connection": {
+      "put": {
+        "operationId": "activatePersonalMcpConnection",
+        "summary": "Activate or replace the calling person's exact MCP connection",
+        "tags": [
+          "MCP Operator"
+        ],
+        "parameters": [
+          {
+            "name": "serverId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpConnectionCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The exact connection command is saved. Its safe status may remain pending while custody or discovery completes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpConnectionProjection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The connection command is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The connection is unavailable to this caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The command conflicts with saved connection work.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "revokePersonalMcpConnection",
+        "summary": "Revoke the calling person's connection before credential cleanup",
+        "tags": [
+          "MCP Operator"
+        ],
+        "parameters": [
+          {
+            "name": "serverId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "commandId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "expectedGeneration",
+            "in": "query",
+            "required": true,
+            "description": "Connection generation the caller intends to revoke. An identical retry must retain this value.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "The exact connection command is saved. Its safe status may remain pending while custody or discovery completes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpConnectionProjection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The connection command is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The connection is unavailable to this caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The command conflicts with saved connection work.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp/servers/{serverId}/service-connections/{agentServiceId}": {
+      "put": {
+        "operationId": "activateServiceMcpConnection",
+        "summary": "Activate the managed assistant's exact connection with current organisation administration",
+        "tags": [
+          "MCP Operator"
+        ],
+        "parameters": [
+          {
+            "name": "serverId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "agentServiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpConnectionCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The exact connection command is saved. Its safe status may remain pending while custody or discovery completes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpConnectionProjection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The connection command is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The connection is unavailable to this caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The command conflicts with saved connection work.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "revokeServiceMcpConnection",
+        "summary": "Revoke the managed assistant's connection with current organisation administration",
+        "tags": [
+          "MCP Operator"
+        ],
+        "parameters": [
+          {
+            "name": "serverId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "agentServiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          {
+            "name": "commandId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "expectedGeneration",
+            "in": "query",
+            "required": true,
+            "description": "Connection generation the caller intends to revoke. An identical retry must retain this value.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "The exact connection command is saved. Its safe status may remain pending while custody or discovery completes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpConnectionProjection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The connection command is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The connection is unavailable to this caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The command conflicts with saved connection work.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/mcp/catalog": {
       "get": {
         "operationId": "listMcpCatalog",
@@ -2191,6 +2697,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Installation removal is still in progress.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -2213,6 +2729,9 @@
           }
         ],
         "responses": {
+          "202": {
+            "description": "Removal accepted. The installed list retains a Removing row until execution and credential cleanup finish."
+          },
           "204": {
             "description": "Server uninstalled."
           },

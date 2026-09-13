@@ -4,6 +4,42 @@
  */
 
 export interface paths {
+    "/mcp/installed/{serverId}/connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Activate or replace the calling person's exact MCP connection */
+        put: operations["activatePersonalMcpConnection"];
+        post?: never;
+        /** Revoke the calling person's connection before credential cleanup */
+        delete: operations["revokePersonalMcpConnection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mcp/servers/{serverId}/service-connections/{agentServiceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Activate the managed assistant's exact connection with current organisation administration */
+        put: operations["activateServiceMcpConnection"];
+        post?: never;
+        /** Revoke the managed assistant's connection with current organisation administration */
+        delete: operations["revokeServiceMcpConnection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/mcp/catalog": {
         parameters: {
             query?: never;
@@ -1796,7 +1832,42 @@ export interface components {
         RemoveOrganizationMemberResult: {
             member: components["schemas"]["OrganizationMember"];
         };
-        /** @description An MCP server exposed by the operator API. Display metadata is optional because this shape serves both the entitled catalogue and the organisation-admin governance view; tools is always present and empty when no Ready OCI revision exists. */
+        McpConnectionCommand: {
+            /** @description Caller key that returns the same admitted generation after an uncertain response. */
+            idempotencyKey: string;
+            /** @description Generation observed before this command, or null before any generation. An identical retry must retain this value; a new command cannot replace a different current generation. */
+            expectedGeneration: number | null;
+            /** @description Material matching the registered server's explicit credential requirement. The token is write-only and never appears in responses or workflow input. */
+            credential: {
+                /** @enum {string} */
+                kind: "none";
+            } | {
+                /** @enum {string} */
+                kind: "bearer";
+                /** @description Bearer token used only for the exact admitted credential custody operation. */
+                token: string;
+            };
+        };
+        McpConnectionProjection: {
+            /**
+             * @description Current connection state. Every effect independently rechecks authority and the saved generation.
+             * @enum {string}
+             */
+            connectionStatus: "needs-credential" | "credentialless" | "activating" | "active" | "recovery-required";
+            /** @description Current admitted generation, or null before connection setup. */
+            connectionGeneration: number | null;
+            /**
+             * Format: date-time
+             * @description Time exact credential custody committed, or null when no credential was stored.
+             */
+            credentialUpdatedAt: string | null;
+            /**
+             * @description Safe failure category without provider responses, secret coordinates or material.
+             * @enum {string|null}
+             */
+            failureCode: "authority-ended" | "endpoint-changed" | "credential-conflict" | "credential-unavailable" | "authentication-rejected" | "unsupported-protocol" | "discovery-rejected" | "workflow-exhausted" | null;
+        };
+        /** @description An MCP server exposed by the operator API. Display metadata is optional because this shape serves both the entitled catalogue and the organisation-admin governance view; tools is always present and empty when no entitled Ready revision exists. */
         McpCatalogServer: {
             /** @description Stable server identifier. */
             id: string;
@@ -1814,7 +1885,7 @@ export interface components {
              */
             type?: "single-user" | "multi-user" | "remote-oauth";
             /**
-             * @description Credential custody required for execution. Only credentialless installations can execute through the current API; the other requirements await a governed activation flow.
+             * @description Credential custody required for execution. Credential-requiring installations become usable only after an authorized exact-generation activation.
              * @enum {string}
              */
             credentialRequirement: "credentialless" | "principal-credential" | "shared-credential";
@@ -1823,14 +1894,14 @@ export interface components {
              * @enum {string}
              */
             approvalStatus?: "pending-review" | "approved" | "published" | "disabled";
-            /** @description Fields declared by the server for credential setup, independent of its presentation type. This API describes the fields but neither receives nor returns credential values; activation remains unavailable. */
+            /** @description Fields declared by the server for credential setup, independent of its presentation type. Catalogue reads describe the fields and never return credential values. The separate write-only activation command supports the declared authentication profile. */
             credentialSchema?: components["schemas"]["CredentialField"][];
             /** @description Human-readable summary of access grants, returned for the governance view. */
             entitlementSummary?: string;
-            /** @description Tools from the newest Ready OCI server revision. User catalogue rows are entitlement-filtered; administrator visibility never grants execution permission. */
+            /** @description Tools from the newest entitled Ready server revision. User catalogue rows are entitlement-filtered; administrator visibility never grants execution permission. */
             tools: components["schemas"]["McpAssignableToolRevision"][];
         };
-        /** @description An immutable OCI-backed MCP tool schema selected from the newest Ready server revision. Governance eligibility does not replace caller authorization. */
+        /** @description An immutable MCP tool schema selected from the newest Ready server revision. Governance eligibility does not replace caller authorization. */
         McpAssignableToolRevision: {
             /** @description Immutable tool revision identifier saved during discovery. */
             toolRevisionId: string;
@@ -1872,13 +1943,30 @@ export interface components {
         };
         /** @description An MCP server installed by the calling user, with its current connection state. */
         McpInstalled: {
+            /**
+             * @description Safe installation and connection state; current authority and exact generation still govern every execution.
+             * @enum {string}
+             */
+            connectionStatus: "needs-credential" | "credentialless" | "activating" | "active" | "recovery-required";
+            /** @description Current admitted generation, or null before connection setup. */
+            connectionGeneration: number | null;
+            /**
+             * Format: date-time
+             * @description Time exact credential custody committed, or null when no credential was stored.
+             */
+            credentialUpdatedAt: string | null;
+            /**
+             * @description Safe failure category without provider responses, secret coordinates or material.
+             * @enum {string|null}
+             */
+            failureCode: "authority-ended" | "endpoint-changed" | "credential-conflict" | "credential-unavailable" | "authentication-rejected" | "unsupported-protocol" | "discovery-rejected" | "workflow-exhausted" | null;
             /** @description Identifier of the installed server. */
             serverId: string;
             /**
-             * @description Persisted installation state. Needs-credential is unavailable until activation exists; credentialless requires no provider credential and still needs current execution authority.
+             * @description Durable installation and removal state. Removed installations are omitted from lists.
              * @enum {string}
              */
-            connectionStatus: "needs-credential" | "credentialless";
+            lifecycleState: "installed" | "removing" | "removed";
             /**
              * Format: date-time
              * @description ISO-8601 timestamp of the server's last use, or null when it has never been used.
@@ -1943,7 +2031,7 @@ export interface components {
             /** @description JSON value inserted into the exact top-level tool argument. */
             value: unknown;
         };
-        /** @description One idempotent asynchronous call of a discovered tool on an installed OCI-backed MCP server. */
+        /** @description One idempotent asynchronous call of a discovered tool on an installed MCP server. */
         McpTaskSubmission: {
             /** @description Caller key that makes retries select the same durable task. */
             idempotencyKey: string;
@@ -1955,11 +2043,11 @@ export interface components {
             arguments: unknown;
             inputRequest?: components["schemas"]["McpTaskInputRequest"];
         };
-        /** @description Caller-visible durable state for one OCI-backed MCP tool call. Arguments, workflow receipts, and executor identifiers are never returned. */
+        /** @description Caller-visible durable state for one MCP tool call. Arguments, workflow receipts, and executor identifiers are never returned. */
         McpTask: {
             /** @description Stable task identifier. */
             id: string;
-            /** @description Immutable OCI-backed MCP server revision. */
+            /** @description Immutable MCP server revision. */
             serverRevisionId: string;
             /** @description Immutable discovered tool revision. */
             toolRevisionId: string;
@@ -2391,6 +2479,220 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    activatePersonalMcpConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serverId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpConnectionCommand"];
+            };
+        };
+        responses: {
+            /** @description The exact connection command is saved. Its safe status may remain pending while custody or discovery completes. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpConnectionProjection"];
+                };
+            };
+            /** @description The connection command is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The connection is unavailable to this caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The command conflicts with saved connection work. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revokePersonalMcpConnection: {
+        parameters: {
+            query: {
+                commandId: string;
+                /** @description Connection generation the caller intends to revoke. An identical retry must retain this value. */
+                expectedGeneration: number;
+            };
+            header?: never;
+            path: {
+                serverId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The exact connection command is saved. Its safe status may remain pending while custody or discovery completes. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpConnectionProjection"];
+                };
+            };
+            /** @description The connection command is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The connection is unavailable to this caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The command conflicts with saved connection work. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    activateServiceMcpConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serverId: string;
+                agentServiceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpConnectionCommand"];
+            };
+        };
+        responses: {
+            /** @description The exact connection command is saved. Its safe status may remain pending while custody or discovery completes. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpConnectionProjection"];
+                };
+            };
+            /** @description The connection command is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The connection is unavailable to this caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The command conflicts with saved connection work. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revokeServiceMcpConnection: {
+        parameters: {
+            query: {
+                commandId: string;
+                /** @description Connection generation the caller intends to revoke. An identical retry must retain this value. */
+                expectedGeneration: number;
+            };
+            header?: never;
+            path: {
+                serverId: string;
+                agentServiceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The exact connection command is saved. Its safe status may remain pending while custody or discovery completes. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpConnectionProjection"];
+                };
+            };
+            /** @description The connection command is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The connection is unavailable to this caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The command conflicts with saved connection work. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     listMcpCatalog: {
         parameters: {
             query?: never;
@@ -2473,6 +2775,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description Installation removal is still in progress. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     uninstallMcpServer: {
@@ -2486,6 +2797,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description Removal accepted. The installed list retains a Removing row until execution and credential cleanup finish. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Server uninstalled. */
             204: {
                 headers: {

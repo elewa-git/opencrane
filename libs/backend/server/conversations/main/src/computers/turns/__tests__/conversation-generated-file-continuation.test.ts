@@ -23,7 +23,8 @@ describe("generated file continuation", function _GeneratedFileContinuation()
 			return { ...result, generatedFile: { state: ConversationGeneratedFileResultStates.Ready, operationId: "file-operation", artifact } };
 		});
 		f.fileLinks.link.mockRejectedValueOnce(new Error("SQL link response lost"));
-		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending", ordinal: 2 });
+		expect(await f.authority.advance(f.step)).toEqual({ outcome: "retry" });
+		expect(f.runLifecycle.enterRecoveryRequired).not.toHaveBeenCalled();
 		const saved = (await f.store.load(f.step))!;
 		expect(saved.outputReceipt!.event.data.entry).toMatchObject({ blocks: [{ kind: "text" }, artifact] });
 		expect(f.flags.runState).toBe("running");
@@ -48,7 +49,8 @@ describe("generated file continuation", function _GeneratedFileContinuation()
 			return { ...result, generatedFile: { state: ConversationGeneratedFileResultStates.Ready, operationId: "file-operation", artifact: { id: "asset-1", kind: ConversationMessageContentBlockKinds.Artifact, artifactId: "artifact-1", artifactRevisionId: "revision-1", name: "counties.csv", mediaType: "text/csv;charset=utf-8" } } };
 		});
 		f.runLifecycle.complete.mockRejectedValueOnce(new Error("run completion interrupted"));
-		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending", ordinal: 2 });
+		expect(await f.authority.advance(f.step)).toEqual({ outcome: "retry" });
+		expect(f.runLifecycle.enterRecoveryRequired).not.toHaveBeenCalled();
 		expect(f.fileLinks.link).toHaveBeenCalledOnce();
 		const saved = (await f.store.load(f.step))!.outputReceipt;
 		f.current.lease.expiresAt = "2000-01-01T00:00:00.000Z";

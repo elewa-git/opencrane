@@ -105,6 +105,7 @@ function _Harness() {
         }),
     },
     runLifecycle: {
+      enterRecoveryRequired: vi.fn().mockResolvedValue(undefined),
       start: vi.fn().mockResolvedValue(undefined),
       complete: vi.fn().mockResolvedValue(undefined),
     },

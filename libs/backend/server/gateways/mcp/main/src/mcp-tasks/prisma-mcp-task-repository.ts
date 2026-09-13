@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 
-import Ajv from "ajv";
-import { ExternalActionRecoveryMode, McpExecutorCommandState, McpExecutorWorkloadState, McpTaskState, Prisma, ToolInvocationState } from "@prisma/client";
+import { ExternalActionRecoveryMode, McpExecutionTransport, McpExecutorCommandState, McpExecutorWorkloadState, McpTaskState, Prisma, ToolInvocationState } from "@prisma/client";
 
 import { PrismaManagedAuthorizationGrantRepository, type AuthorizationAuthority, type ManagedAuthorizationGrantRepository, type ManagedAuthorizationGrantSpec } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
@@ -13,8 +12,9 @@ import { _MCP_CONNECTION_UNAVAILABLE } from "../connections/mcp-connection-readi
 import { MCP_ERA_PROTOCOL_VERSION } from "../era-probe/mcp-era-probe.types";
 import { _McpTerminalWorkloadState } from "../runtime/mcp-runtime-terminal-workload-state";
 
+import { _McpTaskArgumentsAreValid, _McpTaskEffectiveArguments, _McpTaskInputRequest, _McpTaskInputResponse } from "./mcp-task-input";
 import { _McpTaskCancellationConflictError, type McpTaskCreateResult, type McpTaskRepository, type McpTaskSubmissionRecord, type McpTaskWorkflowBinding } from "./mcp-task-repository.types";
-import { McpTaskStates, type McpTaskInputRequest, type McpTaskInputResponse, type McpTaskRecord } from "./mcp-task.types";
+import { McpTaskStates, type McpTaskInputResponse, type McpTaskRecord } from "./mcp-task.types";
 
 /** Isolates grants that follow the durable creator relation of one public MCP task. */
 const _MCP_TASK_CREATOR_GRANT_MANAGER_ID = "mcp-task-creator-access";
@@ -29,6 +29,11 @@ const _TASK_SELECT = {
 	serverRevisionId: true,
 	toolRevisionId: true,
 	protocolVersion: true,
+	transport: true,
+	connectionId: true,
+	connectionGeneration: true,
+	connectionOwnerPrincipalId: true,
+	endpointDigest: true,
 	arguments: true,
 	taskId: true,
 	taskName: true,
@@ -39,7 +44,20 @@ const _TASK_SELECT = {
 	result: true,
 	failureCode: true,
 	toolRevision: { select: { name: true, inputSchema: true } },
-	toolInvocation: { select: { id: true, state: true, mcpRuntimeExecution: { select: { id: true, commandState: true, workloadState: true, workloadUid: true, deliveryCount: true, claimedAt: true, claimExpiresAt: true } } } },
+	serverRevision: {
+		select: {
+			transport: true,
+			connectionId: true,
+			connectionGeneration: true,
+			connectionOwnerPrincipalId: true,
+			endpointDigest: true,
+			protocolVersion: true,
+			state: true,
+			server: { select: { status: true, approvalStatus: true } },
+			connection: { select: { state: true } },
+		},
+	},
+	toolInvocation: { select: { id: true, toolInvocationId: true, state: true, mcpRuntimeExecution: { select: { id: true, transport: true, commandState: true, workloadState: true, workloadUid: true, deliveryCount: true, claimedAt: true, claimExpiresAt: true, remoteClaimFence: true, toolInvocationClaimFence: true, toolInvocationClaimRevision: true } } } },
 } as const satisfies Prisma.McpTaskSelect;
 
 /** Prisma projection mapped into the package contract. */
@@ -49,28 +67,6 @@ type _TaskProjection = Prisma.McpTaskGetPayload<{ select: typeof _TASK_SELECT }>
 function _ClaimDigest(requestKeyDigest: string): string
 {
 	return `sha256:${createHash("sha256").update(`mcp-task:${requestKeyDigest}`).digest("hex")}`;
-}
-
-/** Parse a stored input request or fail closed when its shape drifted. */
-function _InputRequest(value: Prisma.JsonValue | null): McpTaskInputRequest | null
-{
-	if (value === null)
-		return null;
-	if (typeof value !== "object" || Array.isArray(value))
-		throw new Error("MCP task input request is invalid");
-	if (typeof value.requestId !== "string" || typeof value.message !== "string" || typeof value.argumentName !== "string")
-		throw new Error("MCP task input request is invalid");
-	return { requestId: value.requestId, message: value.message, argumentName: value.argumentName };
-}
-
-/** Parse a stored input response or fail closed when its shape drifted. */
-function _InputResponse(value: Prisma.JsonValue | null): McpTaskInputResponse | null
-{
-	if (value === null)
-		return null;
-	if (typeof value !== "object" || Array.isArray(value) || typeof value.requestId !== "string" || !("value" in value))
-		throw new Error("MCP task input response is invalid");
-	return { requestId: value.requestId, value: value.value as JsonValue };
 }
 
 /** Translate Prisma's database vocabulary into the public wire vocabulary. */
@@ -109,40 +105,14 @@ function _Record(value: _TaskProjection): McpTaskRecord
 		toolName: value.toolRevision.name,
 		protocolVersion: value.protocolVersion,
 		state: _State(value.state),
-		inputRequest: _InputRequest(value.inputRequest),
-		inputResponse: _InputResponse(value.inputResponse),
+		inputRequest: _McpTaskInputRequest(value.inputRequest),
+		inputResponse: _McpTaskInputResponse(value.inputResponse),
 		result: value.result as JsonValue | null,
 		failureCode: value.failureCode,
 		toolInvocationRowId: value.toolInvocation?.id ?? null,
+		toolInvocationId: value.toolInvocation?.toolInvocationId ?? null,
 		workflowTask,
 	};
-}
-
-/** Return true when arguments satisfy the exact discovered JSON Schema. */
-function _ArgumentsAreValid(schema: Prisma.JsonValue, value: JsonValue): boolean
-{
-	try
-	{
-		const ajv = new Ajv({ allErrors: false, strict: true });
-		const validator = ajv.compile(schema as object);
-		return validator(value);
-	}
-	catch
-	{
-		return false;
-	}
-}
-
-/** Apply the one saved top-level response without mutating the stored submission arguments. */
-function _EffectiveArguments(task: _TaskProjection): JsonValue | null
-{
-	const request = _InputRequest(task.inputRequest);
-	const response = _InputResponse(task.inputResponse);
-	if (request === null)
-		return task.arguments as JsonValue;
-	if (response === null || typeof task.arguments !== "object" || task.arguments === null || Array.isArray(task.arguments))
-		return null;
-	return { ...(task.arguments as Record<string, JsonValue>), [request.argumentName]: response.value };
 }
 
 /** Transaction-scoped persistence for caller-owned public MCP tasks. */
@@ -188,12 +158,27 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 				siloId: submission.siloId,
 				serverRevisionId: submission.serverRevisionId,
 			},
-			select: { inputSchema: true },
+			select: {
+				inputSchema: true,
+				serverRevision: {
+					select: {
+						transport: true,
+						connectionId: true,
+						connectionGeneration: true,
+						connectionOwnerPrincipalId: true,
+						endpointDigest: true,
+						protocolVersion: true,
+						state: true,
+						server: { select: { status: true, approvalStatus: true } },
+						connection: { select: { state: true } },
+					},
+				},
+			},
 		});
 		const readiness = { siloId: submission.siloId, toolRevisionId: submission.toolRevisionId, ownerPrincipalId: submission.principalId };
 		if (tool === null || !await this._connectionReadiness.isReady(readiness))
 			return null;
-		if (submission.inputRequest === null && !_ArgumentsAreValid(tool.inputSchema, submission.arguments))
+		if (submission.inputRequest === null && !_McpTaskArgumentsAreValid(tool.inputSchema, submission.arguments))
 			return null;
 		if (submission.inputRequest !== null && (typeof submission.arguments !== "object" || submission.arguments === null || Array.isArray(submission.arguments)))
 			return null;
@@ -206,6 +191,11 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 				serverRevisionId: submission.serverRevisionId,
 				toolRevisionId: submission.toolRevisionId,
 				protocolVersion: MCP_ERA_PROTOCOL_VERSION,
+				transport: tool.serverRevision.transport,
+				connectionId: tool.serverRevision.connectionId,
+				connectionGeneration: tool.serverRevision.connectionGeneration,
+				connectionOwnerPrincipalId: tool.serverRevision.connectionOwnerPrincipalId,
+				endpointDigest: tool.serverRevision.endpointDigest,
 				arguments: submission.arguments as Prisma.InputJsonValue,
 				inputRequest: submission.inputRequest === null ? Prisma.DbNull : submission.inputRequest as unknown as Prisma.InputJsonValue,
 			},
@@ -256,8 +246,8 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 		const current = await this._transaction.mcpTask.findFirst({ where: { id: taskId, siloId, principalId }, select: _TASK_SELECT });
 		if (current === null)
 			return null;
-		const request = _InputRequest(current.inputRequest);
-		const stored = _InputResponse(current.inputResponse);
+		const request = _McpTaskInputRequest(current.inputRequest);
+		const stored = _McpTaskInputResponse(current.inputResponse);
 		if (request === null || request.requestId !== response.requestId)
 			return null;
 		if (stored !== null && ___DigestCanonicalJson(stored.value) !== ___DigestCanonicalJson(response.value))
@@ -295,13 +285,18 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 		if (task.state === McpTaskState.Cancelled || task.state === McpTaskState.Failed || task.state === McpTaskState.RecoveryRequired || task.state === McpTaskState.Completed)
 			return _Record(task);
 		const readiness = { siloId: task.siloId, toolRevisionId: task.toolRevisionId, ownerPrincipalId: task.principalId };
-		if (!await this._connectionReadiness.isReady(readiness))
+		if (!await this._connectionReadiness.isReady(readiness)
+			|| task.transport !== task.serverRevision.transport
+			|| task.connectionId !== task.serverRevision.connectionId
+			|| task.connectionGeneration !== task.serverRevision.connectionGeneration
+			|| task.connectionOwnerPrincipalId !== task.serverRevision.connectionOwnerPrincipalId
+			|| task.endpointDigest !== task.serverRevision.endpointDigest)
 		{
 			const failed = await this._transaction.mcpTask.update({ where: { id: task.id }, data: { state: McpTaskState.Failed, failureCode: _MCP_CONNECTION_UNAVAILABLE, completedAt: new Date() }, select: _TASK_SELECT });
 			return _Record(failed);
 		}
-		const effectiveArguments = _EffectiveArguments(task);
-		if (effectiveArguments === null || !_ArgumentsAreValid(task.toolRevision.inputSchema, effectiveArguments))
+		const effectiveArguments = _McpTaskEffectiveArguments(task);
+		if (effectiveArguments === null || !_McpTaskArgumentsAreValid(task.toolRevision.inputSchema, effectiveArguments))
 		{
 			const failed = await this._transaction.mcpTask.update({ where: { id: task.id }, data: { state: McpTaskState.Failed, failureCode: "invalid_tool_arguments", completedAt: new Date() }, select: _TASK_SELECT });
 			return _Record(failed);
@@ -413,10 +408,10 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 			const terminalAt = new Date();
 			if (execution !== null)
 			{
-				const workloadState = _McpTerminalWorkloadState(execution, McpExecutorWorkloadState);
-				if (workloadState === null)
+				const transition = _UnusedRuntimeTransition(execution, task.toolInvocation.id, terminalAt);
+				if (transition === null)
 					return "too_late";
-				const updated = await this._transaction.mcpRuntimeExecution.updateMany({ where: { id: execution.id, toolInvocationId: task.toolInvocation.id, commandState: McpExecutorCommandState.Pending, workloadState: execution.workloadState, workloadUid: execution.workloadUid, deliveryCount: execution.deliveryCount, claimedAt: execution.claimedAt, claimExpiresAt: execution.claimExpiresAt }, data: { commandState: McpExecutorCommandState.Failed, workloadState, terminalOutcome: "mcp_task_cancelled", completedAt: terminalAt } });
+				const updated = await this._transaction.mcpRuntimeExecution.updateMany(transition);
 				if (updated.count !== 1)
 					throw new _McpTaskCancellationConflictError();
 			}
@@ -451,4 +446,27 @@ export class PrismaMcpTaskRepository implements McpTaskRepository
 		});
 		await this._managedGrants.reconcileManagedResourceGrants({ siloId, managerId: _MCP_TASK_CREATOR_GRANT_MANAGER_ID, resource, grants, now: new Date() });
 	}
+}
+
+/** Build the strategy-specific transition that closes runtime work before any provider claim. */
+function _UnusedRuntimeTransition(execution: NonNullable<NonNullable<_TaskProjection["toolInvocation"]>["mcpRuntimeExecution"]>, toolInvocationId: string, terminalAt: Date): { readonly where: Prisma.McpRuntimeExecutionWhereInput; readonly data: Prisma.McpRuntimeExecutionUpdateManyMutationInput } | null
+{
+	if (execution.commandState !== McpExecutorCommandState.Pending)
+		return null;
+	if (execution.transport === McpExecutionTransport.RemoteHttp)
+	{
+		if (execution.remoteClaimFence !== null || execution.toolInvocationClaimFence !== null || execution.toolInvocationClaimRevision !== null)
+			return null;
+		return {
+			where: { id: execution.id, transport: McpExecutionTransport.RemoteHttp, toolInvocationId, commandState: McpExecutorCommandState.Pending, remoteClaimFence: null, toolInvocationClaimFence: null, toolInvocationClaimRevision: null },
+			data: { commandState: McpExecutorCommandState.Failed, terminalOutcome: "mcp_task_cancelled", terminalPayloadDigest: ___DigestCanonicalJson({ failureCode: "mcp_task_cancelled" }), completedAt: terminalAt },
+		};
+	}
+	const workloadState = _McpTerminalWorkloadState(execution, McpExecutorWorkloadState);
+	if (workloadState === null)
+		return null;
+	return {
+		where: { id: execution.id, transport: McpExecutionTransport.OciImage, toolInvocationId, commandState: McpExecutorCommandState.Pending, workloadState: execution.workloadState, workloadUid: execution.workloadUid, deliveryCount: execution.deliveryCount, claimedAt: execution.claimedAt, claimExpiresAt: execution.claimExpiresAt },
+		data: { commandState: McpExecutorCommandState.Failed, workloadState, terminalOutcome: "mcp_task_cancelled", completedAt: terminalAt },
+	};
 }

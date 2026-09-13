@@ -1,4 +1,4 @@
-import { ExternalActionClaimKind, McpExecutorCommandState, McpExecutorWorkloadState, McpRuntimeExecutionKind, McpTaskState, Prisma, ToolInvocationState } from "@prisma/client";
+import { ExternalActionClaimKind, McpExecutionTransport, McpExecutorCommandState, McpExecutorWorkloadState, McpRuntimeExecutionKind, McpTaskState, Prisma, ToolInvocationState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { ToolInvocationStates } from "@opencrane/backend/server/iam/authorization";
@@ -28,7 +28,7 @@ function _ReadyInvocation(execution: Record<string, unknown> | null = null)
 /** Return one assigned runtime execution that cannot have reached provider dispatch. */
 function _PendingExecution()
 {
-	return { id: "execution-1", siloId: _INPUT.siloId, toolInvocationId: "invocation-1", kind: McpRuntimeExecutionKind.Invocation, workloadState: McpExecutorWorkloadState.Assigned, commandState: McpExecutorCommandState.Pending, workloadUid: "job-uid-1", claimedAt: new Date("2026-08-28T11:59:00.000Z"), claimExpiresAt: new Date("2026-08-28T12:01:00.000Z"), deliveryCount: 1, companionClaimFence: null, toolInvocationClaimFence: null, toolInvocationClaimRevision: null };
+	return { id: "execution-1", siloId: _INPUT.siloId, toolInvocationId: "invocation-1", kind: McpRuntimeExecutionKind.Invocation, transport: McpExecutionTransport.OciImage, workloadState: McpExecutorWorkloadState.Assigned, commandState: McpExecutorCommandState.Pending, workloadUid: "job-uid-1", claimedAt: new Date("2026-08-28T11:59:00.000Z"), claimExpiresAt: new Date("2026-08-28T12:01:00.000Z"), deliveryCount: 1, remoteClaimFence: null, remoteClaimExpiresAt: null, companionClaimFence: null, toolInvocationClaimFence: null, toolInvocationClaimRevision: null };
 }
 
 /** Build the mocked transaction and authorization participant around one selected aggregate. */
@@ -98,6 +98,16 @@ describe("Prisma MCP task workflow exhaustion", function _McpTaskWorkflowExhaust
 		expect(harness.transaction.mcpRuntimeExecution.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ commandState: McpExecutorCommandState.Failed, workloadState: McpExecutorWorkloadState.Closed }) }));
 	});
 
+	it("closes an unused remote execution after the final workflow attempt", async function _ClosesRemoteBeforeDispatch()
+	{
+		const execution = { ..._PendingExecution(), transport: McpExecutionTransport.RemoteHttp, workloadState: null, workloadUid: null, claimedAt: null, claimExpiresAt: null, deliveryCount: 0 };
+		const harness = _Harness(_Task(McpTaskState.Queued, _ReadyInvocation(execution)));
+
+		await expect(harness.reconciler.record(_INPUT)).resolves.toEqual({ mcpTaskId: _INPUT.mcpTaskId, state: McpTaskStates.Failed });
+
+		expect(harness.transaction.mcpRuntimeExecution.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ transport: McpExecutionTransport.RemoteHttp, workloadState: null, remoteClaimFence: null, remoteClaimExpiresAt: null }), data: expect.objectContaining({ commandState: McpExecutorCommandState.Failed, terminalOutcome: "workflow_attempts_exhausted", terminalPayloadDigest: expect.stringMatching(/^sha256:/u) }) }));
+	});
+
 	it("preserves ambiguity after the exact provider dispatch claim", async function _ClosesRunningExecution()
 	{
 		const execution = { ..._PendingExecution(), workloadState: McpExecutorWorkloadState.Registered, commandState: McpExecutorCommandState.Claimed, companionClaimFence: "companion-fence-1", toolInvocationClaimFence: 3, toolInvocationClaimRevision: 8 };
@@ -108,6 +118,18 @@ describe("Prisma MCP task workflow exhaustion", function _McpTaskWorkflowExhaust
 
 		expect(harness.toolInvocations.completeAmbiguous).toHaveBeenCalledWith({ invocationId: "invocation-1", kind: "dispatch", fence: 3, revision: 8 }, _NOW);
 		expect(harness.transaction.mcpRuntimeExecution.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ companionClaimFence: "companion-fence-1", toolInvocationClaimFence: 3, toolInvocationClaimRevision: 8 }), data: expect.objectContaining({ commandState: McpExecutorCommandState.RecoveryRequired, workloadState: McpExecutorWorkloadState.Closed }) }));
+	});
+
+	it("preserves a claimed remote effect as RecoveryRequired after final exhaustion", async function _RecoversClaimedRemote()
+	{
+		const execution = { ..._PendingExecution(), transport: McpExecutionTransport.RemoteHttp, workloadState: null, workloadUid: null, claimedAt: null, claimExpiresAt: null, commandState: McpExecutorCommandState.Claimed, remoteClaimFence: "remote-fence-1", remoteClaimExpiresAt: new Date("2026-08-28T12:01:00.000Z"), companionClaimFence: null, toolInvocationClaimFence: 3, toolInvocationClaimRevision: 8 };
+		const invocation = { ..._ReadyInvocation(execution), state: ToolInvocationState.Claimed, revision: 8, claimKind: ExternalActionClaimKind.Dispatch, claimFence: 3, claimExpiresAt: new Date("2026-08-28T12:01:00.000Z") };
+		const harness = _Harness(_Task(McpTaskState.Running, invocation));
+
+		await expect(harness.reconciler.record(_INPUT)).resolves.toEqual({ mcpTaskId: _INPUT.mcpTaskId, state: McpTaskStates.RecoveryRequired });
+
+		expect(harness.toolInvocations.completeAmbiguous).toHaveBeenCalledWith({ invocationId: "invocation-1", kind: "dispatch", fence: 3, revision: 8 }, _NOW);
+		expect(harness.transaction.mcpRuntimeExecution.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ transport: McpExecutionTransport.RemoteHttp, remoteClaimFence: "remote-fence-1", toolInvocationClaimFence: 3, toolInvocationClaimRevision: 8 }), data: expect.objectContaining({ commandState: McpExecutorCommandState.RecoveryRequired, terminalOutcome: "workflow_attempts_exhausted", terminalPayloadDigest: expect.stringMatching(/^sha256:/u) }) }));
 	});
 
 	it("returns an existing terminal result without opening a new transition", async function _ReturnsTerminal()

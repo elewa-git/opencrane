@@ -9,9 +9,9 @@ import { CONVERSATION_COMPUTER_STOP_TASK, CONVERSATION_COMPUTER_TURN_TASK, GROUP
 import { _CreateArtifactCatalogueRepository } from "@opencrane/backend/server/agents/artifacts";
 import { ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
-import { __CreateOciImageLayoutImporter, __CreateOciImageLayoutVerifier, __CreateOciImageValidationWorkflow, __CreateMcpEraProbeWorkflow, MCP_ERA_PROTOCOL_VERSION, McpEraProbeTaskNames, McpTaskTaskNames, OciImageValidationTaskNames, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
+import { __CreateOciImageLayoutImporter, __CreateOciImageLayoutVerifier, __CreateOciImageValidationWorkflow, __CreateMcpEraProbeWorkflow, McpConnectionTaskNames, McpEraProbeTaskNames, McpTaskTaskNames, OciImageValidationTaskNames, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
 
-import { __CreateHttpsMcpEraProbeClient } from "@opencrane/backend/server/infra/mcp-era-probe";
+import { __CreateHttpsMcpRemoteClient } from "@opencrane/backend/server/infra/mcp-remote-client";
 import { __CreateOciRegistryClient } from "@opencrane/backend/server/infra/oci-registry";
 import { _CreateAbsurdWorkflowEngine } from "@opencrane/backend/server/infra/workflows/infra_absurd";
 import { __CreateWorkflowGuard, __CreateWorkflowTaskQueueAuthority } from "@opencrane/backend/server/infra/workflows/guard";
@@ -69,6 +69,8 @@ export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: Open
 		{ taskName: CONVERSATION_COMPUTER_STOP_TASK.taskName, queue: "control-plane" },
 		{ taskName: GROUP_CHILD_TASK.taskName, queue: "control-plane" },
 		{ taskName: McpEraProbeTaskNames.Probe, queue: "control-plane" },
+		{ taskName: McpConnectionTaskNames.Activate, queue: "control-plane" },
+		{ taskName: McpConnectionTaskNames.Revoke, queue: "control-plane" },
 		{ taskName: OciImageValidationTaskNames.Import, queue: "control-plane" },
 		{ taskName: McpTaskTaskNames.Call, queue: "control-plane" },
 		{ taskName: SkillAuthoringValidationTaskDeclaration.taskName, queue: "skill-authoring" },
@@ -78,7 +80,7 @@ export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: Open
 	const execution = __CreateWorkflowGuard({ execution: runtime, log: _log, queueAuthority, siloId: config.siloId });
 	__DeclareSkillAuthoringValidation(execution);
 	__DeclareArtifactPreprocessTask(execution);
-	const transport = __CreateHttpsMcpEraProbeClient({ protocolVersion: MCP_ERA_PROTOCOL_VERSION, maximumResponseBytes: config.mcpEraProbeMaximumResponseBytes, requestTimeoutMilliseconds: config.mcpEraProbeTimeoutMilliseconds });
+	const transport = __CreateHttpsMcpRemoteClient({ maximumResponseBytes: config.mcpRemoteMaximumResponseBytes, requestTimeoutMilliseconds: config.mcpRemoteTimeoutMilliseconds });
 	const probe = _CreateMcpEraProbeAdapter(transport);
 	const unitOfWork = new PrismaMcpOperatorUnitOfWork(prisma);
 	const eraProbeWorkflow = __CreateMcpEraProbeWorkflow({ execution, probe, unitOfWork });
@@ -90,5 +92,5 @@ export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: Open
 	const ociImageValidationWorkflow = __CreateOciImageValidationWorkflow({ execution, verifier, importer, unitOfWork });
 	const artifactCatalogue = _CreateArtifactCatalogueRepository(prisma);
 	const ociImageArtifacts = _CreateOciImageArtifactResolver(artifactCatalogue);
-	return { execution, runtime, unitOfWork, eraProbeWorkflow, ociImageValidationWorkflow, ociImageArtifacts };
+	return { execution, runtime, unitOfWork, eraProbeWorkflow, ociImageValidationWorkflow, ociImageArtifacts, remoteClient: transport };
 }

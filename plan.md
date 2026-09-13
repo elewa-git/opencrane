@@ -1,5 +1,95 @@
 # OpenCrane — Active Plan
 
+## Consolidate, clean and qualify the MVP — 2026-09-13
+
+The delivery order is now one cumulative draft PR against `develop`, followed by a code-quality
+PR based directly on it. Fresh `testv6` will qualify the cleaned candidate. This replaces the
+incremental publication order below; historical entries remain evidence for their original slices.
+
+The cumulative candidate starts at #887 (`8b20275b692563b763e7e096262bd9586e2bcd2d`), includes
+remote MCP #886 (`2b3876edd981cb8762fe8b533987fe6f84c4f586`) and the reviewed model-response
+recovery change, and is checked against develop `d4bd0213c38e4fa70cbc3d93535857da9e381a32`.
+Original branches and local source are preserved. The delegation worktree still contains unfinished
+source and unapplied reservation, grant and database proposals; those are not a working feature.
+The consolidation inventory must account for that work before this can be called a complete MVP.
+
+### Delivery checklist
+
+- [ ] Stop testv4, testv5 and other test workloads on the verified dev cluster. Keep the previously
+  requested test data; use reviewed suspension tooling rather than the destructive teardown path.
+- [ ] Match cloud disks against Kubernetes volumes, retained claims, snapshots and VM attachments;
+  delete only confirmed stale disks and record the exact resources and remaining costs.
+- [ ] Freeze the complete source inventory, resolve integration conflicts, validate the combined
+  behavior and publish one draft against develop. Absorb predecessor PRs only after verifying their
+  full inclusion, and retarget dependants so each change has one review location.
+- [ ] Review the cumulative diff across backend authorities, model validators, persistence,
+  workflows, API/contracts, frontend components/state, package boundaries, deployment and tests.
+  Record each verified finding, its owner, the fix and its validation in the follow-up quality PR.
+- [ ] Delete superseded routes, implementations, exports, configuration, tests and docs together.
+  Preserve required behavior and reusable component states. Split responsibilities when their
+  ownership or dependency direction differs; file length alone is not a reason to split.
+- [ ] Run independent architecture preflight/post-review, independent code review, relevant Nx
+  tests/lint/type/build checks, Prisma/workflow/authorization boundaries, workload and domain
+  guards, style, module growth, release-baseline validation, API generation and UI contracts.
+- [ ] Finish the remaining product journeys below before marking the MVP ready; cleanup is not
+  proof that delegation, scheduling, memory integration or administration is complete.
+- [ ] Build immutable images for the cleaned SHA, deploy a fresh testv6 through the app-owned
+  scripts, and test authenticated journeys plus restarts, revoked authority and uncertain effects.
+  Record exact image digests, test evidence and remaining failures. Close the goal only when its
+  agreed functional acceptance is met. No release tag or merge is implied by this deployment.
+
+### Code-quality review scope
+
+Inspect long field-by-field conditions against their model-owned validators; duplicated domain
+algorithms; transaction ownership, lock order and retries; durable state transitions; package
+cohesion and dependency cycles; app roots that hide business logic; broad public barrels; unused
+or superseded code; exception handling; comments and stale documentation. For the frontend, trace
+complete pages through their stores, mappers and reusable components, including accessible states,
+refresh/recovery behavior and visual coverage. Each deletion needs a verified surviving owner or
+proof that its capability is no longer used. Findings remain open until the fix and its tests pass.
+
+### Consolidation validation checkpoint
+
+The combined application passes 159 tests and its type check; the conversation owner passes 653
+tests and its type check; MCP passes 361 tests and the remote client passes 52, with both type
+checks passing. The server build passes. Prisma boundaries, workflow boundaries, authorization
+enforcement and the current release manifest pass. The cumulative style scan reports no errors
+and 51 categorical-string warnings to classify in the cleanup review. Module growth checks 907
+production source files with no hard-limit errors and 58 responsibility-review candidates.
+
+The fresh-database remote MCP suite passes 10 of 15 cases. Four remote claims are rejected by the
+existing OCI-only runtime trigger, and one malformed-revision case encounters the existing earlier
+trigger rather than the intended transport constraint. The previously rejected remote-runtime SQL
+proposal is still unapplied. This is a recorded blocker for the cleanup and testv6 acceptance, not a
+passing integration claim. Application SQL and full quality review are still in progress.
+
+### Live acceptance
+
+Testv6 must prove real remote and hosted retrieval, approved external actions, consented memory
+remember/recall/correct/forget, visible progress and Stop, rich interaction after reload, scanned
+input documents and downloadable generated files, bounded delegation, scheduled work, administration,
+and safe action recovery. Exercise original-request and continuation restart safety, unchanged
+allowances, durable response-unavailable state, one text-only continuation, and stale lease/generation
+rejection. Preserve the boundary between local/CI evidence and completed live journeys.
+
+
+## Model response recovery — source validation
+
+This bounded fix starts directly above draft #887 at
+`8b20275b692563b763e7e096262bd9586e2bcd2d` on `feat/0.12-model-response-recovery`.
+The conversation history already prevents another paid model dispatch after an uncertain response,
+but the corresponding run could remain Running. The workflow now persists `RecoveryRequired`
+before returning `response_unavailable`, including when a late response reaches error recovery.
+Failure to save that state keeps the workflow pending. Restart accepts the same run attempt and
+lease without resuming it or replenishing the original or final-call allowance.
+
+The change reuses the conversation workflow and execution/runs lifecycle. It adds no endpoint,
+scheduler, schema, grant or recovery action. Bounded assistant delegation remains unfinished in
+its separate worktree and will build on this fix; its reservation and grant proposals are not part
+of this patch. Runs (74), conversations (651), the full application SQL target and application tests/type check/build
+pass locally. Independent source review passes. This fix is included in the cumulative candidate;
+testv6 and live provider qualification remain pending.
+
 ## Visible tool work — published, CI repair
 
 This U1 slice is published in draft #887 directly above draft #885 at
@@ -68,6 +158,83 @@ pass. The reviewed source is published above the unchanged #884 head.
 Client cutover, first-dataset grants, credentials, chart promotion, provider calls and product
 activation remain outside this slice. Remember, cross-conversation recall, Correct and Forget
 still need their complete product and provider integration.
+
+## Standard remote MCP integration — source reviewed
+
+Draft [#886](https://github.com/elewa-git/opencrane/pull/886) publishes this source directly above
+#884. The reviewed fixture correction is pushed at
+`3c95770188ede00259b4d438c735c284ab6deede`, and live stack ancestry passes. Its first
+database CI job stopped while creating test rows: the fixture's first-preparation
+time preceded its default creation time by milliseconds. Both fields now use the same database
+clock value. The corrected 15-case local SQL run passes 10 cases and reaches five remaining runtime
+failures: four remote claims still enter the existing OCI companion trigger; the invalid-revision
+case receives the earlier activation-authority rejection instead of the expected constraint name.
+These failures remain visible. No SQL guard, exception or test exclusion was added, and runtime
+acceptance is still incomplete. The existing proposal and its authority/error expectations must be
+qualified together when that source change is authorized.
+
+The first Linux component job passed interaction checks but found eight missing visual references
+for the new connection states and one changed Removing row. The component owner reviewed all
+nine actual renders from artifact `10317302520` and accepted their exact bytes as Linux references.
+Removing now shows its saved removal state and a disabled Uninstall action. No component, fixture,
+threshold or test selection changes are needed. Tools tests (32), Storybook interaction/accessibility
+tests (195), the Storybook build and Darwin visual checks (3) pass; Linux rerun remains pending.
+The provider job reproduced the known Cognee
+1.2.1 defect: final membership deletion leaves source bytes. This is separate from remote MCP
+execution, and the qualified candidate has not replaced the production pin. Both failures remain
+release gates; neither is suppressed by this source checkpoint.
+
+The preserved remote MCP implementation is being integrated directly above draft
+[#884](https://github.com/elewa-git/opencrane/pull/884), at immutable review base
+`7e2c3f523e719de7c72354551edcea6b9aeb5829`, on
+`feat/0.12-standard-remote-mcp-integration`. The original unpublished worktree at
+`749b50058f6503653d203b5a7caf98926076cf08` remains untouched. Its 226 changed paths and
+separate source overlays are preserved at `/private/tmp/opencrane-remote-pre-884-preservation`.
+The latest source and stack checks for both #883 and #884 pass; hosted k3d tests were skipped.
+
+Earlier reviewed remote work implements connection admission, immutable credential custody,
+connection-specific discovery, write-only personal controls, and server-owned calls through the
+existing ToolInvocation and Absurd owners. Those earlier local checks do not qualify this newly
+integrated source. The integration retains the current personal tool-selection APIs, model-facing
+aliases, generated-file workflow and memory persistence rather than replacing them with the older
+branch versions.
+
+The integration now sends remote results through the transaction-scoped result participant used
+by hosted tools, then persists only its accepted result. Ordinary remote read results remain
+supported. Embedded resources and remote use of the reserved CSV producer are rejected before raw
+file bytes can enter tool-result storage. Remote calls carry their real connection and claim proof;
+they do not invent OCI companion or Job coordinates. A rejected result preserves the saved dispatch,
+so recovery cannot call the provider again. Completion rechecks both invocation authority and the
+remote claim deadline after result preparation. An application regression also proves that an
+opaque model tool name selects the admitted revision and sends the original MCP name to the client.
+
+The integration passes 1,303 tests across MCP (355), conversations (630), conversation assets (159)
+and the application (159). The latter three results are reused after the MCP-only cancellation fix.
+Connection UI, client transport and workload-identity packages pass a further 159 tests and their
+type checks. Storybook passes 195 interaction and accessibility tests. The complete 15-case MCP SQL run now
+passes 10 cases and exposes the five runtime failures
+recorded above; no runtime case is excluded from that corrected run. Prisma generation, baseline
+verification, dependency and Prisma boundaries, workload composition, release binding, style and
+module-growth checks pass. Production server and UI builds pass, and regenerating the API client
+and website reference changes no bytes. Workflow and authorization guards and the workload and
+agent-domain negative tests pass. Deployment contracts and Helm lint pass locally; the contract
+harness warns that system Bash 3.2 does not enforce every assertion, so Linux/Bash 5 CI remains
+required.
+
+Architecture post-review and independent review pass. The reviewed timing correction carries the
+database's remaining claim allowance into a monotonic executor deadline. Credential retrieval and
+provider I/O consume that same allowance, and completion rechecks fresh database time after result
+preparation. Remote execution owns its allowance independently of the OCI companion lease.
+Cancellation now reaches the Kubernetes Secret request; a database lookup that returns after the
+deadline cannot open a Secret request or call the provider. Focused cancellation regressions and
+the full 355-test MCP suite pass. This reviewed source is prepared for a draft checkpoint.
+
+The separately reviewed runtime SQL guards and unused custody-field removal remain unapplied and
+await their existing explicit approvals. The merged baseline only carries source already present
+in the preserved branch and current parent; it does not apply either rejected proposal. Runtime SQL
+acceptance, Linux visuals, complete remote/provider qualification and hosted certificate trust remain
+open gates. No live provider call, existing credential inspection, deployment or testv5 data change
+is included. The full ten-track MVP goal remains active.
 
 ## Hosted generated-file journey — source implementation and prerequisites
 

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __CreateHttpsMcpEraProbeClient } from "@opencrane/backend/server/infra/mcp-era-probe";
+import { __CreateHttpsMcpRemoteClient } from "@opencrane/backend/server/infra/mcp-remote-client";
 
 import { WorkflowTaskRetryableError, WorkflowTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
@@ -39,6 +39,8 @@ function _Server(state: _EraState): McpOperatorServerRecord
 		credentialRequirement: "Credentialless",
 		approvalStatus: state.target.eraProbeStatus === McpEraProbeStates.Accepted ? "PendingReview" : "Disabled",
 		status: state.target.eraProbeStatus === McpEraProbeStates.Accepted ? "Active" : "Degraded",
+		supportsStandardInstall: true,
+		requiresReadyRevisionForInstall: false,
 		latestReadyRevision: null,
 		credentialSchema: [],
 		entitlementSummary: null,
@@ -260,8 +262,8 @@ describe("MCP era-probe workflow", function _McpEraProbeSuite()
 	{
 		const state = _State();
 		const execution = new __FakeWorkflowEngine();
-		const transport = __CreateHttpsMcpEraProbeClient({
-			protocolVersion: "2026-07-28", requestTimeoutMilliseconds: 1_000, maximumResponseBytes: 1_024,
+		const transport = __CreateHttpsMcpRemoteClient({
+			requestTimeoutMilliseconds: 1_000, maximumResponseBytes: 1_024,
 			resolve: async function _resolve() { return [{ address: "93.184.216.34", family: 4 }]; },
 			request: async function _reply()
 			{

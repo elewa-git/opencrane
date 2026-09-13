@@ -193,6 +193,11 @@ physical append rechecks the workload lease, generation, Pod, history position, 
 recovered after later authority loss. Provider credentials are issued after their reservation commits;
 exact retries reuse the saved receipt and failed cleanup prevents a replacement key.
 
+When an original or final model response cannot be recovered, the turn saves `RecoveryRequired`
+through the run lifecycle authority before returning `response_unavailable` to its workflow.
+A failed database write leaves the workflow unfinished. Restart reads the same model reservation
+and retries that state change without issuing another credential or model request.
+
 ## Dependency direction
 
 Tagged `type:lib`, `layer:backend`, `scope:conversations`. Main uses the sibling history libraries,

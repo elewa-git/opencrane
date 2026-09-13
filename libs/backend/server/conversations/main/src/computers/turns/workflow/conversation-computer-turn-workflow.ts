@@ -2,7 +2,7 @@ import { WorkflowTaskRetryableError, type IWorkflowEngine, type IWorkflowTaskCon
 import { ___GeneratedFileEventName } from "@opencrane/contracts";
 
 import { ConversationComputerToolResultOutcomes } from "../conversation-computer-continuation.types";
-import { CONVERSATION_COMPUTER_TURN_TASK } from "./conversation-computer-turn-task";
+import { CONVERSATION_COMPUTER_TURN_MAXIMUM_ATTEMPTS, CONVERSATION_COMPUTER_TURN_TASK } from "./conversation-computer-turn-task";
 import type { ConversationComputerTurnTaskInput, ConversationComputerTurnWorkflowDependencies, ConversationComputerTurnWorkflowResult } from "./conversation-computer-turn-workflow.types";
 
 const _TURN_RETRY_MILLISECONDS = 1_000;
@@ -66,6 +66,29 @@ export function _RegisterConversationComputerTurnWorkflow(workflows: IWorkflowEn
 							{
 								return dependencies.approvalNotifications.publishRequested({ bootstrapId: turn.bootstrapId, siloId: turn.siloId, conversationId: turn.binding.conversationId, runId: turn.compile.runId, attempt: turn.compile.attempt, approvalId: progress.toolInvocationId });
 							});
+						}
+						else
+						{
+							const command = { siloId: turn.siloId, runId: turn.compile.runId, attempt: turn.compile.attempt, toolInvocationId: progress.toolInvocationId };
+							let progressed;
+							try
+							{
+								progressed = await context.checkpoint({ stepName: "dispatch-mcp-invocation" }, function _Dispatch()
+								{
+									// The database claim prevents duplicate effects; this checkpoint records workflow progress only.
+									return dependencies.toolDispatch.tryExecute(command);
+								});
+							}
+							catch (error)
+							{
+								if (!(error instanceof WorkflowTaskRetryableError) || context.attempt < CONVERSATION_COMPUTER_TURN_MAXIMUM_ATTEMPTS)
+									throw error;
+								if (!await dependencies.toolDispatch.settleExhausted(command))
+									throw error;
+								break;
+							}
+							if (progressed)
+								break;
 						}
 						const approvalWait = progress.waitFor === "approval" && progress.waitUntilEpochMs !== undefined ? { timeoutAt: new Date(progress.waitUntilEpochMs) } : undefined;
 						const eventName = progress.waitFor === "approval" ? _ToolApprovalEventName(progress.toolInvocationId) : _ToolResultEventName(progress.toolInvocationId);

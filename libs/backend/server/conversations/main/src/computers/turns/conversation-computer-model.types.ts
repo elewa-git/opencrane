@@ -1,11 +1,32 @@
 import type { ConversationModelRequest, ConversationModelResponse, ConversationModelToolModes } from "@opencrane/contracts";
 import type { ConversationComputerToolResultOutcomes } from "./conversation-computer-continuation.types";
+
+/**
+ * Decisions returned by server model progression to its saved workflow.
+ * Their string values are the workflow's serialized outcomes; none permits a replacement request.
+ */
+export enum ConversationComputerModelProgressOutcomes
+{
+	/** The assistant output and run completion are saved. */
+	Completed = "completed",
+	/** A saved request has no recoverable response and the run must retain that uncertainty. */
+	ResponseUnavailable = "response_unavailable",
+	/** The turn no longer has authority to advance. */
+	AuthorityEnded = "authority_ended",
+	/** The workflow may reload progress without replacing an admitted model request. */
+	Retry = "retry",
+	/** A reserved model request has not reached its fixed deadline. */
+	ModelPending = "model_pending",
+	/** The saved tool proposal still needs a decision or result. */
+	ToolPending = "tool_pending",
+}
+
 /** Server workflow outcome after one evidence-driven progression pass. */
 export type ConversationComputerModelProgress =
-	| { readonly outcome: "completed" | "response_unavailable" | "authority_ended" | "retry" }
-	| { readonly outcome: "model_pending"; readonly notBeforeEpochMs: number; readonly ordinal: 1 | 2 }
+	| { readonly outcome: `${ConversationComputerModelProgressOutcomes.Completed | ConversationComputerModelProgressOutcomes.ResponseUnavailable | ConversationComputerModelProgressOutcomes.AuthorityEnded | ConversationComputerModelProgressOutcomes.Retry}` }
+	| { readonly outcome: `${ConversationComputerModelProgressOutcomes.ModelPending}`; readonly notBeforeEpochMs: number; readonly ordinal: 1 | 2 }
 	| { readonly outcome: ConversationComputerToolResultOutcomes.GeneratedFilePending; readonly operationId: string; readonly notAfterEpochMs: number }
-	| { readonly outcome: "tool_pending"; readonly toolInvocationId: string; readonly waitFor?: "approval" | "result"; readonly waitUntilEpochMs?: number };
+	| { readonly outcome: `${ConversationComputerModelProgressOutcomes.ToolPending}`; readonly toolInvocationId: string; readonly waitFor?: "approval" | "result"; readonly waitUntilEpochMs?: number };
 
 /**
  * Records the consumed request allowance in revision 1 of the turn stream, without prompt or key.

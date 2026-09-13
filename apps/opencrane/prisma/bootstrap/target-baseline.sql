@@ -110,6 +110,15 @@ CREATE TYPE "GroupMembershipAuthority" AS ENUM ('external', 'local');
 CREATE TYPE "PrincipalProvenance" AS ENUM ('external', 'internal');
 
 -- CreateEnum
+CREATE TYPE "McpExecutionTransport" AS ENUM ('oci-image', 'remote-http');
+
+-- CreateEnum
+CREATE TYPE "McpConnectionState" AS ENUM ('awaiting-material', 'activating', 'active', 'revoked', 'failed', 'recovery-required');
+
+-- CreateEnum
+CREATE TYPE "McpConnectionCredentialKind" AS ENUM ('none', 'bearer');
+
+-- CreateEnum
 CREATE TYPE "McpServerTransport" AS ENUM ('streamable-http', 'sse', 'websocket', 'oci-image');
 
 -- CreateEnum
@@ -146,7 +155,10 @@ CREATE TYPE "McpCredentialRequirement" AS ENUM ('credentialless', 'principal-cre
 CREATE TYPE "McpApprovalStatus" AS ENUM ('pending-review', 'approved', 'published', 'disabled');
 
 -- CreateEnum
-CREATE TYPE "McpConnectionStatus" AS ENUM ('needs-credential', 'credentialless');
+CREATE TYPE "McpConnectionStatus" AS ENUM ('needs-credential', 'credentialless', 'activating', 'active', 'recovery-required');
+
+-- CreateEnum
+CREATE TYPE "McpInstallState" AS ENUM ('installed', 'removing', 'removed');
 
 -- CreateEnum
 CREATE TYPE "MemoryDatasetState" AS ENUM ('provisioning', 'active', 'retired');
@@ -980,6 +992,61 @@ CREATE TABLE "group_memberships" (
 );
 
 -- CreateTable
+CREATE TABLE "mcp_connection_admission_claims" (
+    "silo_id" TEXT NOT NULL,
+    "identity_digest" TEXT NOT NULL,
+    "touched_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "mcp_connection_admission_claims_pkey" PRIMARY KEY ("silo_id","identity_digest")
+);
+
+-- CreateTable
+CREATE TABLE "mcp_connections" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "mcp_server_install_id" TEXT NOT NULL,
+    "mcp_server_id" TEXT NOT NULL,
+    "owner_principal_id" TEXT NOT NULL,
+    "actor_principal_id" TEXT NOT NULL,
+    "agent_service_id" TEXT,
+    "generation" INTEGER NOT NULL,
+    "credential_requirement" "McpCredentialRequirement" NOT NULL,
+    "credential_kind" "McpConnectionCredentialKind" NOT NULL,
+    "endpoint_digest" TEXT NOT NULL,
+    "state" "McpConnectionState" NOT NULL DEFAULT 'awaiting-material',
+    "request_key_digest" TEXT NOT NULL,
+    "command_digest" TEXT NOT NULL,
+    "material_verifier" TEXT,
+    "material_verifier_key_id" TEXT,
+    "authorization_decision_digest" TEXT NOT NULL,
+    "custody_claim_fence" INTEGER NOT NULL DEFAULT 0,
+    "custody_claim_expires_at" TIMESTAMP(3),
+    "custody_attempts" INTEGER NOT NULL DEFAULT 0,
+    "credential_secret_ref" TEXT,
+    "credential_secret_uid" TEXT,
+    "credential_secret_resource_version" TEXT,
+    "credential_custodied_at" TIMESTAMP(3),
+    "task_id" TEXT NOT NULL,
+    "task_name" TEXT NOT NULL,
+    "task_key" TEXT NOT NULL,
+    "revoke_key_digest" TEXT,
+    "revoke_decision_digest" TEXT,
+    "revoke_task_id" TEXT,
+    "revoke_task_name" TEXT,
+    "revoke_task_key" TEXT,
+    "revoked_by_principal_id" TEXT,
+    "failure_code" TEXT,
+    "activated_at" TIMESTAMP(3),
+    "revoked_at" TIMESTAMP(3),
+    "completed_at" TIMESTAMP(3),
+    "cleanup_completed_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "mcp_connections_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "mcp_servers" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -1070,9 +1137,16 @@ CREATE TABLE "mcp_server_revisions" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
     "mcp_server_id" TEXT NOT NULL,
-    "oci_image_validation_id" TEXT NOT NULL,
+    "oci_image_validation_id" TEXT,
     "revision" INTEGER NOT NULL,
-    "registry_reference" TEXT NOT NULL,
+    "transport" "McpExecutionTransport" NOT NULL DEFAULT 'oci-image',
+    "connection_id" TEXT,
+    "connection_generation" INTEGER,
+    "connection_owner_principal_id" TEXT,
+    "endpoint_digest" TEXT,
+    "discovery_evidence_digest" TEXT,
+    "discovery_digest" TEXT,
+    "registry_reference" TEXT,
     "protocol_version" TEXT,
     "state" "McpServerRevisionState" NOT NULL DEFAULT 'discovering',
     "completed_at" TIMESTAMP(3),
@@ -1115,6 +1189,11 @@ CREATE TABLE "mcp_tasks" (
     "server_revision_id" TEXT NOT NULL,
     "tool_revision_id" TEXT NOT NULL,
     "protocol_version" TEXT NOT NULL,
+    "transport" "McpExecutionTransport" NOT NULL DEFAULT 'oci-image',
+    "connection_id" TEXT,
+    "connection_generation" INTEGER,
+    "connection_owner_principal_id" TEXT,
+    "endpoint_digest" TEXT,
     "arguments" JSONB NOT NULL,
     "task_id" TEXT,
     "task_name" TEXT,
@@ -1139,11 +1218,20 @@ CREATE TABLE "mcp_runtime_executions" (
     "server_revision_id" TEXT NOT NULL,
     "tool_invocation_id" TEXT,
     "kind" "McpRuntimeExecutionKind" NOT NULL,
-    "workload_state" "McpExecutorWorkloadState" NOT NULL DEFAULT 'pending',
+    "transport" "McpExecutionTransport" NOT NULL DEFAULT 'oci-image',
+    "connection_id" TEXT,
+    "connection_generation" INTEGER,
+    "connection_owner_principal_id" TEXT,
+    "endpoint_digest" TEXT,
+    "credential_secret_uid" TEXT,
+    "credential_secret_resource_version" TEXT,
+    "remote_claim_fence" TEXT,
+    "remote_claim_expires_at" TIMESTAMP(3),
+    "workload_state" "McpExecutorWorkloadState" DEFAULT 'pending',
     "command_state" "McpExecutorCommandState" NOT NULL DEFAULT 'pending',
     "idempotency_key" TEXT NOT NULL,
     "execution_reference" TEXT NOT NULL,
-    "profile_name" TEXT NOT NULL,
+    "profile_name" TEXT,
     "claimed_at" TIMESTAMP(3),
     "delivery_count" INTEGER NOT NULL DEFAULT 0,
     "claim_expires_at" TIMESTAMP(3),
@@ -1176,6 +1264,7 @@ CREATE TABLE "mcp_server_installs" (
     "id" TEXT NOT NULL,
     "mcp_server_id" TEXT NOT NULL,
     "principal_id" TEXT NOT NULL,
+    "lifecycle_state" "McpInstallState" NOT NULL DEFAULT 'installed',
     "connection_status" "McpConnectionStatus" NOT NULL DEFAULT 'needs-credential',
     "last_used_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2455,6 +2544,36 @@ CREATE UNIQUE INDEX "groups_silo_id_name_key" ON "groups"("silo_id", "name");
 CREATE INDEX "group_memberships_silo_id_principal_id_idx" ON "group_memberships"("silo_id", "principal_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "mcp_connections_task_id_key" ON "mcp_connections"("task_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_connections_revoke_task_id_key" ON "mcp_connections"("revoke_task_id");
+
+-- CreateIndex
+CREATE INDEX "mcp_connections_silo_id_state_created_at_idx" ON "mcp_connections"("silo_id", "state", "created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_connections_id_silo_id_key" ON "mcp_connections"("id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_connections_execution_coordinates_key" ON "mcp_connections"("id", "silo_id", "generation", "owner_principal_id", "endpoint_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_connections_mcp_server_install_id_generation_key" ON "mcp_connections"("mcp_server_install_id", "generation");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_connections_silo_id_mcp_server_install_id_request_key_d_key" ON "mcp_connections"("silo_id", "mcp_server_install_id", "request_key_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_connections_silo_id_mcp_server_install_id_revoke_key_di_key" ON "mcp_connections"("silo_id", "mcp_server_install_id", "revoke_key_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_connections_silo_id_task_key_key" ON "mcp_connections"("silo_id", "task_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_connections_silo_id_revoke_task_key_key" ON "mcp_connections"("silo_id", "revoke_task_key");
+
+-- CreateIndex
 CREATE INDEX "mcp_servers_approval_status_idx" ON "mcp_servers"("approval_status");
 
 -- CreateIndex
@@ -2480,6 +2599,9 @@ CREATE INDEX "mcp_server_revisions_silo_id_state_idx" ON "mcp_server_revisions"(
 
 -- CreateIndex
 CREATE UNIQUE INDEX "mcp_server_revisions_mcp_server_id_revision_key" ON "mcp_server_revisions"("mcp_server_id", "revision");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_server_revisions_connection_id_connection_generation_key" ON "mcp_server_revisions"("connection_id", "connection_generation");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "mcp_server_revisions_oci_image_validation_id_silo_id_key" ON "mcp_server_revisions"("oci_image_validation_id", "silo_id");
@@ -2546,6 +2668,9 @@ CREATE INDEX "mcp_server_installs_principal_id_idx" ON "mcp_server_installs"("pr
 
 -- CreateIndex
 CREATE UNIQUE INDEX "mcp_server_installs_mcp_server_id_principal_id_key" ON "mcp_server_installs"("mcp_server_id", "principal_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_server_installs_id_mcp_server_id_principal_id_key" ON "mcp_server_installs"("id", "mcp_server_id", "principal_id");
 
 -- CreateIndex
 CREATE INDEX "verified_fleet_membership_revisions_silo_id_expires_at_idx" ON "verified_fleet_membership_revisions"("silo_id", "expires_at");
@@ -3153,6 +3278,12 @@ ALTER TABLE "group_memberships" ADD CONSTRAINT "group_memberships_group_id_silo_
 ALTER TABLE "group_memberships" ADD CONSTRAINT "group_memberships_principal_id_silo_id_fkey" FOREIGN KEY ("principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "mcp_connections" ADD CONSTRAINT "mcp_connections_mcp_server_install_id_mcp_server_id_owner__fkey" FOREIGN KEY ("mcp_server_install_id", "mcp_server_id", "owner_principal_id") REFERENCES "mcp_server_installs"("id", "mcp_server_id", "principal_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "mcp_connections" ADD CONSTRAINT "mcp_connections_mcp_server_id_silo_id_fkey" FOREIGN KEY ("mcp_server_id", "silo_id") REFERENCES "mcp_servers"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_source_id_fkey" FOREIGN KEY ("source_id") REFERENCES "third_party_sources"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -3160,6 +3291,9 @@ ALTER TABLE "mcp_server_revisions" ADD CONSTRAINT "mcp_server_revisions_mcp_serv
 
 -- AddForeignKey
 ALTER TABLE "mcp_server_revisions" ADD CONSTRAINT "mcp_server_revisions_oci_image_validation_id_silo_id_fkey" FOREIGN KEY ("oci_image_validation_id", "silo_id") REFERENCES "oci_image_validations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "mcp_server_revisions" ADD CONSTRAINT "mcp_server_revisions_connection_id_silo_id_connection_gene_fkey" FOREIGN KEY ("connection_id", "silo_id", "connection_generation", "connection_owner_principal_id", "endpoint_digest") REFERENCES "mcp_connections"("id", "silo_id", "generation", "owner_principal_id", "endpoint_digest") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "mcp_tool_revisions" ADD CONSTRAINT "mcp_tool_revisions_server_revision_id_silo_id_fkey" FOREIGN KEY ("server_revision_id", "silo_id") REFERENCES "mcp_server_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3171,10 +3305,16 @@ ALTER TABLE "mcp_tasks" ADD CONSTRAINT "mcp_tasks_server_revision_id_silo_id_fke
 ALTER TABLE "mcp_tasks" ADD CONSTRAINT "mcp_tasks_tool_revision_id_silo_id_fkey" FOREIGN KEY ("tool_revision_id", "silo_id") REFERENCES "mcp_tool_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "mcp_tasks" ADD CONSTRAINT "mcp_tasks_connection_id_silo_id_connection_generation_conn_fkey" FOREIGN KEY ("connection_id", "silo_id", "connection_generation", "connection_owner_principal_id", "endpoint_digest") REFERENCES "mcp_connections"("id", "silo_id", "generation", "owner_principal_id", "endpoint_digest") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "mcp_runtime_executions" ADD CONSTRAINT "mcp_runtime_executions_server_revision_id_silo_id_fkey" FOREIGN KEY ("server_revision_id", "silo_id") REFERENCES "mcp_server_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "mcp_runtime_executions" ADD CONSTRAINT "mcp_runtime_executions_tool_invocation_id_fkey" FOREIGN KEY ("tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "mcp_runtime_executions" ADD CONSTRAINT "mcp_runtime_executions_connection_id_silo_id_connection_ge_fkey" FOREIGN KEY ("connection_id", "silo_id", "connection_generation", "connection_owner_principal_id", "endpoint_digest") REFERENCES "mcp_connections"("id", "silo_id", "generation", "owner_principal_id", "endpoint_digest") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "mcp_server_installs" ADD CONSTRAINT "mcp_server_installs_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3376,6 +3516,197 @@ ALTER TABLE "oci_image_validations" ADD CONSTRAINT "oci_image_validations_result
     OR ("state" = 'imported' AND "index_digest" ~ '^sha256:[0-9a-f]{64}$' AND "image_manifest_digest" ~ '^sha256:[0-9a-f]{64}$' AND "config_digest" ~ '^sha256:[0-9a-f]{64}$' AND "registry_reference" ~ '^[a-z0-9][a-z0-9.-]*(?::[0-9]+)?/[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$' AND "failure_code" IS NULL AND "completed_at" IS NOT NULL)
     OR ("state" = 'rejected' AND "index_digest" IS NULL AND "image_manifest_digest" IS NULL AND "config_digest" IS NULL AND "registry_reference" IS NULL AND "failure_code" IN ('artifact_mismatch', 'bundle_too_large', 'malformed_zip_package', 'not_oci_image_layout', 'invalid_layout', 'invalid_index', 'invalid_image_manifest', 'validation_failed', 'registry_import_failed') AND "completed_at" IS NOT NULL)
 );
+
+-- A revision belongs to one execution transport. Remote revisions retain the authenticated
+-- connection and both discovery digests; OCI revisions retain only imported-image evidence.
+ALTER TABLE "mcp_server_revisions" ADD CONSTRAINT "mcp_server_revisions_transport_identity_check" CHECK (
+    (
+        "transport" = 'oci-image'
+        AND "oci_image_validation_id" IS NOT NULL
+        AND "registry_reference" IS NOT NULL
+        AND "connection_id" IS NULL
+        AND "connection_generation" IS NULL
+        AND "connection_owner_principal_id" IS NULL
+        AND "endpoint_digest" IS NULL
+        AND "discovery_evidence_digest" IS NULL
+        AND "discovery_digest" IS NULL
+    )
+    OR (
+        "transport" = 'remote-http'
+        AND "oci_image_validation_id" IS NULL
+        AND "registry_reference" IS NULL
+        AND btrim("connection_id") <> ''
+        AND "connection_generation" > 0
+        AND btrim("connection_owner_principal_id") <> ''
+        AND "endpoint_digest" ~ '^sha256:[0-9a-f]{64}$'
+        AND "discovery_evidence_digest" ~ '^sha256:[0-9a-f]{64}$'
+        AND "discovery_digest" ~ '^sha256:[0-9a-f]{64}$'
+    )
+);
+
+-- Insert after the generated mcp_connections table and indexes, before grants/triggers that reference it.
+ALTER TABLE public.mcp_connections
+  ADD CONSTRAINT mcp_connections_digest_shapes_check CHECK (
+    endpoint_digest ~ '^sha256:[0-9a-f]{64}$'
+    AND request_key_digest ~ '^sha256:[0-9a-f]{64}$'
+    AND command_digest ~ '^sha256:[0-9a-f]{64}$'
+    AND authorization_decision_digest ~ '^sha256:[0-9a-f]{64}$'
+    AND (material_verifier IS NULL OR material_verifier ~ '^hmac-sha256:[0-9a-f]{64}$')
+    AND (revoke_key_digest IS NULL OR revoke_key_digest ~ '^sha256:[0-9a-f]{64}$')
+    AND (revoke_decision_digest IS NULL OR revoke_decision_digest ~ '^sha256:[0-9a-f]{64}$')
+  ),
+  ADD CONSTRAINT mcp_connections_custody_claim_check CHECK (
+    custody_claim_fence >= 0
+    AND custody_attempts BETWEEN 0 AND 8
+    AND ((custody_claim_expires_at IS NULL AND custody_claim_fence = 0) OR custody_claim_expires_at IS NOT NULL)
+  ),
+  ADD CONSTRAINT mcp_connections_credential_shape_check CHECK (
+    (
+      credential_kind = 'none'
+      AND material_verifier IS NULL
+      AND material_verifier_key_id IS NULL
+      AND credential_secret_ref IS NULL
+      AND credential_secret_uid IS NULL
+      AND credential_secret_resource_version IS NULL
+      AND credential_custodied_at IS NULL
+    )
+    OR
+    (
+      credential_kind = 'bearer'
+      AND material_verifier IS NOT NULL
+      AND material_verifier_key_id IS NOT NULL
+      AND (
+        (
+          credential_secret_ref IS NULL
+          AND credential_secret_uid IS NULL
+          AND credential_secret_resource_version IS NULL
+          AND credential_custodied_at IS NULL
+        )
+        OR
+        (
+          credential_secret_ref IS NOT NULL
+          AND credential_secret_uid IS NOT NULL
+          AND credential_secret_resource_version IS NOT NULL
+          AND credential_custodied_at IS NOT NULL
+        )
+      )
+    )
+  ),
+  ADD CONSTRAINT mcp_connections_state_evidence_check CHECK (
+    (state = 'awaiting-material' AND completed_at IS NULL AND activated_at IS NULL)
+    OR (state = 'activating' AND completed_at IS NULL AND activated_at IS NULL)
+    OR (state = 'active' AND completed_at IS NOT NULL AND activated_at IS NOT NULL AND failure_code IS NULL)
+    OR (state = 'failed' AND completed_at IS NOT NULL AND activated_at IS NULL AND failure_code IS NOT NULL)
+    OR (state = 'recovery-required' AND completed_at IS NOT NULL AND activated_at IS NULL AND failure_code IS NOT NULL)
+    OR (state = 'revoked' AND completed_at IS NOT NULL AND revoked_at IS NOT NULL)
+  ),
+  ADD CONSTRAINT mcp_connections_revoke_bundle_check CHECK (
+    (
+      state <> 'revoked'
+      AND revoke_key_digest IS NULL
+      AND revoke_decision_digest IS NULL
+      AND revoke_task_id IS NULL
+      AND revoke_task_name IS NULL
+      AND revoke_task_key IS NULL
+      AND revoked_by_principal_id IS NULL
+      AND revoked_at IS NULL
+      AND cleanup_completed_at IS NULL
+    )
+    OR
+    (
+      state = 'revoked'
+      AND revoke_key_digest IS NOT NULL
+      AND revoke_decision_digest IS NOT NULL
+      AND revoke_task_id IS NOT NULL
+      AND revoke_task_name IS NOT NULL
+      AND revoke_task_key IS NOT NULL
+      AND revoked_by_principal_id IS NOT NULL
+      AND revoked_at IS NOT NULL
+    )
+  ),
+  ADD CONSTRAINT mcp_connections_usable_material_check CHECK (
+    credential_kind = 'none'
+    OR state NOT IN ('activating', 'active')
+    OR credential_secret_ref IS NOT NULL
+  );
+
+CREATE UNIQUE INDEX mcp_connections_one_generation_barrier_key
+  ON public.mcp_connections (silo_id, mcp_server_install_id)
+  WHERE state IN ('awaiting-material', 'activating', 'active', 'recovery-required');
+
+CREATE OR REPLACE FUNCTION public.guard_mcp_connection_update()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.id IS DISTINCT FROM OLD.id
+    OR NEW.silo_id IS DISTINCT FROM OLD.silo_id
+    OR NEW.mcp_server_install_id IS DISTINCT FROM OLD.mcp_server_install_id
+    OR NEW.mcp_server_id IS DISTINCT FROM OLD.mcp_server_id
+    OR NEW.owner_principal_id IS DISTINCT FROM OLD.owner_principal_id
+    OR NEW.actor_principal_id IS DISTINCT FROM OLD.actor_principal_id
+    OR NEW.agent_service_id IS DISTINCT FROM OLD.agent_service_id
+    OR NEW.generation IS DISTINCT FROM OLD.generation
+    OR NEW.credential_requirement IS DISTINCT FROM OLD.credential_requirement
+    OR NEW.credential_kind IS DISTINCT FROM OLD.credential_kind
+    OR NEW.endpoint_digest IS DISTINCT FROM OLD.endpoint_digest
+    OR NEW.request_key_digest IS DISTINCT FROM OLD.request_key_digest
+    OR NEW.command_digest IS DISTINCT FROM OLD.command_digest
+    OR NEW.material_verifier IS DISTINCT FROM OLD.material_verifier
+    OR NEW.material_verifier_key_id IS DISTINCT FROM OLD.material_verifier_key_id
+    OR NEW.authorization_decision_digest IS DISTINCT FROM OLD.authorization_decision_digest
+    OR NEW.task_id IS DISTINCT FROM OLD.task_id
+    OR NEW.task_name IS DISTINCT FROM OLD.task_name
+    OR NEW.task_key IS DISTINCT FROM OLD.task_key
+    OR NEW.created_at IS DISTINCT FROM OLD.created_at
+  THEN
+    RAISE EXCEPTION 'MCP connection identity and admission evidence are immutable';
+  END IF;
+
+  IF NOT (
+    NEW.state = OLD.state
+    OR (OLD.state = 'awaiting-material' AND NEW.state IN ('activating', 'recovery-required', 'revoked'))
+    OR (OLD.state = 'activating' AND NEW.state IN ('active', 'failed', 'recovery-required', 'revoked'))
+    OR (OLD.state IN ('active', 'failed', 'recovery-required') AND NEW.state = 'revoked')
+  ) THEN
+    RAISE EXCEPTION 'Invalid MCP connection state transition: % to %', OLD.state, NEW.state;
+  END IF;
+
+  IF OLD.credential_secret_ref IS NOT NULL AND (
+    NEW.credential_secret_ref IS DISTINCT FROM OLD.credential_secret_ref
+    OR NEW.credential_secret_uid IS DISTINCT FROM OLD.credential_secret_uid
+    OR NEW.credential_secret_resource_version IS DISTINCT FROM OLD.credential_secret_resource_version
+    OR NEW.credential_custodied_at IS DISTINCT FROM OLD.credential_custodied_at
+  ) THEN
+    RAISE EXCEPTION 'MCP connection Secret identity is immutable after custody';
+  END IF;
+
+  IF OLD.revoke_key_digest IS NOT NULL AND (
+    NEW.revoke_key_digest IS DISTINCT FROM OLD.revoke_key_digest
+    OR NEW.revoke_decision_digest IS DISTINCT FROM OLD.revoke_decision_digest
+    OR NEW.revoke_task_id IS DISTINCT FROM OLD.revoke_task_id
+    OR NEW.revoke_task_name IS DISTINCT FROM OLD.revoke_task_name
+    OR NEW.revoke_task_key IS DISTINCT FROM OLD.revoke_task_key
+    OR NEW.revoked_by_principal_id IS DISTINCT FROM OLD.revoked_by_principal_id
+    OR NEW.revoked_at IS DISTINCT FROM OLD.revoked_at
+  ) THEN
+    RAISE EXCEPTION 'MCP connection revocation evidence is immutable';
+  END IF;
+
+  IF OLD.activated_at IS NOT NULL AND NEW.activated_at IS DISTINCT FROM OLD.activated_at THEN
+    RAISE EXCEPTION 'MCP connection activation evidence is immutable';
+  END IF;
+  IF OLD.cleanup_completed_at IS NOT NULL AND NEW.cleanup_completed_at IS DISTINCT FROM OLD.cleanup_completed_at THEN
+    RAISE EXCEPTION 'MCP connection cleanup evidence is immutable';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER guard_mcp_connection_update
+BEFORE UPDATE ON public.mcp_connections
+FOR EACH ROW EXECUTE FUNCTION public.guard_mcp_connection_update();
 
 -- Null-safe immutable run/snapshot binding. SQL composite FKs alone skip checks when conversation_id is NULL.
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_input_snapshot_fkey"
@@ -3806,17 +4137,65 @@ BEGIN
         IF NEW."state" <> 'discovering' OR NEW."protocol_version" IS NOT NULL OR NEW."completed_at" IS NOT NULL THEN
             RAISE EXCEPTION 'McpServerRevision must begin discovering without completion evidence';
         END IF;
+        IF NEW."transport" = 'remote-http' THEN
+            PERFORM 1
+            FROM "mcp_connections" connection
+            JOIN "mcp_server_installs" install ON install."id" = connection."mcp_server_install_id"
+            JOIN "mcp_servers" server ON server."id" = connection."mcp_server_id" AND server."silo_id" = connection."silo_id"
+            WHERE connection."id" = NEW."connection_id"
+              AND connection."silo_id" = NEW."silo_id"
+              AND connection."generation" = NEW."connection_generation"
+              AND connection."owner_principal_id" = NEW."connection_owner_principal_id"
+              AND connection."endpoint_digest" = NEW."endpoint_digest"
+              AND connection."mcp_server_id" = NEW."mcp_server_id"
+              AND connection."state" = 'activating'
+              AND install."principal_id" = connection."owner_principal_id"
+              AND install."connection_status" = 'activating'
+              AND server."status" = 'active'
+              AND server."approval_status" = 'published'
+              AND server."transport" = 'streamable-http'
+            FOR UPDATE OF connection, install, server;
+            IF NOT FOUND THEN
+                RAISE EXCEPTION 'Remote McpServerRevision requires its current activating connection and published server';
+            END IF;
+        END IF;
         RETURN NEW;
     END IF;
     IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."mcp_server_id" IS DISTINCT FROM OLD."mcp_server_id"
         OR NEW."oci_image_validation_id" IS DISTINCT FROM OLD."oci_image_validation_id" OR NEW."revision" IS DISTINCT FROM OLD."revision"
-        OR NEW."registry_reference" IS DISTINCT FROM OLD."registry_reference" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'McpServerRevision image identity is immutable';
+        OR NEW."transport" IS DISTINCT FROM OLD."transport" OR NEW."connection_id" IS DISTINCT FROM OLD."connection_id"
+        OR NEW."connection_generation" IS DISTINCT FROM OLD."connection_generation" OR NEW."connection_owner_principal_id" IS DISTINCT FROM OLD."connection_owner_principal_id"
+        OR NEW."endpoint_digest" IS DISTINCT FROM OLD."endpoint_digest" OR NEW."discovery_evidence_digest" IS DISTINCT FROM OLD."discovery_evidence_digest"
+        OR NEW."discovery_digest" IS DISTINCT FROM OLD."discovery_digest" OR NEW."registry_reference" IS DISTINCT FROM OLD."registry_reference"
+        OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+        RAISE EXCEPTION 'McpServerRevision transport and discovery identity is immutable';
     END IF;
     IF OLD."state" <> 'discovering' OR NEW."state" NOT IN ('ready', 'rejected') OR NEW."completed_at" IS NULL
         OR (NEW."state" = 'ready' AND NEW."protocol_version" IS DISTINCT FROM '2026-07-28')
         OR (NEW."state" = 'rejected' AND NEW."protocol_version" IS NOT NULL) THEN
         RAISE EXCEPTION 'McpServerRevision may complete discovery exactly once with checked protocol evidence';
+    END IF;
+    IF NEW."transport" = 'remote-http' THEN
+        PERFORM 1
+        FROM "mcp_connections" connection
+        JOIN "mcp_server_installs" install ON install."id" = connection."mcp_server_install_id"
+        JOIN "mcp_servers" server ON server."id" = connection."mcp_server_id" AND server."silo_id" = connection."silo_id"
+        WHERE connection."id" = NEW."connection_id"
+          AND connection."silo_id" = NEW."silo_id"
+          AND connection."generation" = NEW."connection_generation"
+          AND connection."owner_principal_id" = NEW."connection_owner_principal_id"
+          AND connection."endpoint_digest" = NEW."endpoint_digest"
+          AND connection."mcp_server_id" = NEW."mcp_server_id"
+          AND connection."state" = 'activating'
+          AND install."principal_id" = connection."owner_principal_id"
+          AND install."connection_status" = 'activating'
+          AND server."status" = 'active'
+          AND server."approval_status" = 'published'
+          AND server."transport" = 'streamable-http'
+        FOR UPDATE OF connection, install, server;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'Remote McpServerRevision completion requires its current activating connection and published server';
+        END IF;
     END IF;
     NEW."completed_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
     RETURN NEW;

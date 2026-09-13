@@ -18,6 +18,12 @@ export class ConversationGeneratedFileResultParticipant
 	async prepare(command: GeneratedFileInvocationResultCommand): Promise<McpToolCallResult>
 	{
 		const parsed = _ParseGeneratedFileResource(command.toolName, command.invocation.effectiveArguments, command.result);
+		if (command.remoteClaimFence !== undefined)
+		{
+			if (parsed.outcome !== GeneratedFileResourceOutcomes.NotApplicable)
+				throw new GeneratedFileCaptureError("Remote MCP results cannot contain generated-file resources");
+			return command.result;
+		}
 		if (parsed.outcome === GeneratedFileResourceOutcomes.NotApplicable)
 			return command.result;
 		if (parsed.outcome !== GeneratedFileResourceOutcomes.Accepted)

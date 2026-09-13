@@ -401,6 +401,8 @@ export interface ConversationComputerRunLifecycle
 	start(command: ConversationComputerRunLifecycleCommand): Promise<void>;
 	/** Records success after the assistant output and its receipt are durable. */
 	complete(command: ConversationComputerRunLifecycleCommand): Promise<void>;
+	/** Saves an uncertain model response without ending the run or renewing its allowance. */
+	enterRecoveryRequired(command: ConversationComputerRunLifecycleCommand): Promise<void>;
 }
 
 /** Mints and revokes raw provider-gateway keys behind encrypted retry custody. */

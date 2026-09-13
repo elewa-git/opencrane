@@ -1,4 +1,4 @@
-import { McpApprovalStatus, McpConnectionStatus, McpCredentialRequirement, McpInstalledServer, McpServer, McpServerType } from "../../models/mcp.types";
+import { McpApprovalStatus, McpConnectionStatus, McpInstallStates, McpCredentialRequirement, McpInstalledServer, McpServer, McpServerType } from "../../models/mcp.types";
 
 /**
  * Mock MCP catalogue backing the dev/default {@link McpServer} reads until the
@@ -144,10 +144,10 @@ export const MCP_CATALOGUE: McpServer[] =
  */
 export const MCP_INSTALLED: McpInstalledServer[] =
 [
-	{ serverId: "stripe", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null },
-	{ serverId: "github", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null },
-	{ serverId: "notion", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null },
-	{ serverId: "postgres-prod", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null },
-	{ serverId: "slack", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null },
-	{ serverId: "public-weather", connectionStatus: McpConnectionStatus.Credentialless, lastUsed: "Today" }
+	{ serverId: "stripe", lifecycleState: McpInstallStates.Installed, connectionStatus: McpConnectionStatus.NeedsCredential, connectionGeneration: null, credentialUpdatedAt: null, failureCode: null, lastUsed: null },
+	{ serverId: "github", lifecycleState: McpInstallStates.Installed, connectionStatus: McpConnectionStatus.NeedsCredential, connectionGeneration: null, credentialUpdatedAt: null, failureCode: null, lastUsed: null },
+	{ serverId: "notion", lifecycleState: McpInstallStates.Installed, connectionStatus: McpConnectionStatus.NeedsCredential, connectionGeneration: null, credentialUpdatedAt: null, failureCode: null, lastUsed: null },
+	{ serverId: "postgres-prod", lifecycleState: McpInstallStates.Installed, connectionStatus: McpConnectionStatus.NeedsCredential, connectionGeneration: null, credentialUpdatedAt: null, failureCode: null, lastUsed: null },
+	{ serverId: "slack", lifecycleState: McpInstallStates.Installed, connectionStatus: McpConnectionStatus.NeedsCredential, connectionGeneration: null, credentialUpdatedAt: null, failureCode: null, lastUsed: null },
+	{ serverId: "public-weather", lifecycleState: McpInstallStates.Installed, connectionStatus: McpConnectionStatus.Credentialless, connectionGeneration: null, credentialUpdatedAt: null, failureCode: null, lastUsed: "Today" }
 ];

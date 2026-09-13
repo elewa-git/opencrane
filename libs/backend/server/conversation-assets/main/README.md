@@ -31,6 +31,10 @@ MCP completion uses `_CreateConversationGeneratedFileResultParticipant` to valid
 then saves encrypted file content, stable asset coordinates and an Absurd task in the same
 transaction as the tool's metadata result. Failed capture cannot fall back to storing file text in
 the invocation. Other embedded resources are rejected; ordinary text results keep their existing path.
+Remote MCP completion uses the same result checks, but cannot supply the verified executor Job and
+companion claim required for capture. It therefore accepts only ordinary results and rejects both
+embedded resources and responses under the reserved CSV tool name. Rejection saves no raw file
+content and does not authorise another provider call.
 
 The internal `agent-output/custody` codec splits one non-empty generated file of at most one MiB
 into chunks that fit the existing encrypted conversation-payload limit. It base64-encodes each

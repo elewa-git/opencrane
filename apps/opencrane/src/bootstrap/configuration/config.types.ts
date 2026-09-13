@@ -1,3 +1,4 @@
+import type { OpenCraneMcpConnectionConfig } from "./mcp-connection-config.types";
 import type { OpenCraneHistoryStoreConfig } from "@opencrane/backend/server/infra/history-store";
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 import { OrganizationMembershipDeploymentModes, type StandaloneOrganizationMembershipConfig } from "@opencrane/backend/server/iam/organization-members";
@@ -66,7 +67,7 @@ export interface InternalRuntimeConfig
 	readonly siloId: string;
 }
 
-/** Settings for durable control-plane tasks and the remote MCP protocol check. */
+/** Settings for durable control-plane tasks and remote MCP requests. */
 export interface OpenCraneWorkflowConfig
 {
 	/** PostgreSQL URL shared by product writes and Absurd task admission. */
@@ -74,9 +75,9 @@ export interface OpenCraneWorkflowConfig
 	/** Maximum number of database connections reserved for Absurd. */
 	readonly databasePoolSize: number;
 	/** Largest accepted response body from a remote MCP server. */
-	readonly mcpEraProbeMaximumResponseBytes: number;
-	/** Hard timeout for one remote MCP protocol check. */
-	readonly mcpEraProbeTimeoutMilliseconds: number;
+	readonly mcpRemoteMaximumResponseBytes: number;
+	/** Hard timeout for one remote MCP request. */
+	readonly mcpRemoteTimeoutMilliseconds: number;
 	/** Optional absolute path whose current contents authorize the configured OCI registry. */
 	readonly ociRegistryAuthorizationFilePath: string | undefined;
 	/** HTTPS origin of the registry that stores admitted OCI images. */
@@ -96,6 +97,8 @@ export interface OpenCraneWorkflowConfig
 /** Process-owned settings that shape the OpenCrane server lifecycle. */
 export interface OpenCraneProcessConfig
 {
+	/** Dedicated connection custody and verified server workload coordinates. */
+	readonly mcpConnections: OpenCraneMcpConnectionConfig;
 	/** Per-service process capacity applied before personal run admission reaches PostgreSQL. */
 	readonly runAdmission: RunAdmissionCapacityConfig;
 	/** Namespace in which OIDC authentication resources are resolved. */

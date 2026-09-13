@@ -44,7 +44,8 @@ describe("terminal tool history before the final model call", function _Suite()
 			}
 		};
 		const firstPass = await f.authority.advance(f.step);
-		expect(firstPass.outcome).toBe(boundary === "notification" ? "retry" : "model_pending");
+		expect(firstPass.outcome).toBe("retry");
+		expect(f.runLifecycle.enterRecoveryRequired).not.toHaveBeenCalled();
 		const paused = (await f.store.load(f.step))!;
 		if (boundary === "notification")
 		{

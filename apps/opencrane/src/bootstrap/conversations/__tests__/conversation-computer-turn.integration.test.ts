@@ -41,7 +41,7 @@ describe("conversation computer turn integration", function _Suite()
 		};
 		const execution = { candidate, workload };
 		const authority = new ConversationComputerTurnAuthorityService({
-			logger: { warn: vi.fn() }, model: { request: vi.fn().mockResolvedValue({ kind: "text", text: "assistant answer" }) }, toolProposals: { admit: vi.fn() }, siloId: "testv5", runLifecycle: { start: vi.fn(), complete: vi.fn() },
+			logger: { warn: vi.fn() }, model: { request: vi.fn().mockResolvedValue({ kind: "text", text: "assistant answer" }) }, toolProposals: { admit: vi.fn() }, siloId: "testv5", runLifecycle: { start: vi.fn(), complete: vi.fn(), enterRecoveryRequired: vi.fn() },
 			candidates: { resolve: vi.fn().mockResolvedValue(candidate), resolveForWorkflow: vi.fn().mockResolvedValue(execution), assertCurrentForWorkflow: vi.fn().mockResolvedValue(execution), assertLeaseForWorkflow: vi.fn().mockResolvedValue(workload), assertCurrent: vi.fn().mockResolvedValue(candidate), admit: vi.fn() },
 			reviewCredentials: { bearer: vi.fn(), derive: vi.fn().mockReturnValue("keyed-review-secret") }, modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() }, generatedFiles: { link: vi.fn() }, toolResults: { read: vi.fn(), consume: vi.fn() }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") }, toolRequestedNotifications: { publishRequested: vi.fn() },
 			credentials: { reuseExact: vi.fn(), issueOnce: vi.fn().mockResolvedValue({ key: "sk-turn", credentialDigest: "sha256:key", expiresAt: "2099-01-01T00:00:00.000Z" }), revoke: vi.fn() }, endpoint: "http://model.stub",
@@ -52,7 +52,7 @@ describe("conversation computer turn integration", function _Suite()
 
 		let definition!: IWorkflowTaskDefinition<any, unknown>;
 		const workflows = { register: vi.fn(value => { definition = value; }) };
-		_RegisterConversationComputerTurnWorkflow(workflows as never, { approvalNotifications: { publishRequested: vi.fn().mockResolvedValue("published") }, authority, receipts: { bind: vi.fn().mockResolvedValue(true) }, siloId: "testv5" });
+		_RegisterConversationComputerTurnWorkflow(workflows as never, { toolDispatch: { tryExecute: vi.fn().mockResolvedValue(false), settleExhausted: vi.fn().mockResolvedValue(false) }, approvalNotifications: { publishRequested: vi.fn().mockResolvedValue("published") }, authority, receipts: { bind: vi.fn().mockResolvedValue(true) }, siloId: "testv5" });
 		const activationEventId = "41c1f1dc-0010-4f13-9c2f-d3841ffd6651";
 		const context = { task: { taskId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: activationEventId }, attempt: 1, checkpoint: vi.fn(), spawnChild: vi.fn(), awaitChild: vi.fn(), sleepUntil: vi.fn(), waitForEvent: vi.fn() } as unknown as IWorkflowTaskContext;
 		await expect(definition.run(context, { siloId: "testv5", computerId: "computer-one", leaseId: "lease-one", leaseGeneration: 1, activationEventId, causationId: "entry-one", causationPosition: "1" })).resolves.toMatchObject({ outcome: "completed" });

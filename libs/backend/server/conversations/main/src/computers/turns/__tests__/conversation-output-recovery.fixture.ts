@@ -110,7 +110,7 @@ export async function _OutputRecoveryHarness(reserveOutput = true, overrides: Pa
 	}) };
 	const model = { request: vi.fn().mockResolvedValue({ kind: ConversationModelResponseKinds.Text, text: "A private chosen answer" }) };
 	const credentials = { issueOnce: vi.fn().mockResolvedValue({ key: "test-only-key", credentialDigest: `sha256:${"d".repeat(64)}`, expiresAt: "2099-01-01T00:00:00.000Z" }), reuseExact: vi.fn().mockResolvedValue({ key: "test-only-key", credentialDigest: `sha256:${"d".repeat(64)}`, expiresAt: "2099-01-01T00:00:00.000Z" }), revoke: vi.fn().mockResolvedValue(undefined) };
-	const runLifecycle = { start: vi.fn().mockResolvedValue(undefined), complete: vi.fn(async function _Complete()
+	const runLifecycle = { start: vi.fn().mockResolvedValue(undefined), enterRecoveryRequired: vi.fn().mockResolvedValue(undefined), complete: vi.fn(async function _Complete()
 	{
 		if (flags.runState === "failed")
 			throw new Error("run is already failed");

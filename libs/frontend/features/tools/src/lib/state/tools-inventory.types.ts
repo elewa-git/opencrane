@@ -18,3 +18,12 @@ export interface InstalledToolRow
 	/** Current install and connection state. */
 	readonly installed: McpInstalledServer;
 }
+
+/** Server-owned coordinates captured before a connection command starts. */
+export interface ToolConnectionCoordinate
+{
+	/** Installation lifecycle that must still select the same command path. */
+	readonly lifecycleState: McpInstalledServer["lifecycleState"];
+	/** Current generation, or null before the first connection is admitted. */
+	readonly connectionGeneration: number | null;
+}

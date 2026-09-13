@@ -50,6 +50,11 @@ does not grant permission to use a run.
 
 ## Public surface
 
+- `PrismaConversationRunLifecycleUnitOfWork` records start, recovery and completion for the admitted
+  run attempt and computer lease. A model response that cannot be recovered moves the running
+  attempt to `RecoveryRequired`. Restart accepts that state without moving it back to running or
+  granting another allowance. Completion still requires durable assistant output.
+
 - `PrismaConversationRunLifecycleUnitOfWork` — idempotently advances an exact lease-fenced
   conversation attempt from accepted to running after the workflow freezes its turn, and from running to
   completed only after durable assistant output. Worker restart uncertainty converges on the same state.

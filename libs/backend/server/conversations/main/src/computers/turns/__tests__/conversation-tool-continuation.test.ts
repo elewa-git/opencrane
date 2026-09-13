@@ -225,8 +225,14 @@ describe("one governed tool and its model continuation", function _Continuation(
 			f.model.request.mockResolvedValueOnce({ kind: ConversationModelResponseKinds.Tool, call: f.call }).mockRejectedValueOnce(new Error("paid response lost"));
 		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending" });
 		expect((await f.store.load(f.step))?.continuationReservation).not.toBeNull();
+		const reservation = (await f.store.load(f.step))!.continuationReservation;
 		now += 30_000;
+		f.runLifecycle.enterRecoveryRequired.mockRejectedValueOnce(new Error("run recovery write unavailable"));
+		await expect(f.restart().advance(f.step)).rejects.toThrow("run recovery write unavailable");
 		expect(await f.restart().advance(f.step)).toEqual({ outcome: "response_unavailable" });
+		expect(f.runLifecycle.enterRecoveryRequired).toHaveBeenCalledTimes(2);
+		expect(f.runLifecycle.complete).not.toHaveBeenCalled();
+		expect((await f.store.load(f.step))!.continuationReservation).toEqual(reservation);
 		expect(f.model.request).toHaveBeenCalledTimes(boundary === "response" ? 2 : 1);
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		expect(f.toolFlags.executions).toBe(1);
@@ -286,7 +292,8 @@ describe("one governed tool and its model continuation", function _Continuation(
 					throw new Error("history unavailable before append");
 				}
 			};
-		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending" });
+		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: accepted ? "retry" : "model_pending" });
+		expect(f.runLifecycle.enterRecoveryRequired).not.toHaveBeenCalled();
 		expect((await f.store.load(f.step))?.outputReceipt === null).toBe(!accepted);
 		f.toolFlags.allowed = false;
 		if (accepted)

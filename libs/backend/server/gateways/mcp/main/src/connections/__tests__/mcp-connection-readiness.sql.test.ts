@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { ExternalActionClaimKind, ExternalActionRecoveryMode, McpApprovalStatus, McpConnectionStatus, McpCredentialRequirement, McpExecutorCommandState, McpExecutorWorkloadState, McpRuntimeExecutionKind, McpServerRevisionState, McpServerStatus, McpServerTransport, McpTaskState, OciImageValidationState, PrincipalProvenance, Prisma, PrismaClient, ToolInvocationState } from "@prisma/client";
+import { ExternalActionClaimKind, ExternalActionRecoveryMode, McpApprovalStatus, McpConnectionStatus, McpCredentialRequirement, McpExecutorCommandState, McpExecutorWorkloadState, McpInstallState, McpRuntimeExecutionKind, McpServerRevisionState, McpServerStatus, McpServerTransport, McpTaskState, OciImageValidationState, PrincipalProvenance, Prisma, PrismaClient, ToolInvocationState } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { __CreatePrismaMcpToolInvocationParticipantFactory, ToolInvocationRunRecoveryEnterResults } from "@opencrane/backend/server/iam/authorization";
@@ -197,7 +197,7 @@ describe("MCP connection readiness on the fresh PostgreSQL baseline", function _
 			await _First.mcpServer.update({ where: { id: fixture.serverId }, data: { status: McpServerStatus.Active } });
 			await expect(readiness(command)).resolves.toBe(true);
 			await _RegisterExecution(fixture);
-			await _First.mcpServerInstall.deleteMany({ where: { mcpServerId: fixture.serverId, principalId: fixture.principalId } });
+			await _First.mcpServerInstall.update({ where: { mcpServerId_principalId: { mcpServerId: fixture.serverId, principalId: fixture.principalId } }, data: { lifecycleState: McpInstallState.Removing } });
 			await expect(_ClaimCompanion(_First, fixture)).resolves.toBe("terminal");
 		}
 		finally
@@ -237,15 +237,15 @@ describe("MCP connection readiness on the fresh PostgreSQL baseline", function _
 			const client = _First.$extends(extension) as unknown as PrismaClient;
 			const claim = _ClaimCompanion(client, fixture);
 			await locked;
-			const deletion = _Second.$transaction(async function _Delete(transaction)
+			const removal = _Second.$transaction(async function _Remove(transaction)
 			{
 				await transaction.$queryRaw(Prisma.sql`SELECT set_config('application_name', 'opencrane-mcp-readiness-uninstall', true)`);
-				return transaction.mcpServerInstall.deleteMany({ where: { mcpServerId: fixture.serverId, principalId: fixture.principalId } });
+				return transaction.mcpServerInstall.updateMany({ where: { mcpServerId: fixture.serverId, principalId: fixture.principalId, lifecycleState: McpInstallState.Installed }, data: { lifecycleState: McpInstallState.Removing } });
 			});
 			await _WaitForUninstallLock();
 			releaseLock?.();
 			await expect(claim).resolves.toMatchObject({ command: { kind: "invocation" }, runInvocation: null });
-			await expect(deletion).resolves.toEqual({ count: 1 });
+			await expect(removal).resolves.toEqual({ count: 1 });
 			await expect(_Second.toolInvocation.findUniqueOrThrow({ where: { id: fixture.invocationId } })).resolves.toMatchObject({ state: ToolInvocationState.Claimed, claimKind: ExternalActionClaimKind.Dispatch, claimFence: 1, revision: 2 });
 			await expect(_Second.mcpTask.findUniqueOrThrow({ where: { id: fixture.taskId } })).resolves.toMatchObject({ state: McpTaskState.Running, failureCode: null });
 			await expect(_Second.mcpRuntimeExecution.findUniqueOrThrow({ where: { id: fixture.executionId } })).resolves.toMatchObject({ commandState: McpExecutorCommandState.Claimed, workloadState: McpExecutorWorkloadState.Registered });
@@ -263,7 +263,7 @@ describe("MCP connection readiness on the fresh PostgreSQL baseline", function _
 		try
 		{
 			await _RegisterExecution(fixture);
-			await _Second.mcpServerInstall.deleteMany({ where: { mcpServerId: fixture.serverId, principalId: fixture.principalId } });
+			await _Second.mcpServerInstall.update({ where: { mcpServerId_principalId: { mcpServerId: fixture.serverId, principalId: fixture.principalId } }, data: { lifecycleState: McpInstallState.Removing } });
 			await expect(_ClaimCompanion(_First, fixture)).resolves.toBe("terminal");
 			await expect(_Second.toolInvocation.findUniqueOrThrow({ where: { id: fixture.invocationId } })).resolves.toMatchObject({ state: ToolInvocationState.Failed, failureCode: "mcp_connection_unavailable", revision: 2, claimFence: 0, claimKind: null });
 			await expect(_Second.mcpTask.findUniqueOrThrow({ where: { id: fixture.taskId } })).resolves.toMatchObject({ state: McpTaskState.Failed, failureCode: "mcp_connection_unavailable" });

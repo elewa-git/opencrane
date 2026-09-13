@@ -19,6 +19,7 @@ import { _GENERATED_FILE_ARGUMENTS, _GENERATED_FILE_PROPOSER } from "./conversat
 export interface _GeneratedFileOutputRunLifecycle
 {
 	start(command: ConversationComputerRunLifecycleCommand): Promise<void>;
+	enterRecoveryRequired(command: ConversationComputerRunLifecycleCommand): Promise<void>;
 	complete(command: ConversationComputerRunLifecycleCommand): Promise<void>;
 }
 

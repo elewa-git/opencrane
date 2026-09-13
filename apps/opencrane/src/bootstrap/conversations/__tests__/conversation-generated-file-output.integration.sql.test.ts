@@ -96,6 +96,7 @@ describe.skipIf(!_RUN_REAL_PROOFS)("generated file output across PostgreSQL and 
 		let failCompletion = true;
 		const interrupted: _GeneratedFileOutputRunLifecycle = {
 			start: lifecycle.start.bind(lifecycle),
+			enterRecoveryRequired: lifecycle.enterRecoveryRequired.bind(lifecycle),
 			async complete(command)
 			{
 				if (failCompletion)

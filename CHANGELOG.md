@@ -15,6 +15,12 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Fixed
 
+- **Run status preserves an uncertain model response across server restarts.** The workflow saves
+  that recovery is required before reporting the unavailable response. A failed status write stays
+  pending; retry uses the original request and remaining allowance without another paid dispatch.
+  This applies to both the first response and the final response after a tool result. Live
+  qualification remains separate.
+
 - **Operators can render governed MCP execution with both network and admission policies.**
   The chart keeps these as separate Kubernetes resources, and the controller test parses the
   complete manifest to catch malformed document boundaries before deployment. Hosted execution
@@ -32,6 +38,16 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   the same tool call. Running appears only after an execution claim, and current permission is
   checked again before the executor receives its command. Arguments and credentials remain private;
   a recovered status never permits another dispatch. Live qualification remains separate.
+
+- **People can configure an installed remote MCP connection without reading its credentials back.**
+  The source under review keeps connection commands tied to the observed generation, retains the
+  same command after an uncertain response, and discovers tools for that connection's owner.
+  Removal retains connection history while its existing workflow finishes cleanup. Remote replies
+  pass through the shared result checks before completion: ordinary results remain usable, while
+  embedded file resources cannot enter conversation results without supported capture authority.
+  Rejected replies preserve dispatch evidence and never cause a second provider call. Runtime
+  database fencing still awaits its reviewed source proposal; real remote execution and live
+  qualification remain unfinished.
 
 - **Operators can detect missing outbound certificate trust before starting hosted qualification.**
   The smoke renders the actual server and checks the selected certificate mount before creating

@@ -3,7 +3,7 @@ import { signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@angular/platform-browser-dynamic/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { McpApprovalStatus, McpConnectionStatus, McpCredentialRequirement, McpServerType, type McpServer } from "@opencrane/core";
+import { McpApprovalStatus, McpConnectionStatus, McpInstallStates, McpCredentialRequirement, McpServerType, type McpServer } from "@opencrane/core";
 import { MCP_GATEWAY, type McpGateway } from "@opencrane/state/mcp/adapter";
 import { ModelProvider, PROVIDER_KEY_GATEWAY, type ProviderKeyGateway } from "@opencrane/state/provider-key/adapter";
 import { SessionStore } from "@opencrane/state/core";
@@ -26,7 +26,7 @@ function _Server(id: string): McpServer
 /** Creates the complete gateway while each test controls its asynchronous command. */
 function _Gateway(): McpGateway
 {
-	return { listEntitledCatalogue: vi.fn().mockResolvedValue([]), listInstalled: vi.fn().mockResolvedValue([]), install: vi.fn(), uninstall: vi.fn(), listCatalogue: vi.fn().mockResolvedValue([]), approve: vi.fn(), publish: vi.fn(), reject: vi.fn(), setEnabled: vi.fn() };
+	return { listEntitledCatalogue: vi.fn().mockResolvedValue([]), listInstalled: vi.fn().mockResolvedValue([]), install: vi.fn(), uninstall: vi.fn(), activatePersonalConnection: vi.fn(), revokePersonalConnection: vi.fn(), listCatalogue: vi.fn().mockResolvedValue([]), approve: vi.fn(), publish: vi.fn(), reject: vi.fn(), setEnabled: vi.fn() };
 }
 
 /** Creates the write-only provider port used by the key store. */
@@ -46,6 +46,27 @@ function _Session(customerAdmin = true) { return { capabilities: signal({ custom
 
 describe("tools route stores", function _Stores()
 {
+	it("keeps a saved removal pending until an authoritative refresh omits it", async function _SavedRemoval()
+	{
+		const gateway = _Gateway();
+		vi.mocked(gateway.listEntitledCatalogue).mockResolvedValue([_Server("a")]);
+		vi.mocked(gateway.listInstalled).mockResolvedValue([{ serverId: "a", lifecycleState: McpInstallStates.Removing, connectionStatus: McpConnectionStatus.Active, connectionGeneration: 1, credentialUpdatedAt: null, failureCode: null, lastUsed: null }]);
+		TestBed.configureTestingModule({ providers: [ToolsInventoryStore, { provide: MCP_GATEWAY, useValue: gateway }] });
+		const store = TestBed.inject(ToolsInventoryStore);
+		TestBed.flushEffects();
+		await vi.waitFor(function _Loaded() { expect(store.rows()).toHaveLength(1); });
+
+		await store.uninstall("a");
+		expect(gateway.uninstall).not.toHaveBeenCalled();
+		expect(store.busy().size).toBe(0);
+		expect(store.rows()[0].installed.lifecycleState).toBe(McpInstallStates.Removing);
+
+		vi.mocked(gateway.listInstalled).mockResolvedValue([]);
+		store.refresh();
+		TestBed.flushEffects();
+		await vi.waitFor(function _Removed() { expect(store.rows()).toHaveLength(0); });
+	});
+
 	it("rejects duplicate install admission while allowing independent targets", async function _InstallConcurrency()
 	{
 		const gateway = _Gateway();
@@ -58,11 +79,11 @@ describe("tools route stores", function _Stores()
 		const b = store.install("b");
 		await store.install("a");
 		expect(gateway.install).toHaveBeenCalledTimes(2);
-		first.resolve({ serverId: "a", connectionStatus: McpConnectionStatus.Credentialless, lastUsed: null });
+		first.resolve({ serverId: "a", lifecycleState: McpInstallStates.Installed, connectionStatus: McpConnectionStatus.Credentialless, connectionGeneration: null, credentialUpdatedAt: null, failureCode: null, lastUsed: null });
 		await a;
 		expect(store.busy().has("a")).toBe(false);
 		expect(store.busy().has("b")).toBe(true);
-		second.resolve({ serverId: "b", connectionStatus: McpConnectionStatus.Credentialless, lastUsed: null });
+		second.resolve({ serverId: "b", lifecycleState: McpInstallStates.Installed, connectionStatus: McpConnectionStatus.Credentialless, connectionGeneration: null, credentialUpdatedAt: null, failureCode: null, lastUsed: null });
 		await b;
 		expect(store.busy().size).toBe(0);
 	});
@@ -151,7 +172,7 @@ describe("tools presentation mapping", function _Mapping()
 {
 	it("joins only currently entitled catalogue records", function _AuthorizedJoin()
 	{
-		const records = ["visible", "hidden"].map(serverId => ({ serverId, connectionStatus: McpConnectionStatus.Credentialless, lastUsed: null }));
+		const records = ["visible", "hidden"].map(serverId => ({ serverId, lifecycleState: McpInstallStates.Installed, connectionStatus: McpConnectionStatus.Credentialless, connectionGeneration: null, credentialUpdatedAt: null, failureCode: null, lastUsed: null }));
 		expect(_InstalledToolRows([_Server("visible")], records).map(row => row.server.id)).toEqual(["visible"]);
 	});
 	it("combines browser text and connection filters without changing source data", function _Filters()

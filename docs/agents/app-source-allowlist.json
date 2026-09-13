@@ -478,6 +478,26 @@
       "path": "apps/opencrane/src/bootstrap/conversations/conversation-generated-file-workflow-composition.types.ts",
       "owner": "apps/opencrane",
       "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/configuration/mcp-connection-config.ts",
+      "owner": "apps/opencrane",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/configuration/mcp-connection-config.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/workflows/mcp-connection-composition.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/workflows/mcp-connection-composition.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
     }
   ],
   "requiredTaggedProjects": [

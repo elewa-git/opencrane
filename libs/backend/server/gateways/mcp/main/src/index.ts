@@ -42,3 +42,26 @@ export { _CreateMcpEraProbeAdapter } from "./era-probe/mcp-era-transport.adapter
 export { _CreateOciImageArtifactResolver } from "./oci-image-validation/oci-image-artifact-resolver";
 export { _ResolveMcpOciServerPromotionCaller } from "./runtime/mcp-oci-server-promotion-caller";
 export { _CreateMcpToolInvocationAdmission } from "./runtime/mcp-tool-invocation-admission.factory";
+
+export * from "./connections/discovery/mcp-authenticated-connection-discovery.types";
+export * from "./connections/discovery/mcp-authenticated-connection-discovery";
+export * from "./connections/discovery/prisma-mcp-remote-revision-finalizer";
+export * from "./connections/discovery/prisma-mcp-remote-revision-finalizer-unit-of-work";
+export * from "./connections/mcp-connection.types";
+export * from "./connections/mcp-connection-admission";
+export * from "./connections/mcp-connection-workflow";
+export * from "./connections/mcp-connection-workflow-controller";
+export * from "./connections/prisma-mcp-connection-admission-unit-of-work";
+export * from "./connections/prisma-mcp-connection-admission-unit-of-work.types";
+export * from "./connections/kubernetes-mcp-connection-secret-store";
+export * from "./connections/load-mcp-connection-material-verifier";
+export * from "./server-identity/mcp-server-workload.types";
+export * from "./server-identity/mcp-server-workload";
+export { __McpConnectionCredentialReader } from "./connections/mcp-connection-credential-reader";
+export type { McpConnectionCredentialReader } from "./connections/mcp-connection-credential-reader.types";
+export { mcpConnectionRouter } from "./routes/mcp-connection";
+export { PrismaMcpConnectionExecutionSettlementUnitOfWork } from "./runtime/prisma-mcp-connection-execution-settlement-unit-of-work";
+export { PrismaRemoteMcpDispatchUnitOfWork } from "./runtime/prisma-remote-mcp-dispatch-unit-of-work";
+export { RemoteMcpInvocationExecutor } from "./runtime/remote-mcp-invocation-executor";
+export { McpInvocationDispatchOutcomes, McpInvocationOwnerKinds } from "./runtime/remote-mcp-invocation.types";
+export type { McpInvocationExecutor } from "./runtime/remote-mcp-invocation.types";

@@ -30,6 +30,7 @@ describe("one server-owned model request across process restarts", function _Sui
 		expect(await f.restart().advance(f.output.bootstrapId)).toEqual({ outcome: "completed" });
 		expect(f.model.request).toHaveBeenCalledOnce();
 		expect(f.history.streams.get(f.stream)!.slice(2)).toHaveLength(1);
+		expect(f.runLifecycle.enterRecoveryRequired).not.toHaveBeenCalled();
 	});
 
 	it("lets only the live winning handler send while concurrent and restarted handlers report pending", async function _Concurrent()
@@ -41,6 +42,7 @@ describe("one server-owned model request across process restarts", function _Sui
 		const first = f.authority.advance(f.output.bootstrapId);
 		await entered.promise;
 		expect(await f.restart().advance(f.output.bootstrapId)).toMatchObject({ outcome: "model_pending" });
+		expect(f.runLifecycle.enterRecoveryRequired).not.toHaveBeenCalled();
 		expect(await f.restart().start(f.workflowCommand)).toMatchObject({ bootstrapId: f.output.bootstrapId });
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		expect(f.model.request).toHaveBeenCalledOnce();
@@ -76,6 +78,9 @@ describe("one server-owned model request across process restarts", function _Sui
 		vi.spyOn(Date, "now").mockReturnValue(reservation.dispatchDeadlineEpochMs + 1);
 		for (let retry = 0; retry < 3; retry++)
 			expect(await f.restart().advance(f.output.bootstrapId)).toEqual({ outcome: "response_unavailable" });
+		expect(f.runLifecycle.enterRecoveryRequired).toHaveBeenCalledTimes(3);
+		expect(f.runLifecycle.enterRecoveryRequired).toHaveBeenCalledWith({ runId: "run-1", siloId: "silo-1", attempt: 1, computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 1 } });
+		expect((await f.store.load(f.output.bootstrapId))!.modelReservation).toEqual(reservation);
 		expect(f.model.request).toHaveBeenCalledOnce();
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		expect(f.outputPayloads.store).not.toHaveBeenCalled();
@@ -86,11 +91,31 @@ describe("one server-owned model request across process restarts", function _Sui
 	{
 		const f = await _OutputRecoveryHarness(false);
 		f.runLifecycle.complete.mockRejectedValueOnce(new Error("completion unavailable"));
-		expect(await f.authority.advance(f.output.bootstrapId)).toMatchObject({ outcome: "model_pending" });
+		expect(await f.authority.advance(f.output.bootstrapId)).toEqual({ outcome: "retry" });
 		expect((await f.store.load(f.output.bootstrapId))!.outputReceipt).not.toBeNull();
 		f.flags.mayAppend = false;
 		expect(await f.restart().start(f.workflowCommand)).toBeNull();
 		expect(f.model.request).toHaveBeenCalledOnce();
+		expect(f.history.streams.get(f.stream)!.slice(2)).toHaveLength(1);
+	});
+
+	it("finishes a saved answer when completion fails after the model deadline", async function _SavedAnswerAfterDeadline()
+	{
+		const f = await _OutputRecoveryHarness(false);
+		f.runLifecycle.complete.mockImplementationOnce(async function _LateCompletionFailure()
+		{
+			const saved = (await f.store.load(f.output.bootstrapId))!;
+			expect(saved.outputReceipt).not.toBeNull();
+			vi.spyOn(Date, "now").mockReturnValue(saved.modelReservation!.dispatchDeadlineEpochMs + 1);
+			throw new Error("completion write unavailable");
+		});
+		expect(await f.authority.advance(f.output.bootstrapId)).toEqual({ outcome: "retry" });
+		expect(f.runLifecycle.enterRecoveryRequired).not.toHaveBeenCalled();
+		expect(await f.restart().advance(f.output.bootstrapId)).toEqual({ outcome: "completed" });
+		expect(f.runLifecycle.complete).toHaveBeenCalledTimes(2);
+		expect(f.runLifecycle.enterRecoveryRequired).not.toHaveBeenCalled();
+		expect(f.model.request).toHaveBeenCalledOnce();
+		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		expect(f.history.streams.get(f.stream)!.slice(2)).toHaveLength(1);
 	});
 
@@ -143,6 +168,41 @@ describe("one server-owned model request across process restarts", function _Sui
 		expect((await f.store.load(f.output.bootstrapId))!.outputReceipt).toBeNull();
 		expect(f.history.streams.get(f.stream)!.slice(2)).toHaveLength(0);
 		expect(f.runLifecycle.complete).not.toHaveBeenCalled();
+		expect(f.runLifecycle.enterRecoveryRequired).toHaveBeenCalledOnce();
+		expect(f.runLifecycle.enterRecoveryRequired).toHaveBeenCalledWith({ runId: "run-1", siloId: "silo-1", attempt: 1, computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 1 } });
+	});
+
+	it.each(["saved-status", "caught-late-response"])("withholds %s until run recovery is durable and retries without another dispatch", async function _RecoveryWriteFailure(path)
+	{
+		const f = await _OutputRecoveryHarness(false);
+		if (path === "saved-status")
+		{
+			f.model.request.mockRejectedValueOnce(new Error("response lost"));
+			expect(await f.authority.advance(f.output.bootstrapId)).toMatchObject({ outcome: "model_pending" });
+			const reservation = (await f.store.load(f.output.bootstrapId))!.modelReservation!;
+			vi.spyOn(Date, "now").mockReturnValue(reservation.dispatchDeadlineEpochMs + 1);
+		}
+		else
+		{
+			f.model.request.mockImplementationOnce(async function _LateGateway()
+			{
+				const reservation = (await f.store.load(f.output.bootstrapId))!.modelReservation!;
+				vi.spyOn(Date, "now").mockReturnValue(reservation.dispatchDeadlineEpochMs + 1);
+				return { kind: "text", text: "A private chosen answer" };
+			});
+		}
+		f.runLifecycle.enterRecoveryRequired.mockRejectedValueOnce(new Error("run recovery write unavailable"));
+		await expect(f.authority.advance(f.output.bootstrapId)).rejects.toThrow("run recovery write unavailable");
+		const reservation = (await f.store.load(f.output.bootstrapId))!.modelReservation!;
+		expect(f.runLifecycle.complete).not.toHaveBeenCalled();
+		expect((await f.store.load(f.output.bootstrapId))!.outputReceipt).toBeNull();
+		expect(await f.restart().start(f.workflowCommand)).toMatchObject({ bootstrapId: f.output.bootstrapId });
+		expect(await f.restart().advance(f.output.bootstrapId)).toEqual({ outcome: "response_unavailable" });
+		expect(f.runLifecycle.enterRecoveryRequired).toHaveBeenCalledTimes(2);
+		expect((await f.store.load(f.output.bootstrapId))!.modelReservation).toEqual(reservation);
+		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
+		expect(f.model.request).toHaveBeenCalledOnce();
+		expect(f.history.streams.get(f.stream)!.slice(2)).toHaveLength(0);
 	});
 
 	it("rechecks the original history after the gateway responds before publishing its answer", async function _ForeignHistory()

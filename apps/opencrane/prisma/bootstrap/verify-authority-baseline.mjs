@@ -1,10 +1,21 @@
 import { readFileSync } from "node:fs";
 
 const _BASELINE = new URL("./target-baseline.sql", import.meta.url);
-const _MINIMUM_FUNCTIONS = 80;
-const _MINIMUM_TRIGGERS = 90;
-const _MINIMUM_CONSTRAINTS = 228;
+const _MINIMUM_FUNCTIONS = 82;
+const _MINIMUM_TRIGGERS = 93;
+const _MINIMUM_CONSTRAINTS = 240;
 const _REQUIRED_AUTHORITY_MARKERS = [
+	'CREATE TABLE "mcp_connections"',
+	'CREATE UNIQUE INDEX mcp_connections_one_generation_barrier_key',
+	'ADD CONSTRAINT mcp_connections_digest_shapes_check',
+	'ADD CONSTRAINT mcp_connections_credential_shape_check',
+	'ADD CONSTRAINT mcp_connections_state_evidence_check',
+	'CREATE TRIGGER guard_mcp_connection_update',
+	'MCP connection identity and admission evidence are immutable',
+	'ADD CONSTRAINT "mcp_server_revisions_transport_identity_check"',
+	'Remote McpServerRevision requires its current activating connection and published server',
+	'Remote McpServerRevision completion requires its current activating connection and published server',
+	'McpServerRevision transport and discovery identity is immutable',
 	'ADD CONSTRAINT "mcp_servers_credentialless_schema_check"',
 	'ADD CONSTRAINT "mcp_servers_oci_credential_requirement_check"',
 	'"credential_requirement" <> \'credentialless\' OR "credential_schema" = \'[]\'::jsonb',

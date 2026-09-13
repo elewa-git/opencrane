@@ -1,7 +1,7 @@
 import { _AssertSameConversationGeneratedFile, _ConversationComputerAnswerBlocks, __ReadConversationGeneratedFileOutput } from "./generated-output/conversation-generated-file-output";
 import { _AdvanceConversationComputerModel, _ConversationModelReservationStatus } from "./conversation-computer-model-flow";
 import { _ConversationFailureDiagnostic } from "../../messages/conversation-failure-diagnostic";
-import type { ConversationComputerModelProgress } from "./conversation-computer-model.types";
+import { ConversationComputerModelProgressOutcomes, type ConversationComputerModelProgress } from "./conversation-computer-model.types";
 import { __AssertConversationComputerAnswerAuthority } from "./conversation-computer-answer-authority";
 import { createHash } from "node:crypto";
 import { ConversationEntryKinds, ConversationMessageContentBlockKinds, type CompiledRunInput } from "@opencrane/contracts";
@@ -80,20 +80,32 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 			return { outcome: "completed" };
 		}
 		await this.dependencies.candidates.assertCurrentForWorkflow(turn);
+		let progress: ConversationComputerModelProgress;
 		try
 		{
-			return await _AdvanceConversationComputerModel(turn, this.dependencies, this.appendOutput.bind(this));
+			progress = await _AdvanceConversationComputerModel(turn, this.dependencies, this.appendOutput.bind(this));
 		}
 		catch (error)
 		{
 			this.dependencies.logger.warn({ operation: "conversation.computer.workflow.advance", err: _ConversationFailureDiagnostic(error) }, "Conversation workflow has no completed answer receipt");
 			const saved = await this.dependencies.store.load(turn.bootstrapId);
-			if (saved?.continuationReservation !== null && saved !== null)
-				return _ConversationModelReservationStatus(saved.continuationReservation);
-			if (saved?.toolSelection !== null && saved !== null)
-				return { outcome: "retry" };
-			return saved?.modelReservation !== null && saved !== null ? _ConversationModelReservationStatus(saved.modelReservation) : { outcome: "retry" };
+			if (saved === null)
+				progress = { outcome: "retry" };
+			// A saved answer can still finish after its request deadline; it is not a lost response.
+			else if (saved.outputReceipt !== null)
+				progress = { outcome: "retry" };
+			else if (saved.continuationReservation !== null)
+				progress = _ConversationModelReservationStatus(saved.continuationReservation);
+			else if (saved.toolSelection !== null)
+				progress = { outcome: "retry" };
+			else
+				progress = saved.modelReservation === null ? { outcome: "retry" } : _ConversationModelReservationStatus(saved.modelReservation);
 		}
+		// The workflow must save the run's recovery state before reporting the unavailable response.
+		// Keep this write outside model-error recovery so a failed database write leaves work pending.
+		if (progress.outcome === ConversationComputerModelProgressOutcomes.ResponseUnavailable)
+			await this.dependencies.runLifecycle.enterRecoveryRequired(_RunLifecycleCommand(turn));
+		return progress;
 	}
 
 	/** Save only the winning server model response; the Pod has no output-submission route. */

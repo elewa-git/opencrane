@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
+import { _ReadMcpConnectionConfig } from "./mcp-connection-config";
 
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
@@ -183,7 +184,7 @@ export function _ReadAgentSandboxReleaseProfileConfig(): AgentSandboxReleaseProf
 	};
 }
 
-/** Read the one bounded Absurd worker and remote MCP protocol-check configuration. */
+/** Read the bounded Absurd worker and remote MCP transport configuration. */
 function _readWorkflowConfig(): OpenCraneWorkflowConfig
 {
 	const ociRegistryAuthorizationFilePath = process.env.OPENCRANE_OCI_REGISTRY_AUTHORIZATION_FILE?.trim() || undefined;
@@ -192,8 +193,8 @@ function _readWorkflowConfig(): OpenCraneWorkflowConfig
 	return {
 		databasePoolSize: _readBoundedInteger("OPENCRANE_WORKFLOW_DATABASE_POOL_SIZE", 2, 1, 20),
 		databaseUrl: _readRequired("DATABASE_URL"),
-		mcpEraProbeMaximumResponseBytes: _readBoundedInteger("OPENCRANE_MCP_ERA_PROBE_MAX_RESPONSE_BYTES", 65_536, 1_024, 1_048_576),
-		mcpEraProbeTimeoutMilliseconds: _readBoundedInteger("OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS", 5_000, 1_000, 60_000),
+		mcpRemoteMaximumResponseBytes: _readBoundedInteger("OPENCRANE_MCP_REMOTE_MAX_RESPONSE_BYTES", 65_536, 1_024, 1_048_576),
+		mcpRemoteTimeoutMilliseconds: _readBoundedInteger("OPENCRANE_MCP_REMOTE_TIMEOUT_MS", 5_000, 1_000, 60_000),
 		ociRegistryAuthorizationFilePath,
 		ociRegistryBaseUrl: _readRequired("OPENCRANE_OCI_REGISTRY_BASE_URL"),
 		ociRegistryRepository: _readRequired("OPENCRANE_OCI_REGISTRY_REPOSITORY"),
@@ -241,5 +242,6 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 		},
 		standaloneFirstUserAdmission: _readStandaloneFirstUserAdmission(),
 		workflows: _readWorkflowConfig(),
+		mcpConnections: _ReadMcpConnectionConfig(),
 	};
 }

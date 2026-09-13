@@ -6,15 +6,16 @@
  * `/api/v1/mcp/...` contract shapes rendered by the catalogue UI.
  */
 
-import type { McpCredentialRequirement } from "@opencrane/contracts";
+import type { McpConnectionFailureCodes, McpConnectionStatus, McpCredentialRequirement, McpInstallStates } from "@opencrane/contracts";
 
-export { McpCredentialRequirement } from "@opencrane/contracts";
+export { McpConnectionFailureCodes, McpConnectionStatus, McpCredentialRequirement, McpInstallStates } from "@opencrane/contracts";
+export type { McpConnectionProjection } from "@opencrane/contracts";
 
 /**
  * How the catalogue presents an MCP server connection.
  *
- * Mirrors the server-type values in the OpenCrane MCP API. The separate credential requirement
- * controls readiness; this presentation does not provide a browser activation flow.
+ * Mirrors the server-type values in the OpenCrane MCP API. Credential requirements describe
+ * authentication material; the server-owned connection state determines readiness after discovery.
  */
 export enum McpServerType
 {
@@ -46,24 +47,10 @@ export enum McpApprovalStatus
 }
 
 /**
- * Determines whether the Tools UI presents an installed MCP server as awaiting external activation
- * or requiring no credential.
+ * Server-declared credential-field metadata for catalogue presentation.
  *
- * The adapter maps the operator API's two retained string values into this closed set. OpenCrane has
- * no browser credential or OAuth activation command, so `NeedsCredential` is informational here.
- */
-export enum McpConnectionStatus
-{
-	/** The install remains unusable until a custody flow outside the current browser API activates it. */
-	NeedsCredential = "needs-credential",
-	/** The installed server requires no credential; execution still checks current authority. */
-	Credentialless = "credentialless"
-}
-
-/**
- * Server-declared credential-field metadata for a future governed custody flow.
- *
- * The current browser API neither renders nor submits credential values.
+ * Personal connection commands submit write-only material through the custody endpoint. They do
+ * not turn these metadata fields into an arbitrary credential form or return submitted values.
  */
 export interface McpCredentialField
 {
@@ -71,9 +58,9 @@ export interface McpCredentialField
 	key: string;
 	/** Human-readable field label. */
 	label: string;
-	/** Whether a future activation flow must supply the field. */
+	/** Whether the server definition marks this field as required. */
 	required: boolean;
-	/** Whether a future activation UI must treat the value as a write-only secret. */
+	/** Whether the server definition marks this field as sensitive. */
 	sensitive: boolean;
 	/** Optional placeholder metadata. */
 	placeholder?: string;
@@ -117,8 +104,16 @@ export interface McpInstalledServer
 {
 	/** The catalogue server id this record belongs to. */
 	serverId: string;
+	/** Durable installation lifecycle; Removing continues after the initiating request ends. */
+	lifecycleState: McpInstallStates;
 	/** Per-user connection status. */
 	connectionStatus: McpConnectionStatus;
+	/** Current admitted generation, or null before connection admission. */
+	connectionGeneration: number | null;
+	/** Time credential custody committed, or null when no credential was stored. */
+	credentialUpdatedAt: string | null;
+	/** Safe activation failure category, or null when no failure is reported. */
+	failureCode: McpConnectionFailureCodes | null;
 	/** Relative last-used label, or null when never used. */
 	lastUsed: string | null;
 }

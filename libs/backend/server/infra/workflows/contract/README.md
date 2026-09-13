@@ -61,7 +61,7 @@ tagged and is not a supported release boundary.
 the only schema authority — pre-1.0 a silo reaches the 0.10.0 schema by a fresh install, not by an
 in-place upgrade. An OCI (Open Container Initiative) Image Layout
 ZIP replaces MCPB, the old MCP bundle format. The new admission accepts only Model Context Protocol
-(MCP) version `2026-07-28` and keeps the remote v2 [era-probe workflow](../../mcp-era-probe/README.md)
+(MCP) version `2026-07-28` and keeps the remote v2 [era-probe workflow](../../mcp-remote-client/README.md)
 that checks a remote MCP server before it is accepted. OCI admission and import are separate from
 runtime execution: import produces an immutable image digest, then the MCP-specific executor uses a
 `RuntimeWorkloadClaim` with its own pool profile. The existing generic agent warm Pod has a fixed

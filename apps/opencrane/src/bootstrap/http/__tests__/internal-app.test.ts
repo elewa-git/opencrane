@@ -53,7 +53,7 @@ function _RuntimeConfig(): InternalRuntimeConfig
 /** Supply inert MCP routers because this test owns only the internal body parser. */
 function _McpRuntime(): McpRuntimeComposition
 {
-	return { authority: {} as McpRuntimeComposition["authority"], invocationParticipants: {} as McpRuntimeComposition["invocationParticipants"], admitToolInvocationInTransaction: vi.fn(), promotion: Router(), controller: Router(), companion: Router(), taskWorkflow: {} as McpRuntimeComposition["taskWorkflow"] };
+	return { connections: { connect: vi.fn(), revoke: vi.fn(), uninstall: vi.fn() }, toolDispatch: { tryExecute: vi.fn(), settleExhausted: vi.fn() }, authority: {} as McpRuntimeComposition["authority"], invocationParticipants: {} as McpRuntimeComposition["invocationParticipants"], admitToolInvocationInTransaction: vi.fn(), promotion: Router(), controller: Router(), companion: Router(), taskWorkflow: {} as McpRuntimeComposition["taskWorkflow"] };
 }
 
 describe("internal workload app", function _Suite()

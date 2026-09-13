@@ -26,9 +26,11 @@ a feature never calls `fetch` directly and never guesses a request or response s
 
 - `lib/models/*.types.ts` — shared data models (DTOs), enums, and colour/label maps (`scope`, `session`, `thread`,
   `context`, `notification`, `settings`, `mcp`, `plan`).
-- The MCP server model re-exports the shared credential-requirement enum and requires it on every
-  catalogue server. Its adjacent validator rejects missing and unknown requirement values before
-  they become browser state.
+- The MCP server model re-exports the shared installation-lifecycle, credential-requirement, connection-status, and
+  connection-failure enums. Catalogue validation rejects missing and unknown requirements before
+  they become browser state, while installed rows retain the server's safe lifecycle projection.
+  Personal connection writes use the strict `_ParseMcpConnectionProjection` parser; unknown fields,
+  invalid generations, timestamps, statuses, and failure codes cannot enter command state.
 - `CanvasDocument` — the owner-supplied content and action-state contract for context-panel canvas documents.
 - `lib/data/*.data.ts` — demo fixtures, temporary until the live API replaces them.
 - `ControlPlaneApiService` — the typed HTTP client and its `CONTROL_PLANE_BASE_URL` injection token.

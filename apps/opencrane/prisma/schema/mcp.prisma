@@ -134,13 +134,18 @@ enum McpApprovalStatus {
   Disabled      @map("disabled")
 }
 
-// Records whether an MCP install needs credential activation or explicitly requires no credential.
-// The current API has no activation command, so credential-requiring installs remain unavailable.
+// Projects the current installation and connection generation without granting execution authority.
 enum McpConnectionStatus {
   /// The install cannot execute because its required credential has not been activated.
   NeedsCredential @map("needs-credential")
   /// The installed server requires no credential; execution still checks current authority.
   Credentialless  @map("credentialless")
+  /// The admitted generation is establishing custody or discovering its exact tools.
+  Activating      @map("activating")
+  /// Custody and discovery completed; each execution still rechecks current authority.
+  Active          @map("active")
+  /// Uncertain custody blocks execution and replacement until authorized revocation.
+  RecoveryRequired @map("recovery-required")
 }
 
 model McpServer {
@@ -174,6 +179,7 @@ model McpServer {
   updatedAt              DateTime            @updatedAt @map("updated_at")
   installs               McpServerInstall[]
   revisions              McpServerRevision[]
+  connections            McpConnection[]
   source                 ThirdPartySource?   @relation(fields: [sourceId], references: [id], onDelete: SetNull)
 
   @@unique([siloId, name])
@@ -243,26 +249,35 @@ model OciImageValidation {
   @@map("oci_image_validations")
 }
 
-/// One immutable OCI image revision after an administrator explicitly promotes its imported image.
+/// One discovered revision bound to either an immutable OCI image or an exact remote connection.
 model McpServerRevision {
   id                   String                 @id @default(cuid())
   siloId               String                 @map("silo_id")
   mcpServerId          String                 @map("mcp_server_id")
-  ociImageValidationId String                 @map("oci_image_validation_id")
+  ociImageValidationId String?                @map("oci_image_validation_id")
   revision             Int
-  registryReference    String                 @map("registry_reference")
+  transport            McpExecutionTransport  @default(OciImage)
+  connectionId         String?                @map("connection_id")
+  connectionGeneration Int?                   @map("connection_generation")
+  connectionOwnerPrincipalId String?           @map("connection_owner_principal_id")
+  endpointDigest       String?                @map("endpoint_digest")
+  discoveryEvidenceDigest String?             @map("discovery_evidence_digest")
+  discoveryDigest      String?                @map("discovery_digest")
+  registryReference    String?                @map("registry_reference")
   protocolVersion      String?                @map("protocol_version")
   state                McpServerRevisionState @default(Discovering)
   completedAt          DateTime?              @map("completed_at")
   createdAt            DateTime               @default(now()) @map("created_at")
   updatedAt            DateTime               @updatedAt @map("updated_at")
   server               McpServer              @relation(fields: [mcpServerId, siloId], references: [id, siloId], onDelete: Restrict)
-  validation           OciImageValidation     @relation(fields: [ociImageValidationId, siloId], references: [id, siloId], onDelete: Restrict)
+  validation           OciImageValidation?    @relation(fields: [ociImageValidationId, siloId], references: [id, siloId], onDelete: Restrict)
+  connection           McpConnection?         @relation(fields: [connectionId, siloId, connectionGeneration, connectionOwnerPrincipalId, endpointDigest], references: [id, siloId, generation, ownerPrincipalId, endpointDigest], onDelete: Restrict)
   tools                McpToolRevision[]
   executions           McpRuntimeExecution[]
   tasks                McpTask[]
 
   @@unique([mcpServerId, revision])
+  @@unique([connectionId, connectionGeneration])
   @@unique([ociImageValidationId, siloId])
   @@unique([siloId, registryReference])
   @@unique([id, siloId])
@@ -310,6 +325,11 @@ model McpTask {
   serverRevisionId  String            @map("server_revision_id")
   toolRevisionId    String            @map("tool_revision_id")
   protocolVersion   String            @map("protocol_version")
+  transport         McpExecutionTransport @default(OciImage)
+  connectionId      String?           @map("connection_id")
+  connectionGeneration Int?          @map("connection_generation")
+  connectionOwnerPrincipalId String?  @map("connection_owner_principal_id")
+  endpointDigest    String?           @map("endpoint_digest")
   arguments         Json
   taskId            String?           @unique @map("task_id")
   taskName          String?           @map("task_name")
@@ -326,6 +346,7 @@ model McpTask {
   serverRevision    McpServerRevision @relation(fields: [serverRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
   toolRevision      McpToolRevision   @relation(fields: [toolRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
   toolInvocation    ToolInvocation?
+  connection        McpConnection?    @relation(fields: [connectionId, siloId, connectionGeneration, connectionOwnerPrincipalId, endpointDigest], references: [id, siloId, generation, ownerPrincipalId, endpointDigest], onDelete: Restrict)
 
   @@unique([siloId, requestKeyDigest])
   @@unique([siloId, taskKey])
@@ -340,11 +361,20 @@ model McpRuntimeExecution {
   serverRevisionId            String                   @map("server_revision_id")
   toolInvocationId            String?                  @unique @map("tool_invocation_id")
   kind                        McpRuntimeExecutionKind
-  workloadState               McpExecutorWorkloadState @default(Pending) @map("workload_state")
+  transport                   McpExecutionTransport @default(OciImage)
+  connectionId                String? @map("connection_id")
+  connectionGeneration        Int? @map("connection_generation")
+  connectionOwnerPrincipalId  String? @map("connection_owner_principal_id")
+  endpointDigest              String? @map("endpoint_digest")
+  credentialSecretUid         String? @map("credential_secret_uid")
+  credentialSecretResourceVersion String? @map("credential_secret_resource_version")
+  remoteClaimFence            String? @map("remote_claim_fence")
+  remoteClaimExpiresAt        DateTime? @map("remote_claim_expires_at")
+  workloadState               McpExecutorWorkloadState? @default(Pending) @map("workload_state")
   commandState                McpExecutorCommandState  @default(Pending) @map("command_state")
   idempotencyKey              String                   @unique @map("idempotency_key")
   executionReference          String                   @unique @map("execution_reference")
-  profileName                 String                   @map("profile_name")
+  profileName                 String?                  @map("profile_name")
   claimedAt                   DateTime?                @map("claimed_at")
   deliveryCount               Int                      @default(0) @map("delivery_count")
   claimExpiresAt              DateTime?                @map("claim_expires_at")
@@ -370,6 +400,7 @@ model McpRuntimeExecution {
   updatedAt                   DateTime                 @updatedAt @map("updated_at")
   serverRevision              McpServerRevision        @relation(fields: [serverRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
   toolInvocation              ToolInvocation?          @relation(fields: [toolInvocationId], references: [id], onDelete: Restrict)
+  connection                  McpConnection?           @relation(fields: [connectionId, siloId, connectionGeneration, connectionOwnerPrincipalId, endpointDigest], references: [id, siloId, generation, ownerPrincipalId, endpointDigest], onDelete: Restrict)
 
   @@index([workloadState, claimExpiresAt, createdAt])
   @@index([workloadState, releaseExpiresAt, createdAt])
@@ -406,18 +437,31 @@ view McpRuntimeReleaseClaimCandidate {
 }
 
 // Per-principal installation of an MCP server (operator API).
+/// Keeps installation history while removal waits for execution and credential cleanup.
+enum McpInstallState {
+  /// The owner may connect and admit work under current authority.
+  Installed @map("installed")
+  /// New work is denied while the existing revocation workflow finishes cleanup.
+  Removing  @map("removing")
+  /// Cleanup is complete; the retained installation may be explicitly installed again.
+  Removed   @map("removed")
+}
+
 model McpServerInstall {
   id               String              @id @default(cuid())
   mcpServerId      String              @map("mcp_server_id")
   principalId      String              @map("principal_id")
+  lifecycleState   McpInstallState     @default(Installed) @map("lifecycle_state")
   connectionStatus McpConnectionStatus @default(NeedsCredential) @map("connection_status")
   lastUsedAt       DateTime?           @map("last_used_at")
   createdAt        DateTime            @default(now()) @map("created_at")
   updatedAt        DateTime            @updatedAt @map("updated_at")
   mcpServer        McpServer           @relation(fields: [mcpServerId], references: [id], onDelete: Restrict)
   principal        Principal           @relation(fields: [principalId], references: [id], onDelete: Restrict)
+  connections      McpConnection[]
 
   @@unique([mcpServerId, principalId])
+  @@unique([id, mcpServerId, principalId])
   @@index([principalId])
   @@map("mcp_server_installs")
 }

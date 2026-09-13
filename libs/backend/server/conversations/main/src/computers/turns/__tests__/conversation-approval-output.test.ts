@@ -79,7 +79,8 @@ describe("approval history and the saved model continuation", function _Suite()
 
 		approved = true;
 		const completion = await f.restart().advance(f.step);
-		expect(completion.outcome).toBe(lostReply === "answer" ? "model_pending" : "completed");
+		expect(completion.outcome).toBe(lostReply === "answer" ? "retry" : "completed");
+		expect(f.runLifecycle.enterRecoveryRequired).not.toHaveBeenCalled();
 		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
 		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
 		const completed = (await f.store.load(f.step))!;
