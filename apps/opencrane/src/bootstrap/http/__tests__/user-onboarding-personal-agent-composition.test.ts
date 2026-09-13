@@ -15,7 +15,7 @@ interface _DurableState
 	onboardingState: UserOnboardingState;
 	completionProvenance: UserOnboardingCompletionProvenance | null;
 	agentService: { id: string; state: AgentServiceState; activeRevisionId: string | null; workloadProfile: string } | null;
-	agentRevision: { id: string; state: AgentRevisionState; personaRevisionId: string; modelDefinitionId: string; digest: string } | null;
+	agentRevision: { id: string; state: AgentRevisionState; personaRevisionId: string; modelDefinitionId: string; mcpToolRevisionIds: string[]; digest: string } | null;
 	auditCount: number;
 	authorizationGrants: _AuthorizationGrantRow[];
 }
@@ -208,8 +208,8 @@ function _PrismaFixture(markCompleted: boolean): { readonly prisma: PrismaClient
 			},
 			auditEntry: { create: vi.fn(async function _AuditGrantChange() { return {}; }) },
 			agentService: {
-				findMany: vi.fn(async function _FindServices() { return state.agentService === null || state.agentRevision === null ? [] : [{ ...state.agentService, activeRevision: { personaRevisionId: state.agentRevision.personaRevisionId, modelDefinitionId: state.agentRevision.modelDefinitionId } }]; }),
-				findUnique: vi.fn(async function _FindService() { return state.agentService === null || state.agentRevision === null ? null : { ...state.agentService, siloId: _OWNER.siloId, kind: AgentServiceKind.Personal, activeRevision: { personaRevisionId: state.agentRevision.personaRevisionId, modelDefinitionId: state.agentRevision.modelDefinitionId } }; }),
+				findMany: vi.fn(async function _FindServices() { return state.agentService === null || state.agentRevision === null ? [] : [{ ...state.agentService, activeRevision: { personaRevisionId: state.agentRevision.personaRevisionId, modelDefinitionId: state.agentRevision.modelDefinitionId, mcpToolAssignments: state.agentRevision.mcpToolRevisionIds.map(function _Assignment(toolRevisionId) { return { toolRevisionId }; }) } }]; }),
+				findUnique: vi.fn(async function _FindService() { return state.agentService === null || state.agentRevision === null ? null : { ...state.agentService, siloId: _OWNER.siloId, kind: AgentServiceKind.Personal, activeRevision: { personaRevisionId: state.agentRevision.personaRevisionId, modelDefinitionId: state.agentRevision.modelDefinitionId, mcpToolAssignments: state.agentRevision.mcpToolRevisionIds.map(function _Assignment(toolRevisionId) { return { toolRevisionId }; }) } }; }),
 				create: vi.fn(async function _CreateService(input: { data: { id: string; state: AgentServiceState; workloadProfile: string } })
 				{
 					state.agentService = { id: input.data.id, state: input.data.state, activeRevisionId: null, workloadProfile: input.data.workloadProfile };
@@ -224,9 +224,9 @@ function _PrismaFixture(markCompleted: boolean): { readonly prisma: PrismaClient
 				}),
 			},
 			agentRevision: {
-				create: vi.fn(async function _CreateRevision(input: { data: { id: string; digest: string; personaRevisionId: string; modelDefinition: { connect: { id_siloId: { id: string } } } } })
+				create: vi.fn(async function _CreateRevision(input: { data: { id: string; digest: string; personaRevisionId: string; modelDefinition: { connect: { id_siloId: { id: string } } }; mcpToolAssignments: { create: readonly { toolRevisionId: string }[] } } })
 				{
-					state.agentRevision = { id: input.data.id, state: AgentRevisionState.Draft, personaRevisionId: input.data.personaRevisionId, modelDefinitionId: input.data.modelDefinition.connect.id_siloId.id, digest: input.data.digest };
+					state.agentRevision = { id: input.data.id, state: AgentRevisionState.Draft, personaRevisionId: input.data.personaRevisionId, modelDefinitionId: input.data.modelDefinition.connect.id_siloId.id, mcpToolRevisionIds: input.data.mcpToolAssignments.create.map(function _ToolId(assignment) { return assignment.toolRevisionId; }), digest: input.data.digest };
 					return { ...state.agentRevision, skillAssignments: [] };
 				}),
 				update: vi.fn(async function _PublishRevision(input: { data: { state: AgentRevisionState } })
@@ -295,6 +295,7 @@ describe("personal Agent onboarding app composition", function _PersonalAgentCom
 		expect(response.body).toMatchObject({ state: "completed", canConclude: false });
 		expect(fixture.state()).toMatchObject({ onboardingState: UserOnboardingState.Completed, completionProvenance: UserOnboardingCompletionProvenance.BootstrapConcluded, agentService: { id: _ONBOARDING_ID, state: AgentServiceState.Active, workloadProfile: "developer" }, agentRevision: { state: AgentRevisionState.Published, personaRevisionId: _PERSONA_REVISION_ID }, auditCount: 6 });
 		expect(fixture.state().agentService?.activeRevisionId).toBe(fixture.state().agentRevision?.id);
+		expect(fixture.state().agentRevision?.mcpToolRevisionIds).toEqual([]);
 		expect(fixture.state().authorizationGrants).toHaveLength(19);
 		expect(fixture.attempts()).toBe(2);
 	});

@@ -1540,6 +1540,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/agent/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the personal agent's current tool selection
+         * @description Requires current Edit on the caller's unique active personal AgentService. Returns its immutable active revision and sorted tool revision IDs without recording effect admission or exposing credentials.
+         */
+        get: operations["getPersonalAgentTools"];
+        /**
+         * Replace the personal agent's tool selection
+         * @description Requires current AgentService Edit and Assign on every selected same-silo ready tool revision of an active published MCP server. Publishes an immutable successor while preserving its persona, model, skills, budget and boundaries, and reconciles only the owner's exact personal Use and Invoke grants. A stale expected revision returns 409, including a retry after an uncertain successful commit. Empty selection removes all tools.
+         */
+        put: operations["setPersonalAgentTools"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -8497,6 +8521,131 @@ export interface operations {
                 content?: never;
             };
             /** @description Setup dependency unavailable; the same request may be retried. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getPersonalAgentTools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current selection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        agentServiceId: string;
+                        activeRevisionId: string;
+                        toolRevisionIds: string[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current personal-agent permission denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unique active published personal agent unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Selection dependency unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    setPersonalAgentTools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedActiveRevisionId: string;
+                    toolRevisionIds: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Committed successor or authorized unchanged selection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        agentServiceId: string;
+                        activeRevisionId: string;
+                        toolRevisionIds: string[];
+                    };
+                };
+            };
+            /** @description Invalid tool selection. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current Edit, selected Assign, or selected tool availability denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unique active published personal agent unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Active revision changed; read the current selection before another edit. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Assignment dependency unavailable; read current selection after an uncertain response. */
             503: {
                 headers: {
                     [name: string]: unknown;

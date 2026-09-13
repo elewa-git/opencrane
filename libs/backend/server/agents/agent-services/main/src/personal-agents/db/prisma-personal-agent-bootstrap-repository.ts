@@ -35,6 +35,8 @@ interface _ReadyPersonalService
 	readonly personaRevisionId: string;
 	/** Model definition frozen into the active executable revision. */
 	readonly modelDefinitionId: string;
+	/** Exact tool revisions frozen into the active executable revision. */
+	readonly mcpToolRevisionIds: readonly string[];
 }
 
 /** Returns a stable denied result without writing authority state. */
@@ -144,7 +146,7 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 		// 3. Inspect the deterministic identity independently so an unrelated row can never be adopted.
 		const deterministic = await this.transaction.agentService.findUnique({
 			where: { id_siloId: { id: command.onboardingId, siloId: command.siloId } },
-			select: { id: true, siloId: true, kind: true, state: true, activeRevisionId: true, workloadProfile: true, activeRevision: { select: { personaRevisionId: true, modelDefinitionId: true } } },
+			select: { id: true, siloId: true, kind: true, state: true, activeRevisionId: true, workloadProfile: true, activeRevision: { select: { personaRevisionId: true, modelDefinitionId: true, mcpToolAssignments: { select: { toolRevisionId: true } } } } },
 		});
 		if (deterministic !== null)
 		{
@@ -159,7 +161,7 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 			const activeRevision = deterministic.activeRevision;
 			if (activeRevision === null || activeRevision.personaRevisionId === null)
 				return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);
-			const service = { id: deterministic.id, activeRevisionId: deterministic.activeRevisionId, workloadProfile: deterministic.workloadProfile, personaRevisionId: activeRevision.personaRevisionId, modelDefinitionId: activeRevision.modelDefinitionId };
+			const service = { id: deterministic.id, activeRevisionId: deterministic.activeRevisionId, workloadProfile: deterministic.workloadProfile, personaRevisionId: activeRevision.personaRevisionId, modelDefinitionId: activeRevision.modelDefinitionId, mcpToolRevisionIds: _ToolRevisionIds(activeRevision.mcpToolAssignments) };
 			if (service.workloadProfile !== this.workloadProfile && !await this._RepairUnusedProfile(command, persona, service, caller))
 				return _Denied(PersonalAgentBootstrapDenialReasons.ServiceNotReady);
 			return this._EnsureCurrentPersona(command, persona, { ...service, workloadProfile: this.workloadProfile }, caller);
@@ -209,7 +211,7 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 	{
 		if (service.personaRevisionId === persona.id)
 		{
-			await this.productEffects.reconcileCurrent(caller, { agentServiceId: service.id, agentRevisionId: service.activeRevisionId, personaProfileId: persona.profileId, modelDefinitionId: service.modelDefinitionId }, command.provisionedAt);
+			await this.productEffects.reconcileCurrent(caller, { agentServiceId: service.id, agentRevisionId: service.activeRevisionId, personaProfileId: persona.profileId, modelDefinitionId: service.modelDefinitionId, mcpToolRevisionIds: service.mcpToolRevisionIds }, command.provisionedAt);
 			return _Ready(service, false, false);
 		}
 		const cmd = {
@@ -274,7 +276,7 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 				activeRevisionId: { not: null },
 				activeRevision: { is: { siloId: command.siloId, state: AgentRevisionState.Published, personaRevisionId: { in: [...persona.approvedRevisionIds] } } },
 			},
-			select: { id: true, activeRevisionId: true, workloadProfile: true, activeRevision: { select: { personaRevisionId: true, modelDefinitionId: true } } },
+			select: { id: true, activeRevisionId: true, workloadProfile: true, activeRevision: { select: { personaRevisionId: true, modelDefinitionId: true, mcpToolAssignments: { select: { toolRevisionId: true } } } } },
 			orderBy: { id: "asc" },
 			take: 2,
 		}).then(function _Flatten(services)
@@ -284,9 +286,15 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 				const activeRevision = service.activeRevision;
 				return service.activeRevisionId === null || activeRevision === null || activeRevision.personaRevisionId === null
 					? []
-					: [{ id: service.id, activeRevisionId: service.activeRevisionId, workloadProfile: service.workloadProfile, personaRevisionId: activeRevision.personaRevisionId, modelDefinitionId: activeRevision.modelDefinitionId }];
+					: [{ id: service.id, activeRevisionId: service.activeRevisionId, workloadProfile: service.workloadProfile, personaRevisionId: activeRevision.personaRevisionId, modelDefinitionId: activeRevision.modelDefinitionId, mcpToolRevisionIds: _ToolRevisionIds(activeRevision.mcpToolAssignments) }];
 			});
 		});
 	}
 
+}
+
+/** Returns canonical tool IDs from an included immutable revision. */
+function _ToolRevisionIds(assignments: readonly { readonly toolRevisionId: string }[]): readonly string[]
+{
+	return assignments.map(assignment => assignment.toolRevisionId).sort();
 }

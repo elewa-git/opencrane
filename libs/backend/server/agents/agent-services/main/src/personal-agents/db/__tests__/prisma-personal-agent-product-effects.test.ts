@@ -12,7 +12,7 @@ import { PrismaPersonalAgentProductEffectsAuthority } from "../prisma-personal-a
 const _CALLER = { siloId: "silo-1", subjectId: "user-1", principalId: "principal-1" } as const;
 
 /** Current personal resources used by grant and admission assertions. */
-const _RESOURCES = { agentServiceId: "service-1", agentRevisionId: "revision-2", personaProfileId: "profile-1", modelDefinitionId: "model-1" } as const;
+const _RESOURCES = { agentServiceId: "service-1", agentRevisionId: "revision-2", personaProfileId: "profile-1", modelDefinitionId: "model-1", mcpToolRevisionIds: ["tool-1"] } as const;
 
 /** Builds central-authority and managed-grant spies with an allowed decision by default. */
 function _Dependencies(outcome: AuthorizationDecisionOutcomes = AuthorizationDecisionOutcomes.Allow)
@@ -45,7 +45,7 @@ describe("PrismaPersonalAgentProductEffectsAuthority", function _ProductEffectsS
 
 		await effects.admitInitialPublication(command);
 
-		expect(dependencies.managedGrants.reconcileManagedResourceGrants).toHaveBeenCalledTimes(4);
+		expect(dependencies.managedGrants.reconcileManagedResourceGrants).toHaveBeenCalledTimes(5);
 		expect(dependencies.authorization.admitPrincipal).toHaveBeenCalledTimes(6);
 		expect(dependencies.authorization.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ resource: { kind: ProductAuthorizationResourceKinds.AgentRevision, id: _RESOURCES.agentRevisionId }, action: ProductAuthorizationActions.Publish }));
 		expect(dependencies.authorization.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ resource: { kind: ProductAuthorizationResourceKinds.Persona, id: _RESOURCES.personaProfileId }, action: ProductAuthorizationActions.Use }));
@@ -58,6 +58,43 @@ describe("PrismaPersonalAgentProductEffectsAuthority", function _ProductEffectsS
 		const effects = new PrismaPersonalAgentProductEffectsAuthority(dependencies.transaction, dependencies.authorization, dependencies.managedGrants);
 
 		await expect(effects.admitRevisionSelection({ caller: _CALLER, source: _RESOURCES, target: { ..._RESOURCES, agentRevisionId: "revision-3", modelDefinitionId: "model-2" }, now: new Date("2026-08-29T08:00:00.000Z"), selectedResource: PersonalAgentSelectedResourceKinds.Model, argumentsValue: { modelAlias: "careful-model" } })).rejects.toThrow("not authorized");
+	});
+
+	it("admits each selected tool and reconciles the source-target union exactly once at publication", async function _AdmitsToolSelection()
+	{
+		const dependencies = _Dependencies();
+		const effects = new PrismaPersonalAgentProductEffectsAuthority(dependencies.transaction, dependencies.authorization, dependencies.managedGrants);
+		const now = new Date("2026-08-29T08:00:00.000Z");
+		const target = { ..._RESOURCES, agentRevisionId: "revision-3", mcpToolRevisionIds: ["tool-2", "tool-3"] };
+		const command = { caller: _CALLER, source: _RESOURCES, target, now, selectedResource: PersonalAgentSelectedResourceKinds.Tool, argumentsValue: { toolRevisionIds: target.mcpToolRevisionIds } };
+
+		await effects.admitRevisionSelection(command);
+		expect(dependencies.authorization.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: _RESOURCES.agentServiceId }, action: ProductAuthorizationActions.Edit }));
+		expect(dependencies.authorization.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: "tool-2" }, action: ProductAuthorizationActions.Assign }));
+		expect(dependencies.authorization.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: "tool-3" }, action: ProductAuthorizationActions.Assign }));
+		expect(vi.mocked(dependencies.managedGrants.reconcileManagedResourceGrants).mock.calls.map(call => call[0].resource.id)).not.toContain("tool-1");
+
+		vi.mocked(dependencies.managedGrants.reconcileManagedResourceGrants).mockClear();
+		await effects.admitRevisionPublication(command);
+		const toolCalls = vi.mocked(dependencies.managedGrants.reconcileManagedResourceGrants).mock.calls.map(call => call[0]).filter(call => call.resource.kind === ProductAuthorizationResourceKinds.McpToolRevision);
+		expect(toolCalls.map(call => call.resource.id)).toEqual(["tool-1", "tool-2", "tool-3"]);
+		expect(toolCalls[0]?.grants).toEqual([]);
+		for (const call of toolCalls.slice(1))
+			expect(call.grants.map(grant => grant.capability.capabilityId)).toEqual(["mcp-tool-revision:use", "mcp-tool-revision:invoke"]);
+	});
+
+	it("restores current selected-tool grants before admitting an unchanged Tool selection", async function _RestoresUnchangedToolSelection()
+	{
+		const dependencies = _Dependencies();
+		const effects = new PrismaPersonalAgentProductEffectsAuthority(dependencies.transaction, dependencies.authorization, dependencies.managedGrants);
+		const now = new Date("2026-08-29T08:00:00.000Z");
+		const command = { caller: _CALLER, source: _RESOURCES, target: _RESOURCES, now, selectedResource: PersonalAgentSelectedResourceKinds.Tool, argumentsValue: { toolRevisionIds: _RESOURCES.mcpToolRevisionIds } };
+
+		await effects.admitRevisionSelection(command);
+		const reconciled = vi.mocked(dependencies.managedGrants.reconcileManagedResourceGrants).mock.calls.map(call => call[0]);
+		const toolCall = reconciled.find(call => call.resource.kind === ProductAuthorizationResourceKinds.McpToolRevision);
+		expect(toolCall).toMatchObject({ managerId: "personal-agent-owner-access:principal-1", resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: "tool-1" }, grants: [expect.objectContaining({ capability: expect.objectContaining({ capabilityId: "mcp-tool-revision:use" }) }), expect.objectContaining({ capability: expect.objectContaining({ capabilityId: "mcp-tool-revision:invoke" }) })] });
+		expect(vi.mocked(dependencies.managedGrants.reconcileManagedResourceGrants).mock.invocationCallOrder.at(-1)).toBeLessThan(vi.mocked(dependencies.authorization.admitPrincipal).mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER);
 	});
 
 	it("admits an unused profile repair with an exact source/target digest and no grant reconciliation", async function _AdmitsUnusedProfileRepair()
@@ -89,7 +126,7 @@ describe("PrismaPersonalAgentProductEffectsAuthority", function _ProductEffectsS
 		const dependencies = _Dependencies();
 		const effects = new PrismaPersonalAgentProductEffectsAuthority(dependencies.transaction, dependencies.authorization, dependencies.managedGrants);
 		const secondCaller = { siloId: _CALLER.siloId, subjectId: "user-2", principalId: "principal-2" } as const;
-		const secondResources = { agentServiceId: "service-2", agentRevisionId: "revision-3", personaProfileId: "profile-2", modelDefinitionId: _RESOURCES.modelDefinitionId } as const;
+		const secondResources = { agentServiceId: "service-2", agentRevisionId: "revision-3", personaProfileId: "profile-2", modelDefinitionId: _RESOURCES.modelDefinitionId, mcpToolRevisionIds: [] } as const;
 		const now = new Date("2026-08-29T08:00:00.000Z");
 
 		// 2. Reconcile both owners so each must retain an independent desired set for the shared model.

@@ -20,6 +20,13 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Added
 
+- **People can select tools for their personal agent through the configuration API.** The source
+  under review accepts only tools the person may assign and saves one new agent revision while
+  preserving its model, persona and other settings. Removing a tool removes this personal
+  assignment's permissions; unrelated grants remain. Stale edits conflict, and a refreshed read
+  returns the saved selection after an uncertain response. The complete hosted conversation and
+  live qualification remain separate.
+
 - **MCP tools can keep their original names when offered to a model.** The compiler gives each
   immutable revision a distinct model name, so tools with dots, long names or equal names from
   different servers do not compete for the same declaration. The model selects that saved name;
@@ -75,8 +82,9 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   work refuses repeat dispatch. The receipt binds the document content and processing inputs saved
   before the first request. Explicit candidate repairs preserve the official source hashes
   and separately verify their patch artifacts, base image and running source. It cannot publish a
-  candidate or replace the existing production provider gate. The candidate and personal memory
-  journeys remain under qualification.
+  candidate or replace the existing production provider gate. All 31 replacement-candidate cases
+  now pass on the reviewed image; production integration and personal memory journeys remain
+  unfinished.
 
 - **People can stop their own current personal-assistant turn from the conversation.** Stop checks
   current access, saves the selected turn and prevents further model or tool work. Pending approvals

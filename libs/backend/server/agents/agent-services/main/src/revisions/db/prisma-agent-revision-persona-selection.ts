@@ -84,7 +84,7 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 			return _Stale(command.expectedSourceRevisionId);
 		if (source.personaRevisionId === command.targetPersonaRevisionId)
 		{
-			await this.productEffects.reconcileCurrent({ siloId: command.siloId, principalId: command.principalId, subjectId: command.subjectId }, { agentServiceId: service.id, agentRevisionId: source.id, personaProfileId: target.personaProfileId, modelDefinitionId: source.modelDefinitionId }, command.materializedAt);
+			await this.productEffects.reconcileCurrent({ siloId: command.siloId, principalId: command.principalId, subjectId: command.subjectId }, { agentServiceId: service.id, agentRevisionId: source.id, personaProfileId: target.personaProfileId, modelDefinitionId: source.modelDefinitionId, mcpToolRevisionIds: source.mcpToolAssignments.map(assignment => assignment.toolRevisionId).sort() }, command.materializedAt);
 			return { status: AgentRevisionPersonaSelectionMaterializationCodes.AlreadyCurrent, agentRevisionId: source.id, sourceRevisionId: source.id };
 		}
 
@@ -92,8 +92,8 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 		const agentRevisionId = randomUUID();
 		const productCommand = {
 			caller: { siloId: command.siloId, principalId: command.principalId, subjectId: command.subjectId },
-			source: { agentServiceId: service.id, agentRevisionId: source.id, personaProfileId: sourcePersona.personaProfileId, modelDefinitionId: source.modelDefinitionId },
-			target: { agentServiceId: service.id, agentRevisionId, personaProfileId: target.personaProfileId, modelDefinitionId: source.modelDefinitionId },
+			source: { agentServiceId: service.id, agentRevisionId: source.id, personaProfileId: sourcePersona.personaProfileId, modelDefinitionId: source.modelDefinitionId, mcpToolRevisionIds: source.mcpToolAssignments.map(assignment => assignment.toolRevisionId).sort() },
+			target: { agentServiceId: service.id, agentRevisionId, personaProfileId: target.personaProfileId, modelDefinitionId: source.modelDefinitionId, mcpToolRevisionIds: source.mcpToolAssignments.map(assignment => assignment.toolRevisionId).sort() },
 			now: command.materializedAt,
 			selectedResource: PersonalAgentSelectedResourceKinds.Persona,
 			argumentsValue: { agentServiceId: command.agentServiceId, sourceRevisionId: source.id, targetPersonaRevisionId: command.targetPersonaRevisionId, materializedAt: command.materializedAt.toISOString() },

@@ -107,8 +107,8 @@ export class PrismaAgentRevisionModelSelectionRepository implements AgentRevisio
 		const agentRevisionId = randomUUID();
 		const productCommand = {
 			caller,
-			source: { agentServiceId: service.id, agentRevisionId: source.id, personaProfileId: persona.personaProfileId, modelDefinitionId: source.modelDefinitionId },
-			target: { agentServiceId: service.id, agentRevisionId, personaProfileId: persona.personaProfileId, modelDefinitionId },
+			source: { agentServiceId: service.id, agentRevisionId: source.id, personaProfileId: persona.personaProfileId, modelDefinitionId: source.modelDefinitionId, mcpToolRevisionIds: source.mcpToolAssignments.map(assignment => assignment.toolRevisionId).sort() },
+			target: { agentServiceId: service.id, agentRevisionId, personaProfileId: persona.personaProfileId, modelDefinitionId, mcpToolRevisionIds: source.mcpToolAssignments.map(assignment => assignment.toolRevisionId).sort() },
 			now: command.materializedAt,
 			selectedResource: PersonalAgentSelectedResourceKinds.Model,
 			argumentsValue: { agentServiceId: command.agentServiceId, sourceRevisionId: source.id, targetModelDefinitionId: modelDefinitionId, modelAlias: command.modelAlias, materializedAt: command.materializedAt.toISOString() },

@@ -38,7 +38,7 @@ import { _log } from "../process/log";
 import { _CreateInternalRuntimeComposition } from "../process/runtime-composition";
 import { _CreatePersonaAgentRevisionSelectionFactory } from "@opencrane/backend/agents/personal/personas";
 import type { ResourceSharesRouteOptions, RouteMount } from "./routes.types";
-import { _CreateCompanyAssistantComposition } from "@opencrane/backend/server/agents/agent-services";
+import { _CreateCompanyAssistantComposition, _CreatePersonalAgentToolsComposition } from "@opencrane/backend/server/agents/agent-services";
 import { _CreateUserOnboardingComposition } from "@opencrane/backend/server/agents/onboarding";
 import { _CreateConversationAssetAuthority } from "@opencrane/backend/server/conversation-assets";
 import type { McpWorkflowComposition } from "../workflows/mcp-workflow-composition.types";
@@ -82,6 +82,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScan
 		{ method: "use", path: "/api/v1/me/assets", handler: _CreatePersonalArtifactCatalogueRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/persona", handler: _CreatePersonaOnboardingRouter(prisma, _log, onboarding.personaWorkflow, _CreatePersonaAgentRevisionSelectionFactory()) },
 		{ method: "use", path: "/api/v1/me/configuration", handler: _CreatePersonalConfigurationRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/agent/tools", handler: _CreatePersonalAgentToolsComposition(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunStatusRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: __CreateConversationAssetRouter({ resolveCaller: _ResolveConversationAssetCaller, authority: _CreateConversationAssetAuthority(prisma, process.env, artifactScannerEnabled), logger: _log }) },
 		..._OptionalRoute("/api/v1/me/conversations", conversationHistory),

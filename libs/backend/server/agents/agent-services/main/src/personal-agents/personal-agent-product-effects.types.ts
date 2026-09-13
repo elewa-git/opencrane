@@ -22,6 +22,8 @@ export interface PersonalAgentCurrentResources
 	readonly personaProfileId: string;
 	/** Model definition selected by the active revision. */
 	readonly modelDefinitionId: string;
+	/** Exact immutable MCP tool revisions selected by the active revision, in canonical order. */
+	readonly mcpToolRevisionIds: readonly string[];
 }
 
 /** Resource categories whose selection creates a successor personal-agent revision. */
@@ -31,6 +33,8 @@ export enum PersonalAgentSelectedResourceKinds
 	Persona = "persona",
 	/** The owner selected a ModelDefinition for future runs. */
 	Model = "model",
+	/** The owner replaced the complete MCP tool selection for future runs. */
+	Tool = "tool",
 }
 
 /** Product effects needed to create and publish the first personal-agent revision. */

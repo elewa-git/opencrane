@@ -72,6 +72,7 @@ export class PrismaInitialPersonalAgentPublicationRepository implements InitialP
 			agentRevisionId,
 			personaProfileId: persona.profileId,
 			modelDefinitionId: model.modelDefinitionId,
+			mcpToolRevisionIds: [],
 			now: command.provisionedAt,
 			argumentsValue: { onboardingId: command.onboardingId, onboardingPersonaRevisionId: command.onboardingPersonaRevisionId, materializedPersonaRevisionId: persona.id, readinessKind: command.readinessKind, provisionedAt: command.provisionedAt.toISOString(), workloadProfile: this.workloadProfile },
 		};

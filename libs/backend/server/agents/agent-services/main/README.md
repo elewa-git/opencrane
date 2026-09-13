@@ -4,8 +4,9 @@
 
 ## What it owns
 
-This package owns immutable `AgentService` revisions, personal-assistant configuration, and explicit
-setup and tool selection for one company assistant per silo, the organisation's isolated data boundary.
+This package owns immutable `AgentService` revisions, personal-assistant model, persona and tool
+configuration, and explicit setup and tool selection for one company assistant per silo, the
+organisation's isolated data boundary.
 The company assistant can be selected for a group child
 conversation once its published revision, identity, model permission and the caller's access are ready.
 
@@ -81,6 +82,9 @@ assignments until those capabilities have a supported company policy.
 - `PrismaAgentRevisionModelSelectionRepository` materializes an accepted model choice as a new revision.
 - `PrismaAgentRevisionPersonaSelectionRepository` materializes an approved persona as a new revision.
 - `PrismaPersonalAgentProductEffectsAuthority` records onboarding product-resource decisions.
+- `_CreatePersonalAgentToolsComposition` binds authenticated request identity to personal tool
+  selection and its transaction owner. `PrismaPersonalAgentToolsUnitOfWork` and
+  `_CreatePersonalAgentToolsRouter` support callers that supply those dependencies explicitly.
 - `PrismaPersonalExecutionEvidenceRepository` and `PersonalExecutionEvidenceAuthority` prove current
   personal execution eligibility inside run admission.
 - `PrismaRuntimeAgentEffectEligibilityAuthority` rechecks the active service and revision before an
@@ -149,6 +153,23 @@ Assignment does not install an integration or activate company credentials, and 
 the requesting employee's private permissions or credentials. Run admission freezes the selected
 tool definitions and checks current Use; dispatch rechecks Invoke, revision assignment and human
 membership. Participant-visible tool results remain unfinished, and live retrieval is unqualified.
+
+### Personal agent tools
+
+Read `GET /api/v1/me/agent/tools`, then replace the complete selection with `PUT` to the same path.
+The request carries the active revision returned by GET and up to 32 unique tool revision IDs. The
+server derives the owner from the authenticated session and accepts no identity or credential fields.
+
+GET requires current Edit on the owner's unique active personal service. PUT also requires Assign on
+every selected tool after proving that it is a same-silo Ready revision of an Active, Published MCP
+server. The transaction copies the current revision and changes only its tool IDs, preserving the
+persona, model, skills, budget, prompt policy and boundaries. It publishes the successor, reconciles
+the owner's exact Personal Use and Invoke grants for the old/new tool union, and moves the active
+pointer with a compare-and-swap. `[]` removes all tool assignments. A stale source returns `409` and
+must be refreshed through GET.
+
+This endpoint selects already discovered and published tools. It does not install a server, mint
+Assign permission, bind credentials, invoke a tool, start a workflow, or repair post-admission state.
 
 ## Dependency direction
 

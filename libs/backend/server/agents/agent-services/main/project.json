@@ -7,6 +7,7 @@
   "targets": {
     "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/server/agents/agent-services/main" } },
     "test": { "executor": "nx:run-commands", "options": { "command": "vitest run --exclude '**/*.sql.test.ts'", "cwd": "libs/backend/server/agents/agent-services/main" } },
-    "test:sql": { "executor": "nx:run-commands", "options": { "command": "vitest run src/company-assistants/db/__tests__/company-assistant-tools.sql.test.ts", "cwd": "libs/backend/server/agents/agent-services/main" } }
+    "test:sql": { "executor": "nx:run-commands", "options": { "commands": ["vitest run src/company-assistants/db/__tests__/company-assistant-tools.sql.test.ts", "vitest run src/personal-agents/tools/db/__tests__/personal-agent-tools.sql.test.ts"], "parallel": false, "cwd": "libs/backend/server/agents/agent-services/main", "env": { "TZ": "UTC" } }, "cache": false },
+    "test:personal-tools-sql": { "executor": "nx:run-commands", "options": { "command": "vitest run src/personal-agents/tools/db/__tests__/personal-agent-tools.sql.test.ts", "cwd": "libs/backend/server/agents/agent-services/main", "env": { "TZ": "UTC" } }, "cache": false }
   }
 }

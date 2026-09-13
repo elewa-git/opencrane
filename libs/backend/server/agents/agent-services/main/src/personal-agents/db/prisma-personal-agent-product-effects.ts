@@ -62,10 +62,9 @@ export class PrismaPersonalAgentProductEffectsAuthority implements PersonalAgent
 	/** @inheritdoc */
 	async reconcileCurrent(caller: PersonalAgentProductCaller, resources: PersonalAgentCurrentResources, now: Date): Promise<void>
 	{
-		await this._ReconcileResourceGrants(caller, { kind: ProductAuthorizationResourceKinds.AgentService, id: resources.agentServiceId }, _SERVICE_ACTIONS, now);
-		await this._ReconcileResourceGrants(caller, { kind: ProductAuthorizationResourceKinds.AgentRevision, id: resources.agentRevisionId }, _REVISION_ACTIONS, now);
-		await this._ReconcileResourceGrants(caller, { kind: ProductAuthorizationResourceKinds.Persona, id: resources.personaProfileId }, [ProductAuthorizationActions.Use], now);
-		await this._ReconcileResourceGrants(caller, { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: resources.modelDefinitionId }, _MODEL_ACTIONS, now);
+		await this._ReconcileCoreResources(caller, resources, now);
+		for (const toolRevisionId of [...resources.mcpToolRevisionIds].sort())
+			await this._ReconcileResourceGrants(caller, { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: toolRevisionId }, _TOOL_ACTIONS, now);
 	}
 
 	/** @inheritdoc */
@@ -90,23 +89,37 @@ export class PrismaPersonalAgentProductEffectsAuthority implements PersonalAgent
 	/** @inheritdoc */
 	async admitRevisionSelection(command: AdmitPersonalAgentRevisionSelectionCommand): Promise<void>
 	{
-		await this.reconcileCurrent(command.caller, command.source, command.now);
+		if (command.selectedResource === PersonalAgentSelectedResourceKinds.Tool && command.source.agentRevisionId !== command.target.agentRevisionId)
+			await this._ReconcileCoreResources(command.caller, command.source, command.now);
+		else await this.reconcileCurrent(command.caller, command.source, command.now);
 		const argumentsDigest = ___DigestCanonicalJson(command.argumentsValue);
 		await this._Admit(command.caller, { kind: ProductAuthorizationResourceKinds.AgentService, id: command.source.agentServiceId }, ProductAuthorizationActions.Edit, argumentsDigest, command.now);
 		if (command.selectedResource === PersonalAgentSelectedResourceKinds.Persona)
 		{
 			await this._Admit(command.caller, { kind: ProductAuthorizationResourceKinds.Persona, id: command.target.personaProfileId }, ProductAuthorizationActions.Use, argumentsDigest, command.now);
 		}
-		else
+		else if (command.selectedResource === PersonalAgentSelectedResourceKinds.Model)
 		{
 			await this._Admit(command.caller, { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: command.target.modelDefinitionId }, ProductAuthorizationActions.Use, argumentsDigest, command.now);
 		}
+		else for (const toolRevisionId of [...command.target.mcpToolRevisionIds].sort())
+			await this._Admit(command.caller, { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: toolRevisionId }, ProductAuthorizationActions.Assign, argumentsDigest, command.now);
 	}
 
 	/** @inheritdoc */
 	async admitRevisionPublication(command: AdmitPersonalAgentRevisionSelectionCommand): Promise<void>
 	{
-		await this.reconcileCurrent(command.caller, command.target, command.now);
+		if (command.selectedResource === PersonalAgentSelectedResourceKinds.Tool)
+		{
+			await this._ReconcileCoreResources(command.caller, command.target, command.now);
+			const toolRevisionIds = [...new Set([...command.source.mcpToolRevisionIds, ...command.target.mcpToolRevisionIds])].sort();
+			for (const toolRevisionId of toolRevisionIds)
+			{
+				const actions = command.target.mcpToolRevisionIds.includes(toolRevisionId) ? _TOOL_ACTIONS : [];
+				await this._ReconcileResourceGrants(command.caller, { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: toolRevisionId }, actions, command.now);
+			}
+		}
+		else await this.reconcileCurrent(command.caller, command.target, command.now);
 		const argumentsDigest = ___DigestCanonicalJson(command.argumentsValue);
 		await this._Admit(command.caller, { kind: ProductAuthorizationResourceKinds.AgentRevision, id: command.target.agentRevisionId }, ProductAuthorizationActions.Edit, argumentsDigest, command.now);
 		await this._Admit(command.caller, { kind: ProductAuthorizationResourceKinds.AgentRevision, id: command.target.agentRevisionId }, ProductAuthorizationActions.Publish, argumentsDigest, command.now);
@@ -133,6 +146,15 @@ export class PrismaPersonalAgentProductEffectsAuthority implements PersonalAgent
 		await this.managedGrants.reconcileManagedResourceGrants({ siloId: caller.siloId, managerId, resource, grants, now });
 	}
 
+	/** Reconciles the stable service, revision, persona and model without visiting tool locks. */
+	private async _ReconcileCoreResources(caller: PersonalAgentProductCaller, resources: PersonalAgentCurrentResources, now: Date): Promise<void>
+	{
+		await this._ReconcileResourceGrants(caller, { kind: ProductAuthorizationResourceKinds.AgentService, id: resources.agentServiceId }, _SERVICE_ACTIONS, now);
+		await this._ReconcileResourceGrants(caller, { kind: ProductAuthorizationResourceKinds.AgentRevision, id: resources.agentRevisionId }, _REVISION_ACTIONS, now);
+		await this._ReconcileResourceGrants(caller, { kind: ProductAuthorizationResourceKinds.Persona, id: resources.personaProfileId }, [ProductAuthorizationActions.Use], now);
+		await this._ReconcileResourceGrants(caller, { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: resources.modelDefinitionId }, _MODEL_ACTIONS, now);
+	}
+
 	/** Delegates one protected effect to the central authority and rolls back on denial. */
 	private async _Admit(caller: PersonalAgentProductCaller, resource: ProductAuthorizationResourceLocator, action: ProductAuthorizationActions, argumentsDigest: `sha256:${string}`, now: Date): Promise<void>
 	{
@@ -150,3 +172,6 @@ const _REVISION_ACTIONS = [ProductAuthorizationActions.Read, ProductAuthorizatio
 
 /** Read and runtime-use actions retained for every model referenced by personal revision history. */
 const _MODEL_ACTIONS = [ProductAuthorizationActions.Discover, ProductAuthorizationActions.Read, ProductAuthorizationActions.Use] as const;
+
+/** Runtime actions retained only for tools selected by the current personal revision. */
+const _TOOL_ACTIONS = [ProductAuthorizationActions.Use, ProductAuthorizationActions.Invoke] as const;

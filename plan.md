@@ -1,6 +1,46 @@
 # OpenCrane — Active Plan
 
-## Memory candidate shared-file coordination — source repair under review
+## Personal MCP tool selection — source implemented and tested
+
+This T1 slice starts above draft #881 at `001bd730244727a37d47c3f82455f45fec9fd39f`
+on `feat/0.12-personal-mcp-tool-selection`. A person needs to assign discovered tools to their
+personal agent before a real hosted tool can participate in an admitted conversation. The existing
+personal revision owner selects models and personas only; the company tool API owns a different
+kind of agent and cannot supply this missing personal configuration path.
+
+Architecture preflight passes. The existing agent-services package owns authenticated
+`GET/PUT /api/v1/me/agent/tools`. Selection requires the caller's current personal AgentService
+Edit permission and an existing Assign permission for each selected Ready tool on an Active,
+Published server. It never grants Assign. A changed selection uses the canonical revision writer,
+preserves non-tool content, publishes one successor and switches the active revision within a
+Serializable transaction. The existing personal authority reconciles exact Use and Invoke grants
+for the selected tools; an empty selection removes this manager's grants without disturbing
+independent grants. A stale expected revision conflicts, including after an uncertain successful
+response. Model and persona changes must preserve the tool selection.
+
+Parallel implementation lanes delivered production, unit/router checks and real PostgreSQL proofs
+of authority, rollback, competing writers and restart reads. The six personal SQL cases pass on
+a new disposable database, alongside the five existing company SQL cases. The full server database
+target passes 74 cases and four authority scripts. The server's 115 unit/composition tests,
+configuration and onboarding tests, package type checks, server build, generated API/client and
+boundary checks pass. Prior fixture databases and testv5 remain preserved.
+
+Independent review identified one unchanged-selection gap: a permitted re-save returned success
+without restoring missing assignment-managed Use/Invoke grants. The corrected no-op reconciles
+those grants without creating a revision; the SQL proof also verifies that a revoked Assign
+decision rolls back that repair and preserves independent grants. Focused unit checks pass after
+the correction. Publication requires architecture post-review and independent review of the final
+source and its consequential transaction comments. No schema, default permission, company route
+or workflow changes belong to this slice. The dependent hosted generated-file harness stays in its separate worktree and must
+use this public owner after review; complete hosted qualification also awaits the separately
+pending optional outbound CA support proposal.
+
+The immediate parent #881 now passes all 31 replacement-memory candidate qualification cases,
+including shared-file contention and interrupted cleanup recovery. Its unchanged production
+provider still fails final source-byte cleanup. Candidate authentication, storage ownership and
+gateway integration remain separate M1 work; no provider promotion or deployment has occurred.
+
+## Memory candidate shared-file coordination — candidate qualification passed
 
 This M1 repair starts above draft #880 at `949ab198db37b7dceb7325857cc00f8daf26076f` on
 `feat/0.12-memory-candidate-shared-file-lock`. The production memory provider remains unqualified.
@@ -21,8 +61,12 @@ Architecture preflight passes. The frozen implementation passes 72 offline Cogne
 architecture post-review and independent source review pass with no findings. Style and module-growth
 checks contain no production TypeScript/Python files because the runtime change is an attested
 candidate patch; reviewers must inspect that patch and its resulting source explicitly. Release
-binding remains coherent. Exact-image qualification must run in disposable CI after publication;
-local tests do not qualify the provider or the complete personal-memory journey.
+binding remains coherent. Draft #881 publishes the repair at
+`001bd730244727a37d47c3f82455f45fec9fd39f`. Exact-head run `34743783263` passes all 31 candidate
+cases and retains artifact `10313735048`, including source attestations, owner-root contention,
+shared-file deletion and interrupted-cleanup recovery across restart. The same run fails the
+separate production-pinned Cognee 1.2.1 contract because final deletion leaves source bytes.
+Production replacement and the complete personal-memory journey remain unfinished.
 
 ## MCP tool names across model selection and runtime execution — implementation
 
@@ -63,7 +107,7 @@ The run completed with one failure: the existing production memory-provider cont
 candidate passed this run. Offline diagnosis found that the earlier delete-first fixture acquired
 a global file lock while the server used an owner-scoped lock, leaving its claimed serialization
 unproven. The lock mismatch is confirmed; it is the likely explanation for the intermittent error.
-A bounded fixture/cleanup correction and deterministic synchronization proof remain to implement. Replacement
+A bounded fixture/cleanup correction and deterministic synchronization proof now pass in #881. Replacement
 topology run `34740838698` and the post-push live stack check pass. F1 still needs its pending SQL
 guard and the separately qualified governed OCI-to-download journey.
 
@@ -856,9 +900,9 @@ remain separate gates.
 
 | Priority | Track | Completion means | Current next step |
 | --- | --- | --- | --- |
-| 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection and participant terminal-result history are implemented. Explicit connection readiness and execution fencing pass source review and local database proof. Standard remote activation/discovery/calls, hosted MCP execution and real integration qualification remain. |
+| 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company and personal tool-selection APIs and participant terminal-result history are implemented. Personal selection passes real PostgreSQL authority, concurrency and recovery checks. Standard remote activation/discovery/calls, the joined hosted journey and real integration qualification remain. |
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry, durable resume and visible decision controls are implemented in draft #857. Company approver/connection binding and real action qualification remain. |
-| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: durable persistence, Absurd admission and catalog completion pass CI in #876–#878. The candidate shared-file coordination repair passes 72 offline tests, architecture post-review and independent review; fresh image qualification remains. The production provider is still unqualified. Authenticated composition, gateway/client wiring and product Remember, recall, Correct and Forget remain unfinished. |
+| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: durable persistence, Absurd admission and catalog completion pass CI in #876–#878. The reviewed candidate shared-file repair passes all 31 image-qualification cases in #881. The production provider is still unqualified. Authenticated composition, gateway/client wiring and product Remember, recall, Correct and Forget remain unfinished. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass independent review and exact-head CI in draft #862; qualify the live journey. Other-participant controls remain a separate actor-policy decision. |
 | 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | PAUSED: runtime-question source work awaits its separate explicit approval; partial implementation is not validated delivery. Structured results and A2UI remain. |
 | 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV production, encrypted capture, scanning and answer-link recovery are implemented in #879; all four combined recovery cases pass again in #880. The pending message-link SQL guard and governed hosted execution through authorized download remain to qualify. |
@@ -1180,7 +1224,7 @@ their own completion track; they are not silently bundled into the first tool PR
 | T1 — first permitted tool retrieval | IN PROGRESS — the server's one-tool continuation is implemented and now progresses through Absurd in #849. Company tool assignment is the first active follow-up. Connection activation, a real integration and participant result evidence remain required. |
 | T2 | IN PROGRESS: personal approval and durable resume pass local integration; company approval and real external-action qualification remain. |
 | U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
-| M1 | IN PROGRESS: persistence, transaction-bound Absurd admission and catalog completion pass CI in #876–#878. The candidate shared-file coordination repair passes offline tests, architecture post-review and independent review; fresh exact-image qualification remains. Authenticated composition, gateway/client integration and product memory journeys remain. The separate production-provider qualification still fails. |
+| M1 | IN PROGRESS: persistence, transaction-bound Absurd admission and catalog completion pass CI in #876–#878. The reviewed candidate shared-file repair passes all 31 image-qualification cases in #881. Authenticated composition, gateway/client integration and product memory journeys remain. The separate production-provider qualification still fails. |
 | U2 | PAUSED: partial runtime-question source awaits its separate explicit approval. |
 | F1 | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV capture, scanning and answer-link recovery are implemented in #879 and pass four real-store cases in #880. The pending SQL guard and complete hosted execution/download qualification remain. |
 | D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |

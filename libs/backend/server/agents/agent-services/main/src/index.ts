@@ -26,6 +26,13 @@ export { PersonalAgentBootstrapConflict } from "./personal-agents/personal-agent
 export { InitialPersonalAgentDefaultModelResolutionStatuses } from "./personal-agents/initial-personal-agent-publication.types";
 export type { InitialPersonalAgentDefaultModelResolver } from "./personal-agents/initial-personal-agent-publication.types";
 export { PersonalAgentBootstrapStatuses, type PersonalAgentBootstrapCommand, type PersonalAgentBootstrapRepository, type PersonalAgentBootstrapResult } from "./personal-agents/personal-agent-bootstrap.types";
+export { PrismaPersonalAgentToolsRepository } from "./personal-agents/tools/db/prisma-personal-agent-tools-repository";
+export { PrismaPersonalAgentToolsUnitOfWork } from "./personal-agents/tools/db/prisma-personal-agent-tools-unit-of-work";
+export { PersonalAgentToolsConflict, PersonalAgentToolsDenied, PersonalAgentToolsUnavailable } from "./personal-agents/tools/personal-agent-tools.errors";
+export { _CreatePersonalAgentToolsRouter } from "./personal-agents/tools/personal-agent-tools.router";
+export { _CreatePersonalAgentToolsComposition } from "./personal-agents/tools/personal-agent-tools-composition";
+export { _PersonalAgentToolsOpenapiPaths } from "./personal-agents/tools/openapi";
+export type { PersonalAgentToolsAuthority, PersonalAgentToolsCaller, PersonalAgentToolsCallerResolver, PersonalAgentToolsCommand, PersonalAgentToolsRepository, PersonalAgentToolsSelection } from "./personal-agents/tools/personal-agent-tools.types";
 export { __ExecutionCapabilityEvidence } from "./execution-evidence/execution-capability-evidence";
 export type { ExecutionCapabilityEvidence, ExecutionCapabilityEvidenceInput } from "./execution-evidence/execution-capability-evidence.types";
 export { PrismaPersonalExecutionEvidenceRepository } from "./execution-evidence/db/prisma-personal-execution-evidence-repository";
