@@ -27,6 +27,12 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Added
 
+- **Operators can detect missing outbound certificate trust before starting hosted qualification.**
+  The smoke renders the actual server and checks the selected certificate mount before creating
+  a cluster or credentials. Its test client accepts only the disposable loopback origin and uses
+  public test data for synthetic-provider registration. Complete hosted execution and testv5
+  qualification remain separate; the optional production certificate support is still pending.
+
 - **People can select tools for their personal agent through the configuration API.** The source
   under review accepts only tools the person may assign and saves one new agent revision while
   preserving its model, persona and other settings. Removing a tool removes this personal

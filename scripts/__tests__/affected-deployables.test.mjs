@@ -174,6 +174,10 @@ test("preserves an app-owned Docker target in the publication matrix", function 
 test("selects the complete current-silo image set from app-owned container metadata", function _SelectsDevelopSmokeImages()
 {
 	const projects = [
+		["agent-controller", "opencrane-agent-controller", "apps/agent-controller/deploy/Dockerfile"],
+		["artifact-scanner", "opencrane-artifact-scanner", "apps/artifact-scanner/deploy/Dockerfile"],
+		["mcp-executor", "opencrane-mcp-executor", "apps/mcp-executor/deploy/Dockerfile"],
+		["mcp-file-generator", "opencrane-mcp-file-generator", "apps/mcp-file-generator/deploy/Dockerfile"],
 		["opencrane", "opencrane-server", "apps/opencrane/deploy/Dockerfile"],
 		["opencrane-ui", "opencrane-ui", "apps/opencrane-ui/deploy/Dockerfile"],
 		["cognee", "opencrane-cognee", "apps/_infra/cognee/deploy/Dockerfile"],
@@ -181,17 +185,23 @@ test("selects the complete current-silo image set from app-owned container metad
 		["kurrentdb", "opencrane-kurrentdb-bootstrap", "apps/_infra/kurrentdb/deploy/Dockerfile"],
 		["memory-gateway", "opencrane-memory-gateway", "apps/memory-gateway/deploy/Dockerfile"],
 		["artifact-service", "opencrane-artifact-service", "apps/artifact-service/deploy/Dockerfile"],
+		["skill-authoring", "opencrane-skill-authoring", "apps/skill-authoring/deploy/Dockerfile"],
 	].map(function _Project([name, image, dockerfile]) {
 		return { name, targets: { container: { metadata: { release: { image, dockerfile } } } } };
 	});
 	assert.deepEqual(selectDevelopSmokeImages(projects), [
+		{ project: "agent-controller", image: "opencrane-agent-controller", dockerfile: "apps/agent-controller/deploy/Dockerfile" },
+		{ project: "artifact-scanner", image: "opencrane-artifact-scanner", dockerfile: "apps/artifact-scanner/deploy/Dockerfile" },
 		{ project: "artifact-service", image: "opencrane-artifact-service", dockerfile: "apps/artifact-service/deploy/Dockerfile" },
 		{ project: "cognee", image: "opencrane-cognee", dockerfile: "apps/_infra/cognee/deploy/Dockerfile" },
 		{ project: "conversation-computer", image: "opencrane-conversation-computer", dockerfile: "apps/conversation-computer/deploy/Dockerfile" },
 		{ project: "kurrentdb", image: "opencrane-kurrentdb-bootstrap", dockerfile: "apps/_infra/kurrentdb/deploy/Dockerfile" },
+		{ project: "mcp-executor", image: "opencrane-mcp-executor", dockerfile: "apps/mcp-executor/deploy/Dockerfile" },
+		{ project: "mcp-file-generator", image: "opencrane-mcp-file-generator", dockerfile: "apps/mcp-file-generator/deploy/Dockerfile" },
 		{ project: "memory-gateway", image: "opencrane-memory-gateway", dockerfile: "apps/memory-gateway/deploy/Dockerfile" },
 		{ project: "opencrane", image: "opencrane-server", dockerfile: "apps/opencrane/deploy/Dockerfile" },
 		{ project: "opencrane-ui", image: "opencrane-ui", dockerfile: "apps/opencrane-ui/deploy/Dockerfile" },
+		{ project: "skill-authoring", image: "opencrane-skill-authoring", dockerfile: "apps/skill-authoring/deploy/Dockerfile" },
 	]);
 	assert.throws(
 		function _MissingOwner() { selectDevelopSmokeImages(projects.filter(function _WithoutServer(project) { return project.name !== "opencrane"; })); },
@@ -202,8 +212,8 @@ test("selects the complete current-silo image set from app-owned container metad
 test("uses Nx affected container owners to select current-silo rebuilds", function _SelectsDevelopSmokeProjects()
 {
 	assert.deepEqual(
-		selectDevelopSmokeProjects(["skill-authoring", "opencrane-ui", "cognee", "memory-gateway", "opencrane-ui", "conversation-computer", "kurrentdb"]),
-		["cognee", "conversation-computer", "kurrentdb", "memory-gateway", "opencrane-ui"],
+		selectDevelopSmokeProjects(["skill-authoring", "opencrane-ui", "cognee", "memory-gateway", "opencrane-ui", "conversation-computer", "kurrentdb", "agent-controller", "artifact-scanner", "mcp-executor", "mcp-file-generator"]),
+		["agent-controller", "artifact-scanner", "cognee", "conversation-computer", "kurrentdb", "mcp-executor", "mcp-file-generator", "memory-gateway", "opencrane-ui", "skill-authoring"],
 	);
 });
 
@@ -221,7 +231,7 @@ test("uses an explicit publication set and makes manual dispatch validation-only
 	assert.deepEqual(selectForcedContainerProjects("all", ["skill-authoring", "opencrane", "skill-authoring"]), ["opencrane", "skill-authoring"]);
 	assert.deepEqual(selectForcedContainerProjects("bootstrap"), ["memory-gateway"]);
 	assert.deepEqual(selectForcedContainerProjects("artifact"), ["artifact-service"]);
-	assert.deepEqual(selectForcedContainerProjects("qualification"), ["artifact-service", "cognee", "conversation-computer", "kurrentdb", "memory-gateway", "opencrane", "opencrane-ui", "postgres"]);
+	assert.deepEqual(selectForcedContainerProjects("qualification"), ["agent-controller", "artifact-scanner", "artifact-service", "cognee", "conversation-computer", "kurrentdb", "mcp-executor", "mcp-file-generator", "memory-gateway", "opencrane", "opencrane-ui", "skill-authoring", "postgres"]);
 	assert.deepEqual(selectForcedContainerProjects("server"), ["opencrane"]);
 	assert.deepEqual(selectForcedContainerProjects("ui"), ["opencrane-ui"]);
 	assert.equal(selectForcedContainerProjects(""), null);

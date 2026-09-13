@@ -234,6 +234,23 @@ leaves activations unread. Operator notes:
   contend on the same turn-stream revision, so only one can publish the turn's terminal outcome.
   `npm exec -- nx run opencrane:test:stop-sql` exercises the saved authority and cleanup against a
   disposable `DATABASE_URL`; the target uses UTC so fixture timestamps match database timestamps.
+- `npm exec -- nx run opencrane:test:hosted-generated-file-qualification` checks and bundles the
+  disposable hosted-file public client. Its preparation uses public invitation, model, persona and
+  onboarding operations. The personal tool-selection API owns the published selection; the fixture
+  never manufactures a personal revision or starts a workflow worker. Its setup mutations end when
+  it sends the first message. Restart verification uses the saved command and public reads, followed
+  by the separate Owner's supported membership-removal operation. The database fixture is limited
+  to resolving the authenticated Principal and one exact test Assign grant before selection.
+  Passing this offline target does not qualify a hosted conversation; the joined runner still
+  requires the separately reviewed certificate-trust prerequisite. Provider setup uses a fixed
+  public test marker through the real provider-registration API, then selects the returned
+  credential from the public model catalogue. The client accepts no upstream key or provider URL.
+  Before setup, it requires a disposable `.opencrane.test:8443` HTTPS origin, a loopback transport,
+  and a valid namespace from which it derives the synthetic provider address. These tests exercise
+  registration and recovery with public test data; they do not qualify a real provider credential.
+  Public and login requests have bounded deadlines; polling passes its remaining allowance to each
+  read, and cancellation closes the request's socket. Named API projections validate their required
+  fields and explicitly discard unrelated response fields before verification uses them.
 - A dropped or ended subscription is logged at `warn` and reopened with jittered backoff (1 s doubling
   to 30 s). After 20 consecutive drops without a healthy session (roughly eight minutes of a KurrentDB
   outage) the consumer logs `fatal` with `conversation computer activation consumer gave up`, sends

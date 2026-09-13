@@ -1,11 +1,16 @@
 const DEVELOP_SMOKE_IMAGES = [
+	"agent-controller",
+	"artifact-scanner",
 	"artifact-service",
 	"cognee",
 	"conversation-computer",
 	"kurrentdb",
+	"mcp-executor",
+	"mcp-file-generator",
 	"memory-gateway",
 	"opencrane",
 	"opencrane-ui",
+	"skill-authoring",
 ];
 
 /**

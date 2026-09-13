@@ -682,6 +682,15 @@ jobs:
           # registry export costs 40-50 seconds per image on the smoke's critical path.
           SMOKE_BUILD_CACHE_EXPORT: ${{ github.event_name == 'push' && format('{0}/{1}/{2}', env.REGISTRY, github.repository_owner, env.BUILD_CACHE_IMAGE) || '' }}
 
+      - name: Preserve hosted conversation qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hosted-generated-file-${{ github.run_attempt }}
+          path: .nx/test-results/hosted-generated-file
+          include-hidden-files: true
+          if-no-files-found: ignore
+
   image_smoke:
     name: Image smoke (${{ matrix.project }})
     runs-on: ubuntu-latest

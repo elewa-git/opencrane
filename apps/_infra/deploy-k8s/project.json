@@ -14,6 +14,13 @@
       "executor": "nx:run-commands",
       "options": { "command": "bash apps/_infra/deploy-k8s/platform/tests/helm-lint-current-sources.sh" }
     },
+    "test:hosted-generated-file": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "bash apps/_infra/deploy-k8s/platform/tests/hosted-generated-file-contract.sh"
+      }
+    },
     "develop-smoke": {
       "executor": "nx:run-commands",
       "options": { "command": "bash apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh" }

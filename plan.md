@@ -1,5 +1,106 @@
 # OpenCrane — Active Plan
 
+## Hosted generated-file journey — source implementation and prerequisites
+
+This F1/T1 qualification slice starts directly above draft #883 at
+`db68c8a744a3869bb5854a57414fc134c242d31a` on
+`feat/0.12-hosted-generated-file-qualification`. Separate tests already prove the producer image,
+server capture, scan authority, saved answer/recovery and participant reads. The next proof must
+connect real hosted execution to captured bytes, an actual clean scan, the saved answer and an
+authorized identical-byte download after restart in the existing disposable k3d harness.
+
+Architecture preflight rejects an injected in-Pod workflow driver and approves the production
+server as the sole activation/Absurd worker. A disposable OpenID Connect login fixture and synthetic
+OpenAI-compatible provider must drive real public login/message/read APIs and actual model requests.
+The existing instance LiteLLM owns model and credential administration; its deployment wrapper owns
+the master and encryption keys. The complete proof must
+upload, scan, validate/import, promote and discover the real OCI-layout ZIP through a TLS registry;
+no Imported or post-admission workflow state may be fabricated. Independent implementation lanes
+own the platform fixtures/helpers and the application public client/evidence bundle. CI mapping now
+includes the controller, scanner, companion, skill-authoring worker and producer; its 24 regression
+tests pass.
+
+The preserved fixture work now includes reviewed personal-tool selection PR #882 through the
+chart prerequisite #883. The personal selection parent passes validation workflow `34748052273` and corrected stack workflow `34748262396`
+on `ad3123f3b0b9235c368509cec9401bae94acd246`. The earlier stack attempt failed before the PR body
+named its own review position; the source commit did not change.
+
+The public bridge is being implemented through real login, invitation, model/default, persona,
+onboarding and conversation-directory APIs. A first-user Owner invites the separate requester as
+an Admin. After actual MCP discovery, publication and installation, the requester uses the real
+`GET/PUT /api/v1/me/agent/tools` owner. The fixture may resolve the resulting Principal through the
+existing read-only directory and add one exact synthetic tool Assign grant before selection. It
+must never manufacture a personal revision, its publication, tool Use/Invoke grants or workflow
+state. The PUT accepts only the expected active revision and selected tool revision IDs.
+
+Once its prerequisites pass, the runner is wired to execute prepare, validate and qualify, then
+restart the owned server and artifact service and invoke public verification. It waits for every
+prior Pod to terminate. The two fixed
+OIDC identities are bound through authorization-code exchange; unknown or missing identity hints
+fail. After restart and exact command replay, the Owner removes the requester through the existing
+member API. The still-authenticated requester must receive the explicit membership denial.
+Closing a conversation or logging out would not prove that current membership is enforced.
+
+Offline platform checks cover the two-identity protocol, credential cleanup, wrong-context and
+foreign-deployment rejection, restart waiting/timeouts, exact model-call counts, and evidence
+retention. The smoke copies only named public evidence and image/byte digests into CI artifacts;
+its credentials, checkpoints and generated file contents remain outside the artifact. The app
+bridge is implemented. No complete k3d qualification has run.
+
+Automatic approval review rejected optional production outbound CA trust. The exact source-only
+proposal at `/private/tmp/opencrane-additional-ca-source-proposal.md` passes independent review and
+explicit approval is pending; no trust change or substitute Pod/image injection is applied.
+Only newly generated fixture identities and credentials belong to this CI work. Testv5 and
+existing databases remain outside the slice.
+
+The actual server-trust render now fails before cluster or credential creation when the proposed
+certificate bundle has no production consumer. The independently reviewed shared-LiteLLM fixture
+was replaced with the required instance mode; fake model/key administration and its unused master
+Secret were removed. Automatic approval review also rejected the public synthetic-provider setup
+source patch because it forwards a key into provider configuration. The exact rejected proposal is
+preserved at `/private/tmp/opencrane-hosted-byok-source-proposal.md`; no key was sent and no rejected
+source was applied. A reviewed safer variant is now implemented: the client and synthetic
+provider use only the public literal `opencrane-hosted-fixture-public-marker`. The client accepts
+no upstream key or provider URL, requires a loopback transport and disposable `.opencrane.test`
+origin, and derives the provider URL from the validated namespace. The confidential upstream key
+generation, state and Secret mount are deleted; evidence access keeps a separate random key.
+This exercises the normal public provider-registration path with public test data. It does not
+qualify a real provider or credential. All 28 client tests, the application bundle, lint/type checks,
+style and Prisma boundary checks pass. The full deployment contract suite and Helm lint also pass.
+Final review found no Critical or High issues. Its bounded corrections now give every public/login
+request a deadline, close a stalled TLS socket on cancellation, validate named API projections
+through adjacent typed schemas with explicit field stripping, and retain failure logs from scanner
+and executor namespaces. The corrected source is frozen for final review of those changes.
+
+Enabling the real governed workers exposed a missing YAML document separator before the MCP
+admission policy in the agent-controller chart. The source repair keeps network and admission
+resources separate and extends the owning Helm test to parse their actual rendered documents.
+The five-file repair is independently reviewed and published separately in draft
+[#883](https://github.com/elewa-git/opencrane/pull/883) at
+`db68c8a744a3869bb5854a57414fc134c242d31a`, directly above #882. Its controller tests, full
+manifest parse, Helm lint, workload boundary, release binding, style and growth checks pass.
+The latest stack workflow and exact-commit source CI run `34749913713` pass: seven jobs succeeded
+and five conditional jobs were skipped. The hosted
+worktree is now restacked directly above #883; the named stash and all 41 pre-restack file copies
+remain preserved at `/private/tmp/opencrane-hosted-pre-883-preservation`.
+
+The parent memory-candidate repair is published in draft
+[#881](https://github.com/elewa-git/opencrane/pull/881). Its ten-file change passes 72 offline tests,
+lint, architecture and independent review, patch/postimage verification and stack integrity.
+Exact-head candidate job `103688043992` in run `34743783263` passes all 31 named cases. Its retained
+artifact `10313735048` verifies the repaired source postimages, owner-root contention, serialized
+add/delete orders, shared-file cleanup and both interrupted-cleanup recoveries across restart.
+The overall run is red only because production-pinned Cognee 1.2.1 still leaves source bytes after
+final membership deletion. Replacement topology run `34743803938` passes. Source-only replacement
+preflight is now tracing the audited candidate into the production owner and checking existing
+gateway compatibility. That audit found two concrete deployment gaps: the candidate runs as
+UID/GID 1000 but the current chart does not arrange PVC ownership, and the deployment disables
+Cognee authentication while the candidate's negative control proves ACL-disabled search can
+return a foreign dataset chunk. The current gateway forwards search only and leaves mutation
+transport unavailable. Source-owner consolidation can be planned, but candidate digest activation
+must wait for storage ownership and authenticated gateway integration to be reviewed and qualified.
+No candidate promotion or testv5 deployment has occurred.
+
 ## Governed MCP chart rendering — validation and review
 
 Hosted generated-file qualification exposed a missing YAML document separator between the
@@ -11,11 +112,12 @@ network rules or admission expressions. The owning Helm contract now parses the 
 and checks that the controller network policy, MCP admission policy and binding remain separate
 resources. The isolated controller tests and Helm lint pass, as do workload-ownership, release
 baseline and module-growth checks. Independent review of the five-file overlay passes with no
-findings. Exact-commit CI remains pending publication.
+findings. Draft #883 publishes the reviewed source at `db68c8a744a3869bb5854a57414fc134c242d31a`;
+exact-commit CI run `34749913713` passes, with seven successful jobs and five conditional skips.
 The full hosted journey, pending certificate/provider setup and testv5 qualification remain
 separate work; this repair does not qualify a live tool invocation.
 
-## Personal MCP tool selection — source implemented and tested
+## Personal MCP tool selection — source reviewed and CI passed
 
 This T1 slice starts above draft #881 at `001bd730244727a37d47c3f82455f45fec9fd39f`
 on `feat/0.12-personal-mcp-tool-selection`. A person needs to assign discovered tools to their
@@ -44,8 +146,9 @@ Independent review identified one unchanged-selection gap: a permitted re-save r
 without restoring missing assignment-managed Use/Invoke grants. The corrected no-op reconciles
 those grants without creating a revision; the SQL proof also verifies that a revoked Assign
 decision rolls back that repair and preserves independent grants. Focused unit checks pass after
-the correction. Publication requires architecture post-review and independent review of the final
-source and its consequential transaction comments. No schema, default permission, company route
+the correction. Architecture post-review and independent review of the final source and its
+transaction comments pass. Draft #882 publishes the exact reviewed commit; its validation workflow
+`34748052273` and corrected stack workflow `34748262396` pass. No schema, default permission, company route
 or workflow changes belong to this slice. The dependent hosted generated-file harness stays in its separate worktree and must
 use this public owner after review; complete hosted qualification also awaits the separately
 pending optional outbound CA support proposal.
@@ -923,7 +1026,7 @@ remain separate gates.
 | 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV production, encrypted capture, scanning and answer-link recovery are implemented in #879; all four combined recovery cases pass again in #880. The pending message-link SQL guard and governed hosted execution through authorized download remain to qualify. |
 | 7 | D1 — autonomous delegation | A bounded child works with explicit context and narrower authority, then returns one durable result. | Follow [#845](https://github.com/elewa-git/opencrane/issues/845): root budgets, depth/fan-out, cancellation and result brokering. |
 | 8 | S1 — scheduled work | A reviewed routine fires under current authority with explicit overlap, retry and missed-run policy. | Follow [#848](https://github.com/elewa-git/opencrane/issues/848) through Absurd and existing admission. |
-| 9 | A2 — complete administration | Operators configure agents, connections, models, permissions and budgets, and inspect effective access and actual usage. | Complete protected settings over the owners established by the earlier tracks. |
+| 9 | A2 — complete administration | Operators configure agents, connections, models, permissions and budgets, and inspect effective access and actual usage. | Complete and qualify connection activation, agent/tool/model settings, effective permissions, budgets, actual usage/cost and audit screens over the existing protected owners. |
 | 10 | T3 — action recovery | People and operators can reconcile uncertain effects, inspect cancellation races and perform supported safe retries. | Add provider-specific reconciliation and repair controls over durable invocation evidence. |
 
 Every earlier track includes its required current-authority checks, bounded retries, lease/generation

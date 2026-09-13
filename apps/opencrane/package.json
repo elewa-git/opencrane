@@ -163,6 +163,22 @@
           "env": { "TZ": "UTC" }
         },
         "cache": false
+      },
+      "test:hosted-generated-file-qualification": {
+        "executor": "nx:run-commands",
+        "options": {
+          "cwd": "apps/opencrane",
+          "commands": [
+            "vitest run src/bootstrap/conversations/__tests__/hosted-generated-file/hosted-generated-file.test.ts",
+            "esbuild src/bootstrap/conversations/__tests__/hosted-generated-file/hosted-generated-file-cli.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=../../dist/apps/opencrane/hosted-generated-file/hosted-generated-file-cli.js"
+          ],
+          "parallel": false,
+          "env": { "TZ": "UTC" }
+        },
+        "outputs": [
+          "{workspaceRoot}/dist/apps/opencrane/hosted-generated-file"
+        ],
+        "cache": false
       }
     }
   }
