@@ -21,11 +21,12 @@ The consolidation inventory must account for that work before this can be called
   delete only confirmed stale disks and record the exact resources and remaining costs.
   The reviewed suspension completed from `c661e6bf997f1bfe66dbf97faa51b3745c6496e2`: all six
   silos and shared application controllers are stopped. Retained 20 Bound volumes/380 GiB,
-  seven snapshots, two SandboxClaims and two Sandboxes. No disk was unreferenced; none was deleted.
+  seven snapshots, two SandboxClaims and two Sandboxes. That initial suspension deleted no disk.
   The final repair rerun at `239feb2fdaee3f8ef0a9bb750748c37c426e59d9` also completes its
   full retention comparison with both Sandboxes kept Suspended. GKE system services, its control
-  plane and the retained load balancer/IP remain billable. The terminated VM's attached boot disk
-  remains a separate retirement candidate whose recovery and retention requirements are unproven.
+  plane and the retained load balancer/IP remain billable. A subsequent dependency and backup review
+  qualified the obsolete `opencrane-sandbox` VM and its 30 GiB boot disk for retirement. Both are now
+  deleted; all 14 verified recovery snapshots and the 20 current data disks/380 GiB remain.
 - [x] Freeze the complete source inventory, resolve integration conflicts, validate the combined
   behavior and publish one draft against develop. Absorb predecessor PRs only after verifying their
   full inclusion, and retarget dependants so each change has one review location.
@@ -61,6 +62,22 @@ proof that its capability is no longer used. Findings remain open until the fix 
 Retain the focused capability and type maps established by #843. App source stays bootstrap-only;
 libraries keep capability/role folders, explicit Nx dependency direction and narrow package barrels.
 Consolidation must preserve these boundaries even when an older PR is absorbed or closed.
+
+### Final code and testv6 preparation checkpoint
+
+The cleanup code at `a2560d903f3b5b799e90c3343dc4282c1853c714` passes the CI build/test/lint job
+for 93 projects plus one dependency, including the production Angular build. The dedicated Cognee
+provider contract, history recovery, API generation and three applicable generic image smokes pass.
+Storybook passes 202 interaction/accessibility checks and 133 unchanged visual states. The five
+remote-MCP database failures and 22 intended visual candidates remain the two recorded approval
+gates; the existing macOS and Linux galleries remain the human review targets.
+
+Testv6 DNS now resolves to the retained ingress at `35.205.225.244`, with the wildcard, base and
+sibling records unchanged. The current Zitadel client rejects the exact testv6 callback as absent.
+The scoped administrator-session and callback-change approval is pending after automatic approval
+review blocked private-session inspection. No identity-provider, credential bootstrap, shared
+controller restore or fresh testv6 deployment has run. These preparation results do not complete the
+remaining functional MVP journeys.
 
 ### Bounded multi-step tool reasoning — added MVP acceptance
 
@@ -115,7 +132,7 @@ close a responsibility review.
 | Finding | Owning change | State and validation |
 |---|---|---|
 | Conversation prerequisites depended on the literal silo name `testv5`, so a new `testv6` could bypass them. | `apps/_infra/deploy-k8s` enforces the existing KurrentDB and AgentSandbox contracts for every deployment and checks the final Helm values before a cluster write. | Complete deployment contracts pass. Independent review caught Helm overrides of checked identities/runtime; final merged-value schema constraints and override tests resolve that finding. Post-review passes. |
-| Existing teardown deletes retained test data. The live inventory includes six silos and four MCP Deployments managed outside Helm. | Add an app-owned suspension operation with exact ownership checks and preserved storage identities. | Source and execution review pass; live shutdown completed and retention was verified. All 20 cloud data disks map to Bound volumes; the remaining 30 GiB boot disk still belongs to the stopped VM. No eligible stale disk was found. |
+| Existing teardown deletes retained test data. The live inventory includes six silos and four MCP Deployments managed outside Helm. | Add an app-owned suspension operation with exact ownership checks and preserved storage identities. | Source and execution review pass; live shutdown completed and retention was verified. All 20 current cloud data disks map to Bound volumes. The later backup review qualified the obsolete VM and its separate 30 GiB boot disk for retirement; both are deleted with all 14 verified snapshots retained. |
 | Remote MCP claims reach the OCI-only database trigger. | Complete the reviewed remote transport constraints and lifecycle fencing in the fresh-install baseline. | Current CI and local SQL prove the failure. The concrete source proposal remains unapplied pending explicit approval and fresh PostgreSQL acceptance. |
 | Memory provider deletion leaves source bytes after the final membership is removed. | Promote the qualified Cognee 1.5.4 profile into the sole production image and remove the superseded provider and candidate lifecycle. Compose authenticated provider access inside the existing memory gateway library. | Cognee 73, gateway 43, app 5 and client 18 tests pass, with builds, type checks and full deployment contracts. Independent architecture and source review pass after build-owner registration and stale-comment repairs. The full Docker-backed provider contract passes on #891 at `c66303d6`; fresh-silo live qualification remains pending. |
 | The growing Storybook catalogue shares a single three-minute screenshot-test deadline. | Discover one Playwright test per tagged state from the built catalogue and compare that discovery with the served index. | Before the component-state changes, all then-existing 150 visual checks passed locally in 4.8 minutes with existing screenshots and tolerances. Each state has its own browser context, deadline and failure report. Independent review passes. |

@@ -1359,3 +1359,25 @@ Full run reports belong in the corresponding pull request or issue.
 - scope: this closes the incomplete retention comparison in the preceding partial run. No shared
   prerequisite was restored, no provider account or credential was created, and no testv6 install
   occurred. Fresh testv6 still requires its final CI/image, DNS, OIDC and bootstrap gates.
+
+
+## 2026-09-13 · dev · legacy disk retirement and testv6 DNS preparation · a2560d903f3b5b799e90c3343dc4282c1853c714 · LIVE
+
+- retirement proof: `opencrane-sandbox` had been terminated since 2026-06-30, had no current source
+  owner and had only its 30 GiB boot disk attached. The latest READY snapshot bound the exact disk
+  ID and was created on 2026-09-13, after the VM stopped. Independent review qualified deletion
+  under the existing stale-disk cleanup request. The actual preflight set contained 14 snapshots;
+  an earlier path-based inventory had counted 15 and is not the final retention receipt.
+- execution: deleted only that terminated VM and boot disk. All 14 preflight snapshot identities
+  remain READY. Their `KEEP_AUTO_SNAPSHOTS` policy preserves them after source-disk deletion; no
+  snapshot or policy was changed. All 20 remaining cloud disks, totaling 380 GiB, match the retained
+  Bound PV disk names and identities. No guest filesystem or Secret value was inspected.
+- DNS: Cloud DNS change `39` added only `testv6.dev.opencrane.ai. A 35.205.225.244`, TTL 300, to
+  `opencrane-ai-zone` in `weownai-proto`. The inspected transaction had one addition and no deletion
+  or SOA edit. Managed-zone readback, two authoritative servers and two public resolvers agree.
+  The wildcard, base and testv5 records preserve their existing values and TTLs.
+- remaining gates: old silos and shared controllers remain stopped. The current Zitadel client
+  rejects the exact testv6 callback; scoped administrator-session/callback approval is pending.
+  No provider credential, first-install registration, shared-controller restore or testv6 workload
+  was created. Final images, database and visual approvals, fresh installation and remaining MVP
+  journeys remain separate from this retirement and DNS evidence.
