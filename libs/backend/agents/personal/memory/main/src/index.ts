@@ -13,3 +13,7 @@ export { PersonalMemoryOperationAdmissionOutcomes, PersonalMemoryOperationPersis
 export type { AdmitPersonalMemoryOperationCommand, PersonalMemoryOperationMessageSource, PersonalMemoryOperationTaskIdentity, PersonalMemoryOperationRecord, PersonalMemoryOperationAdmissionResult, PersonalMemoryOperationPersistenceResult, PersonalMemoryOperationRepository, PersonalMemoryOperationUnitOfWork } from "./operations/personal-memory-operation-persistence.types";
 export { PrismaPersonalMemoryOperationRepository } from "./operations/prisma-personal-memory-operation-repository";
 export { PrismaPersonalMemoryOperationUnitOfWork } from "./operations/prisma-personal-memory-operation-unit-of-work";
+export type { PersonalMemoryOperationTaskCoordinates, PersonalMemoryOperationTaskAdmission } from "./operations/personal-memory-operation-persistence.types";
+export type { PersonalMemoryCommandContextCoordinates, PersonalMemoryCommandContextRepository, PersonalMemoryCommandDataset, PersonalMemoryCommandTargetFact } from "./commands/personal-memory-command-context.types";
+export { PersonalMemoryCommandDatasetStates, PersonalMemoryCommandFactStates } from "./commands/personal-memory-command-context.types";
+export { PrismaPersonalMemoryCommandContextRepository } from "./commands/prisma-personal-memory-command-context";

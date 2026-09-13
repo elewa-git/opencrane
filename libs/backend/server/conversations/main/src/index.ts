@@ -34,6 +34,13 @@ export type { ConversationComputerRawCredentialAuthority } from "./computers/tur
 export { _SelfConversationHistoryOpenapiPaths } from "./http/openapi";
 export { PrismaSelfConversationHistoryUnitOfWork } from "./messages/prisma-self-conversation-history";
 export { PrismaConversationMessageAdmissionUnitOfWork } from "./messages/prisma-conversation-message-admission-unit-of-work";
+export { PERSONAL_MEMORY_OPERATION_TASK, _CreatePersonalMemoryOperationTask } from "./memory/workflow/personal-memory-operation-task";
+export type { PersonalMemoryOperationTaskInput } from "./memory/workflow/personal-memory-operation-task.types";
+export { PersonalMemoryCommandDenied } from "./memory/commands/personal-memory-command.types";
+export type { PersonalMemoryCommand, PersonalMemoryCommandSourceSelection } from "./memory/commands/personal-memory-command.types";
+export { PrismaKurrentPersonalMemoryMessageSource } from "./memory/source/prisma-kurrent-personal-memory-message-source";
+export { PrismaPersonalMemoryMessageSourceRepository } from "./memory/source/prisma-personal-memory-message-source-repository";
+export type { PersonalMemoryMessageSourceRead, PersonalMemoryMessageSourceReader, PersonalMemoryMessageSourceRevalidator } from "./memory/source/personal-memory-message-source.types";
 export type { ConversationMessageAdmission, ConversationMessageAttachment, ConversationMessageAttachmentAdmission, ConversationMessageAttachmentAdmissionCommand, ConversationMessageAttachmentAdmissionFactory, ConversationMessageAttachmentAdmissionResult } from "./messages/conversation-message-admission.types";
 export { KurrentConversationHistoryAdmissionReader } from "./messages/kurrent-conversation-history-admission-reader";
 export { PrismaKurrentConversationPromptMessageRepository } from "./messages/db/prisma-kurrent-conversation-prompt-message-repository";

@@ -24,8 +24,11 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   personal-memory repository retains the original source, command and provider receipts, adopts a
   new dataset atomically, and hides a fact when Forget is admitted. Concurrent retries return the
   saved operation; rejected transactions leave neither partial adoption nor a partial command.
-  Authenticated product commands, Absurd task admission and the complete memory journey remain
-  unfinished.
+  Integrators can now bind new operation storage to the actual Absurd task admitted in the same
+  transaction. Exact replay returns the saved receipt without admitting another task. Source
+  preparation reads one caller-authored message and rechecks its encrypted coordinates under
+  current conversation access. Authenticated product command composition, worker/provider wiring
+  and the complete memory journey remain unfinished.
 
 - **Conversation participants can open ready uploaded files from the Files panel.** Supported
   previews and downloads use the current authorized content read, show loading and safe retry

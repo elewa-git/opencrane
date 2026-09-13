@@ -1,8 +1,8 @@
 import { AuthorizationBoundaryKind, MemoryDatasetState, MemoryFactState, type PersonalMemoryOperation as PrismaOperationRow, type Prisma } from "@prisma/client";
 
 import { __CreatePersonalMemoryOperationLifecycle, __PlanPersonalMemoryOperationLifecycle } from "./personal-memory-operation-lifecycle";
-import { ___AdmitPersonalMemoryOperationCommandSchema } from "./personal-memory-operation-persistence.validator";
-import { PersonalMemoryOperationAdmissionOutcomes, PersonalMemoryOperationInvalidState, PersonalMemoryOperationPersistenceOutcomes, PersonalMemoryOperationReplayConflict, type AdmitPersonalMemoryOperationCommand, type PersonalMemoryOperationAdmissionResult, type PersonalMemoryOperationMessageSource, type PersonalMemoryOperationPersistenceResult, type PersonalMemoryOperationRecord, type PersonalMemoryOperationRepository } from "./personal-memory-operation-persistence.types";
+import { ___AdmitPersonalMemoryOperationCommandSchema, ___PersonalMemoryOperationReplayLookupSchema, ___PersonalMemoryOperationTaskIdentitySchema } from "./personal-memory-operation-persistence.validator";
+import { PersonalMemoryOperationAdmissionOutcomes, PersonalMemoryOperationInvalidState, PersonalMemoryOperationPersistenceOutcomes, PersonalMemoryOperationReplayConflict, type AdmitPersonalMemoryOperationCommand, type PersonalMemoryOperationAdmissionResult, type PersonalMemoryOperationMessageSource, type PersonalMemoryOperationPersistenceResult, type PersonalMemoryOperationRecord, type PersonalMemoryOperationRepository, type PersonalMemoryOperationTaskAdmission } from "./personal-memory-operation-persistence.types";
 import { _PersonalMemoryOperationCreateData, _PersonalMemoryOperationLifecycle, _PersonalMemoryOperationLifecycleUpdate, _PersonalMemoryOperationRecord } from "./prisma-personal-memory-operation-mapper";
 import { PersonalMemoryOperationEvents, PersonalMemoryOperationKinds, PersonalMemoryOperationTransitionOutcomes, type PersonalMemoryOperationEvent } from "./personal-memory-operation.types";
 
@@ -19,7 +19,17 @@ export class PrismaPersonalMemoryOperationRepository implements PersonalMemoryOp
 	}
 
 	/** @inheritdoc */
-	async admit(commandInput: AdmitPersonalMemoryOperationCommand): Promise<PersonalMemoryOperationAdmissionResult>
+	async findByReplayKey(siloId: string, idempotencyKeyDigest: string): Promise<PersonalMemoryOperationRecord | null>
+	{
+		const lookup = ___PersonalMemoryOperationReplayLookupSchema.safeParse({ siloId, idempotencyKeyDigest });
+		if (!lookup.success)
+			throw new PersonalMemoryOperationInvalidState("personal-memory operation replay lookup is invalid");
+		const row = await this.transaction.personalMemoryOperation.findUnique({ where: { siloId_idempotencyKeyDigest: lookup.data } });
+		return row === null ? null : _PersonalMemoryOperationRecord(row);
+	}
+
+	/** @inheritdoc */
+	async admit(commandInput: AdmitPersonalMemoryOperationCommand, admitTask: PersonalMemoryOperationTaskAdmission): Promise<PersonalMemoryOperationAdmissionResult>
 	{
 		const parsed = ___AdmitPersonalMemoryOperationCommandSchema.safeParse(commandInput);
 		if (!parsed.success)
@@ -48,7 +58,11 @@ export class PrismaPersonalMemoryOperationRepository implements PersonalMemoryOp
 		if (command.kind === PersonalMemoryOperationKinds.Forget)
 			await this._hideForgottenTarget(facts, command);
 
-		const created = await this.transaction.personalMemoryOperation.create({ data: _PersonalMemoryOperationCreateData(command, lifecycle) });
+		// Admit the task only after replay is ruled out, while the caller still owns every domain lock.
+		const taskResult = ___PersonalMemoryOperationTaskIdentitySchema.safeParse(await admitTask(command.task));
+		if (!taskResult.success || taskResult.data.taskName !== command.task.taskName || taskResult.data.taskKey !== command.task.taskKey)
+			throw new PersonalMemoryOperationInvalidState("personal-memory workflow receipt does not match the admitted command");
+		const created = await this.transaction.personalMemoryOperation.create({ data: _PersonalMemoryOperationCreateData(command, lifecycle, taskResult.data) });
 		return { outcome: PersonalMemoryOperationAdmissionOutcomes.Created, operation: _PersonalMemoryOperationRecord(created) };
 	}
 
@@ -204,6 +218,8 @@ export class PrismaPersonalMemoryOperationRepository implements PersonalMemoryOp
 			&& operation.targetDocumentId === command.targetDocumentId
 			&& operation.expectedFactRevision === command.expectedFactRevision
 			&& operation.admittedProviderDatasetId === command.providerDatasetId
+			&& operation.task.taskName === command.task.taskName
+			&& operation.task.taskKey === command.task.taskKey
 			&& this._sameSource(operation.source, command.source);
 	}
 

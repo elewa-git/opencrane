@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 
 import { AuthorizationBoundaryKind, MemoryConsentState, MemoryDatasetState, MemoryFactState, PrincipalProvenance, Prisma, PrismaClient } from "@prisma/client";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { MemoryMutationDeliveryStates } from "@opencrane/contracts";
+import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 
-import { PersonalMemoryOperationAdmissionOutcomes, PersonalMemoryOperationPersistenceOutcomes, type AdmitPersonalMemoryOperationCommand } from "../personal-memory-operation-persistence.types";
+import { PersonalMemoryOperationAdmissionOutcomes, PersonalMemoryOperationInvalidState, PersonalMemoryOperationPersistenceOutcomes, type AdmitPersonalMemoryOperationCommand, type PersonalMemoryOperationTaskAdmission } from "../personal-memory-operation-persistence.types";
 import { PersonalMemoryOperationEvents, PersonalMemoryOperationFailureCodes, PersonalMemoryOperationKinds, PersonalMemoryOperationPhases } from "../personal-memory-operation.types";
 import { PrismaPersonalMemoryOperationRepository } from "../prisma-personal-memory-operation-repository";
 import { PrismaPersonalMemoryOperationUnitOfWork } from "../prisma-personal-memory-operation-unit-of-work";
@@ -35,8 +36,30 @@ function _Command(principalId: string, datasetId: string): AdmitPersonalMemoryOp
 		commandDigest: `sha256:${"b".repeat(64)}`, kind: PersonalMemoryOperationKinds.Remember,
 		source: { conversationId: randomUUID(), messageId: randomUUID(), messagePosition: 0n, payloadRef: randomUUID(), ciphertextDigest: `sha256:${"c".repeat(64)}`, authorPrincipalId: principalId },
 		contentDigest: _ContentDigest, targetFactId: null, targetDocumentId: null, expectedFactRevision: null,
-		providerDatasetId: null, task: { taskId: randomUUID(), taskName: "personal-memory-operation", taskKey: operationId }, admittedAt: new Date(),
+		providerDatasetId: null, task: { taskName: "personal-memory-operation", taskKey: operationId }, admittedAt: new Date(),
 	};
+}
+
+/** Returns a synthetic receipt for persistence tests; this does not prove an engine admission. */
+async function _AdmitSyntheticTask(coordinates: Parameters<PersonalMemoryOperationTaskAdmission>[0])
+{
+	return { taskId: coordinates.taskKey, ...coordinates };
+}
+
+/** Runs repository admission through the shared Serializable retry boundary. */
+function _Admit(client: PrismaClient, command: AdmitPersonalMemoryOperationCommand, admitTask: PersonalMemoryOperationTaskAdmission = _AdmitSyntheticTask)
+{
+	return ___RunInPrismaUnitOfWork(client, async function _AdmitOperation(transaction)
+	{
+		return new PrismaPersonalMemoryOperationRepository(transaction).admit(command, admitTask);
+	}, { isolationLevel: "Serializable", attemptLimit: 3, operation: "personal-memory operation SQL admission" });
+}
+
+/** Combines composite test admission with the remaining lifecycle-only UnitOfWork. */
+function _Owner(client: PrismaClient)
+{
+	const lifecycle = new PrismaPersonalMemoryOperationUnitOfWork(client);
+	return { admit(command: AdmitPersonalMemoryOperationCommand) { return _Admit(client, command); }, apply: lifecycle.apply.bind(lifecycle) };
 }
 
 /** Creates a provisional dataset inside whichever transaction owns the command admission. */
@@ -64,23 +87,23 @@ describe("personal-memory operations on fresh PostgreSQL", function _Suite()
 	});
 	afterAll(async function _Disconnect() { await Promise.all([_First.$disconnect(), _Second.$disconnect()]); });
 
-	it("admits one operation and one reserved task identity under concurrent replay", async function _ConcurrentAdmission()
+	it("admits one workflow receipt and one operation under concurrent replay", async function _ConcurrentAdmission()
 	{
 		const command = await _Fixture();
-		const first = new PrismaPersonalMemoryOperationUnitOfWork(_First);
-		const second = new PrismaPersonalMemoryOperationUnitOfWork(_Second);
-		const results = await Promise.all([first.admit(command), second.admit(command)]);
+		const admitTask = vi.fn(_AdmitSyntheticTask);
+		const results = await Promise.all([_Admit(_First, command, admitTask), _Admit(_Second, command, admitTask)]);
 		expect(results.filter(result => result.outcome === PersonalMemoryOperationAdmissionOutcomes.Created)).toHaveLength(1);
 		expect(results.filter(result => result.outcome === PersonalMemoryOperationAdmissionOutcomes.Replayed)).toHaveLength(1);
-		expect(results.map(result => result.operation.task.taskId)).toEqual([command.task.taskId, command.task.taskId]);
+		expect(results.map(result => result.operation.task.taskId)).toEqual([command.operationId, command.operationId]);
+		expect(admitTask).toHaveBeenCalledOnce();
 		expect(await _First.personalMemoryOperation.count({ where: { siloId: command.siloId } })).toBe(1);
 	});
 
 	it("adopts a provider dataset once and returns the saved operation after client restart", async function _ConcurrentAdoption()
 	{
 		const command = await _Fixture();
-		const first = new PrismaPersonalMemoryOperationUnitOfWork(_First);
-		const second = new PrismaPersonalMemoryOperationUnitOfWork(_Second);
+		const first = _Owner(_First);
+		const second = _Owner(_Second);
 		await first.admit(command);
 		const providerDatasetId = randomUUID();
 		const event = { operationId: command.operationId, kind: command.kind, expectedRevision: 1, event: PersonalMemoryOperationEvents.DatasetEnsured, providerDatasetId } as const;
@@ -90,7 +113,7 @@ describe("personal-memory operations on fresh PostgreSQL", function _Suite()
 		const restartedClient = new PrismaClient();
 		try
 		{
-			const restarted = new PrismaPersonalMemoryOperationUnitOfWork(restartedClient);
+				const restarted = _Owner(restartedClient);
 			await expect(restarted.admit(command)).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Replayed, operation: { revision: 2, phase: PersonalMemoryOperationPhases.DocumentAddPending, admittedProviderDatasetId: null, providerDatasetId } });
 		}
 		finally { await restartedClient.$disconnect(); }
@@ -104,9 +127,8 @@ describe("personal-memory operations on fresh PostgreSQL", function _Suite()
 		{
 			await _Dataset(transaction, principalId, command.datasetId);
 			const repository = new PrismaPersonalMemoryOperationRepository(transaction);
-			await repository.admit(command);
-			throw new Error("synthetic admission failure");
-		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })).rejects.toThrow("synthetic admission failure");
+			await repository.admit(command, async function _MismatchedTask(coordinates) { return { taskId: randomUUID(), taskName: `${coordinates.taskName}-other`, taskKey: coordinates.taskKey }; });
+		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })).rejects.toBeInstanceOf(PersonalMemoryOperationInvalidState);
 		expect(await _Second.memoryDataset.findUnique({ where: { id: command.datasetId } })).toBeNull();
 		expect(await _Second.personalMemoryOperation.findUnique({ where: { id: command.operationId } })).toBeNull();
 	});
@@ -114,7 +136,7 @@ describe("personal-memory operations on fresh PostgreSQL", function _Suite()
 	it("rolls back provider adoption together with the operation's saved step", async function _AdoptionRollback()
 	{
 		const command = await _Fixture();
-		const owner = new PrismaPersonalMemoryOperationUnitOfWork(_First);
+		const owner = _Owner(_First);
 		await owner.admit(command);
 		await expect(_First.$transaction(async function _FailAdoption(transaction)
 		{
@@ -129,14 +151,14 @@ describe("personal-memory operations on fresh PostgreSQL", function _Suite()
 	it("keeps an uncertain document effect durable across a new client", async function _RecoveryAfterRestart()
 	{
 		const command = await _Fixture();
-		const owner = new PrismaPersonalMemoryOperationUnitOfWork(_First);
+		const owner = _Owner(_First);
 		await owner.admit(command);
 		await owner.apply({ operationId: command.operationId, kind: command.kind, expectedRevision: 1, event: PersonalMemoryOperationEvents.DatasetEnsured, providerDatasetId: randomUUID() }, new Date());
 		await owner.apply({ operationId: command.operationId, kind: command.kind, expectedRevision: 2, event: PersonalMemoryOperationEvents.MutationFailed, failureCode: PersonalMemoryOperationFailureCodes.DocumentConflict, deliveryState: MemoryMutationDeliveryStates.Ambiguous }, new Date());
 		const restartedClient = new PrismaClient();
 		try
 		{
-			const restarted = new PrismaPersonalMemoryOperationUnitOfWork(restartedClient);
+				const restarted = _Owner(restartedClient);
 			await expect(restarted.admit(command)).resolves.toMatchObject({ operation: { revision: 3, phase: PersonalMemoryOperationPhases.RecoveryRequired, recoveryPhase: PersonalMemoryOperationPhases.DocumentAddPending, failureCode: PersonalMemoryOperationFailureCodes.DocumentConflict, deliveryState: MemoryMutationDeliveryStates.Ambiguous } });
 		}
 		finally { await restartedClient.$disconnect(); }
@@ -156,8 +178,8 @@ describe("personal-memory operations on fresh PostgreSQL", function _Suite()
 		}
 		const expectedFactRevision = state === MemoryFactState.Corrected ? 2 : 1;
 		const forget = { ...command, kind: PersonalMemoryOperationKinds.Forget, source: null, contentDigest: null, targetFactId: factId, targetDocumentId: documentId, expectedFactRevision, providerDatasetId };
-		const first = new PrismaPersonalMemoryOperationUnitOfWork(_First);
-		const second = new PrismaPersonalMemoryOperationUnitOfWork(_Second);
+		const first = _Owner(_First);
+		const second = _Owner(_Second);
 		const results = await Promise.all([first.admit(forget), second.admit(forget)]);
 		expect(results.filter(result => result.outcome === PersonalMemoryOperationAdmissionOutcomes.Created)).toHaveLength(1);
 		expect(await _First.memoryFactCatalog.findUnique({ where: { id: factId } })).toMatchObject({ revision: expectedFactRevision + 1, state: MemoryFactState.ForgetPending });

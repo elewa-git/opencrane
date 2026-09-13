@@ -120,6 +120,7 @@
             "vitest run src/bootstrap/conversations/__tests__/conversation-tool-approval.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-tool-result.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-stop*.sql.test.ts",
+            "vitest run src/bootstrap/conversations/__tests__/personal-memory-task-admission.sql.test.ts",
             "vitest run src/bootstrap/onboarding/__tests__/personal-agent-profile-repair.sql.test.ts"
           ],
           "parallel": false

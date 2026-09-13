@@ -28,6 +28,9 @@ signed-in participant ──► main ◄── HERE ──► history
 | `metadata/` | Directory, reads, creation and participant lifecycle each own their queries and transaction sequencing. The metadata facade only delegates. |
 | `sessions/` | Establish personal-session history and its recoverable projection without reopening retries. |
 | `messages/` | Authorise, encrypt and admit participant messages; read authorised history and stream events. |
+| `memory/commands/` | Validate explicit Remember, Correct and Forget requests without accepting plaintext or caller-supplied authority. |
+| `memory/source/` | Read the selected human message through current history access and recheck its encrypted source inside the command transaction. |
+| `memory/workflow/` | Declare identifier-only memory tasks; the command transaction must retain Absurd's returned receipt. Product command integration is in progress. |
 | `children/` | Admit group-child work, preserve its original audience, recover creation, and share human-reviewed text. |
 | `computers/` | Separate activation, lifecycle, checkpoint, turn and review operation owners. |
 | `computers/tools/` | Proposal admission, current dispatch access and saved result consumption each have their own owner. |
@@ -49,6 +52,15 @@ signed-in participant ──► main ◄── HERE ──► history
   bytes outside SQL. Initial and restarted compilation repeat the current authority and coordinate
   checks before adding the text as untrusted user content.
 - `PrismaGroupChildAuthority`, `_CreateGroupChildRouter` and `GROUP_CHILD_TASK` compose explicit child requests and recovery.
+- `PERSONAL_MEMORY_OPERATION_TASK` and `_CreatePersonalMemoryOperationTask` share identifier-only
+  memory task admission. Absurd assigns the task ID; command composition must save its returned
+  receipt and the memory operation in one transaction. The task declaration alone does not admit
+  work or make Remember, Correct or Forget available through the product.
+- `PrismaKurrentPersonalMemoryMessageSource` reads one selected, completed human message authored
+  by the caller. It requires one non-empty text block, limits its UTF-8 content to 64 KiB, and keeps
+  decrypted text outside the SQL transaction. `PrismaPersonalMemoryMessageSourceRepository`
+  rechecks current read access, the visible position and the encrypted payload coordinates in the
+  caller's transaction. Later conversation entries do not invalidate an unchanged selected message.
 - Computer activation atomically admits the existing Absurd turn task when it publishes an active lease. The workflow advances saved model, tool-result, continuation and completion state; the only Pod-facing turn route returns its lease-derived review credential.
 - Stop handling reloads the immutable causation message to derive its requester and never enters activation. Its Kurrent publisher gives final output and cancellation one checked turn-stream winner; cancellation commits the private receipt, safe interrupted log and active-turn settlement together.
 - A fresh Stop selection checks current requester access before Kurrent records its target or no-target

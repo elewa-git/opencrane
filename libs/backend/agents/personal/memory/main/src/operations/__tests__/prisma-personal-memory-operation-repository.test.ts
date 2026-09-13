@@ -3,7 +3,7 @@ import { describe, expect, it, vi, type Mock } from "vitest";
 
 import { MemoryMutationDeliveryStates } from "@opencrane/contracts";
 
-import { PersonalMemoryOperationAdmissionOutcomes, PersonalMemoryOperationInvalidState, PersonalMemoryOperationPersistenceOutcomes, PersonalMemoryOperationReplayConflict, type AdmitPersonalMemoryOperationCommand } from "../personal-memory-operation-persistence.types";
+import { PersonalMemoryOperationAdmissionOutcomes, PersonalMemoryOperationInvalidState, PersonalMemoryOperationPersistenceOutcomes, PersonalMemoryOperationReplayConflict, type AdmitPersonalMemoryOperationCommand, type PersonalMemoryOperationTaskAdmission } from "../personal-memory-operation-persistence.types";
 import { PrismaPersonalMemoryOperationRepository } from "../prisma-personal-memory-operation-repository";
 import { PersonalMemoryOperationEvents, PersonalMemoryOperationFailureCodes, PersonalMemoryOperationKinds, type PersonalMemoryOperationEvent } from "../personal-memory-operation.types";
 
@@ -45,6 +45,23 @@ interface _TransactionFixture
 
 describe("PrismaPersonalMemoryOperationRepository", function _Suite()
 {
+	it("reads a validated replay snapshot only through its silo-scoped digest key", async function _FindReplay()
+	{
+		const fixture = _Fixture(_CorrectRow());
+		const repository = new PrismaPersonalMemoryOperationRepository(fixture.transaction);
+
+		await expect(repository.findByReplayKey("silo-1", _IDEMPOTENCY_DIGEST)).resolves.toMatchObject({ operationId: _OPERATION_ID, admittedProviderDatasetId: _DATASET_PROVIDER_ID, task: { taskId: _TASK_ID, taskKey: _OPERATION_ID } });
+		expect(fixture.findOperation).toHaveBeenCalledWith({ where: { siloId_idempotencyKeyDigest: { siloId: "silo-1", idempotencyKeyDigest: _IDEMPOTENCY_DIGEST } } });
+
+		const absent = _Fixture(_CorrectRow());
+		absent.findOperation.mockResolvedValueOnce(null);
+		await expect(new PrismaPersonalMemoryOperationRepository(absent.transaction).findByReplayKey("silo-1", _IDEMPOTENCY_DIGEST)).resolves.toBeNull();
+
+		const invalid = _Fixture(_CorrectRow());
+		await expect(new PrismaPersonalMemoryOperationRepository(invalid.transaction).findByReplayKey("", "not-a-digest")).rejects.toBeInstanceOf(PersonalMemoryOperationInvalidState);
+		expect(invalid.findOperation).not.toHaveBeenCalled();
+	});
+
 	it("creates a secret-free operation after locking its dataset and keeps only encrypted source coordinates", async function _Create()
 	{
 		const callOrder: string[] = [];
@@ -57,10 +74,13 @@ describe("PrismaPersonalMemoryOperationRepository", function _Suite()
 			return row;
 		});
 		const repository = new PrismaPersonalMemoryOperationRepository(fixture.transaction);
-		const result = await repository.admit(_CorrectCommand());
+		const admitTask = _TaskAdmission(_TASK_ID, callOrder);
+		const result = await repository.admit(_CorrectCommand(), admitTask);
 
 		expect(result).toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Created, operation: { operationId: _OPERATION_ID, source: { payloadRef: "payload-1", ciphertextDigest: _CIPHERTEXT_DIGEST } } });
-		expect(callOrder).toEqual(["dataset-read", "dataset-lock", "fact-read:fact-1", "fact-lock:fact-1", "operation-create"]);
+		expect(callOrder).toEqual(["dataset-read", "dataset-lock", "fact-read:fact-1", "fact-lock:fact-1", "task-admit", "operation-create"]);
+		expect(admitTask).toHaveBeenCalledOnce();
+		expect(admitTask).toHaveBeenCalledWith({ taskName: "personal-memory-operation", taskKey: _OPERATION_ID });
 		const data = fixture.createOperation.mock.calls[0][0].data;
 		expect(data).not.toHaveProperty("content");
 		expect(data).not.toHaveProperty("plaintext");
@@ -72,11 +92,15 @@ describe("PrismaPersonalMemoryOperationRepository", function _Suite()
 	{
 		const exact = _Fixture(_CorrectRow());
 		const repository = new PrismaPersonalMemoryOperationRepository(exact.transaction);
-		await expect(repository.admit(_CorrectCommand())).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Replayed, operation: { operationId: _OPERATION_ID, revision: 1 } });
+		const exactTask = _TaskAdmission();
+		await expect(repository.admit(_CorrectCommand(), exactTask)).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Replayed, operation: { operationId: _OPERATION_ID, revision: 1 } });
+		expect(exactTask).not.toHaveBeenCalled();
 		const regenerated = _Fixture(_CorrectRow());
 		const regeneratedRepository = new PrismaPersonalMemoryOperationRepository(regenerated.transaction);
-		const retryGeneratedIdentity = { ..._CorrectCommand(), operationId: "00000000-0000-4000-8000-000000000099", task: { taskId: "00000000-0000-4000-8000-000000000098", taskName: "personal-memory-operation", taskKey: "retry-generated-key" } };
-		await expect(regeneratedRepository.admit(retryGeneratedIdentity)).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Replayed, operation: { operationId: _OPERATION_ID, task: { taskId: _TASK_ID } } });
+		const retryGeneratedIdentity = { ..._CorrectCommand(), operationId: "00000000-0000-4000-8000-000000000099" };
+		const regeneratedTask = _TaskAdmission();
+		await expect(regeneratedRepository.admit(retryGeneratedIdentity, regeneratedTask)).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Replayed, operation: { operationId: _OPERATION_ID, task: { taskId: _TASK_ID } } });
+		expect(regeneratedTask).not.toHaveBeenCalled();
 
 		const changedCommands: AdmitPersonalMemoryOperationCommand[] = [
 			{ ..._CorrectCommand(), actorPrincipalId: "principal-2", source: { ..._CorrectCommand().source!, authorPrincipalId: "principal-2" } },
@@ -84,14 +108,34 @@ describe("PrismaPersonalMemoryOperationRepository", function _Suite()
 			{ ..._CorrectCommand(), source: { ..._CorrectCommand().source!, messageId: "message-2" } },
 			{ ..._CorrectCommand(), targetFactId: "fact-2" },
 			{ ..._CorrectCommand(), expectedFactRevision: 8 },
+			{ ..._CorrectCommand(), task: { ..._CorrectCommand().task, taskName: "other-memory-operation" } },
+			{ ..._CorrectCommand(), task: { ..._CorrectCommand().task, taskKey: "other-task-key" } },
 			{ ..._CorrectCommand(), kind: PersonalMemoryOperationKinds.Forget, source: null, contentDigest: null },
 		];
 		for (const command of changedCommands)
 		{
 			const fixture = _Fixture(_CorrectRow());
 			const changedRepository = new PrismaPersonalMemoryOperationRepository(fixture.transaction);
-			await expect(changedRepository.admit(command)).rejects.toBeInstanceOf(PersonalMemoryOperationReplayConflict);
+			const admitTask = _TaskAdmission();
+			await expect(changedRepository.admit(command, admitTask)).rejects.toBeInstanceOf(PersonalMemoryOperationReplayConflict);
+			expect(admitTask).not.toHaveBeenCalled();
 		}
+	});
+
+	it.each([
+		["task ID", { taskId: "not-a-uuid", taskName: "personal-memory-operation", taskKey: _OPERATION_ID }],
+		["task name", { taskId: _TASK_ID, taskName: "other-memory-operation", taskKey: _OPERATION_ID }],
+		["task key", { taskId: _TASK_ID, taskName: "personal-memory-operation", taskKey: "other-task-key" }],
+	])("rejects a mismatched %s receipt before inserting the operation", async function _RejectTaskReceipt(_label, receipt)
+	{
+		const fixture = _Fixture(_CorrectRow());
+		fixture.findOperation.mockResolvedValueOnce(null);
+		const repository = new PrismaPersonalMemoryOperationRepository(fixture.transaction);
+		const admitTask = vi.fn(async function _AdmitTask() { return receipt; }) as PersonalMemoryOperationTaskAdmission;
+
+		await expect(repository.admit(_CorrectCommand(), admitTask)).rejects.toBeInstanceOf(PersonalMemoryOperationInvalidState);
+		expect(admitTask).toHaveBeenCalledOnce();
+		expect(fixture.createOperation).not.toHaveBeenCalled();
 	});
 
 	it("replays Remember after provider dataset adoption by comparing the immutable admitted coordinate", async function _RememberReplayAfterProgress()
@@ -99,12 +143,12 @@ describe("PrismaPersonalMemoryOperationRepository", function _Suite()
 		const newDatasetOperation = _RememberRow(null, _DATASET_PROVIDER_ID);
 		const newDatasetFixture = _Fixture(newDatasetOperation);
 		const newDatasetRepository = new PrismaPersonalMemoryOperationRepository(newDatasetFixture.transaction);
-		await expect(newDatasetRepository.admit(_RememberCommand(null))).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Replayed, operation: { admittedProviderDatasetId: null, providerDatasetId: _DATASET_PROVIDER_ID, revision: 2 } });
+		await expect(newDatasetRepository.admit(_RememberCommand(null), _TaskAdmission())).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Replayed, operation: { admittedProviderDatasetId: null, providerDatasetId: _DATASET_PROVIDER_ID, revision: 2 } });
 
 		const existingDatasetOperation = _RememberRow(_DATASET_PROVIDER_ID, _DATASET_PROVIDER_ID);
 		const existingDatasetFixture = _Fixture(existingDatasetOperation);
 		const existingDatasetRepository = new PrismaPersonalMemoryOperationRepository(existingDatasetFixture.transaction);
-		await expect(existingDatasetRepository.admit(_RememberCommand(_DATASET_PROVIDER_ID))).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Replayed, operation: { admittedProviderDatasetId: _DATASET_PROVIDER_ID, providerDatasetId: _DATASET_PROVIDER_ID } });
+		await expect(existingDatasetRepository.admit(_RememberCommand(_DATASET_PROVIDER_ID), _TaskAdmission())).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Replayed, operation: { admittedProviderDatasetId: _DATASET_PROVIDER_ID, providerDatasetId: _DATASET_PROVIDER_ID } });
 	});
 
 	it("admits Remember only for a new Provisioning dataset or an exact existing Active dataset", async function _RememberDatasetState()
@@ -114,19 +158,21 @@ describe("PrismaPersonalMemoryOperationRepository", function _Suite()
 		freshFixture.findOperation.mockResolvedValueOnce(null);
 		freshFixture.createOperation.mockResolvedValueOnce(freshRow);
 		const freshRepository = new PrismaPersonalMemoryOperationRepository(freshFixture.transaction);
-		await expect(freshRepository.admit(_RememberCommand(null))).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Created, operation: { providerDatasetId: null } });
+		await expect(freshRepository.admit(_RememberCommand(null), _TaskAdmission())).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Created, operation: { providerDatasetId: null } });
 
 		const existingRow = _RememberInitialRow(_DATASET_PROVIDER_ID);
 		const existingFixture = _Fixture(existingRow);
 		existingFixture.findOperation.mockResolvedValueOnce(null);
 		existingFixture.createOperation.mockResolvedValueOnce(existingRow);
 		const existingRepository = new PrismaPersonalMemoryOperationRepository(existingFixture.transaction);
-		await expect(existingRepository.admit(_RememberCommand(_DATASET_PROVIDER_ID))).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Created, operation: { providerDatasetId: _DATASET_PROVIDER_ID } });
+		await expect(existingRepository.admit(_RememberCommand(_DATASET_PROVIDER_ID), _TaskAdmission())).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Created, operation: { providerDatasetId: _DATASET_PROVIDER_ID } });
 
 		const mismatchFixture = _Fixture(freshRow, [], _Dataset(MemoryDatasetState.Active, _DATASET_PROVIDER_ID));
 		mismatchFixture.findOperation.mockResolvedValueOnce(null);
 		const mismatchRepository = new PrismaPersonalMemoryOperationRepository(mismatchFixture.transaction);
-		await expect(mismatchRepository.admit(_RememberCommand(null))).rejects.toBeInstanceOf(PersonalMemoryOperationInvalidState);
+		const mismatchTask = _TaskAdmission();
+		await expect(mismatchRepository.admit(_RememberCommand(null), mismatchTask)).rejects.toBeInstanceOf(PersonalMemoryOperationInvalidState);
+		expect(mismatchTask).not.toHaveBeenCalled();
 	});
 
 	it("adopts a Provisioning dataset UUID before saving the matching DatasetEnsured transition", async function _AdoptDataset()
@@ -166,8 +212,10 @@ describe("PrismaPersonalMemoryOperationRepository", function _Suite()
 		const command = _CorrectCommand();
 		const foreignSource = { ...command, source: { ...command.source!, authorPrincipalId: "principal-2" } };
 
-		await expect(repository.admit(foreignSource)).rejects.toBeInstanceOf(PersonalMemoryOperationInvalidState);
+		const admitTask = _TaskAdmission();
+		await expect(repository.admit(foreignSource, admitTask)).rejects.toBeInstanceOf(PersonalMemoryOperationInvalidState);
 		expect(fixture.findDataset).not.toHaveBeenCalled();
+		expect(admitTask).not.toHaveBeenCalled();
 	});
 
 	it("hides a new Forget target in the operation transaction and replays after the fact advances", async function _ForgetAdmission()
@@ -176,13 +224,15 @@ describe("PrismaPersonalMemoryOperationRepository", function _Suite()
 		const freshFixture = _Fixture(row);
 		freshFixture.findOperation.mockResolvedValueOnce(null);
 		const freshRepository = new PrismaPersonalMemoryOperationRepository(freshFixture.transaction);
-		await expect(freshRepository.admit(_ForgetCommand())).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Created, operation: { phase: "document_delete_pending" } });
+		await expect(freshRepository.admit(_ForgetCommand(), _TaskAdmission())).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Created, operation: { phase: "document_delete_pending" } });
 		expect(freshFixture.updateFact).toHaveBeenCalledTimes(2);
 		expect(freshFixture.updateFact.mock.calls[1][0]).toEqual({ where: { id: "fact-1", datasetId: "dataset-1", state: MemoryFactState.Active, revision: 7 }, data: { state: MemoryFactState.ForgetPending, forgetRequestedAt: _ADMITTED_AT } });
 
 		const replayFixture = _Fixture(row, [], _Dataset(MemoryDatasetState.Active, _DATASET_PROVIDER_ID), _Fact(MemoryFactState.ForgetPending, 8));
 		const replayRepository = new PrismaPersonalMemoryOperationRepository(replayFixture.transaction);
-		await expect(replayRepository.admit(_ForgetCommand())).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Replayed });
+		const replayTask = _TaskAdmission();
+		await expect(replayRepository.admit(_ForgetCommand(), replayTask)).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Replayed });
+		expect(replayTask).not.toHaveBeenCalled();
 		expect(replayFixture.updateFact).toHaveBeenCalledTimes(1);
 	});
 
@@ -193,7 +243,7 @@ describe("PrismaPersonalMemoryOperationRepository", function _Suite()
 		fixture.findOperation.mockResolvedValueOnce(null);
 		const repository = new PrismaPersonalMemoryOperationRepository(fixture.transaction);
 
-		await expect(repository.admit(_ForgetCommand())).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Created });
+		await expect(repository.admit(_ForgetCommand(), _TaskAdmission())).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Created });
 		expect(fixture.updateFact.mock.calls[1][0]).toEqual({ where: { id: "fact-1", datasetId: "dataset-1", state: MemoryFactState.Corrected, revision: 7 }, data: { state: MemoryFactState.ForgetPending, forgetRequestedAt: _ADMITTED_AT } });
 	});
 
@@ -264,7 +314,7 @@ function _CorrectCommand(): AdmitPersonalMemoryOperationCommand
 		targetDocumentId: _TARGET_DOCUMENT_ID,
 		expectedFactRevision: 7,
 		providerDatasetId: _DATASET_PROVIDER_ID,
-		task: { taskId: _TASK_ID, taskName: "personal-memory-operation", taskKey: _OPERATION_ID },
+		task: { taskName: "personal-memory-operation", taskKey: _OPERATION_ID },
 		admittedAt: _ADMITTED_AT,
 	};
 }
@@ -392,6 +442,16 @@ function _Dataset(state: MemoryDatasetState, cogneeDatasetId: string | null)
 function _Fact(state: MemoryFactState, revision: number)
 {
 	return { id: "fact-1", cogneeExternalId: _TARGET_DOCUMENT_ID, revision, state };
+}
+
+/** Creates a synthetic transaction-bound task callback; it does not prove a real workflow engine. */
+function _TaskAdmission(taskId = _TASK_ID, callOrder?: string[]): Mock<PersonalMemoryOperationTaskAdmission>
+{
+	return vi.fn(async function _AdmitTask(coordinates)
+	{
+		callOrder?.push("task-admit");
+		return { taskId, ...coordinates };
+	});
 }
 
 /** Creates fake Prisma delegates and optionally records the externally visible lock sequence. */
