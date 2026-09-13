@@ -18,7 +18,9 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 - **Operators can suspend test silos while retaining their data.** The app-owned command stops
   application workloads and their shared controllers, preserves storage and credentials, and keeps
   retained sandboxes suspended when the controller returns. Reruns accept already-removed disposable
-  Pods and reject changed ownership or persistent volumes before mutation.
+  Pods and reject changed ownership or persistent volumes before mutation. Already-stopped PostgreSQL
+  resources with saved ownership need no further write, so retention checks can finish while their
+  admission webhook is stopped.
 
 - **Memory deployments use the qualified provider profile through one authenticated gateway.**
   Cognee 1.5.4 replaces the older production image and separate candidate build. The gateway uses

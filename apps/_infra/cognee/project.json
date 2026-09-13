@@ -22,10 +22,6 @@
       },
       "options": { "command": "docker build --platform linux/amd64 -f apps/_infra/cognee/deploy/Dockerfile ." }
     },
-    "image-smoke": {
-      "executor": "nx:run-commands",
-      "options": { "command": "bash apps/_infra/cognee/tests/image-smoke.sh", "cwd": "." }
-    },
     "memory-contract": {
       "executor": "nx:run-commands",
       "cache": false,

@@ -16,7 +16,7 @@ export class CatalogueComponent
 	/** Store destroyed with this route. */
 	public readonly store = inject(ToolsInventoryStore);
 	/** Stable labels for every server-owned connection filter rendered by the select. */
-	public readonly filterOptions: readonly { label: string; value: ToolCatalogueFilter }[] = [
+	public readonly filterOptions: { label: string; value: ToolCatalogueFilter }[] = [
 		{ label: "All types", value: ToolCatalogueFilters.All },
 		{ label: "OAuth", value: McpServerType.RemoteOauth },
 		{ label: "API token", value: McpServerType.SingleUser },

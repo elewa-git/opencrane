@@ -1322,3 +1322,22 @@ Full run reports belong in the corresponding pull request or issue.
 - lesson: keep the six old silos suspended when creating testv6. Restore shared prerequisites from
   the cleaned immutable candidate through `bootstrap-prerequisites.sh`, then reconcile Agent Sandbox
   through `k8s-deploy.sh --provision-agent-sandbox-controller` before the fresh-silo deployment.
+
+
+## 2026-09-13 · dev · persist retained Sandbox suspension · c66303d669c05c470ee349a4d58c5d5e402e9037 · PARTIAL
+
+- execution: the app-owned suspension preflight passed. The ordinary rerun persisted both retained
+  testv5 Sandboxes as `Suspended`, preserving their Sandbox and Claim UIDs. It then failed while
+  redundantly patching an already-zero Pooler: `vpooler.cnpg.io` had no service endpoints because
+  the shared CNPG controller was stopped. The final before/after retention comparison did not run.
+- readback: all 62 Deployment/StatefulSet objects in `opencrane-*` namespaces had zero desired and
+  ready replicas, with no Running application Pods. The 19 remaining Pods were terminal history.
+  All 20 PVCs remained Bound, totaling 380 GiB; seven snapshots were Ready. Both Sandbox/Claim
+  pairs and 256 Secret identities were present. No Secret values were read or printed.
+- finding (`script`): a rerun must avoid CNPG admission writes when the owned resource already has
+  the saved original state and requested stopped state. This does not permit skipping owner or
+  state checks, or the final comparison of retained identities.
+- remedy: #891 adds the validated no-op in the existing app-owned PostgreSQL suspension operations.
+  A new clean-source run must complete the retention comparison before shared prerequisites return.
+  Shared controllers, old silos and all retained data remain in their stopped/preserved state;
+  no disk deletion or testv6 bootstrap occurred in this attempt.

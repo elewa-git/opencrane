@@ -114,6 +114,13 @@ CloudNativePG, and then stops the reviewed shared controllers. It retains the lo
 Kubernetes control plane, and 380 GiB of persistent disks, so those resources can continue to cost
 money while compute is stopped.
 
+On a rerun, the PostgreSQL operations in `platform/k8s-suspend-postgres.sh` skip a write only
+when the resource is already stopped and has this operation's owner and saved original state.
+This lets the full retention check finish while the stopped CNPG admission webhook is unavailable.
+Missing evidence is revalidated and either repaired with a version-checked write or rejected;
+foreign ownership and invalid saved values stop the operation. The parent script keeps responsibility
+for the shutdown order and the final comparison of retained data identities.
+
 ## Boundary
 
 The umbrella renders no business logic and installs no cluster-wide controller. It composes app-owned

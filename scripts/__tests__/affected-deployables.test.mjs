@@ -253,9 +253,8 @@ test("selects affected image smokes unless manual qualification expands to every
 	);
 });
 
-test("selects Cognee provider qualification through the existing image-smoke decision", function _SelectsMemoryContract()
+test("selects Cognee provider qualification independently of the generic image-smoke target", function _SelectsMemoryContract()
 {
-	const all = ["cognee", "mcp-executor"];
 	for (const [affected, manual, required] of [
 		[["cognee"], "", true],
 		[["mcp-executor"], "", false],
@@ -265,7 +264,7 @@ test("selects Cognee provider qualification through the existing image-smoke dec
 		[[], "none", false],
 	])
 	{
-		assert.equal(selectCogneeMemoryContractRequired(selectImageSmokeProjects(affected, all, manual)), required);
+		assert.equal(selectCogneeMemoryContractRequired(affected, manual), required);
 	}
 });
 
@@ -292,6 +291,7 @@ test("requires an uncached Docker memory proof before normal publication", funct
 	const projectPath = fileURLToPath(new URL("../../apps/_infra/cognee/project.json", import.meta.url));
 	const project = JSON.parse(readFileSync(projectPath, "utf8"));
 	assert.equal(project.targets["memory-contract"].cache, false);
+	assert.equal(project.targets["image-smoke"], undefined);
 	assert.doesNotMatch(project.targets.test.options.command, /memory-contract|docker/u);
 });
 

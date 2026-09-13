@@ -36,8 +36,9 @@ binds Cognify retries to a saved input digest and operation identifier.
   patched module's reviewed hashes.
 - `deploy/patches/` contains the exact source repairs and the fail-closed patch applicator.
 - `helm/` provides `opencrane.cognee.resources` for the silo chart.
-- `project.json` exposes fast source tests, image checks and the Docker-backed
-  `cognee:memory-contract` qualification.
+- `project.json` exposes fast source and policy tests plus the Docker-backed
+  `cognee:memory-contract` qualification. The memory contract owns the image build and offline
+  image smoke before its provider journey, so it is the sole Cognee Docker proof in CI.
 
 There is no importable application code.
 

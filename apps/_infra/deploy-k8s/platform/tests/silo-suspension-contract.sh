@@ -27,7 +27,8 @@ jq -n --slurpfile inventory "$INVENTORY" '
 jq -n --slurpfile inventory "$INVENTORY" '
 	[$inventory[0].clusterTenants[] | ("opencrane-" + .name) as $namespace | ($namespace + "-postgres") as $release |
 		{apiVersion:"postgresql.cnpg.io/v1",kind:"Cluster",metadata:{namespace:$namespace,name:$release,resourceVersion:"1",labels:{"app.kubernetes.io/instance":$release,"app.kubernetes.io/managed-by":"Helm"},annotations:{"meta.helm.sh/release-name":$release,"meta.helm.sh/release-namespace":$namespace}},spec:{instances:1},status:{readyInstances:1}},
-		{apiVersion:"postgresql.cnpg.io/v1",kind:"Pooler",metadata:{namespace:$namespace,name:($release + "-pooler"),resourceVersion:"1",labels:{"app.kubernetes.io/instance":$release,"app.kubernetes.io/managed-by":"Helm"},annotations:{"meta.helm.sh/release-name":$release,"meta.helm.sh/release-namespace":$namespace}},spec:{instances:1},status:{instances:1,readyInstances:1}}] |
+		{apiVersion:"postgresql.cnpg.io/v1",kind:"Pooler",metadata:{namespace:$namespace,name:($release + "-pooler"),resourceVersion:"1",labels:{"app.kubernetes.io/instance":$release,"app.kubernetes.io/managed-by":"Helm"},annotations:{"meta.helm.sh/release-name":$release,"meta.helm.sh/release-namespace":$namespace}},spec:{instances:1},status:{instances:1,readyInstances:1}},
+		{apiVersion:"postgresql.cnpg.io/v1",kind:"ScheduledBackup",metadata:{namespace:$namespace,name:($release + "-scheduled-backup"),resourceVersion:"1",annotations:{"meta.helm.sh/release-name":$release,"meta.helm.sh/release-namespace":$namespace}},spec:{suspend:false}}] |
 	{apiVersion:"v1",kind:"List",items:.}
 ' >"$TEST_DIR/cnpg.json"
 
@@ -167,19 +168,28 @@ case "$command_name" in
 			exit 0
 		fi
 		if [[ "$*" == *" get cronjob/"* ]]; then jq '.items[] | select(.kind == "CronJob")' "$MOCK_FIXTURES/controllers.json"; exit 0; fi
+		if [[ "$*" == *" get scheduledbackup/"* ]]; then
+			resource="${arguments#* get scheduledbackup/}"; name="${resource%% *}"; namespace="${arguments#*--namespace }"; namespace="${namespace%% *}"
+			jq --arg namespace "$namespace" --arg name "$name" '.items[] | select(.kind == "ScheduledBackup" and .metadata.namespace == $namespace and .metadata.name == $name)' "$MOCK_FIXTURES/cnpg.json" | jq 'if $stopped then (.spec.suspend=true | .metadata.annotations["opencrane.ai/suspend-original-scheduled-backup-suspend"]="false" | .metadata.annotations["opencrane.ai/suspended-by"]="opencrane-test-silo-suspension-v1") else . end' --argjson stopped "$(if [[ -e "$MOCK_STATE/scheduledbackup-$namespace-$name" ]]; then echo true; else echo false; fi)"
+			exit 0
+		fi
 		if [[ "$*" == *" get pooler/"* ]]; then
 			resource="${arguments#* get pooler/}"; name="${resource%% *}"; namespace="${arguments#*--namespace }"; namespace="${namespace%% *}"
-			jq --arg namespace "$namespace" --arg name "$name" '.items[] | select(.kind == "Pooler" and .metadata.namespace == $namespace and .metadata.name == $name)' "$MOCK_FIXTURES/cnpg.json" | jq 'if $stopped then .spec.instances=0 | .status.instances=0 | .status.readyInstances=0 | .metadata.annotations["opencrane.ai/suspend-original-pooler-instances"]="1" | .metadata.annotations["opencrane.ai/suspended-by"]="opencrane-test-silo-suspension-v1" else . end' --argjson stopped "$(if [[ -e "$MOCK_STATE/pooler-$namespace-$name" ]]; then echo true; else echo false; fi)"
+			jq --arg namespace "$namespace" --arg name "$name" '.items[] | select(.kind == "Pooler" and .metadata.namespace == $namespace and .metadata.name == $name)' "$MOCK_FIXTURES/cnpg.json" | jq 'if $stopped then (.spec.instances=0 | .status.instances=0 | .status.readyInstances=0 | .metadata.annotations["opencrane.ai/suspend-original-pooler-instances"]="1" | .metadata.annotations["opencrane.ai/suspended-by"]="opencrane-test-silo-suspension-v1") else . end | if $foreign == 1 then .metadata.annotations["opencrane.ai/suspended-by"]="foreign-owner" else . end | if $missing == 1 then del(.metadata.annotations["opencrane.ai/suspended-by"]) else . end' --argjson stopped "$(if [[ -e "$MOCK_STATE/pooler-$namespace-$name" ]]; then echo true; else echo false; fi)" --argjson foreign "${MOCK_CNPG_FOREIGN_OWNER:-0}" --argjson missing "${MOCK_CNPG_MISSING_OWNER:-0}"
 			exit 0
 		fi
 		if [[ "$*" == *" get cluster/"* ]]; then
 			resource="${arguments#* get cluster/}"; name="${resource%% *}"; namespace="${arguments#*--namespace }"; namespace="${namespace%% *}"
-			jq --arg namespace "$namespace" --arg name "$name" '.items[] | select(.kind == "Cluster" and .metadata.namespace == $namespace and .metadata.name == $name)' "$MOCK_FIXTURES/cnpg.json" | jq 'if $stopped then .metadata.annotations["cnpg.io/hibernation"]="on" | .status.readyInstances=0 | .status.conditions=[{type:"cnpg.io/hibernation",status:"True"}] else . end' --argjson stopped "$(if [[ -e "$MOCK_STATE/cluster-$namespace-$name" ]]; then echo true; else echo false; fi)"
+			jq --arg namespace "$namespace" --arg name "$name" '.items[] | select(.kind == "Cluster" and .metadata.namespace == $namespace and .metadata.name == $name)' "$MOCK_FIXTURES/cnpg.json" | jq 'if $stopped then (.metadata.annotations["cnpg.io/hibernation"]="on" | .metadata.annotations["opencrane.ai/suspend-original-cnpg-hibernation"]="absent" | .metadata.annotations["opencrane.ai/suspended-by"]="opencrane-test-silo-suspension-v1" | .status.readyInstances=0 | .status.conditions=[{type:"cnpg.io/hibernation",status:"True"}]) else . end | if $invalid == 1 then .metadata.annotations["opencrane.ai/suspend-original-cnpg-hibernation"]="garbage" else . end' --argjson invalid "${MOCK_CNPG_INVALID_HIBERNATION:-0}" --argjson stopped "$(if [[ -e "$MOCK_STATE/cluster-$namespace-$name" ]]; then echo true; else echo false; fi)"
 			exit 0
 		fi
 		if [[ "$*" == *" patch "* ]]; then
 			resource="${arguments#* patch }"; resource="${resource%% *}"; namespace="${arguments#*--namespace }"; namespace="${namespace%% *}"
 			kind="${resource%%/*}"; name="${resource#*/}"
+			if [[ "${MOCK_CNPG_WEBHOOK_REJECT:-0}" == "1" && ( "$kind" == "scheduledbackup" || "$kind" == "pooler" || "$kind" == "cluster" ) ]]; then
+				printf 'mock CNPG webhook rejected %s/%s\n' "$kind" "$name" >&2
+				exit 1
+			fi
 			if [[ "$kind" == "sandboxes.agents.x-k8s.io" ]]; then
 				payload="${arguments#* -p }"
 				index="${name#sandbox-}"
@@ -315,6 +325,7 @@ grep -Fq 'delete --raw /api/v1/namespaces/opencrane-testv5/pods/sandbox-1' "$TES
 if ! run_case success execute; then cat "$TEST_DIR/success.log" >&2; cat "$TEST_DIR/success.calls" >&2; exit 1; fi
 grep -Fq 'Suspended six OpenCrane development test silos' "$TEST_DIR/success.log"
 grep -Fq 'patch cronjob/opencrane-testv5-kurrentdb-backup' "$TEST_DIR/success.calls"
+grep -Fq 'patch scheduledbackup/opencrane-testv5-postgres-scheduled-backup' "$TEST_DIR/success.calls"
 grep -Fq 'patch pooler/opencrane-testv5-postgres-pooler' "$TEST_DIR/success.calls"
 grep -Fq 'patch cluster/opencrane-testv5-postgres' "$TEST_DIR/success.calls"
 grep -Fq 'patch deployment/cloudnative-pg' "$TEST_DIR/success.calls"
@@ -329,11 +340,24 @@ grep -Fq 'delete --raw /api/v1/namespaces/opencrane-testv5/pods/sandbox-1 -f -' 
 ! grep -Eq ' delete (namespace|pvc|pv|secret|volumesnapshot|volumesnapshotcontent|clusterrole|clusterrolebinding)' "$TEST_DIR/success.calls"
 ! grep -Eq -- '--argjson (pvc|pv|secrets|snapshots|contents)' "$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-suspend-inventory.sh"
 
-if ! run_preserved_case complete-rerun; then cat "$TEST_DIR/complete-rerun.log" >&2; cat "$TEST_DIR/complete-rerun.calls" >&2; exit 1; fi
+if ! MOCK_CNPG_WEBHOOK_REJECT=1 run_preserved_case complete-rerun; then cat "$TEST_DIR/complete-rerun.log" >&2; cat "$TEST_DIR/complete-rerun.calls" >&2; exit 1; fi
+grep -Fq 'Suspended six OpenCrane development test silos' "$TEST_DIR/complete-rerun.log"
+! grep -Eq 'patch (scheduledbackup|pooler|cluster)/' "$TEST_DIR/complete-rerun.calls"
 grep -Fq 'patch sandboxes.agents.x-k8s.io/sandbox-0 --namespace opencrane-testv5 --type=json' "$TEST_DIR/complete-rerun.calls"
 grep -Fq 'patch sandboxes.agents.x-k8s.io/sandbox-1 --namespace opencrane-testv5 --type=json' "$TEST_DIR/complete-rerun.calls"
 ! grep -Fq 'delete --raw /api/v1/namespaces/opencrane-testv5/pods/sandbox-' "$TEST_DIR/complete-rerun.calls"
 ! grep -Eq 'patch sandboxclaims|delete .*sandbox(claim)?s' "$TEST_DIR/complete-rerun.calls"
 ! grep -Eq ' (patch|delete) (lease|leases|lease.coordination.k8s.io|leases.coordination.k8s.io)' "$TEST_DIR/complete-rerun.calls"
+
+if MOCK_CNPG_FOREIGN_OWNER=1 run_preserved_case foreign-cnpg-owner; then echo 'foreign CNPG suspension owner unexpectedly passed' >&2; exit 1; fi
+grep -Fq 'Pooler/opencrane-d2latency-0823/opencrane-d2latency-0823-postgres-pooler has a foreign suspension owner' "$TEST_DIR/foreign-cnpg-owner.log"
+! grep -Eq 'patch (scheduledbackup|pooler|cluster)/' "$TEST_DIR/foreign-cnpg-owner.calls"
+
+if MOCK_CNPG_MISSING_OWNER=1 MOCK_CNPG_WEBHOOK_REJECT=1 run_preserved_case missing-cnpg-owner; then echo 'missing CNPG suspension owner unexpectedly passed' >&2; exit 1; fi
+grep -Fq 'mock CNPG webhook rejected pooler/opencrane-d2latency-0823-postgres-pooler' "$TEST_DIR/missing-cnpg-owner.log"
+
+if MOCK_CNPG_INVALID_HIBERNATION=1 run_preserved_case invalid-saved-hibernation; then echo 'invalid saved hibernation unexpectedly passed' >&2; exit 1; fi
+grep -Fq 'Cluster/opencrane-d2latency-0823/opencrane-d2latency-0823-postgres has invalid saved hibernation state' "$TEST_DIR/invalid-saved-hibernation.log"
+! grep -Eq 'patch (scheduledbackup|pooler|cluster)/' "$TEST_DIR/invalid-saved-hibernation.calls"
 
 printf 'silo suspension contract: PASS\n'
