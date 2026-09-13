@@ -4,7 +4,7 @@ import { _ConversationFailureDiagnostic } from "../../messages/conversation-fail
 import { ConversationComputerModelProgressOutcomes, type ConversationComputerModelProgress } from "./conversation-computer-model.types";
 import { __AssertConversationComputerAnswerAuthority } from "./conversation-computer-answer-authority";
 import { createHash } from "node:crypto";
-import { ConversationEntryKinds, ConversationMessageContentBlockKinds, type CompiledRunInput } from "@opencrane/contracts";
+import { ConversationEntryAudiences, ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates, type CompiledRunInput } from "@opencrane/contracts";
 
 import type { ConversationComputerOutputCommand, ConversationComputerPodLeaseCommand, ConversationComputerReviewCredentialGrant, ConversationComputerRunLifecycleCommand, ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityPort, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, ConversationComputerTurnWorkflowCommand, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 import { ConversationComputerOutputPositionConflictError } from "./conversation-computer-turn-store";
@@ -138,7 +138,7 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 			const notAfter = Math.min(command.modelNotAfterEpochMs, authority.notAfterEpochMs);
 			const commitTurn = { ...turn, binding: authority.candidate.binding };
 			const writer = this.dependencies.writers.create(commitTurn, execution.workload);
-			const receipt = await writer.prepare({ sourceCommandId: command.sourceCommandId, entry: { kind: "message", state: "completed", blocks: _ConversationComputerAnswerBlocks({ id: payload.blockId, kind: ConversationMessageContentBlockKinds.Text, payloadRef: payload.payloadRef, ciphertextDigest: payload.ciphertextDigest }, authority.generatedFile), replyToEntryId: turn.latestPendingEntryId, addressedAgentIdentityId: null, activation: "none", visibility: { audience: "conversation" }, causationId: turn.latestPendingEntryId, correlationId: turn.latestPendingEntryId } });
+			const receipt = await writer.prepare({ sourceCommandId: command.sourceCommandId, entry: { kind: ConversationEntryKinds.Message, state: MessageStates.Completed, blocks: _ConversationComputerAnswerBlocks({ id: payload.blockId, kind: ConversationMessageContentBlockKinds.Text, payloadRef: payload.payloadRef, ciphertextDigest: payload.ciphertextDigest }, authority.generatedFile), replyToEntryId: turn.latestPendingEntryId, addressedAgentIdentityId: null, activation: "none", visibility: { audience: ConversationEntryAudiences.Conversation }, causationId: turn.latestPendingEntryId, correlationId: turn.latestPendingEntryId } });
 			const finalExecution = await this.dependencies.candidates.assertCurrentForWorkflow(turn);
 			const finalAuthority = await __AssertConversationComputerAnswerAuthority(turn, finalExecution.workload, this.dependencies);
 			_AssertSameConversationGeneratedFile(authority.generatedFile, finalAuthority.generatedFile);

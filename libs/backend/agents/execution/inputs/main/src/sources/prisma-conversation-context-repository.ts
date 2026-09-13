@@ -3,7 +3,7 @@ import { AgentRunState, ConversationLifecycle, ConversationMode, OrgMemberStatus
 import { RunAdmissionDenialReasons, RunAdmissionMessageInputModes, type InitialRunAuthority } from "@opencrane/backend/agents/execution/runs";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 
-import type { ConversationContextInput, ConversationContextRepository, ConversationHistoryAdmissionReader, SessionAssemblyCommand, SessionAssemblyLoad } from "../assembly/session-assembly.types";
+import { SessionAssemblyLoadOutcomes, type ConversationContextInput, type ConversationContextRepository, type ConversationHistoryAdmissionReader, type SessionAssemblyCommand, type SessionAssemblyLoad } from "../assembly/session-assembly.types";
 
 /**
  * Turns one conversation into an ordered list of message ids, for the snapshot.
@@ -38,16 +38,16 @@ export class PrismaConversationContextRepository implements ConversationContextR
 		// 1. Avoid an unnecessary conversation lookup when the admitted run has no conversation.
 		if (command.conversationId === null)
 		{
-			return command.messageInput === null ? { outcome: "loaded", value: { messageIds: [] } } : { outcome: "denied", reason: "conversation_unavailable" };
+			return command.messageInput === null ? { outcome: SessionAssemblyLoadOutcomes.Loaded, value: { messageIds: [] } } : { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "conversation_unavailable" };
 		}
 		if (command.messageInput === null || command.messageInput.mode !== RunAdmissionMessageInputModes.PrePersistedHistory)
-			return { outcome: "denied", reason: "conversation_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "conversation_unavailable" };
 
 		// 2. Re-check the verified principal's organization membership before returning any conversation state.
 		const membership = await this.transaction.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.requester.subjectId, status: OrgMemberStatus.Active }, select: { clusterTenant: true } });
 		if (membership === null)
 		{
-			return { outcome: "denied", reason: "conversation_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "conversation_unavailable" };
 		}
 
 		// 3. Bind the conversation to its silo, service, mode, open lifecycle, and participant.
@@ -57,18 +57,18 @@ export class PrismaConversationContextRepository implements ConversationContextR
 		});
 		if (conversation === null)
 		{
-			return { outcome: "denied", reason: "conversation_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "conversation_unavailable" };
 		}
 		if (conversation.runs.length > 0)
 		{
-			return { outcome: "denied", reason: RunAdmissionDenialReasons.ActiveRun };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: RunAdmissionDenialReasons.ActiveRun };
 		}
 
 		// 4. Re-read the exact Kurrent revision so the snapshot cannot trust history coordinates copied by a caller.
 		const history = await this.history.read({ siloId: command.siloId, conversationId: conversation.id, expectedRevision: command.messageInput.historyRevision });
 		if (history === null || !_MatchesHistory(command, executionSubject, history))
-			return { outcome: "denied", reason: "conversation_unavailable" };
-		return { outcome: "loaded", value: { messageIds: [...history.orderedMessageIds] } };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "conversation_unavailable" };
+		return { outcome: SessionAssemblyLoadOutcomes.Loaded, value: { messageIds: [...history.orderedMessageIds] } };
 	}
 }
 

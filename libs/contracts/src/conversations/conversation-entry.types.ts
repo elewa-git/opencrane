@@ -1,3 +1,6 @@
+import type { MessageStates } from "@opencrane/models/conversations";
+import type { ConversationA2UIOperations, ConversationApprovalLogPhases, ConversationArtifactLogPhases, ConversationEntryAudiences, ConversationEntryProvenance, ConversationLogKinds, ConversationLogToolKinds, ConversationMemoryLogOperations, ConversationMemoryLogPhases, ConversationModelLogPhases, ConversationRunLogPhases, ConversationToolCallLogPhases } from "./conversation-entry-categories.types";
+
 /**
  * Selects the author shape used to read an entry.
  *
@@ -132,14 +135,14 @@ export type ConversationEntryVisibility = ConversationVisibility | ParticipantSu
 export interface ConversationVisibility
 {
 	/** Selects the whole-conversation audience. */
-	readonly audience: "conversation";
+	readonly audience: `${ConversationEntryAudiences.Conversation}`;
 }
 
 /** Makes an entry visible only to the listed participant identifiers. */
 export interface ParticipantSubsetVisibility
 {
 	/** Selects an explicit participant subset. */
-	readonly audience: "participant_subset";
+	readonly audience: `${ConversationEntryAudiences.ParticipantSubset}`;
 	/** Lists the participants that may receive this entry. */
 	readonly participantIds: readonly string[];
 }
@@ -179,7 +182,7 @@ export interface ConversationEntryBase
 	/** Identifies the one server-stamped author. */
 	readonly author: ConversationAuthor;
 	/** States whether a human, computer, or receipt-transforming service created this entry. */
-	readonly provenance: "human-authored" | "agent-authored" | "service-attested";
+	readonly provenance: `${ConversationEntryProvenance}`;
 	/** Limits which participants may receive this entry. */
 	readonly visibility: ConversationEntryVisibility;
 	/** Identifies the related fenced run when one exists. */
@@ -238,7 +241,7 @@ export interface MentionMessageContentBlock extends MessageContentBlockBase
 	/** Selects the mention block handler. */
 	readonly kind: `${ConversationMessageContentBlockKinds.Mention}`;
 	/** States whether the target identifies a human or agent. */
-	readonly targetKind: "human" | "agent";
+	readonly targetKind: `${ConversationAuthorKinds.Human | ConversationAuthorKinds.Agent}`;
 	/** Identifies the mentioned human or agent. */
 	readonly targetId: string;
 	/** Captures the target display name at append time. */
@@ -256,7 +259,7 @@ export interface MessageEntry extends ConversationEntryBase
 	/** Selects the message entry handler. */
 	readonly kind: `${ConversationEntryKinds.Message}`;
 	/** States the current immutable message lifecycle representation. */
-	readonly state: "pending" | "streaming" | "completed" | "failed" | "cancelled";
+	readonly state: `${MessageStates}`;
 	/** Lists the ordered safe content blocks. */
 	readonly blocks: readonly MessageContentBlock[];
 	/** Identifies the entry this message replies to when one exists. */
@@ -290,37 +293,37 @@ export interface LogEntryBase extends ConversationEntryBase
 export interface RunLogEntry extends LogEntryBase
 {
 	/** Selects the run log handler. */
-	readonly logKind: "run";
+	readonly logKind: `${ConversationLogKinds.Run}`;
 	/** Identifies the fenced run represented by this log. */
 	readonly runId: string;
 	/** States the safe run lifecycle phase. */
-	readonly phase: "queued" | "started" | "interrupted" | "completed" | "failed" | "recovery_required";
+	readonly phase: `${ConversationRunLogPhases}`;
 }
 
 /** Records one model-call lifecycle change. */
 export interface ModelLogEntry extends LogEntryBase
 {
 	/** Selects the model log handler. */
-	readonly logKind: "model";
+	readonly logKind: `${ConversationLogKinds.Model}`;
 	/** Identifies the model call represented by this log. */
 	readonly modelCallId: string;
 	/** States the safe model-call lifecycle phase. */
-	readonly phase: "started" | "streaming" | "completed" | "failed" | "cancelled";
+	readonly phase: `${ConversationModelLogPhases}`;
 }
 
 /** Records one local, MCP, or isolated OCI tool-call lifecycle change. */
 export interface ToolCallLogEntry extends LogEntryBase
 {
 	/** Selects the tool-call log handler. */
-	readonly logKind: "tool_call";
+	readonly logKind: `${ConversationLogKinds.ToolCall}`;
 	/** Identifies the tool call represented by this log. */
 	readonly toolCallId: string;
 	/** States whether the tool runs locally, through MCP, or in OCI isolation. */
-	readonly toolKind: "local" | "mcp" | "oci";
+	readonly toolKind: `${ConversationLogToolKinds}`;
 	/** Captures the admitted tool display name. */
 	readonly toolName: string;
 	/** States the safe tool-call lifecycle phase. */
-	readonly phase: "requested" | "running" | "completed" | "failed" | "cancelled" | "recovery_required";
+	readonly phase: `${ConversationToolCallLogPhases}`;
 	/** Identifies the immutable result artifact revision when one exists. */
 	readonly resultArtifactRevisionId: string | null;
 }
@@ -329,37 +332,37 @@ export interface ToolCallLogEntry extends LogEntryBase
 export interface ArtifactLogEntry extends LogEntryBase
 {
 	/** Selects the artifact log handler. */
-	readonly logKind: "artifact";
+	readonly logKind: `${ConversationLogKinds.Artifact}`;
 	/** Identifies the artifact represented by this log. */
 	readonly artifactId: string;
 	/** Identifies the immutable artifact revision when one exists. */
 	readonly artifactRevisionId: string | null;
 	/** States the safe artifact lifecycle phase. */
-	readonly phase: "uploading" | "scanning" | "published" | "rejected" | "failed";
+	readonly phase: `${ConversationArtifactLogPhases}`;
 }
 
 /** Records a memory-gateway operation without embedding memory content. */
 export interface MemoryLogEntry extends LogEntryBase
 {
 	/** Selects the memory log handler. */
-	readonly logKind: "memory";
+	readonly logKind: `${ConversationLogKinds.Memory}`;
 	/** States whether the operation recalled or wrote a memory fact. */
-	readonly operation: "recall" | "write";
+	readonly operation: `${ConversationMemoryLogOperations}`;
 	/** States the safe memory-operation lifecycle phase. */
-	readonly phase: "requested" | "completed" | "failed" | "denied";
+	readonly phase: `${ConversationMemoryLogPhases}`;
 }
 
 /** Records a request for or resolution of one governed approval. */
 export interface ApprovalLogEntry extends LogEntryBase
 {
 	/** Selects the approval log handler. */
-	readonly logKind: "approval";
+	readonly logKind: `${ConversationLogKinds.Approval}`;
 	/** Identifies the approval represented by this log. */
 	readonly approvalId: string;
 	/** Captures the admitted action display name. */
 	readonly action: string;
 	/** States the safe approval lifecycle phase. */
-	readonly phase: "requested" | "granted" | "denied" | "expired" | "revoked";
+	readonly phase: `${ConversationApprovalLogPhases}`;
 }
 
 /**
@@ -385,7 +388,7 @@ export interface A2UIEntryBase extends ConversationEntryBase
 export interface A2UIWriteEntry extends A2UIEntryBase
 {
 	/** States whether this entry replaces or patches the surface. */
-	readonly operation: "replace" | "patch";
+	readonly operation: `${ConversationA2UIOperations.Replace | ConversationA2UIOperations.Patch}`;
 	/** Identifies the private payload holding the A2UI mutation. */
 	readonly payloadRef: string;
 	/** Identifies the verified private payload digest. */
@@ -396,7 +399,7 @@ export interface A2UIWriteEntry extends A2UIEntryBase
 export interface A2UIRemoveEntry extends A2UIEntryBase
 {
 	/** Selects a surface removal. */
-	readonly operation: "remove";
+	readonly operation: `${ConversationA2UIOperations.Remove}`;
 	/** States that a removal has no payload. */
 	readonly payloadRef: null;
 	/** States that a removal has no payload digest. */

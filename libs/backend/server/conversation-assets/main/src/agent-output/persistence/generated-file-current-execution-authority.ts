@@ -1,6 +1,6 @@
 import type { ConversationToolExecutionAdmissionAuthority } from "@opencrane/backend/server/conversations";
 import { ExternalActionClaimKinds, ToolInvocationStates, type ProductAuthorizationWorkloadContext } from "@opencrane/backend/server/iam/authorization";
-import { MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
+import { AgentIdentityKinds, MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 
 import type { GeneratedFileCaptureProof, GeneratedFileCurrentExecutionAuthority, GeneratedFileCurrentExecutionEvidence } from "./generated-file-capture.types";
 import type { GeneratedFileInvocationEvidence } from "./generated-file-invocation-evidence.types";
@@ -24,7 +24,7 @@ export class GeneratedFileCurrentExecutionAuthorityAdapter implements GeneratedF
 			workloadKind: "job", workloadUid: evidence.workloadUid, podUid: proof.podUid,
 		};
 		const admission = await this.dispatch.admit(invocation, now, workload);
-		if (admission === null || admission.identity.kind !== "proxied")
+		if (admission === null || admission.identity.kind !== AgentIdentityKinds.Proxied)
 			return null;
 		const subject = admission.subject;
 		const requester = subject.requester.membership;

@@ -49,6 +49,9 @@ signed-in participant ──► main ◄── HERE ──► history
 - `PrismaConversationMetadataUnitOfWork` and `_CreateConversationMetadataRouter` compose directory, list, create, archive and close operations. `PrismaConversationMetadataReader` supplies review coordinates without exposing creation.
 - `PrismaAgentSessionCreationUnitOfWork` creates or recovers a personal assistant conversation from its caller-scoped UUID.
 - `PrismaSelfConversationHistoryUnitOfWork` and `_CreateSelfConversationHistoryRouter` bind current access to messages, history and event streams. `PrismaConversationMessageAdmissionUnitOfWork` commits the encrypted payload and delegates selected-asset binding through a transaction-scoped `ConversationMessageAttachmentAdmissionFactory` before KurrentDB append.
+  A retry rechecks current permission and adopts the saved entry's original author name and sign-in
+  time. A profile edit or later sign-in cannot turn the same message into a new dispatch; changed
+  issuer, principal, participant, content, attachments or activation still conflict.
 - `PrismaConversationPromptDocumentPreparationUnitOfWork` reads the exact Kurrent history prefix,
   resolves selected PDFs through `ConversationPromptDocumentAuthority`, and verifies their converted
   bytes outside SQL. Initial and restarted compilation repeat the current authority and coordinate
@@ -65,6 +68,10 @@ signed-in participant ──► main ◄── HERE ──► history
   caller's transaction. Later conversation entries do not invalidate an unchanged selected message.
 - Computer activation atomically admits the existing Absurd turn task when it publishes an active lease. The workflow advances saved model, tool-result, continuation and completion state; the only Pod-facing turn route returns its lease-derived review credential.
 - Stop handling reloads the immutable causation message to derive its requester and never enters activation. Its Kurrent publisher gives final output and cancellation one checked turn-stream winner; cancellation commits the private receipt, safe interrupted log and active-turn settlement together.
+  The turn store constructs and validates cancellation and settlement appends at the revision it
+  decoded. The Stop publisher composes that pair with its receipt and log; it cannot substitute a
+  newer turn head without reloading the turn and resolving the conflict.
+- Conversation-computer event identifiers use one internal colon-separated SHA-256 encoding so retries preserve existing history identities.
 - A fresh Stop selection checks current requester access before Kurrent records its target or no-target
   outcome. Target admission then rechecks current SQL authority and binds one Absurd cancellation task. That task
   records the Kurrent winner, cancels the original turn task, revokes model credentials and waits

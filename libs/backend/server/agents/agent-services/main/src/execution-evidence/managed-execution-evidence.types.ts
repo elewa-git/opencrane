@@ -3,7 +3,7 @@ import type { ExecutionSubjectHumanMembershipEvidence, ExecutionSubjectManagedMe
 
 import type { ExecutionCapabilityEvidence } from "./execution-capability-evidence.types";
 import type { ManagedAgentRevisionEvidence } from "../company-assistants/managed-agent.types";
-import type { PersonalExecutionEvidenceTransaction } from "./personal-execution-evidence.types";
+import { ExecutionEvidenceOutcomes, type PersonalExecutionEvidenceTransaction } from "./personal-execution-evidence.types";
 
 /** Keeps the checked company identity separate from the human requesting one run. */
 export interface ManagedExecutionEvidenceCommand
@@ -37,7 +37,7 @@ export enum ManagedExecutionEvidenceDenialReasons
 }
 
 /** Returns evidence only after all current checks succeed in the admission transaction. */
-export type ManagedExecutionEvidenceResult = { readonly outcome: "loaded"; readonly value: ManagedExecutionEvidence } | { readonly outcome: "denied"; readonly reason: ManagedExecutionEvidenceDenialReasons };
+export type ManagedExecutionEvidenceResult = { readonly outcome: `${ExecutionEvidenceOutcomes.Loaded}`; readonly value: ManagedExecutionEvidence } | { readonly outcome: `${ExecutionEvidenceOutcomes.Denied}`; readonly reason: ManagedExecutionEvidenceDenialReasons };
 
 /** Rechecks current managed and requester authority before an execution subject is frozen. */
 export interface ManagedExecutionEvidenceAuthorityPort

@@ -126,7 +126,7 @@ export interface OpenDeferredToolApprovalCommand
  * open transaction throws after the database may already have committed, a linked approval proves
  * the create succeeded and the tool call must NOT be failed.
  *
- * Implemented by: ./prisma-deferred-tool-approval-opener.ts.
+ * Implemented by: ./persistence/prisma-deferred-tool-approval-opener.ts.
  * @see {@link DeferredToolApprovalOpenUnitOfWork}
  */
 export interface DeferredToolApprovalOpenRepository
@@ -149,7 +149,7 @@ export interface DeferredToolApprovalOpenRepository
  * Either an approval exists afterwards, or the tool call has been failed. It never leaves a tool
  * call in `AwaitingApproval` with no approval to decide.
  *
- * Implemented by: ./prisma-deferred-tool-approval-opener.ts (`__OpenDeferredToolApproval`).
+ * Implemented by: ./persistence/prisma-deferred-tool-approval-opener.ts (`__OpenDeferredToolApproval`).
  */
 export interface DeferredToolApprovalOpenUnitOfWork
 {

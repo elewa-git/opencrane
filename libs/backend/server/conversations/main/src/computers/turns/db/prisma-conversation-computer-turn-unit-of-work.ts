@@ -1,5 +1,4 @@
 import { PrismaGroupChildAccessRepository } from "../../../children/db/prisma-group-child-access-repository";
-import { createHash } from "node:crypto";
 import { AgentRevisionState, AgentServiceState, ConversationLifecycle, OrgMemberStatus, Prisma, type PrismaClient } from "@prisma/client";
 import { ProductAuthorizationActions } from "@opencrane/models/authorization";
 import { ConversationAuthorKinds, ConversationEntryKinds, MessageStates, type MessageEntry } from "@opencrane/contracts";
@@ -9,6 +8,7 @@ import { ConversationHistoryReader } from "@opencrane/backend/server/conversatio
 import type { ConversationPrivatePayloadCipher, EncryptedConversationPrivatePayload } from "@opencrane/backend/server/conversations/history";
 import type { ConversationComputerOutputPayloadStore, ConversationComputerPendingTurnCompiler, ConversationComputerRunAdmissionCommand, ConversationComputerRunAdmissionPort, ConversationComputerTurnCandidate, ConversationComputerTurnCompileCommand, ConversationComputerTurnHistoryAnchor, ConversationComputerTurnProjectionRepository, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 import { PrismaConversationProductAuthorizationRepository } from "../../../authorization/db/conversation-product-authorization";
+import { _ConversationComputerEventId } from "../../conversation-computer-event-id";
 
 /** Resolves a pending turn and delegates its durable run admission before Kurrent freezes it. */
 export class PrismaConversationComputerTurnRepository implements ConversationComputerTurnProjectionRepository, ConversationComputerPendingTurnCompiler, ConversationComputerOutputPayloadStore
@@ -62,7 +62,7 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 				throw new Error("Conversation computer turn requires the pinned revision to remain published");
 			return { principal, service: conversation.service, revision };
 		})();
-		const runId = _Uuid("turn", pending.id);
+		const runId = _ConversationComputerEventId("turn", pending.id);
 		const admissionCommand: ConversationComputerRunAdmissionCommand = { runId, computer: command.computer, agent: { agentServiceId: loaded.service.id, agentRevisionId: loaded.revision.id, profileRevisionId: command.profileRevisionId }, lease: command.lease, requesterPrincipalId: loaded.principal.id, requesterIssuer: loaded.principal.issuer, requesterSubjectId: loaded.principal.subject, requesterAuthenticatedAt: pendingAuthor.authenticatedAt, requestIdempotencyKey: pending.id, messageInput: { mode: "pre_persisted_history" as const, messageId: pending.id, historyRevision: expectedRevision.toString(), orderedMessageIds: messages.map(message => message.id) } };
 		const admitted = await this.runAdmission.admit(admissionCommand);
 		const compiledInput = admitted.compiledInput;
@@ -78,8 +78,8 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 	/** Encrypt and idempotently persist assistant text before history references it, moving the conversation to the top of every list. */
 	public store(turn: FrozenConversationComputerTurn, sourceCommandId: string, text: string)
 	{
-		const payloadRef = _Uuid("payload", sourceCommandId);
-		const blockId = _Uuid("block", sourceCommandId);
+		const payloadRef = _ConversationComputerEventId("payload", sourceCommandId);
+		const blockId = _ConversationComputerEventId("block", sourceCommandId);
 		const coordinates = { siloId: turn.siloId, conversationId: turn.binding.conversationId, payloadRef, authorSubject: turn.binding.agentIdentityId };
 		const encrypted = this.cipher.encrypt(text, coordinates);
 		return (async () =>
@@ -133,11 +133,4 @@ export class PrismaConversationComputerTurnUnitOfWork implements ConversationCom
 			return await operation(new PrismaConversationComputerTurnRepository(transaction, history, cipher, maximumTurnCostUsdMicros, runAdmission));
 		}, { isolationLevel });
 	}
-}
-
-function _Uuid(domain: string, coordinate: string): string
-{
-	const hex = createHash("sha256").update(`${domain}:${coordinate}`).digest("hex").slice(0, 32).split("");
-	hex[12] = "4"; hex[16] = "8";
-	return `${hex.slice(0, 8).join("")}-${hex.slice(8, 12).join("")}-${hex.slice(12, 16).join("")}-${hex.slice(16, 20).join("")}-${hex.slice(20).join("")}`;
 }

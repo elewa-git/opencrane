@@ -18,9 +18,11 @@ mode, and starts no stream or run. Its main panel follows board `8a`: a compact 
 guide and participant dialogue, a completion divider, and one **Start a new chat** continuation tray. Directory
 warnings explain unavailable Agent setup without inventing provisioning state in the browser.
 
-An ordinary selected conversation may compose one feature-local context panel from the existing Activity and
-Files components. The page owns whether that panel is open and restores keyboard focus to the header trigger
-when it closes. Direct and group conversations can expose Files but never adopt stale Agent-run Activity.
+An ordinary selected conversation may compose one feature-local context panel from the existing Activity,
+Files, and Computer review components. The page owns whether that panel is open and restores keyboard focus
+to the header trigger when it closes. Direct and group conversations can expose Files but never adopt stale
+Agent-run Activity or an unavailable computer generation. PrimeNG tabs own Files and Computer review
+selection and keyboard movement while the context component keeps that visual selection local.
 Ready file intents pass through a feature-local coordinator: it reserves the platform-owned Preview
 or Download action during the click, then asks the component-scoped asset state for authorized bytes.
 Selection or access loss cancels the prepared action, and the state owner drops late bytes. The
@@ -105,8 +107,8 @@ is reset, so reloading cannot reopen a stale modal over the access-change explan
   and the composer emits draft/send/reconnect intents. They reuse the established conversation elements.
 - `ConversationOnboardingHistoryComponent` renders the completed bootstrap transcript without message,
   asset, run, archive, or close controls.
-- `ConversationWorkspaceContextPanelComponent` composes closable Activity and Files presentation without
-  owning state or navigation.
+- `ConversationWorkspaceContextPanelComponent` composes closable Activity, Files, and Computer review
+  presentation without owning state or navigation.
 - `ConversationWorkspaceConnectionStatusComponent` places stream recovery status beside a reconnect
   intent. It displays only presenter-provided copy and never opens a history connection itself.
 - The feature-local list and create controls render privacy-safe rows and immutable conversation mode

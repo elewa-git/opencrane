@@ -3,7 +3,6 @@ import { AgentRunState, ApprovalRequestState, ToolInvocationState, ToolResultDel
 import { _ToolInvocationRecord } from "../tool-invocation-persistence-mapping";
 import { RunToolResultPendingKinds, RunToolResultReadOutcomes, type ConsumeRunToolResultCommand, type ReadRunToolResultCommand, type ReadRunToolResultResult, type RunToolResultDeliveryRepository } from "../run-tool-result-delivery.types";
 import { _CopyReadRunToolResultCommand, _ReadExactRunToolResultPayload } from "../run-tool-result-delivery.validator";
-import type { ToolInvocationRecord } from "../tool-invocation.types";
 
 /**
  * Owns exact run-result reads and acknowledgement on the caller's existing transaction.
@@ -63,9 +62,9 @@ export class PrismaRunToolResultDeliveryRepository implements RunToolResultDeliv
 			|| delivery.state === ToolResultDeliveryState.Pending && delivery.consumedAt !== null
 			|| delivery.state === ToolResultDeliveryState.Consumed && (!(delivery.consumedAt instanceof Date) || !Number.isFinite(delivery.consumedAt.getTime())))
 			return { outcome: RunToolResultReadOutcomes.Unavailable };
-		let invocation: ToolInvocationRecord;
-		try { invocation = structuredClone(_ToolInvocationRecord(row)); }
-		catch { return { outcome: RunToolResultReadOutcomes.Unavailable }; }
+		// Malformed saved authorization is an integrity fault, not evidence that permission ended.
+		// Let the existing workflow trace retain that error while still withholding the result.
+		const invocation = structuredClone(_ToolInvocationRecord(row));
 		const payload = _ReadExactRunToolResultPayload(invocation, delivery.payload, delivery.payloadDigest);
 		if (payload === null)
 			return { outcome: RunToolResultReadOutcomes.Unavailable };

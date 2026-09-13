@@ -1,5 +1,5 @@
 import { Injectable, effect, inject } from "@angular/core";
-import { ConversationComputerStates, ConversationEntryKinds, type ConversationEntry } from "@opencrane/contracts";
+import { ConversationComputerStates, ConversationEntryKinds, ConversationLogKinds, type ConversationEntry } from "@opencrane/contracts";
 import { ConversationAssetContentStore, ConversationAssetsStore, type ConversationAsset } from "@opencrane/state/conversation/assets";
 import { ConversationElicitationStore } from "@opencrane/state/conversation/elicitation";
 import { ConversationComputerReviewStore, ConversationGroupChildStore, ConversationModes, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
@@ -98,7 +98,7 @@ export function _ApprovalInvalidationSequence(entries: readonly ConversationEntr
 {
 	let sequence: string | null = null;
 	for (const entry of entries)
-		if (entry.kind === ConversationEntryKinds.Log && entry.logKind === "approval")
+		if (entry.kind === ConversationEntryKinds.Log && entry.logKind === ConversationLogKinds.Approval)
 			sequence = entry.position;
 	return sequence;
 }

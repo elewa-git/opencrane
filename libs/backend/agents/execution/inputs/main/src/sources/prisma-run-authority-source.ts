@@ -2,7 +2,7 @@ import { AgentRevisionState, AgentServiceKind, AgentServiceState, Prisma } from 
 
 import { RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type InitialRunAuthority, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 
-import type { RunAuthoritySource, SessionAssemblyCommand, SessionAssemblyLoad } from "../assembly/session-assembly.types";
+import { SessionAssemblyLoadOutcomes, type RunAuthoritySource, type SessionAssemblyCommand, type SessionAssemblyLoad } from "../assembly/session-assembly.types";
 
 /**
  * Re-reads the active, published revision this run is allowed to use.
@@ -39,18 +39,18 @@ export class PrismaRunAuthority implements RunAuthoritySource
 		});
 		if (service === null || service.activeRevisionId === null || service.activeRevision === null)
 		{
-			return { outcome: "denied", reason: "run_not_admittable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "run_not_admittable" };
 		}
 
 		// 2. The loaded revision and activeRevisionId must match, so an old published revision cannot survive an active-revision swap.
 		if (service.activeRevision.id !== service.activeRevisionId || service.activeRevision.state !== AgentRevisionState.Published)
 		{
-			return { outcome: "denied", reason: "revision_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "revision_unavailable" };
 		}
 
 		// 3. The text-chat baseline uses approved personas without requiring future memory provisioning.
 		return {
-			outcome: "loaded",
+			outcome: SessionAssemblyLoadOutcomes.Loaded,
 			value: {
 				agentServiceId: service.id,
 				agentRevisionId: service.activeRevision.id,

@@ -2,7 +2,7 @@ import { AgentRunState, McpExecutorCommandState, McpExecutorWorkloadState, McpRu
 
 import { __AreRunInputSnapshotMcpToolsValid } from "@opencrane/backend/agents/execution/inputs";
 import { __FindToolInvocationInTransaction, ExternalActionClaimKinds, ToolInvocationStates } from "@opencrane/backend/server/iam/authorization";
-import type { RunInputSnapshotMcpTool } from "@opencrane/contracts";
+import { ConversationLogToolKinds, type RunInputSnapshotMcpTool } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { PrismaConversationToolDispatchAuthority } from "../dispatch/prisma-conversation-tool-dispatch-authority";
@@ -104,7 +104,7 @@ export class _PrismaConversationToolRunningNotificationRepository implements Con
 		return {
 			bootstrapId: command.requestIdentity.commandId, siloId: command.siloId, conversationId: command.conversationId,
 			runId: command.runId, attempt: command.attempt, toolInvocationId: command.toolInvocationId,
-			toolName: matching[0]!.name, toolKind: "mcp", occurredAt: row.createdAt.toISOString(),
+			toolName: matching[0]!.name, toolKind: ConversationLogToolKinds.Mcp, occurredAt: row.createdAt.toISOString(),
 		};
 	}
 }

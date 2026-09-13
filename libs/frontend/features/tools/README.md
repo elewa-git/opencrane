@@ -48,8 +48,10 @@ provider cannot overlap; independent targets keep separate pending state. Failed
 user's draft and late completions cannot clear a newer draft.
 
 Each card or table row owns its template, styles and typed interaction outputs. Shared headings,
-chips and asynchronous feedback come from `elements/ui`; route components compose these controls
-and delegate to their stores. Search and installation joins are pure feature mappers.
+chips and asynchronous feedback come from `elements/ui`. Buttons, text inputs and selects use the
+configured PrimeNG primitives so focus, disabled and semantic action states have one owner. Route
+components compose these controls and delegate to their stores. Search and installation joins are
+pure feature mappers.
 
 ```
  state gateway → route-scoped store → route → card / table row
@@ -64,8 +66,8 @@ and delegate to their stores. Search and installation joins are pure feature map
 
 - `TOOLS_ROUTES` — the user-facing route table (My Tools at `""`, catalogue at `"catalogue"`).
 - `MCP_ADMIN_ROUTES` — the admin route table (catalogue-admin and model-keys).
-- `theme.scss` — the feature-owned shared presentation for tools/admin layouts, tables, inputs,
-  callouts, actions, and connection-status indicators; the SPA composes this public style entrypoint.
+- `theme.scss` — the feature-owned shared presentation for tools/admin layouts, tables, callouts,
+  and connection-status indicators; the SPA composes this public style entrypoint.
 
 ## Boundary
 

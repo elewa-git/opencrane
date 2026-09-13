@@ -1,12 +1,12 @@
 import { ConversationModelToolModes } from "@opencrane/contracts";
 import type { ConversationComputerContinuationReservation } from "./conversation-computer-continuation.types";
 import { _ConversationContinuationReservationSchema, _ConversationModelReservationSchema } from "./conversation-computer-continuation.validator";
-import { createHash } from "node:crypto";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { ConversationComputerModelReservation } from "./conversation-computer-model.types";
 import type { FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
+import { _ConversationComputerEventId } from "../conversation-computer-event-id";
 
 /** Identifies the persisted v1 reservation format; changing its shape requires a new event version. */
 export const _CONVERSATION_MODEL_RESERVED_EVENT = "opencrane.conversation-computer-turn-model-reserved.v1";
@@ -14,10 +14,7 @@ export const _CONVERSATION_MODEL_RESERVED_EVENT = "opencrane.conversation-comput
 /** Build only non-secret reservation evidence under the turn's complete lease coordinates. */
 export function _ConversationModelReservationEvent(turn: FrozenConversationComputerTurn, reservation: ConversationComputerModelReservation | ConversationComputerContinuationReservation)
 {
-	const hex = createHash("sha256").update(`model-reservation:${reservation.invocationFence}`).digest("hex").slice(0, 32).split("");
-	hex[12] = "4";
-	hex[16] = "8";
-	const id = `${hex.slice(0, 8).join("")}-${hex.slice(8, 12).join("")}-${hex.slice(12, 16).join("")}-${hex.slice(16, 20).join("")}-${hex.slice(20).join("")}`;
+	const id = _ConversationComputerEventId("model-reservation", reservation.invocationFence);
 	return { id, type: _CONVERSATION_MODEL_RESERVED_EVENT, data: { bootstrapId: turn.bootstrapId, reservation: { ...reservation } }, metadata: { siloId: turn.siloId, computerId: turn.computerId, leaseId: turn.lease.leaseId, generation: String(turn.lease.leaseGeneration), bootstrapId: turn.bootstrapId } };
 }
 

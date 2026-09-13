@@ -1,4 +1,4 @@
-"""Prove candidate repair evidence cannot conceal changed upstream modules or artifacts."""
+"""Prove provider repair evidence cannot conceal changed upstream modules or artifacts."""
 
 import argparse
 import hashlib
@@ -14,13 +14,13 @@ from unittest.mock import patch
 import source_repair_evidence as REPAIRS
 
 
-class CandidateSourceDeclarationTest(unittest.TestCase):
-    """Check the shipped candidate declaration before an image build reaches attestation."""
+class ProviderSourceDeclarationTest(unittest.TestCase):
+    """Check the shipped provider declaration before an image build reaches attestation."""
 
-    def test_candidate_repairs_match_upstream_modules_and_image_profile(self) -> None:
-        candidate = Path(__file__).resolve().parent.parent / "candidates" / "1.5.4"
-        expected = json.loads((candidate / "expected-source-hashes.json").read_text())
-        profile = json.loads((candidate / "profile.json").read_text())
+    def test_provider_repairs_match_upstream_modules_and_image_profile(self) -> None:
+        cognee = Path(__file__).resolve().parents[2]
+        expected = json.loads((cognee / "tests/fixtures/provider-source-hashes.json").read_text())
+        profile = json.loads((cognee / "deploy/provider-profile.json").read_text())
         repairs = REPAIRS.validated_repairs(expected, profile)
         self.assertTrue(repairs)
         self.assertEqual(repairs, expected["repairs"])
@@ -39,7 +39,7 @@ class ProviderSourceEvidenceTest(unittest.TestCase):
         patch.object(REPAIRS, "_REPAIR_ROOT", self.repair_root).start()
         self.module = "upstream.adapter"
         self.origin = self.root / "adapter.py"
-        self.origin.write_bytes(b"candidate adapter bytes\n")
+        self.origin.write_bytes(b"provider adapter bytes\n")
         self.patch_path = self.repair_root / "repair.patch"
         self.patch_path.write_bytes(b"synthetic patch artifact\n")
         self.receipt = self.repair_root / "receipt.json"
@@ -53,7 +53,7 @@ class ProviderSourceEvidenceTest(unittest.TestCase):
         }
         self.expected = {
             "version": "test-version",
-            "source": {"scope": "official-tag-source-with-explicit-candidate-repair"},
+            "source": {"scope": "official-tag-source-with-explicit-provider-repair"},
             "modules": {self.module: self.repair["preimageSha256"]},
             "repairs": {self.module: self.repair},
         }
@@ -61,7 +61,7 @@ class ProviderSourceEvidenceTest(unittest.TestCase):
         self._write_receipt()
 
     def _write_receipt(self) -> None:
-        """Write the exact receipt shape produced by the candidate build."""
+        """Write the exact receipt shape produced by the provider build."""
         self.receipt.write_text(json.dumps({"module": self.module, **self.repair}))
 
     def _verify(self) -> dict:
@@ -75,7 +75,7 @@ class ProviderSourceEvidenceTest(unittest.TestCase):
     def _run_driver(self, origins: dict[str, Path]) -> dict:
         """Run main without installing Cognee or contacting any provider."""
         spec = importlib.util.spec_from_file_location(
-            "candidate_source_driver", Path(__file__).with_name("source_evidence.py")
+            "provider_source_driver", Path(__file__).with_name("source_evidence.py")
         )
         if spec is None or spec.loader is None:
             raise AssertionError("Source evidence driver could not be loaded")
@@ -155,7 +155,7 @@ class ProviderSourceEvidenceTest(unittest.TestCase):
         for source in ({}, {"scope": "official-tag-source-expectations"}, {"scope": "arbitrary-claim"}):
             with self.subTest(source=source):
                 self.expected["source"] = source
-                with self.assertRaisesRegex(AssertionError, "admitted candidate repair scope"):
+                with self.assertRaisesRegex(AssertionError, "admitted provider repair scope"):
                     self._verify()
 
     def test_receipt_rejects_missing_or_extra_fields(self) -> None:

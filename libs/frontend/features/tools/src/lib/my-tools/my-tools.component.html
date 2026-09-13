@@ -4,7 +4,7 @@
 			 title="My tools"
 			subtitle="Manage your installed tools and check their connection status."
 		>
-			<button heading-actions type="button" class="wo-tools__act" [disabled]="store.loading()" (click)="store.refresh()">Refresh</button>
+			<button heading-actions pButton type="button" size="small" [text]="true" severity="secondary" [disabled]="store.loading()" (click)="store.refresh()">Refresh</button>
 		</wo-section-heading>
 
 		<wo-resource-feedback [loading]="store.loading()" [error]="store.error() ?? store.readError()" [retryAvailable]="store.readError() !== null" (retryRequested)="store.refresh()" />
@@ -46,9 +46,6 @@
 			<p class="wo-mytools__empty">You haven't installed any tools yet.</p>
 		}
 
-		<a class="wo-dashed-button wo-mytools__browse" [routerLink]="['/tools/catalogue']">
-			<i class="pi pi-plus"></i>
-			Browse the catalogue
-		</a>
+		<a pButton class="wo-mytools__browse" severity="secondary" [outlined]="true" icon="pi pi-plus" label="Browse the catalogue" [routerLink]="['/tools/catalogue']"></a>
 	</div>
 </div>

@@ -9,15 +9,11 @@ export { PrismaOrganizationAdminGrantBootstrapRepository } from "./grants/persis
 export type { OrganizationMemberProductGrantBootstrapRepository, ReconcileOrganizationMemberProductGrantsCommand } from "./grants/organization-member-product-grant-bootstrap.types";
 export { ORGANIZATION_MEMBER_PRODUCT_GRANT_MANAGER_ID, PrismaOrganizationMemberProductGrantBootstrapRepository } from "./grants/persistence/prisma-organization-member-product-grant-bootstrap-repository";
 export { __DecideDeferredToolRequest } from "./approvals/deferred-tool-approval-decision";
-export { __DeferToolRequest } from "./approvals/deferred-tool-approval-opening";
 export { __ExpireDeferredToolApprovalBatch } from "./approvals/deferred-tool-approval-expiry";
-export { __PlanDeferredToolApprovalLifecycle } from "./approvals/deferred-tool-approval-lifecycle";
-export { __IsDeferredToolApprovalReplacementAllowed, __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./approvals/deferred-tool-approval-schema";
+export { __ValidateDeferredToolArguments } from "./approvals/deferred-tool-approval-schema";
 export type { DeferredToolApprovalProjection } from "./approvals/deferred-tool-approval-projection.types";
 export { DeferredToolDecisionKinds, DeferredToolDecisionOutcomes } from "./approvals/deferred-tool-approval-decision.types";
 export type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, ExpireDeferredToolApprovalBatchCommand, ExpireDeferredToolApprovalBatchResult } from "./approvals/deferred-tool-approval-decision.types";
-export { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates } from "./approvals/deferred-tool-approval-lifecycle.types";
-export type { DeferredToolApprovalLifecycleInput } from "./approvals/deferred-tool-approval-lifecycle.types";
 export { DeferToolRequestOutcomes } from "./approvals/deferred-tool-approval-open.types";
 export type { DeferToolRequestCommand, DeferToolRequestResult, OpenDeferredToolApprovalCommand } from "./approvals/deferred-tool-approval-open.types";
 export { __OpenDeferredToolApproval, __OpenDeferredToolApprovalInTransaction } from "./approvals/persistence/prisma-deferred-tool-approval-opener";

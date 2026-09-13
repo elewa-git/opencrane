@@ -1,6 +1,7 @@
 import { BoundConversationWriter, _ConfirmBoundConversationWriterIntent } from "@opencrane/backend/server/conversations/history";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
+import { ConversationEntryAudiences } from "@opencrane/contracts";
 
 import { __AssertConversationComputerAnswerAuthority } from "./conversation-computer-answer-authority";
 import type { ConversationComputerToolResults } from "./conversation-computer-continuation.types";
@@ -33,7 +34,7 @@ export class ConversationComputerTurnWriterFactory implements ConversationComput
 				throw new Error("Conversation computer turn has conflicting output");
 		} }, { assertMayUseVisibility: async function _RequireConversationAudience(_binding, visibility)
 		{
-			if (visibility.audience !== "conversation")
+			if (visibility.audience !== ConversationEntryAudiences.Conversation)
 				throw new Error("Conversation computer output requires conversation visibility");
 		} }, { assertMayAppend: async function _RecheckAnswerAuthorityAtAppend()
 		{

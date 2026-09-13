@@ -111,10 +111,10 @@ class ProviderDeletion154Test(unittest.TestCase):
         self.assertIn("async def contend_from_target_context()", source)
         self.assertIn("await asyncio.create_task(contend_from_target_context())", source)
 
-    def test_candidate_patch_locks_public_cleanup_before_its_session(self) -> None:
+    def test_provider_patch_locks_public_cleanup_before_its_session(self) -> None:
         patch_source = (
             MODULE_PATH.parents[2]
-            / "candidates/1.5.4/patches/sqlalchemy-delete-recovery.patch"
+            / "../deploy/patches/sqlalchemy-delete-recovery.patch"
         ).read_text(encoding="utf-8")
         public_wrapper = patch_source.split(
             "     async def remove_data_file_if_unreferenced", 1

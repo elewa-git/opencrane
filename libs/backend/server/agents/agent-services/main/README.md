@@ -87,8 +87,6 @@ assignments until those capabilities have a supported company policy.
   `_CreatePersonalAgentToolsRouter` support callers that supply those dependencies explicitly.
 - `PrismaPersonalExecutionEvidenceRepository` and `PersonalExecutionEvidenceAuthority` prove current
   personal execution eligibility inside run admission.
-- `PrismaRuntimeAgentEffectEligibilityAuthority` rechecks the active service and revision before an
-  external runtime effect.
 - `__ExecutionCapabilityEvidence` canonicalizes the immutable personal execution evidence digest.
 - `PrismaManagedExecutionEvidenceRepository` and `ManagedExecutionEvidenceAuthority` independently
   admit the human's invocation and the company Principal's model use.

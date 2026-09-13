@@ -1,5 +1,7 @@
+import { NgTemplateOutlet } from "@angular/common";
 import { ChangeDetectionStrategy, Component, input, output, signal } from "@angular/core";
 import { ButtonModule } from "primeng/button";
+import { TabsModule } from "primeng/tabs";
 
 import { ConversationActivityComponent, ConversationActivityReadStates } from "@opencrane/features/conversation-activity";
 import { ConversationFilesPanelComponent, type ConversationAssetActionIntent, type ConversationAssetPresentation } from "@opencrane/features/conversation-assets";
@@ -9,14 +11,14 @@ import { ConversationComputerReviewComponent, type ConversationComputerLocalhost
 import { ConversationWorkspaceContextSections } from "./conversation-workspace-context-panel.types";
 
 /**
- * Presents the selected session's collapsible Activity and Files context.
+ * Presents the selected session's collapsible Activity, Files and Computer review context.
  *
  * The routed page owns visibility and focus restoration. This component only renders already mapped
  * rows, hides Agent Activity when the immutable mode disallows it, and forwards typed intents.
  *
  * Called by: `ConversationWorkspacePageComponent` beside an ordinary selected conversation.
  */
-@Component({ selector: "wo-conversation-workspace-context-panel", standalone: true, imports: [ButtonModule, ConversationActivityComponent, ConversationComputerReviewComponent, ConversationFilesPanelComponent], templateUrl: "./conversation-workspace-context-panel.component.html", styleUrl: "./conversation-workspace-context-panel.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
+@Component({ selector: "wo-conversation-workspace-context-panel", standalone: true, imports: [NgTemplateOutlet, ButtonModule, TabsModule, ConversationActivityComponent, ConversationComputerReviewComponent, ConversationFilesPanelComponent], templateUrl: "./conversation-workspace-context-panel.component.html", styleUrl: "./conversation-workspace-context-panel.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
 export class ConversationWorkspaceContextPanelComponent
 {
 	/** Stable section vocabulary used by the accessible tab controls. */
@@ -78,5 +80,12 @@ export class ConversationWorkspaceContextPanelComponent
 	protected activeSection(): ConversationWorkspaceContextSections
 	{
 		return this.computerReviewVisible() ? this.selectedSection() : ConversationWorkspaceContextSections.Files;
+	}
+
+	/** Adopt only a section rendered by the bounded context tabs. */
+	protected selectSection(value: string | number | undefined): void
+	{
+		if (value === ConversationWorkspaceContextSections.Files || value === ConversationWorkspaceContextSections.ComputerReview)
+			this.selectedSection.set(value);
 	}
 }

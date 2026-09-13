@@ -3,6 +3,7 @@ import type { Logger } from "@opencrane/backend/observability";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import { WorkflowTaskRetryableError, type IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+import { ConversationAuthorKinds, ConversationEntryAudiences } from "@opencrane/contracts";
 import { _ConversationFailureDiagnostic } from "../messages/conversation-failure-diagnostic";
 import type { ConversationPrivatePayloadCipher } from "@opencrane/backend/server/conversations/history";
 import type { GroupChildAgentResolver, GroupChildCreateCommand, GroupChildTaskInput, GroupChildView, GroupChildLifecyclePort, GroupChildRequest } from "./group-child.types";
@@ -30,7 +31,7 @@ export class PrismaGroupChildLifecycleUnitOfWork implements GroupChildLifecycleP
 		if (caller.externalIssuer === undefined || caller.verifiedAuthenticationAt === undefined || !await this._transaction(repository => repository.canCreate(caller, parentId, command, id, digest)))
 			return null;
 		const source = await _ReadGroupChildSource(this.participantHistory, caller, parentId, command.parentMessageId, BigInt(command.parentMessagePosition));
-		if (source === null || source.entry.author.kind !== "human" || source.entry.author.principalId !== caller.principalId || source.entry.author.participantId !== caller.subjectId || source.entry.visibility.audience !== "conversation")
+		if (source === null || source.entry.author.kind !== ConversationAuthorKinds.Human || source.entry.author.principalId !== caller.principalId || source.entry.author.participantId !== caller.subjectId || source.entry.visibility.audience !== ConversationEntryAudiences.Conversation)
 			return null;
 		return this._transaction(repository => repository.create(caller, parentId, command, id, digest));
 	}
@@ -59,7 +60,7 @@ export class PrismaGroupChildLifecycleUnitOfWork implements GroupChildLifecycleP
 				return this._unavailable(request);
 			stage = "source_read";
 			const source = await _ReadGroupChildSource(this.participantHistory, _GroupChildCaller(request), request.parentConversationId, request.parentMessageId, request.parentMessagePosition);
-			if (source === null || source.entry.author.kind !== "human" || source.entry.author.principalId !== request.requestedByPrincipalId || source.entry.author.participantId !== request.requesterSubjectId || source.entry.visibility.audience !== "conversation")
+			if (source === null || source.entry.author.kind !== ConversationAuthorKinds.Human || source.entry.author.principalId !== request.requestedByPrincipalId || source.entry.author.participantId !== request.requesterSubjectId || source.entry.visibility.audience !== ConversationEntryAudiences.Conversation)
 				return this._unavailable(request);
 			stage = "input_admission";
 			const payload = await this._transaction(repository => repository.prepareInput(request, source.text));

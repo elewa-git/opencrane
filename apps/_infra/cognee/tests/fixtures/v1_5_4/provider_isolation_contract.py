@@ -82,8 +82,8 @@ def local_storage_paths(content: bytes) -> list[str]:
     expected_digest = digest(content)
     paths = []
     for path in root.rglob("*"):
-        is_candidate = path.is_file() and path.stat().st_size == len(content)
-        if is_candidate and digest(path.read_bytes()) == expected_digest:
+        is_match = path.is_file() and path.stat().st_size == len(content)
+        if is_match and digest(path.read_bytes()) == expected_digest:
             paths.append(str(path))
     return sorted(set(paths))
 

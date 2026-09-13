@@ -15,17 +15,28 @@ The consolidation inventory must account for that work before this can be called
 
 ### Delivery checklist
 
-- [ ] Stop testv4, testv5 and other test workloads on the verified dev cluster. Keep the previously
+- [x] Stop testv4, testv5 and other test workloads on the verified dev cluster. Keep the previously
   requested test data; use reviewed suspension tooling rather than the destructive teardown path.
-- [ ] Match cloud disks against Kubernetes volumes, retained claims, snapshots and VM attachments;
+- [x] Match cloud disks against Kubernetes volumes, retained claims, snapshots and VM attachments;
   delete only confirmed stale disks and record the exact resources and remaining costs.
-- [ ] Freeze the complete source inventory, resolve integration conflicts, validate the combined
+  The reviewed suspension completed from `c661e6bf997f1bfe66dbf97faa51b3745c6496e2`: all six
+  silos and shared application controllers are stopped. Retained 20 Bound volumes/380 GiB,
+  seven snapshots, two SandboxClaims and two Sandboxes. That initial suspension deleted no disk.
+  The final repair rerun at `239feb2fdaee3f8ef0a9bb750748c37c426e59d9` also completes its
+  full retention comparison with both Sandboxes kept Suspended. GKE system services, its control
+  plane and the retained load balancer/IP remain billable. A subsequent dependency and backup review
+  qualified the obsolete `opencrane-sandbox` VM and its 30 GiB boot disk for retirement. Both are now
+  deleted; all 14 verified recovery snapshots and the 20 current data disks/380 GiB remain.
+- [x] Freeze the complete source inventory, resolve integration conflicts, validate the combined
   behavior and publish one draft against develop. Absorb predecessor PRs only after verifying their
   full inclusion, and retarget dependants so each change has one review location.
-- [ ] Review the cumulative diff across backend authorities, model validators, persistence,
+  Draft #888 is the cumulative review against develop at `9c3437c908eb4bbf0fa18a8e84de4c62227420b7`.
+  All 35 fully absorbed predecessor PRs are closed; their branches and unrelated local work remain.
+  Stack integrity passes. Incomplete delegation proposals remain outside this source inventory.
+- [x] Review the cumulative diff across backend authorities, model validators, persistence,
   workflows, API/contracts, frontend components/state, package boundaries, deployment and tests.
   Record each verified finding, its owner, the fix and its validation in the follow-up quality PR.
-- [ ] Delete superseded routes, implementations, exports, configuration, tests and docs together.
+- [x] Delete superseded routes, implementations, exports, configuration, tests and docs together.
   Preserve required behavior and reusable component states. Split responsibilities when their
   ownership or dependency direction differs; file length alone is not a reason to split.
 - [ ] Run independent architecture preflight/post-review, independent code review, relevant Nx
@@ -48,6 +59,122 @@ complete pages through their stores, mappers and reusable components, including 
 refresh/recovery behavior and visual coverage. Each deletion needs a verified surviving owner or
 proof that its capability is no longer used. Findings remain open until the fix and its tests pass.
 
+Retain the focused capability and type maps established by #843. App source stays bootstrap-only;
+libraries keep capability/role folders, explicit Nx dependency direction and narrow package barrels.
+Consolidation must preserve these boundaries even when an older PR is absorbed or closed.
+
+### Final code and testv6 preparation checkpoint
+
+The cleanup code at `a2560d903f3b5b799e90c3343dc4282c1853c714` passes the CI build/test/lint job
+for 93 projects plus one dependency, including the production Angular build. The dedicated Cognee
+provider contract, history recovery, API generation and three applicable generic image smokes pass.
+Storybook passes 202 interaction/accessibility checks and 133 unchanged visual states. The five
+remote-MCP database failures and 22 intended visual candidates remain the two recorded approval
+gates; the existing macOS and Linux galleries remain the human review targets.
+
+Testv6 DNS now resolves to the retained ingress at `35.205.225.244`, with the wildcard, base and
+sibling records unchanged. The current Zitadel client rejects the exact testv6 callback as absent.
+The scoped administrator-session and callback-change approval is pending after automatic approval
+review blocked private-session inspection. No identity-provider, credential bootstrap, shared
+controller restore or fresh testv6 deployment has run. These preparation results do not complete the
+remaining functional MVP journeys.
+
+### Bounded multi-step tool reasoning — added MVP acceptance
+
+The current one-tool result and text-only continuation is an earlier delivery slice. The complete
+MVP must support a repeated model → MCP call → persisted result → model cycle within one run.
+Absurd continues to select the next saved step and own waiting and recovery. The server owns model
+and tool authority; AgentSandbox owns isolated, lease-fenced execution. No second scheduler is added.
+
+- [ ] Freeze explicit model-call, token, tool-call, elapsed-time and loop limits at admission.
+  Every iteration debits that same allowance; recovery and continuation cannot replenish it.
+- [ ] Let each saved result inform the next exact tool selection, including discovery-dependent
+  sequences, pagination and intermediate reconciliation, before producing a grounded final answer.
+  Qualify with ordinary provider tools; an aggregate `inventory_total` tool is not a substitute.
+- [ ] Apply bounded backoff to proven retryable provider responses such as HTTP 429. Save the
+  retry decision and deadline in the existing workflow. An uncertain effect remains unavailable
+  for redispatch unless its existing recovery contract proves a safe outcome.
+- [ ] Recheck the exact tool revision, connection/credential version, product permission and active
+  execution lease/generation for every call. Only the original requester may approve or cancel
+  MVP external writes; a loop iteration does not inherit an unbounded approval.
+- [ ] Persist visible progress and results across the loop, and stop further model/tool admission
+  after cancellation, ended authority or a defined limit.
+- [ ] Test restart at each model/tool dispatch and result boundary, no duplicate paid model request
+  or uncertain external effect, unchanged remaining allowances, durable response-unavailable state,
+  pagination and 429 backoff, revoked authority, requester approval, cancellation and loop exhaustion.
+- [ ] On testv6, complete a discovery-dependent multi-call business journey with pagination,
+  reconciliation and a grounded answer, plus an approved write and its recovery/cancellation cases.
+
+The repeated loop is not implemented by the quality fixes described below. It remains a functional
+gate alongside memory, delegation, scheduling and administration before the goal can close.
+
+The source preflight confirms that this limit is enforced by the existing conversation turn's
+singular reservations and fixed Kurrent revisions, its text-only continuation, and the tool proposal
+reader's one-invocation clamp. The next implementation must replace those owners together with a
+turn-local sequence of saved model and tool steps. It must not remove the clamp before the saved
+sequence, aggregate allowance checks and per-step proposal identity exist.
+
+Implement admission limits first, then the turn protocol and its exhaustive State × Event table,
+then repeated proposal/result progression through the existing Absurd and IAM owners. Keep model
+transport single-request. Reserve a final model call before admitting another tool; if the remaining
+allowance cannot support a grounded answer, end through the existing durable unavailable outcome.
+Carry the ordered accepted tool-result history into subsequent model requests under the existing
+private custody and context bounds. Restart tests must precede pagination and approved-write live
+qualification. Retry a rate-limited action only when its current adapter/recovery evidence proves
+that another dispatch is safe.
+
+### Cleanup findings and evidence
+
+Draft #891 (`feat/0.12-mvp-quality-cleanup`) is based directly on #888. Keep findings
+and validation here until the complete review is recorded; a passing mechanical scan does not
+close a responsibility review.
+
+| Finding | Owning change | State and validation |
+|---|---|---|
+| Conversation prerequisites depended on the literal silo name `testv5`, so a new `testv6` could bypass them. | `apps/_infra/deploy-k8s` enforces the existing KurrentDB and AgentSandbox contracts for every deployment and checks the final Helm values before a cluster write. | Complete deployment contracts pass. Independent review caught Helm overrides of checked identities/runtime; final merged-value schema constraints and override tests resolve that finding. Post-review passes. |
+| Existing teardown deletes retained test data. The live inventory includes six silos and four MCP Deployments managed outside Helm. | Add an app-owned suspension operation with exact ownership checks and preserved storage identities. | Source and execution review pass; live shutdown completed and retention was verified. All 20 current cloud data disks map to Bound volumes. The later backup review qualified the obsolete VM and its separate 30 GiB boot disk for retirement; both are deleted with all 14 verified snapshots retained. |
+| Remote MCP claims reach the OCI-only database trigger. | Complete the reviewed remote transport constraints and lifecycle fencing in the fresh-install baseline. | Current CI and local SQL prove the failure. The concrete source proposal remains unapplied pending explicit approval and fresh PostgreSQL acceptance. |
+| Memory provider deletion leaves source bytes after the final membership is removed. | Promote the qualified Cognee 1.5.4 profile into the sole production image and remove the superseded provider and candidate lifecycle. Compose authenticated provider access inside the existing memory gateway library. | Cognee 73, gateway 43, app 5 and client 18 tests pass, with builds, type checks and full deployment contracts. Independent architecture and source review pass after build-owner registration and stale-comment repairs. The full Docker-backed provider contract passes on #891 at `c66303d6`; fresh-silo live qualification remains pending. |
+| The growing Storybook catalogue shares a single three-minute screenshot-test deadline. | Discover one Playwright test per tagged state from the built catalogue and compare that discovery with the served index. | Before the component-state changes, all then-existing 150 visual checks passed locally in 4.8 minutes with existing screenshots and tolerances. Each state has its own browser context, deadline and failure report. Independent review passes. |
+| Personal and managed execution admission duplicate command and lease comparisons; the personal path omitted the returned computer ID. | Share pure coordinate validators inside the existing execution-inputs subject owner, retaining separate identity/permission policy and read order. | All 142 input-assembly tests and type checks pass, including 18 substitution cases across both public authorities. Independent review passes. |
+| Assembly's exported result repeated strings already owned by documented outcome enums. | Type the final result with those enums and explicitly map the lower admission result at the boundary. | All 142 input tests and type checks pass. Source-loader states retain their separate contract owners. Independent post-review passes. |
+| A later sign-in or display-name edit made an exact saved-message retry conflict with its original immutable author metadata. | A pure message-retry validator preserves the saved name/authentication time while comparing stable actor coordinates and all command content. Current authorization still runs before recovery. | All 655 conversation tests and type checks pass; independent review passes. |
+| Stop constructed private cancellation events outside the turn owner and could select a head newer than the state it decoded. | The turn store prepares validated cancellation and settlement appends from its loaded revision; Stop retains atomic composition with its receipt and log. | Independent preflight and post-review pass; all 655 conversation tests and type checks pass, including progression between read and append. |
+| An unused runtime eligibility adapter and approval-internal exports remained public after replacement. | Delete the unused agent-service adapter, contract, self-test and boundary registration; keep approval internals behind the live transaction entrypoints. | Repo-wide consumer inventory confirms no production caller. All 161 agent-service and 249 authorization tests pass, with type checks and independent deletion review. |
+| Malformed saved tool authorization was swallowed and reported as ended authority. | Preserve the integrity error through the existing workflow trace while withholding the result; retain explicit unavailable outcomes for current lifecycle and coordinate mismatches. | All 249 authorization tests and the type check pass, including malformed evidence that cannot be consumed. Independent post-review passes. |
+| Agent identity categories duplicated persisted strings across admission, validation and output owners. | Add one documented identity-kind enum in contracts and reuse it at the existing boundaries without changing wire values. | Six affected packages pass tests and type checks, including 136 contract and 53 identity tests. Independent post-review passes. |
+| Seven conversation event publishers duplicate the same durable ID algorithm. | Move the byte-identical algorithm to one conversation-computer helper; retain distinct ID schemes with different inputs or versions. | All 658 conversation tests and the type check pass. Independent review confirms unchanged domain and input bytes at all seven replacements. |
+| Conversation entry categories duplicated stored strings across their types, parser and consumers. | Add documented presentation enums beside the entry contract, retain a distinct phase set for each log subtype, and reuse the existing message-state owner. A total frontend phase map requires an explicit display for future tool phases. | Architecture preflight and independent post-review pass. All 142 contract tests and the type check pass; 392 comparisons with the old parser preserve acceptance and parsed bytes. The consumers pass conversation 658, history 30, inputs 142, workspace 58 and onboarding 32 tests, with type checks. |
+| Tools defines a second base input, select and button system, including inputs without visible focus. | Compose the existing PrimeNG controls in the current feature components and delete the unused duplicate styles. | The source repair passes 32 Tools tests and the type check. All 202 Storybook interaction/accessibility tests pass. Seventeen intended control screenshot changes on each of macOS and Linux await human review. The production Angular template build passes after correcting the options array type. |
+| The active Computer Review panel has no canonical visual or section-navigation coverage. | Add focused populated, busy, error, narrow and keyboard fixtures, preserving the existing state owners. | Source and keyboard repair pass all 58 workspace tests and the type check. Five new states on each of macOS and Linux await human review. On each platform the 155-state visual run passes the other 133 committed states unchanged. |
+| Retained Sandbox objects can request Pods when the shared controller restarts, and a completed suspension cannot be rerun after Pods disappear. | Persist their existing controller's suspended operating mode under exact ownership and version checks; accept already-absent Pods without accepting foreign or durable workloads. | Focused suspension and full deployment contracts pass, including substituted ownership and persistent volumes without a Pod. Independent review passes. The `c66303d6` repair persisted both retained Sandboxes as Suspended, then stopped at an unnecessary Pooler write because the CNPG webhook was offline. That attempt did not complete its full retention comparison. The repaired `239feb2fd` rerun subsequently completed the comparison with both Sandbox/Claim identities preserved; shared controllers remain stopped. |
+| Repeating a completed suspension still writes stopped CNPG resources after their admission webhook is shut down. | Give the existing PostgreSQL suspension operations their own file and skip a write only with valid saved ownership and stopped-state evidence. Retain phase order, version fencing on changes and the final identity comparison. | The focused suspension contract passes with a rejecting webhook, and rejects foreign or missing ownership. Complete deployment contracts and independent post-review pass. The live rerun from `239feb2fd` completes the full before/after retention comparison; all six old silos remain stopped. |
+| Lower input loaders and admission callbacks repeat result strings across different owners. | Define source-load, build, existing-verification and final-admission enums at their current type owners; explicitly map refusals between them. | Inputs pass 142 tests and runs pass 74, with both type checks. Raw fixtures retain independent wire-value assertions. Independent post-review passes after restoring the idempotency and persistence-retry guidance. |
+| Execution evidence and artifact preprocessing repeat their owned outcome strings. | Reuse the evidence owner's enum across its consumers and keep each artifact result's permitted subset explicit. | Agent services 161, inputs 142, conversations 658 and artifacts 97 tests pass. Independent post-review passes; the unused artifact enum barrel export was removed. |
+| The authenticated memory profile requires a safely provisioned existing service-user Secret. | Add a create-only operator helper with explicit cluster, namespace, name and email, private credential files, ownership checks and immutable rerun validation. | Focused and complete deployment contracts and independent security/architecture review pass. Registration remains disabled by default. The separate testv6 bootstrap operation has not run. |
+| PostgreSQL and KurrentDB bootstrap passed generated passwords in process arguments. | Keep password bytes in private temporary files, pass file paths to kubectl and remove those files after success or failure. Existing Secret identity, type and rerun behavior stay unchanged. | Focused contracts prove file permissions, six password creations, absence of password bytes from arguments/output, and success/failure cleanup. Full deployment contracts and independent security post-review pass. |
+
+The final source overlay passes all 90 affected lint/type-check targets. Style reports zero errors
+and two reviewed schema comparisons: Prisma's skill publication state and the group-child
+persistence state carried through its ORM-neutral port. Neither introduces a second state owner.
+Module growth reports zero hard-limit errors; its responsibility candidates remain tied to the
+owning independent reviews. API generation leaves both the generated client and published OpenAPI
+unchanged. Intentional frontend baseline approval, remote-MCP SQL and exact-image/live qualification
+remain separate open gates.
+
+PR #891 CI at `c66303d669c05c470ee349a4d58c5d5e402e9037` passes the full Docker-backed Cognee
+provider contract, KurrentDB history recovery, generated API/client checks, three other image smokes
+and all 202 Storybook interaction/accessibility tests. Its corrected stack metadata check passes.
+The generic Cognee image-smoke target was independently wired without the arguments required by
+the same smoke script already run in the full contract; the reviewed repair removes that duplicate
+target and selects the full contract directly for Cognee changes. Its 24 selector tests pass.
+The affected build found one Angular template type error in the Tools filter options; the type-only
+repair passes the production UI build and produces identical JavaScript. The remote-MCP database
+suite still passes 10/15 pending its separate SQL proposal. Both platforms' 22 intentional screenshot
+candidates still require human review. All 554 frontend unit tests and type/lint targets pass across
+32 projects. Workload ownership and agent-domain boundary guards pass. The repaired commit still
+requires CI; immutable image publication and fresh testv6 qualification remain open.
+
 ### Consolidation validation checkpoint
 
 The combined application passes 159 tests and its type check; the conversation owner passes 653
@@ -61,7 +188,8 @@ The fresh-database remote MCP suite passes 10 of 15 cases. Four remote claims ar
 existing OCI-only runtime trigger, and one malformed-revision case encounters the existing earlier
 trigger rather than the intended transport constraint. The previously rejected remote-runtime SQL
 proposal is still unapplied. This is a recorded blocker for the cleanup and testv6 acceptance, not a
-passing integration claim. Application SQL and full quality review are still in progress.
+passing integration claim. Application SQL passes all 82 cases and four SQL authority scripts;
+the full quality review remains in progress.
 
 ### Live acceptance
 
@@ -69,8 +197,9 @@ Testv6 must prove real remote and hosted retrieval, approved external actions, c
 remember/recall/correct/forget, visible progress and Stop, rich interaction after reload, scanned
 input documents and downloadable generated files, bounded delegation, scheduled work, administration,
 and safe action recovery. Exercise original-request and continuation restart safety, unchanged
-allowances, durable response-unavailable state, one text-only continuation, and stale lease/generation
-rejection. Preserve the boundary between local/CI evidence and completed live journeys.
+allowances, durable response-unavailable state and stale lease/generation rejection across the
+bounded multi-step loop above. Keep the existing one-tool continuation tests as regression evidence
+for that earlier slice. Preserve the boundary between local/CI evidence and completed live journeys.
 
 
 ## Model response recovery — source validation

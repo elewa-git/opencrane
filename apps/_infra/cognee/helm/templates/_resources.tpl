@@ -1,12 +1,14 @@
 {{- define "opencrane.cognee.resources" -}}
-{{- /* In-cluster Cognee is the durable per-silo graph memory store. It is always paired with the
-       release-local memory gateway: Cognee deliberately has no public ingress, authentication, or
-       direct server route. The gateway TokenReviews the exact server identity and is the only caller
-       admitted by Cognee's policy. BYO/non-private Cognee is intentionally rejected by the gateway
-       chart until an authenticated transport is designed and implemented. */ -}}
+{{- /* Cognee stores each silo's durable memory behind its private gateway, with no public ingress
+       or direct OpenCrane server route. The gateway checks the exact server identity with TokenReview
+       and authenticates to Cognee through its service-user session. Cognee's network policy admits
+       only that gateway. This chart supports only the release-local provider. */ -}}
 {{- if and .Values.clustertenantManager.cognee.install }}
 {{- if eq (include "opencrane.litellmShared" .) "true" }}
 {{- fail "private Cognee requires release-local LiteLLM so its NetworkPolicy can name the sole model egress path" }}
+{{- end }}
+{{- if not .Values.clustertenantManager.cognee.persistence.enabled }}
+{{- fail "the qualified Cognee provider requires one shared persistent local volume" }}
 {{- end }}
 ---
 apiVersion: v1
@@ -91,13 +93,15 @@ spec:
               value: "0.0.0.0"
             - name: PORT
               value: {{ .Values.clustertenantManager.cognee.service.port | quote }}
-            # Cognee is not an application authorization boundary in this deployment. The
-            # authenticated memory gateway is its only NetworkPolicy-admitted caller, so disable
-            # Cognee's user-login middleware explicitly instead of relying on vendor defaults.
+            # Source repairs are qualified only with Cognee's local SQLite authority.
+            - name: DB_PROVIDER
+              value: sqlite
+            # The gateway logs in as one service user for this silo. Cognee must enforce the
+            # dataset ACL because NetworkPolicy authenticates the caller pod, not the dataset.
             - name: ENABLE_BACKEND_ACCESS_CONTROL
-              value: "false"
+              value: "true"
             - name: REQUIRE_AUTHENTICATION
-              value: "false"
+              value: "true"
             {{- if .Values.clustertenantManager.cognee.persistence.enabled }}
             # Point Cognee's data + system roots at the mounted PVC so its relational/identity
             # DB, graph store, and vector store survive pod restarts. Cognee's BaseConfig is

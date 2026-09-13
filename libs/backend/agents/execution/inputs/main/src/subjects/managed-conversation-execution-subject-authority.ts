@@ -1,7 +1,10 @@
+import { AgentIdentityKinds } from "@opencrane/contracts";
+import { ExecutionEvidenceOutcomes } from "@opencrane/backend/server/agents/agent-services";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 
 import type { ManagedConversationExecutionSubjectDependencies } from "./managed-conversation-execution-subject-authority.types";
-import type { ExecutionSubjectAuthority, SessionAssemblyCommand, SessionAssemblyLoad } from "../assembly/session-assembly.types";
+import { _MatchesConversationExecutionCommand, _MatchesConversationExecutionLease } from "./conversation-execution-subject.validator";
+import { SessionAssemblyLoadOutcomes, type ExecutionSubjectAuthority, type SessionAssemblyCommand, type SessionAssemblyLoad } from "../assembly/session-assembly.types";
 
 /** Freezes a company assistant's own execution authority while retaining the requesting human separately. */
 export class ManagedConversationExecutionSubjectAuthority implements ExecutionSubjectAuthority
@@ -14,16 +17,11 @@ export class ManagedConversationExecutionSubjectAuthority implements ExecutionSu
 	{
 		const coordinates = this.dependencies.coordinates;
 		const { computer, agent, lease } = coordinates;
-		if (command.conversationId === null || command.trigger !== "interactive" || command.runId !== coordinates.runId
-			|| command.siloId !== computer.siloId || command.conversationId !== computer.conversationId
-			|| command.agentServiceId !== agent.agentServiceId || run.agentServiceId !== agent.agentServiceId || run.agentRevisionId !== agent.agentRevisionId
-			|| command.requester.issuer !== coordinates.requesterIssuer || command.requester.subjectId !== coordinates.requesterSubjectId
-			|| command.requester.authenticatedAt !== coordinates.requesterAuthenticatedAt || command.requestIdempotencyKey !== coordinates.requestIdempotencyKey
-			|| !Number.isSafeInteger(lease.leaseGeneration) || lease.leaseGeneration <= 0)
-			return { outcome: "denied", reason: "identity_unavailable" };
+		if (command.conversationId === null || command.trigger !== "interactive" || !_MatchesConversationExecutionCommand(command, run, coordinates))
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "identity_unavailable" };
 		const principalId = await this.dependencies.resolvePrincipalId(transaction);
 		if (principalId === null || principalId === coordinates.requesterPrincipalId)
-			return { outcome: "denied", reason: "identity_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "identity_unavailable" };
 		let identity;
 		let active;
 		try
@@ -33,24 +31,22 @@ export class ManagedConversationExecutionSubjectAuthority implements ExecutionSu
 		}
 		catch
 		{
-			return { outcome: "denied", reason: "identity_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "identity_unavailable" };
 		}
-		if (identity.identity.kind !== "managed" || identity.identity.principalId !== principalId
+		if (identity.identity.kind !== AgentIdentityKinds.Managed || identity.identity.principalId !== principalId
 			|| identity.identity.id !== computer.agentIdentityId || identity.identity.siloId !== command.siloId || identity.identity.agentServiceId !== agent.agentServiceId
-			|| active.computer.siloId !== command.siloId || active.computer.id !== computer.computerId || active.computer.conversationId !== command.conversationId
-			|| active.computer.agentIdentityId !== computer.agentIdentityId || active.computer.profileRevisionId !== agent.profileRevisionId
-			|| active.lease.id !== lease.leaseId || active.lease.computerId !== computer.computerId || active.lease.generation !== lease.leaseGeneration || active.lease.sandboxClaimId !== lease.sandboxClaimId)
-			return { outcome: "denied", reason: "identity_unavailable" };
+			|| !_MatchesConversationExecutionLease(active, coordinates))
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "identity_unavailable" };
 		if (transaction.authorization === undefined)
-			return { outcome: "denied", reason: "product_authorization_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "product_authorization_unavailable" };
 		const evidence = await this.dependencies.executionEvidence(transaction).load({ identity: identity.identity, requesterPrincipalId: coordinates.requesterPrincipalId, agentRevisionId: run.agentRevisionId }, { authorization: transaction.authorization, admittedAtEpochMs: transaction.admittedAtEpochMs });
-		if (evidence.outcome === "denied")
+		if (evidence.outcome === ExecutionEvidenceOutcomes.Denied)
 			return evidence;
 		const value = evidence.value;
 		if (value.membership.principalId !== principalId || value.membership.siloId !== command.siloId || value.membership.agentServiceId !== agent.agentServiceId || value.membership.agentRevisionId !== run.agentRevisionId
 			|| value.requesterMembership.principalId !== coordinates.requesterPrincipalId || value.requesterMembership.siloId !== command.siloId)
-			return { outcome: "denied", reason: "identity_unavailable" };
-		return { outcome: "loaded", value: {
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "identity_unavailable" };
+		return { outcome: SessionAssemblyLoadOutcomes.Loaded, value: {
 			schemaVersion: 1, siloId: command.siloId, agentIdentityId: computer.agentIdentityId, principalId,
 			identity: { agentIdentityId: computer.agentIdentityId, principalId, siloId: command.siloId, headRevision: identity.revision.toString(), headDigest: identity.headDigest, decisionEvidenceId: identity.headEventId, verifiedAt: transaction.admittedAt },
 			membership: value.membership,

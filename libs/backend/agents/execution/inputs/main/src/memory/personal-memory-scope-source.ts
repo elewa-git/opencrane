@@ -2,7 +2,7 @@ import { __ResolvePersonalMemoryDataset, PersonalMemoryDatasetResolutionOutcomes
 import { RunExecutionPersonalMemoryPolicies, type InitialRunAuthority, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 
-import { RunInputMemoryScopes, type ConversationContextInput, type MemoryScopeInput, type MemoryScopeSource, type SessionAssemblyCommand, type SessionAssemblyLoad } from "../assembly/session-assembly.types";
+import { RunInputMemoryScopes, SessionAssemblyLoadOutcomes, type ConversationContextInput, type MemoryScopeInput, type MemoryScopeSource, type SessionAssemblyCommand, type SessionAssemblyLoad } from "../assembly/session-assembly.types";
 
 /**
  * Freezes the verified personal dataset coordinates when the run policy allows personal memory.
@@ -36,7 +36,7 @@ export class PersonalMemoryScopeSource implements MemoryScopeSource
 		// 1. Personal memory is available only when the explicit run policy allows it.
 		if (run.executionPolicy.personalMemory !== RunExecutionPersonalMemoryPolicies.Allowed)
 		{
-			return { outcome: "denied", reason: "memory_scope_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "memory_scope_unavailable" };
 		}
 
 		// 2. Find the one personal dataset from the principal already verified during admission.
@@ -47,6 +47,6 @@ export class PersonalMemoryScopeSource implements MemoryScopeSource
 		}
 
 		// 3. The snapshot stores dataset coordinates without a recall query or memory content.
-		return { outcome: "loaded", value: { memoryQueryPolicy: { scope: RunInputMemoryScopes.Personal, datasetId: resolved.dataset.datasetId, cogneeDatasetId: resolved.dataset.cogneeDatasetId }, datasetId: resolved.dataset.datasetId } };
+		return { outcome: SessionAssemblyLoadOutcomes.Loaded, value: { memoryQueryPolicy: { scope: RunInputMemoryScopes.Personal, datasetId: resolved.dataset.datasetId, cogneeDatasetId: resolved.dataset.cogneeDatasetId }, datasetId: resolved.dataset.datasetId } };
 	}
 }

@@ -16,6 +16,23 @@ export enum AgentIdentityStates
 }
 
 /**
+ * Selects the principal relationship stored in an agent identity's Kurrent history.
+ *
+ * These strings are shared by identity validation, admission and the public contract. The kind
+ * identifies which principal to check; it never grants that principal permission by itself.
+ * Renaming a value breaks replay of saved identities and changes the public wire contract.
+ */
+export enum AgentIdentityKinds
+{
+	/** Acts through the named human principal, bounded by the referenced delegation policy. */
+	Proxied = "proxied",
+	/** Acts through the managed agent's own principal and current grants. */
+	Managed = "managed",
+	/** Acts through a separate sub-chat principal with its parent and requester recorded. */
+	ManagedSubChat = "managed_subchat",
+}
+
+/**
  * Defines the shared contract coordinates for every agent identity.
  *
  * The concrete identity kind determines whose principal acts. The common fields keep the identity,
@@ -53,7 +70,7 @@ export interface AgentIdentityBase
 export interface ProxiedAgentIdentity extends AgentIdentityBase
 {
 	/** Selects the proxied identity handler. */
-	readonly kind: "proxied";
+	readonly kind: `${AgentIdentityKinds.Proxied}`;
 	/** Identifies the principal whose current authority is delegated. */
 	readonly proxiedPrincipalId: string;
 	/** Identifies the policy that limits this delegation. */
@@ -71,7 +88,7 @@ export interface ConstructedAgentIdentityBase extends AgentIdentityBase
 export interface ManagedAgentIdentity extends ConstructedAgentIdentityBase
 {
 	/** Selects the managed identity handler. */
-	readonly kind: "managed";
+	readonly kind: `${AgentIdentityKinds.Managed}`;
 }
 
 /**
@@ -83,7 +100,7 @@ export interface ManagedAgentIdentity extends ConstructedAgentIdentityBase
 export interface ManagedSubChatAgentIdentity extends ConstructedAgentIdentityBase
 {
 	/** Selects the managed-subchat identity handler. */
-	readonly kind: "managed_subchat";
+	readonly kind: `${AgentIdentityKinds.ManagedSubChat}`;
 	/** Identifies the parent agent identity that requested this sub-chat. */
 	readonly parentAgentIdentityId: string;
 	/** Captures the parent identity's dedicated principal for durable stream verification; it must differ from this sub-chat principal. */

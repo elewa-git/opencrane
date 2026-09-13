@@ -5,7 +5,8 @@
 				<label class="wo-mcp-connection__label" [for]="view().controlId + '-credential'">Access token for {{ view().serverName }}</label>
 				<input
 					#credentialInput
-					class="wo-text-input wo-mcp-connection__input"
+					pInputText
+					class="wo-mcp-connection__input"
 					type="password"
 					[id]="view().controlId + '-credential'"
 					[attr.aria-describedby]="view().controlId + '-credential-help ' + view().controlId + '-error'"
@@ -21,33 +22,33 @@
 				<p class="wo-mcp-connection__help" [id]="view().controlId + '-credential-help'">Stored securely. You cannot view it later.</p>
 			}
 			<div class="wo-mcp-connection__actions">
-				<button type="submit" class="wo-tools__act" [disabled]="!canSubmit()">{{ submitLabel() }}</button>
+				<button pButton type="submit" size="small" [text]="true" [disabled]="!canSubmit()">{{ submitLabel() }}</button>
 				@if (view().state === states.Replace) {
-					<button type="button" class="wo-tools__act wo-tools__act--muted" [disabled]="busy()" (click)="cancelDraftRequested.emit()">Cancel</button>
+					<button pButton type="button" size="small" [text]="true" severity="secondary" [disabled]="busy()" (click)="cancelDraftRequested.emit()">Cancel</button>
 				}
 			</div>
 		</form>
 	} @else if (view().state === states.Active) {
 		<div class="wo-mcp-connection__actions">
 			@if (view().canReplace) {
-				<button #replaceAction type="button" class="wo-tools__act" [disabled]="busy()" (click)="replaceRequested.emit()">Replace</button>
+				<button #replaceAction pButton type="button" size="small" [text]="true" [disabled]="busy()" (click)="replaceRequested.emit()">Replace</button>
 			}
 			@if (view().canRevoke) {
-				<button type="button" class="wo-tools__act wo-tools__act--muted" [disabled]="busy()" (click)="revokeRequested.emit()">Disconnect</button>
+				<button pButton type="button" size="small" [text]="true" severity="danger" [disabled]="busy()" (click)="revokeRequested.emit()">Disconnect</button>
 			}
 		</div>
 	} @else if (view().state === states.Activating) {
 		<p class="wo-mcp-connection__status">Connecting…</p>
 		@if (view().canRevoke) {
 			<div class="wo-mcp-connection__actions">
-				<button type="button" class="wo-tools__act wo-tools__act--muted" [disabled]="busy()" (click)="revokeRequested.emit()">Disconnect</button>
+				<button pButton type="button" size="small" [text]="true" severity="danger" [disabled]="busy()" (click)="revokeRequested.emit()">Disconnect</button>
 			</div>
 		}
 	} @else if (view().state === states.RecoveryRequired) {
 		<p class="wo-mcp-connection__status">{{ view().failureMessage ?? "Disconnect this connection before replacing it." }}</p>
 		@if (view().canRevoke) {
 			<div class="wo-mcp-connection__actions">
-				<button type="button" class="wo-tools__act wo-tools__act--muted" [disabled]="busy()" (click)="revokeRequested.emit()">Disconnect</button>
+				<button pButton type="button" size="small" [text]="true" severity="danger" [disabled]="busy()" (click)="revokeRequested.emit()">Disconnect</button>
 			</div>
 		}
 	} @else {

@@ -1,4 +1,4 @@
-import { ConversationMessageContentBlockKinds, GeneratedFileResultKinds, type GeneratedFileResultMetadata } from "@opencrane/contracts";
+import { AgentIdentityKinds, ConversationMessageContentBlockKinds, GeneratedFileResultKinds, type GeneratedFileResultMetadata } from "@opencrane/contracts";
 import type { Prisma } from "@prisma/client";
 
 import type { ConversationGeneratedFileResult, ConversationGeneratedFileResultCommand, ConversationGeneratedFileResultRepository } from "@opencrane/backend/server/conversations";
@@ -100,7 +100,7 @@ function _CommandMatches(command: ConversationGeneratedFileResultCommand, operat
 	const { admission, invocation, turn } = command;
 	const subject = admission.subject;
 	const selection = turn.toolSelection;
-	return admission.identity.kind === "proxied" && admission.notAfterEpochMs > nowEpochMs
+	return admission.identity.kind === AgentIdentityKinds.Proxied && admission.notAfterEpochMs > nowEpochMs
 		&& operation.siloId === turn.siloId && operation.siloId === turn.binding.siloId && operation.siloId === subject.siloId
 		&& operation.conversationId === turn.binding.conversationId && operation.conversationId === admission.conversationId
 		&& operation.runId === turn.binding.runId && operation.runId === turn.compile.runId && operation.runId === subject.runScope.runId

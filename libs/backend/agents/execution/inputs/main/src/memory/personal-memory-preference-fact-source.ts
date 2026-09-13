@@ -2,7 +2,7 @@ import { __SelectPersonalPreferenceFactIds, type PersonalMemoryAdmissionReposito
 import { RunExecutionPersonalMemoryPolicies, type InitialRunAuthority, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 
-import type { PreferenceFactInput, PreferenceFactSource, SessionAssemblyCommand, SessionAssemblyLoad } from "../assembly/session-assembly.types";
+import { SessionAssemblyLoadOutcomes, type PreferenceFactInput, type PreferenceFactSource, type SessionAssemblyCommand, type SessionAssemblyLoad } from "../assembly/session-assembly.types";
 
 /**
  * Freezes the ids of the user's consented preference facts, chosen from the verified run identity.
@@ -32,10 +32,10 @@ export class PersonalMemoryPreferenceFactSource implements PreferenceFactSource
 	{
 		// 1. An explicit policy, not identity kind inference, governs access to personal preference facts.
 		if (run.executionPolicy.personalMemory === RunExecutionPersonalMemoryPolicies.None)
-			return { outcome: "loaded", value: [] };
+			return { outcome: SessionAssemblyLoadOutcomes.Loaded, value: [] };
 		if (run.executionPolicy.personalMemory !== RunExecutionPersonalMemoryPolicies.Allowed)
 		{
-			return { outcome: "denied", reason: "memory_scope_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "memory_scope_unavailable" };
 		}
 
 		// 2. Read only the verified principal's consented facts through the caller's admission transaction.
@@ -46,6 +46,6 @@ export class PersonalMemoryPreferenceFactSource implements PreferenceFactSource
 		});
 
 		// 3. Pass the ids on for snapshot compilation. The fact text stays with the memory gateway.
-		return { outcome: "loaded", value: ids.map(function _toPreferenceFact(id): PreferenceFactInput { return { id }; }) };
+		return { outcome: SessionAssemblyLoadOutcomes.Loaded, value: ids.map(function _toPreferenceFact(id): PreferenceFactInput { return { id }; }) };
 	}
 }

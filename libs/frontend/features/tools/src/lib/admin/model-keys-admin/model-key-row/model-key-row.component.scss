@@ -7,8 +7,8 @@
 	width: 100%;
 	max-width: 18rem;
 	font-size: var(--oc-text-sm);
+}
 
-	&:disabled {
-		opacity: var(--oc-opacity-disabled);
-	}
+.wo-admin__actions button + button {
+	margin-inline-start: var(--oc-space-3);
 }

@@ -1,4 +1,4 @@
-"""Qualify exact Cognify recovery against the installed 1.5.4 candidate."""
+"""Qualify exact Cognify recovery against the installed 1.5.4 provider."""
 
 import asyncio
 import hashlib

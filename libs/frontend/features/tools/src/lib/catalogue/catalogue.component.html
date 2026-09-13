@@ -9,14 +9,16 @@
 		<div class="wo-cat__toolbar">
 			<div class="wo-cat__search">
 				<i class="pi pi-search"></i>
-				<input class="wo-text-input" type="text" aria-label="Search tools" placeholder="Search tools…" [value]="store.search()" (input)="onSearch($event)" />
+				<input pInputText type="search" aria-label="Search tools" placeholder="Search tools…" [value]="store.search()" (input)="onSearch($event)" />
 			</div>
-			<select aria-label="Connection type" class="wo-select" [value]="store.typeFilter()" (change)="onTypeFilter($event)">
-				<option [value]="filters.All">All types</option>
-				<option [value]="serverType.RemoteOauth">OAuth</option>
-				<option [value]="serverType.SingleUser">API token</option>
-				<option [value]="serverType.MultiUser">Multi-user</option>
-			</select>
+			<p-select
+				ariaLabel="Connection type"
+				[ngModel]="store.typeFilter()"
+				(ngModelChange)="onTypeFilter($event)"
+				[options]="filterOptions"
+				optionLabel="label"
+				optionValue="value"
+			/>
 		</div>
 
 		<div class="wo-cat__grid">

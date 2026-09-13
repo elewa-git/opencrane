@@ -4,10 +4,7 @@ import { ProductAuthorizationActions } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ConversationHistoryAuthority } from "@opencrane/backend/server/conversations/history";
-import { ConversationHistoryAppendOutcomes } from "@opencrane/backend/server/conversations/history";
-import { ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
-import { AesGcmConversationPrivatePayloadCipher } from "@opencrane/backend/server/conversations/history";
+import { AesGcmConversationPrivatePayloadCipher, ConversationHistoryAppendOutcomes, ConversationHistoryAuthority, ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
 import { PrismaSelfConversationHistoryUnitOfWork } from "../prisma-self-conversation-history";
 import { ConversationMessageActivations } from "../self-conversation-history.types";
 import { _ConversationAuthorizationFixture } from "../../authorization/__tests__/conversation-authorization.fixtures";
@@ -214,7 +211,7 @@ describe("participant message transaction with the central authorization authori
 		expect(append).toHaveBeenCalledWith(expect.objectContaining({ entry: expect.objectContaining({ activation: "stop" }), activation: expect.objectContaining({ generation: 7 }) }));
 	});
 
-	it.each(["activation", "requester", "participant"])("rejects a recovered history entry with a different %s", async function _ConflictingHistory(field)
+	it.each(["activation", "requester", "participant", "issuer"])("rejects a recovered history entry with a different %s", async function _ConflictingHistory(field)
 	{
 		const f = _Fixture();
 		await f.authority.postMessage(_CALLER, "conversation-1", _COMMAND);
@@ -224,9 +221,35 @@ describe("participant message transaction with the central authorization authori
 			author = { ...author, principalId: "other-principal" };
 		if (field === "participant")
 			author = { ...author, participantId: "other-subject" };
+		if (field === "issuer")
+			author = { ...author, issuer: "https://other-issuer.test" };
 		const activation = field === "activation" ? ConversationMessageActivations.Stop : ConversationMessageActivations.None;
 		f.read.mockResolvedValue({ entries: [{ ...saved, author, activation }], streamName: "conversation-conversation-1", genesis: {} } as never);
 		await expect(f.authority.postMessage(_CALLER, "conversation-1", _COMMAND)).rejects.toThrow("different command");
+		expect(f.append).toHaveBeenCalledOnce();
+	});
+
+	it("recovers the original author after a new sign-in and display-name change", async function _RecoversOriginalAuthor()
+	{
+		const f = _Fixture();
+		await f.authority.postMessage(_CALLER, "conversation-1", _COMMAND);
+		const entry = f.append.mock.calls[0]![0].entry as MessageEntry;
+		const original = structuredClone(entry);
+		const payload = f.state.payload;
+		f.read.mockResolvedValue({ entries: [entry], streamName: "conversation-conversation-1", genesis: {} } as never);
+		f.client.orgMembership.findUnique.mockResolvedValue({ status: "Active", displayName: "Updated display name" });
+		const refreshedCaller = { ..._CALLER, verifiedAuthenticationAt: "2026-09-13T00:00:00.000Z" };
+
+		await expect(f.authority.postMessage(refreshedCaller, "conversation-1", _COMMAND)).resolves.toEqual({ outcome: "idempotent", position: "1" });
+		expect(entry).toEqual(original);
+		expect(f.state.payload).toBe(payload);
+		expect(f.state.updates).toBe(1);
+		expect(f.state.audits).toHaveLength(2);
+		expect(f.append).toHaveBeenCalledOnce();
+
+		f.client.orgMembership.findUnique.mockResolvedValue({ status: "Suspended", displayName: "Updated display name" });
+		await expect(f.authority.postMessage(refreshedCaller, "conversation-1", _COMMAND)).resolves.toBeNull();
+		expect(f.state.audits).toHaveLength(2);
 		expect(f.append).toHaveBeenCalledOnce();
 	});
 

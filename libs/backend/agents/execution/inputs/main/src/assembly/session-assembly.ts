@@ -1,15 +1,21 @@
 import { __SameMembershipBinding } from "@opencrane/backend/server/iam/membership";
-import { __DigestRunInputSnapshot, RunAdmissionMessageInputModes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type InitialRunAuthority, type RunAdmissionCommit, type RunAdmissionPrepare } from "@opencrane/backend/agents/execution/runs";
+import { __DigestRunInputSnapshot, RunAdmissionBuildOutcomes, RunAdmissionExistingVerificationOutcomes, RunAdmissionMessageInputModes, RunAdmissionOutcomes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type InitialRunAuthority, type RunAdmissionCommit, type RunAdmissionPrepare } from "@opencrane/backend/agents/execution/runs";
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, ___SortBy, type JsonValue } from "@opencrane/util";
 
 import { __AreRunInputSnapshotMcpToolsValid } from "../sources/mcp-tool-snapshot.validator";
-import type { AssembleRunInputSnapshotResult, SessionAssemblyRefusalReason } from "./session-assembly-result.types";
-import { RunInputMemoryScopes, type ApprovedPersonaInput, type MemoryScopeInput, type SessionAssemblyAuthorities, type SessionAssemblyCommand, type ConversationContextInput, type ToolPolicyInput } from "./session-assembly.types";
+import { RunInputSnapshotAdmissionOutcomes, SessionAssemblyOutcomes, type AssembleRunInputSnapshotResult, type SessionAssemblyRefusalReason } from "./session-assembly-result.types";
+import { RunInputMemoryScopes, SessionAssemblyLoadOutcomes, type ApprovedPersonaInput, type MemoryScopeInput, type SessionAssemblyAuthorities, type SessionAssemblyCommand, type ConversationContextInput, type ToolPolicyInput } from "./session-assembly.types";
 
 /** Snapshot format version this assembler stamps on every snapshot it writes. */
 const _SNAPSHOT_VERSION = 1;
+
+/** Maps the admission repository's serialized result into the public assembly vocabulary. */
+const _ADMISSION_OUTCOMES: Record<`${RunInputSnapshotAdmissionOutcomes}`, RunInputSnapshotAdmissionOutcomes> = {
+	[RunInputSnapshotAdmissionOutcomes.Accepted]: RunInputSnapshotAdmissionOutcomes.Accepted,
+	[RunInputSnapshotAdmissionOutcomes.Idempotent]: RunInputSnapshotAdmissionOutcomes.Idempotent,
+};
 
 /**
  * Admits one logical run by compiling its sole immutable `RunInputSnapshot`.
@@ -52,89 +58,89 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 {
 	// 1. Reject a command with blank or missing ids first, so no authority read can match rows outside this run.
 	if (!_isCommandValid(command))
-		return { outcome: "denied", reason: "invalid_command" };
+		return { outcome: SessionAssemblyOutcomes.Denied, reason: "invalid_command" };
 	const checked: { subject: ExecutionSubject | null } = { subject: null };
 
 	// 2. Resolve a duplicate before compilation, or hold the service lock while every input is
 	// revalidated. `prepare` runs first inside that same transaction when the caller passed one, so a
 	// source below can read a conversation the caller has only just created.
-	const admitted = await authorities.admission.admit(command, async function _VerifyExisting(snapshot, transaction)
+	const admitted = await authorities.admission.admit<SessionAssemblyRefusalReason>(command, async function _VerifyExisting(snapshot, transaction)
 	{
 		const personalMemory = _ExistingPersonalMemoryPolicy(snapshot);
 		if (personalMemory === null)
-			return { outcome: "denied", reason: "memory_scope_unavailable" } as const;
+			return { outcome: RunAdmissionExistingVerificationOutcomes.Denied, reason: "memory_scope_unavailable" } as const;
 		const authority: InitialRunAuthority = { agentServiceId: snapshot.agentServiceId, agentRevisionId: snapshot.agentRevisionId, executionPolicy: { persona: snapshot.personaRevisionId === null ? RunExecutionPersonaPolicies.None : RunExecutionPersonaPolicies.Required, personalMemory }, promptCompilerVersion: snapshot.promptCompilerVersion, trigger: command.trigger };
 		const current = await authorities.executionSubject.load(command, authority, transaction);
-		if (current.outcome === "denied")
-			return current;
+		if (current.outcome === SessionAssemblyLoadOutcomes.Denied)
+			return { outcome: RunAdmissionExistingVerificationOutcomes.Denied, reason: current.reason } as const;
 		if (!_IsExecutionSubjectBound(command, authority, current.value) || !_SameExistingSubject(snapshot.executionSubject, current.value))
-			return { outcome: "denied", reason: "identity_unavailable" } as const;
+			return { outcome: RunAdmissionExistingVerificationOutcomes.Denied, reason: "identity_unavailable" } as const;
 		const conversation = await authorities.productAuthorization.verifyExisting(command, current.value, transaction);
-		if (conversation.outcome !== "denied")
+		if (conversation.outcome !== SessionAssemblyLoadOutcomes.Denied)
 			checked.subject = current.value;
-		return conversation.outcome === "denied" ? conversation : { outcome: "verified" } as const;
+		return conversation.outcome === SessionAssemblyLoadOutcomes.Denied ? { outcome: RunAdmissionExistingVerificationOutcomes.Denied, reason: conversation.reason } as const : { outcome: RunAdmissionExistingVerificationOutcomes.Verified } as const;
 	}, async function _compileWithinAdmission(transaction)
 	{
 		// 3. Load the run and its frozen revision first; every later source needs them.
 		const run = await authorities.runAuthority.load(command, transaction);
-		if (run.outcome === "denied")
-			return run;
+		if (run.outcome === SessionAssemblyLoadOutcomes.Denied)
+			return { outcome: RunAdmissionBuildOutcomes.Denied, reason: run.reason } as const;
 
 		// 4. Verify one AgentIdentity-and-Principal subject before loading any identity-scoped input.
 		const executionSubject = await authorities.executionSubject.load(command, run.value, transaction);
-		if (executionSubject.outcome === "denied")
-			return executionSubject;
+		if (executionSubject.outcome === SessionAssemblyLoadOutcomes.Denied)
+			return { outcome: RunAdmissionBuildOutcomes.Denied, reason: executionSubject.reason } as const;
 		if (!_IsExecutionSubjectBound(command, run.value, executionSubject.value))
-			return { outcome: "denied", reason: "identity_unavailable" } as const;
+			return { outcome: RunAdmissionBuildOutcomes.Denied, reason: "identity_unavailable" } as const;
 
 		// 5. The admitted revision's explicit policy determines whether an approved persona is required.
 		const persona = await authorities.approvedPersona.load(command, run.value, executionSubject.value, transaction);
-		if (persona.outcome === "denied")
-			return persona;
+		if (persona.outcome === SessionAssemblyLoadOutcomes.Denied)
+			return { outcome: RunAdmissionBuildOutcomes.Denied, reason: persona.reason } as const;
 		if ((run.value.executionPolicy.persona === RunExecutionPersonaPolicies.Required) !== (persona.value.personaRevisionId !== null))
 		{
-			return { outcome: "denied", reason: "persona_unavailable" } as const;
+			return { outcome: RunAdmissionBuildOutcomes.Denied, reason: "persona_unavailable" } as const;
 		}
 
 		// 6. Freeze the transcript, rejecting messages that leaked into a non-conversational run.
 		const conversation = await authorities.conversationContext.load(command, run.value, executionSubject.value, transaction);
-		if (conversation.outcome === "denied")
-			return conversation;
+		if (conversation.outcome === SessionAssemblyLoadOutcomes.Denied)
+			return { outcome: RunAdmissionBuildOutcomes.Denied, reason: conversation.reason } as const;
 		if (command.conversationId === null && conversation.value.messageIds.length > 0)
-			return { outcome: "denied", reason: "conversation_unavailable" } as const;
+			return { outcome: RunAdmissionBuildOutcomes.Denied, reason: "conversation_unavailable" } as const;
 
 		// 7. Freeze preferences, identity-scoped memory, tools, and budgets in the same final transaction.
 		const preferences = await authorities.preferenceFacts.load(command, run.value, executionSubject.value, transaction);
-		if (preferences.outcome === "denied")
-			return preferences;
+		if (preferences.outcome === SessionAssemblyLoadOutcomes.Denied)
+			return { outcome: RunAdmissionBuildOutcomes.Denied, reason: preferences.reason } as const;
 		const memory = await authorities.memoryScope.load(command, run.value, executionSubject.value, conversation.value, transaction);
-		if (memory.outcome === "denied")
-			return memory;
+		if (memory.outcome === SessionAssemblyLoadOutcomes.Denied)
+			return { outcome: RunAdmissionBuildOutcomes.Denied, reason: memory.reason } as const;
 		const tools = await authorities.toolPolicy.load(command, run.value, transaction);
-		if (tools.outcome === "denied")
-			return tools;
+		if (tools.outcome === SessionAssemblyLoadOutcomes.Denied)
+			return { outcome: RunAdmissionBuildOutcomes.Denied, reason: tools.reason } as const;
 		if (!__AreRunInputSnapshotMcpToolsValid(tools.value.mcpTools))
 		{
-			return { outcome: "denied", reason: "tool_policy_unavailable" } as const;
+			return { outcome: RunAdmissionBuildOutcomes.Denied, reason: "tool_policy_unavailable" } as const;
 		}
 		const skills = await authorities.skillEligibility.load(command, run.value, tools.value, transaction);
-		if (skills.outcome === "denied")
-			return skills;
+		if (skills.outcome === SessionAssemblyLoadOutcomes.Denied)
+			return { outcome: RunAdmissionBuildOutcomes.Denied, reason: skills.reason } as const;
 		const productAuthorization = await authorities.productAuthorization.load(command, executionSubject.value, persona.value, memory.value, tools.value, transaction);
-		if (productAuthorization.outcome === "denied")
-			return productAuthorization;
+		if (productAuthorization.outcome === SessionAssemblyLoadOutcomes.Denied)
+			return { outcome: RunAdmissionBuildOutcomes.Denied, reason: productAuthorization.reason } as const;
 		const budget = await authorities.budgetPolicy.load(command, run.value, transaction);
-		if (budget.outcome === "denied")
-			return budget;
+		if (budget.outcome === SessionAssemblyLoadOutcomes.Denied)
+			return { outcome: RunAdmissionBuildOutcomes.Denied, reason: budget.reason } as const;
 		// 8. Compile the immutable snapshot only after every source has re-checked its data inside this transaction.
 		checked.subject = executionSubject.value;
-		return { outcome: "ready", value: { authority: run.value, snapshot: _compileSnapshot(command, transaction.admittedAt, run.value, persona.value, conversation.value, preferences.value, memory.value, tools.value, budget.value.budgetPolicy, executionSubject.value) } } as const;
+		return { outcome: RunAdmissionBuildOutcomes.Ready, value: { authority: run.value, snapshot: _compileSnapshot(command, transaction.admittedAt, run.value, persona.value, conversation.value, preferences.value, memory.value, tools.value, budget.value.budgetPolicy, executionSubject.value) } } as const;
 	}, commit, prepare);
-	if (admitted.outcome === "denied")
-		return { outcome: "denied", reason: _publicReason(admitted.reason) };
+	if (admitted.outcome === RunAdmissionOutcomes.Denied)
+		return { outcome: SessionAssemblyOutcomes.Denied, reason: _publicReason(admitted.reason) };
 	if (checked.subject === null)
 		throw new Error("Run admission returned without current execution authority");
-	return { outcome: "assembled", admissionOutcome: admitted.outcome, snapshot: admitted.snapshot, currentExecutionSubject: checked.subject };
+	return { outcome: SessionAssemblyOutcomes.Assembled, admissionOutcome: _ADMISSION_OUTCOMES[admitted.outcome], snapshot: admitted.snapshot, currentExecutionSubject: checked.subject };
 }
 
 /** Recovers the saved memory policy without promoting an absent or malformed scope into permission. */

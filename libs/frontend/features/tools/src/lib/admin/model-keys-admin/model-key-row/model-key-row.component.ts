@@ -1,10 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from "@angular/core";
+import { ButtonModule } from "primeng/button";
+import { InputTextModule } from "primeng/inputtext";
 import { ScopeChipAppearances, ScopeChipComponent, ScopeChipTones } from "@opencrane/elements/ui";
 import { LITELLM_BADGE_STYLES, type ModelKeyRow } from "../model-keys-admin.types";
 import { _BadgeFor } from "../model-keys-admin.utils";
 
 /** Presents a provider's write-only key form; it never reads or retains stored key material. */
-@Component({ selector: "tr[wo-model-key-row]", standalone: true, imports: [ScopeChipComponent], host: { "[class.wo-admin__row--off]": "!row().configured" }, templateUrl: "./model-key-row.component.html", styleUrl: "./model-key-row.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
+@Component({ selector: "tr[wo-model-key-row]", standalone: true, imports: [ButtonModule, InputTextModule, ScopeChipComponent], host: { "[class.wo-admin__row--off]": "!row().configured" }, templateUrl: "./model-key-row.component.html", styleUrl: "./model-key-row.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
 export class ModelKeyRowComponent
 {
 	/** Browser-safe status returned by the provider-key read. */
