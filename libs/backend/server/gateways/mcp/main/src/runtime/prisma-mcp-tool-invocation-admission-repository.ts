@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { McpRuntimeExecutionKind, type Prisma } from "@prisma/client";
+import { McpExecutionTransport, McpExecutorWorkloadState, McpRuntimeExecutionKind, type Prisma } from "@prisma/client";
 
 import { RuntimeWorkloadClaimClasses } from "@opencrane/backend/agents/runtime/workloads/contract";
 import { ExternalActionRecoveryModes, ToolInvocationStates, type McpToolInvocationTransactionParticipant } from "@opencrane/backend/server/iam/authorization";
@@ -56,15 +56,31 @@ export class PrismaMcpToolInvocationAdmissionRepository implements McpToolInvoca
 		const invocation = await this._toolInvocations.findById(toolInvocationRowId);
 		if (invocation === null || invocation.siloId !== this._options.siloId)
 			return "not_mcp";
-		const existing = await this._transaction.mcpRuntimeExecution.findUnique({ where: { toolInvocationId: invocation.id }, select: { siloId: true, kind: true, toolInvocationId: true, serverRevisionId: true, profileName: true, idempotencyKey: true } });
+		const existing = await this._transaction.mcpRuntimeExecution.findUnique({ where: { toolInvocationId: invocation.id }, select: { siloId: true, kind: true, transport: true, toolInvocationId: true, serverRevisionId: true, profileName: true, idempotencyKey: true, connectionId: true, connectionGeneration: true, connectionOwnerPrincipalId: true, endpointDigest: true, credentialSecretUid: true, credentialSecretResourceVersion: true } });
 
-		const tool = await this._transaction.mcpToolRevision.findFirst({ where: { id: invocation.toolRevisionId, siloId: invocation.siloId }, select: { serverRevisionId: true } });
+		const tool = await this._transaction.mcpToolRevision.findFirst({
+			where: { id: invocation.toolRevisionId, siloId: invocation.siloId },
+			select: {
+				serverRevisionId: true,
+				serverRevision: {
+					select: {
+						transport: true,
+						state: true,
+						protocolVersion: true,
+						connectionId: true,
+						connectionGeneration: true,
+						connectionOwnerPrincipalId: true,
+						endpointDigest: true,
+						connection: { select: { state: true, credentialSecretUid: true, credentialSecretResourceVersion: true } },
+						server: { select: { status: true, approvalStatus: true } },
+					},
+				},
+			},
+		});
 		if (tool === null)
 			return "not_mcp";
 		if (existing !== null)
-			return existing.siloId === invocation.siloId && existing.kind === McpRuntimeExecutionKind.Invocation
-				&& existing.toolInvocationId === invocation.id && existing.serverRevisionId === tool.serverRevisionId
-				&& existing.profileName === this._options.profileName && existing.idempotencyKey === `mcp-invocation:${invocation.id}` ? "idempotent" : "not_mcp";
+			return _ExistingMatches(existing, invocation.id, invocation.siloId, tool, this._options.profileName) ? "idempotent" : "not_mcp";
 		if (invocation.state !== ToolInvocationStates.Ready
 			|| invocation.recoveryMode !== ExternalActionRecoveryModes.Manual)
 			return "not_ready";
@@ -77,19 +93,47 @@ export class PrismaMcpToolInvocationAdmissionRepository implements McpToolInvoca
 			return "not_ready";
 		}
 
+		const remote = tool.serverRevision.transport === McpExecutionTransport.RemoteHttp;
 		await this._transaction.mcpRuntimeExecution.create({
 			data: {
 				siloId: invocation.siloId,
 				serverRevisionId: tool.serverRevisionId,
 				toolInvocationId: invocation.id,
 				kind: McpRuntimeExecutionKind.Invocation,
+				transport: tool.serverRevision.transport,
+				connectionId: tool.serverRevision.connectionId,
+				connectionGeneration: tool.serverRevision.connectionGeneration,
+				connectionOwnerPrincipalId: tool.serverRevision.connectionOwnerPrincipalId,
+				endpointDigest: tool.serverRevision.endpointDigest,
+				credentialSecretUid: tool.serverRevision.connection?.credentialSecretUid ?? null,
+				credentialSecretResourceVersion: tool.serverRevision.connection?.credentialSecretResourceVersion ?? null,
 				idempotencyKey: `mcp-invocation:${invocation.id}`,
-				executionReference: `mcp-execution-v1_${randomUUID()}`,
-				profileName: this._options.profileName,
+				executionReference: `${remote ? "mcp-remote-v1" : "mcp-execution-v1"}_${randomUUID()}`,
+				profileName: remote ? null : this._options.profileName,
+				workloadState: remote ? null : McpExecutorWorkloadState.Pending,
 			},
 			select: { id: true },
 		});
 		this._options.log.info({ siloId: invocation.siloId, toolInvocationId: invocation.id, workloadClass: RuntimeWorkloadClaimClasses.McpExecutor, executionKind: McpRuntimeExecutionKinds.Invocation }, "admitted MCP tool invocation into durable execution");
 		return "admitted";
 	}
+
+}
+
+/** Tool and revision fields that select one immutable execution strategy. */
+type _ToolProjection = Prisma.McpToolRevisionGetPayload<{ select: { serverRevisionId: true; serverRevision: { select: { transport: true; state: true; protocolVersion: true; connectionId: true; connectionGeneration: true; connectionOwnerPrincipalId: true; endpointDigest: true; connection: { select: { state: true; credentialSecretUid: true; credentialSecretResourceVersion: true } }; server: { select: { status: true; approvalStatus: true } } } } } }>;
+
+/** Require an admission retry to name the complete execution binding saved by the first winner. */
+function _ExistingMatches(existing: { readonly siloId: string; readonly kind: McpRuntimeExecutionKind; readonly transport: McpExecutionTransport; readonly toolInvocationId: string | null; readonly serverRevisionId: string; readonly profileName: string | null; readonly idempotencyKey: string; readonly connectionId: string | null; readonly connectionGeneration: number | null; readonly connectionOwnerPrincipalId: string | null; readonly endpointDigest: string | null; readonly credentialSecretUid: string | null; readonly credentialSecretResourceVersion: string | null }, invocationId: string, siloId: string, tool: _ToolProjection, profileName: string): boolean
+{
+	const revision = tool.serverRevision;
+	const remote = revision.transport === McpExecutionTransport.RemoteHttp;
+	return existing.siloId === siloId && existing.kind === McpRuntimeExecutionKind.Invocation
+		&& existing.toolInvocationId === invocationId && existing.serverRevisionId === tool.serverRevisionId
+		&& existing.transport === revision.transport && existing.idempotencyKey === `mcp-invocation:${invocationId}`
+		&& existing.profileName === (remote ? null : profileName)
+		&& existing.connectionId === revision.connectionId && existing.connectionGeneration === revision.connectionGeneration
+		&& existing.connectionOwnerPrincipalId === revision.connectionOwnerPrincipalId && existing.endpointDigest === revision.endpointDigest
+		&& existing.credentialSecretUid === (revision.connection?.credentialSecretUid ?? null)
+		&& existing.credentialSecretResourceVersion === (revision.connection?.credentialSecretResourceVersion ?? null);
 }

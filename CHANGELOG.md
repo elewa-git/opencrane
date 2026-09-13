@@ -27,6 +27,16 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Added
 
+- **People can configure an installed remote MCP connection without reading its credentials back.**
+  The source under review keeps connection commands tied to the observed generation, retains the
+  same command after an uncertain response, and discovers tools for that connection's owner.
+  Removal retains connection history while its existing workflow finishes cleanup. Remote replies
+  pass through the shared result checks before completion: ordinary results remain usable, while
+  embedded file resources cannot enter conversation results without supported capture authority.
+  Rejected replies preserve dispatch evidence and never cause a second provider call. Runtime
+  database fencing still awaits its reviewed source proposal; real remote execution and live
+  qualification remain unfinished.
+
 - **Operators can detect missing outbound certificate trust before starting hosted qualification.**
   The smoke renders the actual server and checks the selected certificate mount before creating
   a cluster or credentials. Its test client accepts only the disposable loopback origin and uses

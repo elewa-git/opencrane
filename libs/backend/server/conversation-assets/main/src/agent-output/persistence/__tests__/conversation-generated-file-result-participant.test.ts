@@ -31,6 +31,24 @@ function _Fixture(toolName = GENERATED_CSV_TOOL_NAME, result = _Resource(), scan
 	return { command, metadata, capture, createCapture, admit, participant };
 }
 
+/** Build server-mediated evidence without any OCI companion or workload coordinates. */
+function _RemoteFixture(toolName: string, result: McpToolCallResult)
+{
+	const f = _Fixture(toolName, result);
+	f.command = {
+		executionId: "execution-1",
+		invocation: { effectiveArguments: _ARGUMENTS },
+		remoteClaimFence: "remote-fence-1",
+		remoteNotAfterEpochMs: new Date("2099-01-01T00:00:00.000Z").getTime(),
+		result,
+		serverRevisionId: "server-revision-1",
+		siloId: "silo-1",
+		toolClaim: { invocationId: "invocation-row-1" },
+		toolName,
+	} as unknown as GeneratedFileInvocationResultCommand;
+	return f;
+}
+
 describe("generated-file result transaction participant", function _Suite()
 {
 	it.each([true, false])("preserves ordinary results with scanner enabled=%s", async function _OrdinaryResult(scannerEnabled)
@@ -39,6 +57,39 @@ describe("generated-file result transaction participant", function _Suite()
 		await expect(f.participant.prepare(f.command)).resolves.toBe(f.command.result);
 		expect(f.createCapture).not.toHaveBeenCalled();
 		expect(f.admit).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		{ isError: false, content: [{ type: "text", text: "permitted record" }] },
+		{ isError: false, content: [], structuredContent: { recordCount: 3 } },
+	] as const)("preserves an ordinary server-mediated result %#", async function _RemoteOrdinaryResult(result)
+	{
+		const f = _RemoteFixture("records.read", result as McpToolCallResult);
+		await expect(f.participant.prepare(f.command)).resolves.toBe(f.command.result);
+		expect(f.createCapture).not.toHaveBeenCalled();
+		expect(f.admit).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		[GENERATED_CSV_TOOL_NAME, _Resource()],
+		["records.read", _Resource()],
+	] as const)("rejects a server-mediated embedded resource from %s before capture", async function _RemoteResource(toolName, result)
+	{
+		const f = _RemoteFixture(toolName, result);
+		await expect(f.participant.prepare(f.command)).rejects.toThrow("Remote MCP results cannot contain generated-file resources");
+		expect(f.createCapture).not.toHaveBeenCalled();
+		expect(f.capture).not.toHaveBeenCalled();
+		expect(f.admit).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		{ isError: false, content: [{ type: "text", text: "not a generated file" }] },
+		{ isError: true, content: [{ type: "text", text: "producer failed" }] },
+	] as const)("does not let server-mediated reserved producer output impersonate OCI %#", async function _RemoteReservedName(result)
+	{
+		const f = _RemoteFixture(GENERATED_CSV_TOOL_NAME, result as McpToolCallResult);
+		await expect(f.participant.prepare(f.command)).rejects.toThrow("Remote MCP results cannot contain generated-file resources");
+		expect(f.createCapture).not.toHaveBeenCalled();
 	});
 
 	it("rejects an embedded resource from an unowned result format", async function _UnknownResource()

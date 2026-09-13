@@ -2,3 +2,4 @@ export { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenRe
 export { _CreateConversationComputerTokenReviewer, _CreateMcpExecutorTokenReviewer, _CreateSkillAuthoringValidationTokenReviewer } from "./reviewers/pod-bound-reviewers";
 export { _ValidateIsolatedWorkloadNamespace } from "./configuration/workload-namespace";
 export type { FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "./token-review/workload-identity.types";
+export { _CreateMcpServerTokenReviewer } from "./reviewers/server-mcp-token-reviewer";

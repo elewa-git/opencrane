@@ -221,6 +221,7 @@ STORAGE_CLASS=""        # empty → cluster default StorageClass
 ARTIFACT_STORAGE_CLASS="" # resolved class for the durable, expandable ArtifactStore PVC
 INVITATION_SIGNING_SECRET="${OPENCRANE_INVITATION_SIGNING_SECRET:-opencrane-invitation-signing}"
 CONVERSATION_PRIVATE_PAYLOAD_SECRET="${OPENCRANE_CONVERSATION_PRIVATE_PAYLOAD_SECRET:-opencrane-conversation-private-payload}"
+MCP_CONNECTION_MATERIAL_SECRET="${OPENCRANE_MCP_CONNECTION_MATERIAL_SECRET:-opencrane-mcp-connection-material}"
 MEMBERSHIP_MODE="${OPENCRANE_MEMBERSHIP_MODE:-standalone}"
 [[ "$MEMBERSHIP_MODE" == "standalone" || "$MEMBERSHIP_MODE" == "fleet" ]] || { echo "OPENCRANE_MEMBERSHIP_MODE must be standalone or fleet." >&2; exit 2; }
 VALUES_FILE=""
@@ -790,6 +791,7 @@ if ! kubectl get secret "$CONVERSATION_PRIVATE_PAYLOAD_SECRET" -n "$NAMESPACE" >
   rm -f "$conversation_payload_directory/keyring.json"
   rmdir "$conversation_payload_directory"
 fi
+bash "$REPOSITORY_ROOT/apps/opencrane/deploy/ensure-mcp-material-keyring.sh" "$NAMESPACE" "$MCP_CONNECTION_MATERIAL_SECRET"
 install_postgres_release true
 POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
@@ -1066,6 +1068,7 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
   --set-string "artifactService.keys.catalogExistingSecret=$ARTIFACT_CATALOG_KEY_SECRET"
   --set-string "artifactService.keys.serviceExistingSecret=$ARTIFACT_SERVICE_KEY_SECRET"
   --set-string "clustertenantManager.conversationPrivatePayloadKeyring.existingSecret=$CONVERSATION_PRIVATE_PAYLOAD_SECRET"
+  --set-string "clustertenantManager.mcpConnectionMaterialKeyring.existingSecret=$MCP_CONNECTION_MATERIAL_SECRET"
   --set "litellm.existingSecret=opencrane-litellm"
   "${MEMBERSHIP_HELM_ARGS[@]}"
   "${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}"

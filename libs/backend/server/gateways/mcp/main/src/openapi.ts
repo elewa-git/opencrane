@@ -1,3 +1,5 @@
+import { _McpConnectionOpenapiPaths } from "./openapi/mcp-connection-paths";
+
 // Common response helpers
 function notFound(description: string)
 {
@@ -33,6 +35,7 @@ function created(description: string, schema: object)
 
 /** OpenAPI path fragments owned by the mcp domain (composed into the opencrane-ui spec). */
 export const _McpOpenapiPaths = {
+  ..._McpConnectionOpenapiPaths,
   "/mcp/catalog": {
     get: {
       operationId: "listMcpCatalog",
@@ -65,6 +68,7 @@ export const _McpOpenapiPaths = {
         201: created("Server installed.", { $ref: "#/components/schemas/McpInstalled" }),
         400: badRequest("serverId is required."),
         404: notFound("MCP server not found."),
+        409: badRequest("Installation removal is still in progress."),
       },
     },
   },
@@ -76,6 +80,7 @@ export const _McpOpenapiPaths = {
       tags: ["MCP Operator"],
       parameters: [{ name: "serverId", in: "path", required: true, schema: { type: "string" } }],
       responses: {
+        202: { description: "Removal accepted. The installed list retains a Removing row until execution and credential cleanup finish." },
         204: { description: "Server uninstalled." },
         404: notFound("MCP install not found."),
       },

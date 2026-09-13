@@ -1,4 +1,5 @@
 import type { JsonValue } from "@opencrane/util";
+import type { McpConnectionProjection } from "./mcp-connection.types";
 
 /**
  * Operator-API contracts for consuming and governing MCP servers.
@@ -33,9 +34,8 @@ export enum McpServerType
 /**
  * Names the credential custody required before an installed MCP server can execute.
  *
- * Registration saves this value independently of connection presentation. Only Credentialless
- * installs can execute through the current API; the two credential-requiring modes remain
- * unavailable until a governed activation flow exists. Renaming a value changes the public and
+ * Registration saves this value independently of connection presentation. Credential-requiring
+ * installs remain unavailable until their exact owner activates a governed connection generation. Renaming a value changes the public and
  * persisted contract together.
  */
 export enum McpCredentialRequirement
@@ -68,18 +68,23 @@ export enum McpApprovalStatus
 }
 
 /**
- * Reports whether an installed MCP server needs credential activation or requires no credential.
+ * Reports the usable or waiting state of the installation and its current connection generation.
  *
- * The operator API returns these values from persisted install rows. OpenCrane currently has no
- * credential or OAuth activation command, so `NeedsCredential` cannot advance through this API.
- * Renaming either value requires matching database and API changes.
+ * These values summarize saved product state without exposing credential custody coordinates.
+ * Every effect still checks the exact generation and current authority in its claim transaction.
  */
 export enum McpConnectionStatus
 {
-  /** The install is saved but this API cannot use it until credential setup exists. */
+  /** The install is saved but has no usable activated credential generation. */
   NeedsCredential = "needs-credential",
   /** The installed server requires no credential; execution still checks current authority. */
   Credentialless = "credentialless",
+  /** The admitted generation is establishing custody or discovering its exact tools. */
+  Activating = "activating",
+  /** The credential generation and discovery are complete; execution still rechecks authority. */
+  Active = "active",
+  /** Custody is uncertain; the generation cannot execute or be replaced without revocation. */
+  RecoveryRequired = "recovery-required",
 }
 
 /**
@@ -112,7 +117,7 @@ export enum McpToolRevisionReadiness
 }
 
 /**
- * Names one immutable OCI-backed MCP tool schema that an agent author can select.
+ * Names one immutable MCP tool schema that an agent author can select.
  *
  * The catalogue selects the newest Ready server revision, then returns its tools in stable name and
  * identifier order. User responses contain these rows only after entitlement filtering. The
@@ -140,8 +145,8 @@ export interface McpAssignableToolRevision
 }
 
 /**
- * One field a caller must supply to connect a {@link McpServerType.SingleUser}
- * server. Describes the input only — the submitted value is write-only.
+ * One setup field declared by the server. The connection command accepts only its supported
+ * authentication profile; catalogue metadata cannot add arbitrary headers or credential fields.
  */
 export interface CredentialField
 {
@@ -162,7 +167,7 @@ export interface CredentialField
 /**
  * A catalogue server as exposed by the operator API. Display metadata stays optional so the same
  * shape serves the entitled user catalogue and the richer admin governance view. `tools` is always
- * present and is empty when the server has no Ready OCI revision.
+ * present and is empty when the caller has no entitled Ready revision.
  */
 export interface McpCatalogServer
 {
@@ -182,21 +187,34 @@ export interface McpCatalogServer
   credentialRequirement: McpCredentialRequirement;
   /** Governance lifecycle status. */
   approvalStatus?: McpApprovalStatus;
-  /** Fields declared for credential setup; this API cannot accept their values or activate a connection. */
+  /** Setup metadata; the separate write-only command accepts only its supported authentication profile. */
   credentialSchema?: CredentialField[];
   /** Human-readable summary of who is entitled (admin governance view). */
   entitlementSummary?: string;
-	/** Lists tools from the newest Ready OCI server revision; an empty array means none are assignable. */
+	/** Lists tools from the newest entitled Ready server revision; an empty array means none are assignable. */
 	tools: McpAssignableToolRevision[];
 }
 
 /**
  * A server installed by the calling user, with its connection state.
  */
-export interface McpInstalled
+export enum McpInstallStates
+{
+	/** The installation is available for connection setup and currently permitted work. */
+	Installed = "installed",
+	/** Removal was accepted; new work is denied while existing work and credentials settle. */
+	Removing = "removing",
+	/** Removal finished and history remains available for a later explicit reinstall. */
+	Removed = "removed",
+}
+
+/** A retained installation and its current connection state. Removed rows are omitted from lists. */
+export interface McpInstalled extends McpConnectionProjection
 {
   /** Identifier of the installed server. */
   serverId: string;
+  /** Durable removal state, independent of whether the connection has usable credentials. */
+  lifecycleState: McpInstallStates;
   /** Current connection state of this install. */
   connectionStatus: McpConnectionStatus;
   /** ISO-8601 timestamp of last use, or null when never used. */

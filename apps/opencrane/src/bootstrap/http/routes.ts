@@ -9,7 +9,7 @@ import { auditRouter } from "@opencrane/backend/server/iam/audit";
 import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { groupsRouter } from "@opencrane/backend/server/iam/groups";
 import { _IssueAttemptLiteLlmKey, modelRoutingDefaultsRouter } from "@opencrane/backend/server/gateways/model-routing";
-import { _CreateMcpCallerResolver, mcpOperatorRouter, mcpTaskRouter } from "@opencrane/backend/server/gateways/mcp";
+import { _CreateMcpCallerResolver, mcpConnectionRouter, mcpOperatorRouter, mcpTaskRouter } from "@opencrane/backend/server/gateways/mcp";
 import { _CreateGlobalModelRoutingDefaultCommandPort, providerByokRouter, modelRegistryRouter, type ProviderEffectCommandExecutor } from "@opencrane/backend/server/gateways/providers";
 import { PrismaResourceShareUnitOfWork, ResourceShareService, resourceSharesRouter, type ResourceShareCallerResolver } from "@opencrane/backend/server/iam/grants";
 import { PrismaAuthenticatedPrincipalDirectoryUnitOfWork, type AuthenticatedPrincipalDirectory } from "@opencrane/backend/server/iam/identity";
@@ -91,9 +91,10 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScan
 		{ method: "use", path: "/api/v1/me/activity", handler: _CreateSelfElicitationActivityRouter(prisma, _log) },
 	];
 	const gatewayRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/v1/mcp", handler: mcpOperatorRouter(mcpWorkflows.unitOfWork, principalDirectory, mcpWorkflows.eraProbeWorkflow, mcpWorkflows.ociImageValidationWorkflow, mcpWorkflows.ociImageArtifacts) },
+		{ method: "use", path: "/api/v1/mcp", handler: mcpOperatorRouter(mcpWorkflows.unitOfWork, principalDirectory, mcpWorkflows.eraProbeWorkflow, mcpWorkflows.ociImageValidationWorkflow, mcpWorkflows.ociImageArtifacts, mcpRuntime.connections) },
 		{ method: "use", path: "/api/v1/mcp", handler: mcpTaskRouter(mcpWorkflows.unitOfWork, mcpRuntime.taskWorkflow, _CreateMcpCallerResolver(principalDirectory)) },
 		{ method: "use", path: "/api/v1/mcp", handler: mcpRuntime.promotion },
+		{ method: "use", path: "/api/v1/mcp", handler: mcpConnectionRouter(mcpRuntime.connections, _CreateMcpCallerResolver(principalDirectory)) },
 		{ method: "use", path: "/api/v1/model-routing/defaults", handler: modelRoutingDefaultsRouter(prisma, undefined, undefined, _CreateGlobalModelRoutingDefaultCommandPort(prisma, providerEffects)) },
 		{ method: "use", path: "/api/v1/providers/byok", handler: providerByokRouter(prisma, providerEffects, _log) },
 		{ method: "use", path: "/api/v1/models", handler: modelRegistryRouter(prisma, providerEffects) },

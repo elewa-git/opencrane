@@ -1,15 +1,17 @@
-import { McpApprovalStatus, McpConnectionStatus, McpCredentialRequirement, McpServerType, McpToolRevisionEligibility, McpToolRevisionReadiness, type CredentialField, type McpAssignableToolRevision, type McpCatalogServer, type McpInstalled } from "@opencrane/contracts";
+import { McpApprovalStatus, McpConnectionFailureCodes, McpConnectionStatus, McpCredentialRequirement, McpInstallStates, McpServerType, McpToolRevisionEligibility, McpToolRevisionReadiness, type CredentialField, type McpAssignableToolRevision, type McpCatalogServer, type McpInstalled } from "@opencrane/contracts";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___CloneCanonicalJson, ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import type { McpOperatorCaller } from "./mcp-operator.logic.types";
-import type { McpOperatorInstallRecord, McpOperatorServerRecord, McpOperatorTransaction, McpOperatorUnitOfWork } from "./mcp-operator-repository.types";
+import { McpOperatorInstallUpsertOutcomes, type McpOperatorInstallRecord, type McpOperatorServerRecord, type McpOperatorTransaction, type McpOperatorUnitOfWork } from "./mcp-operator-repository.types";
 import { __McpEraProbeRequiredStates } from "../era-probe/mcp-era-probe-state";
+import { McpEraProbeStates } from "../era-probe/mcp-era-probe.types";
 import { __RequireMcpOrganizationAdministration, __RequireMcpOrganizationAdministrationRead } from "./mcp-operator-authorization";
 
 const _TYPE = { SingleUser: McpServerType.SingleUser, MultiUser: McpServerType.MultiUser, RemoteOauth: McpServerType.RemoteOauth } as const;
 const _APPROVAL = { PendingReview: McpApprovalStatus.PendingReview, Approved: McpApprovalStatus.Approved, Published: McpApprovalStatus.Published, Disabled: McpApprovalStatus.Disabled } as const;
 const _REQUIRED_APPROVAL = { Approved: "PendingReview", Published: "Approved" } as const;
-const _CONNECTION = { NeedsCredential: McpConnectionStatus.NeedsCredential, Credentialless: McpConnectionStatus.Credentialless } as const;
+const _CONNECTION = { NeedsCredential: McpConnectionStatus.NeedsCredential, Credentialless: McpConnectionStatus.Credentialless, Activating: McpConnectionStatus.Activating, Active: McpConnectionStatus.Active, RecoveryRequired: McpConnectionStatus.RecoveryRequired } as const;
+const _INSTALL = { Installed: McpInstallStates.Installed, Removing: McpInstallStates.Removing, Removed: McpInstallStates.Removed } as const;
 /** Maps every stored credential requirement into the public closed vocabulary. */
 const _REQUIREMENT = { Credentialless: McpCredentialRequirement.Credentialless, PrincipalCredential: McpCredentialRequirement.PrincipalCredential, SharedCredential: McpCredentialRequirement.SharedCredential } as const;
 /** Marks the persisted server state that permits a tool assignment. */
@@ -33,7 +35,7 @@ export function listEntitledCatalog(unitOfWork: McpOperatorUnitOfWork, caller: M
 {
 	return unitOfWork.execute(async function _List(transaction)
 	{
-		const servers = await transaction.mcp.listPublishedServers(caller.siloId);
+		const servers = await transaction.mcp.listPublishedServers(caller.siloId, caller.principalId);
 		const entitled = await transaction.authorization.listPrincipalEntitled({
 			siloId: caller.siloId,
 			principalId: caller.principalId,
@@ -88,8 +90,9 @@ export function listInstalled(unitOfWork: McpOperatorUnitOfWork, principalId: st
  *
  * A catalog result may be stale by the time a caller installs it. The flow therefore confirms that
  * the server is still in the caller's silo, still published, and still allowed by the MCP-use
- * capability before it writes the install. Only an explicitly credentialless server starts ready;
- * either credential-requiring mode starts as `NeedsCredential`. The typed `Install` check, install,
+ * capability before it writes the install. A credentialless OCI image starts ready. Every remote
+ * server starts as `NeedsCredential` because it still needs a caller-owned connection generation;
+ * credential-requiring OCI modes are rejected before this flow. The typed `Install` check, install,
  * and audit entry use the same database transaction and commit or roll back together.
  *
  * Called by: {@link mcpOperatorRouter} for `POST /installed`.
@@ -103,7 +106,7 @@ export function installServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOper
 	return unitOfWork.execute(async function _Install(transaction)
 	{
 		const server = await transaction.mcp.findServer(caller.siloId, serverId);
-		if (!server || !_GovernanceEligible(server))
+		if (!server || !_InstallEligible(server))
 			return null;
 		const admission = await transaction.authorization.admitPrincipal({
 			siloId: caller.siloId,
@@ -118,34 +121,23 @@ export function installServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOper
 		if (admission.outcome !== AuthorizationDecisionOutcomes.Allow)
 			return null;
 		const requirement = _CredentialRequirement(server.credentialRequirement);
-		const status = requirement === McpCredentialRequirement.Credentialless ? "Credentialless" : "NeedsCredential";
-		const installed = await transaction.mcp.upsertInstall(serverId, caller.principalId, status);
+		const status = server.requiresReadyRevisionForInstall && requirement === McpCredentialRequirement.Credentialless ? "Credentialless" : "NeedsCredential";
+		const result = await transaction.mcp.upsertInstall(serverId, caller.principalId, status);
+		if (result.outcome === McpOperatorInstallUpsertOutcomes.RemovalInProgress)
+			throw new McpInstallConflictError();
 		await transaction.mcp.appendAudit(caller.siloId, "Created", `McpServerInstall/${serverId}:${caller.principalId}`, `MCP server ${serverId} installed for ${caller.principalId}`, caller.principalId);
-		return _MapInstall(installed);
+		return _MapInstall(result.install);
 	});
 }
 
-/**
- * Removes one local Principal's installation of an MCP server.
- *
- * The delete includes both the server and Principal identifiers, so an uninstall request cannot
- * remove another principal's install. An audit entry is written only when a row was removed.
- *
- * Called by: {@link mcpOperatorRouter} for `DELETE /installed/:serverId`.
- * @param unitOfWork - Runs the deletion and any audit write together.
- * @param principalId - Identifies the local Principal whose installation may be removed.
- * @param serverId - Identifies the installed server to remove.
- * @returns `removed` after deleting an install, or `not_found` when this principal has none.
- */
-export function uninstallServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string): Promise<"removed" | "not_found">
+/** Indicates that reinstall cannot overtake durable revocation cleanup. */
+export class McpInstallConflictError extends Error
 {
-	return unitOfWork.execute(async function _Delete(transaction)
+	constructor()
 	{
-		const removed = await transaction.mcp.deleteInstall(serverId, caller.principalId);
-		if (removed)
-			await transaction.mcp.appendAudit(caller.siloId, "Deleted", `McpServerInstall/${serverId}:${caller.principalId}`, `MCP server ${serverId} uninstalled for ${caller.principalId}`, caller.principalId);
-		return removed ? "removed" : "not_found";
-	});
+		super("MCP install removal is still in progress.");
+		this.name = "McpInstallConflictError";
+	}
 }
 
 /**
@@ -268,7 +260,7 @@ function _MapTools(server: McpOperatorServerRecord): McpAssignableToolRevision[]
 	const revision = server.latestReadyRevision;
 	if (!revision || !_READY_REVISION_STATE[revision.state as keyof typeof _READY_REVISION_STATE])
 		return [];
-	const eligibility = _GovernanceEligible(server)
+	const eligibility = _AssignmentEligible(server)
 		? McpToolRevisionEligibility.Assignable
 		: McpToolRevisionEligibility.GovernanceBlocked;
 	return revision.tools.map(function _MapTool(tool): McpAssignableToolRevision
@@ -290,9 +282,26 @@ function _MapTools(server: McpOperatorServerRecord): McpAssignableToolRevision[]
 function _GovernanceEligible(server: McpOperatorServerRecord): boolean
 {
 	const approvalStatus = _APPROVAL[server.approvalStatus as keyof typeof _APPROVAL];
-	const revisionState = server.latestReadyRevision?.state;
 	return approvalStatus === McpApprovalStatus.Published
-		&& _ASSIGNABLE_SERVER_STATUS[server.status as keyof typeof _ASSIGNABLE_SERVER_STATUS] === true
+		&& _ASSIGNABLE_SERVER_STATUS[server.status as keyof typeof _ASSIGNABLE_SERVER_STATUS] === true;
+}
+
+/** Allow supported remote installs after protocol acceptance while OCI waits for its image revision. */
+function _InstallEligible(server: McpOperatorServerRecord): boolean
+{
+	if (!_GovernanceEligible(server) || !server.supportsStandardInstall)
+		return false;
+	if (!server.requiresReadyRevisionForInstall)
+		return server.eraProbeStatus === McpEraProbeStates.Accepted;
+	const revisionState = server.latestReadyRevision?.state;
+	return revisionState !== undefined && _READY_REVISION_STATE[revisionState as keyof typeof _READY_REVISION_STATE] === true;
+}
+
+/** Require a caller-visible Ready revision before its tools can be assigned. */
+function _AssignmentEligible(server: McpOperatorServerRecord): boolean
+{
+	const revisionState = server.latestReadyRevision?.state;
+	return _InstallEligible(server)
 		&& revisionState !== undefined
 		&& _READY_REVISION_STATE[revisionState as keyof typeof _READY_REVISION_STATE] === true;
 }
@@ -300,7 +309,34 @@ function _GovernanceEligible(server: McpOperatorServerRecord): boolean
 /** Maps one persisted installation into the response status and ISO timestamp expected by clients. */
 function _MapInstall(install: McpOperatorInstallRecord): McpInstalled
 {
-	return { serverId: install.mcpServerId, connectionStatus: _ConnectionStatus(install.connectionStatus), lastUsed: install.lastUsedAt?.toISOString() ?? null };
+	return {
+		serverId: install.mcpServerId,
+		lifecycleState: _InstallState(install.lifecycleState),
+		connectionStatus: _ConnectionStatus(install.connectionStatus),
+		connectionGeneration: install.currentConnection?.generation ?? null,
+		credentialUpdatedAt: install.currentConnection?.credentialCustodiedAt?.toISOString() ?? null,
+		failureCode: _ConnectionFailureCode(install.currentConnection?.failureCode ?? null),
+		lastUsed: install.lastUsedAt?.toISOString() ?? null,
+	};
+}
+
+/** Maps a stored install lifecycle and refuses unknown persisted values. */
+function _InstallState(value: string): McpInstallStates
+{
+	if (!Object.hasOwn(_INSTALL, value))
+		throw new Error("MCP install has an unknown lifecycle state.");
+	return _INSTALL[value as keyof typeof _INSTALL];
+}
+
+/** Maps a bounded stored failure category and refuses unknown persisted values. */
+function _ConnectionFailureCode(value: string | null)
+{
+	if (value === null)
+		return null;
+	const values = Object.values(McpConnectionFailureCodes);
+	if (!values.includes(value as McpConnectionFailureCodes))
+		throw new Error("MCP install has an unknown connection failure code.");
+	return value as McpConnectionFailureCodes;
 }
 
 /** Maps a stored connection status and refuses unknown persisted values. */

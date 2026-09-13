@@ -1,7 +1,7 @@
 import { Injector, runInInjectionContext } from "@angular/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CONTROL_PLANE_BASE_URL, ControlPlaneApiService, McpConnectionStatus, McpCredentialRequirement } from "@opencrane/core";
+import { CONTROL_PLANE_BASE_URL, ControlPlaneApiService, McpConnectionStatus, McpInstallStates, McpCredentialRequirement } from "@opencrane/core";
 
 import { OpenCraneMcpGateway } from "../opencrane-mcp-gateway";
 
@@ -47,7 +47,7 @@ describe("OpenCraneMcpGateway", () =>
 		{
 			requests.push(request.clone());
 			if (requests.length === 1)
-				return _Json({ serverId: "alpha/tool ?", connectionStatus: "credentialless" }, 201);
+				return _Json({ serverId: "alpha/tool ?", lifecycleState: McpInstallStates.Installed, connectionStatus: "credentialless" }, 201);
 			if (requests.length === 2)
 				return _Json({ id: "alpha/tool ?", credentialRequirement: "credentialless", tools: [] });
 			return new Response(null, { status: 204 });

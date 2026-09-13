@@ -1,4 +1,4 @@
-import { OrgMemberStatus, PrincipalProvenance } from "@prisma/client";
+import { McpConnectionStatus, McpCredentialRequirement, McpExecutionTransport, OrgMemberStatus, PrincipalProvenance } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgentIdentityStates, ComputerLeaseStates, ConversationComputerStates, ExecutionSubjectMembershipKinds } from "@opencrane/contracts";
@@ -49,7 +49,7 @@ function _Fixture()
 	const transaction = {
 		agentRun: { findFirst: vi.fn().mockResolvedValue({ conversationId: "conversation-1", executionSubject: subject, inputSnapshotDigest: `sha256:${"e".repeat(64)}` }) },
 		runInputSnapshot: { findFirst: vi.fn().mockResolvedValue({ budgetPolicy: { wallClockDeadlineEpochMs: _NOW.getTime() + 60_000, maxToolInvocations: 1 } }) },
-		mcpServerInstall: { findFirst: vi.fn().mockResolvedValue({ id: "install-1" }) },
+		mcpServerInstall: { findFirst: vi.fn().mockResolvedValue({ id: "install-1", mcpServerId: "server-1", principalId: "principal-1", connectionStatus: McpConnectionStatus.Credentialless, mcpServer: { credentialRequirement: McpCredentialRequirement.Credentialless, revisions: [{ transport: McpExecutionTransport.OciImage, connection: null }] } }) },
 		toolInvocation: { count: vi.fn().mockResolvedValue(1) },
 		conversation: { findFirst: vi.fn().mockResolvedValue({ id: "conversation-1", computerAgentIdentityId: "identity-1", computerProfileRevisionId: "profile-1" }) },
 		agentRevision: { findFirst: vi.fn().mockResolvedValue({ id: "revision-1", digest: `sha256:${"a".repeat(64)}`, modelDefinitionId: "model-1", budget: {}, boundaryAttachments: [], skillAssignments: [], mcpToolAssignments: [{ toolRevisionId: "tool-1" }] }) },
@@ -115,7 +115,7 @@ describe("current conversation tool dispatch authority", function _Suite()
 		const f = _Fixture();
 		await expect(f.authority.admit(f.invocation, _NOW, _WORKLOAD)).resolves.toMatchObject({ requesterSubjectId: "user-1", notAfterEpochMs: _NOW.getTime() + 5_000 });
 		expect(f.transaction.agentRun.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ state: "Running", attempt: 1, principalId: "principal-1" }) }));
-		expect(f.transaction.mcpServerInstall.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ principalId: "principal-1", connectionStatus: "Credentialless" }) }));
+		expect(f.transaction.mcpServerInstall.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ principalId: "principal-1", mcpServer: { is: expect.objectContaining({ revisions: { some: expect.objectContaining({ tools: { some: { id: "tool-1", siloId: "silo-1" } } }) } }) } }) }));
 		expect(f.transaction.orgMembership.findUnique).toHaveBeenCalledOnce();
 		expect(f.transaction.agentRevisionMcpToolAssignment.findFirst).toHaveBeenCalledOnce();
 		expect(f.transaction.auditDecision.create).toHaveBeenCalledTimes(3);

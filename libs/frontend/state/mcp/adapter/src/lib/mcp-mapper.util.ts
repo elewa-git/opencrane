@@ -1,4 +1,4 @@
-import { _ParseMcpCredentialRequirement, McpApprovalStatus, McpConnectionStatus, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
+import { _ParseMcpCredentialRequirement, McpApprovalStatus, McpConnectionFailureCodes, McpConnectionStatus, McpInstalledServer, McpInstallStates, McpServer, McpServerType } from "@opencrane/core";
 import type { McpInstalledWire, McpServerWire } from "./mcp-gateway.types";
 
 /**
@@ -32,6 +32,24 @@ function _ToConnectionStatus(raw: string | undefined): McpConnectionStatus
 	return match ?? McpConnectionStatus.NeedsCredential;
 }
 
+/** Refuse an unknown lifecycle rather than presenting a removal as an available install. */
+function _ToInstallState(raw: string | undefined): McpInstallStates
+{
+	const match = Object.values(McpInstallStates).find(function _Matches(value) { return value === raw; });
+	if (match === undefined)
+		throw new Error("MCP installation lifecycle is invalid.");
+	return match;
+}
+
+/** Keep only failure codes declared by the browser-safe connection contract. */
+function _ToFailureCode(raw: string | null | undefined): McpConnectionFailureCodes | null
+{
+	if (raw === null || raw === undefined)
+		return null;
+	const match = Object.values(McpConnectionFailureCodes).find(function eq(value: McpConnectionFailureCodes): boolean { return value === raw; });
+	return match ?? McpConnectionFailureCodes.CredentialUnavailable;
+}
+
 /** Map a wire server onto the {@link McpServer} read model. */
 export function _MapServer(wire: McpServerWire): McpServer
 {
@@ -54,7 +72,11 @@ export function _MapInstalled(wire: McpInstalledWire): McpInstalledServer
 {
 	return {
 		serverId: wire.serverId,
+		lifecycleState: _ToInstallState(wire.lifecycleState),
 		connectionStatus: _ToConnectionStatus(wire.connectionStatus),
+		connectionGeneration: Number.isSafeInteger(wire.connectionGeneration) && Number(wire.connectionGeneration) > 0 ? Number(wire.connectionGeneration) : null,
+		credentialUpdatedAt: typeof wire.credentialUpdatedAt === "string" ? wire.credentialUpdatedAt : null,
+		failureCode: _ToFailureCode(wire.failureCode),
 		lastUsed: wire.lastUsed ?? null
 	};
 }

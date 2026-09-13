@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { IWorkflowTaskContext, IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowTaskRetryableError, type IWorkflowTaskContext, type IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
 import { __FakeWorkflowEngine } from "@opencrane/backend/server/infra/workflows/testing";
-import { CONVERSATION_COMPUTER_TURN_TASK } from "../conversation-computer-turn-task";
+import { CONVERSATION_COMPUTER_TURN_MAXIMUM_ATTEMPTS, CONVERSATION_COMPUTER_TURN_TASK } from "../conversation-computer-turn-task";
 import type { ConversationComputerTurnTaskInput } from "../conversation-computer-turn-workflow.types";
 import { _RegisterConversationComputerTurnWorkflow } from "../conversation-computer-turn-workflow";
 
@@ -20,9 +20,10 @@ function _Fixture(progress: readonly Record<string, unknown>[])
 		authority.advance.mockResolvedValueOnce(result);
 	const receipts = { bind: vi.fn().mockResolvedValue(true) };
 	const approvalNotifications = { publishRequested: vi.fn().mockResolvedValue("published") };
-	_RegisterConversationComputerTurnWorkflow(execution as never, { approvalNotifications, authority: authority as never, receipts, siloId: "silo-1" });
+	const toolDispatch = { tryExecute: vi.fn().mockResolvedValue(false), settleExhausted: vi.fn().mockResolvedValue(true) };
+	_RegisterConversationComputerTurnWorkflow(execution as never, { approvalNotifications, authority: authority as never, receipts, toolDispatch, siloId: "silo-1" });
 	const context = { task: _TASK, attempt: 1, checkpoint: vi.fn(async function _Checkpoint(_step, operation) { return operation(); }), spawnChild: vi.fn(), awaitChild: vi.fn(), sleepUntil: vi.fn().mockResolvedValue(undefined), waitForEvent: vi.fn().mockResolvedValue({ eventName: "tool-result:tool-1", payload: {} }) } as unknown as IWorkflowTaskContext;
-	return { approvalNotifications, authority, context, definition, receipts };
+	return { approvalNotifications, authority, context, definition, receipts, toolDispatch };
 }
 
 describe("conversation computer turn workflow", function _Suite()
@@ -35,7 +36,8 @@ describe("conversation computer turn workflow", function _Suite()
 		expect(fixture.context.waitForEvent).toHaveBeenNthCalledWith(1, "tool-result:tool-1");
 		expect(fixture.context.waitForEvent).toHaveBeenNthCalledWith(2, "generated-output:file-1", { timeoutAt: new Date(deadline) });
 		expect(fixture.authority.advance).toHaveBeenCalledTimes(3);
-		expect(fixture.context.checkpoint).not.toHaveBeenCalled();
+		expect(fixture.context.checkpoint).toHaveBeenCalledExactlyOnceWith({ stepName: "dispatch-mcp-invocation" }, expect.any(Function));
+		expect(fixture.toolDispatch.tryExecute).toHaveBeenCalledExactlyOnceWith({ siloId: "silo-1", runId: "run-1", attempt: 1, toolInvocationId: "tool-1" });
 		expect(fixture.context.sleepUntil).not.toHaveBeenCalled();
 	});
 
@@ -64,6 +66,33 @@ describe("conversation computer turn workflow", function _Suite()
 		const fixture = _Fixture([{ outcome: "tool_pending", toolInvocationId: "tool-1" }, { outcome: "completed" }]);
 		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "completed", turnId: "turn-1" });
 		expect(fixture.context.waitForEvent).toHaveBeenCalledExactlyOnceWith("tool-result:tool-1");
+		expect(fixture.toolDispatch.tryExecute).toHaveBeenCalledExactlyOnceWith({ siloId: "silo-1", runId: "run-1", attempt: 1, toolInvocationId: "tool-1" });
+		expect(fixture.authority.advance).toHaveBeenCalledTimes(2);
+	});
+
+	it("reads a saved remote result immediately after server dispatch completes", async function _RemoteToolCompletion()
+	{
+		const fixture = _Fixture([{ outcome: "tool_pending", toolInvocationId: "tool-1" }, { outcome: "completed" }]);
+		fixture.toolDispatch.tryExecute.mockResolvedValue(true);
+
+		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "completed", turnId: "turn-1" });
+
+		expect(fixture.toolDispatch.tryExecute).toHaveBeenCalledExactlyOnceWith({ siloId: "silo-1", runId: "run-1", attempt: 1, toolInvocationId: "tool-1" });
+		expect(fixture.context.waitForEvent).not.toHaveBeenCalled();
+		expect(fixture.authority.advance).toHaveBeenCalledTimes(2);
+	});
+
+	it("settles remote work on the final retry and re-reads the authoritative turn", async function _RemoteExhaustion()
+	{
+		const fixture = _Fixture([{ outcome: "tool_pending", toolInvocationId: "tool-1" }, { outcome: "authority_ended" }]);
+		fixture.toolDispatch.tryExecute.mockRejectedValue(new WorkflowTaskRetryableError("remote dependency unavailable"));
+		(fixture.context as unknown as { attempt: number }).attempt = CONVERSATION_COMPUTER_TURN_MAXIMUM_ATTEMPTS;
+
+		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "authority_ended", turnId: "turn-1" });
+
+		expect(fixture.toolDispatch.tryExecute).toHaveBeenCalledOnce();
+		expect(fixture.toolDispatch.settleExhausted).toHaveBeenCalledExactlyOnceWith({ siloId: "silo-1", runId: "run-1", attempt: 1, toolInvocationId: "tool-1" });
+		expect(fixture.context.waitForEvent).not.toHaveBeenCalled();
 		expect(fixture.authority.advance).toHaveBeenCalledTimes(2);
 	});
 
@@ -74,6 +103,7 @@ describe("conversation computer turn workflow", function _Suite()
 		expect(fixture.context.waitForEvent).toHaveBeenCalledExactlyOnceWith("tool-approval:tool-1");
 		expect(fixture.approvalNotifications.publishRequested).toHaveBeenCalledExactlyOnceWith({ bootstrapId: "turn-1", siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 1, approvalId: "tool-1" });
 		expect(fixture.approvalNotifications.publishRequested.mock.invocationCallOrder[0]).toBeLessThan((fixture.context.waitForEvent as unknown as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]!);
+		expect(fixture.toolDispatch.tryExecute).not.toHaveBeenCalled();
 		expect(fixture.authority.advance).toHaveBeenCalledTimes(2);
 	});
 
@@ -93,7 +123,8 @@ describe("conversation computer turn workflow", function _Suite()
 			}),
 		};
 		const approvalNotifications = { publishRequested: vi.fn().mockResolvedValue("published") };
-		_RegisterConversationComputerTurnWorkflow(execution, { approvalNotifications, authority, receipts: { bind: vi.fn().mockResolvedValue(true) }, siloId: "silo-1" });
+		const toolDispatch = { tryExecute: vi.fn().mockResolvedValue(false), settleExhausted: vi.fn().mockResolvedValue(true) };
+		_RegisterConversationComputerTurnWorkflow(execution, { approvalNotifications, authority, receipts: { bind: vi.fn().mockResolvedValue(true) }, toolDispatch, siloId: "silo-1" });
 		const task = await execution.spawn({ client: {} }, { taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: _TASK.idempotencyKey, input: _INPUT });
 		const running = execution._DrainPendingTasks();
 		await Promise.resolve();
@@ -104,6 +135,7 @@ describe("conversation computer turn workflow", function _Suite()
 		await running;
 		expect(state.executions).toBe(1);
 		expect(approvalNotifications.publishRequested).toHaveBeenCalledTimes(1);
+		expect(toolDispatch.tryExecute).not.toHaveBeenCalled();
 		await execution._DrainPendingTasks();
 		expect(state.executions).toBe(1);
 	});

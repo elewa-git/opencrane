@@ -22,6 +22,12 @@ describe("opencrane process config", function _ProcessConfigSuite()
 {
 	beforeEach(function _stubRequiredMemoryGatewayEnvironment()
 	{
+		vi.stubEnv("MCP_CONNECTION_CREDENTIAL_NAMESPACE", "release-mcp-credentials");
+		vi.stubEnv("MCP_CONNECTION_MATERIAL_KEYRING_PATH", "/var/run/opencrane/mcp-connection-material/keyring.json");
+		vi.stubEnv("MCP_SERVER_TOKEN_PATH", "/var/run/opencrane/mcp-server/token");
+		vi.stubEnv("MCP_SERVER_SERVICE_ACCOUNT_NAME", "opencrane-server");
+		vi.stubEnv("POD_NAMESPACE", "server-namespace");
+		vi.stubEnv("POD_UID", "server-pod-uid");
 		vi.stubEnv("DATABASE_URL", "postgresql://opencrane:test@localhost:5432/opencrane");
 		vi.stubEnv("CONVERSATION_PRIVATE_PAYLOAD_KEYRING_PATH", "/var/run/opencrane/conversation-payload/keyring.json");
 		vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.default.svc.cluster.local:8080");
@@ -81,8 +87,8 @@ describe("opencrane process config", function _ProcessConfigSuite()
 			workflows: {
 				databasePoolSize: 2,
 				databaseUrl: "postgresql://opencrane:test@localhost:5432/opencrane",
-				mcpEraProbeMaximumResponseBytes: 65_536,
-				mcpEraProbeTimeoutMilliseconds: 5_000,
+				mcpRemoteMaximumResponseBytes: 65_536,
+				mcpRemoteTimeoutMilliseconds: 5_000,
 				ociRegistryBaseUrl: "https://registry.example.test",
 				ociRegistryRepository: "opencrane/mcp-images",
 				ociRegistryTimeoutMilliseconds: 30_000,
@@ -126,10 +132,10 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		expect(function _readExcessiveWorkerConcurrency() { _ReadProcessConfig(); }).toThrow(/integer from 1 through 20/);
 
 		vi.stubEnv("OPENCRANE_WORKFLOW_WORKER_CONCURRENCY", "2");
-		vi.stubEnv("OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS", "999");
+		vi.stubEnv("OPENCRANE_MCP_REMOTE_TIMEOUT_MS", "999");
 		expect(function _readShortProbeTimeout() { _ReadProcessConfig(); }).toThrow(/integer from 1000 through 60000/);
 
-		vi.stubEnv("OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS", "5000");
+		vi.stubEnv("OPENCRANE_MCP_REMOTE_TIMEOUT_MS", "5000");
 		vi.stubEnv("OPENCRANE_OCI_REGISTRY_AUTHORIZATION_FILE", "relative/authorization");
 		expect(function _readRelativeRegistryCredential() { _ReadProcessConfig(); }).toThrow(/absolute mounted file path/);
 	});

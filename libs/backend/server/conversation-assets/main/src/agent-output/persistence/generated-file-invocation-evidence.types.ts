@@ -16,16 +16,42 @@ export interface GeneratedFileInvocationEvidence extends GeneratedFileCapturePro
 	readonly toolClaim: ToolInvocationClaim;
 	/** Name loaded from the selected immutable tool revision. */
 	readonly toolName: string;
+	/** Remote fences never impersonate an OCI companion. */
+	readonly remoteClaimFence?: never;
 	/** UID of the registered executor Job; the Pod UID remains a separate coordinate. */
 	readonly workloadUid: string;
 }
 
-/** Current completion facts and the original strict result before ordinary terminal persistence. */
-export interface GeneratedFileInvocationResultCommand extends GeneratedFileInvocationEvidence
+/** Server-mediated completion facts that carry no OCI companion or workload coordinates. */
+export interface GeneratedFileRemoteInvocationEvidence
+{
+	/** Runtime row whose remote fence authorized the provider request. */
+	readonly executionId: string;
+	/** Exact claimed invocation returned by the IAM participant on this transaction. */
+	readonly invocation: ToolInvocationRecord;
+	/** Opaque remote fence saved before credential or provider access. */
+	readonly remoteClaimFence: string;
+	/** Original remote claim expiry, which result handling cannot extend. */
+	readonly remoteNotAfterEpochMs: number;
+	/** Immutable server revision that owns the selected tool. */
+	readonly serverRevisionId: string;
+	/** Silo that owns the execution and invocation. */
+	readonly siloId: string;
+	/** IAM claim saved on the current MCP execution. */
+	readonly toolClaim: ToolInvocationClaim;
+	/** Name loaded from the selected immutable tool revision. */
+	readonly toolName: string;
+}
+
+/** Original strict result retained until source-specific resource handling succeeds. */
+interface GeneratedFileInvocationRawResult
 {
 	/** Original wire result whose replay digest remains owned by MCP. */
 	readonly result: McpToolCallResult;
 }
+
+/** Current completion facts and original result for either OCI or server-mediated execution. */
+export type GeneratedFileInvocationResultCommand = (GeneratedFileInvocationEvidence | GeneratedFileRemoteInvocationEvidence) & GeneratedFileInvocationRawResult;
 
 /** Binds encrypted capture to the existing completion transaction and its freshly checked authority. */
 export interface GeneratedFileCaptureRepositoryFactory

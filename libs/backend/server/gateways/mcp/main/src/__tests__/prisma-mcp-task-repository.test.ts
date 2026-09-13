@@ -1,4 +1,4 @@
-import { McpExecutorCommandState, McpExecutorWorkloadState, McpTaskState, Prisma, ToolInvocationState } from "@prisma/client";
+import { McpApprovalStatus, McpExecutionTransport, McpExecutorCommandState, McpExecutorWorkloadState, McpServerRevisionState, McpServerStatus, McpTaskState, Prisma, ToolInvocationState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
@@ -49,6 +49,22 @@ function _Submission(): McpTaskSubmissionRecord
 	};
 }
 
+/** Return one executable OCI revision without remote connection coordinates. */
+function _OciRevision()
+{
+	return {
+		transport: McpExecutionTransport.OciImage,
+		connectionId: null,
+		connectionGeneration: null,
+		connectionOwnerPrincipalId: null,
+		endpointDigest: null,
+		protocolVersion: MCP_ERA_PROTOCOL_VERSION,
+		state: McpServerRevisionState.Ready,
+		server: { status: McpServerStatus.Active, approvalStatus: McpApprovalStatus.Published },
+		connection: null,
+	};
+}
+
 /** Return one selected Prisma task row with optional lifecycle overrides. */
 function _Task(overrides: Record<string, unknown> = {}): Record<string, unknown>
 {
@@ -61,7 +77,12 @@ function _Task(overrides: Record<string, unknown> = {}): Record<string, unknown>
 		callDigest: submission.callDigest,
 		serverRevisionId: submission.serverRevisionId,
 		toolRevisionId: submission.toolRevisionId,
-		protocolVersion: MCP_ERA_PROTOCOL_VERSION,
+			protocolVersion: MCP_ERA_PROTOCOL_VERSION,
+			transport: McpExecutionTransport.OciImage,
+			connectionId: null,
+			connectionGeneration: null,
+			connectionOwnerPrincipalId: null,
+			endpointDigest: null,
 		arguments: submission.arguments,
 		taskId: null,
 		taskName: null,
@@ -71,7 +92,8 @@ function _Task(overrides: Record<string, unknown> = {}): Record<string, unknown>
 		inputResponse: null,
 		result: null,
 		failureCode: null,
-		toolRevision: { name: "weather.current", inputSchema: { type: "object", properties: { city: { type: "string" } }, required: ["city"], additionalProperties: false } },
+			toolRevision: { name: "weather.current", inputSchema: { type: "object", properties: { city: { type: "string" } }, required: ["city"], additionalProperties: false } },
+			serverRevision: _OciRevision(),
 		toolInvocation: null,
 		...overrides,
 	};
@@ -82,7 +104,7 @@ describe("Prisma MCP task admission", function _McpTaskAdmissionSuite()
 	it("selects the exact installed tool on the immutable Ready OCI server revision", async function _SelectsExactOciTool()
 	{
 		const submission = _Submission();
-		const findTool = vi.fn().mockResolvedValue({ inputSchema: (_Task().toolRevision as { inputSchema: object }).inputSchema });
+		const findTool = vi.fn().mockResolvedValue({ inputSchema: (_Task().toolRevision as { inputSchema: object }).inputSchema, serverRevision: _OciRevision() });
 		const createTask = vi.fn().mockResolvedValue(_Task());
 		const transaction = {
 			mcpTaskClaim: { upsert: vi.fn().mockResolvedValue({ identityDigest: "claim" }) },
@@ -101,7 +123,22 @@ describe("Prisma MCP task admission", function _McpTaskAdmissionSuite()
 				siloId: submission.siloId,
 				serverRevisionId: submission.serverRevisionId,
 			},
-			select: { inputSchema: true },
+			select: {
+				inputSchema: true,
+				serverRevision: {
+					select: {
+						transport: true,
+						connectionId: true,
+						connectionGeneration: true,
+						connectionOwnerPrincipalId: true,
+						endpointDigest: true,
+						protocolVersion: true,
+						state: true,
+						server: { select: { status: true, approvalStatus: true } },
+						connection: { select: { state: true } },
+					},
+				},
+			},
 		});
 		expect(readiness.isReady).toHaveBeenCalledWith({ siloId: submission.siloId, toolRevisionId: submission.toolRevisionId, ownerPrincipalId: submission.principalId });
 		expect(createTask).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ serverRevisionId: submission.serverRevisionId, toolRevisionId: submission.toolRevisionId, protocolVersion: MCP_ERA_PROTOCOL_VERSION }) }));
@@ -251,6 +288,19 @@ describe("Prisma MCP task input", function _McpTaskInputSuite()
 
 describe("Prisma MCP task cancellation", function _McpTaskCancellationSuite()
 {
+	it("closes unused remote work with canonical terminal evidence", async function _CancelsPendingRemoteWork()
+	{
+		const execution = { id: "execution-1", transport: McpExecutionTransport.RemoteHttp, commandState: McpExecutorCommandState.Pending, workloadState: null, workloadUid: null, deliveryCount: 0, claimedAt: null, claimExpiresAt: null, remoteClaimFence: null, toolInvocationClaimFence: null, toolInvocationClaimRevision: null };
+		const task = _Task({ state: McpTaskState.Queued, toolInvocation: { id: "invocation-1", state: ToolInvocationState.Ready, mcpRuntimeExecution: execution } });
+		const executionUpdate = vi.fn().mockResolvedValue({ count: 1 });
+		const transaction = { mcpTask: { findFirst: vi.fn().mockResolvedValue(task), updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, mcpRuntimeExecution: { updateMany: executionUpdate }, toolInvocation: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) } } as unknown as Prisma.TransactionClient;
+		const repository = new PrismaMcpTaskRepository(transaction, _Authorization() as never);
+
+		await expect(repository.cancel("silo-1", "principal-1", "mcp-task-1")).resolves.toBe("cancelled");
+
+		expect(executionUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ commandState: McpExecutorCommandState.Failed, terminalOutcome: "mcp_task_cancelled", terminalPayloadDigest: ___DigestCanonicalJson({ failureCode: "mcp_task_cancelled" }) }) }));
+	});
+
 	it("closes only pending executor and invocation work before cancelling the task", async function _CancelsPendingWork()
 	{
 		const execution = { id: "execution-1", commandState: McpExecutorCommandState.Pending, workloadState: McpExecutorWorkloadState.Pending, workloadUid: null, deliveryCount: 0, claimedAt: null, claimExpiresAt: null };
@@ -263,7 +313,7 @@ describe("Prisma MCP task cancellation", function _McpTaskCancellationSuite()
 
 		await expect(repository.cancel("silo-1", "principal-1", "mcp-task-1")).resolves.toBe("cancelled");
 
-		expect(executionUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id: execution.id, toolInvocationId: "invocation-1", commandState: McpExecutorCommandState.Pending, workloadState: McpExecutorWorkloadState.Pending, workloadUid: null, deliveryCount: 0, claimedAt: null, claimExpiresAt: null }, data: expect.objectContaining({ commandState: McpExecutorCommandState.Failed, workloadState: McpExecutorWorkloadState.Closed }) }));
+		expect(executionUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id: execution.id, transport: McpExecutionTransport.OciImage, toolInvocationId: "invocation-1", commandState: McpExecutorCommandState.Pending, workloadState: McpExecutorWorkloadState.Pending, workloadUid: null, deliveryCount: 0, claimedAt: null, claimExpiresAt: null }, data: expect.objectContaining({ commandState: McpExecutorCommandState.Failed, workloadState: McpExecutorWorkloadState.Closed }) }));
 		expect(invocationUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "invocation-1", state: ToolInvocationState.Ready }, data: expect.objectContaining({ state: ToolInvocationState.Failed, failureCode: "mcp_task_cancelled" }) }));
 		expect(taskUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "mcp-task-1", state: { in: [McpTaskState.Working, McpTaskState.InputRequired, McpTaskState.Queued] } }, data: expect.objectContaining({ state: McpTaskState.Cancelled }) }));
 	});
@@ -280,7 +330,7 @@ describe("Prisma MCP task cancellation", function _McpTaskCancellationSuite()
 
 		await expect(repository.cancel("silo-1", "principal-1", "mcp-task-1")).resolves.toBe("cancelled");
 
-		expect(executionUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id: execution.id, toolInvocationId: "invocation-1", commandState: McpExecutorCommandState.Pending, workloadState: McpExecutorWorkloadState.Pending, workloadUid: null, deliveryCount: 1, claimedAt, claimExpiresAt }, data: expect.objectContaining({ commandState: McpExecutorCommandState.Failed, workloadState: McpExecutorWorkloadState.Pending, terminalOutcome: "mcp_task_cancelled" }) }));
+		expect(executionUpdate).toHaveBeenCalledWith(expect.objectContaining({ where: { id: execution.id, transport: McpExecutionTransport.OciImage, toolInvocationId: "invocation-1", commandState: McpExecutorCommandState.Pending, workloadState: McpExecutorWorkloadState.Pending, workloadUid: null, deliveryCount: 1, claimedAt, claimExpiresAt }, data: expect.objectContaining({ commandState: McpExecutorCommandState.Failed, workloadState: McpExecutorWorkloadState.Pending, terminalOutcome: "mcp_task_cancelled" }) }));
 	});
 
 	it("refuses cancellation after the provider-effect claim starts", async function _RefusesClaimedWork()

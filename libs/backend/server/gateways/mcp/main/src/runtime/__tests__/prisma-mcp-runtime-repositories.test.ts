@@ -1,4 +1,4 @@
-import { McpApprovalStatus, McpCredentialRequirement, McpExecutorCommandState, McpExecutorWorkloadState, McpRuntimeExecutionKind, McpServerRevisionState, McpServerStatus, McpServerTransport, OciImageValidationState } from "@prisma/client";
+import { McpApprovalStatus, McpCredentialRequirement, McpExecutionTransport, McpExecutorCommandState, McpExecutorWorkloadState, McpRuntimeExecutionKind, McpServerRevisionState, McpServerStatus, McpServerTransport, OciImageValidationState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { McpCompanionCommandKinds, type McpCompanionCompletionRequest } from "@opencrane/backend/agents/runtime/mcp-executor/companion";
@@ -33,6 +33,34 @@ function _Readiness(ready = true)
 function _Results()
 {
 	return { prepare: vi.fn(async function _Prepare(command: { readonly result: McpToolCallResult }): Promise<McpToolCallResult> { return command.result; }) };
+}
+
+/** Return one executable OCI server revision without remote connection coordinates. */
+function _OciRevision(approvalStatus: McpApprovalStatus = McpApprovalStatus.Published, status: McpServerStatus = McpServerStatus.Active)
+{
+	return { transport: McpExecutionTransport.OciImage, state: McpServerRevisionState.Ready, protocolVersion: "2026-07-28", connectionId: null, connectionGeneration: null, connectionOwnerPrincipalId: null, endpointDigest: null, connection: null, server: { status, approvalStatus } };
+}
+
+/** Return the OCI strategy fields stored with one runtime execution. */
+function _OciRuntimeBinding()
+{
+	return { transport: McpExecutionTransport.OciImage, connectionId: null, connectionGeneration: null, connectionOwnerPrincipalId: null, endpointDigest: null, credentialSecretUid: null, credentialSecretResourceVersion: null };
+}
+
+/** Return one active remote revision with an immutable credentialless connection generation. */
+function _RemoteRevision()
+{
+	return {
+		transport: McpExecutionTransport.RemoteHttp,
+		state: McpServerRevisionState.Ready,
+		protocolVersion: "2026-07-28",
+		connectionId: "connection-1",
+		connectionGeneration: 3,
+		connectionOwnerPrincipalId: "principal-1",
+		endpointDigest: `sha256:${"d".repeat(64)}`,
+		connection: { state: "Active", credentialSecretUid: null, credentialSecretResourceVersion: null },
+		server: { status: McpServerStatus.Active, approvalStatus: McpApprovalStatus.Published },
+	};
 }
 
 /** Build the ownership fields consumed by MCP connection checks. */
@@ -72,7 +100,7 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 		const invocation = _TaskInvocation();
 		const transaction = {
 			mcpRuntimeExecution: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "execution-1" }) },
-			mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ serverRevisionId: "revision-1", serverRevision: { state: McpServerRevisionState.Ready, server: { status: McpServerStatus.Active, approvalStatus: McpApprovalStatus.Published } } }) },
+			mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ serverRevisionId: "revision-1", serverRevision: _OciRevision() }) },
 		};
 		const toolInvocations = { findById: vi.fn().mockResolvedValue(invocation), completeUnusedBeforeDispatch: vi.fn(), claim: vi.fn(), completeSucceeded: vi.fn(), completeFailed: vi.fn(), completeAmbiguous: vi.fn() };
 		const repository = new PrismaMcpToolInvocationAdmissionRepository(transaction as never, toolInvocations as never, _Readiness(), _Options());
@@ -86,7 +114,7 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 		const invocation = _TaskInvocation();
 		const transaction = {
 			mcpRuntimeExecution: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
-			mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ serverRevisionId: "revision-1", serverRevision: { state: McpServerRevisionState.Ready, server: { status: McpServerStatus.Active, approvalStatus: McpApprovalStatus.Disabled } } }) },
+			mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ serverRevisionId: "revision-1", serverRevision: _OciRevision(McpApprovalStatus.Disabled) }) },
 		};
 		const completeUnusedBeforeDispatch = vi.fn().mockResolvedValue({ changed: true, invocation: _TaskInvocation({ state: ToolInvocationStates.Failed, failureCode: "mcp_connection_unavailable", revision: 1 }) });
 		const toolInvocations = { findById: vi.fn().mockResolvedValue(invocation), completeUnusedBeforeDispatch, claim: vi.fn(), completeSucceeded: vi.fn(), completeFailed: vi.fn(), completeAmbiguous: vi.fn() };
@@ -97,13 +125,38 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 		expect(completeUnusedBeforeDispatch).toHaveBeenCalledWith("invocation-row-1", 0, "mcp_connection_unavailable", expect.any(Date));
 	});
 
+	it("admits a remote invocation without creating OCI workload coordinates", async function _AdmitsRemoteInvocation()
+	{
+		const invocation = _TaskInvocation();
+		const transaction = {
+			mcpRuntimeExecution: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "execution-1" }) },
+			mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ serverRevisionId: "revision-remote-1", serverRevision: _RemoteRevision() }) },
+		};
+		const toolInvocations = { findById: vi.fn().mockResolvedValue(invocation), completeUnusedBeforeDispatch: vi.fn() };
+		const readiness = _Readiness();
+		const repository = new PrismaMcpToolInvocationAdmissionRepository(transaction as never, toolInvocations as never, readiness, _Options());
+
+		await expect(repository.admitInvocation(invocation.id)).resolves.toBe("admitted");
+
+		expect(transaction.mcpRuntimeExecution.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+			transport: McpExecutionTransport.RemoteHttp,
+			connectionId: "connection-1",
+			connectionGeneration: 3,
+			connectionOwnerPrincipalId: "principal-1",
+			profileName: null,
+			workloadState: null,
+		}) }));
+		expect(readiness.isReady).toHaveBeenCalledExactlyOnceWith({ siloId: "silo-1", toolRevisionId: "tool-1", ownerPrincipalId: "principal-1" });
+		expect(readiness.lockForDispatch).not.toHaveBeenCalled();
+	});
+
 	it.each([ToolInvocationStates.Ready, ToolInvocationStates.Claimed, ToolInvocationStates.Succeeded, ToolInvocationStates.Failed, ToolInvocationStates.RecoveryRequired])("recovers existing executor work after invocation progression to %s", async function _RecoverProgressed(state)
 	{
 		const invocation = _TaskInvocation({ state });
-		const existing = { siloId: "silo-1", kind: McpRuntimeExecutionKind.Invocation, toolInvocationId: invocation.id, serverRevisionId: "revision-1", profileName: "mcp-default", idempotencyKey: `mcp-invocation:${invocation.id}` };
+		const existing = { siloId: "silo-1", kind: McpRuntimeExecutionKind.Invocation, toolInvocationId: invocation.id, serverRevisionId: "revision-1", profileName: "mcp-default", idempotencyKey: `mcp-invocation:${invocation.id}`, ..._OciRuntimeBinding() };
 		const transaction = {
 			mcpRuntimeExecution: { findUnique: vi.fn().mockResolvedValue(existing), create: vi.fn() },
-			mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ serverRevisionId: "revision-1", serverRevision: { state: McpServerRevisionState.Ready, server: { status: McpServerStatus.Active, approvalStatus: McpApprovalStatus.Disabled } } }) },
+			mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ serverRevisionId: "revision-1", serverRevision: _OciRevision(McpApprovalStatus.Disabled) }) },
 		};
 		const repository = new PrismaMcpToolInvocationAdmissionRepository(transaction as never, { findById: vi.fn().mockResolvedValue(invocation) } as never, _Readiness(), _Options());
 		await expect(repository.admitInvocation(invocation.id)).resolves.toBe("idempotent");
@@ -116,7 +169,7 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 	{
 		const transaction = {
 			mcpRuntimeExecution: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
-			mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ serverRevisionId: "revision-1", serverRevision: { state: McpServerRevisionState.Ready, server: { status: McpServerStatus.Active, approvalStatus: McpApprovalStatus.Published } } }) },
+			mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ serverRevisionId: "revision-1", serverRevision: _OciRevision() }) },
 		};
 		const repository = new PrismaMcpToolInvocationAdmissionRepository(transaction as never, { findById: vi.fn().mockResolvedValue(_TaskInvocation({ state })) } as never, _Readiness(), _Options());
 		await expect(repository.admitInvocation("invocation-row-1")).resolves.toBe("not_ready");
@@ -127,7 +180,7 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 	{
 		const claimedAt = new Date("2026-08-26T00:00:00.000Z");
 		const claimExpiresAt = new Date("2026-08-26T00:00:30.000Z");
-		const execution = { id: "execution-1", siloId: "silo-1", workloadState: McpExecutorWorkloadState.Pending, commandState: McpExecutorCommandState.Failed, profileName: "mcp-default", idempotencyKey: "key-1", executionReference: "reference-1", claimedAt: null, claimExpiresAt: null, deliveryCount: 0, serverRevision: { registryReference: `registry.test/mcp/image@sha256:${"a".repeat(64)}` } };
+		const execution = { id: "execution-1", siloId: "silo-1", workloadState: McpExecutorWorkloadState.Pending, commandState: McpExecutorCommandState.Failed, profileName: "mcp-default", idempotencyKey: "key-1", executionReference: "reference-1", claimedAt: null, claimExpiresAt: null, deliveryCount: 0, transport: McpExecutionTransport.OciImage, serverRevision: { registryReference: `registry.test/mcp/image@sha256:${"a".repeat(64)}` } };
 		const transaction = {
 			mcpRuntimeClaimCandidate: { findFirst: vi.fn().mockResolvedValue({ id: "execution-1" }) },
 			mcpRuntimeExecution: { findFirst: vi.fn().mockResolvedValue(execution), updateManyAndReturn: vi.fn().mockResolvedValue([{ claimedAt, claimExpiresAt }]) },
@@ -140,7 +193,7 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 	it("binds a late suspended Job UID while keeping an exhausted execution closed", async function _BindsTerminalAssignment()
 	{
 		const claimedAt = new Date("2026-08-26T00:00:00.000Z");
-		const execution = { id: "execution-1", siloId: "silo-1", workloadState: McpExecutorWorkloadState.Pending, commandState: McpExecutorCommandState.Failed, profileName: "mcp-default", claimedAt, claimExpiresAt: new Date("2099-08-26T00:00:30.000Z"), deliveryCount: 1, workloadUid: null };
+		const execution = { id: "execution-1", siloId: "silo-1", workloadState: McpExecutorWorkloadState.Pending, commandState: McpExecutorCommandState.Failed, profileName: "mcp-default", claimedAt, claimExpiresAt: new Date("2099-08-26T00:00:30.000Z"), deliveryCount: 1, workloadUid: null, transport: McpExecutionTransport.OciImage };
 		const transaction = {
 			mcpRuntimeClock: { findUnique: vi.fn().mockResolvedValue({ singleton: 1, now: new Date("2026-08-26T00:00:10.000Z") }) },
 			mcpRuntimeExecution: { findFirst: vi.fn().mockResolvedValue(execution), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
@@ -155,7 +208,7 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 	{
 		const releaseClaimedAt = new Date("2026-08-26T00:01:00.000Z");
 		const releaseExpiresAt = new Date("2026-08-26T00:01:30.000Z");
-		const execution = { id: "execution-1", siloId: "silo-1", workloadState: McpExecutorWorkloadState.Released, profileName: "mcp-default", idempotencyKey: "key-1", executionReference: "reference-1", claimedAt: new Date("2026-08-26T00:00:00.000Z"), claimExpiresAt: new Date("2026-08-26T00:00:30.000Z"), deliveryCount: 1, workloadUid: "job-1", podUid: null, releaseClaimedAt: new Date("2026-08-26T00:00:30.000Z"), releaseExpiresAt: new Date("2026-08-26T00:01:00.000Z"), releaseDeliveryCount: 1, serverRevision: { registryReference: `registry.test/mcp/image@sha256:${"a".repeat(64)}` } };
+		const execution = { id: "execution-1", siloId: "silo-1", workloadState: McpExecutorWorkloadState.Released, profileName: "mcp-default", idempotencyKey: "key-1", executionReference: "reference-1", claimedAt: new Date("2026-08-26T00:00:00.000Z"), claimExpiresAt: new Date("2026-08-26T00:00:30.000Z"), deliveryCount: 1, workloadUid: "job-1", podUid: null, releaseClaimedAt: new Date("2026-08-26T00:00:30.000Z"), releaseExpiresAt: new Date("2026-08-26T00:01:00.000Z"), releaseDeliveryCount: 1, transport: McpExecutionTransport.OciImage, serverRevision: { registryReference: `registry.test/mcp/image@sha256:${"a".repeat(64)}` } };
 		const transaction = {
 			mcpRuntimeReleaseClaimCandidate: { findFirst: vi.fn().mockResolvedValue({ id: execution.id }) },
 			mcpRuntimeExecution: { findFirst: vi.fn().mockResolvedValue(execution), updateManyAndReturn: vi.fn().mockResolvedValue([{ releaseClaimedAt, releaseExpiresAt }]) },
@@ -170,7 +223,7 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 	{
 		const cleanupClaimedAt = new Date("2026-08-26T00:02:00.000Z");
 		const cleanupExpiresAt = new Date("2026-08-26T00:02:30.000Z");
-		const execution = { id: "execution-1", siloId: "silo-1", workloadState: McpExecutorWorkloadState.Closed, commandState: McpExecutorCommandState.Failed, profileName: "mcp-default", idempotencyKey: "key-1", executionReference: "reference-1", claimedAt: new Date("2026-08-26T00:00:00.000Z"), claimExpiresAt: new Date("2026-08-26T00:00:30.000Z"), deliveryCount: 1, workloadUid: "job-1", cleanupCompletedAt: null, cleanupClaimedAt: new Date("2026-08-26T00:01:00.000Z"), cleanupExpiresAt: new Date("2026-08-26T00:01:30.000Z"), cleanupDeliveryCount: 1, createdAt: new Date("2026-08-26T00:00:00.000Z"), serverRevision: { registryReference: `registry.test/mcp/image@sha256:${"a".repeat(64)}` } };
+		const execution = { id: "execution-1", siloId: "silo-1", workloadState: McpExecutorWorkloadState.Closed, commandState: McpExecutorCommandState.Failed, profileName: "mcp-default", idempotencyKey: "key-1", executionReference: "reference-1", claimedAt: new Date("2026-08-26T00:00:00.000Z"), claimExpiresAt: new Date("2026-08-26T00:00:30.000Z"), deliveryCount: 1, workloadUid: "job-1", cleanupCompletedAt: null, cleanupClaimedAt: new Date("2026-08-26T00:01:00.000Z"), cleanupExpiresAt: new Date("2026-08-26T00:01:30.000Z"), cleanupDeliveryCount: 1, createdAt: new Date("2026-08-26T00:00:00.000Z"), transport: McpExecutionTransport.OciImage, serverRevision: { registryReference: `registry.test/mcp/image@sha256:${"a".repeat(64)}` } };
 		const transaction = {
 			mcpRuntimeClock: { findUnique: vi.fn().mockResolvedValue({ singleton: 1, now: new Date("2026-08-26T00:01:31.000Z") }) },
 			mcpRuntimeExecution: { findFirst: vi.fn().mockResolvedValue(execution), updateManyAndReturn: vi.fn().mockResolvedValue([{ cleanupClaimedAt, cleanupExpiresAt }]) },

@@ -33,7 +33,10 @@ function _Invocation(patch: Partial<ToolInvocationRecord> = {}): ToolInvocationR
 /** Assemble one completion repository with observable transaction participants. */
 function _Harness(invocation: ToolInvocationRecord | null = _Invocation())
 {
-	const transaction = { mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ name: _RUNTIME_TOOL_NAME }) } };
+	const transaction = {
+		mcpRuntimeClock: { findUnique: vi.fn().mockResolvedValue({ now: new Date("2026-09-13T10:00:00.001Z") }) },
+		mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ name: _RUNTIME_TOOL_NAME }) },
+	};
 	const invocations = { findById: vi.fn().mockResolvedValue(invocation), completeSucceeded: vi.fn().mockResolvedValue({ outcome: ToolInvocationCompletionOutcomes.Completed, invocation: { ..._Invocation(), state: ToolInvocationStates.Succeeded, result: _PREPARED_RESULT }, delivery: { toolInvocationId: "tool-call-1", outcome: "succeeded", result: _PREPARED_RESULT } }) };
 	const results = { prepare: vi.fn().mockResolvedValue(_PREPARED_RESULT) };
 	const command: McpInvocationCompletionCommand = {
@@ -42,6 +45,20 @@ function _Harness(invocation: ToolInvocationRecord | null = _Invocation())
 		toolClaim: { invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 7, revision: 3 }, workload: _WORKLOAD, workloadUid: "job-1",
 	};
 	return { command, invocations, repository: new PrismaMcpInvocationCompletionRepository(transaction as never, invocations as never, results), results, transaction };
+}
+
+/** Replace OCI companion coordinates with the exact saved remote runtime fence. */
+function _RemoteCommand(command: McpInvocationCompletionCommand): McpInvocationCompletionCommand
+{
+	return {
+		executionId: command.executionId,
+		remoteClaimFence: "remote-fence-1",
+		remoteNotAfterEpochMs: new Date("2099-01-01T00:00:00.000Z").getTime(),
+		result: command.result,
+		serverRevisionId: command.serverRevisionId,
+		siloId: command.siloId,
+		toolClaim: command.toolClaim,
+	};
 }
 
 describe("Prisma MCP invocation completion", function _DescribeCompletion()
@@ -57,6 +74,64 @@ describe("Prisma MCP invocation completion", function _DescribeCompletion()
 			podUid: "pod-1", result: _RAW_RESULT, serverRevisionId: "server-revision-1", siloId: "silo-1", toolName: _RUNTIME_TOOL_NAME, workload: _WORKLOAD, workloadUid: "job-1",
 		}));
 		expect(harness.invocations.completeSucceeded).toHaveBeenCalledWith(harness.command.toolClaim, _PREPARED_RESULT, expect.any(Date));
+	});
+
+	it("passes verified remote proof to the participant before terminal persistence", async function _RemoteProofBeforeCompletion()
+	{
+		const harness = _Harness();
+		const command = _RemoteCommand(harness.command);
+
+		await expect(harness.repository.completeResult(command, new Date("2026-09-13T10:00:00.000Z"))).resolves.toEqual({ result: _PREPARED_RESULT, completedAt: new Date("2026-09-13T10:00:00.001Z") });
+
+		expect(harness.transaction.mcpToolRevision.findFirst).toHaveBeenCalledWith({ where: { id: "tool-revision-1", siloId: "silo-1", serverRevisionId: "server-revision-1" }, select: { name: true } });
+		expect(harness.results.prepare).toHaveBeenCalledWith(expect.objectContaining({ executionId: "execution-1", invocation: expect.objectContaining({ id: "invocation-row-1" }), remoteClaimFence: "remote-fence-1", toolName: _RUNTIME_TOOL_NAME }));
+		expect(harness.results.prepare.mock.calls[0]?.[0]).not.toHaveProperty("workload");
+		expect(harness.invocations.completeSucceeded).toHaveBeenCalledAfter(harness.results.prepare);
+	});
+
+	it("refuses a substituted remote server revision before its participant runs", async function _RejectsRemoteServerSubstitution()
+	{
+		const harness = _Harness();
+		harness.transaction.mcpToolRevision.findFirst.mockResolvedValue(null);
+
+		await expect(harness.repository.completeResult(_RemoteCommand(harness.command), new Date("2026-09-13T10:00:00.000Z"))).resolves.toBeNull();
+
+		expect(harness.results.prepare).not.toHaveBeenCalled();
+		expect(harness.invocations.completeSucceeded).not.toHaveBeenCalled();
+	});
+
+	it("rejects when fresh database time reaches the remote lease after result preparation", async function _RejectsRemoteExpiry()
+	{
+		const startedAt = new Date("2026-09-13T10:00:00.000Z");
+		const harness = _Harness(_Invocation({ claimExpiresAt: new Date(startedAt.getTime() + 200) }));
+		const command = { ..._RemoteCommand(harness.command), remoteNotAfterEpochMs: startedAt.getTime() + 100 };
+		harness.transaction.mcpRuntimeClock.findUnique.mockResolvedValue({ now: new Date(startedAt.getTime() + 100) });
+
+		await expect(harness.repository.completeResult(command, startedAt)).rejects.toThrow(/authority expired during result capture/u);
+
+		expect(harness.transaction.mcpRuntimeClock.findUnique).toHaveBeenCalledAfter(harness.results.prepare);
+		expect(harness.invocations.completeSucceeded).not.toHaveBeenCalled();
+	});
+
+	it("uses fresh database time for remote completion when the process wall clock is skewed", async function _RemoteClockSkew()
+	{
+		vi.useFakeTimers();
+		try
+		{
+			const startedAt = new Date("2026-09-13T10:00:00.000Z");
+			vi.setSystemTime(new Date("2199-01-01T00:00:00.000Z"));
+			const harness = _Harness(_Invocation({ claimExpiresAt: new Date(startedAt.getTime() + 200) }));
+			const command = { ..._RemoteCommand(harness.command), remoteNotAfterEpochMs: startedAt.getTime() + 200 };
+			harness.transaction.mcpRuntimeClock.findUnique.mockResolvedValue({ now: new Date(startedAt.getTime() + 100) });
+
+			await expect(harness.repository.completeResult(command, startedAt)).resolves.toEqual({ result: _PREPARED_RESULT, completedAt: new Date(startedAt.getTime() + 100) });
+
+			expect(harness.invocations.completeSucceeded).toHaveBeenCalledWith(command.toolClaim, _PREPARED_RESULT, new Date(startedAt.getTime() + 100));
+		}
+		finally
+		{
+			vi.useRealTimers();
+		}
 	});
 
 	it("does not fall back to the raw resource when its result participant fails", async function _RejectsCaptureFailure()

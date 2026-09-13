@@ -73,7 +73,7 @@ describe("saved personal approval through the conversation workflow on PostgreSQ
 				return { outcome: "completed" as const };
 			},
 		};
-		_RegisterConversationComputerTurnWorkflow(workflows, { authority: authority as never, approvalNotifications: _APPROVAL_NOTIFICATIONS, receipts: { bind: async function _Bind() { return true; } }, siloId: f.siloId });
+		_RegisterConversationComputerTurnWorkflow(workflows, { toolDispatch: { tryExecute: async function _WaitForCompanion() { return false; }, settleExhausted: async function _KeepCompanionAuthority() { return false; } }, authority: authority as never, approvalNotifications: _APPROVAL_NOTIFICATIONS, receipts: { bind: async function _Bind() { return true; } }, siloId: f.siloId });
 		const activationEventId = randomUUID();
 		const task = await workflows.spawn({ client: {} }, { taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: activationEventId, input: { siloId: f.siloId, computerId: f.turn.computerId, leaseId: f.turn.lease.leaseId, leaseGeneration: f.turn.lease.leaseGeneration, activationEventId, causationId: f.turn.latestPendingEntryId, causationPosition: f.turn.latestPendingEntryPosition } });
 		const persistedTask = { ...task, taskId: randomUUID() };
@@ -113,7 +113,7 @@ describe("saved personal approval through the conversation workflow on PostgreSQ
 		const restarted = new __FakeWorkflowEngine();
 		const restartedAliases = new Map<string, { readonly taskId: string; readonly taskName: string; readonly idempotencyKey: string }>();
 		const restartedEventPort = _EventPort(restarted, emitted, restartedAliases);
-		_RegisterConversationComputerTurnWorkflow(restarted, { authority: authority as never, approvalNotifications: _APPROVAL_NOTIFICATIONS, receipts: { bind: async function _Bind() { return true; } }, siloId: f.siloId });
+		_RegisterConversationComputerTurnWorkflow(restarted, { toolDispatch: { tryExecute: async function _WaitForCompanion() { return false; }, settleExhausted: async function _KeepCompanionAuthority() { return false; } }, authority: authority as never, approvalNotifications: _APPROVAL_NOTIFICATIONS, receipts: { bind: async function _Bind() { return true; } }, siloId: f.siloId });
 		const restartedActivationEventId = activationEventId;
 		const restartedTask = await restarted.spawn({ client: {} }, { taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: restartedActivationEventId, input: { siloId: f.siloId, computerId: f.turn.computerId, leaseId: f.turn.lease.leaseId, leaseGeneration: f.turn.lease.leaseGeneration, activationEventId: restartedActivationEventId, causationId: f.turn.latestPendingEntryId, causationPosition: f.turn.latestPendingEntryPosition } });
 		restartedAliases.set(persistedTask.taskId, restartedTask);

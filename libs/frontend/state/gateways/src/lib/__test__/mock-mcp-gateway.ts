@@ -1,6 +1,6 @@
 import { Injectable } from "@angular/core";
 
-import { McpApprovalStatus, McpConnectionStatus, McpCredentialRequirement, McpInstalledServer, McpServer } from "@opencrane/core";
+import { McpApprovalStatus, McpConnectionStatus, McpCredentialRequirement, McpInstallStates, McpInstalledServer, McpServer, type McpConnectionProjection } from "@opencrane/core";
 import { MCP_CATALOGUE, MCP_INSTALLED } from "@opencrane/core/testing";
 import { McpGateway } from "@opencrane/state/mcp/adapter";
 
@@ -29,12 +29,16 @@ export class MockMcpGateway implements McpGateway
 		const connectionStatus = server.credentialRequirement === McpCredentialRequirement.Credentialless
 			? McpConnectionStatus.Credentialless
 			: McpConnectionStatus.NeedsCredential;
-		const record: McpInstalledServer = { serverId, connectionStatus, lastUsed: null };
+		const record: McpInstalledServer = { serverId, lifecycleState: McpInstallStates.Installed, connectionStatus, connectionGeneration: null, credentialUpdatedAt: null, failureCode: null, lastUsed: null };
 		this._installed.set(serverId, record);
 		return Promise.resolve({ ...record });
 	}
 
 	public uninstall(serverId: string): Promise<void> { this._installed.delete(serverId); return Promise.resolve(); }
+	/** Tests supply explicit connection outcomes instead of making fixture credentials look active. */
+	public activatePersonalConnection(): Promise<McpConnectionProjection> { return Promise.reject(new Error("This test gateway has no connection command fixture.")); }
+	/** Tests supply an explicit revocation outcome when exercising connection cleanup. */
+	public revokePersonalConnection(): Promise<McpConnectionProjection> { return Promise.reject(new Error("This test gateway has no connection command fixture.")); }
 	public listCatalogue(): Promise<McpServer[]> { return Promise.resolve(Array.from(this._catalogue.values(), function c(s: McpServer): McpServer { return { ...s }; })); }
 	public approve(id: string): Promise<McpServer> { return Promise.resolve(this._setStatus(id, McpApprovalStatus.Approved)); }
 	public publish(id: string): Promise<McpServer> { return Promise.resolve(this._setStatus(id, McpApprovalStatus.Published)); }

@@ -1541,6 +1541,57 @@
 						"importPath": "../persistence/workflow/prisma-conversation-generated-file-record-repository"
 					}
 				]
+			},
+			{
+				"path": "libs/backend/server/gateways/mcp/main/src/connections/discovery/prisma-mcp-remote-revision-finalizer.ts",
+				"adapter": "PrismaMcpRemoteRevisionFinalizationRepository",
+				"contract": "McpRemoteRevisionFinalizationRepository",
+				"contractImportPath": "./mcp-authenticated-connection-discovery.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/gateways/mcp/main/src/connections/prisma-mcp-connection-repository.ts",
+				"adapter": "PrismaMcpConnectionRepository",
+				"contract": "McpConnectionRepository",
+				"contractImportPath": "./mcp-connection.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/gateways/mcp/main/src/connections/installs/prisma-mcp-install-removal-repository.ts",
+				"adapter": "PrismaMcpInstallRemovalRepository",
+				"contract": "McpInstallRemovalRepository",
+				"contractImportPath": "../mcp-connection.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/gateways/mcp/main/src/connections/installs/prisma-mcp-install-audit-repository.ts",
+				"adapter": "PrismaMcpInstallAuditRepository",
+				"contract": "McpInstallAuditRepository",
+				"contractImportPath": "../mcp-connection.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/gateways/mcp/main/src/runtime/prisma-remote-mcp-dispatch-repository.ts",
+				"adapter": "PrismaRemoteMcpDispatchRepository",
+				"contract": "RemoteMcpDispatchRepository",
+				"contractImportPath": "./remote-mcp-invocation.types",
+				"constructs": [
+					{
+						"adapter": "PrismaAuthorizationAuthority",
+						"importPath": "@opencrane/backend/server/iam/authorization"
+					},
+					{
+						"adapter": "PrismaMcpInvocationCompletionRepository",
+						"importPath": "./prisma-mcp-invocation-completion-repository"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/gateways/mcp/main/src/runtime/prisma-mcp-connection-execution-settlement-repository.ts",
+				"adapter": "PrismaMcpConnectionExecutionSettlementRepository",
+				"contract": "RemoteMcpConnectionExecutionSettlementRepository",
+				"contractImportPath": "./remote-mcp-invocation.types",
+				"constructs": []
 			}
 		],
 		"unitsOfWork": [
@@ -2510,6 +2561,90 @@
 						"importPath": "./prisma-conversation-generated-file-output-repository"
 					}
 				]
+			},
+			{
+				"path": "libs/backend/server/gateways/mcp/main/src/connections/discovery/prisma-mcp-remote-revision-finalizer-unit-of-work.ts",
+				"adapter": "PrismaMcpRemoteRevisionFinalizerUnitOfWork",
+				"contract": "McpRemoteRevisionFinalizer",
+				"contractImportPath": "./mcp-authenticated-connection-discovery.types",
+				"constructs": [
+					{
+						"adapter": "PrismaAuthorizationAuthority",
+						"importPath": "@opencrane/backend/server/iam/authorization"
+					},
+					{
+						"adapter": "PrismaManagedAuthorizationGrantRepository",
+						"importPath": "@opencrane/backend/server/iam/authorization"
+					},
+					{
+						"adapter": "PrismaMcpRemoteRevisionFinalizationRepository",
+						"importPath": "./prisma-mcp-remote-revision-finalizer"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/gateways/mcp/main/src/connections/prisma-mcp-connection-admission-unit-of-work.ts",
+				"adapter": "PrismaMcpConnectionAdmissionUnitOfWork",
+				"contract": "McpConnectionAdmissionUnitOfWork",
+				"contractImportPath": "./mcp-connection.types",
+				"constructs": [
+					{
+						"adapter": "PrismaMcpConnectionRepository",
+						"importPath": "./prisma-mcp-connection-repository"
+					},
+					{
+						"adapter": "PrismaAuthorizationAuthority",
+						"importPath": "@opencrane/backend/server/iam/authorization"
+					},
+					{
+						"adapter": "PrismaManagedAuthorizationGrantRepository",
+						"importPath": "@opencrane/backend/server/iam/authorization"
+					},
+					{
+						"adapter": "PrismaMcpInstallRemovalRepository",
+						"importPath": "./installs/prisma-mcp-install-removal-repository"
+					},
+					{
+						"adapter": "PrismaMcpInstallAuditRepository",
+						"importPath": "./installs/prisma-mcp-install-audit-repository"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/gateways/mcp/main/src/runtime/prisma-remote-mcp-dispatch-unit-of-work.ts",
+				"adapter": "PrismaRemoteMcpDispatchUnitOfWork",
+				"contract": "RemoteMcpDispatchAuthority",
+				"contractImportPath": "./remote-mcp-invocation.types",
+				"constructs": [
+					{
+						"adapter": "PrismaMcpTaskToolInvocationLifecycleRepository",
+						"importPath": "../mcp-tasks/prisma-mcp-task-tool-invocation-lifecycle"
+					},
+					{
+						"adapter": "PrismaRemoteMcpDispatchRepository",
+						"importPath": "./prisma-remote-mcp-dispatch-repository"
+					},
+					{
+						"adapter": "PrismaMcpConnectionReadinessRepository",
+						"importPath": "../connections/prisma-mcp-connection-readiness-repository"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/gateways/mcp/main/src/runtime/prisma-mcp-connection-execution-settlement-unit-of-work.ts",
+				"adapter": "PrismaMcpConnectionExecutionSettlementUnitOfWork",
+				"contract": "McpConnectionExecutionSettlement",
+				"contractImportPath": "../connections/mcp-connection.types",
+				"constructs": [
+					{
+						"adapter": "PrismaMcpConnectionExecutionSettlementRepository",
+						"importPath": "./prisma-mcp-connection-execution-settlement-repository"
+					},
+					{
+						"adapter": "PrismaMcpTaskToolInvocationLifecycleRepository",
+						"importPath": "../mcp-tasks/prisma-mcp-task-tool-invocation-lifecycle"
+					}
+				]
 			}
 		],
 		"compositions": [
@@ -2580,7 +2715,8 @@
 			"libs/backend/server/conversations/main/src/messages/conversation-message-admission.types.ts",
 			"libs/backend/server/conversations/main/src/messages/conversation-prompt-document.types.ts",
 			"apps/opencrane/src/index.ts",
-			"libs/backend/server/conversation-assets/main/src/agent-output/persistence/prisma-conversation-generated-file-result.factory.ts"
+			"libs/backend/server/conversation-assets/main/src/agent-output/persistence/prisma-conversation-generated-file-result.factory.ts",
+			"apps/opencrane/src/bootstrap/workflows/mcp-connection-composition.ts"
 		]
 	},
 	"rawProcedureCalls": [

@@ -6,6 +6,16 @@
 }
 
 .wo-mytools {
+	&__table-scroll {
+		max-width: 100%;
+		overflow-x: auto;
+	}
+
+	&__connection {
+		display: block;
+		margin-bottom: var(--oc-space-3);
+	}
+
 	&__table {
 		margin-bottom: 18px;
 	}

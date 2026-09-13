@@ -1,5 +1,58 @@
 # OpenCrane — Active Plan
 
+## Standard remote MCP integration — source reviewed
+
+The preserved remote MCP implementation is being integrated directly above draft
+[#884](https://github.com/elewa-git/opencrane/pull/884), at immutable review base
+`7e2c3f523e719de7c72354551edcea6b9aeb5829`, on
+`feat/0.12-standard-remote-mcp-integration`. The original unpublished worktree at
+`749b50058f6503653d203b5a7caf98926076cf08` remains untouched. Its 226 changed paths and
+separate source overlays are preserved at `/private/tmp/opencrane-remote-pre-884-preservation`.
+The latest source and stack checks for both #883 and #884 pass; hosted k3d tests were skipped.
+
+Earlier reviewed remote work implements connection admission, immutable credential custody,
+connection-specific discovery, write-only personal controls, and server-owned calls through the
+existing ToolInvocation and Absurd owners. Those earlier local checks do not qualify this newly
+integrated source. The integration retains the current personal tool-selection APIs, model-facing
+aliases, generated-file workflow and memory persistence rather than replacing them with the older
+branch versions.
+
+The integration now sends remote results through the transaction-scoped result participant used
+by hosted tools, then persists only its accepted result. Ordinary remote read results remain
+supported. Embedded resources and remote use of the reserved CSV producer are rejected before raw
+file bytes can enter tool-result storage. Remote calls carry their real connection and claim proof;
+they do not invent OCI companion or Job coordinates. A rejected result preserves the saved dispatch,
+so recovery cannot call the provider again. Completion rechecks both invocation authority and the
+remote claim deadline after result preparation. An application regression also proves that an
+opaque model tool name selects the admitted revision and sends the original MCP name to the client.
+
+The integration passes 1,303 tests across MCP (355), conversations (630), conversation assets (159)
+and the application (159). The latter three results are reused after the MCP-only cancellation fix.
+Connection UI, client transport and workload-identity packages pass a further 159 tests and their
+type checks. Storybook passes 195 interaction and accessibility tests. Eight readiness/discovery SQL cases pass on a newly created fixture
+database; the remote runtime SQL matrix remains explicitly excluded. Prisma generation, baseline
+verification, dependency and Prisma boundaries, workload composition, release binding, style and
+module-growth checks pass. Production server and UI builds pass, and regenerating the API client
+and website reference changes no bytes. Workflow and authorization guards and the workload and
+agent-domain negative tests pass. Deployment contracts and Helm lint pass locally; the contract
+harness warns that system Bash 3.2 does not enforce every assertion, so Linux/Bash 5 CI remains
+required.
+
+Architecture post-review and independent review pass. The reviewed timing correction carries the
+database's remaining claim allowance into a monotonic executor deadline. Credential retrieval and
+provider I/O consume that same allowance, and completion rechecks fresh database time after result
+preparation. Remote execution owns its allowance independently of the OCI companion lease.
+Cancellation now reaches the Kubernetes Secret request; a database lookup that returns after the
+deadline cannot open a Secret request or call the provider. Focused cancellation regressions and
+the full 355-test MCP suite pass. This reviewed source is prepared for a draft checkpoint.
+
+The separately reviewed runtime SQL guards and unused custody-field removal remain unapplied and
+await their existing explicit approvals. The merged baseline only carries source already present
+in the preserved branch and current parent; it does not apply either rejected proposal. Runtime SQL
+acceptance, Linux visuals, complete remote/provider qualification and hosted certificate trust remain
+open gates. No live provider call, existing credential inspection, deployment or testv5 data change
+is included. The full ten-track MVP goal remains active.
+
 ## Hosted generated-file journey — source implementation and prerequisites
 
 This F1/T1 qualification slice starts directly above draft #883 at

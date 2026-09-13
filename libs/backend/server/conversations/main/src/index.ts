@@ -110,7 +110,7 @@ export { PrismaConversationComputerStopLifecycleUnitOfWork } from "./computers/i
 export { PrismaConversationComputerStopTargetUnitOfWork } from "./computers/interruptions/prisma-conversation-computer-stop-target-reader";
 export { KurrentConversationComputerStopPublisher } from "./computers/interruptions/kurrent-conversation-computer-stop-publisher";
 export { KurrentConversationComputerStopActiveTurnReader } from "./computers/interruptions/kurrent-conversation-computer-stop-active-turn-reader";
-
 export { ConversationGeneratedFileResultStates, type ConversationGeneratedFileContinuation, type ConversationGeneratedFileResult, type ConversationGeneratedFileResultCommand, type ConversationGeneratedFileResultRepository, type ConversationGeneratedFileResultRepositoryFactory } from "./computers/tools/results/conversation-generated-file-result.types";
 export type { ConversationGeneratedFileOutputLinker } from "./computers/turns/generated-output/conversation-generated-file-output.types";
 export { __ReadConversationGeneratedFileOutput } from "./computers/turns/generated-output/conversation-generated-file-output";
+export type { ConversationComputerToolInvocationDispatch } from "./computers/turns/workflow/conversation-computer-turn-workflow.types";

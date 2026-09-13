@@ -190,7 +190,7 @@ are:
 | `OPENCRANE_HISTORY_STORE_*` | TLS-only KurrentDB endpoint plus read-only CA, username, and password mounts used for checked event history | required |
 | `OPENCRANE_SILO_ID` | Silo that owns tasks admitted by this server | required |
 | `OPENCRANE_WORKFLOW_*` | Absurd database pool, worker concurrency, and polling limits | small development defaults |
-| `OPENCRANE_MCP_ERA_PROBE_*` | Timeout and response-size limit for remote MCP protocol checks | 5 seconds / 64 KiB |
+| `OPENCRANE_MCP_REMOTE_*` | Timeout and response-size limit for remote MCP requests | 5 seconds / 64 KiB |
 | `OPENCRANE_OCI_REGISTRY_*` | Fixed HTTPS registry repository, request timeout, and optional Secret-backed authorization used to import admitted MCP images by digest | deployment profile / 30 seconds / no credential |
 | `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
@@ -211,6 +211,26 @@ from the production image's workspace-scoped install.
 The history client verifies the mounted CA and supplies its mounted service credential through
 the SDK credential provider. Passwords stay out of the connection URL: the native transport
 otherwise preserves percent-encoded password characters and rejects valid generated credentials.
+
+### Remote MCP connection custody
+
+The server sends standard MCP requests using a connection generation owned by the execution
+Principal. Required bearer credentials live in immutable Kubernetes Secrets in a dedicated namespace
+whose name binds the Helm release and its namespace. That namespace permits no Pods. The server can
+create, read and delete Secrets there; this grants no broader access to other server keys.
+
+`MCP_CONNECTION_CREDENTIAL_NAMESPACE` selects that release-owned namespace.
+`MCP_CONNECTION_MATERIAL_KEYRING_PATH` points to the dedicated HMAC keyring mounted only in the server.
+The app-owned deployment helper creates this keyring once. Each verification or new command reads
+the mounted keyring again, so replicas pick up its replacement without a restart. Rotations must
+retain old keys so saved commands can verify their original material. Invalid replacements fail the
+operation. Never substitute the conversation or model keyring.
+`MCP_SERVER_TOKEN_PATH`, `MCP_SERVER_SERVICE_ACCOUNT_NAME`, `POD_NAMESPACE` and `POD_UID` bind each
+remote dispatch to the actual server Pod through TokenReview. The projected audience is
+`opencrane-server-mcp`; it grants no agent permission by itself.
+
+The connection API, database and runtime integration are under source validation. Remote and hosted
+provider qualification and the testv5 journey remain separate gates.
 
 ### Conversation-computer activation consumer
 

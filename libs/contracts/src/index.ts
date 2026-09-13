@@ -18,6 +18,8 @@ export * from "./memory/memory.types";
 export * from "./memory/gateway/memory-gateway.types";
 export * from "./memory/gateway/memory-gateway.validator";
 export * from "./mcp/mcp-operator.types";
+export * from "./mcp/mcp-connection.types";
+export * from "./mcp/mcp-server-identity.types";
 export * from "./mcp/mcp-executor-identity.types";
 export * from "./mcp/generated-file-result.types";
 export { ___GeneratedFileEventName } from "./mcp/generated-file-events";

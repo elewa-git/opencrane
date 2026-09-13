@@ -150,6 +150,12 @@ package imports it.
   exists, because a `sub` is scoped to its original OIDC issuer. Later upgrades must restate that
   same `--oidc-issuer-url`; they may not use chart `--values` or `--reset-values`, which could
   replace or erase the binding.
+- `OPENCRANE_MCP_CONNECTION_MATERIAL_SECRET` selects the server's MCP credential-verification keyring
+  Secret (default `opencrane-mcp-connection-material`). The app-owned
+  `apps/opencrane/deploy/ensure-mcp-material-keyring.sh` creates it only when absent. Failed reads
+  stop deployment; existing keys are preserved. Connection credentials live separately in the
+  release-owned namespace that permits no Pods. Keep old verification keys during rotation so
+  previously admitted connection commands remain verifiable.
 - `platform/provider-key-secrets.sh` — creates only missing fixed-name provider Secret placeholders.
   Authenticated durable provider commands later fill or clear them; redeployment never overwrites a
   previously admitted key.

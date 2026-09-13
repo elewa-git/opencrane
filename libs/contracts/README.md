@@ -34,9 +34,16 @@ eligible turn. Message admission does not mean cleanup has finished: personal st
 `cancelling` until it can report `cancelled`, or `completed` if the answer was already committed.
 
 MCP catalogue entries require `credentialRequirement`, independently of their connection type.
-Installed entries always return their saved `connectionStatus`: `credentialless` requires no
-provider credential, while `needs-credential` remains unavailable until activation exists.
+Installed entries return their saved `connectionStatus`: `credentialless` requires no provider
+credential, while `needs-credential` remains unavailable until its connection is activated.
+Their separate `lifecycleState` records installed, removing or removed. Removal may be accepted
+with HTTP 202 while current work and credential cleanup finish; removed rows are omitted from
+installation lists, and reinstall cannot proceed while removal is pending.
 Neither catalogue visibility nor an installation grants permission to execute a tool.
+
+Connection setup commands carry the generation observed before the request, or `null` before
+any connection generation exists. Disconnect commands carry the generation to revoke. Retries
+keep that original value and their command key so a delayed request cannot change newer work.
 
 ```
  apps/opencrane server ....... emits OpenAPI 3.1 spec (dist/apps/opencrane/openapi.json)

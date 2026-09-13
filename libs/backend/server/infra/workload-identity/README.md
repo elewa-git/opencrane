@@ -27,7 +27,7 @@ identity for the next transport or backend authority.
 
 It owns fixed-account reviewers for the agent controller, artifact preprocessor, artifact scanner,
 and memory-gateway server; and Pod-bound reviewers for the MCP executor, conversation computer,
-and skill-validation worker. Invariant: an unauthenticated review, wrong
+skill-validation worker, and the OpenCrane server before remote MCP dispatch. Invariant: an unauthenticated review, wrong
 audience, unexpected namespace or ServiceAccount, missing bound Pod UID, or ambiguous runtime
 audience returns no identity. The raw token and full Kubernetes response never leave this package.
 
@@ -35,6 +35,8 @@ audience returns no identity. The raw token and full Kubernetes response never l
 
 - `_CreateAgentControllerTokenReviewer` — binds controller dispatch to one namespace, audience, and
   ServiceAccount.
+- `_CreateMcpServerTokenReviewer` — verifies the server's dedicated MCP audience, fixed namespace
+  and ServiceAccount, and bound Pod UID before a server-mediated effect claim.
 - `_CreateMcpExecutorTokenReviewer` — returns an OCI MCP companion identity only when Kubernetes
   confirms its namespace, zero-RBAC ServiceAccount, audience, and bound Pod UID.
 - `_CreateSkillAuthoringValidationTokenReviewer` — binds the Python validation Job to its fixed

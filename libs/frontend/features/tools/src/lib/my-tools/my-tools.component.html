@@ -1,12 +1,15 @@
 <div class="wo-tools-page wo-scrollable">
 	<div class="wo-tools-page__inner">
 		<wo-section-heading
-			title="My tools"
-			subtitle="Servers you've installed. Shared-key servers are ready to use; personal credential activation is not available yet."
-		/>
+			 title="My tools"
+			subtitle="Manage your installed tools and check their connection status."
+		>
+			<button heading-actions type="button" class="wo-tools__act" [disabled]="store.loading()" (click)="store.refresh()">Refresh</button>
+		</wo-section-heading>
 
 		<wo-resource-feedback [loading]="store.loading()" [error]="store.error() ?? store.readError()" [retryAvailable]="store.readError() !== null" (retryRequested)="store.refresh()" />
 		@if (store.rows().length > 0) {
+			<div class="wo-mytools__table-scroll" role="region" aria-label="Installed tools" tabindex="0">
 			<table class="wo-table wo-mytools__table">
 				<thead>
 					<tr>
@@ -14,15 +17,31 @@
 						<th>Type</th>
 						<th>Status</th>
 						<th>Last used</th>
-						<th></th>
+						<th>Actions</th>
 					</tr>
 				</thead>
 				<tbody>
 					@for (row of store.rows(); track row.server.id) {
-						<tr wo-installed-tool-row [row]="row" [busy]="store.busy().has(row.server.id)" (uninstallRequested)="store.uninstall(row.server.id)"></tr>
+						<tr wo-installed-tool-row [row]="row" [busy]="store.commandReserved(row.server.id)" (uninstallRequested)="store.uninstall(row.server.id)">
+							@if (connections.view(row); as connectionView) {
+								<wo-personal-mcp-connection-control
+									connection-control
+									class="wo-mytools__connection"
+									[view]="connectionView"
+									[busy]="connections.busy(row.server.id)"
+									[error]="connections.error(row.server.id)"
+									(draftChanged)="connections.setDraft(row.server.id, $event)"
+									(submitRequested)="connections.submit(row.server.id)"
+									(replaceRequested)="connections.replace(row.server.id)"
+									(revokeRequested)="connections.revoke(row.server.id)"
+									(cancelDraftRequested)="connections.cancelDraft(row.server.id)"
+								/>
+							}
+						</tr>
 					}
 				</tbody>
 			</table>
+			</div>
 		} @else {
 			<p class="wo-mytools__empty">You haven't installed any tools yet.</p>
 		}
