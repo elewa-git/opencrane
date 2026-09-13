@@ -1341,3 +1341,21 @@ Full run reports belong in the corresponding pull request or issue.
   A new clean-source run must complete the retention comparison before shared prerequisites return.
   Shared controllers, old silos and all retained data remain in their stopped/preserved state;
   no disk deletion or testv6 bootstrap occurred in this attempt.
+
+
+## 2026-09-13 · dev · completed suspension repair · 239feb2fdaee3f8ef0a9bb750748c37c426e59d9 · LIVE
+
+- execution: read-only preflight and one ordinary app-owned suspension run both exited zero, using
+  the reviewed cluster/context and `--settle-timeout-seconds 1`. The ordinary command took about
+  2 minutes 32 seconds and completed its full before/after retention comparison. Already-owned
+  stopped CNPG resources required no admission writes while their webhook was offline.
+- findings: no active OpenCrane Pods remain; the 19 historical Pods are terminal. Application
+  Deployments and StatefulSets remain at zero, KurrentDB is stopped and its backup CronJob is
+  suspended. The shared AgentSandbox, CNPG and ingress controllers remain at zero.
+- retention: both retained Sandboxes remain `Suspended` with the original Sandbox and Claim UIDs.
+  Claim lifecycle coordinates remain unchanged. All 20 PVCs are Bound, totaling 380 GiB, with
+  their PV references; all seven snapshots are Ready. The 256 Secret identities remain present.
+  The script compared retained identities without reading Secret data. No disk or data was deleted.
+- scope: this closes the incomplete retention comparison in the preceding partial run. No shared
+  prerequisite was restored, no provider account or credential was created, and no testv6 install
+  occurred. Fresh testv6 still requires its final CI/image, DNS, OIDC and bootstrap gates.
