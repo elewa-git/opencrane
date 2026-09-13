@@ -10,8 +10,8 @@ import { ___DigestCanonicalJson } from "@opencrane/util";
 import { PrismaPersonalAgentProductEffectsAuthority } from "../../../db/prisma-personal-agent-product-effects";
 import { PrismaAgentRevisionWriterRepository } from "../../../../revisions/db/prisma-agent-revision-writer";
 
-/** Budget whose three limits make content-copy failures visible in PostgreSQL. */
-const _BUDGET = { maxTurns: 7, maxTokens: 12_345, maxDurationMs: 98_765 };
+/** Budget whose distinct limits make content-copy failures visible in PostgreSQL. */
+const _BUDGET = { maxTurns: 7, maxTokens: 12_345, maxCostUsdMicros: null, maxToolInvocations: 3, maxDurationMs: 98_765, maxLoopIterations: 3 };
 
 /** Adds managed grants through the production grant writer and installed capability catalogue. */
 async function _GrantActions(transaction: Prisma.TransactionClient, siloId: string, principalId: string, resource: ProductAuthorizationResourceLocator, actions: readonly ProductAuthorizationActions[], managerId: string): Promise<void>

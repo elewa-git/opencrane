@@ -46,7 +46,8 @@ const _COMPILED = {
     maxCompletionTokens: 1_024,
     maxCostUsdMicros: 50_000,
     maxToolInvocations: 0,
-    wallClockDeadlineEpochMs: null,
+    maxLoopIterations: 1,
+    wallClockDeadlineEpochMs: 2_000_000_000_000,
   },
   digest: `sha256:${"a".repeat(64)}`,
 };

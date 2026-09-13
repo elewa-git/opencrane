@@ -58,8 +58,8 @@ export function _PrepareConversationModelRequest(input: ConversationModelRequest
 			|| typeof input.modelAlias !== "string" || input.modelAlias.trim().length === 0 || input.modelAlias !== compiled.model.modelAlias
 			|| !_isPositiveInteger(input.maxCompletionTokens) || !_isPositiveInteger(input.notAfterEpochMs)
 			|| ceilings.some(value => value !== null && !_isPositiveInteger(value)) || ceilings.every(value => value === null)
-			|| compiled.budget.maxModelTurns !== null && !_isPositiveInteger(compiled.budget.maxModelTurns)
-			|| compiled.budget.wallClockDeadlineEpochMs !== null && !_isPositiveInteger(compiled.budget.wallClockDeadlineEpochMs)
+			|| !_isPositiveInteger(compiled.budget.maxModelTurns)
+			|| !_isPositiveInteger(compiled.budget.wallClockDeadlineEpochMs)
 			|| typeof compiled.instructions !== "string" || !Array.isArray(compiled.messages)
 			|| input.tools !== ConversationModelToolModes.None && input.tools !== ConversationModelToolModes.Select
 			|| input.continuation !== null && input.tools !== ConversationModelToolModes.None)
@@ -102,7 +102,7 @@ export function _PrepareConversationModelRequest(input: ConversationModelRequest
 		if (Buffer.byteLength(body) > _CONVERSATION_MODEL_MAX_BYTES)
 			throw new ConversationModelError(ConversationModelFailureCodes.RequestTooLarge);
 		url.pathname = "/v1/chat/completions";
-		const deadlineEpochMs = Math.min(input.notAfterEpochMs, compiled.budget.wallClockDeadlineEpochMs ?? input.notAfterEpochMs, Date.now() + 25_000);
+		const deadlineEpochMs = Math.min(input.notAfterEpochMs, compiled.budget.wallClockDeadlineEpochMs, Date.now() + 25_000);
 		if (deadlineEpochMs <= Date.now())
 			throw new ConversationModelError(ConversationModelFailureCodes.DeadlineExceeded);
 		return { url, authorization: `Bearer ${input.key}`, body, deadlineEpochMs, offeredToolNames: input.tools === ConversationModelToolModes.Select ? offered.map(tool => tool.modelName) : [] };

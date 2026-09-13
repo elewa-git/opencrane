@@ -38,9 +38,15 @@ change — a retry, an audit, or a replay all see the exact same record, identif
 The current text-chat policy freezes a maximum of 4,096 generated tokens per response into the model
 route. This is OpenCrane's response limit; the revision's total run budget stays separate, including
 the initial personal assistant's 256,000-token ceiling. The server uses the smaller of those two
-limits. It may spend the original model dispatch and, after one permitted tool result, at most one
-text-only continuation from the same frozen call and token allowance. Further tool or model loops
-remain future work.
+limits. Admission translates the authored turn, token, tool-invocation, loop-iteration and optional
+cost ceilings, plus one absolute deadline, into the complete saved `RunBudgetPolicy`. The snapshot
+and prompt-compiler versions are required exactly, and recovery parses and compares every saved
+ceiling without defaults or deadline renewal.
+
+The current text-turn workflow still spends the original model dispatch and, after one permitted tool
+result, at most one text-only continuation from the same frozen call and token allowance. The saved
+policy is ready to govern bounded repeated progression; further tool or model loops remain future work
+until the workflow consumes those counters.
 
 The current text-chat baseline supplies conversation history and the personal assistant's approved
 persona. It resolves that persona through the verified local Principal (OpenCrane's permission
@@ -123,9 +129,10 @@ Retries recover the memory policy from the saved snapshot. A valid `none` scope 
 
 `__RunInputAuthorityExpiresAt` bounds model credentials by the earliest original execution-evidence
 expiry, requester-evidence expiry and absolute budget deadline. It verifies run/attempt binding and
-the compiled deadline against the snapshot. Assembly returns the currently checked subject separately
-from the unchanged snapshot. A retry intersects both subjects' trust deadlines: shorter current
-evidence reduces credential validity, while refreshed evidence never extends the original ceiling.
+all compiled budget ceilings against the saved snapshot. Assembly returns the currently checked subject
+separately from the unchanged snapshot. A retry intersects both subjects' trust deadlines: shorter
+current evidence reduces credential validity, while refreshed evidence never extends the original
+ceiling or substitutes a different allowance.
 
 - `__AssembleRunInputSnapshot(command, authorities)` — the end-to-end assembly: validate → load all
   sources inside the admission transaction → compile, digest, and persist.

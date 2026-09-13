@@ -230,7 +230,7 @@ describe("one server-owned model request across process restarts", function _Sui
 			model.maxOutputTokens = -1;
 		if (kind === "no-ceiling")
 		{
-			budget.maxCompletionTokens = null;
+			budget.maxCompletionTokens = null as never;
 			model.maxOutputTokens = null;
 		}
 		if (kind === "expired")

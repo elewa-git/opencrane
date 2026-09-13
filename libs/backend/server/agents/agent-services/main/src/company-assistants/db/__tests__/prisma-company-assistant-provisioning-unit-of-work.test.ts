@@ -7,7 +7,7 @@ import { PrismaCompanyAssistantProvisioningUnitOfWork } from "../prisma-company-
 const _RESULT = { created: true, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", principalId: "company-principal", agentIdentityId: "identity-1", name: "Company", createdAt: "2026-09-07T10:00:00.000Z", createdByPrincipalId: "admin", identityEventId: "13a9a2a4-4312-4f98-8ea1-bf385afed81a" };
 const _CALLER = { siloId: "silo-1", principalId: "admin" };
 const _COMMAND = { name: "Company", modelDefinitionId: "model-1", invokerPrincipalIds: ["human-1"] };
-const _POLICY = { workloadProfile: "company", promptPolicyVersion: "1", budget: { maxTurns: 1, maxTokens: 4096, maxDurationMs: 60_000 } };
+const _POLICY = { workloadProfile: "company", promptPolicyVersion: "1", budget: { maxTurns: 1, maxTokens: 4096, maxCostUsdMicros: null, maxToolInvocations: 1, maxDurationMs: 60_000, maxLoopIterations: 1 } };
 
 afterEach(function _Restore() { vi.restoreAllMocks(); });
 

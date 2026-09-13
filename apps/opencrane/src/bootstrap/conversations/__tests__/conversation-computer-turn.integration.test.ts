@@ -35,7 +35,7 @@ describe("conversation computer turn integration", function _Suite()
 		const workload = { subject: "system:serviceaccount:testv5:computer", namespace: "testv5", serviceAccountName: "computer", podUid: "pod-one" };
 		const candidate: ConversationComputerTurnCandidate = {
 			binding: { siloId: "testv5", conversationId: computer.conversationId, computerId: computer.id, leaseGeneration: 1, agentIdentityId: computer.agentIdentityId, agentServiceId: "service-one", agentName: "Ada", agentAvatarArtifactRevisionId: null, runId: "run-one", expectedRevision: 1n, maximumEntryBytes: 65_536 },
-			compiledInput: { promptCompilerVersion: "v1", runId: "run-one", attempt: 1, instructions: "help", messages: [{ role: "user", content: "hello" }], tools: [], model: { modelAlias: "model-one", maxOutputTokens: null, generatedOutputCapabilities: [] }, budget: { maxModelTurns: 1, maxCompletionTokens: 100, maxCostUsdMicros: 100_000, maxToolInvocations: 0, wallClockDeadlineEpochMs: null }, digest: `sha256:${"b".repeat(64)}` },
+			compiledInput: { promptCompilerVersion: "v1", runId: "run-one", attempt: 1, instructions: "help", messages: [{ role: "user", content: "hello" }], tools: [], model: { modelAlias: "model-one", maxOutputTokens: null, generatedOutputCapabilities: [] }, budget: { maxModelTurns: 1, maxCompletionTokens: 100, maxCostUsdMicros: 100_000, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: 2_000_000_000_000 }, digest: `sha256:${"b".repeat(64)}` },
 			latestPendingEntryId: "entry-one", latestPendingEntryPosition: "1", modelAlias: "model-one", maximumBudgetUsd: 0.1, credentialLifetimeSeconds: 300, credentialExpiresAt: "2099-01-01T00:00:00.000Z",
 			lease: { leaseId: "lease-one", leaseGeneration: 1, sandboxClaimId: "computer-one-g1" },
 		};

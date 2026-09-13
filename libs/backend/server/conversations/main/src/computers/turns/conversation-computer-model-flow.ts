@@ -135,11 +135,11 @@ function _FirstReservation(turn: FrozenConversationComputerTurn, candidate: Conv
 	const input = candidate.compiledInput;
 	const ceilings = [input.budget.maxCompletionTokens, input.model.maxOutputTokens];
 	const limits = ceilings.filter((value): value is number => value !== null && Number.isSafeInteger(value) && value > 0);
-	const authorityExpiresAtEpochMs = Math.min(input.budget.wallClockDeadlineEpochMs ?? Number.POSITIVE_INFINITY, Date.parse(candidate.credentialExpiresAt));
-	if (ceilings.some(value => value !== null && (!Number.isSafeInteger(value) || value <= 0)) || input.budget.maxModelTurns === null || !Number.isSafeInteger(input.budget.maxModelTurns) || input.budget.maxModelTurns < 1 || limits.length === 0 || !Number.isSafeInteger(authorityExpiresAtEpochMs) || authorityExpiresAtEpochMs <= Date.now())
+	const authorityExpiresAtEpochMs = Math.min(input.budget.wallClockDeadlineEpochMs, Date.parse(candidate.credentialExpiresAt));
+	if (ceilings.some(value => value !== null && (!Number.isSafeInteger(value) || value <= 0)) || !Number.isSafeInteger(input.budget.maxModelTurns) || input.budget.maxModelTurns < 1 || limits.length === 0 || !Number.isSafeInteger(authorityExpiresAtEpochMs) || authorityExpiresAtEpochMs <= Date.now())
 		throw new Error("Conversation model request has no remaining frozen allowance");
-	const total = input.budget.maxCompletionTokens ?? Math.min(...limits) * 2;
-	const maySelect = input.budget.maxModelTurns >= 2 && total >= 2 && Number.isSafeInteger(total) && (input.budget.maxToolInvocations === null || Number.isSafeInteger(input.budget.maxToolInvocations) && input.budget.maxToolInvocations >= 1) && input.tools.length > 0;
+	const total = input.budget.maxCompletionTokens;
+	const maySelect = input.budget.maxModelTurns >= 2 && total >= 2 && Number.isSafeInteger(total) && Number.isSafeInteger(input.budget.maxToolInvocations) && input.budget.maxToolInvocations >= 1 && input.tools.length > 0;
 	const tools = maySelect ? ConversationModelToolModes.Select : ConversationModelToolModes.None;
 	const maxCompletionTokens = maySelect ? Math.min(...limits, Math.floor(total / 2)) : Math.min(...limits);
 	const facts = { ordinal: 1 as const, tools, compiledInputDigest: turn.compile.digest, maxCompletionTokens, authorityExpiresAtEpochMs, dispatchDeadlineEpochMs: Math.min(authorityExpiresAtEpochMs, Date.now() + 25_000) };
@@ -152,11 +152,11 @@ function _SecondReservation(turn: FrozenConversationComputerTurn, candidate: Con
 	const first = turn.modelReservation;
 	const budget = candidate.compiledInput.budget;
 	const route = candidate.compiledInput.model.maxOutputTokens;
-	if (first === null || first.tools !== ConversationModelToolModes.Select || turn.toolSelection === null || budget.maxModelTurns === null || budget.maxModelTurns < 2)
+	if (first === null || first.tools !== ConversationModelToolModes.Select || turn.toolSelection === null || budget.maxModelTurns < 2)
 		throw new Error("Conversation continuation was not reserved by the original attempt");
-	const remaining = (budget.maxCompletionTokens ?? (route ?? 0) * 2) - first.maxCompletionTokens;
+	const remaining = budget.maxCompletionTokens - first.maxCompletionTokens;
 	const maxCompletionTokens = Math.min(remaining, route ?? remaining);
-	const authorityExpiresAtEpochMs = Math.min(first.authorityExpiresAtEpochMs, budget.wallClockDeadlineEpochMs ?? first.authorityExpiresAtEpochMs, Date.parse(candidate.credentialExpiresAt), Date.parse(declaration.credentialExpiresAt), resultNotAfter);
+	const authorityExpiresAtEpochMs = Math.min(first.authorityExpiresAtEpochMs, budget.wallClockDeadlineEpochMs, Date.parse(candidate.credentialExpiresAt), Date.parse(declaration.credentialExpiresAt), resultNotAfter);
 	if (!Number.isSafeInteger(maxCompletionTokens) || maxCompletionTokens < 1 || !Number.isSafeInteger(authorityExpiresAtEpochMs) || authorityExpiresAtEpochMs <= Date.now())
 		throw new Error("Conversation continuation has no original allowance remaining");
 	const facts = { ordinal: 2 as const, tools: ConversationModelToolModes.None, compiledInputDigest: turn.compile.digest, maxCompletionTokens, authorityExpiresAtEpochMs, dispatchDeadlineEpochMs: Math.min(authorityExpiresAtEpochMs, Date.now() + 25_000), continuation, proposalId: turn.toolSelection.proposalId, resultDigest };

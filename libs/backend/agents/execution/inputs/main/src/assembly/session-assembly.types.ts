@@ -1,4 +1,4 @@
-import type { RunInputSnapshotMcpTool } from "@opencrane/contracts";
+import type { RunBudgetPolicy, RunInputSnapshotMcpTool } from "@opencrane/contracts";
 import type { InitialRunAuthority, RunAdmissionCommand, RunAdmissionMessageAuthor, RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { ExecutionSubject, PersonaRevisionId } from "@opencrane/models/agents";
 import type { MessageId } from "@opencrane/models/conversations";
@@ -135,8 +135,8 @@ export interface ProductResourceAuthorizationSource
 /** Effective run limits resolved from service, silo, and policy. */
 export interface BudgetPolicyInput
 {
-	/** JSON-safe policy covering token, cost, duration, and tool ceilings. */
-	budgetPolicy: JsonValue;
+	/** Immutable, admitted limits used by every later compiler and runtime step. */
+	budgetPolicy: RunBudgetPolicy;
 }
 
 /**

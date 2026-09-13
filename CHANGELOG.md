@@ -15,6 +15,16 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Fixed
 
+- **Run recovery cannot replace the original model, token, tool, cycle or time allowance.** New
+  revisions and admitted inputs carry explicit limits, including an optional extra revision spend
+  cap. Missing or malformed limits fail closed, and compilation preserves the original deadline.
+  The existing server spend cap still applies. Repeated tool execution and live qualification
+  remain separate work.
+
+- **Tool work recovers the checkpoint for its own invocation.** Approval publication and remote
+  dispatch use the exact invocation identity, so a later call cannot inherit an earlier call's
+  saved checkpoint. Retrying the same call still reuses its existing checkpoint.
+
 - **Operators can suspend test silos while retaining their data.** The app-owned command stops
   application workloads and their shared controllers, preserves storage and credentials, and keeps
   retained sandboxes suspended when the controller returns. Reruns accept already-removed disposable

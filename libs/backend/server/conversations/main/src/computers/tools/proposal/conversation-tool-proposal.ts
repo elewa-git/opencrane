@@ -25,8 +25,8 @@ export function _PrepareConversationToolProposal(turn: FrozenConversationCompute
 		|| !__ValidateDeferredToolArguments(tool.parametersSchema, proposal.arguments))
 		throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Invalid);
 	const deadline = input.budget.wallClockDeadlineEpochMs;
-	if (deadline === null || !Number.isSafeInteger(deadline) || (deadline <= Date.now() && !tool.requiresApproval)
-		|| (input.budget.maxToolInvocations !== null && (!Number.isSafeInteger(input.budget.maxToolInvocations) || input.budget.maxToolInvocations < 1)))
+	if (!Number.isSafeInteger(deadline) || (deadline <= Date.now() && !tool.requiresApproval)
+		|| !Number.isSafeInteger(input.budget.maxToolInvocations) || input.budget.maxToolInvocations < 1)
 		throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 	const hex = createHash("sha256").update(JSON.stringify(["conversation-tool-proposal", turn.compile.runId, turn.compile.attempt, 1])).digest("hex");
 	const proposalId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;

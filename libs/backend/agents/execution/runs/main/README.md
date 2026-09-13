@@ -43,7 +43,9 @@ does not grant permission to use a run.
   participation, lifecycle state, attempt fencing, and execution-subject proof remain separate safety facts;
   none of them grants product permission by itself.
 - The conversation-computer authority owns attempt-key issuance after admission. It fences the current
-  lease, caps the key to the immutable snapshot budget, and keeps encrypted custody across worker restarts.
+  lease, caps the key to the complete immutable six-field snapshot budget, and keeps encrypted custody
+  across worker restarts. Admission and recovery retain the exact policy; they do not fill missing fields,
+  replace ceilings, or renew its deadline.
 - Runtime events are accepted only for the current run, attempt, computer lease, and command. Their sequence is
   global to the durable run, while terminality is scoped to the attempt that emitted the event.
 - Competing writes use serializable database transactions and typed compare-and-set updates.
@@ -80,7 +82,10 @@ The status projection exposes `cancelling` while durable arbitration or cleanup 
 
 This package does not choose personas, memory, tools, models, or Kubernetes settings. The input
 assembler supplies the fixed run input. The conversation workflow runs the server-owned model loop and rechecks the Agent Sandbox lease and
-generation before each effect. The Pod does not schedule or call the model loop.
+generation before each effect. The saved budget projection supplies explicit model-turn, completion-token,
+tool-invocation, loop-iteration, optional-cost and wall-clock ceilings. The current workflow still exposes
+the one-tool text continuation baseline; repeated progression must consume those frozen counters before
+it is enabled. The Pod does not schedule or call the model loop.
 
 The current text-turn baseline uses approved personal instructions, conversation history and the
 selected model. New runs explicitly freeze memory as unavailable. Dataset provisioning and memory

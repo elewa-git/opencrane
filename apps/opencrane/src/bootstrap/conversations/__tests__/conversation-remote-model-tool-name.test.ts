@@ -24,7 +24,7 @@ function _ModelSelectionHarness(callName: string)
 		messages: [],
 		tools: [{ name: _SOURCE_NAME, modelName: _MODEL_NAME, toolRevisionId: _TOOL_REVISION_ID, description: "Find one record", requiresApproval: false, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) }],
 		model: { modelAlias: "test-model", maxOutputTokens: 100, generatedOutputCapabilities: [] },
-		budget: { maxCompletionTokens: 100, maxModelTurns: 2, maxToolInvocations: 1, maxCostUsdMicros: null, wallClockDeadlineEpochMs: Date.now() + 60_000 },
+		budget: { maxCompletionTokens: 100, maxModelTurns: 2, maxToolInvocations: 1, maxCostUsdMicros: null, maxLoopIterations: 1, wallClockDeadlineEpochMs: Date.now() + 60_000 },
 		digest: `sha256:${"b".repeat(64)}`,
 	};
 	const candidate = {

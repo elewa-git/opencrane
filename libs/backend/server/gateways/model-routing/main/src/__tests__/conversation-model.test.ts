@@ -35,7 +35,7 @@ function _request(overrides: Partial<ConversationModelRequest> = {}): Conversati
 			promptCompilerVersion: "test-compiler", runId: "run-1", attempt: 1, instructions: "Private instructions.",
 			messages: [{ role: "user", content: "Private question." }, { role: "assistant", content: "Earlier answer." }],
 			tools: [], model: { modelAlias: "admitted-model", maxOutputTokens: 400, generatedOutputCapabilities: [] },
-			budget: { maxModelTurns: 1, maxCompletionTokens: 300, maxCostUsdMicros: 1000, maxToolInvocations: 0, wallClockDeadlineEpochMs: _NOW + 60_000 },
+			budget: { maxModelTurns: 1, maxCompletionTokens: 300, maxCostUsdMicros: 1000, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: _NOW + 60_000 },
 			digest: "sha256:test",
 		},
 		endpoint: "http://litellm.release.svc.cluster.local", key: "sk-private-attempt", modelAlias: "admitted-model",
@@ -132,7 +132,7 @@ describe("one conversation model text exchange", function _transportSuite()
 			instructions: kind === "bad-unicode" ? "\ud800" : compiledInput.instructions,
 			messages: kind === "tool-message" ? [{ role: "tool" as const, content: "pending tool result" }] : compiledInput.messages,
 			model: { ...compiledInput.model, maxOutputTokens: kind === "no-ceiling" ? null : compiledInput.model.maxOutputTokens },
-			budget: { ...compiledInput.budget, maxCompletionTokens: kind === "no-ceiling" ? null : compiledInput.budget.maxCompletionTokens,
+			budget: { ...compiledInput.budget, maxCompletionTokens: kind === "no-ceiling" ? (null as never) : compiledInput.budget.maxCompletionTokens,
 				maxModelTurns: kind === "no-turns" ? 0 : 1 },
 		};
 		if (kind === "zero-ceiling")

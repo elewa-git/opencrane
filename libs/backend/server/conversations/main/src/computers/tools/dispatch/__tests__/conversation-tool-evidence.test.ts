@@ -30,7 +30,7 @@ function _fixture()
 	} as unknown as ToolInvocationRecord;
 	const transaction = {
 		agentRun: { findFirst: vi.fn().mockResolvedValue({ conversationId: "conversation", executionSubject: subject, inputSnapshotDigest: "snapshot" }) },
-		runInputSnapshot: { findFirst: vi.fn().mockResolvedValue({ budgetPolicy: { wallClockDeadlineEpochMs: _NOW.getTime() + 60_000, maxToolInvocations: 1 } }) },
+		runInputSnapshot: { findFirst: vi.fn().mockResolvedValue({ budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 1, maxCostUsdMicros: null, maxToolInvocations: 1, maxLoopIterations: 1, wallClockDeadlineEpochMs: _NOW.getTime() + 60_000 } }) },
 		toolInvocation: { count: vi.fn().mockResolvedValue(1) },
 	};
 	const runs = new PrismaConversationToolRunEvidenceRepository(transaction as never);

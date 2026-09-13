@@ -1,5 +1,6 @@
 import type { JsonValue } from "@opencrane/util";
 import type { GeneratedOutputCapability } from "../model-routing/model-routing.types";
+import type { RunBudgetPolicy } from "./run-budget-policy.types";
 
 /**
  * Agent input with every reference already resolved to a literal value, built in the control plane.
@@ -77,17 +78,5 @@ export interface CompiledModelRoute
 	readonly generatedOutputCapabilities: GeneratedOutputCapability[];
 }
 
-/** Limits OpenCrane enforces across the whole attempt. */
-export interface CompiledBudget
-{
-	/** Maximum model calls admitted for the attempt; the conversation computer consumes one. */
-	readonly maxModelTurns: number | null;
-	/** Maximum completion tokens produced by the attempt, or null when uncapped. */
-	readonly maxCompletionTokens: number | null;
-	/** Maximum spend in micro-US-dollars across the attempt, or null when uncapped. */
-	readonly maxCostUsdMicros: number | null;
-	/** Maximum external tool invocations across the attempt, or null when uncapped. */
-	readonly maxToolInvocations: number | null;
-	/** Wall-clock deadline for the attempt in epoch milliseconds, or null when unbounded here. */
-	readonly wallClockDeadlineEpochMs: number | null;
-}
+/** The compiled request carries the exact admitted allowance without changing any ceiling. */
+export type CompiledBudget = RunBudgetPolicy;
