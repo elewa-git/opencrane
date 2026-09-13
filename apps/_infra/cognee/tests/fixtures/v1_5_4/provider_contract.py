@@ -80,7 +80,7 @@ def main() -> None:
         if args.phase != "initial":
             if args.mode != "acl-enabled":
                 raise AssertionError(
-                    "Recovery phases are only valid for the authenticated candidate"
+                    "Recovery phases are only valid for the authenticated provider"
                 )
             validated_evidence = json.loads(state_path.read_text(encoding="utf-8"))
         if args.mode == "acl-enabled":

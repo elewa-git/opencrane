@@ -1,5 +1,5 @@
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
-import { ___ConversationEntrySchema, ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageActivations } from "@opencrane/contracts";
+import { ___ConversationEntrySchema, ConversationAuthorKinds, ConversationEntryKinds, ConversationEntryProvenance, ConversationMessageActivations } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import { ConversationHistoryAppendOutcomes, type ConversationHistoryActivationAppendCommand, type ConversationHistoryAppendCommand, type ConversationHistoryAppendResult, type ConversationHistoryAttestedAppendCommand } from "./conversation-history-authority.types";
@@ -107,7 +107,7 @@ export class ConversationHistoryAuthority
 		const entry = _ValidatedEntry(command);
 		const streamName = `conversation-${command.conversationId}`;
 		const attestation = entry.attestation;
-		if (entry.provenance !== "service-attested" || attestation === null || attestation.receiptId !== command.attestation.event.id
+		if (entry.provenance !== ConversationEntryProvenance.ServiceAttested || attestation === null || attestation.receiptId !== command.attestation.event.id
 			|| attestation.domainStream !== command.attestation.streamName || attestation.domainRevision !== "0"
 			|| !_Identifier(command.attestation.streamName) || !_UUID_PATTERN.test(command.attestation.event.id))
 			throw new Error("Conversation attestation entry does not match its immutable receipt");

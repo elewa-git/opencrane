@@ -1,4 +1,4 @@
-import { ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageContentBlockKinds, type ConversationEntry, type MessageEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates, type ConversationEntry, type MessageEntry } from "@opencrane/contracts";
 
 import type { ConversationPromptDocumentReference } from "./conversation-prompt-document.types";
 
@@ -7,7 +7,7 @@ export function _CollectConversationPromptDocumentReferences(entries: readonly C
 {
 	if (orderedMessageIds.length === 0 || new Set(orderedMessageIds).size !== orderedMessageIds.length)
 		throw new Error("Conversation prompt document preparation requires unique ordered messages");
-	const messages = entries.filter(function _CompletedMessage(entry): entry is MessageEntry { return entry.kind === ConversationEntryKinds.Message && entry.state === "completed"; });
+	const messages = entries.filter(function _CompletedMessage(entry): entry is MessageEntry { return entry.kind === ConversationEntryKinds.Message && entry.state === MessageStates.Completed; });
 	const byId = new Map(messages.map(message => [message.id, message]));
 	if (byId.size !== messages.length)
 		throw new Error("Conversation prompt history repeats a message identifier");

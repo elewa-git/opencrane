@@ -23,9 +23,13 @@ done
 command -v kubectl >/dev/null || { _err "kubectl is required."; exit 1; }
 command -v openssl >/dev/null || { _err "openssl is required."; exit 1; }
 
+secret_directory="$(mktemp -d)"
+chmod 700 "$secret_directory"
+trap 'rm -rf "$secret_directory"' EXIT
+
 _secret_name() { printf '%s-%s-postgres-bootstrap' "$RELEASE" "$1"; }
 _ensure_secret() {
-  local authority="$1" username="$2" secret password
+  local authority="$1" username="$2" secret password_file
   secret="$(_secret_name "$authority")"
   if kubectl get secret "$secret" -n "$NAMESPACE" >/dev/null 2>&1; then
     [[ "$(kubectl get secret "$secret" -n "$NAMESPACE" -o jsonpath='{.type}')" == "kubernetes.io/basic-auth" ]] || { _err "Existing $secret has the wrong type."; exit 1; }
@@ -33,9 +37,10 @@ _ensure_secret() {
     [[ -n "$(kubectl get secret "$secret" -n "$NAMESPACE" -o jsonpath='{.data.password}')" ]] || { _err "Existing $secret has no password."; exit 1; }
     return
   fi
-  password="$(openssl rand -base64 36 | tr -d '\n')"
+  password_file="$secret_directory/$authority-password"
+  openssl rand -base64 36 | tr -d '\n' >"$password_file"
   kubectl create secret generic "$secret" -n "$NAMESPACE" --type=kubernetes.io/basic-auth \
-    --from-literal=username="$username" --from-literal=password="$password" >/dev/null
+    --from-literal=username="$username" --from-file="password=$password_file" >/dev/null
 }
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null

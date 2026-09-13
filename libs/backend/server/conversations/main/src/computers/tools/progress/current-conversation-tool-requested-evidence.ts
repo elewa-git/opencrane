@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
+import { ConversationLogToolKinds } from "@opencrane/contracts";
 
 import type { ConversationComputerTurnCandidateResolver, ConversationComputerTurnStore } from "../../turns/conversation-computer-turn.types";
 import type { ConversationToolProgressNotificationEvidence, ConversationToolRequestedNotificationCommand, ConversationToolRequestedNotificationEvidenceReader } from "../../turns/tool-progress-notifications/conversation-tool-progress-notification.types";
@@ -71,7 +72,7 @@ class _CurrentConversationToolRequestedNotificationEvidenceUnitOfWork implements
 		if (tools.length !== 1)
 			return null;
 		const tool = tools[0]!;
-		return { ...command, toolName: tool.name, toolKind: "mcp", occurredAt: invocation.createdAt.toISOString() };
+		return { ...command, toolName: tool.name, toolKind: ConversationLogToolKinds.Mcp, occurredAt: invocation.createdAt.toISOString() };
 	}
 }
 

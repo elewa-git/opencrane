@@ -75,10 +75,12 @@ the ordinary exact boundary-matching rules.
 - `PrismaManagedShareRevocationRepository` soft-revokes the exact manager-owned grant linked from
   an explicit resource-share relation; it cannot create, list, or revoke arbitrary grants.
 - `__DecideDeferredToolRequest`, `__OpenDeferredToolApproval`, `__OpenDeferredToolApprovalInTransaction`,
-  `__CreatePrismaMcpToolInvocationParticipantFactory`, and their lifecycle contracts own durable human approval and
+  `__CreatePrismaMcpToolInvocationParticipantFactory`, and their public request/result contracts own durable human approval and
   provider-effect recovery for tool calls. A deferred approval opens only when the run and admitted
   invocation carry the same immutable execution subject, including the active conversation-computer
   lease id and generation; released or replaced leases fail closed.
+  Approval transition planning, projection and argument-replacement helpers stay private to this
+  package; callers enter through the transaction-bound approval operations.
 - `__AdmitPreparingToolInvocationInTransaction` and `__PrepareToolInvocationInTransaction` let the
   conversation owner save and prepare a permitted call in the transaction that queues its MCP
   executor. The existing lifecycle still enforces approval requirements and observed revisions.

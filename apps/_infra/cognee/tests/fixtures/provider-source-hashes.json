@@ -5,7 +5,7 @@
     "declaredVersion": "1.5.4",
     "isOciAttestation": false,
     "repository": "topoteretes/cognee",
-    "scope": "official-tag-source-with-explicit-candidate-repair",
+    "scope": "official-tag-source-with-explicit-provider-repair",
     "tag": "v1.5.4"
   },
   "modules": {

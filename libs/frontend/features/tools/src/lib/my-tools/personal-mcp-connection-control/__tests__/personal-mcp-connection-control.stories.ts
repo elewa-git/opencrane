@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/angular";
-import { expect, within } from "storybook/test";
+import { expect, userEvent, within } from "storybook/test";
 
 import { PersonalMcpConnectionControlComponent } from "../personal-mcp-connection-control.component";
 import { PersonalMcpConnectionControlStates, PersonalMcpCredentialInputKinds, type PersonalMcpConnectionControlView } from "../personal-mcp-connection-control.types";
@@ -17,12 +17,14 @@ export const BearerConnect: Story = { tags: ["visual-test"], play: async functio
 export const CredentiallessConnect: Story = { args: { view: { ..._BASE, credentialInput: PersonalMcpCredentialInputKinds.None } } };
 /** Accepted activation disables a duplicate start while preserving revocation. */
 export const Activating: Story = { args: { view: { ..._BASE, state: PersonalMcpConnectionControlStates.Activating, canRevoke: true } } };
-/** An active bearer generation may be replaced or revoked. */
-export const Active: Story = { tags: ["visual-test"], args: { view: { ..._BASE, state: PersonalMcpConnectionControlStates.Active, canReplace: true, canRevoke: true } } };
+/** An active bearer generation exposes focused replacement and destructive revocation. */
+export const Active: Story = { tags: ["visual-test"], args: { view: { ..._BASE, state: PersonalMcpConnectionControlStates.Active, canReplace: true, canRevoke: true } }, play: async function _ActiveActions({ canvasElement }) { const canvas = within(canvasElement); const replace = canvas.getByRole("button", { name: "Replace" }); await expect(canvas.getByRole("button", { name: "Disconnect" })).toBeEnabled(); await userEvent.tab(); await expect(replace).toHaveFocus(); } };
 /** Replacement uses a fresh empty controlled field and an explicit cancel intent. */
 export const Replace: Story = { args: { view: { ..._BASE, state: PersonalMcpConnectionControlStates.Replace } } };
 /** Uncertain completion locks the retained draft and exposes only exact Retry. */
 export const AmbiguousRetry: Story = { tags: ["visual-test", "visual-test-narrow"], args: { view: { ..._BASE, state: PersonalMcpConnectionControlStates.Ambiguous, draft: "retained-write-only-value" } }, play: async function _Locked({ canvasElement }) { const canvas = within(canvasElement); await expect(canvas.getByLabelText("Access token for Weather service")).toBeDisabled(); await expect(canvas.getByRole("button", { name: "Retry" })).toBeEnabled(); } };
+/** A pending connection disables its populated input and submit action. */
+export const BusyConnect: Story = { args: { busy: true, view: { ..._BASE, draft: "story-only-draft" } }, play: async function _Busy({ canvasElement }) { const canvas = within(canvasElement); await expect(canvas.getByLabelText("Access token for Weather service")).toBeDisabled(); await expect(canvas.getByRole("button", { name: "Connect" })).toBeDisabled(); } };
 /** Recovery copy is fixed by the presenter and revocation is the only mutation. */
 export const RecoveryRequired: Story = { tags: ["visual-test"], args: { view: { ..._BASE, state: PersonalMcpConnectionControlStates.RecoveryRequired, canRevoke: true, failureMessage: "This connection must be disconnected before it can be replaced." } } };
 /** Removal exposes no connection command. */

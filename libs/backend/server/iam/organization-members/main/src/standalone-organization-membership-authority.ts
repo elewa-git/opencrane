@@ -53,7 +53,7 @@ function _projectInvitation(record: OrganizationInvitationRecord, now: Date, inv
  * with deployment-held key material, and acceptance still needs a verified matching OIDC email. No
  * method consults Fleet, so the application must never construct this class in Fleet mode.
  *
- * Called by: apps/opencrane/src/app/organization-members-composition.ts.
+ * Called by: apps/opencrane/src/bootstrap/http/organization-members-composition.ts.
  * @implements OrganizationMembershipAuthority
  */
 export class StandaloneOrganizationMembershipAuthority implements OrganizationMembershipAuthority

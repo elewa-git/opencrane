@@ -87,8 +87,8 @@ def main() -> None:
             },
             "source": _optional_json(args.source),
             "negativeControl": _optional_json(args.negative),
-            "qualifiedCandidateInitial": _optional_json(args.positive_initial),
-            "qualifiedCandidate": _optional_json(args.positive),
+            "qualifiedProviderInitial": _optional_json(args.positive_initial),
+            "qualifiedProvider": _optional_json(args.positive),
             "stubRequests": _read_json_lines(args.stub_log),
             "commitThenDrop": _read_json_lines(args.drop_log),
         }
@@ -110,8 +110,8 @@ def main() -> None:
         },
         "source": _read_json(args.source),
         "negativeControl": _read_json(args.negative),
-        "qualifiedCandidateInitial": _read_json(args.positive_initial),
-        "qualifiedCandidate": _read_json(args.positive),
+        "qualifiedProviderInitial": _read_json(args.positive_initial),
+        "qualifiedProvider": _read_json(args.positive),
         "stubRequests": _read_json_lines(args.stub_log),
         "commitThenDrop": _read_json_lines(args.drop_log),
     }

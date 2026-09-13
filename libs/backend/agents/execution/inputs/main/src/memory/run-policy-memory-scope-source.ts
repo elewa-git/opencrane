@@ -1,7 +1,7 @@
 import { RunExecutionPersonalMemoryPolicies, type InitialRunAuthority, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 
-import { RunInputMemoryScopes, type ConversationContextInput, type MemoryScopeInput, type MemoryScopeSource, type SessionAssemblyCommand, type SessionAssemblyLoad } from "../assembly/session-assembly.types";
+import { RunInputMemoryScopes, SessionAssemblyLoadOutcomes, type ConversationContextInput, type MemoryScopeInput, type MemoryScopeSource, type SessionAssemblyCommand, type SessionAssemblyLoad } from "../assembly/session-assembly.types";
 
 /** Selects the sole memory source allowed by the explicit policy frozen for one run. */
 export class RunPolicyMemoryScopeSource implements MemoryScopeSource
@@ -20,11 +20,11 @@ export class RunPolicyMemoryScopeSource implements MemoryScopeSource
 	{
 		if (run.executionPolicy.personalMemory === RunExecutionPersonalMemoryPolicies.None)
 		{
-			return { outcome: "loaded", value: { memoryQueryPolicy: { scope: RunInputMemoryScopes.None }, datasetId: null } };
+			return { outcome: SessionAssemblyLoadOutcomes.Loaded, value: { memoryQueryPolicy: { scope: RunInputMemoryScopes.None }, datasetId: null } };
 		}
 		if (run.executionPolicy.personalMemory !== RunExecutionPersonalMemoryPolicies.Allowed)
 		{
-			return { outcome: "denied", reason: "memory_scope_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "memory_scope_unavailable" };
 		}
 		return this.personalMemoryScope.load(command, run, executionSubject, conversation, transaction);
 	}

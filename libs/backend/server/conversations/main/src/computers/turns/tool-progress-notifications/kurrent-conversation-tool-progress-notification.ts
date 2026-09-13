@@ -1,12 +1,11 @@
-import { createHash } from "node:crypto";
-
 import { ConversationHistoryAppendOutcomes, ConversationHistoryAuthority, ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
 import type { HistoryEvent, HistoryRecordedEvent, HistoryStore } from "@opencrane/backend/server/infra/history-store";
-import { ConversationAuthorKinds, ConversationEntryKinds, ___ConversationEntrySchema, type ToolCallLogEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryAudiences, ConversationEntryKinds, ConversationEntryProvenance, ConversationLogKinds, ConversationLogToolKinds, ___ConversationEntrySchema, type ToolCallLogEntry } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _ConversationToolProgressNotificationPhases, ConversationToolProgressNotificationOutcomes, type _ConversationToolProgressNotificationEvidenceRead, type ConversationToolProgressNotificationEvidence, type ConversationToolRequestedNotificationCommand, type ConversationToolRequestedNotificationEvidenceReader, type ConversationToolRequestedNotificationPort, type ConversationToolRunningNotificationCommand, type ConversationToolRunningNotificationEvidenceReader, type ConversationToolRunningNotificationPort } from "./conversation-tool-progress-notification.types";
 import { _ReadConversationToolResultNotificationReceipt } from "../tool-result-notifications/kurrent-conversation-tool-result-notification";
+import { _ConversationComputerEventId } from "../../conversation-computer-event-id";
 
 /** Maximum retries after another writer changes the conversation head. */
 const _APPEND_ATTEMPTS = 4;
@@ -170,10 +169,10 @@ class _KurrentConversationToolProgressPublisher
 function _Intent(command: ConversationToolRequestedNotificationCommand, evidence: ConversationToolProgressNotificationEvidence, phase: _ConversationToolProgressNotificationPhases, expectedRevision: bigint)
 {
 	const receiptStream = _ReceiptStream(command.toolInvocationId, phase);
-	const receiptId = _Uuid(`tool-progress-${phase}-receipt`, command.toolInvocationId);
-	const entryId = _Uuid(`tool-progress-${phase}-entry`, command.toolInvocationId);
+	const receiptId = _ConversationComputerEventId(`tool-progress-${phase}-receipt`, command.toolInvocationId);
+	const entryId = _ConversationComputerEventId(`tool-progress-${phase}-entry`, command.toolInvocationId);
 	const summary = phase === _ConversationToolProgressNotificationPhases.Requested ? "Tool requested" : "Tool running";
-	const entry: ToolCallLogEntry = { schemaVersion: 1, id: entryId, conversationId: command.conversationId, position: (expectedRevision + 1n).toString(), author: { kind: ConversationAuthorKinds.System, systemId: "opencrane", name: "OpenCrane" }, provenance: "service-attested", visibility: { audience: "conversation" }, runId: command.runId, causationId: command.toolInvocationId, correlationId: command.runId, idempotencyKey: entryId, occurredAt: evidence.occurredAt, attestation: { serviceId: "opencrane", receiptId, domainStream: receiptStream, domainRevision: "0", decisionEvidenceId: null }, kind: ConversationEntryKinds.Log, logKind: "tool_call", toolCallId: command.toolInvocationId, toolKind: evidence.toolKind, toolName: evidence.toolName, phase, resultArtifactRevisionId: null, summary, detailsRef: null };
+	const entry: ToolCallLogEntry = { schemaVersion: 1, id: entryId, conversationId: command.conversationId, position: (expectedRevision + 1n).toString(), author: { kind: ConversationAuthorKinds.System, systemId: "opencrane", name: "OpenCrane" }, provenance: ConversationEntryProvenance.ServiceAttested, visibility: { audience: ConversationEntryAudiences.Conversation }, runId: command.runId, causationId: command.toolInvocationId, correlationId: command.runId, idempotencyKey: entryId, occurredAt: evidence.occurredAt, attestation: { serviceId: "opencrane", receiptId, domainStream: receiptStream, domainRevision: "0", decisionEvidenceId: null }, kind: ConversationEntryKinds.Log, logKind: ConversationLogKinds.ToolCall, toolCallId: command.toolInvocationId, toolKind: evidence.toolKind, toolName: evidence.toolName, phase, resultArtifactRevisionId: null, summary, detailsRef: null };
 	const parsed = ___ConversationEntrySchema.parse(entry) as ToolCallLogEntry;
 	const data = { bootstrapId: command.bootstrapId, siloId: command.siloId, conversationId: command.conversationId, runId: command.runId, attempt: command.attempt, toolInvocationId: command.toolInvocationId, phase, intent: { streamName: _ConversationStream(command.conversationId), entry: parsed } };
 	const metadata = { siloId: command.siloId, conversationId: command.conversationId, runId: command.runId, toolInvocationId: command.toolInvocationId, phase };
@@ -191,7 +190,7 @@ function _ReadProgressReceipt(event: HistoryRecordedEvent, command: Conversation
 		|| data.runId !== command.runId || data.attempt !== command.attempt || data.toolInvocationId !== command.toolInvocationId || data.phase !== phase)
 		throw new Error("Tool progress notification receipt differs from its invocation");
 	const parsed = ___ConversationEntrySchema.safeParse(data.intent?.entry);
-	if (!parsed.success || parsed.data.kind !== ConversationEntryKinds.Log || parsed.data.logKind !== "tool_call" || parsed.data.phase !== phase)
+	if (!parsed.success || parsed.data.kind !== ConversationEntryKinds.Log || parsed.data.logKind !== ConversationLogKinds.ToolCall || parsed.data.phase !== phase)
 		throw new Error("Tool progress notification receipt has invalid participant evidence");
 	const entry = parsed.data;
 	const position = entry.position;
@@ -212,7 +211,7 @@ function _ReadTerminalReceipt(event: HistoryRecordedEvent, command: Conversation
 		throw new Error("Tool terminal notification receipt has invalid result evidence");
 	const intent = _ReadConversationToolResultNotificationReceipt(event, { ...command, expectedResultDigest: data.resultDigest });
 	const entry = intent.entry;
-	if (entry.kind !== ConversationEntryKinds.Log || entry.logKind !== "tool_call")
+	if (entry.kind !== ConversationEntryKinds.Log || entry.logKind !== ConversationLogKinds.ToolCall)
 		throw new Error("Tool terminal notification receipt has invalid participant evidence");
 	return entry;
 }
@@ -222,7 +221,7 @@ function _AssertEvidence(command: ConversationToolRequestedNotificationCommand, 
 {
 	if (evidence.bootstrapId !== command.bootstrapId || evidence.siloId !== command.siloId || evidence.conversationId !== command.conversationId
 		|| evidence.runId !== command.runId || evidence.attempt !== command.attempt || evidence.toolInvocationId !== command.toolInvocationId
-		|| evidence.toolKind !== "mcp" || evidence.toolName.trim().length === 0 || evidence.toolName !== evidence.toolName.trim()
+		|| evidence.toolKind !== ConversationLogToolKinds.Mcp || evidence.toolName.trim().length === 0 || evidence.toolName !== evidence.toolName.trim()
 		|| !Number.isFinite(Date.parse(evidence.occurredAt)) || new Date(evidence.occurredAt).toISOString() !== evidence.occurredAt)
 		throw new Error("Tool progress notification evidence is invalid");
 }
@@ -263,12 +262,3 @@ function _ReceiptStream(toolInvocationId: string, phase: _ConversationToolProgre
 function _TerminalReceiptStream(toolInvocationId: string): string { return `conversation-tool-result-notification-${toolInvocationId}`; }
 /** Name the participant history stream that receives the safe projection. */
 function _ConversationStream(conversationId: string): string { return `conversation-${conversationId}`; }
-
-/** Derive stable receipt and participant UUIDs without another persisted identifier. */
-function _Uuid(domain: string, value: string): string
-{
-	const hex = createHash("sha256").update(`${domain}:${value}`).digest("hex").slice(0, 32).split("");
-	hex[12] = "4";
-	hex[16] = "8";
-	return `${hex.slice(0, 8).join("")}-${hex.slice(8, 12).join("")}-${hex.slice(12, 16).join("")}-${hex.slice(16, 20).join("")}-${hex.slice(20).join("")}`;
-}

@@ -1,4 +1,6 @@
 import { ChangeDetectionStrategy, Component, ElementRef, Signal, ViewChild, afterRenderEffect, computed, input, output } from "@angular/core";
+import { ButtonModule } from "primeng/button";
+import { InputTextModule } from "primeng/inputtext";
 
 import { PersonalMcpConnectionControlStates, PersonalMcpCredentialInputKinds, type PersonalMcpConnectionControlView } from "./personal-mcp-connection-control.types";
 
@@ -9,7 +11,7 @@ import { PersonalMcpConnectionControlStates, PersonalMcpCredentialInputKinds, ty
  * projection. This component only renders the supplied finite state and emits typed user intents.
  * Called by: the installed-tool row composed by the My Tools page.
  */
-@Component({ selector: "wo-personal-mcp-connection-control", standalone: true, templateUrl: "./personal-mcp-connection-control.component.html", styleUrl: "./personal-mcp-connection-control.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
+@Component({ selector: "wo-personal-mcp-connection-control", standalone: true, imports: [ButtonModule, InputTextModule], templateUrl: "./personal-mcp-connection-control.component.html", styleUrl: "./personal-mcp-connection-control.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
 export class PersonalMcpConnectionControlComponent
 {
 	/** The rendered password field, when the current state needs one. */

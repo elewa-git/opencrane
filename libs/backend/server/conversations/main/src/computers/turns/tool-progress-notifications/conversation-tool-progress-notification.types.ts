@@ -1,5 +1,5 @@
 import type { ProductAuthorizationWorkloadContext, ToolInvocationClaim, ToolInvocationRequestIdentity } from "@opencrane/backend/server/iam/authorization";
-import type { ToolCallLogEntry } from "@opencrane/contracts";
+import { ConversationToolCallLogPhases, type ToolCallLogEntry } from "@opencrane/contracts";
 
 /**
  * Participant-history phases recorded before a terminal tool result.
@@ -9,9 +9,9 @@ import type { ToolCallLogEntry } from "@opencrane/contracts";
 export enum _ConversationToolProgressNotificationPhases
 {
 	/** The admitted proposal is recorded in participant history as a requested tool call. */
-	Requested = "requested",
+	Requested = ConversationToolCallLogPhases.Requested,
 	/** The tool call is recorded as running from committed claim evidence; command release still requires the later current-authority check. */
-	Running = "running",
+	Running = ConversationToolCallLogPhases.Running,
 }
 
 /** Immutable saved-turn coordinates used after one proposal admission commits. */

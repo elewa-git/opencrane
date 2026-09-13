@@ -58,6 +58,16 @@ describe("__ReadRunToolResultInTransaction", function _resultReader()
 		await expect(__ReadRunToolResultInTransaction(fixture.transaction, _COMMAND)).resolves.toEqual({ outcome: RunToolResultReadOutcomes.Unavailable });
 	});
 
+	it("propagates corrupt saved authorization instead of reporting ended authority", async function _CorruptAuthorization()
+	{
+		const row = { ..._row(), authorizationActorKind: "Workload" };
+		const fixture = _reader(row);
+
+		await expect(__ReadRunToolResultInTransaction(fixture.transaction, _COMMAND)).rejects.toThrow(`ToolInvocation ${row.id} has incomplete authorization evidence`);
+		expect(row.resultDelivery.state).toBe(ToolResultDeliveryState.Pending);
+		expect(row.resultDelivery.consumedAt).toBeNull();
+	});
+
 	it.each(["id", "siloId", "attempt", "state"])("requires the current related run %s", async function _runMismatch(field)
 	{
 		const row = _row();

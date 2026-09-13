@@ -8,7 +8,7 @@ import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workf
 import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand, ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
-import type { ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputLeaseProjection, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, ArtifactPreprocessSourceLeaseProjection, CompleteArtifactPreprocessJobResult, FailArtifactPreprocessJobResult, IssueArtifactPreprocessOutputLeaseResult } from "./artifact-preprocessing.types";
+import { ArtifactPreprocessResultStatuses, type ArtifactPreprocessCompletionRequest, type ArtifactPreprocessOutputLeaseProjection, type ArtifactPreprocessOutputLeaseRequest, type ArtifactPreprocessRepository, type ArtifactPreprocessSourceLeaseProjection, type CompleteArtifactPreprocessJobResult, type FailArtifactPreprocessJobResult, type IssueArtifactPreprocessOutputLeaseResult } from "./artifact-preprocessing.types";
 import { _ARTIFACT_PREPROCESS_RETRY_DELAY_MILLISECONDS, _ArtifactPreprocessFailureTransition } from "./artifact-preprocess-retry-policy";
 import type { ConversationAssetPreprocessLifecycleRepository } from "./artifact-preprocess-conversation-lifecycle.types";
 import { PrismaArtifactPreprocessControllerRepository } from "./prisma-artifact-preprocess-controller-authority";
@@ -146,11 +146,11 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 			const job = await transaction.artifactPreprocessJob.findUnique({ where: { id: request.jobId }, include: { derivedArtifact: true, outputLease: true } });
 			if (job === null || job.derivedArtifact === null)
 			{
-				return { status: "conflict", reason: "claim_not_found" };
+				return { status: ArtifactPreprocessResultStatuses.Conflict, reason: "claim_not_found" };
 			}
 			if (job.deliveryCount !== request.attempt || job.claimFence !== request.claimFence)
 			{
-				return { status: "conflict", reason: "stale_claim" };
+				return { status: ArtifactPreprocessResultStatuses.Conflict, reason: "stale_claim" };
 			}
 			if (job.completionDigest !== null || job.state === ArtifactPreprocessJobState.Completed)
 			{
@@ -158,16 +158,16 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 					&& job.outputLease.expectedContentAddress === request.contentAddress
 					&& job.outputLease.expectedByteLength === BigInt(request.byteLength)
 					&& job.outputLease.mediaType === "text/plain"
-					? { status: "completed" }
-					: { status: "conflict", reason: "invalid_output" };
+					? { status: ArtifactPreprocessResultStatuses.Completed }
+					: { status: ArtifactPreprocessResultStatuses.Conflict, reason: "invalid_output" };
 			}
 			if (job.state !== ArtifactPreprocessJobState.Claimed || job.claimExpiresAt === null || job.claimExpiresAt <= now)
 			{
-				return { status: "conflict", reason: "stale_claim" };
+				return { status: ArtifactPreprocessResultStatuses.Conflict, reason: "stale_claim" };
 			}
 			if (!___IsSha256ContentAddress(request.contentAddress) || !Number.isSafeInteger(request.byteLength) || request.byteLength < 0)
 			{
-				return { status: "conflict", reason: "invalid_output" };
+				return { status: ArtifactPreprocessResultStatuses.Conflict, reason: "invalid_output" };
 			}
 
 			// If the worker resends the same bytes because it never saw our reply, hand back the lease already attached to this attempt rather than creating a second one.
@@ -179,15 +179,15 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 					|| job.outputLease.expectedByteLength !== BigInt(request.byteLength)
 					|| job.outputLease.mediaType !== "text/plain")
 				{
-					return { status: "conflict", reason: "invalid_output" };
+					return { status: ArtifactPreprocessResultStatuses.Conflict, reason: "invalid_output" };
 				}
-				return { status: "issued", lease: _OutputLeaseProjection(job.id, job.deliveryCount, job.claimFence, job.derivedArtifact.id, job.outputLease.id, job.outputLease.siloId, job.outputLease.expiresAt, request.contentAddress, request.byteLength) };
+				return { status: ArtifactPreprocessResultStatuses.Issued, lease: _OutputLeaseProjection(job.id, job.deliveryCount, job.claimFence, job.derivedArtifact.id, job.outputLease.id, job.outputLease.siloId, job.outputLease.expiresAt, request.contentAddress, request.byteLength) };
 			}
 
 			const leaseId = randomUUID();
 			await transaction.artifactUploadLease.create({ data: { id: leaseId, artifactId: job.derivedArtifact.id, siloId: job.derivedArtifact.siloId, capabilityJti: randomUUID(), expectedContentAddress: request.contentAddress, expectedByteLength: BigInt(request.byteLength), mediaType: "text/plain", expiresAt: job.claimExpiresAt } });
 			await transaction.artifactPreprocessJob.update({ where: { id: job.id }, data: { outputLeaseId: leaseId } });
-			return { status: "issued", lease: _OutputLeaseProjection(job.id, job.deliveryCount, job.claimFence, job.derivedArtifact.id, leaseId, job.derivedArtifact.siloId, job.claimExpiresAt, request.contentAddress, request.byteLength) };
+			return { status: ArtifactPreprocessResultStatuses.Issued, lease: _OutputLeaseProjection(job.id, job.deliveryCount, job.claimFence, job.derivedArtifact.id, leaseId, job.derivedArtifact.siloId, job.claimExpiresAt, request.contentAddress, request.byteLength) };
 		}
 	}
 
@@ -200,23 +200,23 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 			const job = await transaction.artifactPreprocessJob.findUnique({ where: { id: request.jobId }, include: { outputLease: true, derivedArtifact: true } });
 			if (job === null || job.outputLease === null || job.derivedArtifact === null)
 			{
-				return { status: "conflict", reason: "claim_not_found" };
+				return { status: ArtifactPreprocessResultStatuses.Conflict, reason: "claim_not_found" };
 			}
 			if (job.deliveryCount !== request.attempt || job.claimFence !== request.claimFence || request.derivedRevisionId !== _DerivedRevisionId(job.outputLease.id))
 			{
-				return { status: "conflict", reason: "stale_claim" };
+				return { status: ArtifactPreprocessResultStatuses.Conflict, reason: "stale_claim" };
 			}
 			if (!_MatchesPromotion(request, job.outputLease))
 			{
-				return { status: "conflict", reason: "invalid_receipt" };
+				return { status: ArtifactPreprocessResultStatuses.Conflict, reason: "invalid_receipt" };
 			}
 			if (job.completionDigest === request.receiptDigest)
 			{
-				return { status: "completed" };
+				return { status: ArtifactPreprocessResultStatuses.Completed };
 			}
 			if (job.state !== ArtifactPreprocessJobState.Claimed || job.claimExpiresAt === null || job.claimExpiresAt <= now)
 			{
-				return { status: "conflict", reason: "stale_claim" };
+				return { status: ArtifactPreprocessResultStatuses.Conflict, reason: "stale_claim" };
 			}
 
 			// 1. Mark the lease Promoted and store the receipt digest first, so the receipt is on record before anything becomes visible.
@@ -231,7 +231,7 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 			await transaction.artifactOutboxEvent.create({ data: { artifactId: job.derivedArtifact.id, revisionId: request.derivedRevisionId, kind: "RevisionPublished", idempotencyKey: `artifact-preprocess:${job.id}:${job.deliveryCount}:revision`, payload: { contentAddress: request.promotion.contentAddress, byteLength: request.promotion.byteLength, mediaType: "text/plain" } } });
 			await transaction.artifactUploadLease.update({ where: { id: job.outputLease.id }, data: { state: ArtifactUploadLeaseState.Finalized, finalizedAt: now } });
 			await transaction.artifactPreprocessJob.update({ where: { id: job.id }, data: { derivedRevisionId: request.derivedRevisionId, completionDigest: request.receiptDigest } });
-			return { status: "completed" };
+			return { status: ArtifactPreprocessResultStatuses.Completed };
 		}
 	}
 
@@ -244,11 +244,11 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 			const job = await transaction.artifactPreprocessJob.findUnique({ where: { id: command.jobId } });
 			if (job === null)
 			{
-				return { status: "conflict", reason: "claim_not_found" };
+				return { status: ArtifactPreprocessResultStatuses.Conflict, reason: "claim_not_found" };
 			}
 			if (job.state !== ArtifactPreprocessJobState.Claimed || job.deliveryCount !== command.attempt || job.claimFence !== command.claimFence || job.claimExpiresAt === null || job.claimExpiresAt <= now)
 			{
-				return { status: "conflict", reason: "stale_claim" };
+				return { status: ArtifactPreprocessResultStatuses.Conflict, reason: "stale_claim" };
 			}
 
 			const transition = _ArtifactPreprocessFailureTransition(job.deliveryCount, now);
@@ -259,7 +259,7 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 			});
 			if (transition.terminal)
 				await this.conversationAssets.fail(job.sourceRevisionId);
-			return { status: transition.terminal ? "terminal" : "retryable" };
+			return { status: transition.terminal ? ArtifactPreprocessResultStatuses.Terminal : ArtifactPreprocessResultStatuses.Retryable };
 		}
 	}
 

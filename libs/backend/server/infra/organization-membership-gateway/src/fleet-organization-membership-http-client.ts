@@ -36,7 +36,7 @@ async function _ResponseJson(response: Response): Promise<unknown>
  * `credentialSiloId` before trusting the forwarded OIDC subject. Redirects are refused so the
  * credential cannot cross origins, and every call re-reads the projected file for kubelet rotation.
  *
- * Called by: apps/opencrane/src/app/organization-members-composition.ts.
+ * Called by: apps/opencrane/src/bootstrap/http/organization-members-composition.ts.
  */
 export class FleetOrganizationMembershipHttpClient
 {

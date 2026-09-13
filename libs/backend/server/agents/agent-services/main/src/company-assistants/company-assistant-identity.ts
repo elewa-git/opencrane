@@ -1,4 +1,4 @@
-import { AgentIdentityStates, type ManagedAgentIdentity } from "@opencrane/contracts";
+import { AgentIdentityKinds, AgentIdentityStates, type ManagedAgentIdentity } from "@opencrane/contracts";
 import type { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
 import { HistoryExpectedRevisions } from "@opencrane/backend/server/infra/history-store";
 
@@ -18,17 +18,17 @@ export async function __EnsureCompanyAssistantIdentity(history: Pick<AgentIdenti
 	const current = await history.load(coordinates);
 	if (current === null)
 	{
-		const identity: ManagedAgentIdentity = { schemaVersion: 1, kind: "managed", id: result.agentIdentityId, siloId: result.siloId, agentServiceId: result.agentServiceId, principalId: result.principalId, name: result.name, avatarArtifactRevisionId: null, state: AgentIdentityStates.Active, createdByPrincipalId: result.createdByPrincipalId, createdAt: result.createdAt };
+		const identity: ManagedAgentIdentity = { schemaVersion: 1, kind: AgentIdentityKinds.Managed, id: result.agentIdentityId, siloId: result.siloId, agentServiceId: result.agentServiceId, principalId: result.principalId, name: result.name, avatarArtifactRevisionId: null, state: AgentIdentityStates.Active, createdByPrincipalId: result.createdByPrincipalId, createdAt: result.createdAt };
 		try { await history.append({ expectedRevision: HistoryExpectedRevisions.NoStream, eventId: result.identityEventId, identity }); }
 		catch
 		{
 			const winner = await history.loadActive(coordinates);
-			if (winner.identity.kind !== "managed")
+			if (winner.identity.kind !== AgentIdentityKinds.Managed)
 				throw new Error("Company assistant identity is unavailable");
 			return;
 		}
 	}
 	const active = await history.loadActive(coordinates);
-	if (active.identity.kind !== "managed")
+	if (active.identity.kind !== AgentIdentityKinds.Managed)
 		throw new Error("Company assistant identity is unavailable");
 }

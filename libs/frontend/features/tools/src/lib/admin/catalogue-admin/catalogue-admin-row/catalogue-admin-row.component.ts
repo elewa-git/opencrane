@@ -1,10 +1,11 @@
 import { ChangeDetectionStrategy, Component, input, output } from "@angular/core";
+import { ButtonModule } from "primeng/button";
 import { McpApprovalStatus, type McpServer } from "@opencrane/core";
 import { ScopeChipComponent } from "@opencrane/elements/ui";
 import { MCP_APPROVAL_CHIPS, MCP_TYPE_CHIPS } from "../../../mcp-chip.constants";
 
 /** Presents server governance actions; the server remains the authority for allowed transitions. */
-@Component({ selector: "tr[wo-catalogue-admin-row]", standalone: true, imports: [ScopeChipComponent], host: { "[class.wo-admin__row--off]": "server().approvalStatus === status.Disabled" }, templateUrl: "./catalogue-admin-row.component.html", styleUrl: "./catalogue-admin-row.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
+@Component({ selector: "tr[wo-catalogue-admin-row]", standalone: true, imports: [ButtonModule, ScopeChipComponent], host: { "[class.wo-admin__row--off]": "server().approvalStatus === status.Disabled" }, templateUrl: "./catalogue-admin-row.component.html", styleUrl: "./catalogue-admin-row.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
 export class CatalogueAdminRowComponent
 {
 	/** Server description and current governance projection. */

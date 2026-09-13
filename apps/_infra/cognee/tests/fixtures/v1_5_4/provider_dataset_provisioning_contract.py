@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 
 class DatasetProvisioningApi(Protocol):
-    """Expose the authenticated dataset calls used by this candidate fixture."""
+    """Expose the authenticated dataset calls used by this provider fixture."""
 
     base_url: str
     _access_token: str | None

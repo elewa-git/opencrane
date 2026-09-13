@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { CogneeProviderSessionError } from "../cognee-provider-session-error";
-import { _CreateCogneeProviderSession } from "../cognee-provider-session";
+import { __CreateCogneeProviderSession } from "../cognee-provider-session";
 import { CogneeProviderSessionFailureCodes, type CogneeProviderCredentialReader, type CogneeProviderSessionOptions } from "../cognee-provider-session.types";
 import type { CogneeProviderFetch } from "../../http/cognee-provider-http.types";
 
@@ -51,7 +51,7 @@ describe("Cognee provider session", function _CogneeProviderSessionTests()
 			requests.push({ path: _Path(input), init });
 			return _Login("private-bearer");
 		});
-		const session = _CreateCogneeProviderSession(_Options(fetchMock));
+		const session = __CreateCogneeProviderSession(_Options(fetchMock));
 
 		await Promise.all([session.ensureReady(), session.ensureReady()]);
 
@@ -77,7 +77,7 @@ describe("Cognee provider session", function _CogneeProviderSessionTests()
 				return new Response("created", { status: 201 });
 			return _Login("registered-bearer");
 		});
-		const session = _CreateCogneeProviderSession(_Options(fetchMock, { allowFirstInstallRegistration: true }));
+		const session = __CreateCogneeProviderSession(_Options(fetchMock, { allowFirstInstallRegistration: true }));
 
 		await session.ensureReady();
 		await session.ensureReady();
@@ -99,7 +99,7 @@ describe("Cognee provider session", function _CogneeProviderSessionTests()
 			paths.push(path);
 			return new Response(path.endsWith("register") ? "provider says existing secret token-x" : "bad synthetic-password", { status: 400 });
 		});
-		const session = _CreateCogneeProviderSession(_Options(fetchMock, { allowFirstInstallRegistration: true }));
+		const session = __CreateCogneeProviderSession(_Options(fetchMock, { allowFirstInstallRegistration: true }));
 
 		const first = await session.ensureReady().catch(function _Failure(error: unknown) { return error; });
 		const second = await session.ensureReady().catch(function _Failure(error: unknown) { return error; });
@@ -135,7 +135,7 @@ describe("Cognee provider session", function _CogneeProviderSessionTests()
 			}
 			return new Response("accepted", { status: 200 });
 		});
-		const session = _CreateCogneeProviderSession(_Options(fetchMock));
+		const session = __CreateCogneeProviderSession(_Options(fetchMock));
 
 		const command = { method: "POST", path: "/api/v1/add", headers: { "content-type": "application/json" }, body: "same-command" };
 		const results = await Promise.all([session.exchange(command), session.exchange(command)]);
@@ -175,7 +175,7 @@ describe("Cognee provider session", function _CogneeProviderSessionTests()
 			}
 			return new Response("accepted", { status: 200 });
 		});
-		const session = _CreateCogneeProviderSession(_Options(fetchMock));
+		const session = __CreateCogneeProviderSession(_Options(fetchMock));
 		await session.ensureReady();
 
 		const slow = session.exchange({ method: "GET", path: "/api/v1/datasets" });
@@ -202,7 +202,7 @@ describe("Cognee provider session", function _CogneeProviderSessionTests()
 			effectCount += 1;
 			return new Response("unauthorized", { status: 401 });
 		});
-		const session = _CreateCogneeProviderSession(_Options(fetchMock));
+		const session = __CreateCogneeProviderSession(_Options(fetchMock));
 
 		await expect(session.exchange({ method: "POST", path: "/api/v1/add", body: "effect" })).rejects.toMatchObject({ code: CogneeProviderSessionFailureCodes.AuthenticationRejected });
 		expect(effectCount).toBe(2);
@@ -224,7 +224,7 @@ describe("Cognee provider session", function _CogneeProviderSessionTests()
 				init?.signal?.addEventListener("abort", function _Abort() { reject(init.signal?.reason); }, { once: true });
 			});
 		});
-		const session = _CreateCogneeProviderSession(_Options(fetchMock, { requestTimeoutMilliseconds: 5 }));
+		const session = __CreateCogneeProviderSession(_Options(fetchMock, { requestTimeoutMilliseconds: 5 }));
 
 		await expect(session.exchange({ method: "POST", path: "/api/v1/add", body: "effect" })).rejects.toMatchObject({ code: CogneeProviderSessionFailureCodes.Timeout });
 		expect(effectCount).toBe(1);
@@ -240,7 +240,7 @@ describe("Cognee provider session", function _CogneeProviderSessionTests()
 			effectCount += 1;
 			throw new Error("provider disconnected after receiving private content");
 		});
-		const session = _CreateCogneeProviderSession(_Options(fetchMock));
+		const session = __CreateCogneeProviderSession(_Options(fetchMock));
 
 		const error = await session.exchange({ method: "POST", path: "/api/v1/add", body: "private content" }).catch(function _Failure(failure: unknown) { return failure; });
 
@@ -257,7 +257,7 @@ describe("Cognee provider session", function _CogneeProviderSessionTests()
 				return _Login("private-token");
 			return new Response("not found", { status: 404, headers: { "content-type": "text/plain" } });
 		});
-		const session = _CreateCogneeProviderSession(_Options(fetchMock));
+		const session = __CreateCogneeProviderSession(_Options(fetchMock));
 
 		const response = await session.exchange({ method: "GET", path: "/api/v1/datasets/missing" });
 
@@ -270,7 +270,7 @@ describe("Cognee provider session", function _CogneeProviderSessionTests()
 		{
 			return Response.json({ access_token: "secret-token", token_type: "bearer", unexpected: "private" });
 		});
-		const malformed = _CreateCogneeProviderSession(_Options(malformedFetch));
+		const malformed = __CreateCogneeProviderSession(_Options(malformedFetch));
 		const malformedError = await malformed.ensureReady().catch(function _Failure(error: unknown) { return error; });
 		expect(malformedError).toMatchObject({ code: CogneeProviderSessionFailureCodes.MalformedResponse });
 		expect(String(malformedError)).not.toContain("secret-token");
@@ -280,7 +280,7 @@ describe("Cognee provider session", function _CogneeProviderSessionTests()
 		{
 			return new Response("secret-token", { status: 200, headers: { "content-length": "5000" } });
 		});
-		const oversize = _CreateCogneeProviderSession(_Options(oversizeFetch, { maximumResponseBytes: 10 }));
+		const oversize = __CreateCogneeProviderSession(_Options(oversizeFetch, { maximumResponseBytes: 10 }));
 		const oversizeError = await oversize.ensureReady().catch(function _Failure(error: unknown) { return error; });
 		expect(oversizeError).toMatchObject({ code: CogneeProviderSessionFailureCodes.ResponseTooLarge });
 		expect(String(oversizeError)).not.toContain("secret-token");
@@ -289,7 +289,7 @@ describe("Cognee provider session", function _CogneeProviderSessionTests()
 		{
 			return Response.json({ access_token: "secret-token\nforwarded", token_type: "bearer" });
 		});
-		const unsafeToken = _CreateCogneeProviderSession(_Options(unsafeTokenFetch));
+		const unsafeToken = __CreateCogneeProviderSession(_Options(unsafeTokenFetch));
 		await expect(unsafeToken.ensureReady()).rejects.toMatchObject({ code: CogneeProviderSessionFailureCodes.MalformedResponse });
 	});
 
@@ -302,7 +302,7 @@ describe("Cognee provider session", function _CogneeProviderSessionTests()
 			},
 		};
 		const fetchMock = vi.fn(async function _Unexpected(): Promise<Response> { throw new Error("unexpected fetch"); });
-		const session = _CreateCogneeProviderSession(_Options(fetchMock, { credentialReader }));
+		const session = __CreateCogneeProviderSession(_Options(fetchMock, { credentialReader }));
 
 		const error = await session.ensureReady().catch(function _Failure(failure: unknown) { return failure; });
 
@@ -316,7 +316,7 @@ describe("Cognee provider session", function _CogneeProviderSessionTests()
 	{
 		const read = vi.fn(async function _Read() { return { email: _EMAIL, password: _PASSWORD }; });
 		const fetchMock = vi.fn(async function _Unexpected(): Promise<Response> { throw new Error("unexpected fetch"); });
-		const session = _CreateCogneeProviderSession(_Options(fetchMock, { credentialReader: { read } }));
+		const session = __CreateCogneeProviderSession(_Options(fetchMock, { credentialReader: { read } }));
 
 		await expect(session.exchange({ method: "GET", path: "https://other.example/api/v1/datasets" })).rejects.toMatchObject({ code: CogneeProviderSessionFailureCodes.UnsafeRequest });
 		await expect(session.exchange({ method: "GET", path: "/api/v1/datasets", headers: { Authorization: "Bearer caller-token" } })).rejects.toMatchObject({ code: CogneeProviderSessionFailureCodes.UnsafeRequest });

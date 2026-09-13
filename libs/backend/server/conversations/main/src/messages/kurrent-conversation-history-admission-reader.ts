@@ -1,4 +1,4 @@
-import type { MessageEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryKinds, MessageStates, type MessageEntry } from "@opencrane/contracts";
 import type { __CreatePrismaSessionAssemblyAuthorities } from "@opencrane/backend/agents/execution/inputs";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
@@ -29,9 +29,9 @@ export class KurrentConversationHistoryAdmissionReader implements _ConversationH
 		const lastRevision = history.entries.at(-1)?.position ?? "0";
 		if (lastRevision !== command.expectedRevision)
 			return null;
-		const messages = history.entries.filter(function _CompletedMessage(entry): entry is MessageEntry { return entry.kind === "message" && entry.state === "completed"; });
+		const messages = history.entries.filter(function _CompletedMessage(entry): entry is MessageEntry { return entry.kind === ConversationEntryKinds.Message && entry.state === MessageStates.Completed; });
 		const finalMessage = messages.at(-1);
-		if (finalMessage?.author.kind !== "human")
+		if (finalMessage?.author.kind !== ConversationAuthorKinds.Human)
 			return null;
 		return {
 			historyRevision: lastRevision,

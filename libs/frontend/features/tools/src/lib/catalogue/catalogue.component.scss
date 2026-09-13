@@ -27,8 +27,9 @@
 			color: var(--oc-ink-muted);
 		}
 
-		.wo-text-input {
-			padding-left: 30px;
+		input[pInputText] {
+			width: 100%;
+			padding-inline-start: var(--oc-space-8);
 		}
 	}
 

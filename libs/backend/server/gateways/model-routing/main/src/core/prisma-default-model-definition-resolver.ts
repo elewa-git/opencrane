@@ -64,7 +64,7 @@ export class PrismaDefaultModelDefinitionResolverRepository implements DefaultMo
 	 * Resolves the configured routing default to a model definition accessible to the silo.
 	 *
 	 * Called by: the initial-publication adapter in
-	 * `apps/opencrane/src/app/user-onboarding-composition.ts` before it creates an AgentService.
+	 * `libs/backend/server/agents/onboarding/main/src/composition/user-onboarding-composition.ts` before it creates an AgentService.
 	 *
 	 * @returns `Resolved` with the selected definition, `Unavailable` when no configured accessible
 	 * model exists, or `Ambiguous` when a precedence rung contains conflicting authority rows.

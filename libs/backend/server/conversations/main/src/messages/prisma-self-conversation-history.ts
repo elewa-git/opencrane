@@ -1,6 +1,6 @@
 import { ConversationMode, Prisma, type PrismaClient } from "@prisma/client";
 import { type HistoryStore } from "@opencrane/backend/server/infra/history-store";
-import { type ConversationEntry } from "@opencrane/contracts";
+import { ConversationEntryAudiences, ConversationEntryKinds, type ConversationEntry } from "@opencrane/contracts";
 
 import { ConversationHistoryAuthority, ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
 import type { ConversationCaller } from "../authorization/conversation-caller.types";
@@ -10,9 +10,6 @@ import { PrismaConversationHistoryRepository } from "./db/prisma-conversation-hi
 import type { AuthorizedConversationProjection, StoredConversationPrivatePayload } from "./db/prisma-conversation-history-repository.types";
 import type { ConversationMessageAdmissionResult, ConversationMessageCommand, PrismaSelfConversationHistoryDependencies, SelfConversationHistoryAuthority, SelfConversationHistoryReadOptions, SelfConversationHistoryResult } from "./self-conversation-history.types";
 
-const _CONVERSATION_AUDIENCE = "conversation";
-const _MESSAGE_ENTRY_KIND = "message";
-const _A2UI_ENTRY_KIND = "a2ui";
 const _TEXT_BLOCK_KIND = "text";
 
 /** Participant authority joining PostgreSQL policy and encrypted payloads to KurrentDB history. */
@@ -110,7 +107,7 @@ export class PrismaSelfConversationHistoryUnitOfWork implements SelfConversation
 /** Returns whether an entry's immutable visibility includes this participant. */
 function _MaySee(entry: ConversationEntry, subjectId: string): boolean
 {
-	return entry.visibility.audience === _CONVERSATION_AUDIENCE || entry.visibility.participantIds.includes(subjectId);
+	return entry.visibility.audience === ConversationEntryAudiences.Conversation || entry.visibility.participantIds.includes(subjectId);
 }
 
 /** Collects private text and A2UI payload references without altering the immutable entries. */
@@ -118,9 +115,9 @@ function _PayloadRefs(entries: readonly ConversationEntry[]): readonly string[]
 {
 	const references = entries.flatMap(function _EntryReferences(entry)
 	{
-		if (entry.kind === _MESSAGE_ENTRY_KIND)
+		if (entry.kind === ConversationEntryKinds.Message)
 			return entry.blocks.flatMap(block => block.kind === _TEXT_BLOCK_KIND ? [block.payloadRef] : []);
-		if (entry.kind === _A2UI_ENTRY_KIND && entry.payloadRef !== null)
+		if (entry.kind === ConversationEntryKinds.A2UI && entry.payloadRef !== null)
 			return [entry.payloadRef];
 		return [];
 	});

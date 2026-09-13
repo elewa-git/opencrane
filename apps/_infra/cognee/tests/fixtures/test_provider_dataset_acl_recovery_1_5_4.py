@@ -19,7 +19,7 @@ from v1_5_4 import provider_dataset_acl_recovery_contract as contract
 
 
 ROOT = Path(__file__).resolve().parents[5]
-PATCHES = ROOT / "apps/_infra/cognee/tests/candidates/1.5.4/patches"
+PATCHES = ROOT / "apps/_infra/cognee/deploy/patches"
 OWNER_ID = str(uuid.uuid4())
 
 
@@ -74,12 +74,12 @@ class _Api:
 
 
 class ProviderDatasetAclRecovery154Test(unittest.TestCase):
-    def test_patches_match_the_candidate_attestation_manifests(self) -> None:
+    def test_patches_match_the_provider_attestation_manifests(self) -> None:
         expected = json.loads(
-            (PATCHES.parent / "expected-source-hashes.json").read_text(encoding="utf-8")
+            (ROOT / "apps/_infra/cognee/tests/fixtures/provider-source-hashes.json").read_text(encoding="utf-8")
         )
         profile = json.loads(
-            (PATCHES.parent / "profile.json").read_text(encoding="utf-8")
+            (PATCHES.parent / "provider-profile.json").read_text(encoding="utf-8")
         )
         cases = (
             (

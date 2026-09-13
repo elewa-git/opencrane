@@ -39,7 +39,7 @@ class _GraphApi:
         return self.graph_value
 
 
-class CandidateDatasetIdentityTest(unittest.TestCase):
+class ProviderDatasetIdentityTest(unittest.TestCase):
     def test_accepts_only_members_owned_by_the_requested_dataset(self) -> None:
         members = dataset_members(
             _Api({"id": DOCUMENT_ID, "datasetId": DATASET_ID}), DATASET_ID

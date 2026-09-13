@@ -16,4 +16,4 @@ export const Active: Story = { args: { row: { provider: ModelProvider.OpenAi, la
 /** A stored key can require registration recovery. */
 export const SecretOnly: Story = { tags: ["visual-test"], args: { row: { provider: ModelProvider.OpenAi, label: "OpenAI", configured: true, litellmRegistered: false, updatedAt: null, updatedAtLabel: "Today" } } };
 /** Pending writes disable the password field and actions. */
-export const Saving: Story = { tags: ["visual-test"], args: { draft: "story-only-draft", busy: true }, play: async function _Busy({ canvasElement }) { await expect(within(canvasElement).getByLabelText("OpenAI API key")).toBeDisabled(); } };
+export const Saving: Story = { tags: ["visual-test"], args: { draft: "story-only-draft", busy: true }, play: async function _Busy({ canvasElement }) { const canvas = within(canvasElement); await expect(canvas.getByLabelText("OpenAI API key")).toBeDisabled(); await expect(canvas.getByRole("button", { name: "Save" })).toBeDisabled(); } };

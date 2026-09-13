@@ -16,5 +16,5 @@
 							<td class="wo-mytools__muted">{{ row().installed.lastUsed ?? "—" }}</td>
 							<td class="wo-mytools__actions">
 								<ng-content select="[connection-control]" />
-								<button type="button" class="wo-tools__act wo-tools__act--muted" [disabled]="busy() || removing()" (click)="uninstallRequested.emit()">Uninstall</button>
+								<button pButton type="button" size="small" [text]="true" severity="danger" [disabled]="busy() || removing()" (click)="uninstallRequested.emit()">Uninstall</button>
 							</td>

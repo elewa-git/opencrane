@@ -57,13 +57,6 @@
 				"constructs": []
 			},
 			{
-				"path": "libs/backend/server/agents/agent-services/main/src/execution-evidence/db/prisma-runtime-agent-effect-eligibility.ts",
-				"adapter": "PrismaRuntimeAgentEffectEligibilityAuthority",
-				"contract": "RuntimeAgentEffectEligibility",
-				"contractImportPath": "../runtime-agent-effect-eligibility.types",
-				"constructs": []
-			},
-			{
 				"path": "libs/backend/server/gateways/mcp/main/src/runtime/prisma-runtime-mcp-effect-eligibility.ts",
 				"adapter": "PrismaRuntimeMcpEffectEligibilityAuthority",
 				"contract": "RuntimeMcpEffectEligibility",
@@ -2729,6 +2722,7 @@
 			"libs/backend/agents/execution/inputs/main/src/assembly/prisma-session-assembly-authorities.ts",
 			"libs/backend/agents/execution/runs/main/src/prisma-self-run-status.router.ts",
 			"libs/backend/server/agents/artifacts/main/src/prisma-artifact-authority.composition.ts",
+			"libs/backend/server/agents/artifacts/main/src/prisma-personal-artifact-catalogue.router.ts",
 			"libs/backend/agents/execution/elicitation/main/src/prisma-self-elicitation.router.ts",
 			"libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 			"libs/backend/server/agents/skills/main/src/catalogue/prisma-skill-catalogue.router.ts",

@@ -15,6 +15,38 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Fixed
 
+- **Operators can suspend test silos while retaining their data.** The app-owned command stops
+  application workloads and their shared controllers, preserves storage and credentials, and keeps
+  retained sandboxes suspended when the controller returns. Reruns accept already-removed disposable
+  Pods and reject changed ownership or persistent volumes before mutation.
+
+- **Memory deployments use the qualified provider profile through one authenticated gateway.**
+  Cognee 1.5.4 replaces the older production image and separate candidate build. The gateway uses
+  an existing service-user Secret, refreshes its private provider session after rejection, and checks
+  the exact admitted dataset on every search response. The provider's recovery and deletion fixes
+  belong to the production build; final-image and live memory journeys still require qualification.
+
+- **Fresh silo bootstrap keeps generated passwords out of process arguments.** PostgreSQL and
+  KurrentDB use private temporary password files and remove them on success or failure. Cognee's
+  separate create-only helper validates the exact immutable service-user Secret on reruns;
+  automatic provider registration remains disabled by default.
+
+- **Keyboard users can reach tool controls and scroll Computer Review output.** Tools uses the
+  shared PrimeNG controls and visible focus treatment. Computer Review includes named keyboard
+  scroll regions and standard tabs, with populated, busy, error and narrow-screen contracts.
+
+- **A repeated message remains recoverable after a new sign-in or display-name change.** The server
+  preserves its saved author metadata while checking the same authenticated person, message content
+  and current conversation permission.
+
+- **Stopping work cannot cancel a newer turn state using an older read.** Cancellation and settlement
+  use the decoded turn revision in the existing atomic history append; a race reloads current state.
+
+- **Every silo deployment checks that conversation execution can run before changing the cluster.**
+  New environments require the existing KurrentDB history store, isolated AgentSandbox profile,
+  immutable images and Secret references. The check applies to the final Helm values, including
+  overrides and reused release values, so a different test-environment name cannot skip it.
+
 - **Run status preserves an uncertain model response across server restarts.** The workflow saves
   that recovery is required before reporting the unavailable response. A failed status write stays
   pending; retry uses the original request and remaining allowance without another paid dispatch.
@@ -27,8 +59,8 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   and live installation qualification remain separate.
 
 Personal and group-assistant text journeys and recent personal activity have passed integration
-CI and earlier live testv5 checks. Current testv5 onboarding is blocked by an unused personal
-assistant's outdated computer profile; its data-preserving repair remains under qualification.
+CI and earlier live testv5 checks. The old test environments are now suspended with their data
+retained. Fresh testv6 will qualify the cleaned candidate and the remaining business journeys.
 The 0.11 baseline remains under review; this is not a release or a completed MVP.
 
 ### Added

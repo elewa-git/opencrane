@@ -83,6 +83,22 @@ export interface PersonalExecutionEvidence
 	readonly admissionDecisionDigest: string;
 }
 
+/**
+ * Closed outcomes returned when an authority rechecks current execution evidence.
+ *
+ * Agent-service authorities produce these values, while execution-input and conversation-tool
+ * consumers branch on them before adopting any evidence. They exist only in memory and are not
+ * stored or sent over a public API, but the string values remain stable for structural ports and
+ * focused fixtures. Any value outside this set must be refused rather than treated as loaded.
+ */
+export enum ExecutionEvidenceOutcomes
+{
+	/** Every required current authority check passed; the caller may inspect and adopt `value`. */
+	Loaded = "loaded",
+	/** At least one current authority check failed; the caller must map `reason` and stop adoption. */
+	Denied = "denied",
+}
+
 /** Stable reasons why personal execution evidence cannot be issued. */
 export enum PersonalExecutionEvidenceDenialReasons
 {
@@ -98,8 +114,8 @@ export enum PersonalExecutionEvidenceDenialReasons
 
 /** Result of one personal execution-evidence load. */
 export type PersonalExecutionEvidenceResult =
-	| { readonly outcome: "loaded"; readonly value: PersonalExecutionEvidence }
-	| { readonly outcome: "denied"; readonly reason: PersonalExecutionEvidenceDenialReasons };
+	| { readonly outcome: `${ExecutionEvidenceOutcomes.Loaded}`; readonly value: PersonalExecutionEvidence }
+	| { readonly outcome: `${ExecutionEvidenceOutcomes.Denied}`; readonly reason: PersonalExecutionEvidenceDenialReasons };
 
 /** Rechecks personal execution authority inside the transaction that persists the run. */
 export interface PersonalExecutionEvidenceAuthorityPort

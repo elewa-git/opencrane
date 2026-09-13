@@ -1,6 +1,6 @@
 import { AgentRevisionState, AgentServiceKind, AgentServiceState, type Prisma } from "@prisma/client";
 
-import type { ExecutionSubjectAuthority, SessionAssemblyCommand } from "../assembly/session-assembly.types";
+import { SessionAssemblyLoadOutcomes, type ExecutionSubjectAuthority, type SessionAssemblyCommand } from "../assembly/session-assembly.types";
 
 /**
  * Selects one identity authority from the service currently published in the admission transaction.
@@ -22,6 +22,6 @@ export class PrismaConversationExecutionSubjectAuthority implements ExecutionSub
 			return this.personal.load(command, run, transaction);
 		if (service?.kind === AgentServiceKind.Managed)
 			return this.managed.load(command, run, transaction);
-		return { outcome: "denied", reason: "identity_unavailable" };
+		return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "identity_unavailable" };
 	}
 }

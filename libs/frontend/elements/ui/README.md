@@ -92,6 +92,12 @@ package.
 - `npm run test:storybook:visual:update` — intentionally refresh those screenshot baselines after
   reviewing the rendered changes; committed baselines live in `tests/storybook/__screenshots__`.
 
+Visual checks discover tagged stories from the same static catalogue that Nx serves. Each story
+runs as a separate Playwright test with its own deadline and browser context, so a growing catalogue
+cannot exhaust a shared deadline or leave later states unchecked after one failure. The served index
+must match the discovered contracts before the run can pass. Screenshot names and pixel tolerances
+remain tied to the individual story.
+
 Stories tagged `visual-test-narrow` are captured at the supported 390-pixel viewport instead of the
 default desktop viewport, so responsive contracts remain explicit and reproducible.
 Stories tagged `visual-test-full-viewport` must render one journey canvas or routed workspace shell

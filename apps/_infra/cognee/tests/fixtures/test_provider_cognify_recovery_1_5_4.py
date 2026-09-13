@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the candidate Cognify evidence and exact-run recovery helpers."""
+"""Verify the provider Cognify evidence and exact-run recovery helpers."""
 
 import asyncio
 import hashlib
@@ -14,11 +14,11 @@ from uuid import UUID, uuid4, uuid5
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
-PATCH_DIRECTORY = REPOSITORY_ROOT / "apps/_infra/cognee/tests/candidates/1.5.4/patches"
+PATCH_DIRECTORY = REPOSITORY_ROOT / "apps/_infra/cognee/deploy/patches"
 APPLIER_PATH = PATCH_DIRECTORY / "apply-source-patch.py"
-APPLIER_SPEC = importlib.util.spec_from_file_location("candidate_source_patch", APPLIER_PATH)
+APPLIER_SPEC = importlib.util.spec_from_file_location("provider_source_patch", APPLIER_PATH)
 if APPLIER_SPEC is None or APPLIER_SPEC.loader is None:
-    raise RuntimeError("Unable to load the candidate source patch helper")
+    raise RuntimeError("Unable to load the provider source patch helper")
 APPLIER = importlib.util.module_from_spec(APPLIER_SPEC)
 APPLIER_SPEC.loader.exec_module(APPLIER)
 
@@ -33,7 +33,7 @@ def _load_evidence_module() -> types.ModuleType:
         "from cognee.infrastructure.files.utils.open_data_file import open_data_file",
         "open_data_file = None",
     )
-    module = types.ModuleType("candidate_cognify_input_evidence")
+    module = types.ModuleType("provider_cognify_input_evidence")
     exec(compile(source, "cognify_input_evidence.py", "exec"), module.__dict__)
     return module
 
@@ -78,7 +78,7 @@ def _load_recovery_module(evidence_module: types.ModuleType) -> types.ModuleType
         "from .cognify_input_evidence import build_cognify_input_evidence",
         "build_cognify_input_evidence = _build_cognify_input_evidence",
     )
-    name = "candidate_cognify_run_recovery"
+    name = "provider_cognify_run_recovery"
     module = types.ModuleType(name)
     module.__dict__.update(
         {
@@ -125,7 +125,7 @@ async def _raw(row_by_location: dict[str, bytes], location: str) -> bytes:
     return row_by_location[location]
 
 
-class CandidateCognifyRecovery154Test(unittest.TestCase):
+class ProviderCognifyRecovery154Test(unittest.TestCase):
     def setUp(self) -> None:
         self.evidence = _load_evidence_module()
         self.recovery = _load_recovery_module(self.evidence)

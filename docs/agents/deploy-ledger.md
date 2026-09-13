@@ -28,8 +28,10 @@ Full run reports belong in the corresponding pull request or issue.
   the live object and release manifest before applying.
 - Verify the running image digest and application health after rollout.
 - Mutate clusters only through the app-owned deployment scripts.
-- The minimal single-silo handoff is context, tenant/domain, OIDC issuer/client/secret, first
-  operator, three distinct external database bootstrap Secrets, and a pull Secret only for private images.
+- A single-silo handoff names the context, tenant/domain, OIDC issuer/client/secret, first operator,
+  immutable application and AgentSandbox images, three distinct database bootstrap Secrets,
+  KurrentDB trust/bootstrap/history credentials and the Cognee service-user Secret. A pull Secret
+  is required only for private images. The deploy wrapper and platform README define the full inputs.
 - On GKE Autopilot, prove the database-privileges Job schedules; requested capacity, not observed
   workload use, decides admission.
 
@@ -1301,3 +1303,22 @@ Full run reports belong in the corresponding pull request or issue.
 - receipts: private `ui-6692b2e59-publication.json`, `installed-ui-6692b2e59-verify.json`,
   `colleague-d-browser-activity-6692b2e59.json`, `colleague-e-browser-activity-6692b2e59.json` and
   source-attributed preflight/install logs. No credentials entered Git, and no merge or tag ran.
+
+## 2026-09-13 · dev · retained-data fleet suspension · c661e6bf997f1bfe66dbf97faa51b3745c6496e2 · LIVE
+
+- findings: all six test silos are stopped: 51 application Deployments, four UID-fenced Acorn MCP
+  Deployments, six pooler Deployments, six hibernated CNPG databases and the KurrentDB StatefulSet.
+  Its backup CronJob and all six shared application-controller Deployments are stopped too. Final
+  readback found zero active OpenCrane Pods; only GKE-managed system workloads remained.
+- findings: retained 20 Bound PVCs/PVs totaling 380 GiB, two SandboxClaims, two Sandboxes, seven
+  Ready snapshots, Secrets, Services and durable history. Only the two revalidated, PVC-free sandbox
+  Pods were deleted, with UID preconditions. No Secret values were collected.
+- findings: all 21 cloud disks have an owner: 20 back the retained PVs, and one 30 GiB boot disk
+  belongs to the stopped sandbox VM. No disk or snapshot was eligible for deletion.
+- friction: one transient Kubernetes API network failure interrupted the first execution after
+  application shutdown. The identical app-owned suspension command rechecked the partial state
+  and completed. Autopilot had reduced live nodes from seven to six at final observation; system
+  capacity, the control plane, Premium ingress load balancer/IP, storage and snapshots remain billed.
+- lesson: keep the six old silos suspended when creating testv6. Restore shared prerequisites from
+  the cleaned immutable candidate through `bootstrap-prerequisites.sh`, then reconcile Agent Sandbox
+  through `k8s-deploy.sh --provision-agent-sandbox-controller` before the fresh-silo deployment.
