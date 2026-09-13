@@ -119,6 +119,7 @@
             "vitest run src/bootstrap/conversations/__tests__/conversation-tool-proposal.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-tool-approval.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-tool-result.sql.test.ts",
+            "vitest run src/bootstrap/conversations/__tests__/conversation-tool-progress.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-generated-file-authority.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-generated-file-capture.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-generated-file-quarantine.sql.test.ts",

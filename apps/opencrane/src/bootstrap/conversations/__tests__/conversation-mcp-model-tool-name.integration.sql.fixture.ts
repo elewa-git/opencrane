@@ -2,7 +2,8 @@ import type { PrismaClient } from "@prisma/client";
 
 import { ConversationModelToolModes } from "@opencrane/contracts";
 import { PrismaConversationRunLifecycleUnitOfWork } from "@opencrane/backend/agents/execution/runs";
-import { ConversationComputerTurnAuthorityService, ConversationComputerTurnWriterFactory, ConversationComputerToolResultOutcomes, KurrentConversationComputerTurnStore, PrismaConversationComputerTurnUnitOfWork, PrismaConversationModelCustodyUnitOfWork, PrismaConversationToolProposalUnitOfWork, type ConversationComputerTurnAuthorityDependencies, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
+import { CurrentConversationToolRequestedNotificationEvidenceReader, KurrentConversationToolRequestedNotificationPublisher, ConversationComputerTurnAuthorityService, ConversationComputerTurnWriterFactory, ConversationComputerToolResultOutcomes, KurrentConversationComputerTurnStore, PrismaConversationComputerTurnUnitOfWork, PrismaConversationModelCustodyUnitOfWork, PrismaConversationToolProposalUnitOfWork, type ConversationComputerTurnAuthorityDependencies, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
+import { ConversationHistoryAuthority, ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import { _GENERATED_OUTPUT_CIPHER, _GENERATED_OUTPUT_WORKLOAD } from "./conversation-generated-file-output.integration.sql.fixture";
@@ -34,6 +35,7 @@ export function _McpModelNameAuthority(prisma: PrismaClient, history: HistorySto
 		model: { request: requestModel },
 		modelCustody: new PrismaConversationModelCustodyUnitOfWork(prisma, _GENERATED_OUTPUT_CIPHER),
 		toolResults,
+		toolRequestedNotifications: new KurrentConversationToolRequestedNotificationPublisher(new CurrentConversationToolRequestedNotificationEvidenceReader(prisma, turns, candidates), new ConversationHistoryAuthority(history), new ConversationHistoryReader(history), history),
 		toolResultNotifications: { async publishTerminal() { throw new Error("MCP model-name proof has no terminal result"); } },
 		logger: { warn() {} },
 		reviewCredentials: { bearer() { throw new Error("MCP model-name proof has no approval"); }, derive() { throw new Error("MCP model-name proof has no review credential"); } },

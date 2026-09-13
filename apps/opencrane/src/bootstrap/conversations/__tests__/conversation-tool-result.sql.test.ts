@@ -91,7 +91,8 @@ async function _Completed(reserve = true)
 	_Runtimes.add(runtime);
 	await new PrismaConversationToolProposalUnitOfWork(_First, fixture.dependencies, runtime.admission, async function _ApprovalExpiry() {}).admit(fixture.turn, fixture.candidate, fixture.proposal, _AUDITED_WORKLOAD);
 	const registered = (await runtime.register())!;
-	const command = await runtime.authority.claimCompanion(registered.identity, registered.executionReference);
+	const commandClaimed = await runtime.authority.claimCompanion(registered.identity, registered.executionReference);
+	const command = commandClaimed === null || typeof commandClaimed === "string" ? commandClaimed : commandClaimed.command;
 	if (command === null || typeof command === "string" || command.kind !== "invocation")
 		throw new Error("Expected the real fenced invocation claim");
 	const result = { isError: false, content: [{ type: "text", text: "Dedicated SQL result for this invocation" }] };

@@ -37,6 +37,8 @@ signed-in participant ──► main ◄── HERE ──► history
 | `computers/interruptions/` | Select and admit requester-owned Stop commands, record their outcome and let Absurd recover cancellation cleanup. |
 | `computers/turns/workflow/` | Absurd task admission, saved run receipt binding, durable waits, tool-result wakeups and generated-file outcome wakeups. |
 | `computers/turns/approval-notifications/` | Recheck the assigned participant and publish one receipt-backed requested-approval history fact before the durable wait. |
+| `computers/turns/tool-progress-notifications/` | Publish ordered requested/running facts with exact recovery receipts; history never grants permission to execute. |
+| `computers/tools/progress/` | Recheck saved admission and the current execution claim before exposing safe progress. |
 | `computers/turns/tool-result-notifications/` | Publish a terminal tool status and its private recovery receipt before the remaining model call is reserved. |
 | `computers/turns/credentials/` | Credential issuance, exact recovery and cleanup use repositories supplied by the credential unit of work. |
 | `authorization/` | Transaction-bound product permission and membership checks. |
@@ -74,6 +76,24 @@ signed-in participant ──► main ◄── HERE ──► history
 - `_SelfConversationHistoryOpenapiPaths` contributes the conversation API description.
 
 History and computer snapshot classes are imported directly from their sibling packages.
+
+### Tool progress and recovery
+
+`KurrentConversationToolRequestedNotificationPublisher` records a request after its exact proposal
+is saved. `KurrentConversationToolRunningNotificationPublisher` ensures that request is visible,
+then records running only for a current execution claim. Each phase keeps the same tool-call ID
+and only the frozen tool name; arguments, credentials and result content stay private.
+
+The publisher reads the conversation position before checking fresh evidence. It saves the entry
+and its private receipt atomically against that position. If another writer wins, it checks again;
+a saved later phase suppresses an earlier one. If an append acknowledgement is lost, the publisher
+checks the exact receipt and entry within the same call. Running publication ends with another
+current-claim check before the executor receives its command. A saved history entry can never renew an expired claim or permit another dispatch.
+The existing terminal publisher still runs before the remaining model call is reserved.
+
+If history remains unavailable after a hosted claim, the server withholds the command. The existing
+claim expires into recovery-required; a server restart or an uncertain command response cannot
+permit another provider dispatch. Receipt recovery proves saved history, not delivery of a command.
 
 ### Stop selection and recovery
 

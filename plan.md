@@ -1,10 +1,55 @@
 # OpenCrane — Active Plan
 
+## Visible tool work — source validation
+
+This U1 slice starts directly above draft #885 at
+`ede0c912224a6e73404880458380520d4639dcd0` on `feat/0.12-visible-tool-work`.
+The remote MCP integration is an independent sibling in #886; its pending runtime database guards
+must not become a dependency of this existing hosted/personal work-visibility slice.
+
+The existing transcript renders requested, running and terminal tool entries. This slice adds the
+missing producers: requested is saved after proposal admission, and running after an actual hosted
+execution claim. Terminal results and approval notifications keep their existing owners. A pending
+result alone never reports that execution started.
+
+Architecture and component preflights pass at this base. The conversation history producers and
+hosted post-claim callback are implemented. Progress uses stable tool-call IDs and private atomic
+receipts to survive reload, stream resume and uncertain history append without duplicate entries
+or dispatch. Current access controls every read, and a late progress event must not replace a
+terminal state. Reuse Absurd, conversation history and the existing status-line component; do not
+add polling, a scheduler, a queue or another authoritative status store. Architecture and component
+handoffs require phase-specific atomic receipts and a fresh current-claim check after history
+publication before the companion command is returned. Receipt recovery proves history durability
+only; it never renews execution authority. The terminal publisher still precedes final-model
+reservation, so progress failure cannot replenish or consume a replacement model allowance.
+
+Local validation passes 648 conversation tests, 199 MCP tests, 143 application tests and 81
+application PostgreSQL tests, plus four SQL authority scripts. The new SQL cases verify current
+claim evidence, substituted coordinates, grant revocation, computer generation changes and expiry.
+Two joined route/database cases recover a lost history acknowledgement within the original claim
+request, release the original command once, and withhold it when permission ends during publication.
+A test fixture now supplies its membership timestamp as an explicit UTC string; production
+membership checks are unchanged. Both library type checks, the application type check and server
+build pass. Workload and agent-domain boundary guards and their negative tests pass. An approval
+fixture timed out during the parallel validation run; the unchanged full SQL target passes on its
+sequential rerun, including both new route cases.
+
+The real-Kurrent integration target includes the new recovery and ordering cases, but its store
+cases are skipped locally because no Kurrent URL is configured. Full architecture post-review
+passes. Independent review led to same-call lost-acknowledgement recovery and clearer state comments;
+its bounded follow-up review passes with no remaining findings after the final comment correction.
+CI remains required. No live tool call, deployment or testv5 qualification
+is claimed by these source checks.
+
+History that remains unavailable after the hosted SQL claim cannot authorize command release. The
+existing expiry worker closes the invocation and run as recovery-required. That no-redelivery
+boundary also survives a server restart; recovering a history receipt never renews a provider claim.
+
 ## Memory indexing receipts — source reviewed
 
-This M1 slice starts above draft #884 at `7e2c3f523e719de7c72354551edcea6b9aeb5829`
-on `feat/0.12-memory-cognify-receipts`. It is independent of the unpublished remote MCP
-integration. The gateway's locked document snapshot now carries metadata and a content digest;
+This M1 slice is published in draft #885 at `ede0c912224a6e73404880458380520d4639dcd0`,
+directly above #884. Its source CI run `34755914962` passes; provider and k3d qualification were
+skipped. It is independent of the remote MCP integration in draft #886. The gateway's locked document snapshot now carries metadata and a content digest;
 indexing requests and completed receipts retain the caller-saved operation and provider pipeline.
 The adapter rejects mismatched and unfinished responses without exposing fact text or storage paths.
 
@@ -13,7 +58,7 @@ responses. The correction normalises UUIDs before sending or comparing them, rej
 duplicates across letter case, and checks result-map cardinality before normalisation. Contract
 tests (136), gateway tests (29) and both package type checks pass. Independent review closes the
 UUID finding with no remaining issues. Final style, Prisma boundaries and module-growth checks
-pass. The reviewed source is prepared for a draft checkpoint above the unchanged #884 head.
+pass. The reviewed source is published above the unchanged #884 head.
 
 Client cutover, first-dataset grants, credentials, chart promotion, provider calls and product
 activation remain outside this slice. Remember, cross-conversation recall, Correct and Forget
@@ -1037,10 +1082,10 @@ remain separate gates.
 
 | Priority | Track | Completion means | Current next step |
 | --- | --- | --- | --- |
-| 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company and personal tool-selection APIs and participant terminal-result history are implemented. Personal selection passes real PostgreSQL authority, concurrency and recovery checks. Standard remote activation/discovery/calls, the joined hosted journey and real integration qualification remain. |
+| 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company and personal tool-selection APIs and participant terminal-result history are implemented. Personal selection passes real PostgreSQL authority, concurrency and recovery checks. Standard remote activation/discovery/calls are implemented in sibling #886, whose database-authority gate still fails. The joined hosted journey and real integration qualification remain. |
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry, durable resume and visible decision controls are implemented in draft #857. Company approver/connection binding and real action qualification remain. |
 | 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: durable persistence, Absurd admission and catalog completion pass CI in #876–#878. The reviewed candidate shared-file repair passes all 31 image-qualification cases in #881. The production provider is still unqualified. Authenticated composition, gateway/client wiring and product Remember, recall, Correct and Forget remain unfinished. |
-| 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass independent review and exact-head CI in draft #862; qualify the live journey. Other-participant controls remain a separate actor-policy decision. |
+| 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass review and CI in draft #862. Requested/running history producers pass source validation and independent review above #885; the existing transcript and status components are reused. Live qualification and other-participant controls remain separate. |
 | 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | PAUSED: runtime-question source work awaits its separate explicit approval; partial implementation is not validated delivery. Structured results and A2UI remain. |
 | 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV production, encrypted capture, scanning and answer-link recovery are implemented in #879; all four combined recovery cases pass again in #880. The pending message-link SQL guard and governed hosted execution through authorized download remain to qualify. |
 | 7 | D1 — autonomous delegation | A bounded child works with explicit context and narrower authority, then returns one durable result. | Follow [#845](https://github.com/elewa-git/opencrane/issues/845): root budgets, depth/fan-out, cancellation and result brokering. |

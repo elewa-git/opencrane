@@ -114,7 +114,8 @@ describe("conversation tool proposal admission on fresh PostgreSQL", function _S
 		const receipt = await owner.admit(f.turn, f.candidate, f.proposal, _WORKLOAD);
 		const runtime = _Runtime(_First, f);
 		const registered = (await runtime.register())!;
-		const command = await runtime.authority.claimCompanion(registered.identity, registered.executionReference);
+		const commandClaimed = await runtime.authority.claimCompanion(registered.identity, registered.executionReference);
+		const command = commandClaimed === null || typeof commandClaimed === "string" ? commandClaimed : commandClaimed.command;
 		if (command === null || typeof command === "string" || command.kind !== "invocation")
 			throw new Error("Expected the exact MCP invocation after model-name selection");
 		expect(command).toMatchObject({ invocationId: receipt.proposalId, toolName: sourceName, arguments: f.proposal.arguments });
@@ -195,7 +196,8 @@ describe("conversation tool proposal admission on fresh PostgreSQL", function _S
 		const receipt = await owner.admit(f.turn, f.candidate, f.proposal, _WORKLOAD);
 		const runtime = _Runtime(_First, f);
 		const registered = (await runtime.register())!;
-		const command = await runtime.authority.claimCompanion(registered.identity, registered.executionReference);
+		const commandClaimed = await runtime.authority.claimCompanion(registered.identity, registered.executionReference);
+		const command = commandClaimed === null || typeof commandClaimed === "string" ? commandClaimed : commandClaimed.command;
 		if (command === null || typeof command === "string" || command.kind !== "invocation")
 			throw new Error("Expected the real invocation claim");
 		expect(command.kind).toBe("invocation");
@@ -239,7 +241,8 @@ describe("conversation tool proposal admission on fresh PostgreSQL", function _S
 		} }) as unknown as PrismaClient;
 		const runtime = _Runtime(client, f, lease);
 		const registered = (await runtime.register())!;
-		const command = await runtime.authority.claimCompanion(registered.identity, registered.executionReference);
+		const commandClaimed = await runtime.authority.claimCompanion(registered.identity, registered.executionReference);
+		const command = commandClaimed === null || typeof commandClaimed === "string" ? commandClaimed : commandClaimed.command;
 		if (command === null || typeof command === "string")
 			throw new Error("Expected a command within its original deadline");
 		const invocation = await _Second.toolInvocation.findFirstOrThrow({ where: { runId: f.runId } });

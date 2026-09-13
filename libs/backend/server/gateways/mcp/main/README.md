@@ -74,8 +74,15 @@ History reads happen before the claim inside its bounded SQL transaction, while 
 after commit. The history read does not create a cross-store lock. The conversation server now
 owns model requests and result resumption: its Absurd workflow waits for the exact terminal tool
 result and may reserve one text-only continuation within the original remaining allowance. The
-ConversationComputer Pod does not schedule that work. Participant-visible tool history, company
-credential activation and a complete live retrieval journey remain unfinished.
+ConversationComputer Pod does not schedule that work. After a run-owned companion claim commits,
+the router waits for the injected `publishCurrentRunInvocation` callback. The conversation owner
+records requested/running history and rechecks the exact claim after that work. A lost history
+acknowledgement can recover within that same call from the exact saved receipt and entry. Only
+success releases the original command. An unresolved history outage or ended authority withholds
+it; the existing expiry worker moves an unused claimed invocation to recovery-required. A server
+restart or uncertain command response never permits another provider claim. Discovery and caller-owned MCP tasks skip conversation
+history. The private claim receipt is never sent to the Pod. Company credential activation and a
+complete live retrieval journey remain unfinished.
 
 An installed server can then run a tool through a public task. The task keeps its state, input,
 result, and failure in the database, so a server restart does not repeat the tool call.

@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import type { McpCompanionClaimResponse, McpCompanionCompletionRequest, McpCompanionFailureRequest } from "@opencrane/backend/agents/runtime/mcp-executor/companion";
+import type { McpCompanionCompletionRequest, McpCompanionFailureRequest } from "@opencrane/backend/agents/runtime/mcp-executor/companion";
 import type { RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
@@ -14,7 +14,7 @@ import { PrismaMcpRuntimeCompanionRepository } from "./prisma-mcp-runtime-compan
 import { PrismaMcpRuntimeControllerRepository } from "./prisma-mcp-runtime-controller-repository";
 import { PrismaMcpOciServerPromotionRepository } from "./prisma-mcp-oci-server-promotion-repository";
 import { PrismaMcpToolInvocationAdmissionRepository } from "./prisma-mcp-tool-invocation-admission-repository";
-import { McpRuntimeCompanionClaimOutcomes, type McpOciServerPromotionCaller, type McpOciServerPromotionCommand, type McpOciServerPromotionRepository, type McpOciServerPromotionResult, type McpRuntimeAuthority, type McpRuntimeCleanupCommand, type McpRuntimeControllerClaim, type McpRuntimeControllerCleanupClaim, type McpRuntimeControllerReleaseClaim, type McpRuntimeControllerWriteOutcome, type McpRuntimePodRegistrationCommand, type McpRuntimeReleaseCommand, type McpToolInvocationAdmissionRepository, type PrismaMcpRuntimeAuthorityDependencies } from "./mcp-runtime.types";
+import { McpRuntimeCompanionClaimOutcomes, type McpOciServerPromotionCaller, type McpOciServerPromotionCommand, type McpOciServerPromotionRepository, type McpOciServerPromotionResult, type McpRuntimeAuthority, type McpRuntimeCleanupCommand, type McpRuntimeCompanionClaimResult, type McpRuntimeControllerClaim, type McpRuntimeControllerCleanupClaim, type McpRuntimeControllerReleaseClaim, type McpRuntimeControllerWriteOutcome, type McpRuntimePodRegistrationCommand, type McpRuntimeReleaseCommand, type McpToolInvocationAdmissionRepository, type PrismaMcpRuntimeAuthorityDependencies } from "./mcp-runtime.types";
 
 /** Maximum serializable retries when concurrent controller or companion writes collide. */
 const _SERIALIZABLE_ATTEMPTS = 3;
@@ -102,9 +102,9 @@ export class PrismaMcpRuntimeUnitOfWork implements McpRuntimeAuthority, McpTaskW
 	}
 
 	/** Claim one command for the exact TokenReview-confirmed companion Pod. */
-	claimCompanion(identity: RuntimeWorkloadIdentity, executionReference: string): Promise<McpCompanionClaimResponse | McpRuntimeCompanionClaimOutcomes.Terminal | null>
+	claimCompanion(identity: RuntimeWorkloadIdentity, executionReference: string): Promise<McpRuntimeCompanionClaimResult | McpRuntimeCompanionClaimOutcomes.Terminal | null>
 	{
-		return this._run<McpCompanionClaimResponse | McpRuntimeCompanionClaimOutcomes.Terminal | null>("mcp.runtime.companion.claim", null, async function _ClaimCompanion(repositories) { return repositories.companion.claim(identity, executionReference); });
+		return this._run<McpRuntimeCompanionClaimResult | McpRuntimeCompanionClaimOutcomes.Terminal | null>("mcp.runtime.companion.claim", null, async function _ClaimCompanion(repositories) { return repositories.companion.claim(identity, executionReference); });
 	}
 
 	/** Save one checked companion result and all paired authority state. */

@@ -59,6 +59,7 @@ function _Harness() {
     logger: { warn: vi.fn() }, model: { request: vi.fn().mockResolvedValue({ kind: "text", text: "Hi" }) },
     siloId: "testv5",
     toolProposals: { admit: vi.fn() },
+    toolRequestedNotifications: { publishRequested: vi.fn().mockResolvedValue("published") },
     candidates: {
       resolve: vi.fn(),
       resolveForWorkflow: vi

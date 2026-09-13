@@ -98,7 +98,8 @@ export async function _SeedConversationToolProposalSqlFixture(options: _FixtureO
 		await setup.query("BEGIN");
 		await setup.query("SELECT pg_temp.seed_silo_model($1, $2)", [siloId, modelId]);
 		await setup.query("SELECT pg_temp.seed_external_user($1, $2)", [siloId, principalId]);
-		await setup.query("INSERT INTO org_memberships (id, cluster_tenant, subject, role, status, updated_at) VALUES ($1, $2, $3, 'member', 'active', $4)", [membership.membershipId, siloId, principalId, now]);
+		// This column has no time zone; an explicit UTC string keeps it aligned with the saved subject.
+		await setup.query("INSERT INTO org_memberships (id, cluster_tenant, subject, role, status, updated_at) VALUES ($1, $2, $3, 'member', 'active', $4)", [membership.membershipId, siloId, principalId, now.toISOString()]);
 		await _SeedApprovedPersona(setup, id, siloId, principalId, now);
 		await setup.query("INSERT INTO agent_services (id, silo_id, kind, name, workload_profile, updated_at) VALUES ($1, $2, 'personal', 'SQL assistant', 'personal-default', $3)", [agentServiceId, siloId, now]);
 		await setup.query("INSERT INTO agent_revisions (id, silo_id, agent_service_id, revision, digest, prompt_policy_version, model_definition_id, budget, authored_by, persona_revision_id) VALUES ($1, $2, $3, 1, $4, $5, $6, $7::jsonb, $8, $9)", [agentRevisionId, siloId, agentServiceId, ___DigestCanonicalJson(agentRevisionId), PROMPT_COMPILER_VERSION, modelId, JSON.stringify(budgetPolicy), principalId, id("persona")]);

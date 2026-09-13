@@ -55,7 +55,8 @@ describe.skipIf(!_RUN_REAL_PROOF)("MCP model-name selection across PostgreSQL an
 		const turn = await first.start();
 		await expect(first.authority.advance(turn.bootstrapId)).resolves.toMatchObject({ outcome: "tool_pending", waitFor: "result" });
 		const registered = (await first.runtime.register())!;
-		const command = await first.runtime.authority.claimCompanion(registered.identity, registered.executionReference);
+		const commandClaimed = await first.runtime.authority.claimCompanion(registered.identity, registered.executionReference);
+		const command = commandClaimed === null || typeof commandClaimed === "string" ? commandClaimed : commandClaimed.command;
 		if (command === null || typeof command === "string" || command.kind !== "invocation")
 			throw new Error("Expected the model-selected MCP invocation");
 		expect(command).toMatchObject({ toolName: sourceName, arguments: fixture.proposal.arguments });

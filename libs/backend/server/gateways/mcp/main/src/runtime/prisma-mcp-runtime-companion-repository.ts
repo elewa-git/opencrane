@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { McpExecutorCommandState, McpExecutorWorkloadState, McpRuntimeExecutionKind, McpServerRevisionState, McpServerStatus, Prisma } from "@prisma/client";
 
 import { McpCompanionCommandKinds, type McpCompanionClaimResponse, type McpCompanionCompletionRequest, type McpCompanionFailureRequest } from "@opencrane/backend/agents/runtime/mcp-executor/companion";
-import { ExternalActionClaimKinds, ToolInvocationClaimOutcomes, ToolInvocationStates, type McpToolInvocationTransactionParticipant, type ToolInvocationClaim, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
+import { ExternalActionClaimKinds, ToolInvocationClaimOutcomes, ToolInvocationStates, type McpToolInvocationTransactionParticipant, type ProductAuthorizationWorkloadContext, type ToolInvocationClaim, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import { MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
@@ -11,7 +11,7 @@ import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { _MCP_CONNECTION_UNAVAILABLE, _McpConnectionOwnerPrincipalId } from "../connections/mcp-connection-readiness";
 import type { McpConnectionReadiness } from "../connections/mcp-connection-readiness.types";
 import { _McpRuntimeLeaseExpiryProposal, _McpRuntimeTimestampProposal } from "./mcp-runtime-timestamps";
-import { McpRuntimeCompanionClaimOutcomes, type McpRuntimeAuthorityOptions, type McpRuntimeCompanionRepository } from "./mcp-runtime.types";
+import { McpRuntimeCompanionClaimOutcomes, type McpRuntimeAuthorityOptions, type McpRuntimeCompanionClaimResult, type McpRuntimeCompanionRepository, type McpRuntimeRunInvocationClaimReceipt } from "./mcp-runtime.types";
 import type { McpInvocationResultParticipant } from "./mcp-invocation-result.types";
 import { PrismaMcpInvocationCompletionRepository } from "./prisma-mcp-invocation-completion-repository";
 
@@ -40,7 +40,7 @@ export class PrismaMcpRuntimeCompanionRepository implements McpRuntimeCompanionR
 	}
 
 	/** Claim at most one command for the exact TokenReview-confirmed Pod. */
-	async claim(identity: RuntimeWorkloadIdentity, executionReference: string): Promise<McpCompanionClaimResponse | McpRuntimeCompanionClaimOutcomes.Terminal | null>
+	async claim(identity: RuntimeWorkloadIdentity, executionReference: string): Promise<McpRuntimeCompanionClaimResult | McpRuntimeCompanionClaimOutcomes.Terminal | null>
 	{
 		// 1. Match every authenticated workload coordinate before revealing whether work exists.
 		if (!_IdentityMatchesOptions(identity, this._options))
@@ -68,6 +68,7 @@ export class PrismaMcpRuntimeCompanionRepository implements McpRuntimeCompanionR
 		const claimFence = randomUUID();
 		let toolClaim: ToolInvocationClaim | null = null;
 		let invocation: ToolInvocationRecord | null = null;
+		let workload: ProductAuthorizationWorkloadContext | null = null;
 		if (execution.kind === McpRuntimeExecutionKind.Invocation)
 		{
 			if (execution.toolInvocationId === null || typeof execution.workloadUid !== "string" || execution.workloadUid.trim().length === 0)
@@ -88,7 +89,7 @@ export class PrismaMcpRuntimeCompanionRepository implements McpRuntimeCompanionR
 				await this._CloseBeforeDispatch(execution, closed.invocation?.state ?? null);
 				return McpRuntimeCompanionClaimOutcomes.Terminal;
 			}
-			const workload = { audience: MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, workloadKind: "job" as const, workloadUid: execution.workloadUid, podUid: identity.podUid };
+			workload = { audience: MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, workloadKind: "job", workloadUid: execution.workloadUid, podUid: identity.podUid };
 			const claimed = await this._toolInvocations.claim(execution.toolInvocationId, now, this._options.companionClaimLeaseMilliseconds, workload);
 			if (claimed.outcome === ToolInvocationClaimOutcomes.Missing)
 			{
@@ -117,13 +118,23 @@ export class PrismaMcpRuntimeCompanionRepository implements McpRuntimeCompanionR
 			throw new Error("MCP companion command lost its database fence");
 		const lease = { executionId: execution.id, claimFence, expiresAt: claimedExecution.companionClaimExpiresAt.toISOString() };
 		if (execution.kind === McpRuntimeExecutionKind.Discovery)
-			return { kind: McpCompanionCommandKinds.Discovery, ...lease };
+			return { command: { kind: McpCompanionCommandKinds.Discovery, ...lease }, runInvocation: null };
 		if (invocation === null)
 			throw new Error("MCP invocation claim lost its authorization record");
 		const tool = execution.serverRevision.tools.find(function _SelectedTool(candidate) { return candidate.id === invocation.toolRevisionId; });
 		if (tool === undefined)
 			throw new Error("MCP invocation no longer matches its immutable tool revision");
-		return { kind: McpCompanionCommandKinds.Invocation, ...lease, invocationId: invocation.toolInvocationId, toolName: tool.name, inputSchema: tool.inputSchema as JsonValue, arguments: invocation.effectiveArguments };
+		const command: McpCompanionClaimResponse = { kind: McpCompanionCommandKinds.Invocation, ...lease, invocationId: invocation.toolInvocationId, toolName: tool.name, inputSchema: tool.inputSchema as JsonValue, arguments: invocation.effectiveArguments };
+		if (invocation.mcpTaskId !== null)
+			return { command, runInvocation: null };
+		if (invocation.runId === null)
+			throw new Error("MCP invocation claim requires the exact run-owned invocation fence");
+		const run = await this._transaction.agentRun.findUnique({ where: { id: invocation.runId }, select: { siloId: true, attempt: true, conversationId: true } });
+		if (run === null || run.siloId !== execution.siloId || run.attempt !== invocation.attempt || run.conversationId === null)
+			throw new Error("MCP invocation claim requires the exact run-owned invocation fence");
+		if (workload === null)
+			throw new Error("MCP invocation claim requires the exact run-owned invocation fence");
+		return { command, runInvocation: _RunInvocationClaimReceipt(execution.id, execution.siloId, claimFence, run.conversationId, invocation, toolClaim, workload) };
 	}
 
 	/** Save one checked discovery or invocation result through the current companion fence. */
@@ -273,6 +284,15 @@ export class PrismaMcpRuntimeCompanionRepository implements McpRuntimeCompanionR
 
 /** Prisma projection used by terminal writes and expired-claim recovery. */
 type _TerminalExecution = Prisma.McpRuntimeExecutionGetPayload<{ include: { serverRevision: { select: { mcpServerId: true } } } }>;
+
+/** Build the history publication proof only for the winning run-owned provider claim. */
+function _RunInvocationClaimReceipt(executionId: string, executionSiloId: string, companionClaimFence: string, conversationId: string, invocation: ToolInvocationRecord, toolClaim: ToolInvocationClaim | null, workload: ProductAuthorizationWorkloadContext): McpRuntimeRunInvocationClaimReceipt
+{
+	const attempt = invocation.attempt;
+	if (toolClaim === null || toolClaim.invocationId !== invocation.id || invocation.runId === null || attempt === null || !Number.isSafeInteger(attempt) || attempt < 1 || invocation.siloId !== executionSiloId || invocation.claimFence !== toolClaim.fence || invocation.revision !== toolClaim.revision)
+		throw new Error("MCP invocation claim requires the exact run-owned invocation fence");
+	return { executionId, companionClaimFence, invocationId: invocation.id, siloId: invocation.siloId, conversationId, runId: invocation.runId, attempt: attempt as number, toolInvocationId: invocation.toolInvocationId, requestIdentity: invocation.requestIdentity, toolClaim, workload };
+}
 
 /** Require TokenReview to confirm the one executor namespace and ServiceAccount. */
 function _IdentityMatchesOptions(identity: RuntimeWorkloadIdentity, options: McpRuntimeAuthorityOptions): boolean

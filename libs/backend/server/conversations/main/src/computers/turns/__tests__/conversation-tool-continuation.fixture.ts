@@ -46,6 +46,7 @@ export async function _ToolContinuationHarness()
 		return { proposalId: admitted, outcome: ConversationToolProposalOutcomes.Existing };
 	}) };
 	const occurredAt = new Date().toISOString();
+	const requestedNotifications = { publishRequested: vi.fn().mockResolvedValue("published") };
 	const notifications = { publishTerminal: vi.fn().mockResolvedValue("published") };
 	const results = {
 		read: vi.fn(async function _Read(turn: FrozenConversationComputerTurn): Promise<ConversationComputerToolResult>
@@ -71,6 +72,6 @@ export async function _ToolContinuationHarness()
 			return result;
 		}),
 	};
-	Object.assign(overrides, { modelCustody: custody, toolResults: results, toolProposals: proposals, toolResultNotifications: notifications });
-	return { ...f, authority: f.restart(), call, rows, custody, results, notifications, proposals, toolFlags: flags, step: f.output.bootstrapId };
+	Object.assign(overrides, { modelCustody: custody, toolResults: results, toolProposals: proposals, toolRequestedNotifications: requestedNotifications, toolResultNotifications: notifications });
+	return { ...f, authority: f.restart(), call, rows, custody, results, requestedNotifications, notifications, proposals, toolFlags: flags, step: f.output.bootstrapId };
 }

@@ -44,7 +44,7 @@ function _TaskInvocation(patch: Record<string, unknown> = {})
 /** Build the managed execution ownership fields consumed by MCP connection checks. */
 function _RunInvocation(patch: Record<string, unknown> = {})
 {
-	return { id: "invocation-row-1", siloId: "silo-1", toolRevisionId: "tool-1", state: ToolInvocationStates.Ready, recoveryMode: ExternalActionRecoveryModes.Manual, mcpTaskId: null, runId: "run-1", revision: 0, authorizationEvidence: { executionSubject: { principalId: "service-principal-1" }, requester: { requesterPrincipalId: "admin-principal-1" } }, ...patch };
+	return { id: "invocation-row-1", siloId: "silo-1", toolRevisionId: "tool-1", state: ToolInvocationStates.Ready, recoveryMode: ExternalActionRecoveryModes.Manual, mcpTaskId: null, runId: "run-1", attempt: 1, revision: 4, claimFence: 7, toolInvocationId: "tool-call-1", requestIdentity: { runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1" }, authorizationEvidence: { executionSubject: { principalId: "service-principal-1" }, requester: { requesterPrincipalId: "admin-principal-1" } }, ...patch };
 }
 
 describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRepositories()
@@ -217,7 +217,7 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 		const toolInvocations = { findById: vi.fn(), claim: vi.fn(), completeSucceeded: vi.fn(), completeFailed: vi.fn(), completeAmbiguous: vi.fn() };
 		const repository = new PrismaMcpRuntimeCompanionRepository(transaction as never, toolInvocations as never, _Readiness(), _Options(), _Results());
 
-		await expect(repository.claim({ subject: "system:serviceaccount:mcp-executors:mcp-executor-default", namespace: "mcp-executors", serviceAccountName: "mcp-executor-default", podUid: "pod-1" }, "reference-1")).resolves.toMatchObject({ kind: "discovery", executionId: "execution-1", expiresAt: expiry.toISOString() });
+		await expect(repository.claim({ subject: "system:serviceaccount:mcp-executors:mcp-executor-default", namespace: "mcp-executors", serviceAccountName: "mcp-executor-default", podUid: "pod-1" }, "reference-1")).resolves.toMatchObject({ command: { kind: "discovery", executionId: "execution-1", expiresAt: expiry.toISOString() }, runInvocation: null });
 	});
 
 	it("dispatches the exact selected revision schema beside the saved arguments", async function _claimFrozenSchema()
@@ -233,8 +233,50 @@ describe("Prisma MCP runtime repositories", function _DescribePrismaMcpRuntimeRe
 		const toolInvocations = { findById: vi.fn().mockResolvedValue(invocation), claim: vi.fn().mockResolvedValue({ outcome: "claimed", claim: { fence: "tool-fence", revision: 1 }, invocation }) };
 		const repository = new PrismaMcpRuntimeCompanionRepository(transaction as never, toolInvocations as never, _Readiness(), _Options(), _Results());
 
-		await expect(repository.claim({ subject: "system:serviceaccount:mcp-executors:mcp-executor-default", namespace: "mcp-executors", serviceAccountName: "mcp-executor-default", podUid: "pod-1" }, "reference-1")).resolves.toMatchObject({ kind: "invocation", toolName: "records.find", inputSchema, arguments: { account: "saved-account" } });
+		await expect(repository.claim({ subject: "system:serviceaccount:mcp-executors:mcp-executor-default", namespace: "mcp-executors", serviceAccountName: "mcp-executor-default", podUid: "pod-1" }, "reference-1")).resolves.toMatchObject({ command: { kind: "invocation", toolName: "records.find", inputSchema, arguments: { account: "saved-account" } }, runInvocation: null });
 		expect(transaction.mcpRuntimeExecution.findFirst).toHaveBeenCalledWith(expect.objectContaining({ include: { serverRevision: { include: { tools: { select: { id: true, name: true, inputSchema: true } } } } } }));
+	});
+
+	it("returns one private history receipt only for a winning run-owned claim", async function _ReturnsRunReceipt()
+	{
+		const expiry = new Date("2026-08-26T00:01:00.000Z");
+		const execution = { id: "execution-1", siloId: "silo-1", kind: McpRuntimeExecutionKind.Invocation, workloadState: McpExecutorWorkloadState.Registered, commandState: McpExecutorCommandState.Pending, podUid: "pod-1", workloadUid: "job-1", companionClaimFence: null, companionClaimExpiresAt: null, toolInvocationId: "invocation-row-1", serverRevision: { tools: [{ id: "tool-1", name: "records.find", inputSchema: { type: "object" } }] } };
+		const transaction = {
+			mcpRuntimeExecution: { findFirst: vi.fn().mockResolvedValue(execution), updateManyAndReturn: vi.fn().mockResolvedValue([{ companionClaimExpiresAt: expiry }]) },
+			mcpRuntimeClock: { findUnique: vi.fn().mockResolvedValue({ singleton: 1, now: new Date("2026-08-26T00:00:00.000Z") }) },
+			agentRun: { findUnique: vi.fn().mockResolvedValue({ siloId: "silo-1", attempt: 1, conversationId: "conversation-1" }) },
+		};
+		const invocation = _RunInvocation({ id: "invocation-row-1", toolRevisionId: "tool-1", effectiveArguments: { query: "saved" } });
+		const toolInvocations = { findById: vi.fn().mockResolvedValue(invocation), claim: vi.fn().mockResolvedValue({ outcome: "claimed", claim: { invocationId: invocation.id, kind: "dispatch", fence: invocation.claimFence, revision: invocation.revision }, invocation }) };
+		const repository = new PrismaMcpRuntimeCompanionRepository(transaction as never, toolInvocations as never, _Readiness(), _Options(), _Results());
+
+		const result = await repository.claim({ subject: "system:serviceaccount:mcp-executors:mcp-executor-default", namespace: "mcp-executors", serviceAccountName: "mcp-executor-default", podUid: "pod-1" }, "reference-1");
+		expect(result).toMatchObject({ command: { kind: "invocation", arguments: { query: "saved" } }, runInvocation: { executionId: "execution-1", companionClaimFence: expect.any(String), invocationId: invocation.id, siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 1, toolInvocationId: "tool-call-1", requestIdentity: invocation.requestIdentity, toolClaim: { invocationId: invocation.id, fence: 7, revision: 4 }, workload: { workloadUid: "job-1", podUid: "pod-1" } } });
+		expect(result && typeof result === "object" && "runInvocation" in result ? JSON.stringify(result.runInvocation) : "").not.toContain("saved");
+	});
+
+	it("returns no command for a losing duplicate provider claim", async function _RefusesLosingClaim()
+	{
+		const execution = { id: "execution-1", siloId: "silo-1", kind: McpRuntimeExecutionKind.Invocation, workloadState: McpExecutorWorkloadState.Registered, commandState: McpExecutorCommandState.Pending, podUid: "pod-1", workloadUid: "job-1", companionClaimFence: null, companionClaimExpiresAt: null, toolInvocationId: "invocation-1", serverRevision: { tools: [] } };
+		const updateManyAndReturn = vi.fn();
+		const transaction = { mcpRuntimeExecution: { findFirst: vi.fn().mockResolvedValue(execution), updateManyAndReturn }, mcpRuntimeClock: { findUnique: vi.fn().mockResolvedValue({ singleton: 1, now: new Date("2026-08-26T00:00:00.000Z") }) } };
+		const invocation = _TaskInvocation({ id: "invocation-1", toolInvocationId: "tool-call-1" });
+		const claim = vi.fn().mockResolvedValue({ outcome: "winner", invocation });
+		const repository = new PrismaMcpRuntimeCompanionRepository(transaction as never, { findById: vi.fn().mockResolvedValue(invocation), claim } as never, _Readiness(), _Options(), _Results());
+
+		await expect(repository.claim({ subject: "system:serviceaccount:mcp-executors:mcp-executor-default", namespace: "mcp-executors", serviceAccountName: "mcp-executor-default", podUid: "pod-1" }, "reference-1")).resolves.toBeNull();
+		expect(claim).toHaveBeenCalledOnce();
+		expect(updateManyAndReturn).not.toHaveBeenCalled();
+	});
+
+	it("does not redeliver a command while the companion fence remains current", async function _RefusesDuplicateDelivery()
+	{
+		const execution = { id: "execution-1", siloId: "silo-1", kind: McpRuntimeExecutionKind.Discovery, workloadState: McpExecutorWorkloadState.Registered, commandState: McpExecutorCommandState.Claimed, podUid: "pod-1", companionClaimFence: "companion-fence-1", companionClaimExpiresAt: new Date("2099-08-26T00:00:00.000Z"), toolInvocationId: null, serverRevision: { tools: [] } };
+		const transaction = { mcpRuntimeExecution: { findFirst: vi.fn().mockResolvedValue(execution), updateManyAndReturn: vi.fn() }, mcpRuntimeClock: { findUnique: vi.fn().mockResolvedValue({ singleton: 1, now: new Date("2026-08-26T00:00:00.000Z") }) } };
+		const repository = new PrismaMcpRuntimeCompanionRepository(transaction as never, { findById: vi.fn(), claim: vi.fn() } as never, _Readiness(), _Options(), _Results());
+
+		await expect(repository.claim({ subject: "system:serviceaccount:mcp-executors:mcp-executor-default", namespace: "mcp-executors", serviceAccountName: "mcp-executor-default", podUid: "pod-1" }, "reference-1")).resolves.toBeNull();
+		expect(transaction.mcpRuntimeClock.findUnique).toHaveBeenCalledOnce();
 	});
 
 	it("replays only the exact whole raw completion request after resource capture", async function _ReplaysWholeRawRequest()

@@ -30,6 +30,9 @@ describe("one governed tool and its model continuation", function _Continuation(
 		expect(second.key).toBe(first.key);
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		expect(f.credentials.reuseExact).toHaveBeenCalledOnce();
+		expect(f.requestedNotifications.publishRequested).toHaveBeenCalledWith(expect.objectContaining({ bootstrapId: f.step, toolInvocationId: expect.any(String) }));
+		expect(f.proposals.admit.mock.invocationCallOrder[0]).toBeLessThan(f.requestedNotifications.publishRequested.mock.invocationCallOrder[0]!);
+		expect(f.requestedNotifications.publishRequested.mock.invocationCallOrder[0]).toBeLessThan(f.results.read.mock.invocationCallOrder[0]!);
 		expect(f.toolFlags).toMatchObject({ executions: 1, acknowledgements: 1, consumed: true });
 		const turn = (await f.store.load(f.step))!;
 		expect(turn.toolSelection).not.toBeNull();
@@ -102,6 +105,24 @@ describe("one governed tool and its model continuation", function _Continuation(
 		expect(f.model.request).toHaveBeenCalledTimes(2);
 	});
 
+	it("publishes no requested fact when proposal admission refuses", async function _AdmissionRefusal()
+	{
+		const f = await _ToolContinuationHarness();
+		f.proposals.admit.mockRejectedValue(new Error("proposal refused"));
+		expect(await f.authority.advance(f.step)).toEqual({ outcome: "retry" });
+		expect(f.requestedNotifications.publishRequested).not.toHaveBeenCalled();
+		expect(f.results.read).not.toHaveBeenCalled();
+	});
+
+	it("does not poll a result when requested history loses current authority", async function _RequestedRefused()
+	{
+		const f = await _ToolContinuationHarness();
+		f.requestedNotifications.publishRequested.mockResolvedValue("no_longer_visible");
+		expect(await f.authority.advance(f.step)).toEqual({ outcome: "authority_ended" });
+		expect(f.proposals.admit).toHaveBeenCalledOnce();
+		expect(f.results.read).not.toHaveBeenCalled();
+	});
+
 	it("waits on pending tool work past the first response deadline without replaying the model or key", async function _PendingTool()
 	{
 		let now = Date.now();
@@ -153,7 +174,7 @@ describe("one governed tool and its model continuation", function _Continuation(
 		const f = await _ToolContinuationHarness();
 		Object.assign(f.candidate.compiledInput.tools[0], { requiresApproval: true });
 		let denied = false;
-		f.proposals.admit.mockResolvedValue({ proposalId: f.call.id, outcome: ConversationToolProposalOutcomes.Existing });
+		f.proposals.admit.mockImplementation(async function _Admit(turn) { return { proposalId: turn.toolSelection!.proposalId, outcome: ConversationToolProposalOutcomes.Existing }; });
 		f.results.read.mockImplementation(async function _Read()
 		{
 			return denied ? { outcome: ConversationComputerToolResultOutcomes.Unavailable } as const : { outcome: ConversationComputerToolResultOutcomes.Pending, waitFor: "approval" } as const;

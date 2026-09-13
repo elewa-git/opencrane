@@ -55,7 +55,8 @@ export async function _CaptureGeneratedFileSqlFixture(client: PrismaClient, opti
 		throw new Error("Generated-file SQL proof requires a registered MCP execution");
 	if (options.claimCompanion !== false)
 	{
-		const companionClaim = await runtime.authority.claimCompanion(registered.identity, registered.executionReference);
+		const companionClaimClaimed = await runtime.authority.claimCompanion(registered.identity, registered.executionReference);
+		const companionClaim = companionClaimClaimed === null || typeof companionClaimClaimed === "string" ? companionClaimClaimed : companionClaimClaimed.command;
 		if (companionClaim === null || typeof companionClaim === "string")
 			throw new Error("Generated-file SQL proof requires a claimed MCP execution");
 	}

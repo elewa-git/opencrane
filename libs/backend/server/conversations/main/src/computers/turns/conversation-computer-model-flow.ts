@@ -9,6 +9,7 @@ import { ConversationComputerToolResultOutcomes, type ConversationComputerContin
 import type { ConversationComputerCredentialReceipt, ConversationComputerOutputCommand, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 import { _PrepareConversationToolProposal } from "../tools/proposal/conversation-tool-proposal";
 import { ConversationToolResultNotificationOutcomes } from "./tool-result-notifications/conversation-tool-result-notification.types";
+import { ConversationToolProgressNotificationOutcomes } from "./tool-progress-notifications/conversation-tool-progress-notification.types";
 
 /**
  * Advances one text answer or one tool followed by a final answer within the original attempt.
@@ -60,7 +61,12 @@ async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: 
 	await dependencies.store.selectTool(turn.bootstrapId, selection);
 	const selected = (await dependencies.store.load(turn.bootstrapId))!;
 	const workload = currentExecution.workload;
-	await dependencies.toolProposals.admit(selected, currentExecution.candidate, proposal.command, { audience: CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, namespace: workload.namespace, serviceAccountName: workload.serviceAccountName, workloadKind: "pod", workloadUid: workload.podUid, podUid: workload.podUid });
+	const admitted = await dependencies.toolProposals.admit(selected, currentExecution.candidate, proposal.command, { audience: CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, namespace: workload.namespace, serviceAccountName: workload.serviceAccountName, workloadKind: "pod", workloadUid: workload.podUid, podUid: workload.podUid });
+	if (admitted.proposalId !== selection.proposalId)
+		throw new Error("Conversation tool admission returned a different proposal");
+	const requested = await dependencies.toolRequestedNotifications.publishRequested({ bootstrapId: selected.bootstrapId, siloId: selected.siloId, conversationId: selected.binding.conversationId, runId: selected.compile.runId, attempt: selected.compile.attempt, toolInvocationId: admitted.proposalId });
+	if (requested !== ConversationToolProgressNotificationOutcomes.Published)
+		return { outcome: "authority_ended" };
 	const result = await dependencies.toolResults.read(selected, workload);
 	if (result.outcome === ConversationComputerToolResultOutcomes.GeneratedFilePending)
 		return { outcome: ConversationComputerToolResultOutcomes.GeneratedFilePending, operationId: result.operationId, notAfterEpochMs: result.notAfterEpochMs };

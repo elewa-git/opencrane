@@ -5,7 +5,7 @@ import type { PrismaClient, Prisma } from "@prisma/client";
 
 import { PrismaConversationRunLifecycleUnitOfWork } from "@opencrane/backend/agents/execution/runs";
 import { PrismaConversationGeneratedFileOutputLinkUnitOfWork, PrismaConversationGeneratedFileResultRepository, PrismaConversationGeneratedFileWorkflowRepository } from "@opencrane/backend/server/conversation-assets";
-import { ConversationComputerTurnAuthorityService, ConversationComputerTurnWriterFactory, CurrentConversationToolResultNotificationEvidenceReader, KurrentConversationComputerTurnStore, KurrentConversationToolResultNotificationPublisher, PrismaConversationComputerTurnUnitOfWork, PrismaConversationModelCustodyUnitOfWork, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, type ConversationComputerContinuationReservation, type ConversationComputerRunLifecycleCommand, type ConversationComputerTurnAuthorityDependencies, type ConversationComputerTurnCandidateResolver, type ConversationGeneratedFileOutputLinker, type ConversationGeneratedFileResultRepositoryFactory, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
+import { CurrentConversationToolRequestedNotificationEvidenceReader, KurrentConversationToolRequestedNotificationPublisher, ConversationComputerTurnAuthorityService, ConversationComputerTurnWriterFactory, CurrentConversationToolResultNotificationEvidenceReader, KurrentConversationComputerTurnStore, KurrentConversationToolResultNotificationPublisher, PrismaConversationComputerTurnUnitOfWork, PrismaConversationModelCustodyUnitOfWork, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, type ConversationComputerContinuationReservation, type ConversationComputerRunLifecycleCommand, type ConversationComputerTurnAuthorityDependencies, type ConversationComputerTurnCandidateResolver, type ConversationGeneratedFileOutputLinker, type ConversationGeneratedFileResultRepositoryFactory, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { AesGcmConversationPrivatePayloadCipher, ConversationHistoryAuthority, ConversationHistoryModes, ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
@@ -153,6 +153,7 @@ function _AuthorityDependencies(prisma: PrismaClient, capture: _ActualGeneratedF
 		modelCustody: custody,
 		toolResults,
 		toolResultNotifications: notifications,
+		toolRequestedNotifications: new KurrentConversationToolRequestedNotificationPublisher(new CurrentConversationToolRequestedNotificationEvidenceReader(prisma, turns, candidates), historyAuthority, historyReader, history),
 		logger: { warn() {} },
 		reviewCredentials: { bearer() { throw new Error("Generated output integration does not issue review credentials"); }, derive() { throw new Error("Generated output integration does not issue review credentials"); } },
 		generatedFiles,

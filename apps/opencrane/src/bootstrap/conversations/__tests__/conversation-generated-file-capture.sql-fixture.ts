@@ -6,7 +6,7 @@ import { _CreateConversationGeneratedFileResultParticipant } from "@opencrane/ba
 import { CONVERSATION_COMPUTER_TURN_TASK, PrismaConversationToolDispatchAuthority, PrismaConversationToolProposalUnitOfWork } from "@opencrane/backend/server/conversations";
 import type { ConversationPrivatePayloadCipher } from "@opencrane/backend/server/conversations/history";
 import type { IWorkflowEngine, IWorkflowTaskReceipt, IWorkflowTaskSpawn, IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
-import { McpCompanionCommandKinds, type McpInvocationResultParticipantFactory } from "@opencrane/backend/server/gateways/mcp";
+import { McpCompanionCommandKinds, type McpInvocationResultParticipantFactory, type McpRuntimeCompanionClaimResult } from "@opencrane/backend/server/gateways/mcp";
 import { type McpToolCallResult } from "@opencrane/contracts";
 import { GENERATED_CSV_INPUT_SCHEMA, GENERATED_CSV_MEDIA_TYPE, GENERATED_CSV_TOOL_NAME, ___CreateCsvFile } from "@opencrane/models/conversation-assets";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
@@ -40,7 +40,7 @@ export interface _PreparedGeneratedFileCaptureSqlFixture
 	/** Actual synthetic file result returned by the declared CSV producer. */
 	readonly rawResult: McpToolCallResult;
 	/** Current invocation command claimed by the registered MCP companion. */
-	readonly command: Extract<Awaited<ReturnType<ReturnType<typeof _ToolHandoffSqlRuntime>["authority"]["claimCompanion"]>>, { readonly kind: McpCompanionCommandKinds.Invocation }>;
+	readonly command: Extract<McpRuntimeCompanionClaimResult["command"], { readonly kind: McpCompanionCommandKinds.Invocation }>;
 	/** Shared cipher used for the capture and later replay verification. */
 	readonly cipher: ConversationPrivatePayloadCipher;
 	/** Original proposal/run authority fixture. */
@@ -148,7 +148,8 @@ export async function _PrepareConversationGeneratedFileCaptureSqlFixture(client:
 	const registered = await runtime.register();
 	if (registered === null)
 		throw new Error("Generated-file SQL fixture requires a registered MCP execution");
-	const command = await runtime.authority.claimCompanion(registered.identity, registered.executionReference);
+	const commandClaimed = await runtime.authority.claimCompanion(registered.identity, registered.executionReference);
+	const command = commandClaimed === null || typeof commandClaimed === "string" ? commandClaimed : commandClaimed.command;
 	if (command === null || typeof command === "string" || command.kind !== "invocation")
 		throw new Error("Generated-file SQL fixture requires a current invocation claim");
 	return { rawResult: _GeneratedFileRawResult(), command, cipher, fixture, taskReceipts, invocationResults, parentTaskReceipt, participants: runtime.participants, registered, runtime, workflows };

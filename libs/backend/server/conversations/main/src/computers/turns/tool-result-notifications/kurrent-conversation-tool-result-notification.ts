@@ -63,7 +63,7 @@ export class KurrentConversationToolResultNotificationPublisher implements Conve
 			receipt = event;
 		if (receipt === null)
 			return false;
-		const intent = _ReadReceipt(receipt, command);
+		const intent = _ReadConversationToolResultNotificationReceipt(receipt, command);
 		const history = await this._historyReader.read({ siloId: command.siloId, conversationId: command.conversationId, fromRevision: BigInt(intent.entry.position), maxCount: 1, maximumBytes: 65_536 });
 		const accepted = history.entries[0];
 		if (accepted === undefined || ___DigestCanonicalJson(accepted as unknown as JsonValue) !== ___DigestCanonicalJson(intent.entry as unknown as JsonValue))
@@ -99,7 +99,7 @@ function _Intent(command: ConversationToolResultNotificationCommand, evidence: C
 }
 
 /** Read and validate the exact safe intent retained by the private revision-zero receipt. */
-function _ReadReceipt(event: HistoryRecordedEvent, command: ConversationToolResultNotificationCommand)
+export function _ReadConversationToolResultNotificationReceipt(event: HistoryRecordedEvent, command: ConversationToolResultNotificationCommand)
 {
 	if (event.streamName !== _ReceiptStream(command.toolInvocationId) || event.revision !== 0n || event.type !== _RECEIPT_EVENT_TYPE)
 		throw new Error("Tool result notification receipt has invalid stream coordinates");

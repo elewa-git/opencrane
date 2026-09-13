@@ -27,6 +27,12 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Added
 
+- **Participants can follow requested and running hosted tool work in their conversation.**
+  The source under review saves these states in ordered history, so refresh and recovery retain
+  the same tool call. Running appears only after an execution claim, and current permission is
+  checked again before the executor receives its command. Arguments and credentials remain private;
+  a recovered status never permits another dispatch. Live qualification remains separate.
+
 - **Operators can detect missing outbound certificate trust before starting hosted qualification.**
   The smoke renders the actual server and checks the selected certificate mount before creating
   a cluster or credentials. Its test client accepts only the disposable loopback origin and uses

@@ -80,6 +80,8 @@ export { __AssertConversationComputerAnswerAuthority } from "./computers/turns/c
 export { PrismaConversationModelCustodyUnitOfWork } from "./computers/turns/db/prisma-conversation-model-custody";
 export { PrismaConversationToolResultsUnitOfWork } from "./computers/tools/results/prisma-conversation-tool-results";
 export { CurrentConversationToolResultNotificationEvidenceReader } from "./computers/tools/results/current-conversation-tool-result-notification-evidence";
+export { CurrentConversationToolRequestedNotificationEvidenceReader } from "./computers/tools/progress/current-conversation-tool-requested-evidence";
+export { PrismaConversationToolRunningNotificationEvidenceReader } from "./computers/tools/progress/prisma-conversation-tool-running-evidence";
 export { ConversationComputerToolResultOutcomes } from "./computers/turns/conversation-computer-continuation.types";
 export type { ConversationComputerContinuationReservation, ConversationComputerModelCustody, ConversationComputerToolDeclaration, ConversationComputerToolSelection, ConversationComputerToolResults } from "./computers/turns/conversation-computer-continuation.types";
 export { PrismaConversationToolDispatchAuthority } from "./computers/tools/dispatch/prisma-conversation-tool-dispatch-authority";
@@ -100,6 +102,9 @@ export type { ConversationApprovalNotificationClock, ConversationApprovalNotific
 export { KurrentConversationToolResultNotificationPublisher } from "./computers/turns/tool-result-notifications/kurrent-conversation-tool-result-notification";
 export { ConversationToolResultNotificationOutcomes } from "./computers/turns/tool-result-notifications/conversation-tool-result-notification.types";
 export type { ConversationToolResultNotificationCommand, ConversationToolResultNotificationEvidence, ConversationToolResultNotificationEvidenceReader, ConversationToolResultNotificationPort } from "./computers/turns/tool-result-notifications/conversation-tool-result-notification.types";
+export { KurrentConversationToolRequestedNotificationPublisher, KurrentConversationToolRunningNotificationPublisher } from "./computers/turns/tool-progress-notifications/kurrent-conversation-tool-progress-notification";
+export { ConversationToolProgressNotificationOutcomes } from "./computers/turns/tool-progress-notifications/conversation-tool-progress-notification.types";
+export type { ConversationToolProgressNotificationEvidence, ConversationToolRequestedNotificationCommand, ConversationToolRequestedNotificationEvidenceReader, ConversationToolRequestedNotificationPort, ConversationToolRunningNotificationCommand, ConversationToolRunningNotificationEvidenceReader, ConversationToolRunningNotificationPort } from "./computers/turns/tool-progress-notifications/conversation-tool-progress-notification.types";
 
 export * from "./computers/interruptions/conversation-computer-stop.types";
 export { _ConversationComputerStopAuthority } from "./computers/interruptions/conversation-computer-stop-authority";

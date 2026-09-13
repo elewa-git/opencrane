@@ -119,7 +119,8 @@ describe("saved personal approval through the conversation workflow on PostgreSQ
 		restartedAliases.set(persistedTask.taskId, restartedTask);
 		const restartedRunning = restarted._DrainPendingTasks();
 		await _Eventually(async function _RestartWaiting() { return (await _First.toolInvocation.findFirstOrThrow({ where: { runId: f.runId } })).state === ToolInvocationState.Ready; });
-		const command = await runtime.authority.claimCompanion(registered.identity, registered.executionReference);
+		const commandClaimed = await runtime.authority.claimCompanion(registered.identity, registered.executionReference);
+		const command = commandClaimed === null || typeof commandClaimed === "string" ? commandClaimed : commandClaimed.command;
 		if (command === null || typeof command === "string" || command.kind !== "invocation")
 			throw new Error("Expected the real invocation claim");
 		await expect(runtime.authority.completeCompanion(registered.identity, { executionReference: registered.executionReference, podUid: registered.identity.podUid, executionId: command.executionId, claimFence: command.claimFence, completion: { kind: command.kind, result: { isError: false, content: [{ type: "text", text: "approved SQL result" }] } } })).resolves.toBe("completed");

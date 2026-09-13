@@ -120,7 +120,7 @@ export async function _OutputRecoveryHarness(reserveOutput = true, overrides: Pa
 	function _Restart()
 	{
 		const store = new KurrentConversationComputerTurnStore(history);
-		const dependencies: ConversationComputerTurnAuthorityDependencies = { logger: { warn: vi.fn() }, modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() }, generatedFiles: fileLinks, toolResults: { read: vi.fn(), consume: vi.fn() }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") }, model, siloId: "silo-1", endpoint: "http://model.test", candidates, store, toolProposals: { admit: vi.fn() }, outputPayloads, credentials, runLifecycle, reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, writers: { async confirmSaved(turn)
+		const dependencies: ConversationComputerTurnAuthorityDependencies = { logger: { warn: vi.fn() }, modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() }, generatedFiles: fileLinks, toolResults: { read: vi.fn(), consume: vi.fn() }, toolRequestedNotifications: { publishRequested: vi.fn().mockResolvedValue("published") }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") }, model, siloId: "silo-1", endpoint: "http://model.test", candidates, store, toolProposals: { admit: vi.fn() }, outputPayloads, credentials, runLifecycle, reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, writers: { async confirmSaved(turn)
 		{
 			if (turn.outputReceipt === null)
 				throw new Error("Fixture requires a saved output");

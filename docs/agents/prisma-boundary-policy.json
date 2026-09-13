@@ -1285,6 +1285,25 @@
 				"constructs": []
 			},
 			{
+				"path": "libs/backend/server/conversations/main/src/computers/tools/progress/current-conversation-tool-requested-evidence.ts",
+				"adapter": "_PrismaConversationToolRequestedNotificationRepository",
+				"contract": "ConversationToolRequestedNotificationRepository",
+				"contractImportPath": "./conversation-tool-progress-notification-persistence.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/computers/tools/progress/prisma-conversation-tool-running-evidence-repository.ts",
+				"adapter": "_PrismaConversationToolRunningNotificationRepository",
+				"contract": "ConversationToolRunningNotificationRepository",
+				"contractImportPath": "./conversation-tool-progress-notification-persistence.types",
+				"constructs": [
+					{
+						"adapter": "PrismaConversationToolDispatchAuthority",
+						"importPath": "../dispatch/prisma-conversation-tool-dispatch-authority"
+					}
+				]
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/computers/tools/dispatch/prisma-conversation-tool-access.ts",
 				"adapter": "PrismaConversationToolAccessAuthority",
 				"contract": "ConversationToolCurrentAccess",
@@ -2389,6 +2408,30 @@
 					{
 						"adapter": "PrismaConversationToolResultsRepository",
 						"importPath": "<same-file>"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/computers/tools/progress/current-conversation-tool-requested-evidence.ts",
+				"adapter": "_CurrentConversationToolRequestedNotificationEvidenceUnitOfWork",
+				"contract": "ConversationToolRequestedNotificationEvidenceReader",
+				"contractImportPath": "../../turns/tool-progress-notifications/conversation-tool-progress-notification.types",
+				"constructs": [
+					{
+						"adapter": "_PrismaConversationToolRequestedNotificationRepository",
+						"importPath": "<same-file>"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/computers/tools/progress/prisma-conversation-tool-running-evidence.ts",
+				"adapter": "_PrismaConversationToolRunningNotificationEvidenceUnitOfWork",
+				"contract": "ConversationToolRunningNotificationEvidenceReader",
+				"contractImportPath": "../../turns/tool-progress-notifications/conversation-tool-progress-notification.types",
+				"constructs": [
+					{
+						"adapter": "_PrismaConversationToolRunningNotificationRepository",
+						"importPath": "./prisma-conversation-tool-running-evidence-repository"
 					}
 				]
 			},

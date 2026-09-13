@@ -6,7 +6,7 @@ import { MCP_EXECUTOR_PROFILE_NAME, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME } from "@o
 import { PrismaToolInvocationLifecycleEventUnitOfWork, PrismaToolInvocationRunRecoveryAuthority, PrismaToolRecoveryEventReporter } from "@opencrane/backend/agents/execution/runs";
 import { _CreateMcpToolInvocationAdmission, _ResolveMcpOciServerPromotionCaller, __CreateMcpOciServerPromotionRouter, __CreateMcpRuntimeCompanionRouter, __CreateMcpRuntimeControllerRouter, __CreateMcpTaskWorkflow, PrismaMcpRuntimeUnitOfWork, PrismaRuntimeMcpEffectEligibilityAuthority } from "@opencrane/backend/server/gateways/mcp";
 import { ManagedExecutionEvidenceAuthority, PersonalExecutionEvidenceAuthority, PrismaManagedExecutionEvidenceRepository, PrismaPersonalExecutionEvidenceRepository } from "@opencrane/backend/server/agents/agent-services";
-import { PrismaConversationComputerTurnWorkflowEventRepository, PrismaConversationToolDispatchAuthority, type ConversationToolDispatchDependencies } from "@opencrane/backend/server/conversations";
+import { ConversationToolProgressNotificationOutcomes, KurrentConversationToolRunningNotificationPublisher, PrismaConversationToolRunningNotificationEvidenceReader, PrismaConversationComputerTurnWorkflowEventRepository, PrismaConversationToolDispatchAuthority, type ConversationToolDispatchDependencies } from "@opencrane/backend/server/conversations";
 import { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
 import { __HumanMembershipRevision, _CreateHumanMembershipEvidenceConfig, type HumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
@@ -18,7 +18,7 @@ import { _log } from "../process/log";
 import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
 import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
 import { _CreateConversationGeneratedFileResultParticipant } from "@opencrane/backend/server/conversation-assets";
-import { AesGcmConversationPrivatePayloadCipher, _ReadConversationPrivatePayloadKeyring } from "@opencrane/backend/server/conversations/history";
+import { AesGcmConversationPrivatePayloadCipher, ConversationHistoryAuthority, ConversationHistoryReader, _ReadConversationPrivatePayloadKeyring } from "@opencrane/backend/server/conversations/history";
 
 /** Polling cadence for durable public task completion after runtime admission. */
 const _MCP_TASK_STATUS_POLL_MILLISECONDS = 250;
@@ -60,6 +60,8 @@ export function _CreateMcpRuntimeComposition(prisma: PrismaClient, authApi: k8s.
 		return _CreateConversationGeneratedFileResultParticipant(transaction, cipher, workflows.execution, dispatch, config.artifactScannerEnabled);
 	} };
 	const authority = new PrismaMcpRuntimeUnitOfWork(prisma, { toolInvocations: participantFactory, invocationResults, options });
+	const runningEvidence = new PrismaConversationToolRunningNotificationEvidenceReader(prisma, dispatchDependencies);
+	const runningHistory = new KurrentConversationToolRunningNotificationPublisher(runningEvidence, new ConversationHistoryAuthority(history), new ConversationHistoryReader(history), history);
 	const taskWorkflow = __CreateMcpTaskWorkflow({ execution: workflows.execution, unitOfWork: workflows.unitOfWork, runtime: authority, statusPollMilliseconds: _MCP_TASK_STATUS_POLL_MILLISECONDS });
 	return {
 		authority,
@@ -72,7 +74,16 @@ export function _CreateMcpRuntimeComposition(prisma: PrismaClient, authApi: k8s.
 			logger: _log,
 		}),
 		controller: __CreateMcpRuntimeControllerRouter({ authority, tokenReviewer: _CreateAgentControllerTokenReviewer(authApi, config.serverNamespace), serverNamespace: config.serverNamespace, logger: _log }),
-		companion: __CreateMcpRuntimeCompanionRouter({ authority, tokenReviewer: _CreateMcpExecutorTokenReviewer(authApi, executorNamespace), logger: _log }),
+		companion: __CreateMcpRuntimeCompanionRouter({
+			authority,
+			tokenReviewer: _CreateMcpExecutorTokenReviewer(authApi, executorNamespace),
+			logger: _log,
+			/** Release only the still-current claim after its visible history is durable. */
+			async publishCurrentRunInvocation(receipt)
+			{
+				return await runningHistory.publishRunning(receipt) === ConversationToolProgressNotificationOutcomes.Published;
+			},
+		}),
 	};
 }
 

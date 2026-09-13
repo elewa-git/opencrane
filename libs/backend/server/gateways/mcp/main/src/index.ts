@@ -33,7 +33,7 @@ export type { McpInvocationResultParticipant, McpInvocationResultParticipantFact
 export { PrismaMcpToolInvocationAdmissionRepository } from "./runtime/prisma-mcp-tool-invocation-admission-repository";
 export { PrismaRuntimeMcpEffectEligibilityAuthority } from "./runtime/prisma-runtime-mcp-effect-eligibility";
 export type { RuntimeMcpEffectEligibility, RuntimeMcpEffectEligibilityCommand } from "./runtime/runtime-mcp-effect-eligibility.types";
-export type { McpRuntimeAuthority } from "./runtime/mcp-runtime.types";
+export type { McpRuntimeAuthority, McpRuntimeCompanionClaimResult, McpRuntimeCompanionRouterDependencies, McpRuntimeRunInvocationClaimReceipt } from "./runtime/mcp-runtime.types";
 export * from "./openapi";
 export { _McpEraProbeFailure } from "./era-probe/mcp-era-transport.adapter";
 

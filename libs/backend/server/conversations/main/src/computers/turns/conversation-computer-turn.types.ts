@@ -11,6 +11,7 @@ import type { BoundConversationWriterBinding, BoundConversationWriterIntent } fr
 import type { ConversationComputerLeaseCoordinates } from "@opencrane/backend/server/conversations/computers";
 import type { ConversationComputerReviewCredentialDeriver } from "../review/conversation-computer-review.types";
 import type { ConversationToolResultNotificationPort } from "./tool-result-notifications/conversation-tool-result-notification.types";
+import type { ConversationToolRequestedNotificationPort } from "./tool-progress-notifications/conversation-tool-progress-notification.types";
 
 /** Coordinates a sandbox Pod must prove before receiving its review credential. */
 export interface ConversationComputerPodLeaseCommand
@@ -360,6 +361,8 @@ export interface ConversationComputerTurnAuthorityDependencies
 	readonly modelCustody: ConversationComputerModelCustody;
 	/** Reads and acknowledges the exact original tool result under current authority. */
 	readonly toolResults: ConversationComputerToolResults;
+	/** Keeps an admitted tool request in participant history before result polling begins. */
+	readonly toolRequestedNotifications: ConversationToolRequestedNotificationPort;
 	/** Keeps a safe terminal result in participant history before spending the final model call. */
 	readonly toolResultNotifications: ConversationToolResultNotificationPort;
 	/** Receives closed diagnostics only, never prompts, keys or provider response data. */
