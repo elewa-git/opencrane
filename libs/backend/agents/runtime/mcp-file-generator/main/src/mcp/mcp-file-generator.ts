@@ -1,8 +1,8 @@
-import { ___CreateCsvFile, CsvFileCreationFailureCodes, GENERATED_CSV_INPUT_SCHEMA, GENERATED_CSV_MEDIA_TYPE } from "@opencrane/models/conversation-assets";
+import { ___CreateCsvFile, CsvFileCreationFailureCodes, GENERATED_CSV_INPUT_SCHEMA, GENERATED_CSV_MEDIA_TYPE, GENERATED_CSV_TOOL_NAME } from "@opencrane/models/conversation-assets";
 import { MCP_PROTOCOL_VERSION, ___ParseMcpToolCallResult, type McpToolCallResult } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
-import { MCP_FILE_GENERATOR_RESOURCE_URI, MCP_FILE_GENERATOR_TOOL_NAME } from "./mcp-file-generator-contract";
+import { MCP_FILE_GENERATOR_RESOURCE_URI } from "./mcp-file-generator-contract";
 import { McpFileGeneratorErrorCodes, type McpFileGeneratorProtocolResponse } from "./mcp-file-generator.types";
 
 /** Cache lifetime for immutable discovery metadata in milliseconds. */
@@ -41,7 +41,7 @@ function _ListTools(id: string, params: Record<string, unknown>): McpFileGenerat
 {
 	if (!_ExactKeys(params, ["_meta"]))
 		return _Error(id, -32602, McpFileGeneratorErrorCodes.InvalidRequest);
-	const tool = { name: MCP_FILE_GENERATOR_TOOL_NAME, description: "Create a UTF-8 CSV file from bounded tabular values.", inputSchema: GENERATED_CSV_INPUT_SCHEMA };
+	const tool = { name: GENERATED_CSV_TOOL_NAME, description: "Create a UTF-8 CSV file from bounded tabular values.", inputSchema: GENERATED_CSV_INPUT_SCHEMA };
 	const result: JsonValue = { resultType: "complete", tools: [tool], ttlMs: _DISCOVERY_CACHE_MILLISECONDS, cacheScope: "public" };
 	return _Success(id, result);
 }
@@ -49,7 +49,7 @@ function _ListTools(id: string, params: Record<string, unknown>): McpFileGenerat
 /** Validates admitted arguments again and returns one embedded CSV resource. */
 function _CallTool(id: string, params: Record<string, unknown>): McpFileGeneratorProtocolResponse
 {
-	if (!_ExactKeys(params, ["_meta", "name", "arguments"]) || params["name"] !== MCP_FILE_GENERATOR_TOOL_NAME)
+	if (!_ExactKeys(params, ["_meta", "name", "arguments"]) || params["name"] !== GENERATED_CSV_TOOL_NAME)
 		return _Error(id, -32602, McpFileGeneratorErrorCodes.InvalidArguments);
 	const generated = ___CreateCsvFile(params["arguments"]);
 	if (!generated.accepted)

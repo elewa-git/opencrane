@@ -3,10 +3,11 @@ import { type AddressInfo } from "node:net";
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { MCP_PROTOCOL_VERSION, ___BuildMcpDiscoveryRequest, ___BuildMcpToolCallRequest, ___BuildMcpToolsListRequest, ___ParseMcpDiscoveryResponse, ___ParseMcpToolCallResponse, ___ParseMcpToolsListResponse } from "@opencrane/contracts";
+import { MCP_PROTOCOL_VERSION, ___BuildMcpDiscoveryRequest, ___BuildMcpToolCallRequest, ___BuildMcpToolsListRequest, ___ConversationModelToolCallSchema, ___ParseMcpDiscoveryResponse, ___ParseMcpToolCallResponse, ___ParseMcpToolsListResponse } from "@opencrane/contracts";
+import { GENERATED_CSV_TOOL_NAME } from "@opencrane/models/conversation-assets";
 
 import { __CreateMcpFileGeneratorServer } from "../mcp-file-generator-http";
-import { MCP_FILE_GENERATOR_HOST, MCP_FILE_GENERATOR_MAX_REQUEST_BYTES, MCP_FILE_GENERATOR_RESOURCE_URI, MCP_FILE_GENERATOR_TOOL_NAME } from "../../mcp/mcp-file-generator-contract";
+import { MCP_FILE_GENERATOR_HOST, MCP_FILE_GENERATOR_MAX_REQUEST_BYTES, MCP_FILE_GENERATOR_RESOURCE_URI } from "../../mcp/mcp-file-generator-contract";
 
 /** Server shared by the loopback HTTP contract tests. */
 let _server: Server;
@@ -53,12 +54,13 @@ describe("MCP file generator HTTP server", function _McpHttpSuite()
 		expect(discovery.supportedVersions).toContain(MCP_PROTOCOL_VERSION);
 
 		const listed = ___ParseMcpToolsListResponse(await _Post(___BuildMcpToolsListRequest()));
-		expect(listed).toMatchObject({ nextCursor: null, tools: [{ name: MCP_FILE_GENERATOR_TOOL_NAME }] });
+		expect(listed).toMatchObject({ nextCursor: null, tools: [{ name: GENERATED_CSV_TOOL_NAME }] });
+		expect(___ConversationModelToolCallSchema.safeParse({ id: "generated-file-call", name: GENERATED_CSV_TOOL_NAME, arguments: "{}", content: null }).success).toBe(true);
 	});
 
 	it("returns one embedded UTF-8 CSV resource and no mixed content", async function _CallsTool()
 	{
-		const request = ___BuildMcpToolCallRequest("invocation-1", MCP_FILE_GENERATOR_TOOL_NAME, { displayName: "customers.csv", headers: ["Name", "Balance"], rows: [["Amina", -12.5]] });
+		const request = ___BuildMcpToolCallRequest("invocation-1", GENERATED_CSV_TOOL_NAME, { displayName: "customers.csv", headers: ["Name", "Balance"], rows: [["Amina", -12.5]] });
 		const result = ___ParseMcpToolCallResponse(await _Post(request), "invocation-1");
 
 		expect(result).toEqual({ isError: false, content: [{ type: "resource", resource: { uri: MCP_FILE_GENERATOR_RESOURCE_URI, mimeType: "text/csv;charset=utf-8", text: "Name,Balance\r\nAmina,-12.5\r\n" } }] });
@@ -67,7 +69,7 @@ describe("MCP file generator HTTP server", function _McpHttpSuite()
 	it("returns a content-free stable error for rejected arguments", async function _RejectsArguments()
 	{
 		const secret = "=HYPERLINK(\"https://secret.example\")";
-		const request = ___BuildMcpToolCallRequest("invocation-2", MCP_FILE_GENERATOR_TOOL_NAME, { displayName: "customers.csv", headers: ["Name"], rows: [[secret]] });
+		const request = ___BuildMcpToolCallRequest("invocation-2", GENERATED_CSV_TOOL_NAME, { displayName: "customers.csv", headers: ["Name"], rows: [[secret]] });
 		const response = await _PostResponse(request);
 		const body = await response.text();
 

@@ -8,14 +8,12 @@ import type { ConversationPrivatePayloadCipher } from "@opencrane/backend/server
 import type { IWorkflowEngine, IWorkflowTaskReceipt, IWorkflowTaskSpawn, IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 import { McpCompanionCommandKinds, type McpInvocationResultParticipantFactory } from "@opencrane/backend/server/gateways/mcp";
 import { type McpToolCallResult } from "@opencrane/contracts";
-import { GENERATED_CSV_INPUT_SCHEMA, GENERATED_CSV_MEDIA_TYPE, ___CreateCsvFile } from "@opencrane/models/conversation-assets";
+import { GENERATED_CSV_INPUT_SCHEMA, GENERATED_CSV_MEDIA_TYPE, GENERATED_CSV_TOOL_NAME, ___CreateCsvFile } from "@opencrane/models/conversation-assets";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
 
 import { _ToolHandoffSqlRuntime } from "./conversation-tool-handoff.sql-fixture";
 import { _SeedConversationToolProposalSqlFixture } from "./conversation-tool-proposal.sql-fixture";
 
-/** Exact OCI-discovered tool name used by the production generated-file parser. */
-export const _GENERATED_FILE_TOOL_NAME = "opencrane.files.create_csv";
 /** Metadata-only resource identifier returned by the credentialless producer. */
 export const _GENERATED_FILE_RESOURCE_URI = "urn:opencrane:generated-file:csv";
 /** Admitted CSV arguments shared by the actual producer renderer and capture parser. */
@@ -42,7 +40,7 @@ export interface _PreparedGeneratedFileCaptureSqlFixture
 	/** Actual synthetic file result returned by the declared CSV producer. */
 	readonly rawResult: McpToolCallResult;
 	/** Current invocation command claimed by the registered MCP companion. */
-	readonly command: Exclude<Awaited<ReturnType<ReturnType<typeof _ToolHandoffSqlRuntime>["authority"]["claimCompanion"]>>, string | null>;
+	readonly command: Extract<Awaited<ReturnType<ReturnType<typeof _ToolHandoffSqlRuntime>["authority"]["claimCompanion"]>>, { readonly kind: McpCompanionCommandKinds.Invocation }>;
 	/** Shared cipher used for the capture and later replay verification. */
 	readonly cipher: ConversationPrivatePayloadCipher;
 	/** Original proposal/run authority fixture. */
@@ -129,7 +127,7 @@ export async function _PrepareConversationGeneratedFileCaptureSqlFixture(client:
 	const fixture = await _SeedConversationToolProposalSqlFixture({
 		maximumCompletionTokens: options.maximumCompletionTokens,
 		runLifetimeMs: options.runLifetimeMs,
-		tool: { name: _GENERATED_FILE_TOOL_NAME, description: "Create a UTF-8 CSV file from bounded tabular values.", inputSchema: GENERATED_CSV_INPUT_SCHEMA, arguments: _GENERATED_FILE_ARGUMENTS },
+		tool: { name: GENERATED_CSV_TOOL_NAME, description: "Create a UTF-8 CSV file from bounded tabular values.", inputSchema: GENERATED_CSV_INPUT_SCHEMA, arguments: _GENERATED_FILE_ARGUMENTS },
 	});
 	await _GrantArtifactCreation(client, fixture);
 	workflows.declare(CONVERSATION_COMPUTER_TURN_TASK);

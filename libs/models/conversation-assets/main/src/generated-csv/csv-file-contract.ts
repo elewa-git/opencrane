@@ -1,5 +1,11 @@
 import type { JsonValue } from "@opencrane/util";
 
+/**
+ * Exact MCP discovery name and model function identifier for the governed CSV producer.
+ * Renaming it changes admitted tool snapshots, model declarations and server-side capture matching.
+ */
+export const GENERATED_CSV_TOOL_NAME = "opencrane_files_create_csv";
+
 /** Media type produced by the shared CSV serialization policy. */
 export const GENERATED_CSV_MEDIA_TYPE = "text/csv;charset=utf-8";
 

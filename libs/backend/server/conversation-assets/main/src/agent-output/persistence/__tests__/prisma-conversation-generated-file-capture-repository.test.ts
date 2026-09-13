@@ -5,7 +5,7 @@ import type { Prisma } from "@prisma/client";
 import { MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, GeneratedFileResultKinds, type McpToolCallResult } from "@opencrane/contracts";
 import type { ConversationPrivatePayloadCipher, ConversationPrivatePayloadCoordinates, EncryptedConversationPrivatePayload } from "@opencrane/backend/server/conversations/history";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
-import { ___CreateCsvFile, GENERATED_CSV_MEDIA_TYPE } from "@opencrane/models/conversation-assets";
+import { ___CreateCsvFile, GENERATED_CSV_MEDIA_TYPE, GENERATED_CSV_TOOL_NAME } from "@opencrane/models/conversation-assets";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import type { JsonValue } from "@opencrane/util";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -35,7 +35,7 @@ function _Evidence(overrides: Partial<GeneratedFileCurrentExecutionEvidence> = {
 		bootstrapId: "bootstrap-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 3,
 		agentIdentityId: "agent-identity-1", requesterPrincipalId: "principal-1", requesterSubjectId: "subject-1",
 		toolInvocationRowId: "invocation-row-1", toolInvocationId: "tool-call-1", toolRevisionId: "tool-revision-1",
-		serverRevisionId: "server-revision-1", toolName: "opencrane.files.create_csv", effectiveArguments: _ARGUMENTS as unknown as JsonValue,
+		serverRevisionId: "server-revision-1", toolName: GENERATED_CSV_TOOL_NAME, effectiveArguments: _ARGUMENTS as unknown as JsonValue,
 		execution: { executionId: "execution-1", executionReference: "reference-1", claimFence: "fence-1" },
 		authorizationWorkload: { audience: MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE, namespace: "mcp-executors", serviceAccountName: "mcp-executor", workloadKind: "job", workloadUid: "job-1", podUid: "pod-1" },
 		authorizationRun: { runId: "run-1", attempt: 2, agentServiceId: "agent-service-1", agentRevisionId: "agent-revision-1" },

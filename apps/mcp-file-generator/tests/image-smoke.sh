@@ -56,10 +56,10 @@ assert.deepEqual(discovery.result.capabilities, { tools: {} });
 
 const listed = await post("tools", "tools/list");
 assert.equal(listed.result.tools.length, 1);
-assert.equal(listed.result.tools[0].name, "opencrane.files.create_csv");
+assert.equal(listed.result.tools[0].name, "opencrane_files_create_csv");
 
 const called = await post("invocation-1", "tools/call", {
-	name: "opencrane.files.create_csv",
+	name: "opencrane_files_create_csv",
 	arguments: { displayName: "customers.csv", headers: ["Name", "Balance"], rows: [["Amina", -12.5]] },
 });
 assert.deepEqual(called.result, {

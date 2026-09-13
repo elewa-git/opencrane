@@ -2,6 +2,6 @@ export { ___CONVERSATION_ASSET_MAX_FILES, ___CONVERSATION_ASSET_MAX_TOTAL_BYTES,
 export { ConversationAssetDisposition, ConversationAssetLifecycle, ConversationAssetProvenance } from "./conversation-asset.types";
 export type { ConversationAssetBatchDecision, ConversationAssetBatchItem } from "./conversation-asset.types";
 export { ___CreateCsvFile } from "./generated-csv/csv-file";
-export { GENERATED_CSV_INPUT_SCHEMA, GENERATED_CSV_LIMITS, GENERATED_CSV_MEDIA_TYPE } from "./generated-csv/csv-file-contract";
+export { GENERATED_CSV_INPUT_SCHEMA, GENERATED_CSV_LIMITS, GENERATED_CSV_MEDIA_TYPE, GENERATED_CSV_TOOL_NAME } from "./generated-csv/csv-file-contract";
 export { CsvFileCreationFailureCodes } from "./generated-csv/csv-file.types";
 export type { CreateCsvFileCommand, CsvFileCell, CsvFileCreationResult, GeneratedCsvFile } from "./generated-csv/csv-file.types";

@@ -58,6 +58,7 @@ describe.skipIf(!_RUN_REAL_PROOFS)("generated file output across PostgreSQL and 
 		const fixture = await _PrepareGeneratedFileOutputIntegrationFixture(firstPrisma, firstHistory, _Workflows);
 		await expect(fixture.authority.advance(fixture.turn.bootstrapId)).resolves.toEqual({ outcome: "completed" });
 		await _ExpectOneOriginalContinuation(fixture);
+		expect((await fixture.turns.load(fixture.turn.bootstrapId))?.toolSelection?.proposalId).toBe(fixture.capture.command.invocationId);
 
 		const saved = await fixture.turns.load(fixture.turn.bootstrapId);
 		_ExpectSavedArtifact(saved, fixture);

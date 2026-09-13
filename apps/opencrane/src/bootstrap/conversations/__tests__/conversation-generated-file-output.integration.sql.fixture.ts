@@ -13,7 +13,7 @@ import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _ActualGeneratedFileScanner, _CaptureActualGeneratedFileSqlFixture, _ClaimActualGeneratedFile, _GeneratedFileWorkflowDependencies, _QuarantineActualGeneratedFile, type _ActualGeneratedFileCapture } from "./conversation-generated-file-lifecycle.sql-fixture";
-import { _GENERATED_FILE_ARGUMENTS, _GENERATED_FILE_PROPOSER, _GENERATED_FILE_TOOL_NAME } from "./conversation-generated-file-capture.sql-fixture";
+import { _GENERATED_FILE_ARGUMENTS, _GENERATED_FILE_PROPOSER } from "./conversation-generated-file-capture.sql-fixture";
 
 /** Narrow lifecycle surface used by output completion and its injected recovery fault. */
 export interface _GeneratedFileOutputRunLifecycle
@@ -118,7 +118,7 @@ export async function _PrepareGeneratedFileOutputIntegrationFixture(prisma: Pris
 		bootstrapId: turn.bootstrapId, runId: turn.compile.runId, attempt: turn.compile.attempt, compiledInputDigest: turn.compile.digest,
 		modelInvocationFence: turn.modelReservation!.invocationFence, acceptedAtEpochMs: Date.now(), requestNotAfterEpochMs: deadline,
 		credentialDigest: delivery.payloadDigest, credentialExpiresAt: new Date(deadline).toISOString(),
-		call: { id: `generated-file-${invocation.toolInvocationId}`, name: _GENERATED_FILE_TOOL_NAME, arguments: JSON.stringify(_GENERATED_FILE_ARGUMENTS), content: null },
+		call: { id: `generated-file-${invocation.toolInvocationId}`, name: capture.fixture.tool.name, arguments: JSON.stringify(_GENERATED_FILE_ARGUMENTS), content: null },
 	});
 
 	const candidates = _Candidates(capture, turn, history);

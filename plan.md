@@ -7,7 +7,7 @@ F1 continues above draft #878 at `5acd38a6f6dec8a0dc4fa4e010bf7a9b9e73b37d` on
 file, the server captures and scans it, the assistant attaches its published revision, and the
 requester can download identical bytes after refresh or restart. Producer tests alone do not close F1.
 
-The first producer is `opencrane.files.create_csv`, an actual credentialless MCP image owned by
+The first producer is `opencrane_files_create_csv`, an actual credentialless MCP image owned by
 `apps/mcp-file-generator` with protocol and CSV logic under
 `libs/backend/agents/runtime/mcp-file-generator/main`. Existing OCI promotion, installation,
 revision assignment, invocation and workload fencing remain the execution boundary. This change
@@ -18,7 +18,7 @@ and loopback HTTP tests plus the app image contract. CSV media policy passes fiv
 lint. Independent producer review passed before the shared CSV model extraction; the integrated review
 of that extraction, resource validation and encrypted custody passes. Capture persistence,
 metadata-only MCP completion, workflow persistence and scanner publication checks are implemented
-locally. The actual capture and scanner PostgreSQL/Absurd proofs pass; final answer integration remains unfinished.
+locally. The actual capture and scanner PostgreSQL/Absurd proofs pass; final answer integration is implemented and awaits its combined CI proof.
 
 The server integration must preserve these ordering rules:
 
@@ -91,6 +91,27 @@ the generated-file Create decision separately from participant asset mutations, 
 and seven regression tests pass.
 The final full dependency check also passes after exposing the existing MCP completion command
 enum through its gateway facade and declaring the asset owner's workload-identity type dependency.
+
+Draft [#879](https://github.com/elewa-git/opencrane/pull/879) publishes this source checkpoint at
+`499813fe4f7e0c6bf9c619c6b22618f8ce6c28e3`, directly above #878. Independent review has no remaining
+findings. CI run `34739668909` at that source SHA passes the production CSV image smoke, database
+authority proofs and generated API. The new combined recovery suite fails during fixture setup:
+the owned producer advertises a dotted name that production copies unchanged into model
+declarations, whose name validation rejects dots. There is no production alias mapping. The fix
+renames the real producer, capture allowlist and fixtures together to `opencrane_files_create_csv`;
+a fixture-only alias is rejected, and the declaration validator remains unchanged. The correction
+passes independent review and all 21 source-manifest hashes match. Focused model, MCP gateway,
+asset and producer suites pass 17, 193, 153 and 5 tests respectively, with lint/type checks,
+producer build, style, Prisma boundaries and module growth passing. The complete proof and
+overall CI are still pending. The live stack
+check and replacement stack CI run `34739775866` pass after recording the complete ancestor review
+order; the branch contains the current `origin/develop`. This source checkpoint does not close F1.
+
+The same CI run also fails both memory-provider qualification jobs. The production pin retains its
+known source-file erasure gap. The 1.5.4 candidate returned HTTP 500 while adding a shared file,
+reporting a missing provider-owned `shared.txt`; its prior passing run does not establish repeatable
+qualification. No Cognee harness source changed in this PR. Candidate root-cause diagnosis remains
+open, and neither provider is qualified for the complete memory journey.
 
 The additional PostgreSQL once-only message-link guard is proposed but unapplied: automatic approval
 review requires explicit approval of that exact production baseline mutation. The concrete source
@@ -767,7 +788,7 @@ remain separate gates.
 | --- | --- | --- | --- |
 | 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection and participant terminal-result history are implemented. Explicit connection readiness and execution fencing pass source review and local database proof. Standard remote activation/discovery/calls, hosted MCP execution and real integration qualification remain. |
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry, durable resume and visible decision controls are implemented in draft #857. Company approver/connection binding and real action qualification remain. |
-| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: the repaired 1.5.4 candidate passes exact-image deletion, isolation, dataset permission and indexing recovery qualification. Durable operation persistence is published in #876 with passing CI. Command/source preparation and actual Absurd admission are published in #877 with passing CI; catalog completion is published in #878 with passing CI; authenticated composition, gateway/client wiring and product Remember, recall, Correct and Forget remain unfinished. |
+| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: the 1.5.4 candidate previously passed its complete contract, but the latest shared-file add returns HTTP 500 and repeatable provider qualification remains blocked. Durable operation persistence is published in #876 with passing CI. Command/source preparation and actual Absurd admission are published in #877 with passing CI; catalog completion is published in #878 with passing CI; authenticated composition, gateway/client wiring and product Remember, recall, Correct and Forget remain unfinished. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass independent review and exact-head CI in draft #862; qualify the live journey. Other-participant controls remain a separate actor-policy decision. |
 | 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | PAUSED: runtime-question source work awaits its separate explicit approval; partial implementation is not validated delivery. Structured results and A2UI remain. |
 | 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file Open/Preview/Download is implemented and exact-head CI passes in #868. PDF-informed answers are source complete in #869 and exact-head CI passes, including real-store recovery and Linux visuals; live qualification remains. Generated file production follows. |
@@ -783,6 +804,13 @@ retrieval, approval, controls and recovery; its full acceptance closes only when
 The [delivery plan](docs/design/mvp-delivery-plan.md) records owners and acceptance for each slice.
 
 ### First execution slice: company tool selection
+
+The generated-file CI proof exposed a T1 integration gap: discovered MCP names flow unchanged
+into model declarations, whose accepted characters are narrower. The owned CSV producer is being
+renamed consistently, but remote MCPs can still advertise names the model cannot accept. A
+separate architecture preflight has approved the server's name mapping through the existing frozen
+tool snapshot and revision-bound dispatch. It must handle invalid characters and collisions and
+preserve exact recovery; a test-only alias does not solve this requirement.
 
 Implemented in draft [#850](https://github.com/elewa-git/opencrane/pull/850) on
 `feat/0.12-real-tool-retrieval`, directly above
@@ -1082,7 +1110,7 @@ their own completion track; they are not silently bundled into the first tool PR
 | T1 — first permitted tool retrieval | IN PROGRESS — the server's one-tool continuation is implemented and now progresses through Absurd in #849. Company tool assignment is the first active follow-up. Connection activation, a real integration and participant result evidence remain required. |
 | T2 | IN PROGRESS: personal approval and durable resume pass local integration; company approval and real external-action qualification remain. |
 | U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
-| M1 | IN PROGRESS: the candidate in #875 passes exact-image deletion, isolation, permission recovery and interrupted-indexing qualification. Durable Remember/Correct/Forget persistence is published in #876 with passing CI. Command/source preparation and transaction-bound Absurd admission are published in #877 with passing CI; catalog completion is published in #878 with passing CI. Authenticated composition, gateway/client integration and product memory journeys remain. The separate production-provider qualification still fails. |
+| M1 | IN PROGRESS: the candidate in #875 previously passed exact-image recovery qualification, but the latest shared-file add fails with HTTP 500; provider qualification remains open. Durable Remember/Correct/Forget persistence is published in #876 with passing CI. Command/source preparation and transaction-bound Absurd admission are published in #877 with passing CI; catalog completion is published in #878 with passing CI. Authenticated composition, gateway/client integration and product memory journeys remain. The separate production-provider qualification still fails. |
 | U2 | PAUSED: partial runtime-question source awaits its separate explicit approval. |
 | F1 | IN PROGRESS: Ready-file Open/Preview/Download and PDF-informed answers pass exact-head CI in #868 and #869. Generated outputs and live qualification remain. |
 | D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ConversationToolDispatchAdmission } from "@opencrane/backend/server/conversations";
 import { ExternalActionClaimKinds, ToolInvocationStates, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import { ExecutionSubjectMembershipKinds } from "@opencrane/contracts";
+import { GENERATED_CSV_TOOL_NAME } from "@opencrane/models/conversation-assets";
 
 import { GeneratedFileCurrentExecutionAuthorityAdapter } from "../generated-file-current-execution-authority";
 import type { GeneratedFileInvocationEvidence } from "../generated-file-invocation-evidence.types";
@@ -21,7 +22,7 @@ function _Fixture()
 		toolInvocationId: "tool-call", toolRevisionId: "tool-revision", effectiveArguments: { rows: [] },
 	} as unknown as ToolInvocationRecord;
 	const evidence: GeneratedFileInvocationEvidence = {
-		invocation, companionNotAfterEpochMs: _NOW.getTime() + 20_000, serverRevisionId: "server-revision", toolName: "opencrane.files.create_csv", workloadUid: "executor-job",
+		invocation, companionNotAfterEpochMs: _NOW.getTime() + 20_000, serverRevisionId: "server-revision", toolName: GENERATED_CSV_TOOL_NAME, workloadUid: "executor-job",
 		executionId: "execution", executionReference: "reference", claimFence: "companion-fence", podUid: "executor-pod",
 		workload: { subject: "system:serviceaccount:executors:mcp", namespace: "executors", serviceAccountName: "mcp", podUid: "executor-pod" },
 		toolClaim: { invocationId: invocation.id, kind: ExternalActionClaimKinds.Dispatch, fence: 7, revision: 4 },

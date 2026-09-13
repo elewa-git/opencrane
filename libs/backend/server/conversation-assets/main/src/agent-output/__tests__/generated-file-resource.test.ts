@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import type { McpToolCallResult } from "@opencrane/contracts";
-import { ___CreateCsvFile } from "@opencrane/models/conversation-assets";
+import { ___CreateCsvFile, GENERATED_CSV_TOOL_NAME } from "@opencrane/models/conversation-assets";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _ParseGeneratedFileResource } from "../generated-file-resource";
@@ -55,7 +55,7 @@ describe("generated file resource capture", function _Suite()
 			expect(_Parse(result)).toEqual({ outcome: GeneratedFileResourceOutcomes.Rejected });
 		}
 		for (const displayName of ["../file.csv", "file.csv.exe", "=formula.csv", "a\r\n.csv", `${"x".repeat(125)}.csv`])
-			expect(_ParseGeneratedFileResource("opencrane.files.create_csv", { displayName }, _Result("a"))).toEqual({ outcome: GeneratedFileResourceOutcomes.Rejected });
+			expect(_ParseGeneratedFileResource(GENERATED_CSV_TOOL_NAME, { displayName }, _Result("a"))).toEqual({ outcome: GeneratedFileResourceOutcomes.Rejected });
 	});
 
 	it("checks encoded byte length and rejects malformed Unicode", function _ByteLimits()
@@ -64,7 +64,7 @@ describe("generated file resource capture", function _Suite()
 		const expected = ___CreateCsvFile(argumentsValue);
 		if (!expected.accepted)
 			throw new Error("expected valid large CSV");
-		expect(_ParseGeneratedFileResource("opencrane.files.create_csv", argumentsValue, _Result(expected.file.text)).outcome).toBe(GeneratedFileResourceOutcomes.Accepted);
+		expect(_ParseGeneratedFileResource(GENERATED_CSV_TOOL_NAME, argumentsValue, _Result(expected.file.text)).outcome).toBe(GeneratedFileResourceOutcomes.Accepted);
 		for (const text of ["", "a".repeat(1_048_577), "é".repeat(524_289), "\ud800"])
 			expect(_Parse(_Result(text))).toEqual({ outcome: GeneratedFileResourceOutcomes.Rejected });
 	});
@@ -73,7 +73,7 @@ describe("generated file resource capture", function _Suite()
 	{
 		for (const text of ["County,Total\r\nNairobi,=HYPERLINK(\"bad\")\r\n", "County,Total\r\nNairobi,43\r\n"])
 			expect(_Parse(_Result(text))).toEqual({ outcome: GeneratedFileResourceOutcomes.Rejected });
-		expect(_ParseGeneratedFileResource("opencrane.files.create_csv", { displayName: "file.csv", headers: ["Formula"], rows: [["  =HYPERLINK(\"bad\")"]] }, _Result("Formula\r\n  =HYPERLINK(\"bad\")\r\n"))).toEqual({ outcome: GeneratedFileResourceOutcomes.Rejected });
+		expect(_ParseGeneratedFileResource(GENERATED_CSV_TOOL_NAME, { displayName: "file.csv", headers: ["Formula"], rows: [["  =HYPERLINK(\"bad\")"]] }, _Result("Formula\r\n  =HYPERLINK(\"bad\")\r\n"))).toEqual({ outcome: GeneratedFileResourceOutcomes.Rejected });
 	});
 });
 
@@ -86,5 +86,5 @@ function _Result(text: string): McpToolCallResult
 /** Supplies the admitted producer name and filename for content-shape tests. */
 function _Parse(result: McpToolCallResult)
 {
-	return _ParseGeneratedFileResource("opencrane.files.create_csv", { displayName: "county-totals.csv", headers: ["County", "Total"], rows: [["Nairobi", 42]] }, result);
+	return _ParseGeneratedFileResource(GENERATED_CSV_TOOL_NAME, { displayName: "county-totals.csv", headers: ["County", "Total"], rows: [["Nairobi", 42]] }, result);
 }

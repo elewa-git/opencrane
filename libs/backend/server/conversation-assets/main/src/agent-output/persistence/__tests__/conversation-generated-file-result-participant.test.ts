@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { McpToolCallResult } from "@opencrane/contracts";
-import { ___CreateCsvFile } from "@opencrane/models/conversation-assets";
+import { ___CreateCsvFile, GENERATED_CSV_TOOL_NAME } from "@opencrane/models/conversation-assets";
 
 import { ConversationGeneratedFileResultParticipant } from "../conversation-generated-file-result-participant";
 import { GeneratedFileCaptureOutcomes } from "../generated-file-capture.types";
@@ -20,7 +20,7 @@ function _Resource(): McpToolCallResult
 }
 
 /** Observe only the wrapper boundary; capture authority and persistence have their own proofs. */
-function _Fixture(toolName = "opencrane.files.create_csv", result = _Resource(), scannerEnabled = true)
+function _Fixture(toolName = GENERATED_CSV_TOOL_NAME, result = _Resource(), scannerEnabled = true)
 {
 	const command = { toolName, invocation: { effectiveArguments: _ARGUMENTS }, result } as unknown as GeneratedFileInvocationResultCommand;
 	const metadata: McpToolCallResult = { isError: false, content: [{ type: "text", text: "Saved file metadata" }] };
@@ -72,7 +72,7 @@ describe("generated-file result transaction participant", function _Suite()
 	});
 	it("rejects supported resources before storage when scanning is disabled", async function _DisabledScanner()
 	{
-		const f = _Fixture("opencrane.files.create_csv", _Resource(), false);
+		const f = _Fixture(GENERATED_CSV_TOOL_NAME, _Resource(), false);
 		await expect(f.participant.prepare(f.command)).rejects.toThrow("requires an enabled scanner");
 		expect(f.createCapture).not.toHaveBeenCalled();
 		expect(f.capture).not.toHaveBeenCalled();

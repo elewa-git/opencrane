@@ -1,13 +1,11 @@
 import { createHash } from "node:crypto";
 
 import type { McpToolCallResult } from "@opencrane/contracts";
-import { ___CreateCsvFile, GENERATED_CSV_MEDIA_TYPE } from "@opencrane/models/conversation-assets";
+import { ___CreateCsvFile, GENERATED_CSV_MEDIA_TYPE, GENERATED_CSV_TOOL_NAME } from "@opencrane/models/conversation-assets";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { GeneratedFileResourceOutcomes, type GeneratedFileResourceResult } from "./generated-file-resource.types";
 
-/** Selects the first supported producer after the caller verifies its actual tool and server revision. */
-const _TOOL_NAME = "opencrane.files.create_csv";
 /** The producer's metadata URI is an identifier, never a location to open. */
 const _RESOURCE_URI = "urn:opencrane:generated-file:csv";
 
@@ -19,7 +17,7 @@ const _RESOURCE_URI = "urn:opencrane:generated-file:csv";
  */
 export function _ParseGeneratedFileResource(toolName: string, argumentsValue: JsonValue, result: McpToolCallResult): GeneratedFileResourceResult
 {
-	if (toolName !== _TOOL_NAME)
+	if (toolName !== GENERATED_CSV_TOOL_NAME)
 	{
 		const embedded = result.content.some(block => _Record(block) && block["type"] === "resource");
 		return { outcome: embedded ? GeneratedFileResourceOutcomes.Rejected : GeneratedFileResourceOutcomes.NotApplicable };

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationCompletionOutcomes, ToolInvocationStates, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import type { McpToolCallResult } from "@opencrane/contracts";
+import { GENERATED_CSV_TOOL_NAME } from "@opencrane/models/conversation-assets";
 
 import type { McpInvocationCompletionCommand } from "../mcp-invocation-result.types";
 import { PrismaMcpInvocationCompletionRepository } from "../prisma-mcp-invocation-completion-repository";
@@ -30,7 +31,7 @@ function _Invocation(patch: Partial<ToolInvocationRecord> = {}): ToolInvocationR
 /** Assemble one completion repository with observable transaction participants. */
 function _Harness(invocation: ToolInvocationRecord | null = _Invocation())
 {
-	const transaction = { mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ name: "opencrane.files.create_csv" }) } };
+	const transaction = { mcpToolRevision: { findFirst: vi.fn().mockResolvedValue({ name: GENERATED_CSV_TOOL_NAME }) } };
 	const invocations = { findById: vi.fn().mockResolvedValue(invocation), completeSucceeded: vi.fn().mockResolvedValue({ outcome: ToolInvocationCompletionOutcomes.Completed, invocation: { ..._Invocation(), state: ToolInvocationStates.Succeeded, result: _PREPARED_RESULT }, delivery: { toolInvocationId: "tool-call-1", outcome: "succeeded", result: _PREPARED_RESULT } }) };
 	const results = { prepare: vi.fn().mockResolvedValue(_PREPARED_RESULT) };
 	const command: McpInvocationCompletionCommand = {
@@ -51,7 +52,7 @@ describe("Prisma MCP invocation completion", function _DescribeCompletion()
 
 		expect(harness.results.prepare).toHaveBeenCalledWith(expect.objectContaining({
 			executionId: "execution-1", executionReference: "execution-reference-1", invocation: expect.objectContaining({ id: "invocation-row-1", requestIdentity: { runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1" } }),
-			podUid: "pod-1", result: _RAW_RESULT, serverRevisionId: "server-revision-1", siloId: "silo-1", toolName: "opencrane.files.create_csv", workload: _WORKLOAD, workloadUid: "job-1",
+			podUid: "pod-1", result: _RAW_RESULT, serverRevisionId: "server-revision-1", siloId: "silo-1", toolName: GENERATED_CSV_TOOL_NAME, workload: _WORKLOAD, workloadUid: "job-1",
 		}));
 		expect(harness.invocations.completeSucceeded).toHaveBeenCalledWith(harness.command.toolClaim, _PREPARED_RESULT, expect.any(Date));
 	});

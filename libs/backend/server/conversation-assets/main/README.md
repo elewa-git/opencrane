@@ -27,7 +27,7 @@ response keeps the bindings reserved for the same message key.
 ### Generated files
 
 MCP completion uses `_CreateConversationGeneratedFileResultParticipant` to validate the admitted
-CSV tool and its returned bytes. For a personal run, it rechecks the current requester and execution,
+`opencrane_files_create_csv` tool and its returned bytes. For a personal run, it rechecks the current requester and execution,
 then saves encrypted file content, stable asset coordinates and an Absurd task in the same
 transaction as the tool's metadata result. Failed capture cannot fall back to storing file text in
 the invocation. Other embedded resources are rejected; ordinary text results keep their existing path.
