@@ -75,7 +75,10 @@ in sorted ID order, and then the operation. Exact command replays return the fir
 task without calling task admission. For a new command, the repository calls the transaction-bound
 task admission once after those locks, validates the returned UUID/name/key, and inserts that exact
 receipt. Conflicting command or task evidence fails. Accepted events use the shared lifecycle planner
-and a revision compare-and-set, and a lost compare-and-set returns the validated row that won.
+and a revision compare-and-set. Accepted catalog events first write the exact catalog evidence in
+the same transaction: Remember and Correct create one deterministic Active fact, while Forget
+finalizes only its revision-fenced hidden target. A lost compare-and-set after either catalog write
+throws so the caller rolls back the catalog mutation with the operation advance.
 
 ## Boundary
 
@@ -103,9 +106,12 @@ The command supplies only the expected workflow task name and idempotency key. A
 inserted only after a callback bound to the same transaction returns the actual task receipt. The
 repository does not itself prove current product authority; the composite conversation owner must
 compose dataset creation, authorization audit, this transaction-scoped repository, and workflow
-admission. Bare catalog completion events fail closed until that transaction also proves the exact
-catalog mutation. Forget admission hides its exact Active or Corrected target as `ForgetPending` in
-the same database transaction; the database owns the fact revision increment.
+admission. Only lifecycle-accepted catalog completion events write the exact catalog mutation in
+that transaction. Catalog completion persists content-free Message provenance from the immutable
+source coordinates, Explicit consent, server-selected `personal` sensitivity, and the operation UUID
+as the fact ID. Correct relies on PostgreSQL to mark its exact predecessor Corrected. Forget admission
+hides its exact Active or Corrected target as `ForgetPending`, and finalization advances that same
+target to Forgotten. The database owns every fact revision increment.
 
 ## Dependency direction
 
@@ -117,9 +123,11 @@ Tagged `scope:personal-memory`, this backend package may depend only on its own 
 Owns `MemoryDataset`, `MemoryFactCatalog`, and `PersonalMemoryOperation` in `memory.prisma`.
 `MemoryDataset` distinguishes explicit `Provisioning` from `Active` and `Retired`, and its provider
 UUID is nullable only until the exact DatasetEnsured event adopts it. `MemoryFactCatalog.revision`
-fences target commands. The operation stores immutable replay, source, target, and actual workflow
-receipt evidence plus write-once provider receipts and current lifecycle recovery fields. No memory outbox,
-queue, scheduler, route, provider call, or plaintext store is introduced.
+fences target commands. Remember and Correct catalog rows retain only their provider coordinate,
+content digest, fixed consent and sensitivity, and content-free Message provenance; no remembered
+text is copied into PostgreSQL. The operation stores immutable replay, source, target, and actual
+workflow receipt evidence plus write-once provider receipts and current lifecycle recovery fields.
+No memory outbox, queue, scheduler, route, provider call, or plaintext store is introduced.
 
 ## See also
 

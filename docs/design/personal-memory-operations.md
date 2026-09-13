@@ -36,6 +36,12 @@ It does not accept an arbitrary text field or another participant's message. Cor
 new authorized source message and an expected revision of the old fact. Forget identifies the exact
 fact and expected revision. These authenticated commands are explicit consent for their operation.
 
+Facts created by this direct message flow record Explicit consent and the server-selected
+`personal` sensitivity. The command cannot choose or change that classification. It describes the
+fact's personal context and grants no access; dataset, consent and lifecycle checks remain required.
+Supporting more classifications later requires admitting and retaining the selected value before
+provider dispatch so a restart cannot change it at catalog completion.
+
 The source reader binds silo, conversation, message ID, message position, author, private payload
 reference and ciphertext digest. It must still work after later messages are appended. A whole
 conversation-head equality check would incorrectly invalidate a saved Remember command.
@@ -59,6 +65,14 @@ referenced facts sorted by ID, then operation.
 Command kind and lifecycle have separate responsibilities: kind selects Remember, Correct or Forget
 behavior; the lifecycle decides whether the saved evidence permits the next step. Repositories and
 controllers must not maintain their own competing transition tables.
+
+Remember and Correct use the operation UUID as the new fact ID. Their content-free Message
+provenance comes from the saved operation and selected message; it does not classify the fact as
+an ExplicitUserFact for automatic preference selection. Catalog publication and the accepted
+operation transition share one transaction. Correct inserts the successor and lets PostgreSQL mark
+the prior fact Corrected and increment its revision. Forget finalization updates the saved target
+from ForgetPending at admitted revision R+1 to Forgotten at R+2. If the operation write loses after
+any catalog mutation, the whole transaction must roll back.
 
 | Saved phase | Evidence needed to advance | Result |
 | --- | --- | --- |

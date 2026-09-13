@@ -1,5 +1,36 @@
 # OpenCrane — Active Plan
 
+## Personal memory catalog completion — transaction integration
+
+This slice starts above draft #877 at `5618b277157b9601fdd3527c3fc423bcd1247f9e` on
+`feat/0.12-personal-memory-catalog-completion`. Its parent passes exact-head CI in run
+`34727906356`, including affected build/test/lint, database authority, KurrentDB recovery, generated
+API, component contracts and server image publication. Provider qualification was unaffected and
+skipped; testv5 remains a separate gate.
+
+The existing personal-memory operation repository will compose catalog mutations with accepted
+operation transitions. The lifecycle planner retains all state/event decisions; PostgreSQL retains
+fact revisions and correction constraints. Catalog mutation precedes the operation compare-and-set
+in the same transaction. A lost operation write after a fact mutation must abort the transaction.
+
+| Saved operation state | Accepted event | Catalog effect and next operation state |
+| --- | --- | --- |
+| Remember, CatalogCommitPending | CatalogCommitted | Create the exact Active fact and complete the operation together. |
+| Correct, CatalogCommitPending | CatalogCommitted | Create one Active successor; PostgreSQL marks its prior Active fact Corrected at revision R+1. Advance to PriorDocumentDeletePending. |
+| Forget, CatalogFinalizePending | CatalogFinalized | Change the exact ForgetPending fact from R+1 to Forgotten at R+2 and complete the operation together. |
+| RecoveryRequired with one of these saved recovery phases | Matching accepted catalog event | Apply the same catalog transaction through the existing lifecycle planner. |
+| Stale revision, wrong kind/phase or completed operation | Any catalog event | Deny before a fact write; preserve the saved state. |
+
+Architecture preflight passes. Direct message facts use server-selected personal sensitivity,
+Explicit consent, the operation UUID as fact identity and content-free Message provenance.
+Implementation passes 51 unit tests and all 13 personal-memory PostgreSQL cases, including six new
+completion, duplicate/restart and rollback proofs. The server SQL target also passes its 48 cases
+and raw authority scripts. Package lint/type checks, server build/OpenAPI, style, Prisma ownership,
+module growth and release binding pass. Architecture post-review and independent review of the
+complete nine-file change pass with no blocking findings. This source slice does not add a grant,
+public route, gateway transport or worker; the pending first-dataset permission and gateway
+replacement remain separate decisions. Publication and exact-head CI remain the next gates.
+
 ## Personal memory command preparation and atomic task admission
 
 This slice starts directly above draft #876 at
@@ -634,7 +665,7 @@ remain separate gates.
 | --- | --- | --- | --- |
 | 1 | T1 — real tool retrieval | A permitted real record reaches an answer in personal and company-child chats; remote MCP connections and hosted MCP execution have qualified journeys. Results survive reload and restart without repeated dispatch. | IN PROGRESS: company tool selection and participant terminal-result history are implemented. Explicit connection readiness and execution fencing pass source review and local database proof. Standard remote activation/discovery/calls, hosted MCP execution and real integration qualification remain. |
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry, durable resume and visible decision controls are implemented in draft #857. Company approver/connection binding and real action qualification remain. |
-| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: the repaired 1.5.4 candidate passes exact-image deletion, isolation, dataset permission and indexing recovery qualification. Durable operation persistence is published in #876 with passing CI. Command/source preparation and actual Absurd admission are locally tested; authenticated composition, gateway/client wiring and product Remember, recall, Correct and Forget remain unfinished. |
+| 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: the repaired 1.5.4 candidate passes exact-image deletion, isolation, dataset permission and indexing recovery qualification. Durable operation persistence is published in #876 with passing CI. Command/source preparation and actual Absurd admission are published in #877 with passing CI; catalog completion now passes local unit and PostgreSQL proof; authenticated composition, gateway/client wiring and product Remember, recall, Correct and Forget remain unfinished. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass independent review and exact-head CI in draft #862; qualify the live journey. Other-participant controls remain a separate actor-policy decision. |
 | 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | PAUSED: runtime-question source work awaits its separate explicit approval; partial implementation is not validated delivery. Structured results and A2UI remain. |
 | 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file Open/Preview/Download is implemented and exact-head CI passes in #868. PDF-informed answers are source complete in #869 and exact-head CI passes, including real-store recovery and Linux visuals; live qualification remains. Generated file production follows. |
@@ -949,7 +980,7 @@ their own completion track; they are not silently bundled into the first tool PR
 | T1 — first permitted tool retrieval | IN PROGRESS — the server's one-tool continuation is implemented and now progresses through Absurd in #849. Company tool assignment is the first active follow-up. Connection activation, a real integration and participant result evidence remain required. |
 | T2 | IN PROGRESS: personal approval and durable resume pass local integration; company approval and real external-action qualification remain. |
 | U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
-| M1 | IN PROGRESS: the candidate in #875 passes exact-image deletion, isolation, permission recovery and interrupted-indexing qualification. Durable Remember/Correct/Forget persistence is published in #876 with passing CI. Command/source preparation and transaction-bound Absurd admission pass local proof. Authenticated composition, gateway/client integration and product memory journeys remain. The separate production-provider qualification still fails. |
+| M1 | IN PROGRESS: the candidate in #875 passes exact-image deletion, isolation, permission recovery and interrupted-indexing qualification. Durable Remember/Correct/Forget persistence is published in #876 with passing CI. Command/source preparation and transaction-bound Absurd admission are published in #877 with passing CI; catalog completion passes local unit and PostgreSQL proof. Authenticated composition, gateway/client integration and product memory journeys remain. The separate production-provider qualification still fails. |
 | U2 | PAUSED: partial runtime-question source awaits its separate explicit approval. |
 | F1 | IN PROGRESS: Ready-file Open/Preview/Download and PDF-informed answers pass exact-head CI in #868 and #869. Generated outputs and live qualification remain. |
 | D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |

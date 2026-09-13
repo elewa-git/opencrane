@@ -27,8 +27,12 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   Integrators can now bind new operation storage to the actual Absurd task admitted in the same
   transaction. Exact replay returns the saved receipt without admitting another task. Source
   preparation reads one caller-authored message and rechecks its encrypted coordinates under
-  current conversation access. Authenticated product command composition, worker/provider wiring
-  and the complete memory journey remain unfinished.
+  current conversation access. Catalog completion now publishes the new fact, replaces a prior
+  fact for Correct, or finalizes Forget together with the operation's progress. A failed transaction
+  preserves both prior states; retries cannot publish another correction successor. The catalog
+  keeps consent, personal sensitivity and message provenance without remembered text.
+  Authenticated product command composition, worker/provider wiring and the complete memory
+  journey remain unfinished.
 
 - **Conversation participants can open ready uploaded files from the Files panel.** Supported
   previews and downloads use the current authorized content read, show loading and safe retry

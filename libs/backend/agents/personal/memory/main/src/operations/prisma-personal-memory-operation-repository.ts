@@ -1,5 +1,6 @@
-import { AuthorizationBoundaryKind, MemoryDatasetState, MemoryFactState, type PersonalMemoryOperation as PrismaOperationRow, type Prisma } from "@prisma/client";
+import { AuthorizationBoundaryKind, MemoryConsentState, MemoryDatasetState, MemoryFactState, type PersonalMemoryOperation as PrismaOperationRow, type Prisma } from "@prisma/client";
 
+import { _PersonalMemoryFactCreateData } from "./personal-memory-fact-catalog";
 import { __CreatePersonalMemoryOperationLifecycle, __PlanPersonalMemoryOperationLifecycle } from "./personal-memory-operation-lifecycle";
 import { ___AdmitPersonalMemoryOperationCommandSchema, ___PersonalMemoryOperationReplayLookupSchema, ___PersonalMemoryOperationTaskIdentitySchema } from "./personal-memory-operation-persistence.validator";
 import { PersonalMemoryOperationAdmissionOutcomes, PersonalMemoryOperationInvalidState, PersonalMemoryOperationPersistenceOutcomes, PersonalMemoryOperationReplayConflict, type AdmitPersonalMemoryOperationCommand, type PersonalMemoryOperationAdmissionResult, type PersonalMemoryOperationMessageSource, type PersonalMemoryOperationPersistenceResult, type PersonalMemoryOperationRecord, type PersonalMemoryOperationRepository, type PersonalMemoryOperationTaskAdmission } from "./personal-memory-operation-persistence.types";
@@ -82,8 +83,6 @@ export class PrismaPersonalMemoryOperationRepository implements PersonalMemoryOp
 		const operation = await this._lockOperation(initialRow);
 		if (operation.revision !== initial.revision)
 			return { outcome: PersonalMemoryOperationPersistenceOutcomes.ConcurrentWinner, operation };
-		if (event.event === PersonalMemoryOperationEvents.CatalogCommitted || event.event === PersonalMemoryOperationEvents.CatalogFinalized)
-			throw new PersonalMemoryOperationInvalidState("personal-memory catalog event requires exact fact mutation evidence in this transaction");
 
 		const planned = __PlanPersonalMemoryOperationLifecycle(_PersonalMemoryOperationLifecycle(operation), event);
 		if (planned.outcome === PersonalMemoryOperationTransitionOutcomes.Denied)
@@ -93,6 +92,7 @@ export class PrismaPersonalMemoryOperationRepository implements PersonalMemoryOp
 		if (planned.operation === undefined)
 			throw new PersonalMemoryOperationInvalidState("personal-memory lifecycle accepted an event without next state");
 		const adoptedDataset = await this._adoptDatasetForEvent(dataset, operation, event);
+		const changedCatalog = await this._applyCatalogEvent(operation, event, recordedAt);
 
 		const update = await this.transaction.personalMemoryOperation.updateMany({
 			where: { id: operation.operationId, revision: operation.revision },
@@ -104,8 +104,8 @@ export class PrismaPersonalMemoryOperationRepository implements PersonalMemoryOp
 		const durable = _PersonalMemoryOperationRecord(saved);
 		if (update.count === 0)
 		{
-			if (adoptedDataset)
-				throw new PersonalMemoryOperationInvalidState("dataset adoption lost the matching operation revision");
+			if (adoptedDataset || changedCatalog)
+				throw new PersonalMemoryOperationInvalidState("a dependent personal-memory write lost the matching operation revision");
 			return { outcome: PersonalMemoryOperationPersistenceOutcomes.ConcurrentWinner, operation: durable };
 		}
 		return { outcome: PersonalMemoryOperationPersistenceOutcomes.Advanced, operation: durable };
@@ -159,6 +159,30 @@ export class PrismaPersonalMemoryOperationRepository implements PersonalMemoryOp
 		});
 		if (adopted.count !== 1)
 			throw new PersonalMemoryOperationInvalidState("personal-memory dataset provider adoption lost its state fence");
+		return true;
+	}
+
+	/** Applies exact catalog evidence only after the lifecycle planner accepts the event. */
+	private async _applyCatalogEvent(operation: PersonalMemoryOperationRecord, event: PersonalMemoryOperationEvent, recordedAt: Date): Promise<boolean>
+	{
+		if (event.event === PersonalMemoryOperationEvents.CatalogCommitted)
+		{
+			const data = _PersonalMemoryFactCreateData(operation, recordedAt);
+			if (data === null)
+				throw new PersonalMemoryOperationInvalidState("personal-memory catalog commit lacks immutable fact evidence");
+			await this.transaction.memoryFactCatalog.create({ data: { ...data, state: MemoryFactState.Active, consentState: MemoryConsentState.Explicit } });
+			return true;
+		}
+		if (event.event !== PersonalMemoryOperationEvents.CatalogFinalized)
+			return false;
+		if (operation.kind !== PersonalMemoryOperationKinds.Forget || operation.targetFactId === null || operation.targetDocumentId === null || operation.expectedFactRevision === null)
+			throw new PersonalMemoryOperationInvalidState("personal-memory catalog finalization lacks immutable target evidence");
+		const finalized = await this.transaction.memoryFactCatalog.updateMany({
+			where: { id: operation.targetFactId, datasetId: operation.datasetId, cogneeExternalId: operation.targetDocumentId, state: MemoryFactState.ForgetPending, revision: operation.expectedFactRevision + 1 },
+			data: { state: MemoryFactState.Forgotten, forgottenAt: recordedAt },
+		});
+		if (finalized.count !== 1)
+			throw new PersonalMemoryOperationInvalidState("personal-memory Forget target lost its finalization fence");
 		return true;
 	}
 
