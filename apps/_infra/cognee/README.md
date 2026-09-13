@@ -45,6 +45,12 @@ There is no importable application code.
 
 OpenCrane owns how Cognee is built, deployed, reached, and isolated. The vendor owns Cognee's
 behaviour and data model. Only the release-local memory gateway may connect to the Cognee Service.
+Network isolation decides who may call Cognee. It does not decide what one search may see inside
+Cognee: dataset-scoped retrieval exists only in Cognee's access-control mode, and that mode requires
+a login. The gateway therefore holds one Cognee service user per silo and forwards exactly one
+dataset UUID per request. Cognee's own permissions never separate employees; OpenCrane's dataset
+selection does. The decision and its evidence are in
+[ADR 0017](../../../docs/adr/0017-cognee-access-control-mode-and-gateway-service-user.md).
 Cognee may reach release-local LiteLLM, cluster DNS, and optional local telemetry, but not
 `extension.ladybugdb.com` at runtime.
 
@@ -85,8 +91,12 @@ fallback.
   vector data under `/cognee-data` across pod restarts.
 - `clustertenantManager.cognee.image.*` selects an immutable release image or local smoke alias.
 - `sharedPlatform.litellm.mode` must remain `instance`.
-- Cognee's own login middleware stays disabled because the authenticated gateway and NetworkPolicy
-  own access to this private Service.
+- `ENABLE_BACKEND_ACCESS_CONTROL` and `REQUIRE_AUTHENTICATION` are the decided target, `true` and
+  `true`, once the authenticated isolation proof lands with the switch change. They currently render
+  `false`. In that setting Cognee ignores the requested dataset and searches one shared store, so
+  personal memory must stay unavailable. The memory gateway is the only Cognee login, with one
+  service user per silo. See
+  [ADR 0017](../../../docs/adr/0017-cognee-access-control-mode-and-gateway-service-user.md).
 
 ## See also
 
