@@ -1,8 +1,8 @@
 # OpenCrane — Active Plan
 
-## Visible tool work — source validation
+## Visible tool work — published, CI repair
 
-This U1 slice starts directly above draft #885 at
+This U1 slice is published in draft #887 directly above draft #885 at
 `ede0c912224a6e73404880458380520d4639dcd0` on `feat/0.12-visible-tool-work`.
 The remote MCP integration is an independent sibling in #886; its pending runtime database guards
 must not become a dependency of this existing hosted/personal work-visibility slice.
@@ -38,8 +38,13 @@ The real-Kurrent integration target includes the new recovery and ordering cases
 cases are skipped locally because no Kurrent URL is configured. Full architecture post-review
 passes. Independent review led to same-call lost-acknowledgement recovery and clearer state comments;
 its bounded follow-up review passes with no remaining findings after the final comment correction.
-CI remains required. No live tool call, deployment or testv5 qualification
-is claimed by these source checks.
+CI run `34761057932` at `ded7bbb7836bbd49b12a528d58ed165d4f52db41` passes
+affected build/test/lint, the real-Kurrent history proofs, generated API and stack checks.
+Its database job failed on one existing MCP readiness assertion: task-owned claims now return
+the command envelope with no conversation-run receipt. The assertion now checks both fields;
+production claim behavior is unchanged. All five MCP PostgreSQL cases pass against the same fresh
+baseline, and package lint, style and Prisma-boundary checks pass. Fresh CI remains required after
+this test correction. No live tool call, deployment or testv5 qualification is claimed by these checks.
 
 History that remains unavailable after the hosted SQL claim cannot authorize command release. The
 existing expiry worker closes the invocation and run as recovery-required. That no-redelivery

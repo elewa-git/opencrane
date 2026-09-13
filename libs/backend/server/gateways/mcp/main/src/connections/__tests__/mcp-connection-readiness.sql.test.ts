@@ -244,7 +244,7 @@ describe("MCP connection readiness on the fresh PostgreSQL baseline", function _
 			});
 			await _WaitForUninstallLock();
 			releaseLock?.();
-			await expect(claim).resolves.toMatchObject({ kind: "invocation" });
+			await expect(claim).resolves.toMatchObject({ command: { kind: "invocation" }, runInvocation: null });
 			await expect(deletion).resolves.toEqual({ count: 1 });
 			await expect(_Second.toolInvocation.findUniqueOrThrow({ where: { id: fixture.invocationId } })).resolves.toMatchObject({ state: ToolInvocationState.Claimed, claimKind: ExternalActionClaimKind.Dispatch, claimFence: 1, revision: 2 });
 			await expect(_Second.mcpTask.findUniqueOrThrow({ where: { id: fixture.taskId } })).resolves.toMatchObject({ state: McpTaskState.Running, failureCode: null });
