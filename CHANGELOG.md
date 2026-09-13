@@ -20,10 +20,18 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Added
 
+- **MCP tools can keep their original names when offered to a model.** The compiler gives each
+  immutable revision a distinct model name, so tools with dots, long names or equal names from
+  different servers do not compete for the same declaration. The model selects that saved name;
+  permission checks and runtime calls retain the original revision and MCP name. Recovery uses
+  the same mapping and remaining allowance. Real remote and hosted integration qualification
+  remains separate.
+
 - **Integrators can build a credentialless MCP that produces CSV files from tabular values.** The
   isolated producer and server validator share the same filename, formula-safety and serialization
-  rules. Its `opencrane_files_create_csv` discovery name can be selected by the model without a
-  separate alias. Server validation rejects output that differs from the admitted arguments. The encrypted
+  rules. Its `opencrane_files_create_csv` discovery name remains the exact runtime identity, while
+  the compiler provides its model declaration name. Server validation rejects output that differs
+  from the admitted arguments. The encrypted
   file codec preserves up to 1 MiB through ordered chunks without increasing ordinary message
   limits. MCP completion now requires capture before saving metadata in place of file contents.
   Server workflow progression rechecks current authority, and a clean scan cannot publish a file

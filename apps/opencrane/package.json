@@ -153,6 +153,16 @@
           "env": { "TZ": "UTC" }
         },
         "cache": false
+      },
+      "test:mcp-model-tool-name-integration": {
+        "executor": "nx:run-commands",
+        "dependsOn": ["db:generate"],
+        "options": {
+          "command": "vitest run src/bootstrap/conversations/__tests__/conversation-mcp-model-tool-name.integration.sql.test.ts",
+          "cwd": "apps/opencrane",
+          "env": { "TZ": "UTC" }
+        },
+        "cache": false
       }
     }
   }

@@ -474,6 +474,9 @@ jobs:
       - name: Prove conversation conflicts and saved answer recovery
         run: npx nx run backend-server-conversations:test:integration
 
+      - name: Prove MCP model-name selection and exact runtime dispatch
+        run: npx nx run opencrane:test:mcp-model-tool-name-integration
+
       - name: Prove generated file capture and saved answer recovery
         run: npx nx run opencrane:test:generated-file-integration
 

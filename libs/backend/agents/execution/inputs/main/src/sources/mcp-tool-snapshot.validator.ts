@@ -35,10 +35,9 @@ export function __IsRunInputSnapshotMcpToolValid(tool: RunInputSnapshotMcpTool):
 	}
 }
 
-/** Verifies a complete exact MCP tool revision set and rejects ambiguous ids or model-visible names. */
+/** Verifies a complete exact MCP tool revision set and rejects ambiguous revision identifiers. */
 export function __AreRunInputSnapshotMcpToolsValid(tools: readonly RunInputSnapshotMcpTool[]): boolean
 {
 	return tools.every(__IsRunInputSnapshotMcpToolValid)
-		&& new Set(tools.map(function _RevisionId(tool): string { return tool.toolRevisionId; })).size === tools.length
-		&& new Set(tools.map(function _Name(tool): string { return tool.name; })).size === tools.length;
+		&& new Set(tools.map(function _RevisionId(tool): string { return tool.toolRevisionId; })).size === tools.length;
 }

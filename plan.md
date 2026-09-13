@@ -1,5 +1,40 @@
 # OpenCrane — Active Plan
 
+## MCP tool names across model selection and runtime execution — implementation
+
+This T1 slice starts directly above draft #879 at `774940fb7479e0529c738a265f8de7d2cfa82809`
+on `feat/0.12-mcp-model-tool-names`. Architecture preflight approves a direct replacement in the
+existing compiler, model gateway and conversation selection owners. A tool's exact MCP `name`
+remains frozen with its immutable revision. A separate required `modelName` is derived from that
+revision for provider declarations and responses. The compiled digest covers both names and the
+compiler version changes; there is no fallback to the old dual-use name contract.
+
+Parallel source lanes cover compilation and first-party declarations, gateway selection and
+recovery, and an application integration proof from persisted discovery through exact MCP dispatch.
+Duplicate runtime names are permitted only for distinct revisions with distinct model names.
+Permission, approval, schema and argument checks still use the original revision evidence. No
+credential, grant, scheduler, database schema or MCP executor authority changes in this slice.
+Library and application independent reviews and architecture post-review pass. Contracts (135),
+execution inputs (124), personal configuration (65), model gateway (190), conversations (628),
+MCP gateway (193) and application composition (115) tests pass with their lint/type checks. The application SQL target passes
+74 cases and four raw authority scripts on a new disposable database, preserving prior fixtures.
+Server build, full dependency lint, style, Prisma ownership, module growth, release binding and
+24 CI-workflow regression tests pass. The new PostgreSQL/Kurrent target compiles and its local
+prerequisite check passes; its complete case is skipped without Kurrent and must execute in CI.
+The integration now follows the real compiler, model transport, saved selection/custody, IAM
+admission and companion claim, then recovers with fresh clients without repeating the model call,
+invocation or runtime execution. This source checkpoint still needs its incremental draft PR and CI.
+
+The parent CSV correction's exact-head CI run `34740821230` passes its combined PostgreSQL/Kurrent
+generated-file recovery step, source checks, database authority, API, Storybook and image smokes.
+The run completed with one failure: the existing production memory-provider contract. The 1.5.4
+candidate passed this run. Offline diagnosis found that the earlier delete-first fixture acquired
+a global file lock while the server used an owner-scoped lock, leaving its claimed serialization
+unproven. The lock mismatch is confirmed; it is the likely explanation for the intermittent error.
+A bounded fixture/cleanup correction and deterministic synchronization proof remain to implement. Replacement
+topology run `34740838698` and the post-push live stack check pass. F1 still needs its pending SQL
+guard and the separately qualified governed OCI-to-download journey.
+
 ## Generated conversation files — implementation in progress
 
 F1 continues above draft #878 at `5acd38a6f6dec8a0dc4fa4e010bf7a9b9e73b37d` on
@@ -18,7 +53,7 @@ and loopback HTTP tests plus the app image contract. CSV media policy passes fiv
 lint. Independent producer review passed before the shared CSV model extraction; the integrated review
 of that extraction, resource validation and encrypted custody passes. Capture persistence,
 metadata-only MCP completion, workflow persistence and scanner publication checks are implemented
-locally. The actual capture and scanner PostgreSQL/Absurd proofs pass; final answer integration is implemented and awaits its combined CI proof.
+locally. The actual capture and scanner PostgreSQL/Absurd proofs pass, and the combined final-answer recovery proof passes CI at `774940fb7`.
 
 The server integration must preserve these ordering rules:
 
@@ -67,7 +102,7 @@ commit. The link owner reloads that receipt and binds the asset before run compl
 cover link failure, changed attachments and settlement after an already-linked answer's lease
 expires. Frontend mapper and content-store tests cover refreshed AgentOutput CSV downloads.
 Independent final-output review passes with no findings. The assembled PostgreSQL/Kurrent proof
-is implemented and awaits CI execution.
+passes CI at `774940fb7` after the exact producer-name correction.
 
 Final-output architecture post-review passes, including the seven module-growth candidates.
 The broad local source run passes 920 tests; the full server SQL target passes 73 cases plus its
@@ -103,15 +138,18 @@ a fixture-only alias is rejected, and the declaration validator remains unchange
 passes independent review and all 21 source-manifest hashes match. Focused model, MCP gateway,
 asset and producer suites pass 17, 193, 153 and 5 tests respectively, with lint/type checks,
 producer build, style, Prisma boundaries and module growth passing. The complete proof and
-overall CI are still pending. The live stack
+corrected combined proof now passes in run `34740821230` at `774940fb7`. Source, database, API,
+Storybook and image checks also pass. That run remains red only for the existing production
+memory-provider contract. The live stack
 check and replacement stack CI run `34739775866` pass after recording the complete ancestor review
 order; the branch contains the current `origin/develop`. This source checkpoint does not close F1.
 
-The same CI run also fails both memory-provider qualification jobs. The production pin retains its
+The earlier CI run `34739668909` failed both memory-provider qualification jobs. The production pin retains its
 known source-file erasure gap. The 1.5.4 candidate returned HTTP 500 while adding a shared file,
 reporting a missing provider-owned `shared.txt`; its prior passing run does not establish repeatable
 qualification. No Cognee harness source changed in this PR. Candidate root-cause diagnosis remains
-open, and neither provider is qualified for the complete memory journey.
+open. The candidate passes the next exact-head run `34740821230`, but neither that pass nor the
+persistence slices qualify the complete memory product.
 
 The additional PostgreSQL once-only message-link guard is proposed but unapplied: automatic approval
 review requires explicit approval of that exact production baseline mutation. The concrete source

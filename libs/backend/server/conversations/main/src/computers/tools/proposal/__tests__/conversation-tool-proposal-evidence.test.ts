@@ -37,7 +37,7 @@ function _fixture()
 	});
 	const schema = { type: "object", properties: { query: { type: "string" } }, required: ["query"], additionalProperties: false };
 	const tool = {
-		toolRevisionId: "tool-1", name: "records.read", description: "Read a record", requiresApproval: false,
+		toolRevisionId: "tool-1", name: "records.read", modelName: "records_read", description: "Read a record", requiresApproval: false,
 		parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema),
 	};
 	const proposal: PreparedConversationToolProposal = {

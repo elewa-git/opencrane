@@ -120,6 +120,13 @@ tool effect, and every server effect rejects a changed frozen input, stale lease
 
 ## Tool and answer authority
 
+Model declarations use the compiled `modelName`, which is distinct from the tool's exact MCP
+`name`. Selection resolves one offered model name to its immutable `toolRevisionId` before the
+existing proposal checks run. Approval disclosure, participant logs and runtime dispatch retain
+the original name. A recovered declaration must resolve to the same saved proposal and fingerprint;
+changing its name cannot move an existing invocation to another revision or obtain another model
+request. The model name itself grants no permission.
+
 A proposal keeps one invocation slot for its admitted run attempt. Its transaction reads the saved
 run and snapshot, records central permission evidence, checks current dispatch access and admits
 executor work together. A refusal after any write rolls back the whole transaction. Identical

@@ -22,8 +22,9 @@ Import `@opencrane/models/conversation-assets` for the enums, limits, and pure p
 `___CreateCsvFile` validates a filename, unique headers and rectangular scalar rows, rejects
 formula-leading strings and control characters, and returns at most 1 MiB of UTF-8 CSV. Negative
 numeric cells remain numbers. `GENERATED_CSV_INPUT_SCHEMA` is the same argument contract exposed
-by the MCP producer. `GENERATED_CSV_TOOL_NAME` is the one discovery and model-selection name shared
-by the isolated producer and server capture.
+by the MCP producer. `GENERATED_CSV_TOOL_NAME` is the discovery and runtime name shared by the
+isolated producer and server capture. The server compiler owns the separate model declaration name
+for each admitted revision.
 
 ## Boundary
 

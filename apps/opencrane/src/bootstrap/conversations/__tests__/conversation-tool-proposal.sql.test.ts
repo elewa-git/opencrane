@@ -1,8 +1,11 @@
-import { Prisma, PrismaClient } from "@prisma/client";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 
-import { ConversationToolProposalOutcomes, MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
+import { Prisma, PrismaClient } from "@prisma/client";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+
+import { ConversationModelResponseKinds, ConversationModelToolModes, ConversationToolProposalOutcomes, MCP_EXECUTOR_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import { PrismaConversationToolProposalUnitOfWork } from "@opencrane/backend/server/conversations";
+import { __RequestConversationModel } from "@opencrane/backend/server/gateways/model-routing";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 
@@ -61,6 +64,7 @@ describe("conversation tool proposal admission on fresh PostgreSQL", function _S
 	});
 	afterEach(async function _FinishFixtureControllers()
 	{
+		vi.unstubAllGlobals();
 		for (const runtime of _Runtimes.values())
 			await runtime.register();
 		_Runtimes.clear();
@@ -88,6 +92,35 @@ describe("conversation tool proposal admission on fresh PostgreSQL", function _S
 		expect(await _Second.mcpRuntimeExecution.findMany({ where: { siloId: f.siloId } })).toMatchObject([{ toolInvocationId: rows[0].id, workloadState: "Pending", commandState: "Pending" }]);
 		const restarted = _Owner(_Second, f);
 		expect(await restarted.admit(f.turn, f.candidate, f.proposal, _WORKLOAD)).toEqual({ proposalId: receipts[0].proposalId, outcome: ConversationToolProposalOutcomes.Existing });
+	});
+
+	it("compiles a provider-safe name while admission retains the exact dotted MCP runtime name", async function _ModelNameBoundary()
+	{
+		const sourceName = `records.${"long_segment_".repeat(8)}lookup`;
+		const f = await _SeedConversationToolProposalSqlFixture({ tool: { name: sourceName, description: "Read one record through a long discovered name", inputSchema: { type: "object", required: ["query"], properties: { query: { type: "string" } }, additionalProperties: false }, arguments: { query: "dedicated record" } } });
+		expect(sourceName.length).toBeGreaterThan(64);
+		expect(f.tool).toMatchObject({ name: sourceName, modelName: expect.stringMatching(/^mcp_[A-Za-z0-9_-]{43}$/u), toolRevisionId: f.proposal.toolRevisionId });
+		const restartedInput = await f.recompile();
+		expect(restartedInput).toEqual(f.candidate.compiledInput);
+
+		const call = { id: `call-${randomUUID()}`, name: f.tool.modelName, arguments: JSON.stringify(f.proposal.arguments), content: null };
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ index: 0, finish_reason: "tool_calls", message: { role: "assistant", content: null, tool_calls: [{ id: call.id, type: "function", function: { name: call.name, arguments: call.arguments } }] } }] }), { headers: { "content-type": "application/json; charset=utf-8" } }));
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(__RequestConversationModel({ compiledInput: f.candidate.compiledInput, endpoint: "https://model.example.test", key: "fixture-model-key", modelAlias: f.turn.modelAlias, maxCompletionTokens: 100, notAfterEpochMs: Date.now() + 30_000, tools: ConversationModelToolModes.Select, continuation: null })).resolves.toEqual({ kind: ConversationModelResponseKinds.Tool, call });
+		const providerBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1].body));
+		expect(providerBody.tools).toEqual([{ type: "function", function: { name: f.tool.modelName, description: f.tool.description, parameters: f.tool.parametersSchema } }]);
+		expect(JSON.stringify(providerBody.tools)).not.toContain(sourceName);
+		const owner = _Owner(_First, f);
+		const receipt = await owner.admit(f.turn, f.candidate, f.proposal, _WORKLOAD);
+		const runtime = _Runtime(_First, f);
+		const registered = (await runtime.register())!;
+		const command = await runtime.authority.claimCompanion(registered.identity, registered.executionReference);
+		if (command === null || typeof command === "string" || command.kind !== "invocation")
+			throw new Error("Expected the exact MCP invocation after model-name selection");
+		expect(command).toMatchObject({ invocationId: receipt.proposalId, toolName: sourceName, arguments: f.proposal.arguments });
+		expect(await owner.admit(f.turn, { ...f.candidate, compiledInput: restartedInput }, f.proposal, _WORKLOAD)).toEqual({ proposalId: receipt.proposalId, outcome: ConversationToolProposalOutcomes.Existing });
+		expect(await _Second.toolInvocation.count({ where: { runId: f.runId } })).toBe(1);
+		expect(await _Second.mcpRuntimeExecution.count({ where: { siloId: f.siloId } })).toBe(1);
 	});
 
 	it("lets only one of two different argument bodies own the single slot", async function _ChangedBodyRace()

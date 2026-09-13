@@ -59,7 +59,7 @@ describe("terminal tool history before the final model call", function _Suite()
 		expect(completed.outputReceipt?.expectedRevision).toBe("2");
 		const entries = f.history.streams.get(f.stream)!;
 		expect(entries).toHaveLength(4);
-		expect(entries[2].data["entry"]).toMatchObject({ position: "2", kind: "log", logKind: "tool_call", toolName: "lookup_record", phase: "completed", visibility: { audience: "conversation" }, detailsRef: null, resultArtifactRevisionId: null });
+		expect(entries[2].data["entry"]).toMatchObject({ position: "2", kind: "log", logKind: "tool_call", toolName: "records.lookup", phase: "completed", visibility: { audience: "conversation" }, detailsRef: null, resultArtifactRevisionId: null });
 		expect(entries[3].data).toEqual(completed.outputReceipt!.event.data);
 		const reader = new ConversationHistoryReader(f.history);
 		const replay = await reader.read({ siloId: "silo-1", conversationId: "conversation-1", fromRevision: 2n, maxCount: 2, maximumBytes: 65_536 });

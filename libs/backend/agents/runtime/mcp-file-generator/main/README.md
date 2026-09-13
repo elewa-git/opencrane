@@ -31,7 +31,8 @@ bytes each have a one MiB ceiling.
 - `__CreateMcpFileGeneratorServer` creates the HTTP server used by the OCI image.
 - The exported runtime constants give the app and tests the loopback address and resource metadata
   URI. The shared conversation-assets model owns the `opencrane_files_create_csv` tool name used by
-  both MCP discovery and model selection.
+  MCP discovery and runtime calls. The server compiler supplies a separate model name for each
+  immutable revision.
 
 The [conversation-assets model](../../../../../models/conversation-assets/main/README.md) owns
 `___CreateCsvFile`, its input schema and limits. The producer and server capture use that same

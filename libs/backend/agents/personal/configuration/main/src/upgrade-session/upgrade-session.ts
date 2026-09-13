@@ -28,6 +28,7 @@ const _UPGRADE_SESSION_PARAMETERS_SCHEMA = { oneOf: [{ type: "object", propertie
  */
 export const UPGRADE_SESSION_TOOL: CompiledToolDefinition = {
 	name: "upgrade_session",
+	modelName: "upgrade_session",
 	toolRevisionId: UPGRADE_SESSION_TOOL_REVISION,
 	description: "Propose a personal-agent configuration change for a future session after the user reviews it.",
 	requiresApproval: false,

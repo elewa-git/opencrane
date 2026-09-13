@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
+import { PrismaClient } from "@prisma/client";
 import { Client } from "pg";
 
-import { AgentIdentityStates, ComputerLeaseStates, ConversationComputerStates, ExecutionSubjectMembershipKinds, ___ExecutionSubjectSchema, type CompiledRunInput, type CompiledToolDefinition, type ConversationToolProposal, type RunInputSnapshot } from "@opencrane/contracts";
+import { AgentIdentityStates, ComputerLeaseStates, ConversationComputerStates, ExecutionSubjectMembershipKinds, PROMPT_COMPILER_VERSION, ___ExecutionSubjectSchema, type ConversationToolProposal, type RunInputSnapshot } from "@opencrane/contracts";
+import { PrismaPromptCompilerUnitOfWork } from "@opencrane/backend/agents/execution/inputs";
 import { __DigestRunInputSnapshot } from "@opencrane/backend/agents/execution/runs";
 import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
@@ -80,10 +82,13 @@ export async function _SeedConversationToolProposalSqlFixture(options: _FixtureO
 	const schema: JsonValue = options.tool?.inputSchema ?? (options.secretArguments === true
 		? { type: "object", required: ["token"], properties: { token: { type: "string", writeOnly: true } }, additionalProperties: false }
 		: { type: "object", required: ["query"], properties: { query: { type: "string" } }, additionalProperties: false });
-	const tool: CompiledToolDefinition = { name: options.tool?.name ?? "records.read", toolRevisionId: id("tool"), description: options.tool?.description ?? "Read a dedicated test record", requiresApproval: options.approvalRequired === true, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) };
+	const toolRevisionId = id("tool");
+	const toolName = options.tool?.name ?? "records.read";
+	const toolDescription = options.tool?.description ?? "Read a dedicated test record";
+	const toolSchemaDigest = ___DigestCanonicalJson(schema);
 	const serverName = "Records SQL proof";
 	const budgetPolicy = { maxModelTurns: 2, maxCompletionTokens: options.maximumCompletionTokens ?? 1_024, maxToolInvocations: 1, wallClockDeadlineEpochMs: now.getTime() + (options.runLifetimeMs ?? 240_000) };
-	const snapshot: RunInputSnapshot = { runId, attempt: 1, siloId, agentServiceId, agentRevisionId, snapshotVersion: 1, conversationId, messageIds: [], personaRevisionId: id("persona"), preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [{ toolRevisionId: tool.toolRevisionId, name: tool.name, description: tool.description, inputSchema: schema, inputSchemaDigest: tool.parametersSchemaDigest }], modelRoute: { alias: modelId, modelDefinitionId: modelId, litellmModelId: `litellm-${modelId}`, maxOutputTokens: 512, generatedOutputCapabilities: [] }, budgetPolicy, executionSubject: subject, promptCompilerVersion: "tool-proof-v1", digest: "", compiledAt: now.toISOString() };
+	const snapshot: RunInputSnapshot = { runId, attempt: 1, siloId, agentServiceId, agentRevisionId, snapshotVersion: 1, conversationId, messageIds: [], personaRevisionId: id("persona"), preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [{ toolRevisionId, name: toolName, description: toolDescription, inputSchema: schema, inputSchemaDigest: toolSchemaDigest }], modelRoute: { alias: modelId, modelDefinitionId: modelId, litellmModelId: `litellm-${modelId}`, maxOutputTokens: 512, generatedOutputCapabilities: [] }, budgetPolicy, executionSubject: subject, promptCompilerVersion: PROMPT_COMPILER_VERSION, digest: "", compiledAt: now.toISOString() };
 	const snapshotDigest = __DigestRunInputSnapshot(snapshot);
 	const setup = new Client({ connectionString: process.env.DATABASE_URL });
 	await setup.connect();
@@ -96,26 +101,26 @@ export async function _SeedConversationToolProposalSqlFixture(options: _FixtureO
 		await setup.query("INSERT INTO org_memberships (id, cluster_tenant, subject, role, status, updated_at) VALUES ($1, $2, $3, 'member', 'active', $4)", [membership.membershipId, siloId, principalId, now]);
 		await _SeedApprovedPersona(setup, id, siloId, principalId, now);
 		await setup.query("INSERT INTO agent_services (id, silo_id, kind, name, workload_profile, updated_at) VALUES ($1, $2, 'personal', 'SQL assistant', 'personal-default', $3)", [agentServiceId, siloId, now]);
-		await setup.query("INSERT INTO agent_revisions (id, silo_id, agent_service_id, revision, digest, prompt_policy_version, model_definition_id, budget, authored_by, persona_revision_id) VALUES ($1, $2, $3, 1, $4, 'tool-proof-v1', $5, $6::jsonb, $7, $8)", [agentRevisionId, siloId, agentServiceId, ___DigestCanonicalJson(agentRevisionId), modelId, JSON.stringify(budgetPolicy), principalId, id("persona")]);
+		await setup.query("INSERT INTO agent_revisions (id, silo_id, agent_service_id, revision, digest, prompt_policy_version, model_definition_id, budget, authored_by, persona_revision_id) VALUES ($1, $2, $3, 1, $4, $5, $6, $7::jsonb, $8, $9)", [agentRevisionId, siloId, agentServiceId, ___DigestCanonicalJson(agentRevisionId), PROMPT_COMPILER_VERSION, modelId, JSON.stringify(budgetPolicy), principalId, id("persona")]);
 		const digest = ___DigestCanonicalJson(id("image"));
 		const image = `registry.example.test/proof/image@${digest}`;
-		await setup.query("INSERT INTO mcp_servers (id, silo_id, name, endpoint, transport, status, approval_status, credential_requirement, updated_at) VALUES ($1, $2, $3, $4, 'oci-image', 'active', 'published', 'credentialless', $5)", [id("server"), siloId, serverName, image, now]);
+		await setup.query("INSERT INTO mcp_servers (id, silo_id, name, endpoint, transport, status, approval_status, credential_requirement, requires_approval, updated_at) VALUES ($1, $2, $3, $4, 'oci-image', 'active', 'published', 'credentialless', $5, $6)", [id("server"), siloId, serverName, image, options.approvalRequired === true, now]);
 		await setup.query("INSERT INTO oci_image_validations (id, silo_id, artifact_id, artifact_revision_id, content_address, byte_length, media_type, submission_key_digest, submission_digest, state, index_digest, image_manifest_digest, config_digest, registry_reference, created_by_principal_id, completed_at, updated_at) VALUES ($1, $2, $3, $4, $5, 1, 'application/vnd.oci.image.layout.v1+tar', $5, $5, 'imported', $5, $5, $5, $6, $7, $8, $8)", [id("validation"), siloId, id("artifact"), id("artifact-revision"), digest, image, principalId, now]);
 		await setup.query("INSERT INTO mcp_server_revisions (id, silo_id, mcp_server_id, oci_image_validation_id, revision, registry_reference, updated_at) VALUES ($1, $2, $3, $4, 1, $5, $6)", [id("server-revision"), siloId, id("server"), id("validation"), image, now]);
-		await setup.query("INSERT INTO mcp_tool_revisions (id, silo_id, server_revision_id, name, description, input_schema, input_schema_digest) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)", [tool.toolRevisionId, siloId, id("server-revision"), tool.name, tool.description, JSON.stringify(schema), tool.parametersSchemaDigest]);
+		await setup.query("INSERT INTO mcp_tool_revisions (id, silo_id, server_revision_id, name, description, input_schema, input_schema_digest) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)", [toolRevisionId, siloId, id("server-revision"), toolName, toolDescription, JSON.stringify(schema), toolSchemaDigest]);
 		await setup.query("UPDATE mcp_server_revisions SET state='ready', protocol_version='2026-07-28', completed_at=$2 WHERE id=$1", [id("server-revision"), now]);
 		await setup.query("INSERT INTO mcp_server_installs (id, mcp_server_id, principal_id, connection_status, updated_at) VALUES ($1, $2, $3, 'credentialless', $4)", [id("server-install"), id("server"), principalId, now]);
-		await setup.query("INSERT INTO agent_revision_mcp_tool_assignments (agent_revision_id, agent_service_id, tool_revision_id, silo_id) VALUES ($1, $2, $3, $4)", [agentRevisionId, agentServiceId, tool.toolRevisionId, siloId]);
+		await setup.query("INSERT INTO agent_revision_mcp_tool_assignments (agent_revision_id, agent_service_id, tool_revision_id, silo_id) VALUES ($1, $2, $3, $4)", [agentRevisionId, agentServiceId, toolRevisionId, siloId]);
 		await setup.query("UPDATE agent_revisions SET state='published', published_at=$2 WHERE id=$1", [agentRevisionId, now]);
 		await setup.query("UPDATE agent_services SET state='active', active_revision_id=$2 WHERE id=$1", [agentServiceId, agentRevisionId]);
 		await setup.query("SELECT pg_temp.seed_agent_conversation($1, $2, $3)", [conversationId, siloId, agentServiceId]);
 		await setup.query("SELECT pg_temp.seed_participant($1, $2)", [conversationId, principalId]);
 		await setup.query("INSERT INTO conversation_computer_active_leases (computer_id, silo_id, conversation_id, agent_identity_id, lease_id, lease_generation, expires_at, updated_at) VALUES ($1, $2, $3, $4, $5, 1, $6, $7)", [computerId, siloId, conversationId, agentIdentityId, lease.leaseId, leaseExpiresAt, now]);
 		await setup.query("INSERT INTO agent_runs (id, silo_id, agent_service_id, agent_revision_id, conversation_id, trigger, agent_identity_id, principal_id, execution_subject, request_idempotency_key, input_snapshot_digest) VALUES ($1, $2, $3, $4, $5, 'interactive', $6, $7, $8::jsonb, $9, $10)", [runId, siloId, agentServiceId, agentRevisionId, conversationId, agentIdentityId, principalId, JSON.stringify(subject), id("request"), snapshotDigest]);
-		await setup.query("INSERT INTO run_input_snapshots (id, run_id, attempt, snapshot_version, silo_id, agent_service_id, agent_revision_id, agent_identity_id, principal_id, execution_subject, conversation_id, model_route, mcp_tools, memory_query_policy, budget_policy, prompt_compiler_version, input_digest, created_at, persona_revision_id) VALUES ($1, $2, 1, 1, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11::jsonb, '{}'::jsonb, $12::jsonb, 'tool-proof-v1', $13, $14, $15)", [id("snapshot"), runId, siloId, agentServiceId, agentRevisionId, agentIdentityId, principalId, JSON.stringify(subject), conversationId, JSON.stringify(snapshot.modelRoute), JSON.stringify(snapshot.mcpTools), JSON.stringify(budgetPolicy), snapshotDigest, now, id("persona")]);
+		await setup.query("INSERT INTO run_input_snapshots (id, run_id, attempt, snapshot_version, silo_id, agent_service_id, agent_revision_id, agent_identity_id, principal_id, execution_subject, conversation_id, model_route, mcp_tools, memory_query_policy, budget_policy, prompt_compiler_version, input_digest, created_at, persona_revision_id) VALUES ($1, $2, 1, 1, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11::jsonb, '{}'::jsonb, $12::jsonb, $13, $14, $15, $16)", [id("snapshot"), runId, siloId, agentServiceId, agentRevisionId, agentIdentityId, principalId, JSON.stringify(subject), conversationId, JSON.stringify(snapshot.modelRoute), JSON.stringify(snapshot.mcpTools), JSON.stringify(budgetPolicy), PROMPT_COMPILER_VERSION, snapshotDigest, now, id("persona")]);
 		await setup.query("SET CONSTRAINTS ALL IMMEDIATE");
 		await setup.query("UPDATE agent_runs SET state='running', started_at=$2 WHERE id=$1", [runId, now]);
-		for (const [kind, resourceId] of [[ProductAuthorizationResourceKinds.AgentService, agentServiceId], [ProductAuthorizationResourceKinds.Conversation, conversationId], [ProductAuthorizationResourceKinds.McpToolRevision, tool.toolRevisionId]] as const)
+		for (const [kind, resourceId] of [[ProductAuthorizationResourceKinds.AgentService, agentServiceId], [ProductAuthorizationResourceKinds.Conversation, conversationId], [ProductAuthorizationResourceKinds.McpToolRevision, toolRevisionId]] as const)
 		{
 			const action = kind === ProductAuthorizationResourceKinds.Conversation ? ProductAuthorizationActions.Use : ProductAuthorizationActions.Invoke;
 			const capability = __ProductAuthorizationCapability(kind, action)!;
@@ -131,17 +136,37 @@ export async function _SeedConversationToolProposalSqlFixture(options: _FixtureO
 		throw error;
 	}
 	finally { await setup.end(); }
+	const recompile = async function _Recompile()
+	{
+		const prisma = new PrismaClient();
+		try
+		{
+			return await new PrismaPromptCompilerUnitOfWork(prisma, function _NoMessages()
+			{
+				return { loadMessages: async function _LoadMessages(messageIds: readonly string[])
+				{
+					if (messageIds.length !== 0)
+						throw new Error("SQL fixture compiler expected empty conversation history");
+					return [];
+				} };
+			}).compile({ ...snapshot, digest: snapshotDigest }, 1);
+		}
+		finally { await prisma.$disconnect(); }
+	};
+	const compiledInput = await recompile();
+	const tool = compiledInput.tools.find(definition => definition.toolRevisionId === toolRevisionId);
+	if (tool === undefined)
+		throw new Error("SQL fixture compiler omitted its exact MCP tool revision");
 	const identity = { schemaVersion: 1, id: agentIdentityId, siloId, agentServiceId, name: "SQL assistant", avatarArtifactRevisionId: null, state: AgentIdentityStates.Active, createdByPrincipalId: principalId, createdAt: now.toISOString(), kind: "proxied", proxiedPrincipalId: principalId, delegationPolicyId: "personal-agent-session-v1" } as const;
 	const dependencies = { ..._CreateConversationToolDispatchDependencies({} as never, { mode: FleetMembershipDeploymentModes.Standalone, siloId, trustedOidcIssuer: membership.issuer, maximumStalenessMs: options.currentMembershipLifetimeMs ?? 300_000 }),
 		identities: { load: async function _Identity() { return { identity, revision: 0n, headDigest: subject.identity.headDigest, headEventId: id("identity-event"), streamName: id("identity-stream") }; } },
 		computers: { load: async function _Computer() { return { computer: { state: ConversationComputerStates.Warm, leaseGeneration: 1 }, lease: { state: ComputerLeaseStates.Active, id: lease.leaseId, generation: 1, computerId, sandboxId: id("sandbox"), expiresAt: leaseExpiresAt } } as never; } } };
 	const binding = { siloId, conversationId, computerId, leaseGeneration: 1, agentIdentityId, agentServiceId, agentName: "SQL assistant", agentAvatarArtifactRevisionId: null, runId, expectedRevision: 0n, maximumEntryBytes: 65_536 };
-	const compiledInput: CompiledRunInput = { promptCompilerVersion: "tool-proof-v1", runId, attempt: 1, instructions: "Read the requested test record.", messages: [], tools: [tool], model: { modelAlias: modelId, maxOutputTokens: 512, generatedOutputCapabilities: [] }, budget: { ...budgetPolicy, maxCostUsdMicros: null }, digest: ___DigestCanonicalJson(id("compiled-input")) };
 	const turn: FrozenConversationComputerTurn = { bootstrapId: randomUUID(), siloId, computerId, lease, binding, latestPendingEntryId: id("message"), latestPendingEntryPosition: "1", modelAlias: modelId, maximumBudgetUsd: 1, credentialLifetimeSeconds: 120, compile: { runId, attempt: 1, promptCompilerVersion: compiledInput.promptCompilerVersion, digest: compiledInput.digest }, outputSourceCommandId: null, outputReceipt: null, cancellationReceipt: null, toolSelection: null, continuationReservation: null, modelReservation: null };
 	const candidate: ConversationComputerTurnCandidate = { ...turn, compiledInput, credentialExpiresAt: trustedUntil };
 	const argumentsValue: ConversationToolProposal["arguments"] = options.tool?.arguments ?? (options.secretArguments === true ? { token: "sql-secret-never-visible" } : { query: "dedicated record" });
 	const proposal: ConversationToolProposal = { bootstrapId: turn.bootstrapId, toolRevisionId: tool.toolRevisionId, arguments: argumentsValue };
-	return { siloId, runId, principalId, subject, turn, candidate, dependencies, leaseExpiresAt, tool, serverName, proposal, toolGrantId: id(`grant-${ProductAuthorizationResourceKinds.McpToolRevision}`) };
+	return { siloId, runId, principalId, subject, turn, candidate, dependencies, leaseExpiresAt, tool, serverName, proposal, recompile, toolGrantId: id(`grant-${ProductAuthorizationResourceKinds.McpToolRevision}`) };
 }
 
 /** Reuses the approved-persona sequence proved by personal-configuration-authority.sql. */

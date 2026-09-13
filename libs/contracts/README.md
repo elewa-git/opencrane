@@ -58,8 +58,11 @@ record of one run's frozen persona, transcript, memory references, tools, budget
 verified identity provenance; it carries only immutable coordinates and canonical JSON, never
 provider credentials or mutable source objects. Its `mcpTools` list records immutable MCP tool
 revision identifiers plus each saved name, description, exact input JSON Schema, and canonical
-schema digest. Registry and provider credentials remain entirely behind server-owned execution
-boundaries and never enter the snapshot or conversation computer. The compiled model
+schema digest. Compilation keeps that exact source name for disclosure and MCP dispatch, while it
+adds a provider-compatible `modelName` derived from the immutable revision identifier. The alias is
+sealed into the compiled input; it is neither stored in the snapshot nor used as permission.
+Registry and provider credentials remain entirely behind server-owned execution boundaries and
+never enter the snapshot or conversation computer. The compiled model
 route also freezes the model registry's generated-output allowlist; the executor
 cannot infer image-generation authority from a prompt or provider response. The compiled budget
 preserves the admitted model-turn limit alongside token, cost, tool, and wall-clock ceilings.

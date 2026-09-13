@@ -15,7 +15,7 @@ export async function _ToolContinuationHarness()
 	const overrides: Partial<ConversationComputerTurnAuthorityDependencies> = {};
 	const f = await _OutputRecoveryHarness(false, overrides);
 	const schema = { type: "object", required: ["query"], additionalProperties: false, properties: { query: { type: "string" } } };
-	Object.assign(f.candidate, { compiledInput: { ...f.candidate.compiledInput, tools: [{ name: "lookup_record", toolRevisionId: "tool-1", description: "Read a dedicated record", requiresApproval: false, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) }], budget: { ...f.candidate.compiledInput.budget, maxModelTurns: 2, maxToolInvocations: 1, wallClockDeadlineEpochMs: Date.now() + 240_000 } } });
+	Object.assign(f.candidate, { compiledInput: { ...f.candidate.compiledInput, tools: [{ name: "records.lookup", modelName: "lookup_record", toolRevisionId: "tool-1", description: "Read a dedicated record", requiresApproval: false, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) }], budget: { ...f.candidate.compiledInput.budget, maxModelTurns: 2, maxToolInvocations: 1, wallClockDeadlineEpochMs: Date.now() + 240_000 } } });
 	const call = { id: "original-call-id", name: "lookup_record", arguments: "{ \"query\": \"private-query\" }", content: "Private assistant declaration" };
 	f.model.request.mockImplementation(async function _Model(input)
 	{

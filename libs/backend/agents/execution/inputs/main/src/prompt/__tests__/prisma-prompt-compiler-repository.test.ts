@@ -13,16 +13,22 @@ function _executionSubject()
 }
 
 /** Build the narrow transaction doubles used by immutable prompt repository tests. */
-function _Transaction()
+function _Transaction(toolRows: readonly unknown[] = [_ToolRow()])
 {
-	const schema = { type: "object", additionalProperties: false };
 	return {
 		personaRevision: { findFirst: vi.fn().mockResolvedValue({ compiledInstructions: "Be helpful." }) },
-		mcpToolRevision: { findMany: vi.fn().mockResolvedValue([{ id: "tool-1", siloId: "silo-1", name: "calendar.read", description: "Read calendar", inputSchema: schema, inputSchemaDigest: ___DigestCanonicalJson(schema), serverRevision: { siloId: "silo-1", state: "Retired", server: { siloId: "silo-1", status: "Disabled", approvalStatus: "Revoked", requiresApproval: true } } }]) },
+		mcpToolRevision: { findMany: vi.fn().mockResolvedValue(toolRows) },
 		artifactRevision: { findMany: vi.fn().mockResolvedValue([{ id: "artifact-1", mediaType: "text/plain" }]) },
 		skillRevision: { findMany: vi.fn().mockResolvedValue([{ id: "skill-1", skillId: "skill-parent-1" }]) },
 		modelDefinition: { findFirst: vi.fn().mockResolvedValue({ id: "model-1", siloId: "silo-1", publicModelName: "changed-model", litellmModelId: "changed-deployment", generatedOutputCapabilities: [] }) },
 	};
+}
+
+/** Build one historical MCP tool row whose immutable literals remain compilable. */
+function _ToolRow(overrides: Record<string, unknown> = {})
+{
+	const schema = { type: "object", additionalProperties: false };
+	return { id: "tool-1", siloId: "silo-1", name: "calendar.read", description: "Read calendar", inputSchema: schema, inputSchemaDigest: ___DigestCanonicalJson(schema), serverRevision: { siloId: "silo-1", state: "Retired", server: { siloId: "silo-1", status: "Disabled", approvalStatus: "Revoked", requiresApproval: true } }, ...overrides };
 }
 
 describe("PrismaPromptCompilerRepository", function _PrismaPromptCompilerRepositorySuite()
@@ -50,10 +56,42 @@ describe("PrismaPromptCompilerRepository", function _PrismaPromptCompilerReposit
 
 		await expect(repository.loadPersonaInstructions("persona-1")).resolves.toBe("Be helpful.");
 		await expect(repository.loadMessages(["message-1"])).resolves.toEqual([{ role: "user", content: "hello" }]);
-		await expect(repository.loadToolDefinitions([{ toolRevisionId: "tool-1", name: "calendar.read", description: "Read calendar", inputSchema: schema, inputSchemaDigest: ___DigestCanonicalJson(schema) }])).resolves.toEqual([{ toolRevisionId: "tool-1", name: "calendar.read", description: "Read calendar", requiresApproval: true, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) }]);
+		await expect(repository.loadToolDefinitions([{ toolRevisionId: "tool-1", name: "calendar.read", description: "Read calendar", inputSchema: schema, inputSchemaDigest: ___DigestCanonicalJson(schema) }])).resolves.toEqual([{ toolRevisionId: "tool-1", name: "calendar.read", modelName: "mcp_N7odFteZclDmu0DFKlJhoEt53tfHx79bYbz59tNqNu0", description: "Read calendar", requiresApproval: true, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) }]);
 		await expect(repository.loadArtifactSummaries(["artifact-1"])).resolves.toEqual(["text/plain artifact artifact-1"]);
 		await expect(repository.loadSkillSummaries(["skill-1"])).resolves.toEqual(["skill skill-parent-1 revision skill-1"]);
 		await expect(repository.resolveModelRoute("silo-1", { alias: "tenant-model", modelDefinitionId: "model-1", litellmModelId: "deployment-1", maxOutputTokens: 384, generatedOutputCapabilities: ["image_png"] })).resolves.toEqual({ modelAlias: "tenant-model", maxOutputTokens: 384, generatedOutputCapabilities: ["image_png"] });
+	});
+
+	it("preserves dotted and long source names while deriving distinct provider names", async function _DerivesProviderNames()
+	{
+		const schema = { type: "object", additionalProperties: false };
+		const dotted = _ToolRow({ id: "revision-dotted", name: "opencrane.files.create_csv" });
+		const longName = `reports.${"x".repeat(80)}`;
+		const long = _ToolRow({ id: "revision-long", name: longName });
+		const repository = new PrismaPromptCompilerRepository(_Transaction([long, dotted]) as never, { loadMessages: vi.fn() } as never, "silo-1");
+
+		await expect(repository.loadToolDefinitions([
+			{ toolRevisionId: "revision-dotted", name: "opencrane.files.create_csv", description: "Read calendar", inputSchema: schema, inputSchemaDigest: ___DigestCanonicalJson(schema) },
+			{ toolRevisionId: "revision-long", name: longName, description: "Read calendar", inputSchema: schema, inputSchemaDigest: ___DigestCanonicalJson(schema) },
+		])).resolves.toEqual([
+			expect.objectContaining({ name: "opencrane.files.create_csv", modelName: "mcp_wWKT_5cFG66QdMscL6hmB1XTsZzT1bRj_Sij6ljOg_c", toolRevisionId: "revision-dotted" }),
+			expect.objectContaining({ name: longName, modelName: "mcp_lRn5FnpMinTXKgKT50uzqB-Xj5FKgtUNVaiZEh_odWk", toolRevisionId: "revision-long" }),
+		]);
+	});
+
+	it("gives separate revisions distinct provider names even when source names repeat or normalize alike", async function _SeparatesSourceNames()
+	{
+		const schema = { type: "object", additionalProperties: false };
+		const rows = [_ToolRow({ id: "revision-dotted", name: "files.export" }), _ToolRow({ id: "revision-long", name: "files.export" }), _ToolRow({ id: "revision-normalized", name: "files_export" })];
+		const repository = new PrismaPromptCompilerRepository(_Transaction(rows) as never, { loadMessages: vi.fn() } as never, "silo-1");
+		const definitions = await repository.loadToolDefinitions([
+			{ toolRevisionId: "revision-dotted", name: "files.export", description: "Read calendar", inputSchema: schema, inputSchemaDigest: ___DigestCanonicalJson(schema) },
+			{ toolRevisionId: "revision-long", name: "files.export", description: "Read calendar", inputSchema: schema, inputSchemaDigest: ___DigestCanonicalJson(schema) },
+			{ toolRevisionId: "revision-normalized", name: "files_export", description: "Read calendar", inputSchema: schema, inputSchemaDigest: ___DigestCanonicalJson(schema) },
+		]);
+
+		expect(definitions.map(function _ModelName(tool): string { return tool.modelName; })).toEqual(["mcp_wWKT_5cFG66QdMscL6hmB1XTsZzT1bRj_Sij6ljOg_c", "mcp_lRn5FnpMinTXKgKT50uzqB-Xj5FKgtUNVaiZEh_odWk", "mcp_rmeDdNzbpq9wnWR61APEZO4P3Vl-0Q0vOGj43yp7yWk"]);
+		expect(new Set(definitions.map(function _ModelName(tool): string { return tool.modelName; })).size).toBe(3);
 	});
 
 	it("rejects an MCP schema that differs from the admitted literal", async function _RejectChangedToolSchema()

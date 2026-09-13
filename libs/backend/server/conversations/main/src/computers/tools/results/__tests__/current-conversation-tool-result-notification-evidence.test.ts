@@ -15,7 +15,7 @@ const _WORKLOAD = { subject: "system:serviceaccount:computers:computer", namespa
 /** Build one selected turn and its matching current compiled candidate. */
 function _Fixture()
 {
-	const tool = { name: "records.read", toolRevisionId: "tool-revision-1", description: "Read one record", requiresApproval: false, parametersSchema: { type: "object" }, parametersSchemaDigest: `sha256:${"b".repeat(64)}` };
+	const tool = { name: "records.read", modelName: "records_read", toolRevisionId: "tool-revision-1", description: "Read one record", requiresApproval: false, parametersSchema: { type: "object" }, parametersSchemaDigest: `sha256:${"b".repeat(64)}` };
 	const compiledInput = { promptCompilerVersion: "compiler-v1", runId: "run-1", attempt: 1, instructions: "help", messages: [], tools: [tool], model: { modelAlias: "model-1", maxOutputTokens: 100, generatedOutputCapabilities: [] }, budget: { maxModelTurns: 2, maxCompletionTokens: 200, maxCostUsdMicros: 10, maxToolInvocations: 1, wallClockDeadlineEpochMs: Date.parse("2026-09-12T00:00:00.000Z") }, digest: `sha256:${"a".repeat(64)}` };
 	const turn = { bootstrapId: "turn-1", siloId: "silo-1", computerId: "computer-1", binding: { siloId: "silo-1", conversationId: "conversation-1", runId: "run-1" }, compile: { runId: compiledInput.runId, attempt: compiledInput.attempt, promptCompilerVersion: compiledInput.promptCompilerVersion, digest: compiledInput.digest }, toolSelection: { proposalId: "invoke-1" }, continuationReservation: null, outputReceipt: null } as FrozenConversationComputerTurn;
 	const load = vi.fn().mockResolvedValue(turn);

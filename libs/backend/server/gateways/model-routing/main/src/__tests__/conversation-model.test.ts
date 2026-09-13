@@ -312,7 +312,7 @@ describe("one conversation model text exchange", function _transportSuite()
 function _tool(overrides: Partial<CompiledToolDefinition> = {}): CompiledToolDefinition
 {
 	const parametersSchema = { type: "object", properties: { path: { type: "string" } }, required: ["path"], additionalProperties: false };
-	return { name: "read_file", toolRevisionId: "revision-read-1", description: "Read a file.", requiresApproval: false, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema), ...overrides };
+	return { name: "read_file", modelName: "read_file", toolRevisionId: "revision-read-1", description: "Read a file.", requiresApproval: false, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema), ...overrides };
 }
 
 /** Supplies two-call budgets; their durable aggregate reservation remains the conversation owner's job. */
@@ -337,14 +337,51 @@ function _toolAnswer(call = _toolCall()): Record<string, unknown>
 
 describe("one selected tool and its paired continuation", function _toolExchange()
 {
+	it.each(["records.lookup", `records.${"long_".repeat(20)}`])("uses the frozen model name for MCP tool %s", async function _wireName(sourceName)
+	{
+		const tool = _tool({ name: sourceName, modelName: "mcp_selected_revision" });
+		const call = _toolCall({ name: tool.modelName });
+		const fetchMock = vi.fn().mockResolvedValueOnce(_response(_toolAnswer(call))).mockResolvedValueOnce(_response());
+		vi.stubGlobal("fetch", fetchMock);
+		const input = _selection([tool]);
+		await expect(__RequestConversationModel(input)).resolves.toEqual({ kind: ConversationModelResponseKinds.Tool, call });
+		const first = JSON.parse(String(fetchMock.mock.calls[0]?.[1].body));
+		expect(first.tools[0].function.name).toBe(tool.modelName);
+		expect(JSON.stringify(first.tools)).not.toContain(sourceName);
+		await __RequestConversationModel({ ...input, tools: ConversationModelToolModes.None, continuation: { call, resultContent: "saved result" } });
+		const second = JSON.parse(String(fetchMock.mock.calls[1]?.[1].body));
+		expect(second.messages.at(-2).tool_calls[0].function.name).toBe(tool.modelName);
+		expect(second).not.toHaveProperty("tools");
+	});
+
+	it("offers two equal runtime names through distinct frozen model names", async function _sameRuntimeName()
+	{
+		const first = _tool({ name: "records.read", modelName: "mcp_first" });
+		const second = _tool({ name: "records.read", modelName: "mcp_second", toolRevisionId: "revision-second" });
+		const call = _toolCall({ name: second.modelName });
+		const fetchMock = vi.fn().mockResolvedValue(_response(_toolAnswer(call)));
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(__RequestConversationModel(_selection([first, second]))).resolves.toEqual({ kind: ConversationModelResponseKinds.Tool, call });
+		const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1].body));
+		expect(body.tools.map((tool: { function: { name: string } }) => tool.function.name)).toEqual(["mcp_first", "mcp_second"]);
+	});
+
+	it.each(["read_file", "mcp_unoffered"])("rejects %s when only the frozen model name was offered", async function _noRuntimeNameFallback(name)
+	{
+		const fetchMock = vi.fn().mockResolvedValue(_response(_toolAnswer(_toolCall({ name }))));
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(__RequestConversationModel(_selection([_tool({ modelName: "mcp_selected" })]))).rejects.toMatchObject({ code: ConversationModelFailureCodes.UnsupportedResponse });
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
 	it("offers every frozen definition and accepts one exact original declaration", async function _firstCall()
 	{
 		const call = _toolCall({ content: "  Looking it up.\n" });
 		const fetchMock = vi.fn().mockResolvedValue(_response(_toolAnswer(call)));
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModel(_selection([_tool(), _tool({ name: "write_file", requiresApproval: true })]))).resolves.toEqual({ kind: ConversationModelResponseKinds.Tool, call });
+		await expect(__RequestConversationModel(_selection([_tool(), _tool({ name: "write_file", modelName: "write_file", toolRevisionId: "revision-write", requiresApproval: true })]))).resolves.toEqual({ kind: ConversationModelResponseKinds.Tool, call });
 		const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1].body));
-		expect(body.tools).toEqual([_tool(), _tool({ name: "write_file", requiresApproval: true })].map(tool => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.parametersSchema } })));
+		expect(body.tools).toEqual([_tool(), _tool({ name: "write_file", modelName: "write_file", toolRevisionId: "revision-write", requiresApproval: true })].map(tool => ({ type: "function", function: { name: tool.modelName, description: tool.description, parameters: tool.parametersSchema } })));
 		expect(body).toMatchObject({ tool_choice: "auto", parallel_tool_calls: false, n: 1, stream: false });
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		expect(_telemetry.fields).toEqual([{}]);
@@ -359,7 +396,7 @@ describe("one selected tool and its paired continuation", function _toolExchange
 	it("offers multiple unambiguous frozen names but still accepts exactly one selection", async function _oneOfMany()
 	{
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(_response(_toolAnswer(_toolCall({ name: "read_notes" })))));
-		await expect(__RequestConversationModel(_selection([_tool(), _tool({ name: "read_notes", toolRevisionId: "revision-notes" })]))).resolves.toMatchObject({ kind: ConversationModelResponseKinds.Tool, call: { name: "read_notes" } });
+		await expect(__RequestConversationModel(_selection([_tool(), _tool({ name: "read_notes", modelName: "read_notes", toolRevisionId: "revision-notes" })]))).resolves.toMatchObject({ kind: ConversationModelResponseKinds.Tool, call: { name: "read_notes" } });
 	});
 
 	it("pairs the saved assistant declaration and result after the unchanged compiled messages", async function _secondCall()
@@ -383,7 +420,9 @@ describe("one selected tool and its paired continuation", function _toolExchange
 
 	it.each([
 		[], [_tool(), _tool()],
-		[_tool({ name: "not.legal" })], [_tool({ parametersSchemaDigest: "sha256:changed" })],
+		[_tool({ modelName: "not.legal" })], [_tool({ modelName: "x".repeat(65) })],
+		[_tool({ modelName: undefined as never })], [_tool({ name: "other_source", modelName: "read_file" }), _tool()],
+		[_tool({ parametersSchemaDigest: "sha256:changed" })],
 		[_tool({ parametersSchema: [] })], [_tool({ description: "\ud800" })],
 	].map(tools => ({ tools })))("rejects unusable frozen offer %# before dispatch", async function _badOffer({ tools })
 	{
@@ -467,8 +506,8 @@ describe("one selected tool and its paired continuation", function _toolExchange
 		const fetchMock = vi.fn(function _pendingResponse(_url: URL, _init: RequestInit) { return new Promise<Response>(function _save(resolve) { accept = resolve; }); });
 		vi.stubGlobal("fetch", fetchMock);
 		const outcome = expect(__RequestConversationModel(_selection([tool]))).rejects.toMatchObject({ code: ConversationModelFailureCodes.UnsupportedResponse });
-		tool.name = "changed_after_dispatch";
-		accept(_response(_toolAnswer(_toolCall({ name: tool.name }))));
+		tool.modelName = "changed_after_dispatch";
+		accept(_response(_toolAnswer(_toolCall({ name: tool.modelName }))));
 		await outcome;
 		expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain("read_file");
 		expect(fetchMock).toHaveBeenCalledTimes(1);

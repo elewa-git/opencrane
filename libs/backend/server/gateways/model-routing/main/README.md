@@ -98,7 +98,11 @@ derived from their governed Global resource, so a late first POST cannot create 
   compiled run deadline or 25 seconds, including time spent reading the body.
 
 The first request can offer every frozen tool definition, including tools that need owner approval.
-Names must be unique and legal, with parameters matching their saved schema digests. The model may
+Each definition's `modelName` must be unique and legal, with parameters matching their saved schema
+digests. The compiler derives MCP model names from immutable tool revisions; this adapter sends
+that frozen name without deriving or normalizing another one. The original MCP `name` can contain
+dots or exceed the provider's name limit, and stays out of function declarations. Responses and
+continuations must use an offered `modelName`; the original runtime name is never a fallback. The model may
 return text or propose exactly one offered tool. The shared declaration retains the provider call
 id, original argument string and accompanying text. Arguments must contain a bounded JSON object;
 the conversation and IAM owners still validate the actual schema and current permission before any

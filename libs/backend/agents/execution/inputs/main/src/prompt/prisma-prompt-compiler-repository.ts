@@ -3,6 +3,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { GeneratedOutputCapability, type CompiledModelRoute, type CompiledRunInput, type CompiledToolDefinition, type RunInputSnapshotMcpTool } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
+import { _McpModelToolName } from "./mcp-model-tool-name";
 import type { ConversationPromptMessageRepository, PromptCompilerRepositories } from "./prompt-compiler.types";
 import { __CompileRunInput } from "./prompt-compiler";
 import type { PromptCompilerUnitOfWork } from "./prompt-compiler-unit-of-work.types";
@@ -80,7 +81,7 @@ export class PrismaPromptCompilerRepository implements PromptCompilerRepositorie
 				|| ___DigestCanonicalJson(row.inputSchema as JsonValue) !== tool.inputSchemaDigest || ___DigestCanonicalJson(tool.inputSchema) !== tool.inputSchemaDigest
 				|| row.siloId !== row.serverRevision.siloId || row.siloId !== row.serverRevision.server.siloId)
 				throw new Error("Prompt MCP tool revision does not match the admitted snapshot");
-			return { name: tool.name, toolRevisionId: tool.toolRevisionId, description: tool.description ?? "", requiresApproval: row.serverRevision.server.requiresApproval, parametersSchema: tool.inputSchema, parametersSchemaDigest: tool.inputSchemaDigest };
+			return { name: tool.name, modelName: _McpModelToolName(tool.toolRevisionId), toolRevisionId: tool.toolRevisionId, description: tool.description ?? "", requiresApproval: row.serverRevision.server.requiresApproval, parametersSchema: tool.inputSchema, parametersSchemaDigest: tool.inputSchemaDigest };
 		});
 	}
 

@@ -99,10 +99,13 @@ async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: 
 	return { outcome: "completed" };
 }
 
-/** Select one unambiguous frozen definition, then reuse the existing schema and budget validator. */
+/**
+ * Resolve the model's wire name to one frozen revision before proposal validation.
+ * The original MCP name stays in the definition for disclosure and runtime dispatch.
+ */
 function _Proposal(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, call: ConversationModelToolCall)
 {
-	const matching = candidate.compiledInput.tools.filter(tool => tool.name === call.name);
+	const matching = candidate.compiledInput.tools.filter(tool => tool.modelName === call.name);
 	if (matching.length !== 1)
 		throw new Error("Conversation model selected an unavailable or ambiguous tool");
 	const command = ___ParseAndValidateJson(call.arguments, "Conversation tool arguments", argumentsValue => ___ConversationToolProposalSchema.parse({ bootstrapId: turn.bootstrapId, toolRevisionId: matching[0]!.toolRevisionId, arguments: argumentsValue }));

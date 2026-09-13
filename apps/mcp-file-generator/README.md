@@ -7,7 +7,8 @@
 This app is the process and image owner for OpenCrane's CSV-generating MCP (Model Context Protocol)
 server. An administrator can admit its immutable image through the existing OCI tool flow. The MCP
 executor then runs it as the uncredentialed server container beside the authenticated companion.
-Its single `opencrane_files_create_csv` name is valid for both MCP discovery and model selection.
+Its MCP discovery and runtime name is `opencrane_files_create_csv`. The server compiler gives
+each admitted revision a separate model declaration name.
 
 ```text
 runtime-created MCP Job

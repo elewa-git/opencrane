@@ -4,6 +4,7 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
+import { _IsModelToolNameValid } from "./mcp-model-tool-name";
 import type { PromptCompilerRepositories } from "./prompt-compiler.types";
 
 /**
@@ -52,16 +53,14 @@ export async function __CompileRunInput(snapshot: RunInputSnapshot, attempt: num
  *
  * @param input - An already compiled run input. Not modified; a new object is returned.
  * @param tool - The first-party tool to add.
- * @returns A new compiled input with the tool included, tools re-sorted by name, and a fresh digest.
- * @throws When `input` already contains a tool with the same `name` or the same `toolRevisionId`.
- * Duplicate tool names would make the runtime's tool selection ambiguous, so this fails loudly
- * rather than picking one.
+ * @returns A new compiled input with the tool included, tools re-sorted by model name, and a fresh digest.
+ * @throws When `input` already contains the same revision or provider-facing model name.
  * @see __CompileRunInput
  */
 export function __AppendCompiledTool(input: CompiledRunInput, tool: CompiledToolDefinition): CompiledRunInput
 {
-	if (input.tools.some(function _sameTool(existing): boolean { return existing.toolRevisionId === tool.toolRevisionId || existing.name === tool.name; }))
-		throw new Error(`compiled input already contains tool ${tool.name} or revision ${tool.toolRevisionId}`);
+	if (input.tools.some(function _sameTool(existing): boolean { return existing.toolRevisionId === tool.toolRevisionId || existing.modelName === tool.modelName; }))
+		throw new Error(`compiled input already contains model tool ${tool.modelName} or revision ${tool.toolRevisionId}`);
 	const unsealed = { ...input, tools: _orderTools([...input.tools, tool]) };
 	return { ...unsealed, digest: _digest(unsealed) };
 }
@@ -102,7 +101,7 @@ async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, rep
 }
 
 /**
- * Order tool definitions by name so the compiled set never depends on grant iteration order.
+ * Validate and order tool definitions by model name so the compiled set never depends on grant iteration order.
  *
  * Two callers rely on this: the initial compile, and `__AppendCompiledTool`, which re-sorts after adding
  * a first-party tool so an appended tool lands in the same place every time.
@@ -113,7 +112,16 @@ async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, rep
  */
 function _orderTools(tools: readonly CompiledToolDefinition[]): readonly CompiledToolDefinition[]
 {
-	return [...tools].sort(function _byName(left, right): number { return _compareText(left.name, right.name); });
+	const revisionIds = new Set<string>();
+	const modelNames = new Set<string>();
+	for (const tool of tools)
+	{
+		if (!_IsModelToolNameValid(tool.modelName) || tool.toolRevisionId.trim().length === 0 || revisionIds.has(tool.toolRevisionId) || modelNames.has(tool.modelName))
+			throw new Error("compiled tool definitions require valid unique model names and revision identifiers");
+		revisionIds.add(tool.toolRevisionId);
+		modelNames.add(tool.modelName);
+	}
+	return [...tools].sort(function _byModelName(left, right): number { return _compareText(left.modelName, right.modelName); });
 }
 
 /** Compare two canonical text identifiers without locale-dependent ordering. */

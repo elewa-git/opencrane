@@ -22,7 +22,7 @@ export interface CompiledRunInput
 	readonly instructions: string;
 	/** Ordered conversation turns compiled from the snapshot's message references. */
 	readonly messages: readonly CompiledMessage[];
-	/** Tool schemas the model loop may call, sorted by name. */
+	/** Tool schemas the model loop may call, sorted by their provider-facing model name. */
 	readonly tools: readonly CompiledToolDefinition[];
 	/** Resolved model route carrying no provider credential. */
 	readonly model: CompiledModelRoute;
@@ -50,8 +50,10 @@ export interface CompiledMessage
  */
 export interface CompiledToolDefinition
 {
-	/** Stable tool name the model selects. */
+	/** Exact immutable source name used for disclosure and MCP runtime dispatch. */
 	readonly name: string;
+	/** Provider-compatible name used in the model declaration and returned selection; it grants no permission. */
+	readonly modelName: string;
 	/** Tool revision this call is pinned to, so authorization later checks the same revision. */
 	readonly toolRevisionId: string;
 	/** Human-readable tool description compiled from its revision. */

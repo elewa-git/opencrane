@@ -80,9 +80,13 @@ requester's Conversation Use remains a separate human decision. These server-sid
 not claim a runtime Pod identity; workload decisions still require verified Kubernetes coordinates.
 
 MCP tools enter the snapshot as revision-selected immutable tool revisions. Each entry contains the
-saved tool identifier, name, description, input schema, and schema digest. Missing, malformed, or
-digest-mismatched schemas fail admission. The assembler never receives registry or provider
-credentials; execution consumes only the admitted OCI-backed MCP revision.
+saved tool identifier, exact runtime name, description, input schema, and schema digest. Missing,
+malformed, or digest-mismatched schemas fail admission. During compilation, the immutable revision
+identifier produces a 47-character provider-compatible `modelName`; the source name stays unchanged
+for disclosure and MCP dispatch. Different revisions may share a source name, but revision or final
+model-name collisions fail compilation. The alias grants no permission. The assembler never
+receives registry or provider credentials; execution consumes only the admitted OCI-backed MCP
+revision.
 
 Invariant: a run either commits with its one complete, digest-sealed input snapshot, or it does not
 exist — there is no partially assembled state, and no snapshot field originates from unverified
