@@ -3,7 +3,9 @@
 ## Standard remote MCP integration — source reviewed
 
 Draft [#886](https://github.com/elewa-git/opencrane/pull/886) publishes this source directly above
-#884. Its first database CI job stopped while creating test rows: the fixture's first-preparation
+#884. The reviewed fixture correction is pushed at
+`3c95770188ede00259b4d438c735c284ab6deede`, and live stack ancestry passes. Its first
+database CI job stopped while creating test rows: the fixture's first-preparation
 time preceded its default creation time by milliseconds. Both fields now use the same database
 clock value. The corrected 15-case local SQL run passes 10 cases and reaches five remaining runtime
 failures: four remote claims still enter the existing OCI companion trigger; the invalid-revision
@@ -11,6 +13,17 @@ case receives the earlier activation-authority rejection instead of the expected
 These failures remain visible. No SQL guard, exception or test exclusion was added, and runtime
 acceptance is still incomplete. The existing proposal and its authority/error expectations must be
 qualified together when that source change is authorized.
+
+The first Linux component job passed interaction checks but found eight missing visual references
+for the new connection states and one changed Removing row. The component owner reviewed all
+nine actual renders from artifact `10317302520` and accepted their exact bytes as Linux references.
+Removing now shows its saved removal state and a disabled Uninstall action. No component, fixture,
+threshold or test selection changes are needed. Tools tests (32), Storybook interaction/accessibility
+tests (195), the Storybook build and Darwin visual checks (3) pass; Linux rerun remains pending.
+The provider job reproduced the known Cognee
+1.2.1 defect: final membership deletion leaves source bytes. This is separate from remote MCP
+execution, and the qualified candidate has not replaced the production pin. Both failures remain
+release gates; neither is suppressed by this source checkpoint.
 
 The preserved remote MCP implementation is being integrated directly above draft
 [#884](https://github.com/elewa-git/opencrane/pull/884), at immutable review base
@@ -39,8 +52,9 @@ opaque model tool name selects the admitted revision and sends the original MCP 
 The integration passes 1,303 tests across MCP (355), conversations (630), conversation assets (159)
 and the application (159). The latter three results are reused after the MCP-only cancellation fix.
 Connection UI, client transport and workload-identity packages pass a further 159 tests and their
-type checks. Storybook passes 195 interaction and accessibility tests. Eight readiness/discovery SQL cases pass on a newly created fixture
-database; the remote runtime SQL matrix remains explicitly excluded. Prisma generation, baseline
+type checks. Storybook passes 195 interaction and accessibility tests. The complete 15-case MCP SQL run now
+passes 10 cases and exposes the five runtime failures
+recorded above; no runtime case is excluded from that corrected run. Prisma generation, baseline
 verification, dependency and Prisma boundaries, workload composition, release binding, style and
 module-growth checks pass. Production server and UI builds pass, and regenerating the API client
 and website reference changes no bytes. Workflow and authorization guards and the workload and
