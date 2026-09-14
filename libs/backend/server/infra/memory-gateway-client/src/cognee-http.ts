@@ -1,196 +1,253 @@
 import { readFile } from "node:fs/promises";
 
 import { ___DoWithoutTrace } from "@opencrane/backend/observability";
+import { ___MemoryGatewayMutationErrorSchema, ___MemoryGatewayReadErrorSchema, MemoryGatewayErrorCodes, MemoryMutationDeliveryStates } from "@opencrane/contracts";
 
-import { MemoryGatewayProtocolError } from "./personal-memory-record-receipt";
-import type { CogneeFetch, CogneeMemoryGatewayHttpOptions, CogneeSession, MemoryGatewayTransportFailureCode } from "./http-cognee-memory-gateway-client.types";
+import { MemoryGatewayMutationFailure, MemoryGatewayProtocolError, MemoryGatewayReadFailure, MemoryGatewayTransportError } from "./memory-gateway-errors";
+import { MemoryGatewayRequestKinds } from "./http-cognee-memory-gateway-client.types";
+import type { CogneeFetch, CogneeMemoryGatewayHttpOptions, CogneeSession, MemoryGatewayFailureDelivery, MemoryGatewayHttpCommand } from "./http-cognee-memory-gateway-client.types";
 
-/** Maximum body accepted from one Cognee exchange. */
-const _MAX_RESPONSE_BYTES = 256 * 1024;
+/** Response ceiling that accepts the largest highly escaped shared search response. */
+const _MAXIMUM_RESPONSE_BYTES = 8 * 1024 * 1024;
 
-/**
- * Typed failure raised when Cognee could not be reached or answered outside the protocol.
- *
- * The bounded {@link MemoryGatewayTransportFailureCode} is the ONLY detail carried out of the
- * transport: remote bodies, fact content, and credentials never appear in the message.
- */
-export class MemoryGatewayTransportError extends Error
-{
-	/** Which kind of failure it was. It carries no remote content, so it is safe to log or store as an invocation's failure code. */
-	readonly code: MemoryGatewayTransportFailureCode;
+/** Stable gateway failure required for each non-success HTTP status. */
+const _ERROR_CODE_BY_STATUS = new Map<number, MemoryGatewayErrorCodes>([
+	[401, MemoryGatewayErrorCodes.Unauthorized],
+	[404, MemoryGatewayErrorCodes.NotFound],
+	[409, MemoryGatewayErrorCodes.Conflict],
+	[422, MemoryGatewayErrorCodes.InvalidRequest],
+	[502, MemoryGatewayErrorCodes.ProviderProtocol],
+	[503, MemoryGatewayErrorCodes.ProviderUnavailable],
+]);
 
-	/** Creates a transport failure that names only its bounded class. */
-	constructor(code: MemoryGatewayTransportFailureCode)
-	{
-		super(`Memory gateway transport failed: ${code}`);
-		this.name = "MemoryGatewayTransportError";
-		this.code = code;
-	}
-}
-
-/** Check that the configured gateway URL is one in-cluster Kubernetes Service origin, and return it parsed. */
+/** Parses the release-local memory-gateway Service origin. */
 function _MemoryGatewayOrigin(value: string): URL
 {
 	const parsed = URL.parse(value);
-	if (!parsed || parsed.protocol !== "http:" || !parsed.hostname.endsWith(".svc.cluster.local") || parsed.pathname !== "/" || parsed.search !== "" || parsed.hash !== "" || parsed.username !== "" || parsed.password !== "")
-	{
+	if (parsed === null || parsed.protocol !== "http:" || !parsed.hostname.endsWith(".svc.cluster.local") || parsed.pathname !== "/" || parsed.search !== "" || parsed.hash !== "" || parsed.username !== "" || parsed.password !== "")
 		throw new Error("MEMORY_GATEWAY_URL must be one release-local Kubernetes Service HTTP origin with no path or credentials");
-	}
 	return parsed;
 }
 
-/** Read one Cognee response without allocating beyond the fixed protocol ceiling. */
-async function _ReadBoundedText(response: Response): Promise<string>
+/** Returns mutation delivery evidence and leaves read failures unclassified. */
+function _Delivery(kind: MemoryGatewayRequestKinds, dispatched: boolean): MemoryGatewayFailureDelivery
 {
-	const declaredLength = response.headers.get("content-length");
-	if (declaredLength !== null)
-	{
-		const parsedLength = Number(declaredLength);
-		if (!Number.isSafeInteger(parsedLength) || parsedLength < 0 || parsedLength > _MAX_RESPONSE_BYTES)
-		{
-			await response.body?.cancel();
-			throw new MemoryGatewayTransportError("oversize");
-		}
-	}
-	if (response.body === null)
-	{
-		return "";
-	}
-
-	const reader = response.body.getReader();
-	const chunks: Uint8Array[] = [];
-	let byteLength = 0;
-	while (true)
-	{
-		const result = await reader.read();
-		if (result.done)
-		{
-			return Buffer.concat(chunks, byteLength).toString("utf8");
-		}
-		byteLength += result.value.byteLength;
-		if (byteLength > _MAX_RESPONSE_BYTES)
-		{
-			await reader.cancel();
-			throw new MemoryGatewayTransportError("oversize");
-		}
-		chunks.push(result.value);
-	}
+	if (kind === MemoryGatewayRequestKinds.Read)
+		return undefined;
+	return dispatched ? MemoryMutationDeliveryStates.Ambiguous : MemoryMutationDeliveryStates.ProvenNotSent;
 }
 
-/**
- * Classify a fetch rejection into a bounded transport failure.
- *
- * Typed failures raised while reading a body are rethrown untouched so a protocol violation is not
- * relabelled as a network fault.
- *
- * @param error - Value thrown by fetch or by bounded reading.
- * @returns Never; always throws.
- */
-function _ThrowTransportFailure(error: unknown): never
+/** Creates a protocol failure with the request's current delivery evidence. */
+function _Protocol(command: MemoryGatewayHttpCommand, dispatched: boolean): MemoryGatewayProtocolError
 {
-	if (error instanceof MemoryGatewayTransportError || error instanceof MemoryGatewayProtocolError)
-	{
-		throw error;
-	}
-	const isTimeout = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
-	throw new MemoryGatewayTransportError(isTimeout ? "timeout" : "network");
+	const error = dispatched ? MemoryGatewayErrorCodes.ProviderProtocol : MemoryGatewayErrorCodes.InvalidRequest;
+	return new MemoryGatewayProtocolError(error, _Delivery(command.kind, dispatched));
 }
 
-/** Read the rotating server token without retaining a stale projected credential in process memory. */
+/** Reads the rotating server token without retaining a stale projected credential. */
 function _CreateServerTokenReader(tokenFile: string): () => Promise<string>
 {
-	return async function _readServerToken(): Promise<string>
+	return async function _ReadServerToken(): Promise<string>
 	{
 		const token = await readFile(tokenFile, "utf8");
 		if (token.trim().length === 0)
-		{
-			throw new Error("mounted memory-gateway token is empty");
-		}
+			throw new Error("mounted token is empty");
 		return token.trim();
 	};
 }
 
-/**
- * Create the authenticated exchange the memory-gateway client uses for read-only search.
- *
- * Every exchange re-reads the projected ServiceAccount token and sends it as a bearer token. The
- * memory gateway checks that token with a Kubernetes TokenReview and admits only the OpenCrane
- * server identity. Cognee sits behind the gateway and authenticates the gateway's service user;
- * the server never receives that credential. Every fetch runs with automatic child
- * tracing switched off so the bearer header and the remote address cannot become span attributes;
- * the caller's own memory-gateway span stays active. The token audience is
- * `MEMORY_GATEWAY_PROJECTED_TOKEN_AUDIENCE` in libs/contracts/src/memory/memory.types.ts.
- *
- * Called by: http-cognee-memory-gateway-client.ts, which builds one session per client.
- *
- * @param options - Gateway origin, per-exchange timeout, projected-token path, and the optional
- *   fetch and token-reader overrides used by tests.
- * @returns A session with a single `search` method — the only call allowed against Cognee.
- * @throws Error When the origin is not a single in-cluster HTTP Service origin, or the mounted token
- *   file is empty when it is first read.
- * @see NEEDS-HUMAN - add the URI for the Kubernetes TokenReview API
- *   (`authentication.k8s.io/v1`) that the "admits only the OpenCrane server identity" claim rests
- *   on; I could not confirm the exact upstream doc URL.
- */
-export function __CreateCogneeSession(options: CogneeMemoryGatewayHttpOptions): CogneeSession
+/** Reads a complete response while the request timeout remains active. */
+async function _ReadBoundedBody(response: Response, signal: AbortSignal, command: MemoryGatewayHttpCommand): Promise<Uint8Array>
 {
-	const baseUrl = _MemoryGatewayOrigin(options.baseUrl);
-	const fetchRequest: CogneeFetch = options.fetch ?? fetch;
-	const readServerToken = options.readServerToken ?? _CreateServerTokenReader(options.serverTokenFile);
-
-	/** Issue one exchange with the supplied token, returning the raw response. */
-	async function _Send(path: string, method: string, body: unknown): Promise<Response>
+	const declared = response.headers.get("content-length");
+	if (declared !== null)
 	{
-		const headers = new Headers({ accept: "application/json" });
-		if (body !== undefined)
+		const parsed = Number(declared);
+		if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > _MAXIMUM_RESPONSE_BYTES)
 		{
-			headers.set("content-type", "application/json");
-		}
-		headers.set("authorization", `Bearer ${await readServerToken()}`);
-		try
-		{
-			return await ___DoWithoutTrace(function _fetchSensitiveEndpoint()
-			{
-				return fetchRequest(new URL(path, baseUrl), { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(options.requestTimeoutMilliseconds), redirect: "error" });
-			});
-		}
-		catch (error)
-		{
-			return _ThrowTransportFailure(error);
+			if (response.body !== null)
+				void Promise.allSettled([response.body.cancel()]);
+			throw new MemoryGatewayTransportError("response_too_large", _Delivery(command.kind, true));
 		}
 	}
+	if (response.body === null)
+		return new Uint8Array();
 
-	return {
-		async search(body: unknown): Promise<unknown>
+	const reader = response.body.getReader();
+	let aborted = signal.aborted;
+	function _AbortRead(): void
+	{
+		aborted = true;
+		void Promise.allSettled([reader.cancel()]);
+	}
+	signal.addEventListener("abort", _AbortRead, { once: true });
+	const chunks: Uint8Array[] = [];
+	let byteLength = 0;
+	try
+	{
+		while (true)
 		{
-			const response = await _Send("/api/v1/search", "POST", body);
-			if (!response.ok)
+			if (aborted)
+				signal.throwIfAborted();
+			const result = await reader.read();
+			if (aborted)
+				signal.throwIfAborted();
+			if (result.done)
+				break;
+			byteLength += result.value.byteLength;
+			if (byteLength > _MAXIMUM_RESPONSE_BYTES)
 			{
-				await response.body?.cancel();
-				throw new MemoryGatewayTransportError(`http_${response.status}`);
+				void Promise.allSettled([reader.cancel()]);
+				throw new MemoryGatewayTransportError("response_too_large", _Delivery(command.kind, true));
 			}
-			try
-			{
-				const text = await _ReadBoundedText(response);
-				return text.trim().length === 0 ? null : _ParseJson(text);
-			}
-			catch (error)
-			{
-				return _ThrowTransportFailure(error);
-			}
-		},
-	};
+			chunks.push(result.value);
+		}
+	}
+	finally
+	{
+		signal.removeEventListener("abort", _AbortRead);
+	}
+
+	const body = new Uint8Array(byteLength);
+	let offset = 0;
+	for (const chunk of chunks)
+	{
+		body.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return body;
 }
 
-/** Parse untrusted Cognee JSON into an unknown value, failing as a protocol violation. */
-function _ParseJson(text: string): unknown
+/** Parses strict UTF-8 JSON without retaining response text in a thrown error. */
+function _Json(body: Uint8Array, command: MemoryGatewayHttpCommand, dispatched: boolean): unknown
 {
 	try
 	{
+		const text = new TextDecoder("utf-8", { fatal: true }).decode(body);
 		return JSON.parse(text) as unknown;
 	}
 	catch
 	{
-		throw new MemoryGatewayProtocolError("Memory gateway returned malformed JSON");
+		throw _Protocol(command, dispatched);
 	}
+}
+
+/** Requires the JSON media type used by every stable gateway response. */
+function _RequireJson(response: Response, command: MemoryGatewayHttpCommand): void
+{
+	const mediaType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+	if (mediaType !== "application/json")
+		throw _Protocol(command, true);
+}
+
+/** Throws a strict gateway error whose body agrees with its HTTP status. */
+function _ThrowGatewayError(response: Response, body: Uint8Array, command: MemoryGatewayHttpCommand): never
+{
+	_RequireJson(response, command);
+	const expectedCode = _ERROR_CODE_BY_STATUS.get(response.status);
+	if (expectedCode === undefined)
+		throw _Protocol(command, true);
+	const payload = _Json(body, command, true);
+	if (command.kind === MemoryGatewayRequestKinds.Read)
+	{
+		const parsed = ___MemoryGatewayReadErrorSchema.safeParse(payload);
+		if (!parsed.success || parsed.data.error !== expectedCode)
+			throw _Protocol(command, true);
+		throw new MemoryGatewayReadFailure(parsed.data.error);
+	}
+	const parsed = ___MemoryGatewayMutationErrorSchema.safeParse(payload);
+	if (!parsed.success || parsed.data.error !== expectedCode)
+		throw _Protocol(command, true);
+	throw new MemoryGatewayMutationFailure(parsed.data.error, parsed.data.deliveryState);
+}
+
+/** Converts an exchange exception into a content-free failure. */
+function _ThrowExchangeFailure(error: unknown, signal: AbortSignal, command: MemoryGatewayHttpCommand): never
+{
+	if (error instanceof MemoryGatewayTransportError || error instanceof MemoryGatewayProtocolError || error instanceof MemoryGatewayReadFailure || error instanceof MemoryGatewayMutationFailure)
+		throw error;
+	if (signal.aborted)
+	{
+		const reasonName = signal.reason instanceof Error ? signal.reason.name : "";
+		const code = reasonName === "TimeoutError" ? "timeout" : "aborted";
+		throw new MemoryGatewayTransportError(code, _Delivery(command.kind, true));
+	}
+	throw new MemoryGatewayTransportError("network", _Delivery(command.kind, true));
+}
+
+/**
+ * Creates the authenticated transport used by every stable memory-gateway operation.
+ *
+ * The transport re-reads the projected server token for each exchange, refuses redirects, bounds
+ * the complete response, and keeps the timeout active while consuming its body. It never retries.
+ * A mutation that fails before fetch is `ProvenNotSent`; any failure after fetch starts is
+ * `Ambiguous`. Errors retain no token, request content, URL, response body, or original cause.
+ *
+ * Called by: `__CreateHttpCogneeMemoryGatewayClient`.
+ *
+ * @param options - Private Service origin, timeout, projected-token path, and test seams.
+ * @returns One authenticated request-at-a-time transport.
+ * @throws Error When the origin or timeout cannot satisfy the private transport contract.
+ */
+export function __CreateCogneeSession(options: CogneeMemoryGatewayHttpOptions): CogneeSession
+{
+	const origin = _MemoryGatewayOrigin(options.baseUrl);
+	if (!Number.isSafeInteger(options.requestTimeoutMilliseconds) || options.requestTimeoutMilliseconds < 1_000 || options.requestTimeoutMilliseconds > 300_000)
+		throw new Error("Memory gateway client requires a 1-300s request timeout");
+	const fetchRequest: CogneeFetch = options.fetch ?? fetch;
+	const readServerToken = options.readServerToken ?? _CreateServerTokenReader(options.serverTokenFile);
+
+	return {
+		async send(command: MemoryGatewayHttpCommand)
+		{
+			let token: string;
+			try
+			{
+				token = (await readServerToken()).trim();
+				if (token.length === 0 || token.length > 65_536 || !/^[A-Za-z0-9._~-]+$/u.test(token))
+					throw new Error("mounted token is invalid");
+			}
+			catch
+			{
+				throw new MemoryGatewayTransportError("token_unavailable", _Delivery(command.kind, false));
+			}
+			let body: string | undefined;
+			try
+			{
+				body = command.body === undefined ? undefined : JSON.stringify(command.body);
+			}
+			catch
+			{
+				throw _Protocol(command, false);
+			}
+			let headers: Headers;
+			try
+			{
+				headers = new Headers({ accept: "application/json", authorization: `Bearer ${token}` });
+				if (body !== undefined)
+					headers.set("content-type", "application/json");
+			}
+			catch
+			{
+				throw new MemoryGatewayTransportError("token_unavailable", _Delivery(command.kind, false));
+			}
+			const signal = AbortSignal.timeout(options.requestTimeoutMilliseconds);
+			try
+			{
+				return await ___DoWithoutTrace(async function _SendAndConsumeMemoryGatewayResponse()
+				{
+					const response = await fetchRequest(new URL(command.path, origin), { method: command.method, headers, body, signal, redirect: "error" });
+					const responseBody = await _ReadBoundedBody(response, signal, command);
+					if (response.status !== 200)
+						return _ThrowGatewayError(response, responseBody, command);
+					_RequireJson(response, command);
+					return { body: _Json(responseBody, command, true) };
+				});
+			}
+			catch (error)
+			{
+				return _ThrowExchangeFailure(error, signal, command);
+			}
+		},
+	};
 }

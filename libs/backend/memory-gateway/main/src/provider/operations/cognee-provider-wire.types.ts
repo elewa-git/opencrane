@@ -1,3 +1,18 @@
+/** Dataset fields returned by the pinned Cognee dataset routes. */
+export interface CogneeDatasetWire
+{
+	/** Provider dataset UUID. */
+	readonly id: string;
+	/** Provider dataset name. */
+	readonly name: string;
+	/** Provider creation timestamp. */
+	readonly createdAt: string;
+	/** Provider update timestamp when one exists. */
+	readonly updatedAt: string | null;
+	/** Authenticated provider owner UUID. */
+	readonly ownerId: string;
+}
+
 /** Cognee document fields returned in a locked Cognify input snapshot. */
 export interface CogneeCognifyEvidenceDocumentWire
 {

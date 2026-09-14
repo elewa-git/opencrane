@@ -26,9 +26,11 @@ doc claims.
 
 **The port** — `libs/backend/server/infra/memory-gateway-client` owns the boundary for a subject's
 memory. It is a runtime-neutral contract (a TypeScript interface), with the real transport wired
-in elsewhere. `MemoryGatewayClient` exposes `query`, `recordPersonalFact`, `correct`, and
-`forget`, plus scoped recall/injection for the org scope. Read `src/index.ts` for the current
-barrel before naming any symbol.
+in elsewhere. `MemoryGatewayClient` exposes query and scoped-memory APIs plus individual
+dataset/document operations. Each method performs one gateway request and checks its receipt.
+The personal-memory workflow owns Remember, Correct and Forget sequencing and restart recovery;
+never rebuild those lifecycles inside the client. Read `src/index.ts` for the current barrel before
+naming any symbol.
 
 - **Everything routes through the port.** No call site reaches into Cognee directly. That
   indirection is the whole point — it is what lets the platform stop scattering memory access
@@ -37,8 +39,9 @@ barrel before naming any symbol.
   authenticated transport is verified; it throws `MemoryGatewayUnavailableError` rather than
   returning an empty or fabricated result. An empty recall and an unreachable gateway must never
   be indistinguishable. Same discipline in the assertion helpers:
-  `__AssertMemoryProvenanceComplete` (→ `MemoryProvenanceIncompleteError`) and
-  `__AssertPersonalMemoryRecordResult` (→ `MemoryGatewayProtocolError`).
+  `__AssertMemoryProvenanceComplete` rejects missing scoped attribution. Shared request/response
+  validators and exact coordinate checks reject invalid operation receipts. A failed mutation must
+  distinguish proven non-delivery from an ambiguous result; neither is a successful receipt.
 - **Datasets are frozen, not derived.** A recall names the gateway-native dataset that OpenCrane
   froze in the admitted run snapshot. A subject id is never enough to select a dataset — deriving
   one at recall time is how a run reads memory it was not admitted for.
@@ -51,7 +54,9 @@ its sensitivity, whether the user consented, and exactly where it came from.
   (CAS-style — a value named by the hash of its bytes), never the fact text. Copying fact content
   into OpenCrane's database duplicates it and lets the two drift. Enforce the split.
 - Recording is gated: one explainable source, a valid digest, and consent. A denial carries a
-  reason. Writes land as a catalog row plus an outbox intent.
+  reason. The existing Absurd operation records saved phases and content-free evidence. Catalog
+  changes and operation transitions commit together through the personal-memory repository; do
+  not add an outbox or another scheduler.
 
 **The contracts** — `libs/contracts/src/memory/memory.types.ts` carries the shared shapes. Cross-package
 memory types belong there, re-exported from the one barrel, never duplicated per app.

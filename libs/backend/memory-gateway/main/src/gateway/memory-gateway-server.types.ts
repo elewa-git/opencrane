@@ -1,6 +1,7 @@
 import type { Server } from "node:http";
 
 import type { CogneeProviderSession } from "../provider/auth/cognee-provider-session.types";
+import type { MemoryGatewayProviderOperations } from "../provider/operations/memory-gateway-provider-operations.types";
 
 /** Minimal logger used by the private gateway without tying transport code to one app logger. */
 export interface MemoryGatewayRequestLogger
@@ -23,6 +24,8 @@ export interface MemoryGatewayServerOptions
 	readonly tokenReviewer: MemoryGatewayTokenReviewer;
 	/** Owns the sole Cognee login and every bounded provider exchange. */
 	readonly providerSession: CogneeProviderSession;
+	/** Provider operation adapter for the shared ordered memory routes. */
+	readonly providerOperations?: MemoryGatewayProviderOperations;
 	/** Receives content-free failure details for app-owned observability. */
 	readonly log: MemoryGatewayRequestLogger;
 }

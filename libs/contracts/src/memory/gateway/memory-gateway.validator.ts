@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { MemoryMutationDeliveryStates } from "../memory.types";
 import { MEMORY_GATEWAY_LIMITS, MemoryGatewayErrorCodes } from "./memory-gateway.types";
-import type { MemoryGatewayDataset, MemoryGatewayDatasetCognifyRequest, MemoryGatewayDatasetCognifyResponse, MemoryGatewayDatasetEnsureRequest, MemoryGatewayDatasetEnsureResponse, MemoryGatewayDatasetListRequest, MemoryGatewayDatasetListResponse, MemoryGatewayDocument, MemoryGatewayDocumentAddRequest, MemoryGatewayDocumentAddResponse, MemoryGatewayDocumentDeleteRequest, MemoryGatewayDocumentListRequest, MemoryGatewayDocumentListResponse, MemoryGatewayDocumentRawDigestRequest, MemoryGatewayDocumentRawDigestResponse, MemoryGatewayMutationError, MemoryGatewayReadError, MemoryGatewaySearchFact, MemoryGatewaySearchRequest, MemoryGatewaySearchResponse } from "./memory-gateway.types";
+import type { MemoryGatewayDataset, MemoryGatewayDatasetCognifyRequest, MemoryGatewayDatasetCognifyResponse, MemoryGatewayDatasetEnsureRequest, MemoryGatewayDatasetEnsureResponse, MemoryGatewayDatasetListRequest, MemoryGatewayDatasetListResponse, MemoryGatewayDocument, MemoryGatewayDocumentAddRequest, MemoryGatewayDocumentAddResponse, MemoryGatewayDocumentDeleteRequest, MemoryGatewayDocumentDeleteResponse, MemoryGatewayDocumentListRequest, MemoryGatewayDocumentListResponse, MemoryGatewayDocumentRawDigestRequest, MemoryGatewayDocumentRawDigestResponse, MemoryGatewayMutationError, MemoryGatewayReadError, MemoryGatewaySearchFact, MemoryGatewaySearchRequest, MemoryGatewaySearchResponse } from "./memory-gateway.types";
 
 /** Encoder used to enforce byte limits without depending on Node.js Buffer. */
 const _Utf8Encoder = new TextEncoder();
@@ -107,7 +107,7 @@ export const ___MemoryGatewayDocumentAddResponseSchema: z.ZodType<MemoryGatewayD
 	contentDigest: _ContentDigestSchema,
 }).strict().refine(function _UsesSeparateAddedDocumentIdentity(response): boolean
 {
-	return response.datasetId !== response.documentId;
+	return response.datasetId.toLowerCase() !== response.documentId.toLowerCase();
 });
 
 /** Strict request schema for listing one dataset's documents. */
@@ -127,7 +127,7 @@ export const ___MemoryGatewayDocumentListResponseSchema: z.ZodType<MemoryGateway
 		}),
 }).strict().refine(function _UsesSeparateListedDocumentIdentities(response): boolean
 {
-	return response.documents.every(document => document.documentId !== response.datasetId);
+	return response.documents.every(document => document.documentId.toLowerCase() !== response.datasetId.toLowerCase());
 });
 
 /** Strict request schema for hashing one exact raw document. */
@@ -136,7 +136,7 @@ export const ___MemoryGatewayDocumentRawDigestRequestSchema: z.ZodType<MemoryGat
 	documentId: z.string().uuid(),
 }).strict().refine(function _UsesSeparateRawDocumentIdentity(request): boolean
 {
-	return request.datasetId !== request.documentId;
+	return request.datasetId.toLowerCase() !== request.documentId.toLowerCase();
 });
 
 /** Strict metadata-only response schema for a raw document digest. */
@@ -147,7 +147,7 @@ export const ___MemoryGatewayDocumentRawDigestResponseSchema: z.ZodType<MemoryGa
 	byteLength: z.number().int().min(0).max(MEMORY_GATEWAY_LIMITS.TextMaximumBytes),
 }).strict().refine(function _UsesSeparateRawDigestIdentity(response): boolean
 {
-	return response.datasetId !== response.documentId;
+	return response.datasetId.toLowerCase() !== response.documentId.toLowerCase();
 });
 
 /** Strict request schema for blocking dataset processing. */
@@ -179,7 +179,7 @@ export const ___MemoryGatewaySearchFactSchema: z.ZodType<MemoryGatewaySearchFact
 	content: _FactContentSchema,
 }).strict().refine(function _UsesSeparateChunkIdentity(fact): boolean
 {
-	return fact.chunkId !== fact.documentId;
+	return fact.chunkId.toLowerCase() !== fact.documentId.toLowerCase();
 });
 
 /** Strict response schema for ranked facts from one exact dataset. */
@@ -195,7 +195,7 @@ export const ___MemoryGatewaySearchResponseSchema: z.ZodType<MemoryGatewaySearch
 {
 	return response.facts.every(function _IsSeparateFactIdentity(fact): boolean
 	{
-		return response.datasetId !== fact.documentId && response.datasetId !== fact.chunkId;
+		return response.datasetId.toLowerCase() !== fact.documentId.toLowerCase() && response.datasetId.toLowerCase() !== fact.chunkId.toLowerCase();
 	});
 });
 
@@ -205,7 +205,16 @@ export const ___MemoryGatewayDocumentDeleteRequestSchema: z.ZodType<MemoryGatewa
 	documentId: z.string().uuid(),
 }).strict().refine(function _UsesSeparateDeletedDocumentIdentity(request): boolean
 {
-	return request.datasetId !== request.documentId;
+	return request.datasetId.toLowerCase() !== request.documentId.toLowerCase();
+});
+
+/** Validate the exact dataset and document coordinates of a confirmed deletion. */
+export const ___MemoryGatewayDocumentDeleteResponseSchema: z.ZodType<MemoryGatewayDocumentDeleteResponse> = z.object({
+	datasetId: z.string().uuid(),
+	documentId: z.string().uuid(),
+}).strict().refine(function _UsesSeparateDeletedReceiptIdentity(response): boolean
+{
+	return response.datasetId.toLowerCase() !== response.documentId.toLowerCase();
 });
 
 /** Strict read-error schema that rejects mutation delivery evidence. */

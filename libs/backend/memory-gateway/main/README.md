@@ -5,8 +5,8 @@
 ## What it owns
 
 This library supplies the private memory gateway's request server and provider connection. The
-server TokenReviews the OpenCrane caller, accepts only the fixed bounded search contract and passes
-the exact dataset UUID through to Cognee. Its authentication client
+server TokenReviews the OpenCrane caller, accepts only the fixed bounded dataset, document and
+search contracts, and passes the exact saved coordinates through to Cognee. Its authentication client
 logs in to Cognee, holds the login token in memory and refreshes it once when the provider rejects
 an expired session. Its HTTP client bounds requests and responses and removes provider details from
 errors. Its document reader returns a locked, content-free snapshot with byte digests, and its
@@ -34,14 +34,15 @@ response must remain a failure: it cannot become an empty recall or trigger an u
 
 ## Public surface
 
-`__CreateMemoryGatewayServer` creates the private liveness, readiness and bounded-search HTTP
+`__CreateMemoryGatewayServer` creates the private liveness, readiness and bounded memory HTTP
 surface. `__CreateCogneeProviderCredentialFileReader` reads the two mounted Secret files through a
 fixed byte ceiling. `__CreateCogneeProviderSession` owns login, readiness and one authorised
-exchange. The
-document and Cognify operations reject duplicate or altered snapshot evidence, nonterminal runs and
-receipts that do not echo the saved dataset, operation and digest. A replay of a completed operation
-returns the same provider pipeline coordinate. Callers receive projected metadata and failure
-classes, never the login token, provider storage path or provider response content.
+exchange. `_CreateCogneeMemoryGatewayProviderOperations` adapts dataset ensure/list, document
+add/list/raw-digest/delete, Cognify and search. Add and delete recover from uncertain provider
+responses by checking saved coordinates and complete raw-byte digests before reporting success. A
+replay of a completed operation returns the same provider pipeline coordinate. Callers receive
+projected metadata and failure classes, never the login token, provider storage path or provider
+response content.
 
 ## Boundary
 

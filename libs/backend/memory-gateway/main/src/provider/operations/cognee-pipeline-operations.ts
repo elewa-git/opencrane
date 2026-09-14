@@ -1,11 +1,12 @@
-import { MemoryGatewayErrorCodes, ___MemoryGatewayDatasetCognifyResponseSchema } from "@opencrane/contracts";
-import type { MemoryGatewayDatasetCognifyRequest, MemoryGatewayDatasetCognifyResponse } from "@opencrane/contracts";
+import { MemoryGatewayErrorCodes, ___MemoryGatewayDatasetCognifyResponseSchema, ___MemoryGatewaySearchResponseSchema } from "@opencrane/contracts";
+import type { MemoryGatewayDatasetCognifyRequest, MemoryGatewayDatasetCognifyResponse, MemoryGatewaySearchRequest, MemoryGatewaySearchResponse } from "@opencrane/contracts";
 
 import type { CogneeProviderSession } from "../auth/cognee-provider-session.types";
 import type { CogneeProviderHttpResponse } from "../http/cognee-provider-http.types";
-import { _CompletedPipeline, _PrepareMutation } from "./cognee-provider-operation-io";
+import { _CompletedPipeline, _PrepareMutation, _ReadExchange } from "./cognee-provider-operation-io";
 import { _CanonicalProviderUuid, _MutationErrorForStatus, _ParseProviderJson, _ParseProviderValue, _ParseSharedValue, _PostDispatchMutationFailure, _ProviderJson, _ProviderRunMapSchema } from "./cognee-provider-operation-support";
 import { MemoryGatewayProviderReadError } from "./memory-gateway-provider-error";
+import { _ProjectCogneeSearchResponse } from "./cognee-search-response";
 
 /** Headers used by the repaired blocking Cognify route. */
 const _JSON_HEADERS = { "content-type": "application/json" } as const;
@@ -13,7 +14,7 @@ const _JSON_HEADERS = { "content-type": "application/json" } as const;
 /** Run or replay blocking Cognify with the caller's saved recovery coordinates. */
 export async function _CognifyDataset(session: CogneeProviderSession, request: MemoryGatewayDatasetCognifyRequest, signal?: AbortSignal): Promise<MemoryGatewayDatasetCognifyResponse>
 {
-	await _PrepareMutation(session);
+	await _PrepareMutation(session, signal);
 	const datasetId = _CanonicalProviderUuid(request.datasetId);
 	const operationId = _CanonicalProviderUuid(request.operationId);
 	let response: CogneeProviderHttpResponse;
@@ -49,4 +50,31 @@ export async function _CognifyDataset(session: CogneeProviderSession, request: M
 	{
 		throw _PostDispatchMutationFailure(error);
 	}
+}
+
+/** Translate one shared search request into the private Cognee CHUNKS protocol. */
+export async function _Search(session: CogneeProviderSession, request: MemoryGatewaySearchRequest, signal?: AbortSignal): Promise<MemoryGatewaySearchResponse>
+{
+	const datasetId = _CanonicalProviderUuid(request.datasetId);
+	const body = _ProviderJson({ search_type: "CHUNKS", dataset_ids: [datasetId], query: request.query, top_k: request.topK });
+	const response = await _ReadExchange(session, { method: "POST", path: "/api/v1/search", headers: _JSON_HEADERS, body, signal });
+	const projected = _ProjectCogneeSearchResponse(response, datasetId);
+	let chunks: unknown;
+	try
+	{
+		chunks = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(projected)) as unknown;
+	}
+	catch
+	{
+		throw new MemoryGatewayProviderReadError(MemoryGatewayErrorCodes.ProviderProtocol);
+	}
+	if (!Array.isArray(chunks))
+		throw new MemoryGatewayProviderReadError(MemoryGatewayErrorCodes.ProviderProtocol);
+	const facts = chunks.slice(0, request.topK).map(function _ProjectChunk(chunk: unknown)
+	{
+		if (typeof chunk !== "object" || chunk === null || !("document_id" in chunk) || !("id" in chunk) || !("text" in chunk))
+			throw new MemoryGatewayProviderReadError(MemoryGatewayErrorCodes.ProviderProtocol);
+		return { documentId: String(chunk.document_id), chunkId: String(chunk.id), content: String(chunk.text) };
+	});
+	return _ParseSharedValue(___MemoryGatewaySearchResponseSchema, { datasetId, facts });
 }

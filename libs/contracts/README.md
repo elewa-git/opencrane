@@ -104,7 +104,9 @@ a tool's identity, arguments or result.
 
 The `memory/gateway/` folder owns the private HTTP contract between the OpenCrane server and the
 memory gateway. Its eight routes cover dataset lookup, bounded document storage and recovery,
-blocking processing, passage search, and exact document deletion. A locked document snapshot carries
+blocking processing, passage search, and exact document deletion. A deletion receipt contains only
+the dataset and document UUIDs whose absence was verified; the workflow must compare both with
+its saved target before completing that step. A locked document snapshot carries
 per-document byte evidence and one digest for the complete input. The blocking processing receipt
 binds that digest and the caller's saved operation to one provider pipeline run. Strict validators keep Cognee field
 aliases, credentials, owner records, storage locations, and provider errors outside this contract.
