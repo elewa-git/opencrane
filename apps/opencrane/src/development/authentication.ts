@@ -15,7 +15,7 @@ const _TIER2_TRANSPORT: DevelopmentAuthenticationTransport = Object.freeze({ bro
 /** Request methods that cannot change application state. */
 const _SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
-/** Carries the per-launch credential set only by the dedicated Tier 2 browser. */
+/** Carries the per-launch credential set only by the dedicated Tier 2 browser or Tier 3 proxy. */
 const _DEVELOPMENT_SESSION_HEADER = "x-opencrane-development-session";
 
 /** Short authorization lifetime forces every long-running local session to be re-projected. */
@@ -134,7 +134,7 @@ function _CreateAdmissionMiddleware(identity: DevelopmentIdentity, admission: Au
 		}
 		catch (err)
 		{
-			logger.warn({ err, siloId: identity.siloId, subject: identity.subjectId }, "Tier 2 Principal admission is unavailable");
+			logger.warn({ err, siloId: identity.siloId, subject: identity.subjectId }, "Development Principal admission is unavailable");
 			response.status(503).json({ error: "identity_projection_unavailable" });
 		}
 	};
