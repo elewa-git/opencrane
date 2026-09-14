@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ConversationModelResponseKinds, type ConversationModelToolCall } from "../conversation-model.types";
-import { ___ConversationModelContinuationSchema, ___ConversationModelResponseSchema, ___ConversationModelToolCallSchema } from "../conversation-model.validator";
+import { ___ConversationModelResponseSchema, ___ConversationModelToolCallSchema, ___ConversationModelToolExchangeSchema, ___ConversationModelToolHistorySchema } from "../conversation-model.validator";
 
 /** Supplies a saved declaration whose original argument formatting matters on replay. */
 function _call(overrides: Partial<ConversationModelToolCall> = {}): ConversationModelToolCall
@@ -49,14 +49,14 @@ describe("conversation model saved content", function _schemas()
 
 	it("preserves paired content and rejects combined overflow, bad Unicode and extra fields", function _continuation()
 	{
-		const continuation = { call: _call(), resultContent: '{"result":"It is ready."}' };
-		expect(___ConversationModelContinuationSchema.parse(continuation)).toEqual(continuation);
+		const exchange = { call: _call(), resultContent: '{"result":"It is ready."}' };
+		expect(___ConversationModelToolExchangeSchema.parse(exchange)).toEqual(exchange);
 		for (const changed of [
-			{ ...continuation, resultContent: "" }, { ...continuation, resultContent: "\ud800" },
-			{ ...continuation, call: _call({ content: "x".repeat(35_000) }), resultContent: "y".repeat(35_000) },
-			{ ...continuation, tool_call_id: "different" },
+			{ ...exchange, resultContent: "" }, { ...exchange, resultContent: "\ud800" },
+			{ ...exchange, call: _call({ content: "x".repeat(35_000) }), resultContent: "y".repeat(35_000) },
+			{ ...exchange, tool_call_id: "different" },
 		])
-			expect(___ConversationModelContinuationSchema.safeParse(changed).success).toBe(false);
+			expect(___ConversationModelToolExchangeSchema.safeParse(changed).success).toBe(false);
 	});
 
 	it("accepts the combined serialized custody ceiling exactly", function _custodyBoundary()
@@ -64,8 +64,21 @@ describe("conversation model saved content", function _schemas()
 		const value = { call: _call(), resultContent: "x" };
 		const overhead = new TextEncoder().encode(JSON.stringify(value)).byteLength - 1;
 		value.resultContent = "x".repeat(65_536 - overhead);
-		expect(___ConversationModelContinuationSchema.safeParse(value).success).toBe(true);
-		expect(___ConversationModelContinuationSchema.safeParse({ ...value, resultContent: value.resultContent + "x" }).success).toBe(false);
+		expect(___ConversationModelToolExchangeSchema.safeParse(value).success).toBe(true);
+		expect(___ConversationModelToolExchangeSchema.safeParse({ ...value, resultContent: value.resultContent + "x" }).success).toBe(false);
+	});
+
+	it("accepts Select history in order and rejects duplicate provider call ids", function _History()
+	{
+		const history = [{ call: _call({ id: "first" }), resultContent: "first result" }, { call: _call({ id: "second" }), resultContent: "second result" }];
+		expect(___ConversationModelToolHistorySchema.parse(history)).toEqual(history);
+		expect(___ConversationModelToolHistorySchema.safeParse([...history, { ...history[0]! }]).success).toBe(false);
+	});
+
+	it("rejects a history that exceeds its ordered entry bound", function _HistoryBytes()
+	{
+		const history = new Array(129).fill(null).map(function _Exchange(_value, index) { return { call: _call({ id: `call-${index}` }), resultContent: "result" }; });
+		expect(___ConversationModelToolHistorySchema.safeParse(history).success).toBe(false);
 	});
 
 	it.each([

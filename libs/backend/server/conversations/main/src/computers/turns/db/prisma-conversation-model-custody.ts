@@ -3,8 +3,9 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { ___CanonicalizeJson, ___ParseAndValidateJson, type JsonValue } from "@opencrane/util";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 
-import type { ConversationComputerModelCustody, ConversationComputerPrivateModelReference, ConversationComputerToolContinuation, ConversationComputerToolDeclaration } from "../conversation-computer-continuation.types";
-import { _ConversationToolContinuationSchema, _ConversationToolDeclarationSchema } from "../conversation-computer-continuation.validator";
+import type { ConversationComputerModelCustody, ConversationComputerToolDeclaration, ConversationComputerToolExchange } from "../conversation-computer-continuation.types";
+import { _ConversationToolDeclarationSchema, _ConversationToolExchangeSchema } from "../conversation-computer-continuation.validator";
+import type { ConversationComputerPrivateModelReference } from "../conversation-computer-turn-protocol.types";
 import type { FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 import type { ConversationPrivatePayloadCipher } from "@opencrane/backend/server/conversations/history";
 
@@ -17,56 +18,76 @@ export class PrismaConversationModelCustodyRepository implements ConversationCom
 	public async storeDeclaration(turn: FrozenConversationComputerTurn, declaration: ConversationComputerToolDeclaration): Promise<ConversationComputerPrivateModelReference>
 	{
 		_AssertDeclaration(turn, _ConversationToolDeclarationSchema.parse(declaration));
-		return this._Store(turn, "declaration", ___CanonicalizeJson(declaration as unknown as JsonValue));
+		return this._Store(turn, "declaration", declaration.ordinal, declaration.modelInvocationFence, ___CanonicalizeJson(declaration as unknown as JsonValue));
 	}
 
 	/** Recover committed custody after a lost selection append; current tool authority is checked by the caller. */
-	public async loadDeclaration(turn: FrozenConversationComputerTurn)
+	public async loadDeclaration(turn: FrozenConversationComputerTurn, ordinal?: number)
 	{
-		const saved = await this._Read(turn, "declaration");
-		if (saved === null)
-			return null;
-		const declaration = ___ParseAndValidateJson(saved.text, "Conversation model declaration", value => _ConversationToolDeclarationSchema.parse(value));
-		_AssertDeclaration(turn, declaration);
-		return { declaration, reference: saved.reference };
+		const steps = ordinal === undefined ? turn.protocol.steps.slice(-1) : turn.protocol.steps.filter(step => step.reservation.ordinal === ordinal);
+		for (const step of steps)
+		{
+			const saved = await this._Read(turn, "declaration", step.reservation.ordinal, step.reservation.invocationFence);
+			if (saved === null)
+				continue;
+			const declaration = ___ParseAndValidateJson(saved.text, "Conversation model declaration", value => _ConversationToolDeclarationSchema.parse(value));
+			_AssertDeclaration(turn, declaration);
+			return { declaration, reference: saved.reference };
+		}
+		return null;
 	}
 
-	/** Commit the exact assistant/tool pair before the second model request consumes the delivery. */
-	public async storeContinuation(turn: FrozenConversationComputerTurn, continuation: ConversationComputerToolContinuation)
+	/** Commit the exact assistant/tool pair before the next model request consumes the delivery. */
+	public async storeExchange(turn: FrozenConversationComputerTurn, exchange: ConversationComputerToolExchange)
 	{
-		_AssertContinuation(turn, _ConversationToolContinuationSchema.parse(continuation));
-		return this._Store(turn, "continuation", ___CanonicalizeJson(continuation as unknown as JsonValue));
+		_AssertExchange(turn, _ConversationToolExchangeSchema.parse(exchange));
+		const declaration = await this._Read(turn, "declaration", exchange.ordinal, exchange.modelInvocationFence);
+		if (declaration === null)
+			throw new Error("Conversation model exchange requires its saved declaration");
+		const savedDeclaration = ___ParseAndValidateJson(declaration.text, "Conversation model declaration", value => _ConversationToolDeclarationSchema.parse(value));
+		if (___CanonicalizeJson(savedDeclaration.call as unknown as JsonValue) !== ___CanonicalizeJson(exchange.call as unknown as JsonValue))
+			throw new Error("Conversation model exchange differs from its saved declaration");
+		return this._Store(turn, "exchange", exchange.ordinal, exchange.modelInvocationFence, ___CanonicalizeJson(exchange as unknown as JsonValue));
 	}
 
-	/** Read only the exact ciphertext named by the saved second-request reservation. */
-	public async loadContinuation(turn: FrozenConversationComputerTurn, reference: ConversationComputerPrivateModelReference)
+	/** Read only the exact ciphertext named by the saved ordered result. */
+	public async loadExchange(turn: FrozenConversationComputerTurn, reference: ConversationComputerPrivateModelReference)
 	{
-		const saved = await this._Read(turn, "continuation");
+		const step = turn.protocol.steps.find(candidate => candidate.result?.exchange.payloadRef === reference.payloadRef && candidate.result.exchange.ciphertextDigest === reference.ciphertextDigest);
+		if (step === undefined)
+			throw new Error("Conversation model exchange custody differs from its saved reference");
+		const saved = await this._Read(turn, "exchange", step.reservation.ordinal, step.reservation.invocationFence);
 		if (saved === null || saved.reference.payloadRef !== reference.payloadRef || saved.reference.ciphertextDigest !== reference.ciphertextDigest)
-			throw new Error("Conversation model continuation custody differs from its saved reference");
-		const continuation = ___ParseAndValidateJson(saved.text, "Conversation model continuation", value => _ConversationToolContinuationSchema.parse(value));
-		_AssertContinuation(turn, continuation);
-		return continuation;
+			throw new Error("Conversation model exchange custody differs from its saved reference");
+		const exchange = ___ParseAndValidateJson(saved.text, "Conversation model exchange", value => _ConversationToolExchangeSchema.parse(value));
+		_AssertExchange(turn, exchange);
+		const declaration = await this._Read(turn, "declaration", step.reservation.ordinal, step.reservation.invocationFence);
+		if (declaration === null)
+			throw new Error("Conversation model exchange requires its saved declaration");
+		const savedDeclaration = ___ParseAndValidateJson(declaration.text, "Conversation model declaration", value => _ConversationToolDeclarationSchema.parse(value));
+		if (___CanonicalizeJson(savedDeclaration.call as unknown as JsonValue) !== ___CanonicalizeJson(exchange.call as unknown as JsonValue))
+			throw new Error("Conversation model exchange differs from its saved declaration");
+		return exchange;
 	}
 
-	private async _Store(turn: FrozenConversationComputerTurn, domain: "declaration" | "continuation", text: string)
+	private async _Store(turn: FrozenConversationComputerTurn, domain: "declaration" | "exchange", ordinal: number, fence: string, text: string)
 	{
-		const existing = await this._Read(turn, domain);
+		const existing = await this._Read(turn, domain, ordinal, fence);
 		if (existing !== null)
 		{
 			if (existing.text !== text)
 				throw new Error("Conversation model custody cannot replace saved content");
 			return existing.reference;
 		}
-		const coordinates = _Coordinates(turn, domain);
+		const coordinates = _Coordinates(turn, domain, ordinal, fence);
 		const encrypted = this.cipher.encrypt(text, coordinates);
 		await this.transaction.conversationPrivatePayload.create({ data: { id: coordinates.payloadRef, siloId: coordinates.siloId, conversationId: coordinates.conversationId, authorSubject: coordinates.authorSubject, idempotencyKey: coordinates.payloadRef, keyId: encrypted.keyId, nonce: Buffer.from(encrypted.nonce), authTag: Buffer.from(encrypted.authTag), ciphertext: Buffer.from(encrypted.ciphertext), ciphertextDigest: encrypted.ciphertextDigest } });
 		return { payloadRef: coordinates.payloadRef, ciphertextDigest: encrypted.ciphertextDigest };
 	}
 
-	private async _Read(turn: FrozenConversationComputerTurn, domain: "declaration" | "continuation")
+	private async _Read(turn: FrozenConversationComputerTurn, domain: "declaration" | "exchange", ordinal: number, fence: string)
 	{
-		const coordinates = _Coordinates(turn, domain);
+		const coordinates = _Coordinates(turn, domain, ordinal, fence);
 		const row = await this.transaction.conversationPrivatePayload.findUnique({ where: { id: coordinates.payloadRef } });
 		if (row === null)
 			return null;
@@ -86,17 +107,17 @@ export class PrismaConversationModelCustodyUnitOfWork implements ConversationCom
 	{
 		return this._Run(repository => repository.storeDeclaration(turn, declaration));
 	}
-	public loadDeclaration(turn: FrozenConversationComputerTurn)
+	public loadDeclaration(turn: FrozenConversationComputerTurn, ordinal?: number)
 	{
-		return this._Run(repository => repository.loadDeclaration(turn));
+		return this._Run(repository => repository.loadDeclaration(turn, ordinal));
 	}
-	public storeContinuation(turn: FrozenConversationComputerTurn, continuation: ConversationComputerToolContinuation)
+	public storeExchange(turn: FrozenConversationComputerTurn, exchange: ConversationComputerToolExchange)
 	{
-		return this._Run(repository => repository.storeContinuation(turn, continuation));
+		return this._Run(repository => repository.storeExchange(turn, exchange));
 	}
-	public loadContinuation(turn: FrozenConversationComputerTurn, reference: ConversationComputerPrivateModelReference)
+	public loadExchange(turn: FrozenConversationComputerTurn, reference: ConversationComputerPrivateModelReference)
 	{
-		return this._Run(repository => repository.loadContinuation(turn, reference));
+		return this._Run(repository => repository.loadExchange(turn, reference));
 	}
 	private _Run<T>(operation: (repository: PrismaConversationModelCustodyRepository) => Promise<T>)
 	{
@@ -109,11 +130,9 @@ export class PrismaConversationModelCustodyUnitOfWork implements ConversationCom
 }
 
 /** Derives private payload identity independently of participant-output idempotency keys. */
-function _Coordinates(turn: FrozenConversationComputerTurn, domain: "declaration" | "continuation")
+function _Coordinates(turn: FrozenConversationComputerTurn, domain: "declaration" | "exchange", ordinal: number, fence: string)
 {
-	if (turn.modelReservation === null)
-		throw new Error("Conversation model custody requires its original request reservation");
-	const hex = createHash("sha256").update(JSON.stringify(["conversation-model-custody", domain, turn.bootstrapId, turn.modelReservation.invocationFence])).digest("hex");
+	const hex = createHash("sha256").update(JSON.stringify(["conversation-model-custody", domain, turn.bootstrapId, ordinal, fence])).digest("hex");
 	const payloadRef = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 	return { siloId: turn.siloId, conversationId: turn.binding.conversationId, payloadRef, authorSubject: turn.binding.agentIdentityId };
 }
@@ -121,16 +140,18 @@ function _Coordinates(turn: FrozenConversationComputerTurn, domain: "declaration
 /** A saved acceptance time may precede recovery, but cannot exceed the original dispatch/key window. */
 function _AssertDeclaration(turn: FrozenConversationComputerTurn, value: ConversationComputerToolDeclaration)
 {
-	if (turn.modelReservation === null || value.bootstrapId !== turn.bootstrapId || value.runId !== turn.compile.runId || value.attempt !== turn.compile.attempt || value.compiledInputDigest !== turn.compile.digest || value.modelInvocationFence !== turn.modelReservation.invocationFence
-		|| value.acceptedAtEpochMs > Date.now() || value.acceptedAtEpochMs >= value.requestNotAfterEpochMs || value.requestNotAfterEpochMs > turn.modelReservation.dispatchDeadlineEpochMs || value.requestNotAfterEpochMs > Date.parse(value.credentialExpiresAt))
+	const step = turn.protocol.steps.find(candidate => candidate.reservation.ordinal === value.ordinal);
+	if (step === undefined || value.bootstrapId !== turn.bootstrapId || value.runId !== turn.compile.runId || value.attempt !== turn.compile.attempt || value.compiledInputDigest !== turn.compile.digest || value.modelInvocationFence !== step.reservation.invocationFence
+		|| value.acceptedAtEpochMs > Date.now() || value.acceptedAtEpochMs >= value.requestNotAfterEpochMs || value.requestNotAfterEpochMs > step.reservation.dispatchDeadlineEpochMs || value.requestNotAfterEpochMs > Date.parse(value.credentialExpiresAt))
 		throw new Error("Conversation model declaration crossed its original accepted response");
 }
 
 /** The pair keeps the original input anchor and selected encrypted declaration unchanged. */
-function _AssertContinuation(turn: FrozenConversationComputerTurn, value: ConversationComputerToolContinuation)
+function _AssertExchange(turn: FrozenConversationComputerTurn, value: ConversationComputerToolExchange)
 {
-	const selection = turn.toolSelection;
-	if (selection === null || value.bootstrapId !== turn.bootstrapId || value.runId !== turn.compile.runId || value.attempt !== turn.compile.attempt || value.compiledInputDigest !== turn.compile.digest
-		|| value.proposalId !== selection.proposalId || value.declaration.payloadRef !== selection.payloadRef || value.declaration.ciphertextDigest !== selection.ciphertextDigest)
-		throw new Error("Conversation model continuation crossed its original tool selection");
+	const step = turn.protocol.steps.find(candidate => candidate.reservation.ordinal === value.ordinal);
+	const selection = step?.selection;
+	if (step === undefined || selection === null || selection === undefined || value.bootstrapId !== turn.bootstrapId || value.runId !== turn.compile.runId || value.attempt !== turn.compile.attempt || value.compiledInputDigest !== turn.compile.digest
+		|| value.modelInvocationFence !== step.reservation.invocationFence || value.proposalId !== selection.proposalId || value.toolInvocationId !== selection.toolInvocationId || step.result !== null && value.resultDigest !== step.result.resultDigest || value.declaration.payloadRef !== selection.declaration.payloadRef || value.declaration.ciphertextDigest !== selection.declaration.ciphertextDigest)
+		throw new Error("Conversation model exchange crossed its original tool selection");
 }

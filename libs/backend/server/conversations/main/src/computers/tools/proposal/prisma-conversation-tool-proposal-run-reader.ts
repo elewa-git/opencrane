@@ -10,7 +10,7 @@ import { ConversationToolProposalRefusals, type PreparedConversationToolProposal
 import type { ConversationToolApprovalDisclosure, ConversationToolProposalRun, ConversationToolProposalRunReader } from "./conversation-tool-proposal-run.types";
 
 /**
- * Checks the running attempt, its saved input and the proposal slot without writing anything.
+ * Checks the running attempt, its saved input and the per-step proposal identity without writing anything.
  *
  * The caller must keep these reads and admission in the same Serializable transaction. Counting
  * existing calls before the insert lets PostgreSQL reject concurrent attempts to claim another slot.
@@ -98,7 +98,7 @@ export class PrismaConversationToolProposalRunRepository implements Conversation
 		return { toolName: frozenTool.name, toolDescription: frozenTool.description, serverName: row.serverRevision.server.name };
 	}
 
-	/** Reject a changed retry and prevent a new proposal from taking an occupied call slot. */
+	/** Reject a changed retry and prevent a new proposal from exceeding the frozen invocation allowance. */
 	private async _checkSlot(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: PreparedConversationToolProposal): Promise<void>
 	{
 		const query = {
@@ -110,7 +110,7 @@ export class PrismaConversationToolProposalRunRepository implements Conversation
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Conflict);
 		const countQuery = { where: { runId: turn.compile.runId, attempt: turn.compile.attempt } };
 		const count = await this.transaction.toolInvocation.count(countQuery);
-		if (existing === null && count >= Math.min(1, candidate.compiledInput.budget.maxToolInvocations))
+		if (existing === null && count >= candidate.compiledInput.budget.maxToolInvocations)
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 	}
 }

@@ -56,6 +56,6 @@ export type { ConversationToolProposal, ConversationToolProposalReceipt } from "
 export { ___ConversationToolArgumentsSchema, ___ConversationToolProposalSchema } from "./conversations/conversation-tool-proposal.validator";
 
 export * from "./conversations/conversation-model.types";
-export { ___ConversationModelToolCallSchema, ___ConversationModelContinuationSchema, ___ConversationModelResponseSchema } from "./conversations/conversation-model.validator";
+export { ___ConversationModelToolCallSchema, ___ConversationModelToolExchangeSchema, ___ConversationModelToolHistorySchema, ___ConversationModelResponseSchema } from "./conversations/conversation-model.validator";
 
 export * from "./mcp/protocol";

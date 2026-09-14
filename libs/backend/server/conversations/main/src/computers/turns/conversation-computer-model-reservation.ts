@@ -1,74 +1,86 @@
+import { z } from "zod";
 import { ConversationModelToolModes } from "@opencrane/contracts";
-import type { ConversationComputerContinuationReservation } from "./conversation-computer-continuation.types";
-import { _ConversationContinuationReservationSchema, _ConversationModelReservationSchema } from "./conversation-computer-continuation.validator";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { ConversationComputerModelReservation } from "./conversation-computer-model.types";
-import type { FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 import { _ConversationComputerEventId } from "../conversation-computer-event-id";
+import type { ConversationComputerTurnModelReservation } from "./conversation-computer-turn-protocol.types";
+import type { FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 
-/** Identifies the persisted v1 reservation format; changing its shape requires a new event version. */
-export const _CONVERSATION_MODEL_RESERVED_EVENT = "opencrane.conversation-computer-turn-model-reserved.v1";
+/** Identifies the fresh-install ordered model-reservation event. */
+export const _CONVERSATION_MODEL_RESERVED_EVENT = "opencrane.conversation-computer-turn-model-reserved.v2";
 
-/** Build only non-secret reservation evidence under the turn's complete lease coordinates. */
-export function _ConversationModelReservationEvent(turn: FrozenConversationComputerTurn, reservation: ConversationComputerModelReservation | ConversationComputerContinuationReservation)
+const _Digest = z.string().regex(/^sha256:[0-9a-f]{64}$/u);
+const _Fence = z.string().uuid();
+const _Count = z.number().int().positive().safe();
+const _ReservationSchema: z.ZodType<ConversationComputerTurnModelReservation> = z.object({
+	ordinal: _Count,
+	invocationFence: _Fence,
+	tools: z.nativeEnum(ConversationModelToolModes),
+	compiledInputDigest: _Digest,
+	historyDigest: _Digest,
+	requestDigest: _Digest,
+	maxCompletionTokens: _Count,
+	authorityExpiresAtEpochMs: _Count,
+	dispatchDeadlineEpochMs: _Count,
+}).strict();
+
+/** Builds non-secret reservation evidence under the turn's complete lease coordinates. */
+export function _ConversationModelReservationEvent(turn: FrozenConversationComputerTurn, reservation: ConversationComputerTurnModelReservation)
 {
-	const id = _ConversationComputerEventId("model-reservation", reservation.invocationFence);
-	return { id, type: _CONVERSATION_MODEL_RESERVED_EVENT, data: { bootstrapId: turn.bootstrapId, reservation: { ...reservation } }, metadata: { siloId: turn.siloId, computerId: turn.computerId, leaseId: turn.lease.leaseId, generation: String(turn.lease.leaseGeneration), bootstrapId: turn.bootstrapId } };
+	return {
+		id: _ConversationComputerEventId(`model-reservation-${reservation.ordinal}`, reservation.invocationFence),
+		type: _CONVERSATION_MODEL_RESERVED_EVENT,
+		data: { bootstrapId: turn.bootstrapId, reservation: { ...reservation } },
+		metadata: _Metadata(turn),
+	};
 }
 
-/** Bind the immutable compiled input, model, ordinal and absolute limits into one request identity. */
-export function _ConversationModelRequestDigest(turn: Pick<FrozenConversationComputerTurn, "bootstrapId" | "compile" | "modelAlias">, reservation: Omit<ConversationComputerModelReservation, "invocationFence" | "requestDigest"> | Omit<ConversationComputerContinuationReservation, "invocationFence" | "requestDigest">): string
+/** Binds the immutable turn, aggregate allowance and ordered private history into one request identity. */
+export function _ConversationModelRequestDigest(turn: Pick<FrozenConversationComputerTurn, "bootstrapId" | "compile" | "modelAlias" | "budget">, reservation: Omit<ConversationComputerTurnModelReservation, "invocationFence" | "requestDigest">): string
 {
-	const continuationEvidence = reservation.ordinal === 2
-		? { continuation: reservation.continuation, proposalId: reservation.proposalId, resultDigest: reservation.resultDigest }
-		: { continuation: null, proposalId: null, resultDigest: null };
-	return ___DigestCanonicalJson({ bootstrapId: turn.bootstrapId, runId: turn.compile.runId, attempt: turn.compile.attempt, compiledInputDigest: turn.compile.digest, modelAlias: turn.modelAlias, ordinal: reservation.ordinal, tools: reservation.tools, ...continuationEvidence, maxCompletionTokens: reservation.maxCompletionTokens, authorityExpiresAtEpochMs: reservation.authorityExpiresAtEpochMs, dispatchDeadlineEpochMs: reservation.dispatchDeadlineEpochMs } as unknown as JsonValue);
+	return ___DigestCanonicalJson({ bootstrapId: turn.bootstrapId, runId: turn.compile.runId, attempt: turn.compile.attempt, modelAlias: turn.modelAlias, budget: turn.budget, ...reservation } as unknown as JsonValue);
 }
 
 /**
- * Checks the saved fields, request digest and complete revision-1 event against the frozen turn.
- * Reading a valid fence proves what was recorded, not that this caller may dispatch.
- * @throws Error when fields, stream coordinates, event identity or digests differ.
- * Called by: KurrentConversationComputerTurnStore.load and KurrentConversationComputerTurnStore.reserveModel.
+ * Checks one ordered model reservation without granting permission to dispatch it.
+ *
+ * Called by: KurrentConversationComputerTurnStore during replay and before append.
+ *
+ * @param event Recorded event or locally prepared candidate at its proposed revision.
+ * @param turn Frozen turn and projection immediately before this event.
+ * @returns The exact validated reservation.
+ * @throws Error when its shape, request digest, stream revision, identity or metadata differs.
  */
-export function _ReadConversationModelReservation(event: HistoryRecordedEvent, turn: FrozenConversationComputerTurn): ConversationComputerModelReservation
+export function _ReadConversationModelReservation(event: HistoryRecordedEvent, turn: FrozenConversationComputerTurn): ConversationComputerTurnModelReservation
 {
-	const parsed = _ConversationModelReservationSchema.safeParse(event.data["reservation"]);
+	const parsed = _ReservationSchema.safeParse(event.data["reservation"]);
 	if (!parsed.success)
 		throw new Error("Conversation computer model reservation is invalid");
 	const reservation = parsed.data;
-	return _ReadReservation(event, turn, reservation, 1n);
-}
-
-/**
- * Checks revision 3 against the original request and selected tool, without granting dispatch.
- * The final request needs a different fence and cannot extend the first request's authority window.
- * @throws Error when the saved event or its original decision coordinates differ.
- */
-export function _ReadConversationContinuationReservation(event: HistoryRecordedEvent, turn: FrozenConversationComputerTurn): ConversationComputerContinuationReservation
-{
-	const parsed = _ConversationContinuationReservationSchema.safeParse(event.data["reservation"]);
-	if (!parsed.success)
-		throw new Error("Conversation computer continuation reservation is invalid");
-	const reservation = parsed.data;
-	if (turn.modelReservation === null || turn.modelReservation.tools !== ConversationModelToolModes.Select || reservation.invocationFence === turn.modelReservation.invocationFence || turn.toolSelection === null || reservation.proposalId !== turn.toolSelection.proposalId || reservation.authorityExpiresAtEpochMs > turn.modelReservation.authorityExpiresAtEpochMs)
-		throw new Error("Conversation computer continuation crossed its original model or tool decision");
-	return _ReadReservation(event, turn, reservation, 3n);
-}
-
-/** Validates complete event identity and frozen request limits after typed shape validation. */
-function _ReadReservation<T extends ConversationComputerModelReservation | ConversationComputerContinuationReservation>(event: HistoryRecordedEvent, turn: FrozenConversationComputerTurn, reservation: T, revision: bigint): T
-{
-	if (reservation.compiledInputDigest !== turn.compile.digest || reservation.dispatchDeadlineEpochMs > reservation.authorityExpiresAtEpochMs)
+	if (reservation.compiledInputDigest !== turn.compile.digest || reservation.dispatchDeadlineEpochMs > reservation.authorityExpiresAtEpochMs
+		|| reservation.requestDigest !== _ConversationModelRequestDigest(turn, _WithoutIdentity(reservation)))
 		throw new Error("Conversation computer model reservation crossed its frozen limits");
-	if (reservation.requestDigest !== _ConversationModelRequestDigest(turn, reservation))
-		throw new Error("Conversation computer model reservation has a different request digest");
 	const expected = _ConversationModelReservationEvent(turn, reservation);
-	if (event.revision !== revision || event.streamName !== `conversation-computer-turn-${turn.bootstrapId}` || event.id !== expected.id || event.type !== expected.type
+	if (event.revision !== turn.protocol.revision + 1n || event.streamName !== _Stream(turn.bootstrapId) || event.id !== expected.id || event.type !== expected.type
 		|| ___DigestCanonicalJson(event.data as JsonValue) !== ___DigestCanonicalJson(expected.data as unknown as JsonValue)
-		|| ___DigestCanonicalJson(event.metadata as JsonValue) !== ___DigestCanonicalJson(expected.metadata))
+		|| ___DigestCanonicalJson(event.metadata as JsonValue) !== ___DigestCanonicalJson(expected.metadata as unknown as JsonValue))
 		throw new Error("Conversation computer model reservation crossed its exact event fence");
 	return reservation;
+}
+
+function _WithoutIdentity(reservation: ConversationComputerTurnModelReservation): Omit<ConversationComputerTurnModelReservation, "invocationFence" | "requestDigest">
+{
+	const { invocationFence: _fence, requestDigest: _digest, ...facts } = reservation;
+	return facts;
+}
+
+function _Metadata(turn: FrozenConversationComputerTurn): Record<string, unknown>
+{
+	return { siloId: turn.siloId, computerId: turn.computerId, leaseId: turn.lease.leaseId, generation: String(turn.lease.leaseGeneration), bootstrapId: turn.bootstrapId };
+}
+
+function _Stream(bootstrapId: string): string
+{
+	return `conversation-computer-turn-${bootstrapId}`;
 }

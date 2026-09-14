@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ConversationGeneratedFileResultStates, type ConversationGeneratedFileResultCommand } from "@opencrane/backend/server/conversations";
+import { ConversationComputerTurnProtocolStates, ConversationGeneratedFileResultStates, type ConversationGeneratedFileResultCommand } from "@opencrane/backend/server/conversations";
 import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationStates, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
-import { GeneratedFileResultKinds, type GeneratedFileResultMetadata, type McpToolCallResult } from "@opencrane/contracts";
+import { ConversationModelToolModes, GeneratedFileResultKinds, type GeneratedFileResultMetadata, type McpToolCallResult } from "@opencrane/contracts";
 
 import { PrismaConversationAssetProductAuthorizationRepository } from "../../../conversation-asset-product-authorization";
 import { _GeneratedFileCapturedMetadataResult } from "../../persistence/generated-file-capture-result";
@@ -70,9 +70,16 @@ function _Command(patch: Partial<ConversationGeneratedFileResultCommand> = {}): 
 			lease: { leaseId: "lease-1", leaseGeneration: 3, sandboxClaimId: "claim-1" },
 			compile: { runId: "run-1", attempt: 2, promptCompilerVersion: "v1", digest: `sha256:${"d".repeat(64)}` },
 			latestPendingEntryId: "entry-1", latestPendingEntryPosition: "1", modelAlias: "model", maximumBudgetUsd: 1,
-			credentialLifetimeSeconds: 60, outputSourceCommandId: null, outputReceipt: null, cancellationReceipt: null,
-			toolSelection: { proposalId: "proposal-1", requestFingerprint: invocation.requestFingerprint, payloadRef: "payload-1", ciphertextDigest: `sha256:${"e".repeat(64)}` },
-			continuationReservation: null, modelReservation: null,
+			credentialLifetimeSeconds: 60,
+			budget: { maxModelTurns: 2, maxCompletionTokens: 200, maxCostUsdMicros: null, maxToolInvocations: 1, maxLoopIterations: 1, wallClockDeadlineEpochMs: _NOW.getTime() + 60_000 },
+			protocol: {
+				state: ConversationComputerTurnProtocolStates.ToolPending, revision: 2n, output: null, cancellation: null, unavailable: null,
+				accounting: { reservedModelCalls: 1, reservedCompletionTokens: 100, reservedToolInvocations: 1, toolResultCyclesFed: 0 },
+				steps: [{ state: ConversationComputerTurnProtocolStates.ToolPending,
+					reservation: { ordinal: 1, invocationFence: "first-fence", tools: ConversationModelToolModes.Select, compiledInputDigest: `sha256:${"d".repeat(64)}`, historyDigest: "sha256:history", requestDigest: "sha256:request", maxCompletionTokens: 100, authorityExpiresAtEpochMs: _NOW.getTime() + 60_000, dispatchDeadlineEpochMs: _NOW.getTime() + 30_000 },
+					selection: { ordinal: 1, modelInvocationFence: "first-fence", proposalId: "proposal-1", toolInvocationId: "proposal-1", requestFingerprint: invocation.requestFingerprint, declaration: { payloadRef: "payload-1", ciphertextDigest: `sha256:${"e".repeat(64)}` } }, result: null,
+				}],
+			},
 		},
 		invocation,
 		payload: { toolInvocationId: "proposal-1", outcome: "succeeded", result: _Result() as never },

@@ -4,22 +4,40 @@ import { ConversationModelResponseKinds, ConversationToolProposalOutcomes } from
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { ConversationComputerToolResultOutcomes, type ConversationComputerToolResult } from "../conversation-computer-continuation.types";
+import { ConversationComputerTurnProtocolStates } from "../conversation-computer-turn-protocol.types";
 import type { ConversationComputerTurnAuthorityDependencies, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 import { AesGcmConversationPrivatePayloadCipher } from "@opencrane/backend/server/conversations/history";
 import { PrismaConversationModelCustodyUnitOfWork } from "../db/prisma-conversation-model-custody";
 import { _OutputRecoveryHarness } from "./conversation-output-recovery.fixture";
 
-/** Combine real turn CAS, current-Pod checks and encrypted custody with a controlled terminal tool. */
-export async function _ToolContinuationHarness()
+/** Combine real turn CAS, current-Pod checks and encrypted custody with controlled ordered tools. */
+export async function _ToolContinuationHarness(toolCount = 1, maxCompletionTokens = 100)
 {
 	const overrides: Partial<ConversationComputerTurnAuthorityDependencies> = {};
-	const f = await _OutputRecoveryHarness(false, overrides);
 	const schema = { type: "object", required: ["query"], additionalProperties: false, properties: { query: { type: "string" } } };
-	Object.assign(f.candidate, { compiledInput: { ...f.candidate.compiledInput, tools: [{ name: "records.lookup", modelName: "lookup_record", toolRevisionId: "tool-1", description: "Read a dedicated record", requiresApproval: false, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) }], budget: { ...f.candidate.compiledInput.budget, maxModelTurns: 2, maxToolInvocations: 1, wallClockDeadlineEpochMs: Date.now() + 240_000 } } });
-	const call = { id: "original-call-id", name: "lookup_record", arguments: "{ \"query\": \"private-query\" }", content: "Private assistant declaration" };
+	const tools = Array.from({ length: toolCount }, (_, index) =>
+	{
+		const name = index === 0 ? "records.lookup" : `records.lookup-${index + 1}`;
+		const modelName = index === 0 ? "lookup_record" : `lookup_record_${index + 1}`;
+		return { name, modelName, toolRevisionId: `tool-${index + 1}`, description: "Read a dedicated record", requiresApproval: false, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) };
+	});
+	const calls = tools.map((tool, index) =>
+	{
+		const id = index === 0 ? "original-call-id" : `original-call-id-${index + 1}`;
+		const argumentsText = index === 0 ? "{ \"query\": \"private-query\" }" : `{ \"query\": \"private-query-${index + 1}\" }`;
+		const content = index === 0 ? "Private assistant declaration" : `Private assistant declaration ${index + 1}`;
+		return { id, name: tool.modelName, arguments: argumentsText, content };
+	});
+	const f = await _OutputRecoveryHarness(false, overrides, candidate =>
+	{
+		Object.assign(candidate, { compiledInput: { ...candidate.compiledInput, tools, budget: { ...candidate.compiledInput.budget, maxCompletionTokens, maxModelTurns: toolCount + 1, maxToolInvocations: toolCount, maxLoopIterations: toolCount, wallClockDeadlineEpochMs: Date.now() + 240_000 } } });
+	});
+	const call = calls[0]!;
 	f.model.request.mockImplementation(async function _Model(input)
 	{
-		return input.continuation === null ? { kind: ConversationModelResponseKinds.Tool, call } : { kind: ConversationModelResponseKinds.Text, text: "A private chosen answer" };
+		if (input.history.length >= calls.length)
+			return { kind: ConversationModelResponseKinds.Text, text: "A private chosen answer" };
+		return { kind: ConversationModelResponseKinds.Tool, call: calls[input.history.length]! };
 	});
 	const rows = new Map<string, Record<string, any>>();
 	const transaction = { conversationPrivatePayload: { findUnique: vi.fn(async ({ where }) => rows.get(where.id) ?? null), create: vi.fn(async ({ data }) =>
@@ -33,21 +51,28 @@ export async function _ToolContinuationHarness()
 	const cipher = new AesGcmConversationPrivatePayloadCipher("key-1", { "key-1": randomBytes(32).toString("base64url") });
 	const custody = new PrismaConversationModelCustodyUnitOfWork(prisma as never, cipher);
 	const flags = { pending: false, allowed: true, consumed: false, executions: 0, acknowledgements: 0 };
-	let admitted: string | null = null;
+	const consumedInvocations = new Set<string>();
+	const admitted = new Set<string>();
 	const proposals = { admit: vi.fn(async function _Admit(turn: FrozenConversationComputerTurn)
 	{
-		if (admitted === null)
+		const selection = turn.protocol.steps.at(-1)?.selection;
+		if (selection === null || selection === undefined)
+			throw new Error("tool selection is missing");
+		if (!admitted.has(selection.proposalId))
 		{
-			admitted = turn.toolSelection!.proposalId;
+			admitted.add(selection.proposalId);
 			flags.executions++;
 		}
-		if (admitted !== turn.toolSelection?.proposalId)
-			throw new Error("another proposal already owns this attempt");
-		return { proposalId: admitted, outcome: ConversationToolProposalOutcomes.Existing };
+		return { proposalId: selection.proposalId, outcome: ConversationToolProposalOutcomes.Existing };
 	}) };
 	const occurredAt = new Date().toISOString();
 	const requestedNotifications = { publishRequested: vi.fn().mockResolvedValue("published") };
 	const notifications = { publishTerminal: vi.fn().mockResolvedValue("published") };
+	const resultFor = (selection: { readonly ordinal: number; readonly toolInvocationId: string }) =>
+	{
+		const payload = { toolInvocationId: selection.toolInvocationId, outcome: "succeeded" as const, result: { record: `private-result-${selection.ordinal}` } };
+		return { outcome: ConversationComputerToolResultOutcomes.Available, payload, payloadDigest: ___DigestCanonicalJson(payload), toolRevisionId: `tool-${selection.ordinal}`, occurredAt, notAfterEpochMs: Date.now() + 60_000 } as const;
+	};
 	const results = {
 		read: vi.fn(async function _Read(turn: FrozenConversationComputerTurn): Promise<ConversationComputerToolResult>
 		{
@@ -55,17 +80,22 @@ export async function _ToolContinuationHarness()
 				return { outcome: ConversationComputerToolResultOutcomes.Unavailable } as const;
 			if (flags.pending)
 				return { outcome: ConversationComputerToolResultOutcomes.Pending } as const;
-			const payload = { toolInvocationId: turn.toolSelection!.proposalId, outcome: "succeeded" as const, result: { record: "private-result" } };
-			return { outcome: ConversationComputerToolResultOutcomes.Available, payload, payloadDigest: ___DigestCanonicalJson(payload), toolRevisionId: "tool-1", occurredAt, notAfterEpochMs: Date.now() + 60_000 } as const;
+			const selection = turn.protocol.steps.at(-1)?.selection ?? [...turn.protocol.steps].reverse().find(step => step.result !== null)?.selection;
+			if (selection === null || selection === undefined)
+				throw new Error("tool selection is missing");
+			return resultFor(selection);
 		}),
-		consume: vi.fn(async function _Consume(turn: FrozenConversationComputerTurn)
+		consume: vi.fn(async function _Consume(turn: FrozenConversationComputerTurn): Promise<ConversationComputerToolResult>
 		{
 			const saved = (await f.store.load(turn.bootstrapId))!;
-			if (saved.continuationReservation === null || saved.continuationReservation.invocationFence !== turn.continuationReservation?.invocationFence)
+			const resultStep = [...saved.protocol.steps].reverse().find(step => step.result !== null);
+			if (resultStep === undefined || resultStep.result === null || turn.protocol.state !== ConversationComputerTurnProtocolStates.ModelReserved)
 				throw new Error("acknowledgement requires durable continuation evidence");
-			const result = await results.read(turn);
-			if (result.outcome === ConversationComputerToolResultOutcomes.Available && !flags.consumed)
+			const resultTurn = { ...turn, protocol: { ...saved.protocol, state: ConversationComputerTurnProtocolStates.ResultReady, steps: saved.protocol.steps.slice(0, -1) } } as FrozenConversationComputerTurn;
+			const result = await results.read(resultTurn);
+			if (result.outcome === ConversationComputerToolResultOutcomes.Available && !consumedInvocations.has(resultStep.selection.toolInvocationId))
 			{
+				consumedInvocations.add(resultStep.selection.toolInvocationId);
 				flags.consumed = true;
 				flags.acknowledgements++;
 			}
@@ -73,5 +103,5 @@ export async function _ToolContinuationHarness()
 		}),
 	};
 	Object.assign(overrides, { modelCustody: custody, toolResults: results, toolProposals: proposals, toolRequestedNotifications: requestedNotifications, toolResultNotifications: notifications });
-	return { ...f, authority: f.restart(), call, rows, custody, results, requestedNotifications, notifications, proposals, toolFlags: flags, step: f.output.bootstrapId };
+	return { ...f, authority: f.restart(), call, calls, rows, custody, results, requestedNotifications, notifications, proposals, toolFlags: flags, step: f.output.bootstrapId };
 }

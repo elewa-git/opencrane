@@ -1,10 +1,10 @@
+import { BoundConversationWriter, type BoundConversationWriterAppend, type BoundConversationWriterBinding } from "@opencrane/backend/server/conversations/history";
 import { ConversationModelToolModes } from "@opencrane/contracts";
+
 import { _ConversationModelRequestDigest } from "../conversation-computer-model-reservation";
-import type { ConversationComputerModelReservation } from "../conversation-computer-model.types";
-import type { ConversationComputerTurnStore } from "../conversation-computer-turn.types";
-import { BoundConversationWriter } from "@opencrane/backend/server/conversations/history";
-import type { BoundConversationWriterAppend, BoundConversationWriterBinding } from "@opencrane/backend/server/conversations/history";
-import type { FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
+import { _ConversationComputerTurnHistoryDigest } from "../conversation-computer-turn-protocol";
+import type { ConversationComputerTurnModelReservation } from "../conversation-computer-turn-protocol.types";
+import type { ConversationComputerTurnStore, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 
 /** Prepare a real writer intent without permitting the fixture to append history. */
 export async function _PrepareBoundDraft(binding: BoundConversationWriterBinding, command: BoundConversationWriterAppend)
@@ -20,9 +20,10 @@ export function _PrepareConversationOutputIntent(turn: FrozenConversationCompute
 }
 
 /** Represent a model request already dispatched before a storage/restart proof begins. */
-export function _ModelReservationFixture(turn: Pick<FrozenConversationComputerTurn, "bootstrapId" | "compile" | "modelAlias">, invocationFence: string, tools = ConversationModelToolModes.None): ConversationComputerModelReservation
+export function _ModelReservationFixture(turn: Pick<FrozenConversationComputerTurn, "bootstrapId" | "compile" | "modelAlias" | "budget" | "protocol">, invocationFence: string, tools = ConversationModelToolModes.None): ConversationComputerTurnModelReservation
 {
-	const facts = { ordinal: 1 as const, tools, compiledInputDigest: turn.compile.digest, maxCompletionTokens: 100, authorityExpiresAtEpochMs: Date.parse("2099-01-01T00:00:00Z"), dispatchDeadlineEpochMs: Date.parse("2099-01-01T00:00:00Z") };
+	const deadline = Math.min(turn.budget.wallClockDeadlineEpochMs, turn.protocol.steps.at(-1)?.reservation.authorityExpiresAtEpochMs ?? turn.budget.wallClockDeadlineEpochMs);
+	const facts = { ordinal: turn.protocol.steps.length + 1, tools, compiledInputDigest: turn.compile.digest, historyDigest: _ConversationComputerTurnHistoryDigest(turn.protocol.steps), maxCompletionTokens: 100, authorityExpiresAtEpochMs: deadline, dispatchDeadlineEpochMs: deadline };
 	return { invocationFence, ...facts, requestDigest: _ConversationModelRequestDigest(turn, facts) };
 }
 

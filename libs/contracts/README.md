@@ -158,9 +158,10 @@ personal-memory dataset or adopts a fact.
   `RunInputSnapshot`/`RunInputSnapshotMcpTool`, `ExecutionSubject`,
   `TenantModelSet`, and domain-topology host builders.
 - `ConversationModelRequest`, `ConversationModelResponse`, `ConversationModelToolCall` and
-  `ConversationModelContinuation` — shared server-only model transport contracts. Adjacent strict
-  schemas preserve the original assistant call and validate the combined saved call/result bound.
-  Tool modes distinguish a first selection from text-only continuation. These types grant no tool
+  `ConversationModelToolExchange` — shared server-only model transport contracts. A request carries
+  an ordered history of accepted assistant calls and their results. Adjacent strict schemas validate
+  each pair and reject repeated call IDs. Tool modes distinguish requests that may select a tool
+  from requests that must return text; either may carry earlier results. These types grant no tool
   permission; endpoint and credential fields stay in server memory and must never become workload
   or browser payloads.
 - `PROMPT_COMPILER_VERSION` — the immutable compiler-version pin every executable agent revision

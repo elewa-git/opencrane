@@ -18,8 +18,8 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 - **Run recovery cannot replace the original model, token, tool, cycle or time allowance.** New
   revisions and admitted inputs carry explicit limits, including an optional extra revision spend
   cap. Missing or malformed limits fail closed, and compilation preserves the original deadline.
-  The existing server spend cap still applies. Repeated tool execution and live qualification
-  remain separate work.
+  The existing server spend cap still applies across repeated tool calls. Live qualification
+  remains a separate gate.
 
 - **Tool work recovers the checkpoint for its own invocation.** Approval publication and remote
   dispatch use the exact invocation identity, so a later call cannot inherit an earlier call's
@@ -269,12 +269,12 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   discovery-only; provider credentials, external hosted egress and live qualification are still
   outstanding.
 
-- **Assistant turns now progress durably through model work and one permitted tool round trip.**
-  Conversation activation atomically admits the existing Absurd task, which resumes saved model
-  deadlines, waits for the exact terminal tool result, and finishes output after a server restart.
-  The server preserves one original model request and at most one text-only continuation under its
-  saved remaining call and token allowance; `response_unavailable` remains durable. Live testv5
-  qualification remains pending.
+- **Assistants can use successive tool results to choose their next permitted action in one turn.**
+  Each model request receives the earlier call/result pairs in order and spends the original run's
+  shared allowance. Another tool is offered only when a final text call can still be reserved.
+  Absurd resumes saved progress after approvals or restarts; the same attempt credential and expiry
+  remain binding. Unavailable responses are saved for recovery, and a lost paid response cannot
+  trigger another dispatch. Provider backoff and live testv6 business qualification remain pending.
 
 - **Maintainers can locate and change server behavior in functional libraries and frontend behavior in
   focused components and stores.** Capability folders group related implementation and make its

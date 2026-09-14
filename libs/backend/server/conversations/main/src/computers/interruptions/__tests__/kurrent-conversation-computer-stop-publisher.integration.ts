@@ -9,6 +9,7 @@ import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { _ConversationComputerActiveTurnStreamName } from "../../lifecycle/conversation-computer-activity";
 import { _ModelReservationFixture, _PrepareConversationOutputIntent, _ReserveConversationOutputFixture } from "../../turns/__tests__/conversation-output-intent.fixture";
 import { KurrentConversationComputerTurnStore } from "../../turns/conversation-computer-turn-store";
+import { _InitialConversationComputerTurnProtocol } from "../../turns/conversation-computer-turn-protocol";
 import type { FrozenConversationComputerTurn } from "../../turns/conversation-computer-turn.types";
 import { ConversationComputerStopAdmissionKinds, ConversationComputerStopDecisions, type ConversationComputerStopAdmission, type ConversationComputerStopCommand } from "../conversation-computer-stop.types";
 import { KurrentConversationComputerStopPublisher } from "../kurrent-conversation-computer-stop-publisher";
@@ -50,7 +51,7 @@ describe.skipIf(_URL === undefined)("conversation Stop arbitration against a liv
 		{
 			await authority.append({ siloId, conversationId, expectedRevision: BigInt(position) - 1n, entry: { schemaVersion: 1, id, conversationId, position, author: { kind: "human", principalId: "principal-1", participantId: "subject-1", issuer: "https://issuer.test", authenticatedAt: "2026-09-11T08:00:00.000Z", name: "Jente", avatarArtifactRevisionId: null }, provenance: "human-authored", visibility: { audience: "conversation" }, runId: null, causationId: id, correlationId: conversationId, idempotencyKey: id, occurredAt: "2026-09-11T08:00:00.000Z", attestation: null, kind: "message", state: "completed", blocks: [{ id: randomUUID(), kind: "text", payloadRef: randomUUID(), ciphertextDigest: _DIGEST }], replyToEntryId: null, addressedAgentIdentityId: null, activation } });
 		}
-		const turn: FrozenConversationComputerTurn = { bootstrapId, siloId, computerId, lease: { leaseId, leaseGeneration: 1, sandboxClaimId: `${computerId}-g1` }, latestPendingEntryId: messageId, latestPendingEntryPosition: "1", modelAlias: "proof-model", maximumBudgetUsd: 0.05, credentialLifetimeSeconds: 60, outputSourceCommandId: null, outputReceipt: null, cancellationReceipt: null, toolSelection: null, continuationReservation: null, modelReservation: null, binding: { siloId, conversationId, computerId, leaseGeneration: 1, agentIdentityId: randomUUID(), agentServiceId: randomUUID(), agentName: "Ada", agentAvatarArtifactRevisionId: null, runId, expectedRevision: 2n, maximumEntryBytes: 65_536 }, compile: { runId, attempt: 1, promptCompilerVersion: "proof-v1", digest: _DIGEST } };
+		const turn: FrozenConversationComputerTurn = { bootstrapId, siloId, computerId, lease: { leaseId, leaseGeneration: 1, sandboxClaimId: `${computerId}-g1` }, latestPendingEntryId: messageId, latestPendingEntryPosition: "1", modelAlias: "proof-model", maximumBudgetUsd: 0.05, credentialLifetimeSeconds: 60, binding: { siloId, conversationId, computerId, leaseGeneration: 1, agentIdentityId: randomUUID(), agentServiceId: randomUUID(), agentName: "Ada", agentAvatarArtifactRevisionId: null, runId, expectedRevision: 2n, maximumEntryBytes: 65_536 }, compile: { runId, attempt: 1, promptCompilerVersion: "proof-v2", digest: _DIGEST }, budget: { maxModelTurns: 3, maxCompletionTokens: 300, maxCostUsdMicros: null, maxToolInvocations: 2, maxLoopIterations: 2, wallClockDeadlineEpochMs: 4_070_908_800_000 }, protocol: _InitialConversationComputerTurnProtocol() };
 		await new KurrentConversationComputerTurnStore(history).createOrRead(turn);
 		const command: ConversationComputerStopCommand = { commandId: randomUUID(), siloId, conversationId, computerId, generation: 1, causationId: stopId, causationPosition: "2", requester: { principalId: "principal-1", subjectId: "subject-1", issuer: "https://issuer.test", authenticatedAt: "2026-09-11T08:00:00.000Z" } };
 		const target = { bootstrapId, runId, attempt: 1, leaseId, leaseGeneration: 1 };
@@ -96,7 +97,7 @@ describe.skipIf(_URL === undefined)("conversation Stop arbitration against a liv
 		expect(stopResult.value.decision === ConversationComputerStopDecisions.CancellationWon || stopResult.value.decision === ConversationComputerStopDecisions.OutputWon).toBe(true);
 		expect(outputResult.status === "fulfilled").toBe(stopResult.value.decision === ConversationComputerStopDecisions.OutputWon);
 		const saved = await new KurrentConversationComputerTurnStore(_Connect()).load(fixture.turn.bootstrapId);
-		expect(saved?.cancellationReceipt !== null).not.toBe(saved?.outputReceipt !== null);
+		expect(saved?.protocol.cancellation !== null).not.toBe(saved?.protocol.output !== null);
 	});
 
 	it("recovers a lost cancellation acknowledgement without appending another receipt or log", async function _LostAck()
@@ -141,7 +142,7 @@ describe.skipIf(_URL === undefined)("conversation Stop arbitration against a liv
 		} };
 
 		await expect(new KurrentConversationComputerStopPublisher(contended).publish(fixture.admission)).resolves.toEqual({ decision: ConversationComputerStopDecisions.CancellationWon, published: true, outputReceiptDigest: null });
-		expect((await new KurrentConversationComputerTurnStore(_Connect()).load(fixture.turn.bootstrapId))?.cancellationReceipt?.commandId).toBe(fixture.command.commandId);
+		expect((await new KurrentConversationComputerTurnStore(_Connect()).load(fixture.turn.bootstrapId))?.protocol.cancellation?.commandId).toBe(fixture.command.commandId);
 	});
 
 	it("records and replays no-target only while its checked active pointer remains current", async function _NoTarget()

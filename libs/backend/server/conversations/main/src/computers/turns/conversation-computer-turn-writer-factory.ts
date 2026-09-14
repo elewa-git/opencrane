@@ -16,9 +16,10 @@ export class ConversationComputerTurnWriterFactory implements ConversationComput
 	/** Confirm only the saved event after the generated attachment linker has verified its durable link. */
 	public async confirmSaved(turn: FrozenConversationComputerTurn): Promise<void>
 	{
-		if (turn.outputReceipt === null)
+		const output = turn.protocol.output;
+		if (output === null)
 			throw new Error("Conversation computer output receipt is missing");
-		await _ConfirmBoundConversationWriterIntent(this.history, { ...turn.binding, expectedRevision: BigInt(turn.outputReceipt.expectedRevision) }, turn.outputReceipt);
+		await _ConfirmBoundConversationWriterIntent(this.history, { ...turn.binding, expectedRevision: BigInt(output.receipt.expectedRevision) }, output.receipt);
 	}
 
 	/** Builds a writer that prepares an answer and can confirm its exact participant event. */
@@ -30,7 +31,7 @@ export class ConversationComputerTurnWriterFactory implements ConversationComput
 		return new BoundConversationWriter(this.history, turn.binding, { now: function _Now() { return new Date(); } }, { assertMayAppend: async function _RequirePendingTurn()
 		{
 			const current = await turns.load(turn.bootstrapId);
-			if (current === null || current.outputSourceCommandId !== turn.outputSourceCommandId)
+			if (current === null || current.protocol.output?.sourceCommandId !== turn.protocol.output?.sourceCommandId)
 				throw new Error("Conversation computer turn has conflicting output");
 		} }, { assertMayUseVisibility: async function _RequireConversationAudience(_binding, visibility)
 		{

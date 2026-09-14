@@ -72,7 +72,7 @@ class _History implements Pick<HistoryStore, "append" | "appendAtomic" | "readHe
 }
 
 /** Recreate the actual store, writer, Pod/lease resolver and coordinator against shared durable state. */
-export async function _OutputRecoveryHarness(reserveOutput = true, overrides: Partial<ConversationComputerTurnAuthorityDependencies> = {})
+export async function _OutputRecoveryHarness(reserveOutput = true, overrides: Partial<ConversationComputerTurnAuthorityDependencies> = {}, prepareCandidate?: (candidate: ConversationComputerTurnCandidate) => void)
 {
 	const history = new _History();
 	const stream = "conversation-conversation-1";
@@ -80,6 +80,7 @@ export async function _OutputRecoveryHarness(reserveOutput = true, overrides: Pa
 	const binding = { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Ada", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 1n, maximumEntryBytes: 65_536 };
 	const lease = { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" };
 	const candidate: ConversationComputerTurnCandidate = { binding, lease, latestPendingEntryId: "prior-1", latestPendingEntryPosition: "1", modelAlias: "test-model", maximumBudgetUsd: 1, credentialLifetimeSeconds: 60, credentialExpiresAt: "2099-01-01T00:00:00.000Z", compiledInput: { promptCompilerVersion: "test-v1", runId: "run-1", attempt: 1, instructions: "Help", messages: [], tools: [], model: { modelAlias: "test-model", maxOutputTokens: 100, generatedOutputCapabilities: [] }, budget: { maxCompletionTokens: 100, maxModelTurns: 1, maxToolInvocations: 0, maxCostUsdMicros: null, maxLoopIterations: 1, wallClockDeadlineEpochMs: Date.parse("2099-01-01T00:00:00.000Z") }, digest: `sha256:${"a".repeat(64)}` } };
+	prepareCandidate?.(candidate);
 	const current = { computer: { state: ConversationComputerStates.Warm, leaseGeneration: 1 }, lease: { id: lease.leaseId, generation: 1, state: ComputerLeaseStates.Active, sandboxId: "sandbox-1", expiresAt: "2099-01-01T00:00:00.000Z" } };
 	const flags = { mayAppend: true, mayUseVisibility: true, duringVisibility: async function _DuringVisibility() {}, stamp: 0, payloadWrites: 0, runState: "running" };
 	const compiler = { compile: vi.fn(async function _CompileOriginalHistory(_command?: unknown, anchor?: ConversationComputerTurnHistoryAnchor)
@@ -120,11 +121,12 @@ export async function _OutputRecoveryHarness(reserveOutput = true, overrides: Pa
 	function _Restart()
 	{
 		const store = new KurrentConversationComputerTurnStore(history);
-		const dependencies: ConversationComputerTurnAuthorityDependencies = { logger: { warn: vi.fn() }, modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() }, generatedFiles: fileLinks, toolResults: { read: vi.fn(), consume: vi.fn() }, toolRequestedNotifications: { publishRequested: vi.fn().mockResolvedValue("published") }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") }, model, siloId: "silo-1", endpoint: "http://model.test", candidates, store, toolProposals: { admit: vi.fn() }, outputPayloads, credentials, runLifecycle, reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, writers: { async confirmSaved(turn)
+		const dependencies: ConversationComputerTurnAuthorityDependencies = { logger: { warn: vi.fn() }, modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadExchange: vi.fn(), storeExchange: vi.fn() }, generatedFiles: fileLinks, toolResults: { read: vi.fn(), consume: vi.fn() }, toolRequestedNotifications: { publishRequested: vi.fn().mockResolvedValue("published") }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") }, model, siloId: "silo-1", endpoint: "http://model.test", candidates, store, toolProposals: { admit: vi.fn() }, outputPayloads, credentials, runLifecycle, reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, writers: { async confirmSaved(turn)
 		{
-			if (turn.outputReceipt === null)
+			const output = turn.protocol.output;
+			if (output === null)
 				throw new Error("Fixture requires a saved output");
-			await _ConfirmBoundConversationWriterIntent(history, { ...turn.binding, expectedRevision: BigInt(turn.outputReceipt.expectedRevision) }, turn.outputReceipt);
+			await _ConfirmBoundConversationWriterIntent(history, { ...turn.binding, expectedRevision: BigInt(output.receipt.expectedRevision) }, output.receipt);
 		}, create: function _Writer(turn, workload)
 		{
 			return new BoundConversationWriter(history, turn.binding, { now: function _Now() { return new Date(Date.parse("2026-09-08T23:00:00.000Z") + flags.stamp++ * 1_000); } }, { assertMayAppend: async function _Rate() {} }, { assertMayUseVisibility: async function _Visibility()

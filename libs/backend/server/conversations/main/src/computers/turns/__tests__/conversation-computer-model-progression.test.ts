@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { _OutputRecoveryHarness } from "./conversation-output-recovery.fixture";
+import { ConversationComputerTurnProtocolStates, ConversationComputerTurnUnavailableReasons } from "../conversation-computer-turn-protocol.types";
 
 /** Pause exactly the winning gateway request so another process can observe its reservation. */
 function _Gate()
@@ -23,8 +24,8 @@ describe("one server-owned model request across process restarts", function _Sui
 		expect(f.model.request).toHaveBeenCalledOnce();
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		const turn = (await f.store.load(f.output.bootstrapId))!;
-		expect(turn.modelReservation).toMatchObject({ ordinal: 1, maxCompletionTokens: 100, compiledInputDigest: turn.compile.digest });
-		expect(turn.outputReceipt?.event.id).toBe(turn.modelReservation?.invocationFence);
+		expect(turn.protocol.steps[0]?.reservation).toMatchObject({ ordinal: 1, maxCompletionTokens: 100, compiledInputDigest: turn.compile.digest });
+		expect(turn.protocol.output?.receipt.event.id).toBe(turn.protocol.steps[0]?.reservation?.invocationFence);
 		expect(f.history.streams.get(`conversation-computer-turn-${turn.bootstrapId}`)).toHaveLength(3);
 		expect(JSON.stringify(f.history.streams.get(`conversation-computer-turn-${turn.bootstrapId}`)!.map(event => event.data))).not.toMatch(/test-only-key|A private chosen answer|instructions/);
 		expect(await f.restart().advance(f.output.bootstrapId)).toEqual({ outcome: "completed" });
@@ -55,18 +56,20 @@ describe("one server-owned model request across process restarts", function _Sui
 		const f = await _OutputRecoveryHarness(false);
 		f.history.afterAppend = async command =>
 		{
-			if (command.events[0].type.endsWith("model-reserved.v1"))
+			if (command.events[0].type.endsWith("model-reserved.v2"))
 				throw new Error("reservation response lost");
 		};
 		expect(await f.authority.advance(f.output.bootstrapId)).toMatchObject({ outcome: "model_pending" });
 		expect(await f.restart().advance(f.output.bootstrapId)).toMatchObject({ outcome: "model_pending" });
 		expect(f.credentials.issueOnce).not.toHaveBeenCalled();
 		expect(f.model.request).not.toHaveBeenCalled();
-		const reservation = (await f.store.load(f.output.bootstrapId))!.modelReservation!;
+		const reservation = (await f.store.load(f.output.bootstrapId))!.protocol.steps.at(-1)!.reservation;
 		vi.spyOn(Date, "now").mockReturnValue(reservation.dispatchDeadlineEpochMs + 1);
 		expect(await f.restart().start(f.workflowCommand)).toMatchObject({ bootstrapId: f.output.bootstrapId });
 		expect(await f.restart().advance(f.output.bootstrapId)).toEqual({ outcome: "response_unavailable" });
-		expect((await f.store.load(f.output.bootstrapId))!.modelReservation).toEqual(reservation);
+		const unavailable = (await f.store.load(f.output.bootstrapId))!;
+		expect(unavailable.protocol.steps.at(-1)?.reservation).toEqual(reservation);
+		expect(unavailable.protocol).toMatchObject({ state: ConversationComputerTurnProtocolStates.ResponseUnavailable, unavailable: { ordinal: 1, sourceCommandId: reservation.invocationFence, reason: ConversationComputerTurnUnavailableReasons.ModelResponseUnavailable } });
 	});
 
 	it("never renews a paid allowance after an uncertain gateway response", async function _GatewayResponseLoss()
@@ -74,13 +77,13 @@ describe("one server-owned model request across process restarts", function _Sui
 		const f = await _OutputRecoveryHarness(false);
 		f.model.request.mockRejectedValueOnce(new Error("sanitized transport failure"));
 		expect(await f.authority.advance(f.output.bootstrapId)).toMatchObject({ outcome: "model_pending" });
-		const reservation = (await f.store.load(f.output.bootstrapId))!.modelReservation!;
+		const reservation = (await f.store.load(f.output.bootstrapId))!.protocol.steps.at(-1)!.reservation;
 		vi.spyOn(Date, "now").mockReturnValue(reservation.dispatchDeadlineEpochMs + 1);
 		for (let retry = 0; retry < 3; retry++)
 			expect(await f.restart().advance(f.output.bootstrapId)).toEqual({ outcome: "response_unavailable" });
 		expect(f.runLifecycle.enterRecoveryRequired).toHaveBeenCalledTimes(3);
 		expect(f.runLifecycle.enterRecoveryRequired).toHaveBeenCalledWith({ runId: "run-1", siloId: "silo-1", attempt: 1, computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 1 } });
-		expect((await f.store.load(f.output.bootstrapId))!.modelReservation).toEqual(reservation);
+		expect((await f.store.load(f.output.bootstrapId))!.protocol.steps.at(-1)?.reservation).toEqual(reservation);
 		expect(f.model.request).toHaveBeenCalledOnce();
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		expect(f.outputPayloads.store).not.toHaveBeenCalled();
@@ -92,7 +95,7 @@ describe("one server-owned model request across process restarts", function _Sui
 		const f = await _OutputRecoveryHarness(false);
 		f.runLifecycle.complete.mockRejectedValueOnce(new Error("completion unavailable"));
 		expect(await f.authority.advance(f.output.bootstrapId)).toEqual({ outcome: "retry" });
-		expect((await f.store.load(f.output.bootstrapId))!.outputReceipt).not.toBeNull();
+		expect((await f.store.load(f.output.bootstrapId))!.protocol.output?.receipt).not.toBeNull();
 		f.flags.mayAppend = false;
 		expect(await f.restart().start(f.workflowCommand)).toBeNull();
 		expect(f.model.request).toHaveBeenCalledOnce();
@@ -105,8 +108,8 @@ describe("one server-owned model request across process restarts", function _Sui
 		f.runLifecycle.complete.mockImplementationOnce(async function _LateCompletionFailure()
 		{
 			const saved = (await f.store.load(f.output.bootstrapId))!;
-			expect(saved.outputReceipt).not.toBeNull();
-			vi.spyOn(Date, "now").mockReturnValue(saved.modelReservation!.dispatchDeadlineEpochMs + 1);
+			expect(saved.protocol.output?.receipt).not.toBeNull();
+			vi.spyOn(Date, "now").mockReturnValue(saved.protocol.steps.at(-1)!.reservation.dispatchDeadlineEpochMs + 1);
 			throw new Error("completion write unavailable");
 		});
 		expect(await f.authority.advance(f.output.bootstrapId)).toEqual({ outcome: "retry" });
@@ -130,7 +133,7 @@ describe("one server-owned model request across process restarts", function _Sui
 		});
 		expect(await f.authority.advance(f.output.bootstrapId)).toEqual({ outcome: "completed" });
 		expect(f.model.request).toHaveBeenCalledWith(expect.objectContaining({ notAfterEpochMs: shorter }));
-		expect((await f.store.load(f.output.bootstrapId))!.modelReservation!.dispatchDeadlineEpochMs).toBeGreaterThan(shorter);
+		expect((await f.store.load(f.output.bootstrapId))!.protocol.steps.at(-1)!.reservation.dispatchDeadlineEpochMs).toBeGreaterThan(shorter);
 	});
 
 	it("keeps the shorter dispatch bound after later authority renewal and a slow payload write", async function _NoRenewedOutputDeadline()
@@ -151,7 +154,7 @@ describe("one server-owned model request across process restarts", function _Sui
 			return result;
 		});
 		expect(await f.authority.advance(f.output.bootstrapId)).toMatchObject({ outcome: "model_pending" });
-		expect((await f.store.load(f.output.bootstrapId))!.outputReceipt).toBeNull();
+		expect((await f.store.load(f.output.bootstrapId))!.protocol.output).toBeNull();
 		expect(f.history.streams.get(f.stream)!.slice(2)).toHaveLength(0);
 	});
 
@@ -160,12 +163,14 @@ describe("one server-owned model request across process restarts", function _Sui
 		const f = await _OutputRecoveryHarness(false);
 		f.model.request.mockImplementationOnce(async function _LateGateway()
 		{
-			const reservation = (await f.store.load(f.output.bootstrapId))!.modelReservation!;
+			const reservation = (await f.store.load(f.output.bootstrapId))!.protocol.steps.at(-1)!.reservation;
 			vi.spyOn(Date, "now").mockReturnValue(reservation.dispatchDeadlineEpochMs + 1);
 			return { kind: "text", text: "A private chosen answer" };
 		});
 		expect(await f.authority.advance(f.output.bootstrapId)).toEqual({ outcome: "response_unavailable" });
-		expect((await f.store.load(f.output.bootstrapId))!.outputReceipt).toBeNull();
+		const unavailable = (await f.store.load(f.output.bootstrapId))!;
+		expect(unavailable.protocol.output).toBeNull();
+		expect(unavailable.protocol.unavailable?.reason).toBe(ConversationComputerTurnUnavailableReasons.ModelResponseUnavailable);
 		expect(f.history.streams.get(f.stream)!.slice(2)).toHaveLength(0);
 		expect(f.runLifecycle.complete).not.toHaveBeenCalled();
 		expect(f.runLifecycle.enterRecoveryRequired).toHaveBeenCalledOnce();
@@ -179,27 +184,27 @@ describe("one server-owned model request across process restarts", function _Sui
 		{
 			f.model.request.mockRejectedValueOnce(new Error("response lost"));
 			expect(await f.authority.advance(f.output.bootstrapId)).toMatchObject({ outcome: "model_pending" });
-			const reservation = (await f.store.load(f.output.bootstrapId))!.modelReservation!;
+			const reservation = (await f.store.load(f.output.bootstrapId))!.protocol.steps.at(-1)!.reservation;
 			vi.spyOn(Date, "now").mockReturnValue(reservation.dispatchDeadlineEpochMs + 1);
 		}
 		else
 		{
 			f.model.request.mockImplementationOnce(async function _LateGateway()
 			{
-				const reservation = (await f.store.load(f.output.bootstrapId))!.modelReservation!;
+				const reservation = (await f.store.load(f.output.bootstrapId))!.protocol.steps.at(-1)!.reservation;
 				vi.spyOn(Date, "now").mockReturnValue(reservation.dispatchDeadlineEpochMs + 1);
 				return { kind: "text", text: "A private chosen answer" };
 			});
 		}
 		f.runLifecycle.enterRecoveryRequired.mockRejectedValueOnce(new Error("run recovery write unavailable"));
 		await expect(f.authority.advance(f.output.bootstrapId)).rejects.toThrow("run recovery write unavailable");
-		const reservation = (await f.store.load(f.output.bootstrapId))!.modelReservation!;
+		const reservation = (await f.store.load(f.output.bootstrapId))!.protocol.steps.at(-1)!.reservation;
 		expect(f.runLifecycle.complete).not.toHaveBeenCalled();
-		expect((await f.store.load(f.output.bootstrapId))!.outputReceipt).toBeNull();
+		expect((await f.store.load(f.output.bootstrapId))!.protocol.output).toBeNull();
 		expect(await f.restart().start(f.workflowCommand)).toMatchObject({ bootstrapId: f.output.bootstrapId });
 		expect(await f.restart().advance(f.output.bootstrapId)).toEqual({ outcome: "response_unavailable" });
 		expect(f.runLifecycle.enterRecoveryRequired).toHaveBeenCalledTimes(2);
-		expect((await f.store.load(f.output.bootstrapId))!.modelReservation).toEqual(reservation);
+		expect((await f.store.load(f.output.bootstrapId))!.protocol.steps.at(-1)?.reservation).toEqual(reservation);
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		expect(f.model.request).toHaveBeenCalledOnce();
 		expect(f.history.streams.get(f.stream)!.slice(2)).toHaveLength(0);
@@ -209,7 +214,7 @@ describe("one server-owned model request across process restarts", function _Sui
 	{
 		const f = await _OutputRecoveryHarness(false);
 		f.model.request.mockImplementationOnce(async function _ChangedHistory() { f.flags.mayAppend = false; return { kind: "text", text: "A private chosen answer" }; });
-		expect(await f.authority.advance(f.output.bootstrapId)).toMatchObject({ outcome: "model_pending" });
+		expect(await f.authority.advance(f.output.bootstrapId)).toEqual({ outcome: "authority_ended" });
 		expect(f.outputPayloads.store).not.toHaveBeenCalled();
 		expect(f.runLifecycle.complete).not.toHaveBeenCalled();
 		expect(f.model.request).toHaveBeenCalledOnce();
@@ -237,7 +242,7 @@ describe("one server-owned model request across process restarts", function _Sui
 			budget.wallClockDeadlineEpochMs = Date.now() - 1;
 		f.compiler.compile.mockResolvedValue({ ...candidate, compiledInput: { ...input, model, budget } });
 		expect(await f.authority.advance(f.output.bootstrapId)).toEqual({ outcome: "retry" });
-		expect((await f.store.load(f.output.bootstrapId))!.modelReservation).toBeNull();
+		expect((await f.store.load(f.output.bootstrapId))!.protocol.steps).toHaveLength(0);
 		expect(f.credentials.issueOnce).not.toHaveBeenCalled();
 		expect(f.model.request).not.toHaveBeenCalled();
 	});
@@ -246,12 +251,12 @@ describe("one server-owned model request across process restarts", function _Sui
 	{
 		const f = await _OutputRecoveryHarness();
 		f.pods.resolve.mockResolvedValueOnce(null);
-		await expect(f.restart().advance(f.output.bootstrapId)).rejects.toThrow("lease-bound");
+		await expect(f.restart().advance(f.output.bootstrapId)).resolves.toEqual({ outcome: "authority_ended" });
 		expect(f.model.request).not.toHaveBeenCalled();
 		expect(f.credentials.issueOnce).not.toHaveBeenCalled();
 	});
 
-	it.each(["fence", "request", "tokens", "metadata", "event-id", "extra-field", "budget-drift", "deadline-renewal", "request-drift"])("rejects a corrupted saved reservation before gateway use: %s", async function _CorruptReservation(kind)
+	it.each(["fence", "request", "history", "tokens", "metadata", "event-id", "extra-field", "budget-drift", "deadline-renewal", "request-drift"])("rejects a corrupted saved reservation before gateway use: %s", async function _CorruptReservation(kind)
 	{
 		const f = await _OutputRecoveryHarness();
 		const event = f.history.streams.get(`conversation-computer-turn-${f.output.bootstrapId}`)![1];
@@ -260,6 +265,8 @@ describe("one server-owned model request across process restarts", function _Sui
 			reservation["invocationFence"] = "invalid";
 		if (kind === "request")
 			reservation["requestDigest"] = "invalid";
+		if (kind === "history")
+			reservation["historyDigest"] = `sha256:${"e".repeat(64)}`;
 		if (kind === "tokens")
 			reservation["maxCompletionTokens"] = 0;
 		if (kind === "metadata")

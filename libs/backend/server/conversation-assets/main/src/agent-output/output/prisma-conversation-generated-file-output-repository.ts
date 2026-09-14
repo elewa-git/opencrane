@@ -36,10 +36,12 @@ export class PrismaConversationGeneratedFileOutputRepository implements Generate
 	async link(turn: FrozenConversationComputerTurn): Promise<void>
 	{
 		const artifact = __ReadConversationGeneratedFileOutput(turn);
-		if (artifact === null || turn.outputReceipt === null || turn.toolSelection === null)
+		const output = turn.protocol.output;
+		const step = turn.protocol.steps.at(-2);
+		if (artifact === null || output === null || step?.selection == null || step.result === null)
 			throw new Error("Generated file output has no saved Artifact");
-		const entry = turn.outputReceipt.event.data.entry;
-		if (turn.outputSourceCommandId !== entry.id || turn.outputReceipt.event.id !== entry.id || entry.idempotencyKey !== entry.id)
+		const entry = output.receipt.event.data.entry;
+		if (turn.protocol.output?.sourceCommandId !== entry.id || output.receipt.event.id !== entry.id || entry.idempotencyKey !== entry.id)
 			throw new Error("Generated file output message identity is invalid");
 
 		const operation = await this.transaction.conversationGeneratedFile.findUnique({ where: { assetId: artifact.id }, select: _OPERATION_SELECT });
@@ -56,16 +58,16 @@ export class PrismaConversationGeneratedFileOutputRepository implements Generate
 
 		const result = await __ReadRunToolResultInTransaction(this.transaction, {
 			siloId: turn.siloId, runId: turn.compile.runId, attempt: turn.compile.attempt,
-			toolInvocationId: turn.toolSelection.proposalId, runtimeInstanceId: turn.computerId,
-			commandId: turn.bootstrapId, requestFingerprint: turn.toolSelection.requestFingerprint,
+			toolInvocationId: step.selection.toolInvocationId, runtimeInstanceId: turn.computerId,
+			commandId: turn.bootstrapId, requestFingerprint: step.selection.requestFingerprint,
 		});
 		if (result.outcome !== RunToolResultReadOutcomes.Available || !result.consumed
-			|| result.payloadDigest !== turn.continuationReservation?.resultDigest)
+			|| result.payloadDigest !== step.result.resultDigest)
 			throw new Error("Generated file output result is no longer available");
 		const admission = await this.dispatch.admitSystem(result.invocation, new Date(), CONVERSATION_GENERATED_FILE_SYSTEM_ACTOR);
 		if (admission === null)
 			throw new Error("Generated file output authority ended before linking");
-		const deadline = Math.min(admission.notAfterEpochMs, turn.continuationReservation?.authorityExpiresAtEpochMs ?? 0);
+		const deadline = Math.min(admission.notAfterEpochMs, step.result.authorityExpiresAtEpochMs);
 		const current = await this.generatedResults.read({ turn, invocation: result.invocation, payload: result.payload, admission });
 		if (current.state !== ConversationGeneratedFileResultStates.Ready || current.operationId !== operation.id
 			|| ___DigestCanonicalJson(current.artifact as unknown as JsonValue) !== ___DigestCanonicalJson(artifact as unknown as JsonValue)
@@ -96,7 +98,7 @@ function _OperationMatches(operation: _Operation, turn: FrozenConversationComput
 		&& operation.bootstrapId === turn.bootstrapId && operation.computerId === turn.computerId
 		&& operation.computerId === turn.binding.computerId && operation.leaseId === turn.lease.leaseId
 		&& operation.leaseGeneration === turn.lease.leaseGeneration && operation.leaseGeneration === turn.binding.leaseGeneration
-		&& operation.agentIdentityId === turn.binding.agentIdentityId && operation.toolInvocationId === turn.toolSelection?.proposalId
+		&& operation.agentIdentityId === turn.binding.agentIdentityId && operation.toolInvocationId === turn.protocol.steps.at(-2)?.selection?.toolInvocationId
 		&& operation.assetId === artifact.id && operation.artifactId === artifact.artifactId && operation.revisionId === artifact.artifactRevisionId
 		&& operation.displayName === artifact.name && operation.mediaType === artifact.mediaType
 		&& operation.asset.state === ConversationAssetState.Ready && operation.asset.artifactId === operation.artifactId

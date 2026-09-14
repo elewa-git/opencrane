@@ -3,24 +3,31 @@ import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/wo
 import type { ToolResultDeliveryPayload } from "@opencrane/backend/server/iam/authorization";
 
 import type { ConversationGeneratedFileContinuation } from "../tools/results/conversation-generated-file-result.types";
-import type { ConversationComputerModelReservation } from "./conversation-computer-model.types";
+import type { ConversationComputerPrivateModelReference } from "./conversation-computer-turn-protocol.types";
 import type { FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 
 /**
- * Retains the first accepted tool declaration in encrypted storage before selection or admission.
+ * Retains an accepted tool declaration in encrypted storage before selection or admission.
  * Recovery may use its original acceptance time after the request deadline has elapsed. That proves
  * when the response was accepted; the caller must still check current authority before continuing.
  */
 export interface ConversationComputerToolDeclaration
 {
+	/** Names the frozen conversation turn that owns this private content. */
 	readonly bootstrapId: string;
+	/** Names the admitted run whose model produced this content. */
 	readonly runId: string;
+	/** Preserves the admitted run attempt across recovery. */
 	readonly attempt: number;
+	/** Binds the content to the original compiled input. */
 	readonly compiledInputDigest: string;
+	/** Identifies the ordered model step that produced the declaration. */
+	readonly ordinal: number;
+	/** Names the model reservation that accepted the response. */
 	readonly modelInvocationFence: string;
 	/** Records when the live handler accepted the response within its request deadline. */
 	readonly acceptedAtEpochMs: number;
-	/** Preserves any shorter deadline observed immediately before the first dispatch. */
+	/** Preserves the response deadline checked before this model request. */
 	readonly requestNotAfterEpochMs: number;
 	/** Requires continuation to reuse the key that produced this declaration. */
 	readonly credentialDigest: string;
@@ -30,49 +37,37 @@ export interface ConversationComputerToolDeclaration
 	readonly call: ConversationModelToolCall;
 }
 
-/** Refers to encrypted content without placing arguments, results or credentials in KurrentDB. */
-export interface ConversationComputerPrivateModelReference
+/** Saves one assistant/tool pair privately so ordered model history remains exact. */
+export interface ConversationComputerToolExchange
 {
-	readonly payloadRef: string;
-	readonly ciphertextDigest: string;
-}
-
-/** Selects the sole tool slot after the first model declaration has entered encrypted custody. */
-export interface ConversationComputerToolSelection extends ConversationComputerPrivateModelReference
-{
-	readonly proposalId: string;
-	readonly requestFingerprint: string;
-}
-
-/** Saves the assistant/tool pair privately so continuation does not alter the compiled conversation head. */
-export interface ConversationComputerToolContinuation
-{
+	/** Names the frozen conversation turn that owns this private content. */
 	readonly bootstrapId: string;
+	/** Names the admitted run whose model produced this content. */
 	readonly runId: string;
+	/** Preserves the admitted run attempt across recovery. */
 	readonly attempt: number;
+	/** Binds the content to the original compiled input. */
 	readonly compiledInputDigest: string;
+	/** Identifies the ordered model step that produced the assistant declaration. */
+	readonly ordinal: number;
+	/** Binds the exchange to the model reservation that produced its declaration. */
+	readonly modelInvocationFence: string;
+	/** Points to the encrypted declaration saved for this step. */
 	readonly declaration: ConversationComputerPrivateModelReference;
+	/** Names the proposal admitted for this model step. */
 	readonly proposalId: string;
+	/** Names the exact invocation that supplied the result. */
+	readonly toolInvocationId: string;
+	/** Binds the pair to the immutable tool delivery payload. */
 	readonly resultDigest: string;
+	/** Preserves the provider call ID, tool name, arguments and assistant content. */
 	readonly call: ConversationModelToolCall;
+	/** Carries the private result and any final file-publication outcome to the next model. */
 	readonly resultContent: string;
 }
 
 /**
- * Consumes the final request allowance at turn revision 3, before result delivery is acknowledged.
- * The first token reservation remains spent. Reading this record after restart cannot reacquire
- * dispatch, even if acknowledgement or the model response was lost.
- */
-export interface ConversationComputerContinuationReservation extends Omit<ConversationComputerModelReservation, "ordinal">
-{
-	readonly ordinal: 2;
-	readonly continuation: ConversationComputerPrivateModelReference;
-	readonly proposalId: string;
-	readonly resultDigest: string;
-}
-
-/**
- * Retains encrypted content under references derived from the original first reservation.
+ * Retains encrypted content under references derived from its ordered model reservation.
  * Writes must recover identical content and refuse replacements. Declaration reads can recover
  * after custody committed but before selection was recorded; neither read grants current authority.
  */
@@ -80,16 +75,16 @@ export interface ConversationComputerModelCustody
 {
 	/** Commit the accepted declaration before recording its tool selection. */
 	storeDeclaration(turn: FrozenConversationComputerTurn, declaration: ConversationComputerToolDeclaration): Promise<ConversationComputerPrivateModelReference>;
-	/** Return absent custody as null; malformed or altered saved content must throw. */
-	loadDeclaration(turn: FrozenConversationComputerTurn): Promise<{ readonly declaration: ConversationComputerToolDeclaration; readonly reference: ConversationComputerPrivateModelReference } | null>;
-	/** Commit the assistant/tool pair before reserving the final request. */
-	storeContinuation(turn: FrozenConversationComputerTurn, continuation: ConversationComputerToolContinuation): Promise<ConversationComputerPrivateModelReference>;
+	/** Return the current step's declaration, or the requested historical ordinal for credential reuse; malformed or altered content must throw. */
+	loadDeclaration(turn: FrozenConversationComputerTurn, ordinal?: number): Promise<{ readonly declaration: ConversationComputerToolDeclaration; readonly reference: ConversationComputerPrivateModelReference } | null>;
+	/** Commit the assistant/tool pair before reserving the next model request. */
+	storeExchange(turn: FrozenConversationComputerTurn, exchange: ConversationComputerToolExchange): Promise<ConversationComputerPrivateModelReference>;
 	/** Require the saved ciphertext reference; missing or mismatched content must throw. */
-	loadContinuation(turn: FrozenConversationComputerTurn, reference: ConversationComputerPrivateModelReference): Promise<ConversationComputerToolContinuation>;
+	loadExchange(turn: FrozenConversationComputerTurn, reference: ConversationComputerPrivateModelReference): Promise<ConversationComputerToolExchange>;
 }
 
 /**
- * Tells the conversation loop whether the original tool result can support continuation now.
+ * Tells the conversation loop whether the current tool result can support its next bounded request.
  * These closed in-process outcomes are not persisted run states or Pod responses. Available still
  * requires a fresh model reservation; Pending and Unavailable never authorise model dispatch.
  */
@@ -112,14 +107,14 @@ export type ConversationComputerToolResult =
 	| { readonly outcome: ConversationComputerToolResultOutcomes.Available; readonly payload: ToolResultDeliveryPayload; readonly payloadDigest: string; readonly toolRevisionId: string; readonly occurredAt: string; readonly notAfterEpochMs: number; readonly generatedFile?: ConversationGeneratedFileContinuation };
 
 /**
- * Reads the original invocation under current authority without consuming its delivery.
- * Acknowledgement requires the saved final-request reservation and matching result digest, so a
+ * Reads the selected invocation under current authority without consuming its delivery.
+ * Acknowledgement requires the saved next-model reservation and matching result digest, so a
  * restart cannot consume a result before it has retained the content needed for continuation.
  */
 export interface ConversationComputerToolResults
 {
 	/** Return current permission and validated terminal content without acknowledging delivery. */
 	read(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity): Promise<ConversationComputerToolResult>;
-	/** Acknowledge only the result bound to the saved continuation, with fresh authority checks. */
+	/** Acknowledge only the result bound to the saved ordered step, with fresh authority checks. */
 	consume(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity): Promise<ConversationComputerToolResult>;
 }

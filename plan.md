@@ -81,18 +81,30 @@ remaining functional MVP journeys.
 
 ### Bounded multi-step tool reasoning — added MVP acceptance
 
-The current one-tool result and text-only continuation is an earlier delivery slice. The complete
+The ordered-turn implementation wave starts at immutable review base
+`d3986cc15c611f8aef836cd77ea420267dd2174c` on `feat/0.12-bounded-tool-reasoning`
+(draft #892, above #891). Architecture preflight passed. Three coordinated lanes replaced the
+fixed turn protocol, ordered private model history, and proposal/result workflow together. The
+source now supports repeated tool reasoning. Final validation passes 678 conversations tests,
+160 contracts tests, 192 model-routing tests, 161 asset tests and 159 application tests. Nx affected
+lint/type checks pass for 80 projects; style, Prisma ownership, module-growth, workload and agent
+boundaries pass. Final independent review and architecture post-review pass with no remaining
+findings. This source slice is ready for publication; provider backoff and live qualification remain.
+
+The one-tool result and text-only continuation was an earlier delivery slice. The complete
 MVP must support a repeated model → MCP call → persisted result → model cycle within one run.
 Absurd continues to select the next saved step and own waiting and recovery. The server owns model
 and tool authority; AgentSandbox owns isolated, lease-fenced execution. No second scheduler is added.
 
 - [x] Freeze explicit model-call, token, tool-call, elapsed-time and loop limits at admission.
   Revision authoring, compilation and recovered snapshots preserve the complete allowance.
-- [ ] Debit every new ordered step from that same allowance; repeated recovery and continuation
-  must never replenish it. The existing one-tool continuation remains the current runtime ceiling.
-- [ ] Let each saved result inform the next exact tool selection, including discovery-dependent
-  sequences, pagination and intermediate reconciliation, before producing a grounded final answer.
-  Qualify with ordinary provider tools; an aggregate `inventory_total` tool is not a substitute.
+- [x] Debit every new ordered step from that same allowance; repeated recovery and continuation
+  never replenish it. The ordered protocol replaces the fixed one-tool runtime ceiling.
+- [x] Carry each saved call/result pair into subsequent model requests in order, allowing another
+  permitted tool selection before the final text answer. Two-tool and saved-result restart tests
+  exercise the real turn store and encrypted custody.
+- [ ] Qualify discovery-dependent sequences, pagination and intermediate reconciliation with
+  ordinary provider tools; an aggregate `inventory_total` tool is not a substitute.
 - [ ] Apply bounded backoff to proven retryable provider responses such as HTTP 429. Save the
   retry decision and deadline in the existing workflow. An uncertain effect remains unavailable
   for redispatch unless its existing recovery contract proves a safe outcome.
@@ -107,17 +119,14 @@ and tool authority; AgentSandbox owns isolated, lease-fenced execution. No secon
 - [ ] On testv6, complete a discovery-dependent multi-call business journey with pagination,
   reconciliation and a grounded answer, plus an approved write and its recovery/cancellation cases.
 
-The repeated loop is not implemented by the quality fixes described below. It remains a functional
-gate alongside memory, delegation, scheduling and administration before the goal can close.
+The source loop builds above the completed quality fixes. Provider backoff and live qualification
+remain functional gates alongside memory, delegation, scheduling and administration before the
+goal can close. The singular reservations, fixed Kurrent revisions, singular continuation custody
+and one-invocation proposal clamp are deleted together. Ordered reservations, aggregate accounting
+and distinct per-step proposal identities now enforce the admitted limits.
 
-The source preflight confirms that this limit is enforced by the existing conversation turn's
-singular reservations and fixed Kurrent revisions, its text-only continuation, and the tool proposal
-reader's one-invocation clamp. The next implementation must replace those owners together with a
-turn-local sequence of saved model and tool steps. It must not remove the clamp before the saved
-sequence, aggregate allowance checks and per-step proposal identity exist.
-
-Implement admission limits first, then the turn protocol and its exhaustive State × Event table,
-then repeated proposal/result progression through the existing Absurd and IAM owners. Keep model
+Admission limits, the exhaustive State × Event table and repeated proposal/result progression now
+use the existing Absurd and IAM owners. Keep model
 transport single-request. Reserve a final model call before admitting another tool; if the remaining
 allowance cannot support a grounded answer, end through the existing durable unavailable outcome.
 Carry the ordered accepted tool-result history into subsequent model requests under the existing
@@ -154,8 +163,8 @@ and scoped Zitadel callback approvals are unchanged; they do not prevent indepen
 The first slice keeps the current authored model-call, completion-token and duration limits and
 adds explicit tool and cycle limits. Personal revisions allow eight tool-result cycles; company
 revisions retain one. A cycle means one distinct saved tool result that may feed a later model
-step, not an Absurd delivery attempt, sleep or retry. The runtime still permits only one tool while
-the ordered-step replacement is pending. An explicit null revision spend cap means the existing
+step, not an Absurd delivery attempt, sleep or retry. The ordered-step wave above now removes
+the earlier one-tool runtime ceiling. An explicit null revision spend cap means the existing
 frozen server spend cap applies; no new dollar default or unbounded spending mode is introduced.
 The adjacent workflow prerequisite binds approval and remote-dispatch checkpoints to the exact
 invocation ID, preserving idempotent replay while preventing reuse across different calls.
