@@ -8,20 +8,51 @@ import type { AgentSandboxPodBindingCommand } from "../agent-sandbox-pod-binding
 /** Supplies a claim and its named Pod without granting namespace-wide discovery. */
 function _Fixture()
 {
-	const labels = { "opencrane.ai/computer-id": "computer-one", "opencrane.ai/computer-generation": "2", "opencrane.ai/computer-lease-id": "lease-one" };
+	const labels = {
+		"opencrane.ai/computer-id": "computer-one",
+		"opencrane.ai/computer-generation": "2",
+		"opencrane.ai/computer-lease-id": "lease-one",
+	};
 	const claim = { metadata: { labels }, status: { sandbox: { name: "sandbox-one" } } };
 	const sandbox = { metadata: { namespace: "testv5", name: "sandbox-one" }, status: { service: "sandbox-one", serviceFQDN: "sandbox-one.testv5.svc.cluster.local" } };
-	const pod = { metadata: { namespace: "testv5", name: "sandbox-one", uid: "pod-uid-1", labels: { ...labels } }, spec: { serviceAccountName: "conversation-computer" } };
+	const pod = {
+		metadata: {
+			namespace: "testv5",
+			name: "sandbox-one",
+			uid: "pod-uid-1",
+			labels: { ...labels },
+		},
+		spec: { serviceAccountName: "conversation-computer" },
+	};
 	const customApi = { getNamespacedCustomObject: vi.fn().mockImplementation(async function _Read(request) { return request.plural === "sandboxes" ? sandbox : claim; }) };
 	const coreApi = { readNamespacedPod: vi.fn().mockResolvedValue(pod) };
 	const adapter = new AgentSandboxPodBindingAdapter(coreApi as never, customApi as never);
 	const command: AgentSandboxPodBindingCommand = {
 		computerId: "computer-one",
 		lease: { leaseId: "lease-one", leaseGeneration: 2 },
-		realization: { kind: "agent_sandbox" as AgentSandboxConversationComputerRealization["kind"], claimId: "computer-one-g2", sandboxId: "sandbox-one", serviceFQDN: "sandbox-one.testv5.svc.cluster.local" },
-		workload: { subject: "system:serviceaccount:testv5:conversation-computer", namespace: "testv5", serviceAccountName: "conversation-computer", podUid: "pod-uid-1" },
+		realization: {
+			kind: "agent_sandbox" as AgentSandboxConversationComputerRealization["kind"],
+			claimId: "computer-one-g2",
+			sandboxId: "sandbox-one",
+			serviceFQDN: "sandbox-one.testv5.svc.cluster.local",
+		},
+		workload: {
+			subject: "system:serviceaccount:testv5:conversation-computer",
+			namespace: "testv5",
+			serviceAccountName: "conversation-computer",
+			podUid: "pod-uid-1",
+		},
 	};
-	return { adapter, command, coreApi, customApi, claim, pod, sandbox };
+
+	return {
+		adapter,
+		command,
+		coreApi,
+		customApi,
+		claim,
+		pod,
+		sandbox,
+	};
 }
 
 describe("AgentSandboxPodBindingAdapter", function _Suite()
@@ -33,7 +64,11 @@ describe("AgentSandboxPodBindingAdapter", function _Suite()
 		expect(fixture.coreApi.readNamespacedPod).toHaveBeenCalledExactlyOnceWith({ namespace: "testv5", name: "sandbox-one" });
 	});
 
-	it.each(["uid", "name", "namespace"] as const)("rejects a Pod with a foreign %s", async function _ForeignIdentity(field)
+	it.each([
+		"uid",
+		"name",
+		"namespace",
+	] as const)("rejects a Pod with a foreign %s", async function _ForeignIdentity(field)
 	{
 		const fixture = _Fixture();
 		fixture.pod.metadata[field] = "foreign";
@@ -47,7 +82,11 @@ describe("AgentSandboxPodBindingAdapter", function _Suite()
 		await expect(fixture.adapter.verify(fixture.command)).resolves.toBe(false);
 	});
 
-	it.each(["opencrane.ai/computer-id", "opencrane.ai/computer-generation", "opencrane.ai/computer-lease-id"] as const)("rejects changed Pod and claim labels at %s", async function _ForeignLease(field)
+	it.each([
+		"opencrane.ai/computer-id",
+		"opencrane.ai/computer-generation",
+		"opencrane.ai/computer-lease-id",
+	] as const)("rejects changed Pod and claim labels at %s", async function _ForeignLease(field)
 	{
 		const fixture = _Fixture();
 		fixture.pod.metadata.labels[field] = "foreign";

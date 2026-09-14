@@ -1,7 +1,7 @@
-/** Tier 2 process compositions accepted by the CLI. */
+/** Lists the Tier 2 process compositions accepted by the CLI. */
 const LOCAL_DEVELOPMENT_PROFILES = Object.freeze({ Core: "core", Agent: "agent" });
 
-/** Model transports accepted by the Agent profile. */
+/** Lists the model transports accepted by the Agent profile. */
 export const LOCAL_DEVELOPMENT_ALTERNATIVES = Object.freeze({
 	LocalLiteLLM: "local-llm",
 	RemoteLiteLLM: "remote-llm",
@@ -35,12 +35,23 @@ function _validateRemoteEndpoint(value)
 		throw new Error("--remote-litellm-endpoint must be a valid HTTPS origin");
 	}
 
-	if (endpoint.protocol !== "https:" || endpoint.pathname !== "/" || endpoint.username || endpoint.password || endpoint.search || endpoint.hash)
+	if (
+		endpoint.protocol !== "https:"
+		|| endpoint.pathname !== "/"
+		|| endpoint.username
+		|| endpoint.password
+		|| endpoint.search
+		|| endpoint.hash
+	)
 	{
 		throw new Error("--remote-litellm-endpoint must be an HTTPS origin without credentials, a path, a query, or a fragment");
 	}
 
-	if (["localhost", "127.0.0.1", "[::1]"].includes(endpoint.hostname))
+	if ([
+		"localhost",
+		"127.0.0.1",
+		"[::1]"
+	].includes(endpoint.hostname))
 	{
 		throw new Error("--remote-litellm-endpoint must not be loopback");
 	}
@@ -72,32 +83,40 @@ export function parseLocalDevelopmentArguments(argumentsList)
 				parsed.profile = _readValue(argumentsList, index, argument);
 				index += 1;
 				break;
+
 			case "--alternative":
 				parsed.alternative = _readValue(argumentsList, index, argument);
 				index += 1;
 				break;
+
 			case "--provider":
 				parsed.provider = _readValue(argumentsList, index, argument);
 				index += 1;
 				break;
+
 			case "--model":
 				parsed.model = _readValue(argumentsList, index, argument);
 				index += 1;
 				break;
+
 			case "--remote-litellm-endpoint":
 				parsed.remoteLiteLLMEndpoint = _readValue(argumentsList, index, argument);
 				index += 1;
 				break;
+
 			case "--remote-litellm-master-key-file":
 				parsed.remoteLiteLLMMasterKeyFile = _readValue(argumentsList, index, argument);
 				index += 1;
 				break;
+
 			case "--reset":
 				parsed.reset = true;
 				break;
+
 			case "--help":
 				parsed.help = true;
 				break;
+
 			default:
 				throw new Error(`Unknown local-development option: ${argument}`);
 		}
@@ -115,7 +134,13 @@ export function parseLocalDevelopmentArguments(argumentsList)
 
 	if (parsed.profile === LOCAL_DEVELOPMENT_PROFILES.Core)
 	{
-		if (parsed.alternative || parsed.provider || parsed.model || parsed.remoteLiteLLMEndpoint || parsed.remoteLiteLLMMasterKeyFile)
+		if (
+			parsed.alternative
+			|| parsed.provider
+			|| parsed.model
+			|| parsed.remoteLiteLLMEndpoint
+			|| parsed.remoteLiteLLMMasterKeyFile
+		)
 		{
 			throw new Error("Model alternatives apply only to --profile agent");
 		}

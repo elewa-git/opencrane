@@ -36,7 +36,12 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
 	const authService = ___CreateOidcAuthService(_log, prisma, customApi, standaloneFirstUserAdmission, _CreateStandaloneFirstUserAudit(standaloneFirstUserAdmission));
 	const admission = new PrismaAuthenticatedPrincipalAdmissionUnitOfWork(prisma, _log);
 	const sessions = new PrismaOidcSessionUnitOfWork(prisma);
-	return { router: ___AuthRouter(authService), sessionMiddleware: authService.createSessionMiddleware(sessions), authMiddleware: ___AuthMiddleware(admission) };
+
+	return {
+		router: ___AuthRouter(authService),
+		sessionMiddleware: authService.createSessionMiddleware(sessions),
+		authMiddleware: ___AuthMiddleware(admission),
+	};
 }
 
 /**
@@ -74,11 +79,13 @@ export function _CreatePublicApp(prisma: PrismaClient, authentication: PublicAut
 	app.use("/api/v1/auth", authentication.router);
 	app.use(authentication.authMiddleware);
 	const organizationMembers = suppliedOrganizationMembers ?? _CreateOrganizationMembersComposition(prisma, _ReadOrganizationMembershipConfig());
+
 	if (organizationMembers.productAccess !== null)
 		app.use(organizationMembers.productAccess);
 
 	// 5. Mount authenticated product routes, then terminate failures through one structured handler.
 	_RegisterRoutes(app, prisma, artifactScannerEnabled, organizationMembers.router, mcpWorkflows, mcpRuntime, providerEffects, historyStore, conversationPrivatePayloadKeyringPath, releaseProfile, sandboxReviewNamespace);
 	app.use(_ErrorHandler(_log));
+
 	return app;
 }

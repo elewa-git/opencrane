@@ -11,18 +11,50 @@ import { _log } from "../app/log";
 /** Reuse the current release idle boundaries while keeping the selected lease lifetime explicit. */
 const _IDLE_POLICY = { staleAfterMilliseconds: 300_000, retireAfterMilliseconds: 1_200_000 };
 
+/** Report that Tier 2 has no external lifecycle checkpoint to capture. */
+async function _CaptureCheckpoint(): Promise<null> { return null; }
+
 /** Start retained-state convergence before the local server accepts traffic, then keep leases current. */
 export async function _StartDevelopmentConversationComputerLifecycle(prisma: PrismaClient, historyStore: HistoryStore, realizer: ConversationComputerRealizer, siloId: string, profile: ConversationComputerReleaseProfileConfig): Promise<ConversationComputerLifecycleWorker>
 {
 	const history = new ConversationComputerHistory(historyStore);
 	const projections = new PrismaConversationComputerLifecycleProjectionRepository(prisma);
+
+	/** Clear the active lease inside the database transaction that owns the projection write. */
+	function _ClearActiveLease(command: Parameters<typeof projections.clearActiveLease>[0])
+	{
+		return ___RunInPrismaUnitOfWork(prisma, function _InTransaction(transaction)
+		{
+			const repository = new PrismaConversationComputerLifecycleProjectionRepository(transaction);
+
+			return repository.clearActiveLease(command);
+		}, {
+			isolationLevel: "Serializable",
+			operation: "development conversation computer active lease clear",
+		});
+	}
+
+	/** Extend the active lease inside the database transaction that owns the projection write. */
+	function _ExtendActiveLease(command: Parameters<typeof projections.extendActiveLease>[0])
+	{
+		return ___RunInPrismaUnitOfWork(prisma, function _InTransaction(transaction)
+		{
+			const repository = new PrismaConversationComputerLifecycleProjectionRepository(transaction);
+
+			return repository.extendActiveLease(command);
+		}, {
+			isolationLevel: "Serializable",
+			operation: "development conversation computer active lease renewal",
+		});
+	}
+
 	const attempts = {
-		clearActiveLease: function _ClearActiveLease(command: Parameters<typeof projections.clearActiveLease>[0]) { return ___RunInPrismaUnitOfWork(prisma, function _InTransaction(transaction) { return new PrismaConversationComputerLifecycleProjectionRepository(transaction).clearActiveLease(command); }, { isolationLevel: "Serializable", operation: "development conversation computer active lease clear" }); },
-		extendActiveLease: function _ExtendActiveLease(command: Parameters<typeof projections.extendActiveLease>[0]) { return ___RunInPrismaUnitOfWork(prisma, function _InTransaction(transaction) { return new PrismaConversationComputerLifecycleProjectionRepository(transaction).extendActiveLease(command); }, { isolationLevel: "Serializable", operation: "development conversation computer active lease renewal" }); },
+		clearActiveLease: _ClearActiveLease,
+		extendActiveLease: _ExtendActiveLease,
 	};
 	const activity = new KurrentConversationComputerActivityReader(historyStore);
 	const policy = { ..._IDLE_POLICY, leaseTtlMilliseconds: profile.leaseTtlMilliseconds };
-	const checkpoints = { async capture(): Promise<null> { return null; } };
+	const checkpoints = { capture: _CaptureCheckpoint };
 	const authority = new ConversationComputerLifecycleAuthority(history, checkpoints, attempts, realizer, activity, policy);
 	const enumerator = new ConversationComputerLifecycleDueEnumerator(projections, history, activity, realizer, siloId, policy);
 	const scheduler = new ConversationComputerLifecycleScheduler(enumerator, authority, 50);
@@ -31,5 +63,6 @@ export async function _StartDevelopmentConversationComputerLifecycle(prisma: Pri
 	{
 		throw new Error("Tier 2 retained conversation computer is still fenced by an active attempt");
 	}
+
 	return new ConversationComputerLifecycleWorker(scheduler, _log);
 }

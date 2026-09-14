@@ -2,6 +2,7 @@ import type { ManagedAgentIdentity } from "@opencrane/contracts";
 import type { ExecutionSubjectHumanMembershipEvidence, ExecutionSubjectManagedMembershipEvidence } from "@opencrane/models/agents";
 
 import type { ExecutionCapabilityEvidence } from "./execution-capability-evidence.types";
+import { ExecutionEvidenceOutcomes } from "./execution-evidence.types";
 import type { ManagedAgentRevisionEvidence } from "./managed-agent.types";
 import type { PersonalExecutionEvidenceTransaction } from "./personal-execution-evidence.types";
 
@@ -37,7 +38,7 @@ export enum ManagedExecutionEvidenceDenialReasons
 }
 
 /** Returns evidence only after all current checks succeed in the admission transaction. */
-export type ManagedExecutionEvidenceResult = { readonly outcome: "loaded"; readonly value: ManagedExecutionEvidence } | { readonly outcome: "denied"; readonly reason: ManagedExecutionEvidenceDenialReasons };
+export type ManagedExecutionEvidenceResult = { readonly outcome: ExecutionEvidenceOutcomes.Loaded; readonly value: ManagedExecutionEvidence } | { readonly outcome: ExecutionEvidenceOutcomes.Denied; readonly reason: ManagedExecutionEvidenceDenialReasons };
 
 /** Rechecks current managed and requester authority before an execution subject is frozen. */
 export interface ManagedExecutionEvidenceAuthorityPort

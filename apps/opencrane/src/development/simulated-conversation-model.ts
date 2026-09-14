@@ -3,19 +3,15 @@ import { createHash } from "node:crypto";
 import { ConversationModelResponseKinds } from "@opencrane/contracts";
 import type { ConversationComputerCredentialIssueCommand, ConversationComputerCredentialIssuer, ConversationComputerCredentialReceipt, ConversationComputerCredentialReuseCommand, ConversationComputerModelTransport } from "@opencrane/backend/server/conversations";
 
+import type { SimulatedConversationComputerCredential } from "./simulated-conversation-model.types";
+
 /** Fixed answer returned by the credential-free Tier 2 model transport. */
 const _SIMULATED_RESPONSE = "This is a deterministic Tier 2 simulated model response.";
-
-/** Keep one simulated receipt without creating provider-side credential state. */
-interface _SimulatedCredential
-{
-	readonly command: ConversationComputerCredentialIssueCommand;
-	readonly receipt: ConversationComputerCredentialReceipt;
-}
 
 /** Answer every reserved request without reading an endpoint, provider key, or model service. */
 export class DeterministicDevelopmentConversationModelTransport implements ConversationComputerModelTransport
 {
+	/** Return the fixed Tier 2 response without calling a model provider. */
 	public async request(): Promise<{ readonly kind: ConversationModelResponseKinds.Text; readonly text: string }>
 	{
 		return { kind: ConversationModelResponseKinds.Text, text: _SIMULATED_RESPONSE };
@@ -25,24 +21,32 @@ export class DeterministicDevelopmentConversationModelTransport implements Conve
 /** Hold deterministic, non-provider receipts for the lifetime of one Tier 2 server process. */
 export class DevelopmentConversationComputerCredentialIssuer implements ConversationComputerCredentialIssuer
 {
-	private readonly credentials = new Map<string, _SimulatedCredential>();
+	/** Keeps credentials by the bootstrap that first received them. */
+	private readonly credentials = new Map<string, SimulatedConversationComputerCredential>();
 
 	/** Return the same non-provider receipt for an exact retry of one bootstrap. */
 	public async issueOnce(command: ConversationComputerCredentialIssueCommand): Promise<ConversationComputerCredentialReceipt>
 	{
 		const existing = this.credentials.get(command.bootstrapId);
-		if (existing !== undefined)
+
+		if (existing)
 		{
 			this._AssertSameCommand(existing.command, command);
 			return existing.receipt;
 		}
+
 		if (!Number.isFinite(Date.parse(command.notAfter)) || Date.parse(command.notAfter) <= Date.now())
 		{
 			throw new Error("Simulated model credential requires unexpired authority");
 		}
 		const key = `simulated-${createHash("sha256").update(command.bootstrapId).digest("hex")}`;
-		const receipt = { key, credentialDigest: `sha256:${createHash("sha256").update(key).digest("hex")}`, expiresAt: command.notAfter };
+		const receipt = {
+			key,
+			credentialDigest: `sha256:${createHash("sha256").update(key).digest("hex")}`,
+			expiresAt: command.notAfter,
+		};
 		this.credentials.set(command.bootstrapId, { command: structuredClone(command), receipt });
+
 		return receipt;
 	}
 
@@ -50,15 +54,22 @@ export class DevelopmentConversationComputerCredentialIssuer implements Conversa
 	public async reuseExact(command: ConversationComputerCredentialReuseCommand): Promise<ConversationComputerCredentialReceipt>
 	{
 		const existing = this.credentials.get(command.bootstrapId);
-		if (existing === undefined)
+
+		if (!existing)
 		{
 			throw new Error("Simulated model credential does not exist");
 		}
 		this._AssertSameCommand(existing.command, command);
-		if (existing.receipt.credentialDigest !== command.expectedCredentialDigest || existing.receipt.expiresAt !== command.expectedExpiresAt || Date.parse(existing.receipt.expiresAt) <= Date.now())
+
+		if (
+			existing.receipt.credentialDigest !== command.expectedCredentialDigest
+			|| existing.receipt.expiresAt !== command.expectedExpiresAt
+			|| Date.parse(existing.receipt.expiresAt) <= Date.now()
+		)
 		{
 			throw new Error("Simulated model credential receipt changed");
 		}
+
 		return existing.receipt;
 	}
 

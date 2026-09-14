@@ -10,15 +10,23 @@ import { LOCAL_DEVELOPMENT_ALTERNATIVES } from "./profiles.mjs";
 function readPrivateSecret(filePath, label)
 {
 	const statistics = fs.lstatSync(filePath);
-	if (statistics.isSymbolicLink() || !statistics.isFile() || (statistics.mode & 0o077) !== 0)
+
+	if (
+		statistics.isSymbolicLink()
+		|| !statistics.isFile()
+		|| (statistics.mode & 0o077) !== 0
+	)
 	{
 		throw new Error(`${label} must be a private regular file: ${filePath}`);
 	}
+
 	const value = fs.readFileSync(filePath, "utf8").trim();
+
 	if (!value)
 	{
 		throw new Error(`${label} is empty: ${filePath}`);
 	}
+
 	return value;
 }
 
@@ -29,9 +37,11 @@ function _persistentSecret(filePath, prefix, randomBytes)
 	{
 		return readPrivateSecret(filePath, "Tier 2 persistent credential");
 	}
+
 	fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
 	const value = `${prefix}${randomBytes(32).toString("base64url")}`;
 	fs.writeFileSync(filePath, `${value}\n`, { mode: 0o600, flag: "wx" });
+
 	return value;
 }
 
@@ -44,12 +54,19 @@ function _persistentConversationKeyring(filePath, randomBytes)
 		const document = { currentKeyId: "tier2-persistent", keys: { "tier2-persistent": randomBytes(32).toString("base64") } };
 		fs.writeFileSync(filePath, `${JSON.stringify(document)}\n`, { mode: 0o600, flag: "wx" });
 	}
+
 	const document = JSON.parse(readPrivateSecret(filePath, "Tier 2 conversation keyring"));
 	const key = document?.keys?.[document.currentKeyId];
-	if (document.currentKeyId !== "tier2-persistent" || typeof key !== "string" || Buffer.from(key, "base64").byteLength !== 32)
+
+	if (
+		document.currentKeyId !== "tier2-persistent"
+		|| typeof key !== "string"
+		|| Buffer.from(key, "base64").byteLength !== 32
+	)
 	{
 		throw new Error(`Tier 2 conversation keyring is invalid: ${filePath}`);
 	}
+
 	return filePath;
 }
 
@@ -58,6 +75,7 @@ function _writeSecret(directory, name, value)
 {
 	const filePath = path.join(directory, name);
 	fs.writeFileSync(filePath, `${value}\n`, { mode: 0o600, flag: "wx" });
+
 	return filePath;
 }
 
@@ -101,7 +119,12 @@ async function _createKurrentCertificate(configuration, directory, runCommand)
 	fs.chmodSync(privateKeyPath, 0o600);
 	fs.chmodSync(serverCertificatePath, 0o644);
 	fs.chmodSync(caCertificatePath, 0o644);
-	return { caCertificatePath, privateKeyPath, serverCertificatePath };
+
+	return {
+		caCertificatePath,
+		privateKeyPath,
+		serverCertificatePath
+	};
 }
 
 /** Creates persistent service credentials plus disposable TLS and application-session secrets. */
@@ -112,6 +135,7 @@ export async function createLocalDevelopmentSecrets(configuration, operations = 
 	const makeTemporaryDirectory = operations.makeTemporaryDirectory ?? fs.mkdtempSync;
 	const directory = makeTemporaryDirectory(path.join(os.tmpdir(), "opencrane-tier2-"));
 	fs.chmodSync(directory, 0o700);
+
 	try
 	{
 		const postgresPassword = _persistentSecret(path.join(configuration.persistentSecretsDirectory, "postgres-password"), "postgres-", randomBytes);
@@ -127,14 +151,17 @@ export async function createLocalDevelopmentSecrets(configuration, operations = 
 		{
 			liteLLMMasterKey = `sk-local-${randomBytes(32).toString("base64url")}`;
 		}
+
 		if (configuration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.RemoteLiteLLM)
 		{
 			if (configuration.modelCredentials?.kind !== "remote")
 			{
 				throw new Error("Remote LiteLLM requires a validated administrator credential");
 			}
+
 			liteLLMMasterKey = configuration.modelCredentials.remoteMasterKey;
 		}
+
 		return {
 			browserSessionCredential,
 			browserSessionCredentialPath,

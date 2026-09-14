@@ -27,7 +27,15 @@ export class HostDevelopmentConversationComputerRealizer implements Conversation
 	public async claim(command: ConversationComputerRealizationClaimCommand): Promise<ConversationComputerRealization>
 	{
 		const realization = this._HostRealization(command.realization);
-		const coordinates = await this.processes.claim({ siloId: command.siloId, computerId: command.computerId, leaseId: command.leaseId, generation: command.generation, expiresAt: command.expiresAt, coordinates: this._Coordinates(realization) });
+		const coordinates = await this.processes.claim({
+			siloId: command.siloId,
+			computerId: command.computerId,
+			leaseId: command.leaseId,
+			generation: command.generation,
+			expiresAt: command.expiresAt,
+			coordinates: this._Coordinates(realization),
+		});
+
 		return this._Realization(coordinates);
 	}
 
@@ -56,18 +64,26 @@ export class HostDevelopmentConversationComputerRealizer implements Conversation
 		{
 			return false;
 		}
-		return this.processes.bind({ ...this._Command(command), process: { processId: command.process.processId } });
+
+		return this.processes.bind({
+			...this._Command(command),
+			process: { processId: command.process.processId },
+		});
 	}
 
 	/** Maps a private bearer to the domain identity for its host process. */
 	public async authenticate(bearer: string): Promise<ConversationComputerProcessIdentity | null>
 	{
 		const process = await this.processes.authenticate(bearer);
-		if (process === null)
+		if (!process)
 		{
 			return null;
 		}
-		return { kind: ConversationComputerRealizationKinds.HostDevelopmentProcess, processId: process.processId };
+
+		return {
+			kind: ConversationComputerRealizationKinds.HostDevelopmentProcess,
+			processId: process.processId,
+		};
 	}
 
 	/** Attempts to stop every host process and remove every private bearer file, rejecting on cleanup failure. */
@@ -80,7 +96,13 @@ export class HostDevelopmentConversationComputerRealizer implements Conversation
 	private _Command(command: ConversationComputerRealizationCommand): HostConversationComputerProcessCommand
 	{
 		const realization = this._HostRealization(command.lease.realization);
-		return { computerId: command.computerId, leaseId: command.lease.leaseId, generation: command.lease.leaseGeneration, coordinates: this._Coordinates(realization) };
+
+		return {
+			computerId: command.computerId,
+			leaseId: command.lease.leaseId,
+			generation: command.lease.leaseGeneration,
+			coordinates: this._Coordinates(realization),
+		};
 	}
 
 	/** Removes the domain discriminant before calling the host-process owner. */
@@ -92,7 +114,11 @@ export class HostDevelopmentConversationComputerRealizer implements Conversation
 	/** Adds the domain discriminant to neutral host-process coordinates. */
 	private _Realization(coordinates: HostConversationComputerProcessCoordinates): HostDevelopmentConversationComputerRealization
 	{
-		return { kind: ConversationComputerRealizationKinds.HostDevelopmentProcess, processId: coordinates.processId, endpoint: coordinates.endpoint };
+		return {
+			kind: ConversationComputerRealizationKinds.HostDevelopmentProcess,
+			processId: coordinates.processId,
+			endpoint: coordinates.endpoint,
+		};
 	}
 
 	/** Refuses production realizations at the Tier 2 domain bridge. */
@@ -102,6 +128,7 @@ export class HostDevelopmentConversationComputerRealizer implements Conversation
 		{
 			throw new Error("Host conversation computer requires a workstation realization");
 		}
+
 		return realization;
 	}
 }
@@ -110,5 +137,10 @@ export class HostDevelopmentConversationComputerRealizer implements Conversation
 export function _CreateHostDevelopmentConversationComputerRealization(options: HostDevelopmentConversationComputerRealizerOptions): HostDevelopmentConversationComputerRealizationOwner
 {
 	const realizer = new HostDevelopmentConversationComputerRealizer(options);
-	return { authenticator: realizer, realizer, stop: realizer.close.bind(realizer) };
+
+	return {
+		authenticator: realizer,
+		realizer,
+		stop: realizer.close.bind(realizer),
+	};
 }

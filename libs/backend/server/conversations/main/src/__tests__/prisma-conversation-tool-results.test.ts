@@ -48,7 +48,22 @@ async function _savedTurn(reserve: boolean)
 	const frozen: FrozenConversationComputerTurn = {
 		bootstrapId: "55555555-5555-4555-8555-555555555555", siloId: "silo-1", computerId: "computer-1",
 		binding: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Ada", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 1n, maximumEntryBytes: 65_536 },
-		lease: { leaseId: "lease-1", leaseGeneration: 1, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g1", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.computers.svc.cluster.local" } }, compile: { runId: "run-1", attempt: 1, promptCompilerVersion: "test-v1", digest: _DIGEST },
+		lease: {
+			leaseId: "lease-1",
+			leaseGeneration: 1,
+			realization: {
+				kind: ConversationComputerRealizationKinds.AgentSandbox,
+				claimId: "computer-1-g1",
+				sandboxId: "sandbox-1",
+				serviceFQDN: "sandbox-1.computers.svc.cluster.local",
+			},
+		},
+		compile: {
+			runId: "run-1",
+			attempt: 1,
+			promptCompilerVersion: "test-v1",
+			digest: _DIGEST,
+		},
 		latestPendingEntryId: "input-1", modelAlias: "model-1", maximumBudgetUsd: 1, credentialLifetimeSeconds: 60,
 		modelReservation: null, toolSelection: null, continuationReservation: null, outputReceipt: null, outputSourceCommandId: null,
 	};

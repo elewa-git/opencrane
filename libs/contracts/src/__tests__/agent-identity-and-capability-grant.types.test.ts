@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AgentCapabilityGrantEffects, AgentCapabilityGrantKinds, AgentIdentityStates, McpInvocationActions, WebDestinationSelectorKinds, WebEgressProtocols } from "../index";
+import { AgentCapabilityGrantEffects, AgentCapabilityGrantKinds, AgentIdentityKinds, AgentIdentityStates, McpInvocationActions, WebDestinationSelectorKinds, WebEgressProtocols } from "../index";
 import type { AgentIdentity, WebEgressGrant } from "../index";
 
 describe("agent identity and capability grant contracts", function ()
@@ -16,7 +16,7 @@ describe("agent identity and capability grant contracts", function ()
 			state: AgentIdentityStates.Active,
 			createdByPrincipalId: "principal-owner-1",
 			createdAt: "2026-08-31T20:00:00.000Z",
-			kind: "managed_subchat",
+			kind: AgentIdentityKinds.ManagedSubChat,
 			principalId: "principal-subchat-1",
 			parentAgentIdentityId: "identity-parent-1",
 			parentPrincipalId: "principal-parent-1",

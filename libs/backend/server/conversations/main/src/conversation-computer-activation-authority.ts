@@ -28,7 +28,15 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 			return "denied";
 		if (projection.profileRevisionId !== this.profile.profileRevisionId)
 			return { action: ConversationComputerActivationQueueActions.Park, reason: "conversation computer profile is not admitted by this release" };
-		const coordinates = { computer: { siloId: command.siloId, computerId: command.computerId, conversationId: command.conversationId, agentIdentityId: projection.agentIdentityId }, profileRevisionId: projection.profileRevisionId };
+		const coordinates = {
+			computer: {
+				siloId: command.siloId,
+				computerId: command.computerId,
+				conversationId: command.conversationId,
+				agentIdentityId: projection.agentIdentityId,
+			},
+			profileRevisionId: projection.profileRevisionId,
+		};
 		let current = await this.computers.load(coordinates);
 		if (current === null || current.computer.state === ConversationComputerStates.Retired)
 			return "denied";
@@ -43,45 +51,125 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 		if (current.computer.state === ConversationComputerStates.Cooling && currentActiveLease)
 		{
 			const reactivatedAt = now.toISOString();
-			await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-reactivated", `${lease.id}:${command.generation}:${current.revision}`), computer: { ...current.computer, state: ConversationComputerStates.Warm, updatedAt: reactivatedAt }, lease });
+			await this.computers.append({
+				expectedRevision: current.revision,
+				eventId: _Uuid("computer-reactivated", `${lease.id}:${command.generation}:${current.revision}`),
+				computer: {
+					...current.computer,
+					state: ConversationComputerStates.Warm,
+					updatedAt: reactivatedAt,
+				},
+				lease,
+			});
 			await this.projections.publishActiveLease(_ActiveProjection(current.computer, lease));
 			return "activated";
 		}
 
 		// 2. Persist the generation reservation before starting an external process, so a retry has one owner.
 		const expiresAt = new Date(now.getTime() + this.profile.leaseTtlMilliseconds).toISOString();
-		const initialClaim = current.computer.state === ConversationComputerStates.Cold && current.lease === null && current.computer.leaseGeneration === command.generation;
-		const recoveryClaim = (current.computer.state === ConversationComputerStates.Cold || current.computer.state === ConversationComputerStates.Cooling) && _IsTerminalLease(current.lease) && current.computer.leaseGeneration + 1 === command.generation;
+		const initialClaim = current.computer.state === ConversationComputerStates.Cold
+			&& !current.lease
+			&& current.computer.leaseGeneration === command.generation;
+		const recoveryClaim = (
+			current.computer.state === ConversationComputerStates.Cold
+			|| current.computer.state === ConversationComputerStates.Cooling
+		) && _IsTerminalLease(current.lease)
+			&& current.computer.leaseGeneration + 1 === command.generation;
+
 		if (initialClaim || recoveryClaim)
 		{
-			const request = { siloId: command.siloId, computerId: command.computerId, leaseId: _LeaseId(command.computerId, command.generation), generation: command.generation, expiresAt, reason: current.computer.workspaceCheckpoint === null ? "activation_requested" as const : "recovery_requested" as const };
+			const request = {
+				siloId: command.siloId,
+				computerId: command.computerId,
+				leaseId: _LeaseId(command.computerId, command.generation),
+				generation: command.generation,
+				expiresAt,
+				reason: !current.computer.workspaceCheckpoint ? "activation_requested" as const : "recovery_requested" as const,
+			};
 			const lease = _ClaimedLease(command.computerId, command.generation, now.toISOString(), expiresAt, this.realizer.prepare(request));
-			await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-claim-pending", lease.id), computer: { ...current.computer, state: ConversationComputerStates.ClaimPending, leaseGeneration: command.generation, updatedAt: now.toISOString() }, lease });
+			await this.computers.append({
+				expectedRevision: current.revision,
+				eventId: _Uuid("computer-claim-pending", lease.id),
+				computer: {
+					...current.computer,
+					state: ConversationComputerStates.ClaimPending,
+					leaseGeneration: command.generation,
+					updatedAt: now.toISOString(),
+				},
+				lease,
+			});
 			current = await this.computers.load(coordinates);
 		}
+
 		if (current === null)
 			return "denied";
+
 		// A competing consumer may have finished this generation between our load and reload; report
 		// that as the idempotent replay it is instead of a denial.
-		if (current.computer.state === ConversationComputerStates.Warm && _IsCurrentActiveLease(current.computer.leaseGeneration, current.lease, command.generation, new Date()))
+		if (
+			current.computer.state === ConversationComputerStates.Warm
+			&& _IsCurrentActiveLease(current.computer.leaseGeneration, current.lease, command.generation, new Date())
+		)
 		{
 			await this.projections.publishActiveLease(_ActiveProjection(current.computer, current.lease));
 			return "idempotent";
 		}
 		if (current.computer.state !== ConversationComputerStates.ClaimPending || current.lease?.state !== ComputerLeaseStates.Claimed)
 			return "denied";
+		if (_LeaseExpired(current.lease))
+			return _EXPIRED_CLAIM_OUTCOME;
 
 		// 3. Converge the reserved realization and keep the delivery live while its adapter reports pending.
-		const realization = await this.realizer.claim({ siloId: command.siloId, computerId: command.computerId, leaseId: current.lease.id, generation: command.generation, expiresAt: current.lease.expiresAt, reason: current.computer.workspaceCheckpoint === null ? "activation_requested" : "recovery_requested", realization: current.lease.realization });
-		if (realization.kind === ConversationComputerRealizationKinds.AgentSandbox && (realization.sandboxId === null || realization.serviceFQDN === null))
+		const realization = await this.realizer.claim({
+			siloId: command.siloId,
+			computerId: command.computerId,
+			leaseId: current.lease.id,
+			generation: command.generation,
+			expiresAt: current.lease.expiresAt,
+			reason: !current.computer.workspaceCheckpoint ? "activation_requested" : "recovery_requested",
+			realization: current.lease.realization,
+		});
+		if (_LeaseExpired(current.lease))
+			return _EXPIRED_CLAIM_OUTCOME;
+		if (
+			realization.kind === ConversationComputerRealizationKinds.AgentSandbox
+			&& (
+				realization.sandboxId === null
+				|| realization.serviceFQDN === null
+			)
+		)
 			return { action: ConversationComputerActivationQueueActions.Retry, reason: "Agent Sandbox has not assigned the conversation computer yet" };
 
 		// 4. Fence the ready process into history before the queue acknowledges activation.
-		const activeLease: ComputerLease = { ...current.lease, realization, state: ComputerLeaseStates.Active };
-		await this.computers.append({ expectedRevision: current.revision, eventId: _Uuid("computer-lease-active", activeLease.id), computer: { ...current.computer, state: ConversationComputerStates.Warm, updatedAt: new Date().toISOString() }, lease: activeLease });
+		const activeLease: ComputerLease = {
+			...current.lease,
+			realization,
+			state: ComputerLeaseStates.Active,
+		};
+		await this.computers.append({
+			expectedRevision: current.revision,
+			eventId: _Uuid("computer-lease-active", activeLease.id),
+			computer: {
+				...current.computer,
+				state: ConversationComputerStates.Warm,
+				updatedAt: new Date().toISOString(),
+			},
+			lease: activeLease,
+		});
 		await this.projections.publishActiveLease(_ActiveProjection(current.computer, activeLease));
 		return "activated";
 	}
+}
+
+const _EXPIRED_CLAIM_OUTCOME = {
+	action: ConversationComputerActivationQueueActions.Retry,
+	reason: "conversation computer claim lease expired before activation completed",
+} as const;
+
+/** Reject activation once lifecycle authority owns expiry recovery for this generation. */
+function _LeaseExpired(lease: ComputerLease): boolean
+{
+	return Date.parse(lease.expiresAt) <= Date.now();
 }
 
 /** Recognize a lease that ended, by orderly release or by loss, so the next generation may open. */
@@ -93,7 +181,10 @@ function _IsTerminalLease(lease: ComputerLease | null): boolean
 /** Accept only the requested, unexpired active generation for replay or reactivation. */
 function _IsCurrentActiveLease(currentGeneration: number, lease: ComputerLease | null, requestedGeneration: number, now: Date): lease is ComputerLease
 {
-	return currentGeneration === requestedGeneration && lease?.state === ComputerLeaseStates.Active && lease.generation === requestedGeneration && Date.parse(lease.expiresAt) > now.getTime();
+	return currentGeneration === requestedGeneration
+		&& lease?.state === ComputerLeaseStates.Active
+		&& lease.generation === requestedGeneration
+		&& Date.parse(lease.expiresAt) > now.getTime();
 }
 
 /** Convert canonical active history into the exact rebuildable transaction fence. */
@@ -105,7 +196,17 @@ function _ActiveProjection(computer: ConversationComputer, lease: ComputerLease)
 /** Build a deterministic DNS-label lease so redelivery cannot reserve a second realization. */
 function _ClaimedLease(computerId: string, generation: number, claimedAt: string, expiresAt: string, realization: ComputerLease["realization"]): ComputerLease
 {
-	return { schemaVersion: 1, id: _LeaseId(computerId, generation), computerId, generation, realization, state: ComputerLeaseStates.Claimed, claimedAt, expiresAt, releasedAt: null };
+	return {
+		schemaVersion: 1,
+		id: _LeaseId(computerId, generation),
+		computerId,
+		generation,
+		realization,
+		state: ComputerLeaseStates.Claimed,
+		claimedAt,
+		expiresAt,
+		releasedAt: null,
+	};
 }
 
 /** Derives the id that fences one reserved generation before external realization starts. */

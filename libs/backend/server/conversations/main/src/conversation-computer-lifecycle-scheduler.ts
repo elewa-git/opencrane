@@ -23,12 +23,19 @@ export class ConversationComputerLifecycleScheduler
 		do
 		{
 			const page = await this.candidates.enumerateDue(now, this.limit, cursor);
-			outcomes.push(...await Promise.all(page.items.map((candidate) => this.reconciler.reconcile({ ...candidate, now, eventId: _LifecycleEventId(candidate) }))));
+			outcomes.push(...await Promise.all(page.items.map(candidate => this.reconciler.reconcile({
+				...candidate,
+				now,
+				eventId: _LifecycleEventId(candidate),
+			}))));
+
 			if (page.nextCursor !== null && page.nextCursor === cursor)
 				throw new Error("Conversation computer lifecycle enumeration did not advance its cursor");
+
 			cursor = page.nextCursor;
 		}
 		while (cursor !== null);
+
 		return outcomes;
 	}
 }

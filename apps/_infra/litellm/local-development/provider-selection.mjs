@@ -35,31 +35,13 @@ function _requireOwnerOnlyCredential(credentialPath)
 	}
 }
 
-function _compareProviderKeyNames(left, right)
-{
-	const leftName = createLocalProviderKeyFileName(left);
-	const rightName = createLocalProviderKeyFileName(right);
-
-	if (leftName < rightName)
-	{
-		return -1;
-	}
-
-	if (leftName > rightName)
-	{
-		return 1;
-	}
-
-	return 0;
-}
-
 function _findRequestedProvider(providers, providerName, modelName)
 {
 	const namedProvider = providerName
-		? providers.find(function _HasProviderName(provider) { return provider.name === providerName; })
+		? providers.find((provider) => provider.name === providerName)
 		: undefined;
 	const modelProvider = modelName
-		? providers.find(function _OwnsModel(provider) { return provider.models.includes(modelName); })
+		? providers.find((provider) => provider.models.includes(modelName))
 		: undefined;
 
 	if (providerName && !namedProvider)
@@ -72,7 +54,11 @@ function _findRequestedProvider(providers, providerName, modelName)
 		throw new Error(`Model ${modelName} is not in the reviewed catalogue`);
 	}
 
-	if (namedProvider && modelProvider && namedProvider.name !== modelProvider.name)
+	if (
+		namedProvider
+		&& modelProvider
+		&& namedProvider.name !== modelProvider.name
+	)
 	{
 		throw new Error(`Model ${modelName} does not belong to provider ${providerName}`);
 	}
@@ -81,7 +67,7 @@ function _findRequestedProvider(providers, providerName, modelName)
 }
 
 /**
- * Reads the production-owned BYOK catalogue and rejects duplicate or ambiguous provider authority.
+ * Reads production's BYOK provider catalog and rejects repeated provider names or model IDs.
  *
  * Called by: local selection and remote-key separation.
  * @returns {{ name: string, litellmProvider: string, defaultModel: string, models: string[] }[]} Reviewed providers.
@@ -99,28 +85,56 @@ export function readLocalProviderCatalog()
 		throw new Error(`The reviewed provider catalogue is invalid: ${error.message}`);
 	}
 
-	if (!contract || Array.isArray(contract) || typeof contract !== "object")
+	if (
+		!contract
+		|| Array.isArray(contract)
+		|| typeof contract !== "object"
+	)
 	{
 		throw new Error("The reviewed provider catalogue must be an object");
 	}
-	const providers = Object.entries(contract).map(function _Provider([name, provider])
+
+	const providers = Object.entries(contract).map(([name, provider]) =>
 	{
-		if (!provider || typeof provider !== "object" || Array.isArray(provider) || !Array.isArray(provider.models))
+		if (
+			!provider
+			|| typeof provider !== "object"
+			|| Array.isArray(provider)
+			|| !Array.isArray(provider.models)
+		)
 		{
 			throw new Error(`Provider ${name} must declare its reviewed model catalogue`);
 		}
-		const validModels = provider.models.every(function _ValidModel(model)
+
+		const validModels = provider.models.every((model) =>
 		{
-			return model && typeof model === "object" && !Array.isArray(model) && typeof model.className === "string" && typeof model.slug === "string";
+			return model
+				&& typeof model === "object"
+				&& !Array.isArray(model)
+				&& typeof model.className === "string"
+				&& typeof model.slug === "string";
 		});
-		if (!validModels || typeof provider.defaultClass !== "string" || typeof provider.litellmProvider !== "string")
+
+		if (
+			!validModels
+			|| typeof provider.defaultClass !== "string"
+			|| typeof provider.litellmProvider !== "string"
+		)
 		{
 			throw new Error(`Provider ${name} has invalid reviewed model entries`);
 		}
-		const defaultModel = provider.models.find(function _Default(model) { return model.className === provider.defaultClass; });
-		return { name, litellmProvider: provider.litellmProvider, defaultModel: defaultModel?.slug, models: provider.models.map(function _Slug(model) { return model.slug; }) };
+
+		const defaultModel = provider.models.find((model) => model.className === provider.defaultClass);
+
+		return {
+			name,
+			litellmProvider: provider.litellmProvider,
+			defaultModel: defaultModel?.slug,
+			models: provider.models.map((model) => model.slug)
+		};
 	});
-	if (providers.length === 0)
+
+	if (!providers.length)
 	{
 		throw new Error("The reviewed provider catalogue must contain at least one provider");
 	}
@@ -130,7 +144,11 @@ export function readLocalProviderCatalog()
 
 	for (const provider of providers)
 	{
-		if (!provider || !_PROVIDER_PATTERN.test(provider.name) || !_PROVIDER_PATTERN.test(provider.litellmProvider))
+		if (
+			!provider
+			|| !_PROVIDER_PATTERN.test(provider.name)
+			|| !_PROVIDER_PATTERN.test(provider.litellmProvider)
+		)
 		{
 			throw new Error("Every reviewed local provider must have lowercase provider names");
 		}
@@ -140,7 +158,11 @@ export function readLocalProviderCatalog()
 			throw new Error(`The reviewed provider catalogue repeats provider ${provider.name}`);
 		}
 
-		if (!Array.isArray(provider.models) || provider.models.length === 0 || !provider.models.includes(provider.defaultModel))
+		if (
+			!Array.isArray(provider.models)
+			|| !provider.models.length
+			|| !provider.models.includes(provider.defaultModel)
+		)
 		{
 			throw new Error(`Provider ${provider.name} must list its default model`);
 		}
@@ -167,7 +189,7 @@ export function readLocalProviderCatalog()
 }
 
 /**
- * Derives the only admitted hidden credential filename for a reviewed provider.
+ * Returns the hidden credential filename allowed for a provider in the catalog.
  *
  * Called by: local selection and remote-key separation.
  * @param {{ name: string }} provider - Reviewed provider.
@@ -213,11 +235,27 @@ export function resolveLocalProviderSelection(options)
 	}
 
 	const configuredProviders = providers
-		.filter(function _HasConventionalKey(provider)
+		.filter((provider) =>
 		{
 			return keyNames.has(createLocalProviderKeyFileName(provider));
 		})
-		.sort(_compareProviderKeyNames);
+		.sort((left, right) =>
+		{
+			const leftName = createLocalProviderKeyFileName(left);
+			const rightName = createLocalProviderKeyFileName(right);
+
+			if (leftName < rightName)
+			{
+				return -1;
+			}
+
+			if (leftName > rightName)
+			{
+				return 1;
+			}
+
+			return 0;
+		});
 	const requestedProvider = _findRequestedProvider(providers, options.provider, options.model);
 	const selectedProvider = requestedProvider ?? configuredProviders[0];
 
@@ -227,14 +265,19 @@ export function resolveLocalProviderSelection(options)
 		throw new Error(`local-llm requires one reviewed provider key in keys/: ${expected}`);
 	}
 
-	if (!configuredProviders.some(function _IsSelected(provider) { return provider.name === selectedProvider.name; }))
+	if (!configuredProviders.some((provider) => provider.name === selectedProvider.name))
 	{
 		throw new Error(`Provider ${selectedProvider.name} requires keys/${createLocalProviderKeyFileName(selectedProvider)}`);
 	}
 
 	const providerKeyPath = path.join(keysDirectory, createLocalProviderKeyFileName(selectedProvider));
 	_requireOwnerOnlyCredential(providerKeyPath);
-	return { provider: selectedProvider, model: options.model ?? selectedProvider.defaultModel, providerKeyPath };
+
+	return {
+		provider: selectedProvider,
+		model: options.model ?? selectedProvider.defaultModel,
+		providerKeyPath
+	};
 }
 
 /**
@@ -282,7 +325,7 @@ export function createModelCredentialPlan(options)
 	}
 
 	const remoteMasterKeyPath = path.resolve(options.repositoryRoot, options.remoteLiteLLMMasterKeyFile);
-	const localKeyPaths = new Set(readLocalProviderCatalog().map(function _ToLocalKeyPath(provider)
+	const localKeyPaths = new Set(readLocalProviderCatalog().map((provider) =>
 	{
 		return path.resolve(options.repositoryRoot, "keys", createLocalProviderKeyFileName(provider));
 	}));

@@ -40,7 +40,11 @@ function _port(environment, name, defaultValue)
 {
 	const value = Number(environment[name] ?? defaultValue);
 
-	if (!Number.isInteger(value) || value < 1024 || value > 65535)
+	if (
+		!Number.isInteger(value)
+		|| value < 1024
+		|| value > 65535
+	)
 	{
 		throw new Error(`${name} must be an integer from 1024 to 65535`);
 	}
@@ -68,7 +72,13 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 	const postgresPort = _port(environment, "OPENCRANE_LOCAL_POSTGRES_PORT", "54329");
 	const kurrentPort = _port(environment, "OPENCRANE_LOCAL_KURRENTDB_PORT", "21139");
 	const liteLLMPort = _port(environment, "OPENCRANE_LOCAL_LITELLM_PORT", "4000");
-	const occupiedPorts = [postgresPort, kurrentPort, 4_200, 8_080, 8_081];
+	const occupiedPorts = [
+		postgresPort,
+		kurrentPort,
+		4_200,
+		8_080,
+		8_081
+	];
 
 	if (parsed.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM && occupiedPorts.includes(liteLLMPort))
 	{

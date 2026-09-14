@@ -8,7 +8,7 @@ export async function runDevelopmentProcesses(specifications, repositoryRoot, op
 {
 	const processHost = options.processHost ?? process;
 	const spawnProcess = options.spawnProcess ?? spawn;
-	const children = specifications.map(function _start(specification)
+	const children = specifications.map((specification) =>
 	{
 		const child = spawnProcess(specification.command, specification.arguments, {
 			cwd: repositoryRoot,
@@ -29,7 +29,7 @@ export async function runDevelopmentProcesses(specifications, repositoryRoot, op
 
 		function _finish()
 		{
-			if (remaining.size > 0)
+			if (remaining.size)
 			{
 				return;
 			}

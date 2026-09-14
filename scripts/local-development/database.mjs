@@ -2,25 +2,49 @@ import fs from "node:fs";
 
 import { runLocalCommand } from "./command-runner.mjs";
 
-/** Builds an authenticated psql invocation inside the exact-owned PostgreSQL container. */
+/** Builds an authenticated psql invocation inside the PostgreSQL container labeled for this checkout and target baseline. */
 function _postgresArguments(configuration, ...argumentsList)
 {
-	return ["exec", "--interactive", configuration.postgresContainerName, "psql", "--username", "opencrane", "--dbname", "opencrane", "--set", "ON_ERROR_STOP=1", ...argumentsList];
+	return [
+		"exec",
+		"--interactive",
+		configuration.postgresContainerName,
+		"psql",
+		"--username",
+		"opencrane",
+		"--dbname",
+		"opencrane",
+		"--set",
+		"ON_ERROR_STOP=1",
+		...argumentsList
+	];
 }
 
 /** Waits for the clean local PostgreSQL operand to accept connections. */
 export async function waitForPostgres(configuration, operations = {})
 {
 	const runCommand = operations.runCommand ?? runLocalCommand;
+
 	for (let attempt = 0; attempt < 120; attempt += 1)
 	{
-		const result = await runCommand("docker", ["exec", configuration.postgresContainerName, "pg_isready", "--username", "opencrane", "--dbname", "opencrane"], { acceptFailure: true, signal: configuration.abortSignal });
+		const result = await runCommand("docker", [
+			"exec",
+			configuration.postgresContainerName,
+			"pg_isready",
+			"--username",
+			"opencrane",
+			"--dbname",
+			"opencrane"
+		], { acceptFailure: true, signal: configuration.abortSignal });
+
 		if (result.status === 0)
 		{
 			return;
 		}
+
 		await new Promise(function _wait(resolve) { setTimeout(resolve, 250); });
 	}
+
 	throw new Error("Tier 2 PostgreSQL did not become ready within 30 seconds");
 }
 
@@ -31,9 +55,12 @@ export async function applyTargetBaseline(configuration, operations = {})
 	async function _query(sql)
 	{
 		const result = await runCommand("docker", _postgresArguments(configuration, "--tuples-only", "--no-align", "--command", sql), { signal: configuration.abortSignal });
+
 		return result.stdout.trim();
 	}
+
 	const hasState = await _query("SELECT to_regclass('public.opencrane_local_development_state') IS NOT NULL;") === "t";
+
 	if (hasState)
 	{
 		const digest = await _query("SELECT target_baseline_sha256 FROM opencrane_local_development_state WHERE id = 'baseline';");
@@ -49,10 +76,12 @@ export async function applyTargetBaseline(configuration, operations = {})
 		{
 			throw new Error("The local database has an untracked schema; rerun with --reset");
 		}
+
 		await runCommand("docker", _postgresArguments(configuration), { input: fs.readFileSync(configuration.baselinePath), signal: configuration.abortSignal });
 		const stateSql = `CREATE TABLE opencrane_local_development_state (id text PRIMARY KEY, target_baseline_sha256 text NOT NULL); INSERT INTO opencrane_local_development_state VALUES ('baseline', '${configuration.baselineDigest}');`;
 		await runCommand("docker", _postgresArguments(configuration, "--command", stateSql), { signal: configuration.abortSignal });
 	}
+
 	await runCommand("docker", _postgresArguments(configuration), { input: fs.readFileSync(configuration.seedPath), signal: configuration.abortSignal });
 }
 
@@ -60,6 +89,7 @@ export async function applyTargetBaseline(configuration, operations = {})
 export async function bootstrapKurrent(configuration, secrets, operations = {})
 {
 	const runCommand = operations.runCommand ?? runLocalCommand;
+
 	await runCommand("sh", [configuration.kurrentBootstrapPath], {
 		environment: {
 			KURRENTDB_BOOTSTRAP_ENDPOINT: `https://127.0.0.1:${configuration.kurrentPort}`,

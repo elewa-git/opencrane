@@ -40,14 +40,20 @@ export function prepareLocalLiteLLMConfiguration(options)
 {
 	const selection = options.selection;
 	const generatedDirectory = options.generatedDirectory;
+
 	if (!generatedDirectory)
 	{
 		throw new Error("The local LiteLLM configuration requires a session-owned output directory");
 	}
+
 	_requireRealDirectory(generatedDirectory);
 	const digest = crypto.createHash("sha256").update(selection.model).digest("hex").slice(0, 16);
 	const generatedConfigPath = path.join(generatedDirectory, `${selection.provider.name}-${digest}.generated.yaml`);
-	fs.writeFileSync(generatedConfigPath, _createSecretFreeConfiguration(selection.model), { encoding: "utf8", flag: "wx", mode: 0o600 });
+	fs.writeFileSync(generatedConfigPath, _createSecretFreeConfiguration(selection.model), {
+		encoding: "utf8",
+		flag: "wx",
+		mode: 0o600
+	});
 
 	return {
 		generatedConfigPath,

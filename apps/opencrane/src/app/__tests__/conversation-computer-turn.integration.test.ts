@@ -38,7 +38,12 @@ describe("conversation computer turn integration", function _Suite() {
       id: "lease-one",
       computerId: computer.id,
       generation: 1,
-      realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-one-g1", sandboxId: null, serviceFQDN: null } as const,
+      realization: {
+        kind: ConversationComputerRealizationKinds.AgentSandbox,
+        claimId: "computer-one-g1",
+        sandboxId: null,
+        serviceFQDN: null,
+      } as const,
       state: ComputerLeaseStates.Claimed,
       claimedAt: "2026-09-05T00:00:00.000Z",
       expiresAt: "2099-09-05T00:00:00.000Z",
@@ -66,8 +71,16 @@ describe("conversation computer turn integration", function _Suite() {
       {} as never,
       {
         prepare: vi.fn(),
-        claim: vi.fn().mockResolvedValue({ kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-one-g1", sandboxId: "sandbox-one", serviceFQDN: "sandbox-one.testv5.svc.cluster.local" }),
-        inspect: vi.fn(), renew: vi.fn(), release: vi.fn(), bind: vi.fn(),
+        claim: vi.fn().mockResolvedValue({
+          kind: ConversationComputerRealizationKinds.AgentSandbox,
+          claimId: "computer-one-g1",
+          sandboxId: "sandbox-one",
+          serviceFQDN: "sandbox-one.testv5.svc.cluster.local",
+        }),
+        inspect: vi.fn(),
+        renew: vi.fn(),
+        release: vi.fn(),
+        bind: vi.fn(),
       } as never,
       {
         profileRevisionId: computer.profileRevisionId,
@@ -125,7 +138,16 @@ describe("conversation computer turn integration", function _Suite() {
             maximumBudgetUsd: 0.1,
             credentialLifetimeSeconds: 300,
             credentialExpiresAt: "2099-01-01T00:00:00.000Z",
-            lease: { leaseId: "lease-one", leaseGeneration: 1, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-one-g1", sandboxId: "sandbox-one", serviceFQDN: "sandbox-one.testv5.svc.cluster.local" } },
+            lease: {
+              leaseId: "lease-one",
+              leaseGeneration: 1,
+              realization: {
+                kind: ConversationComputerRealizationKinds.AgentSandbox,
+                claimId: "computer-one-g1",
+                sandboxId: "sandbox-one",
+                serviceFQDN: "sandbox-one.testv5.svc.cluster.local",
+              },
+            },
           };
     const authority = new ConversationComputerTurnAuthorityService({
       logger: { warn: vi.fn() }, model: { request: vi.fn().mockResolvedValue({ kind: "text", text: "assistant answer" }) },
@@ -167,7 +189,16 @@ describe("conversation computer turn integration", function _Suite() {
         selectTool: vi.fn().mockResolvedValue(undefined),
         createOrRead: vi.fn(async (turn) => (frozen ??= turn)),
         load: vi.fn(async () => frozen),
-        markOutput: vi.fn(async function _Mark(_bootstrapId, receipt) { frozen = { ...frozen, outputReceipt: receipt, outputSourceCommandId: receipt.event.id }; return { outcome: "accepted" as const, receipt }; }),
+		markOutput: vi.fn(async function _Mark(_bootstrapId, receipt)
+		{
+			frozen = {
+				...frozen,
+				outputReceipt: receipt,
+				outputSourceCommandId: receipt.event.id,
+			};
+
+			return { outcome: "accepted" as const, receipt };
+		}),
         loadActive: vi.fn().mockResolvedValue(null),
         settle: vi.fn().mockResolvedValue(undefined),
       },

@@ -1,7 +1,7 @@
 import { OrgMemberStatus, PrincipalProvenance } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AgentIdentityStates, ComputerLeaseStates, ConversationComputerRealizationKinds, ConversationComputerStates, ExecutionSubjectMembershipKinds } from "@opencrane/contracts";
+import { AgentIdentityKinds, AgentIdentityStates, ComputerLeaseStates, ConversationComputerRealizationKinds, ConversationComputerStates, ExecutionSubjectMembershipKinds } from "@opencrane/contracts";
 import { __DigestCanonicalJson, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
@@ -40,9 +40,24 @@ function _Fixture()
 		requester: { membership: _MEMBERSHIP, siloId: "silo-1", requesterPrincipalId: "principal-1", requestIdempotencyKey: "request-1", authenticatedAt: _NOW.toISOString() },
 		admission: { authorizingPrincipalId: "principal-1", decisionEvidenceId: "admission-evidence", admittedAt: _NOW.toISOString() },
 	} as const;
-	const identity = { schemaVersion: 1, id: "identity-1", siloId: "silo-1", agentServiceId: "service-1", name: "Personal assistant", avatarArtifactRevisionId: null, state: AgentIdentityStates.Active, createdByPrincipalId: "principal-1", createdAt: _NOW.toISOString(), kind: "proxied", proxiedPrincipalId: "principal-1", delegationPolicyId: "personal-agent-session-v1" } as const;
+	const identity = { schemaVersion: 1, id: "identity-1", siloId: "silo-1", agentServiceId: "service-1", name: "Personal assistant", avatarArtifactRevisionId: null, state: AgentIdentityStates.Active, createdByPrincipalId: "principal-1", createdAt: _NOW.toISOString(), kind: AgentIdentityKinds.Proxied, proxiedPrincipalId: "principal-1", delegationPolicyId: "personal-agent-session-v1" } as const;
 	const identityHead = { identity, revision: 0n, headDigest: subject.identity.headDigest, headEventId: "identity-event", streamName: "identity-identity-1" };
-	const computer = { computer: { state: ConversationComputerStates.Warm, leaseGeneration: 1 }, lease: { state: ComputerLeaseStates.Active, id: "lease-1", generation: 1, computerId: "computer-1", realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g1", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.computers.svc.cluster.local" }, expiresAt: new Date(_NOW.getTime() + 60_000).toISOString() } };
+	const computer = {
+		computer: { state: ConversationComputerStates.Warm, leaseGeneration: 1 },
+		lease: {
+			state: ComputerLeaseStates.Active,
+			id: "lease-1",
+			generation: 1,
+			computerId: "computer-1",
+			realization: {
+				kind: ConversationComputerRealizationKinds.AgentSandbox,
+				claimId: "computer-1-g1",
+				sandboxId: "sandbox-1",
+				serviceFQDN: "sandbox-1.computers.svc.cluster.local",
+			},
+			expiresAt: new Date(_NOW.getTime() + 60_000).toISOString(),
+		},
+	};
 	const grants = [_Grant(ProductAuthorizationResourceKinds.AgentService, "service-1", ProductAuthorizationActions.Invoke), _Grant(ProductAuthorizationResourceKinds.Conversation, "conversation-1", ProductAuthorizationActions.Use), _Grant(ProductAuthorizationResourceKinds.McpToolRevision, "tool-1", ProductAuthorizationActions.Invoke)];
 	const principal = { id: "principal-1", siloId: "silo-1", issuer: "https://issuer.test", subject: "user-1", provenance: PrincipalProvenance.External };
 	const membership = { id: "membership-1", clusterTenant: "silo-1", subject: "user-1", status: OrgMemberStatus.Active as OrgMemberStatus, updatedAt: new Date(_NOW.getTime() - 2_000) };
@@ -122,7 +137,20 @@ describe("current conversation tool dispatch authority", function _Suite()
 		expect(f.identities.load).not.toHaveBeenCalled();
 	});
 
-	it.each([{ state: ComputerLeaseStates.Released }, { id: "other-lease" }, { generation: 2 }, { expiresAt: _NOW.toISOString() }, { realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g1", sandboxId: null, serviceFQDN: null } }])("denies stale lease evidence %j", async function _LeaseFence(patch)
+	it.each([
+		{ state: ComputerLeaseStates.Released },
+		{ id: "other-lease" },
+		{ generation: 2 },
+		{ expiresAt: _NOW.toISOString() },
+		{
+			realization: {
+				kind: ConversationComputerRealizationKinds.AgentSandbox,
+				claimId: "computer-1-g1",
+				sandboxId: null,
+				serviceFQDN: null,
+			},
+		},
+	])("denies stale lease evidence %j", async function _LeaseFence(patch)
 	{
 		const f = _Fixture();
 		f.computers.load.mockResolvedValue({ ...f.computer, lease: { ...f.computer.lease, ...patch } });
@@ -194,7 +222,7 @@ describe("current conversation tool dispatch authority", function _Suite()
 	{
 		const f = _Fixture();
 		const subject = { ...f.subject, principalId: "managed-1", identity: { ...f.subject.identity, principalId: "managed-1" } };
-		const identity = { ...f.identityHead.identity, kind: "managed", principalId: "managed-1" };
+		const identity = { ...f.identityHead.identity, kind: AgentIdentityKinds.Managed, principalId: "managed-1" };
 		f.identities.load.mockResolvedValue({ ...f.identityHead, identity });
 		f.transaction.agentRun.findFirst.mockResolvedValue({ conversationId: "conversation-1", executionSubject: subject });
 		const service = { id: "service-1", principalId: "managed-1", name: "Company assistant", workloadProfile: {}, activeRevisionId: "revision-1", activeRevision: { id: "revision-1", siloId: "silo-1", agentServiceId: "service-1", state: "Published", digest: `sha256:${"a".repeat(64)}`, personaRevisionId: null, modelDefinitionId: "model-1", budget: { maxDurationMs: 60_000 }, skillAssignments: [], mcpToolAssignments: [{ toolRevisionId: "tool-1" }], boundaryAttachments: [] } };

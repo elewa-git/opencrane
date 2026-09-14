@@ -37,13 +37,14 @@ export class HostDevelopmentConversationComputerSupervisor
 	/** Start the private app on IPv4 loopback and attach process cleanup. */
 	public async start(): Promise<{ readonly stop: () => Promise<void> }>
 	{
-		if (this.server !== null)
+		if (this.server)
 		{
 			throw new Error("Host conversation computer supervisor already started");
 		}
-		this.server = await new Promise<Server>((resolve, reject): void =>
+		const { app, port } = this.options;
+		this.server = await new Promise<Server>(function _StartListener(resolve, reject): void
 		{
-			const server = this.options.app.listen(this.options.port, "127.0.0.1");
+			const server = app.listen(port, "127.0.0.1");
 			server.once("error", reject);
 			server.once("listening", function _Ready(): void
 			{
@@ -51,13 +52,14 @@ export class HostDevelopmentConversationComputerSupervisor
 				resolve(server);
 			});
 		});
+
 		return { stop: this.stop.bind(this) };
 	}
 
 	/** Stop accepting private requests before stopping all authenticated children. */
 	public async stop(): Promise<void>
 	{
-		if (this.stopping !== null)
+		if (this.stopping)
 		{
 			return this.stopping;
 		}
@@ -71,7 +73,7 @@ export class HostDevelopmentConversationComputerSupervisor
 		const server = this.server;
 		this.server = null;
 		await _RunDevelopmentCleanup([[
-			function _CloseListener(): Promise<void> { return server === null ? Promise.resolve() : _CloseServer(server); },
+			function _CloseListener(): Promise<void> { return server ? _CloseServer(server) : Promise.resolve(); },
 			this.options.processes.close,
 		]], "Host conversation-computer supervisor cleanup failed");
 	}

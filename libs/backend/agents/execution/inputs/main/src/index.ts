@@ -1,4 +1,5 @@
 export { __AreRunInputSnapshotMcpToolsValid, __IsRunInputSnapshotMcpToolValid } from "./mcp-tool-snapshot.validator";
+export type { ConversationExecutionSubjectCoordinates } from "./conversation-execution-subject-admission.types";
 export * from "./conversation-prompt-message-repository";
 export * from "./personal-conversation-execution-subject-authority";
 export * from "./personal-conversation-execution-subject-authority.types";

@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { AgentIdentityKinds } from "@opencrane/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PrismaCompanyAssistantProvisioningRepository } from "../db/prisma-company-assistant-provisioning";
@@ -20,8 +21,8 @@ describe("PrismaCompanyAssistantProvisioningUnitOfWork", function _Suite()
 		const identities = { load: vi.fn().mockImplementation(async function _AfterCommit()
 		{
 			expect($transaction).toHaveBeenCalledTimes(2);
-			return { identity: { kind: "managed" } };
-		}), append: vi.fn(), loadActive: vi.fn().mockResolvedValue({ identity: { kind: "managed" } }) };
+			return { identity: { kind: AgentIdentityKinds.Managed } };
+		}), append: vi.fn(), loadActive: vi.fn().mockResolvedValue({ identity: { kind: AgentIdentityKinds.Managed } }) };
 		const authority = new PrismaCompanyAssistantProvisioningUnitOfWork({ $transaction } as never, _POLICY, identities as never);
 		await expect(authority.provision(_CALLER, _COMMAND)).resolves.toEqual(_RESULT);
 		expect($transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });

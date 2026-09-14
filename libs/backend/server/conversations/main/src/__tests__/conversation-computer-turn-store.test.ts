@@ -13,7 +13,16 @@ const _TURN = {
   bootstrapId: _ID,
   siloId: "testv5",
   computerId: "computer-1",
-  lease: { leaseId: "lease-1", leaseGeneration: 1, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g1", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.computers.svc.cluster.local" } },
+  lease: {
+    leaseId: "lease-1",
+    leaseGeneration: 1,
+    realization: {
+      kind: ConversationComputerRealizationKinds.AgentSandbox,
+      claimId: "computer-1-g1",
+      sandboxId: "sandbox-1",
+      serviceFQDN: "sandbox-1.computers.svc.cluster.local",
+    },
+  },
   latestPendingEntryId: "entry-1",
   modelAlias: "testv5-default",
   maximumBudgetUsd: 0.05,

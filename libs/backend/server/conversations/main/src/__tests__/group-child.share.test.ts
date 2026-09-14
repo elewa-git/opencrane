@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ConversationMessageContentBlockKinds } from "@opencrane/contracts";
 import { PrismaGroupChildShareUnitOfWork } from "../prisma-group-child-share";
 import { PrismaConversationHistoryRepository } from "../db/prisma-conversation-history-repository";
 import { PrismaConversationProductAuthorizationRepository } from "../db/conversation-product-authorization";
@@ -32,7 +33,7 @@ function _Fixture()
 	});
 	vi.spyOn(ConversationHistoryReader.prototype, "read").mockImplementation(async () => ({ streamName: "conversation-parent", genesis: {} as never, entries: state.entries }));
 	const append = vi.spyOn(ConversationHistoryAuthority.prototype, "append").mockImplementation(async command => { state.entries.push(command.entry); return { outcome: ConversationHistoryAppendOutcomes.Appended, receipt: { streamName: "conversation-parent", revision: BigInt(command.entry.position) } }; });
-	const history = { read: vi.fn(async () => ({ entries: [{ id: _SOURCE, position: "2", kind: "message", state: "completed", author: { kind: "agent", agentIdentityId: "managed-company", agentServiceId: "company" }, blocks: [{ kind: "text", payloadRef: "source-private" }] }], payloads: { "source-private": "Original detailed assistant answer" }, nextPosition: "2", computer: null })) };
+	const history = { read: vi.fn(async () => ({ entries: [{ id: _SOURCE, position: "2", kind: "message", state: "completed", author: { kind: "agent", agentIdentityId: "managed-company", agentServiceId: "company" }, blocks: [{ kind: ConversationMessageContentBlockKinds.Text, payloadRef: "source-private" }] }], payloads: { "source-private": "Original detailed assistant answer" }, nextPosition: "2", computer: null })) };
 	const authority = new PrismaGroupChildShareUnitOfWork(prisma as never, {} as never, new AesGcmConversationPrivatePayloadCipher("key", { key: Buffer.alloc(32, 8).toString("base64url") }), history as never, {} as never, {} as never, new ConversationHistoryAuthority({} as never));
 	return { state, transaction, authority, history, append, persist };
 }

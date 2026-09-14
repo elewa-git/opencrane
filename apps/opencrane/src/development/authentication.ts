@@ -19,7 +19,11 @@ const _EXPECTED_DIRECT_HOST = "local-development.localhost:8080";
 const _EXPECTED_PROXY_TARGETS = new Set(["127.0.0.1:8080", "localhost:8080"]);
 
 /** Request methods that cannot change application state. */
-const _SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const _SAFE_METHODS = new Set([
+	"GET",
+	"HEAD",
+	"OPTIONS",
+]);
 
 /** Carries the per-launch credential set only by the dedicated Tier 2 browser. */
 const _DEVELOPMENT_SESSION_HEADER = "x-opencrane-development-session";
@@ -32,10 +36,12 @@ function _HasExpectedHost(request: Request): boolean
 {
 	const host = request.get("host")?.trim().toLowerCase() ?? "";
 	const forwardedHost = request.headers["x-forwarded-host"];
+
 	if (typeof forwardedHost === "string")
 	{
 		return forwardedHost.trim().toLowerCase() === _EXPECTED_BROWSER_HOST && _EXPECTED_PROXY_TARGETS.has(host);
 	}
+
 	return host === _EXPECTED_DIRECT_HOST;
 }
 
@@ -58,15 +64,18 @@ function _HasExpectedOrigin(request: Request): boolean
 	}
 	const expected = _ExpectedOrigin(request);
 	const origin = request.get("origin");
+
 	if (origin)
 	{
 		return origin === expected;
 	}
 	const referer = request.get("referer");
+
 	if (!referer)
 	{
 		return false;
 	}
+
 	try
 	{
 		return new URL(referer).origin === expected;
@@ -84,7 +93,10 @@ function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionC
 	{
 		if (!_HasExpectedHost(request))
 		{
-			response.status(403).json({ code: "DEVELOPMENT_HOST_MISMATCH", error: "Tier 2 requests require the dedicated local development host." });
+			response.status(403).json({
+				code: "DEVELOPMENT_HOST_MISMATCH",
+				error: "Tier 2 requests require the dedicated local development host.",
+			});
 			return;
 		}
 		const suppliedCredential = request.get(_DEVELOPMENT_SESSION_HEADER) ?? "";
@@ -92,27 +104,36 @@ function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionC
 		const supplied = Buffer.from(suppliedCredential, "utf8");
 		if (supplied.byteLength !== expected.byteLength || !timingSafeEqual(supplied, expected))
 		{
-			response.status(401).json({ code: "DEVELOPMENT_SESSION_REQUIRED", error: "Tier 2 requests require the private per-launch browser session." });
+			response.status(401).json({
+				code: "DEVELOPMENT_SESSION_REQUIRED",
+				error: "Tier 2 requests require the private per-launch browser session.",
+			});
 			return;
 		}
+
 		if (!_HasExpectedOrigin(request))
 		{
-			response.status(403).json({ code: "DEVELOPMENT_ORIGIN_MISMATCH", error: "Tier 2 state changes require the dedicated local development origin." });
+			response.status(403).json({
+				code: "DEVELOPMENT_ORIGIN_MISMATCH",
+				error: "Tier 2 state changes require the dedicated local development origin.",
+			});
 			return;
 		}
 		const now = new Date();
-		request.session = { authUser: {
-			authenticatedAt: now.toISOString(),
-			authorizationExpiresAt: new Date(now.getTime() + _AUTHORIZATION_LIFETIME_MILLISECONDS).toISOString(),
-			email: identity.email,
-			emailVerified: true,
-			groups: [],
-			isPlatformOperator: false,
-			issuer: identity.issuer,
-			name: identity.displayName,
-			siloId: identity.siloId,
-			sub: identity.subjectId,
-		} } as never;
+		request.session = {
+			authUser: {
+				authenticatedAt: now.toISOString(),
+				authorizationExpiresAt: new Date(now.getTime() + _AUTHORIZATION_LIFETIME_MILLISECONDS).toISOString(),
+				email: identity.email,
+				emailVerified: true,
+				groups: [],
+				isPlatformOperator: false,
+				issuer: identity.issuer,
+				name: identity.displayName,
+				siloId: identity.siloId,
+				sub: identity.subjectId,
+			},
+		} as never;
 		next();
 	};
 }
@@ -129,8 +150,17 @@ function _CreateAdmissionMiddleware(identity: DevelopmentIdentity, admission: Au
 		}
 		try
 		{
-			const principal = await admission.admit({ siloId: identity.siloId, issuer: identity.issuer, subject: identity.subjectId });
-			if (principal === null || principal.principalId !== identity.principalId || principal.siloId !== identity.siloId)
+			const principal = await admission.admit({
+				siloId: identity.siloId,
+				issuer: identity.issuer,
+				subject: identity.subjectId,
+			});
+
+			if (
+				!principal
+				|| principal.principalId !== identity.principalId
+				|| principal.siloId !== identity.siloId
+			)
 			{
 				response.status(401).json({ error: "authenticated_principal_required" });
 				return;
@@ -140,7 +170,11 @@ function _CreateAdmissionMiddleware(identity: DevelopmentIdentity, admission: Au
 		}
 		catch (err)
 		{
-			logger.warn({ err, siloId: identity.siloId, subject: identity.subjectId }, "Tier 2 Principal admission is unavailable");
+			logger.warn({
+				err,
+				siloId: identity.siloId,
+				subject: identity.subjectId,
+			}, "Tier 2 Principal admission is unavailable");
 			response.status(503).json({ error: "identity_projection_unavailable" });
 		}
 	};
@@ -152,13 +186,30 @@ function _CreateAuthRouter(identity: DevelopmentIdentity, capabilities: Authenti
 	const router = Router();
 	router.get("/me", async function _ReadSession(_request, response): Promise<void>
 	{
-		const administerOrganization = await capabilities.canAdministerOrganization({ siloId: identity.siloId, issuer: identity.issuer, subject: identity.subjectId });
-		response.json({ authenticated: true, mode: "development", user: { clusterTenant: identity.siloId, email: identity.email, groups: [], isPlatformOperator: false, name: identity.displayName, productCapabilities: { administerOrganization }, sub: identity.subjectId } });
+		const administerOrganization = await capabilities.canAdministerOrganization({
+			siloId: identity.siloId,
+			issuer: identity.issuer,
+			subject: identity.subjectId,
+		});
+		response.json({
+			authenticated: true,
+			mode: "development",
+			user: {
+				clusterTenant: identity.siloId,
+				email: identity.email,
+				groups: [],
+				isPlatformOperator: false,
+				name: identity.displayName,
+				productCapabilities: { administerOrganization },
+				sub: identity.subjectId,
+			},
+		});
 	});
 	router.post("/logout", function _KeepFixedSession(_request, response): void
 	{
 		response.status(204).end();
 	});
+
 	return router;
 }
 

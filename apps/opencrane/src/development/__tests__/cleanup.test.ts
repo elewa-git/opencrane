@@ -22,7 +22,11 @@ describe("Tier 2 process signal cleanup", function _Suite(): void
 
 		processHost.emit("SIGTERM");
 		await vi.waitFor(function _FailureReported(): void { expect(logger.error).toHaveBeenCalledOnce(); });
-		expect(events).toEqual(["server", "telemetry", "console"]);
+		expect(events).toEqual([
+			"server",
+			"telemetry",
+			"console",
+		]);
 		expect(processHost.exitCode).toBe(1);
 		expect(logger.error.mock.calls[0][0]).toMatchObject({ err: expect.any(AggregateError), signal: "SIGTERM" });
 	});

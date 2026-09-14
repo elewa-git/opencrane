@@ -2,7 +2,7 @@ import { PrismaGroupChildAccessRepository } from "./prisma-group-child-access-re
 import { createHash } from "node:crypto";
 import { AgentRevisionState, AgentServiceState, ConversationLifecycle, OrgMemberStatus, Prisma, type PrismaClient } from "@prisma/client";
 import { ProductAuthorizationActions } from "@opencrane/models/authorization";
-import type { MessageEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryKinds, MessageStates, type MessageEntry } from "@opencrane/contracts";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import { ConversationHistoryReader } from "../conversation-history-reader";
@@ -19,7 +19,7 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 		this.histories = new ConversationHistoryReader(history);
 	}
 
-	/** Resolve exact computer coordinates inside the TokenReviewed silo. */
+	/** Resolve exact computer coordinates inside the server-selected silo. */
 	public async resolve(siloId: string, computerId: string)
 	{
 		const row = await this.prisma.conversation.findFirst({ where: { siloId, computerId }, select: { id: true, computerAgentIdentityId: true, computerProfileRevisionId: true } });
@@ -31,12 +31,17 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 	{
 		const { siloId, conversationId, computerId, agentIdentityId } = command.computer;
 		const history = await this.histories.read({ siloId, conversationId });
-		const messages = history.entries.filter((entry): entry is MessageEntry => entry.kind === "message" && entry.state === "completed");
-		const lastAgent = messages.findLastIndex(entry => entry.author.kind === "agent");
-		const pending = messages.slice(lastAgent + 1).findLast(entry => entry.author.kind === "human" && (entry.addressedAgentIdentityId === null || entry.addressedAgentIdentityId === agentIdentityId));
+		const messages = history.entries.filter((entry): entry is MessageEntry => entry.kind === ConversationEntryKinds.Message && entry.state === MessageStates.Completed);
+		const lastAgent = messages.findLastIndex(entry => entry.author.kind === ConversationAuthorKinds.Agent);
+		const pending = messages.slice(lastAgent + 1).findLast(entry =>
+			entry.author.kind === ConversationAuthorKinds.Human
+			&& (
+				entry.addressedAgentIdentityId === null
+				|| entry.addressedAgentIdentityId === agentIdentityId
+			));
 		if (pending === undefined)
 			return null;
-		if (pending.author.kind !== "human")
+		if (pending.author.kind !== ConversationAuthorKinds.Human)
 			throw new Error("Conversation computer turn requires a pending human entry");
 		const pendingAuthor = pending.author;
 		const expectedRevision = BigInt(history.entries.at(-1)?.position ?? "0");

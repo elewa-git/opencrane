@@ -95,7 +95,7 @@ Tier 2 keeps the live gateways and production route table, but directs them to t
 development server through a separate build configuration:
 
 ```bash
-npm exec nx run opencrane-ui:serve:tier2 -- --host local-development.localhost --port 4200
+npm exec nx run opencrane-ui:serve-browser:tier2 -- --host local-development.localhost --port 4200
 ```
 
 The root `npm run dev:tier2*` commands own this child process in normal use. The distinct

@@ -1,16 +1,17 @@
-import { _CONVERSATION_TOOL_SELECTED_EVENT, _ConversationToolSelectionEvent, _ReadConversationToolSelection } from "./conversation-computer-tool-selection";
-import type { ConversationComputerContinuationReservation, ConversationComputerToolSelection } from "./conversation-computer-continuation.types";
-import { _ConversationModelReservationEvent, _ReadConversationModelReservation, _ReadConversationContinuationReservation } from "./conversation-computer-model-reservation";
-import type { ConversationComputerModelReservation } from "./conversation-computer-model.types";
 import { createHash } from "node:crypto";
+
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
-
+import { ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _ReadBoundConversationWriterIntent } from "./bound-conversation-writer";
 import { _ConversationComputerActiveTurnStreamName } from "./conversation-computer-activity";
-import type { ConversationComputerOutputDecision, ConversationComputerTurnOutputReceipt, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
+import type { ConversationComputerContinuationReservation, ConversationComputerToolSelection } from "./conversation-computer-continuation.types";
+import { _ConversationModelReservationEvent, _ReadConversationModelReservation, _ReadConversationContinuationReservation } from "./conversation-computer-model-reservation";
+import type { ConversationComputerModelReservation } from "./conversation-computer-model.types";
+import { _CONVERSATION_TOOL_SELECTED_EVENT, _ConversationToolSelectionEvent, _ReadConversationToolSelection } from "./conversation-computer-tool-selection";
+import type { ConversationComputerOutputDecision, ConversationComputerTurnOutputReceipt, ConversationComputerTurnStore, FrozenConversationComputerTurn, StoredFrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 import type { ConversationComputerLeaseCoordinates } from "./conversation-computers";
 import { _ValidatedConversationComputerRealization } from "./conversation-computers";
 
@@ -332,25 +333,32 @@ function _Serializable(turn: FrozenConversationComputerTurn): Record<string, unk
 
 function _Metadata(turn: FrozenConversationComputerTurn): Record<string, unknown>
 {
-	return { siloId: turn.siloId, computerId: turn.computerId, leaseId: turn.lease.leaseId, generation: turn.lease.leaseGeneration, bootstrapId: turn.bootstrapId };
+	return {
+		siloId: turn.siloId,
+		computerId: turn.computerId,
+		leaseId: turn.lease.leaseId,
+		generation: turn.lease.leaseGeneration,
+		bootstrapId: turn.bootstrapId,
+	};
 }
-
-/** Shape of the frozen event data with its realization discriminant and string stream revision. */
-type _StoredFrozenTurn = Omit<FrozenConversationComputerTurn, "lease" | "binding" | "outputSourceCommandId" | "outputReceipt" | "toolSelection" | "continuationReservation" | "modelReservation"> & { readonly generation: number; readonly leaseId: string; readonly realization: FrozenConversationComputerTurn["lease"]["realization"]; readonly binding: Omit<FrozenConversationComputerTurn["binding"], "expectedRevision"> & { readonly expectedRevision: string } };
 
 /** Rebuild the in-memory record from the stored event, gathering the flat lease fields into the `lease` bundle. */
 function _Frozen(event: HistoryRecordedEvent, bootstrapId: string): FrozenConversationComputerTurn
 {
 	if (event.type !== _FROZEN_EVENT || event.id !== bootstrapId || event.streamName !== _Stream(bootstrapId))
 		throw new Error("Conversation computer turn received an invalid frozen event");
-	const value = event.data["turn"] as _StoredFrozenTurn;
+	const value = event.data["turn"] as StoredFrozenConversationComputerTurn;
 	if (value?.bootstrapId !== bootstrapId || typeof value.binding?.expectedRevision !== "string" || typeof value.compile?.digest !== "string" || typeof value.compile.runId !== "string" || typeof value.compile.attempt !== "number" || typeof value.compile.promptCompilerVersion !== "string")
 		throw new Error("Conversation computer turn received malformed frozen data");
 	return {
 		bootstrapId: value.bootstrapId,
 		siloId: value.siloId,
 		computerId: value.computerId,
-		lease: { leaseId: value.leaseId, leaseGeneration: value.generation, realization: _ValidatedConversationComputerRealization(value.realization) },
+		lease: {
+			leaseId: value.leaseId,
+			leaseGeneration: value.generation,
+			realization: _ValidatedConversationComputerRealization(value.realization),
+		},
 		binding: { ...value.binding, expectedRevision: BigInt(value.binding.expectedRevision) },
 		latestPendingEntryId: value.latestPendingEntryId,
 		modelAlias: value.modelAlias,
@@ -384,9 +392,19 @@ function _OutputIntent(turn: FrozenConversationComputerTurn, value: unknown): Co
 {
 	const intent = _ReadBoundConversationWriterIntent(turn.binding, value);
 	const entry = intent.event.data.entry;
-	if (intent.event.id !== _OutputReservation(turn).invocationFence || entry.kind !== "message" || entry.state !== "completed" || entry.blocks.length !== 1 || entry.blocks[0].kind !== "text"
-		|| entry.replyToEntryId !== turn.latestPendingEntryId || entry.addressedAgentIdentityId !== null || entry.activation !== "none"
-		|| entry.visibility.audience !== "conversation" || entry.causationId !== turn.latestPendingEntryId || entry.correlationId !== turn.latestPendingEntryId)
+	if (
+		intent.event.id !== _OutputReservation(turn).invocationFence
+			|| entry.kind !== ConversationEntryKinds.Message
+		|| entry.state !== MessageStates.Completed
+		|| entry.blocks.length !== 1
+		|| entry.blocks[0].kind !== ConversationMessageContentBlockKinds.Text
+		|| entry.replyToEntryId !== turn.latestPendingEntryId
+		|| entry.addressedAgentIdentityId !== null
+		|| entry.activation !== "none"
+		|| entry.visibility.audience !== "conversation"
+		|| entry.causationId !== turn.latestPendingEntryId
+		|| entry.correlationId !== turn.latestPendingEntryId
+	)
 		throw new Error("Conversation computer output decision has a different answer shape");
 	return intent;
 }

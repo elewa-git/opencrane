@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { KurrentDBClient } from "@kurrent/kurrentdb-client";
 import { HistoryExpectedRevisions, _KurrentHistoryStore } from "@opencrane/backend/server/infra/history-store";
+import { ConversationAuthorKinds, ConversationEntryKinds } from "@opencrane/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { ConversationHistoryAuthority } from "../conversation-history-authority";
@@ -42,7 +43,7 @@ function _command(siloId: string, conversationId: string, expectedRevision: bigi
 			id,
 			conversationId,
 			position: (expectedRevision + 1n).toString(),
-			author: { kind: "agent", agentIdentityId: "identity-1", agentServiceId: "service-1", name: "Archive", avatarArtifactRevisionId: null },
+			author: { kind: ConversationAuthorKinds.Agent, agentIdentityId: "identity-1", agentServiceId: "service-1", name: "Archive", avatarArtifactRevisionId: null },
 			provenance: "agent-authored",
 			visibility: { audience: "conversation" },
 			runId: "run-1",
@@ -51,7 +52,7 @@ function _command(siloId: string, conversationId: string, expectedRevision: bigi
 			idempotencyKey: id,
 			occurredAt: "2026-09-01T00:00:00.000Z",
 			attestation: null,
-			kind: "a2ui",
+			kind: ConversationEntryKinds.A2UI,
 			surfaceId: "surface-1",
 			a2uiSchemaVersion: "0.8",
 			operation: "remove",

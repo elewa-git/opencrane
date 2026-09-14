@@ -8,7 +8,14 @@ import { _ComputerScopeOf, _LeaseScopeOf, type ConversationComputerHistory, type
 /** Checks that the three policy durations are positive, increasing where required, and safe integers. */
 export function _ValidateConversationComputerIdlePolicy(policy: ConversationComputerIdlePolicy): void
 {
-	if (!Number.isSafeInteger(policy.staleAfterMilliseconds) || !Number.isSafeInteger(policy.retireAfterMilliseconds) || !Number.isSafeInteger(policy.leaseTtlMilliseconds) || policy.staleAfterMilliseconds <= 0 || policy.retireAfterMilliseconds <= policy.staleAfterMilliseconds || policy.leaseTtlMilliseconds <= 0)
+	if (
+		!Number.isSafeInteger(policy.staleAfterMilliseconds)
+		|| !Number.isSafeInteger(policy.retireAfterMilliseconds)
+		|| !Number.isSafeInteger(policy.leaseTtlMilliseconds)
+		|| policy.staleAfterMilliseconds <= 0
+		|| policy.retireAfterMilliseconds <= policy.staleAfterMilliseconds
+		|| policy.leaseTtlMilliseconds <= 0
+	)
 		throw new Error("Conversation computer idle policy requires increasing positive deadlines and a positive lease lifetime");
 }
 
@@ -30,12 +37,12 @@ export function _ConversationComputerIdleMilliseconds(computer: ConversationComp
 }
 
 /** Returns true once less than half of the lease lifetime remains, or the process deadline lags the lease. */
-export function _ConversationComputerRenewalDue(lease: ComputerLease, claimShutdownTime: string | null, policy: ConversationComputerIdlePolicy, now: Date): boolean
+export function _ConversationComputerRenewalDue(lease: ComputerLease, processShutdownTime: string | null, policy: ConversationComputerIdlePolicy, now: Date): boolean
 {
 	if (Date.parse(lease.expiresAt) - now.getTime() <= policy.leaseTtlMilliseconds / 2)
 		return true;
 	// Agent Sandbox drops fractional seconds when it writes the Kubernetes shutdown time.
-	return claimShutdownTime !== null && Math.floor(Date.parse(claimShutdownTime) / 1000) < Math.floor(Date.parse(lease.expiresAt) / 1000);
+	return processShutdownTime !== null && Math.floor(Date.parse(processShutdownTime) / 1000) < Math.floor(Date.parse(lease.expiresAt) / 1000);
 }
 
 /**
@@ -58,24 +65,45 @@ export class ConversationComputerLifecycleAuthority
 		if (Number.isNaN(command.now.getTime()))
 			throw new Error("Conversation computer lifecycle requires a valid server time");
 		const current = await this.computers.load(command);
-		if (current === null || current.computer.state === ConversationComputerStates.Cold || current.computer.state === ConversationComputerStates.RecoveryRequired || current.computer.state === ConversationComputerStates.Retired)
+
+		if (
+			!current
+			|| current.computer.state === ConversationComputerStates.Cold
+			|| current.computer.state === ConversationComputerStates.RecoveryRequired
+			|| current.computer.state === ConversationComputerStates.Retired
+		)
 			return "terminal";
+
 		if (current.lease !== null && current.computer.state === ConversationComputerStates.Cooling && current.lease.state === ComputerLeaseStates.Released)
 			return this._finishRelease(current, current.lease, command);
-		if (current.lease === null || current.lease.state === ComputerLeaseStates.Released || current.lease.state === ComputerLeaseStates.Lost)
+		if (
+			!current.lease
+			|| current.lease.state === ComputerLeaseStates.Released
+			|| current.lease.state === ComputerLeaseStates.Lost
+		)
 			return "current";
 		const lease = current.lease;
 
 		// 1. Record a lease whose realization can no longer report work before anything trusts it.
 		const expired = Date.parse(lease.expiresAt) <= command.now.getTime();
 		const realization = expired ? null : await this.realizer.inspect(this._realizationCommand(current.computer, lease));
-		if (expired || (lease.state === ComputerLeaseStates.Active && realization === null))
+		if (
+			expired
+			|| (
+				lease.state === ComputerLeaseStates.Active
+				&& !realization
+			)
+		)
 			return this._markLost(current, lease, command);
 		if (lease.state !== ComputerLeaseStates.Active)
 			return "current";
 
 		// 2. Measure idleness from turn activity, and retire a cooling computer before any renewal.
-		const activity = await this.activity.lastActivity({ siloId: current.computer.siloId, computerId: current.computer.id, lease: _LeaseScopeOf(lease) });
+		const activity = await this.activity.lastActivity({
+			siloId: current.computer.siloId,
+			computerId: current.computer.id,
+			lease: _LeaseScopeOf(lease),
+		});
 		const idleMilliseconds = _ConversationComputerIdleMilliseconds(current.computer, activity, command.now);
 		if (current.computer.state === ConversationComputerStates.Cooling && idleMilliseconds >= this.policy.retireAfterMilliseconds)
 			return this._checkpointAndRelease(current, lease, command);
@@ -85,7 +113,12 @@ export class ConversationComputerLifecycleAuthority
 			return "current";
 		if (current.computer.state === ConversationComputerStates.Warm)
 		{
-			await this.computers.append({ expectedRevision: current.revision, eventId: command.eventId, computer: { ...current.computer, state: ConversationComputerStates.Cooling }, lease });
+			await this.computers.append({
+				expectedRevision: current.revision,
+				eventId: command.eventId,
+				computer: { ...current.computer, state: ConversationComputerStates.Cooling },
+				lease,
+			});
 			return "cooling";
 		}
 		return "cooling";
@@ -97,7 +130,12 @@ export class ConversationComputerLifecycleAuthority
 		const expiresAt = new Date(command.now.getTime() + this.policy.leaseTtlMilliseconds).toISOString();
 		if (await this.realizer.renew({ ...this._realizationCommand(current.computer, lease), expiresAt }) === "absent")
 			return this._markLost(current, lease, command);
-		await this.computers.append({ expectedRevision: current.revision, eventId: _DeterministicUuid("computer-lease-renewed", lease.id, current.revision.toString()), computer: current.computer, lease: { ...lease, expiresAt } });
+		await this.computers.append({
+			expectedRevision: current.revision,
+			eventId: _DeterministicUuid("computer-lease-renewed", lease.id, current.revision.toString()),
+			computer: current.computer,
+			lease: { ...lease, expiresAt },
+		});
 		const projection = _LeaseProjectionCommand(current.computer, lease);
 		if (!await this.attempts.extendActiveLease({ computer: projection.computer, lease: { ..._LeaseScopeOf(lease), expiresAt } }))
 			throw new Error("Conversation computer active lease projection changed before renewal completion");
@@ -111,7 +149,20 @@ export class ConversationComputerLifecycleAuthority
 			return "active_attempt";
 		await this.realizer.release(this._realizationCommand(current.computer, lease));
 		const lostAt = command.now.toISOString();
-		await this.computers.append({ expectedRevision: current.revision, eventId: _DeterministicUuid("computer-lease-lost", lease.id, current.revision.toString()), computer: { ...current.computer, state: ConversationComputerStates.Cold, updatedAt: lostAt }, lease: { ...lease, state: ComputerLeaseStates.Lost, releasedAt: lostAt } });
+		await this.computers.append({
+			expectedRevision: current.revision,
+			eventId: _DeterministicUuid("computer-lease-lost", lease.id, current.revision.toString()),
+			computer: {
+				...current.computer,
+				state: ConversationComputerStates.Cold,
+				updatedAt: lostAt,
+			},
+			lease: {
+				...lease,
+				state: ComputerLeaseStates.Lost,
+				releasedAt: lostAt,
+			},
+		});
 		return "lost";
 	}
 
@@ -122,7 +173,19 @@ export class ConversationComputerLifecycleAuthority
 		const releasedAt = command.now.toISOString();
 		if (!await this.attempts.clearActiveLease(_LeaseProjectionCommand(current.computer, lease)))
 			return "active_attempt";
-		await this.computers.append({ expectedRevision: current.revision, eventId: command.eventId, computer: { ...current.computer, workspaceCheckpoint: checkpoint ?? current.computer.workspaceCheckpoint }, lease: { ...lease, state: ComputerLeaseStates.Released, releasedAt } });
+		await this.computers.append({
+			expectedRevision: current.revision,
+			eventId: command.eventId,
+			computer: {
+				...current.computer,
+				workspaceCheckpoint: checkpoint ?? current.computer.workspaceCheckpoint,
+			},
+			lease: {
+				...lease,
+				state: ComputerLeaseStates.Released,
+				releasedAt,
+			},
+		});
 		const released = await this.computers.load(command);
 		if (released === null || released.lease?.state !== ComputerLeaseStates.Released)
 			throw new Error("Conversation computer checkpoint release history is unavailable");
@@ -141,14 +204,30 @@ export class ConversationComputerLifecycleAuthority
 	private async _coolToZero(current: CurrentConversationComputer, lease: ComputerLease, command: ConversationComputerLifecycleCommand): Promise<ConversationComputerLifecycleOutcome>
 	{
 		await this.realizer.release(this._realizationCommand(current.computer, lease));
-		await this.computers.append({ expectedRevision: current.revision, eventId: _CompletionEventId(command.eventId), computer: { ...current.computer, state: ConversationComputerStates.Cold, updatedAt: command.now.toISOString() }, lease });
-		return current.computer.workspaceCheckpoint === null ? "retired_without_checkpoint" : "retired_to_checkpoint";
+		await this.computers.append({
+			expectedRevision: current.revision,
+			eventId: _CompletionEventId(command.eventId),
+			computer: {
+				...current.computer,
+				state: ConversationComputerStates.Cold,
+				updatedAt: command.now.toISOString(),
+			},
+			lease,
+		});
+		return !current.computer.workspaceCheckpoint ? "retired_without_checkpoint" : "retired_to_checkpoint";
 	}
 
 	/** Binds one process operation to the realization stored with the lease. */
 	private _realizationCommand(computer: ConversationComputer, lease: ComputerLease)
 	{
-		return { computerId: computer.id, lease: { leaseId: lease.id, leaseGeneration: lease.generation, realization: lease.realization } };
+		return {
+			computerId: computer.id,
+			lease: {
+				leaseId: lease.id,
+				leaseGeneration: lease.generation,
+				realization: lease.realization,
+			},
+		};
 	}
 }
 

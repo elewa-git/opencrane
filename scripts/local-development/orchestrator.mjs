@@ -15,17 +15,37 @@ import { createLocalDevelopmentSecrets, removeLocalDevelopmentSecrets, removePer
 /** Runs one command plan through the shared command runner. */
 async function _runSpecification(specification, configuration)
 {
-	await runLocalCommand(specification.command, specification.arguments, { environment: specification.environment, signal: configuration.abortSignal });
+	await runLocalCommand(specification.command, specification.arguments, {
+		environment: specification.environment,
+		signal: configuration.abortSignal
+	});
 }
 
 /** Validates required host commands and immutable repository inputs before acquiring resources. */
 async function _validateInputs(configuration)
 {
-	for (const [command, argumentsList] of [["docker", ["version"]], ["npm", ["--version"]], ["npx", ["--version"]], ["openssl", ["version"]], ["curl", ["--version"]], ["jq", ["--version"]], ["base64", []]])
+	const commandChecks = [
+		["docker", ["version"]],
+		["npm", ["--version"]],
+		["npx", ["--version"]],
+		["openssl", ["version"]],
+		["curl", ["--version"]],
+		["jq", ["--version"]],
+		["base64", []]
+	];
+
+	for (const [command, argumentsList] of commandChecks)
 	{
 		await runLocalCommand(command, argumentsList, { signal: configuration.abortSignal });
 	}
-	for (const requiredPath of [configuration.baselinePath, configuration.seedPath, configuration.kurrentBootstrapPath])
+
+	const requiredPaths = [
+		configuration.baselinePath,
+		configuration.seedPath,
+		configuration.kurrentBootstrapPath
+	];
+
+	for (const requiredPath of requiredPaths)
 	{
 		if (!fs.existsSync(requiredPath))
 		{
@@ -38,14 +58,17 @@ async function _validateInputs(configuration)
 export async function prepareModelCredentials(configuration)
 {
 	const plan = createModelCredentialPlan(configuration);
+
 	if (plan.kind === "simulated")
 	{
 		return plan;
 	}
+
 	if (plan.kind === "remote")
 	{
 		return { ...plan, remoteMasterKey: readOwnerOnlyCredentialFile(plan.remoteMasterKeyPath) };
 	}
+
 	return { ...plan, providerKey: readOwnerOnlyCredentialFile(plan.selection.providerKeyPath) };
 }
 
@@ -87,23 +110,28 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 		{
 			operations.processHost.kill(0, "SIGCONT");
 		}
+
 		_stop();
 	}
+
 	operations.processHost.once("SIGINT", _stop);
 	operations.processHost.once("SIGTERM", _stop);
 	operations.processHost.once("SIGTSTP", _resumeAndStop);
 	let primaryFailure;
+
 	try
 	{
 		await operations.validateInputs(sessionConfiguration);
 		const modelCredentials = sessionConfiguration.profile === "core"
 			? undefined
 			: await operations.prepareModelCredentials(sessionConfiguration);
+
 		if (sessionConfiguration.reset)
 		{
 			await operations.resetOwnedPersistentState(sessionConfiguration, { signal: shutdown.signal });
 			operations.removePersistentLocalDevelopmentSecrets(sessionConfiguration);
 		}
+
 		const secrets = await operations.createLocalDevelopmentSecrets({ ...sessionConfiguration, modelCredentials });
 		ledger.acquire("temporary secrets", async function _removeSecrets() { operations.removeLocalDevelopmentSecrets(secrets); });
 		const provider = modelCredentials?.kind === "local"
@@ -128,6 +156,7 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 		ledger.acquire("KurrentDB container", async function _removeKurrent() { await operations.removeOwnedDockerResource("container", sessionConfiguration.kurrentContainerName, sessionConfiguration); });
 		await operations.runSpecification(createKurrentCommand(sessionConfiguration, secrets), sessionConfiguration);
 		await operations.bootstrapKurrent(sessionConfiguration, secrets);
+
 		if (provider)
 		{
 			await operations.removeOwnedDockerResource("container", sessionConfiguration.liteLLMContainerName, sessionConfiguration);
@@ -135,6 +164,7 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 			await operations.runSpecification(createLiteLLMCommand(sessionConfiguration, secrets, provider), sessionConfiguration);
 			await operations.waitForLocalLiteLLM(sessionConfiguration, secrets);
 		}
+
 		process.stdout.write(`Starting Tier 2 ${sessionConfiguration.developmentProfile}${provider ? ` with ${provider.selection.provider.name}/${provider.selection.model}` : ""}\n`);
 		process.stdout.write(`Open the private Tier 2 browser URL: http://local-development.localhost:4200/?development-session=${encodeURIComponent(secrets.browserSessionCredential)}\n`);
 		await operations.runDevelopmentProcesses(createApplicationCommands(sessionConfiguration, secrets), sessionConfiguration.repositoryRoot, { signal: shutdown.signal });
@@ -151,6 +181,7 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 		operations.processHost.removeListener("SIGINT", _stop);
 		operations.processHost.removeListener("SIGTERM", _stop);
 		operations.processHost.removeListener("SIGTSTP", _resumeAndStop);
+
 		try
 		{
 			await ledger.releaseAll();
@@ -162,6 +193,7 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 				: cleanupFailure;
 		}
 	}
+
 	if (primaryFailure)
 	{
 		throw primaryFailure;

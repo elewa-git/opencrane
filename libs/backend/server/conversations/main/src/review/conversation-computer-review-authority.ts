@@ -1,6 +1,7 @@
-import { ConversationComputerHistory, _LeaseScopeOf } from "../conversation-computers";
-import { ProductAuthorizationActions } from "@opencrane/models/authorization";
 import { ConversationComputerRealizationKinds } from "@opencrane/contracts";
+import { ProductAuthorizationActions } from "@opencrane/models/authorization";
+
+import { ConversationComputerHistory, _LeaseScopeOf } from "../conversation-computers";
 import type { ConversationMetadataAuthority } from "../conversation-metadata.types";
 
 import type { ConversationComputerReviewAuthority, ConversationComputerReviewCaller, ConversationComputerReviewCredentialDeriver, ConversationComputerReviewRoute } from "./conversation-computer-review.types";
@@ -31,12 +32,30 @@ export class _ConversationComputerReviewAuthority implements ConversationCompute
 		const coordinates = await this.metadata.reviewCoordinates(caller, conversationId, action);
 		if (coordinates === null)
 			return null;
-		const current = await this.history.loadActiveLease({ computer: { siloId: caller.siloId, conversationId, computerId: coordinates.computerId, agentIdentityId: coordinates.agentIdentityId }, profileRevisionId: coordinates.profileRevisionId, nowEpochMilliseconds: Date.now() });
+		const current = await this.history.loadActiveLease({
+			computer: {
+				siloId: caller.siloId,
+				conversationId,
+				computerId: coordinates.computerId,
+				agentIdentityId: coordinates.agentIdentityId,
+			},
+			profileRevisionId: coordinates.profileRevisionId,
+			nowEpochMilliseconds: Date.now(),
+		});
 		if (current.lease.realization.kind !== ConversationComputerRealizationKinds.AgentSandbox || current.lease.realization.sandboxId === null)
 			return null;
 		if (current.lease.realization.serviceFQDN === null)
 			return null;
-		const reviewCredential = this.credentials.bearer({ siloId: caller.siloId, computerId: coordinates.computerId, lease: _LeaseScopeOf(current.lease) });
-		return { reviewCredential, sandboxId: current.lease.realization.sandboxId, serviceFQDN: current.lease.realization.serviceFQDN };
+		const reviewCredential = this.credentials.bearer({
+			siloId: caller.siloId,
+			computerId: coordinates.computerId,
+			lease: _LeaseScopeOf(current.lease),
+		});
+
+		return {
+			reviewCredential,
+			sandboxId: current.lease.realization.sandboxId,
+			serviceFQDN: current.lease.realization.serviceFQDN,
+		};
 	}
 }

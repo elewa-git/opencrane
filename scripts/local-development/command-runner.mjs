@@ -2,15 +2,31 @@ import { spawn } from "node:child_process";
 
 import { _SignalDevelopmentProcessTree } from "./process-group.mjs";
 
-const _TOOLCHAIN_ENVIRONMENT_NAMES = ["COLORTERM", "DOCKER_CERT_PATH", "DOCKER_CONTEXT", "DOCKER_HOST", "DOCKER_TLS_VERIFY", "FORCE_COLOR", "HOME", "LANG", "LC_ALL", "NO_COLOR", "PATH", "SHELL", "TERM", "TMPDIR"];
+const _TOOLCHAIN_ENVIRONMENT_NAMES = [
+	"COLORTERM",
+	"DOCKER_CERT_PATH",
+	"DOCKER_CONTEXT",
+	"DOCKER_HOST",
+	"DOCKER_TLS_VERIFY",
+	"FORCE_COLOR",
+	"HOME",
+	"LANG",
+	"LC_ALL",
+	"NO_COLOR",
+	"PATH",
+	"SHELL",
+	"TERM",
+	"TMPDIR"
+];
 
 /** Keeps tool discovery and terminal settings without forwarding unrelated shell credentials. */
 export function createLocalChildEnvironment(parentEnvironment, explicitEnvironment = {})
 {
-	const toolchain = Object.fromEntries(_TOOLCHAIN_ENVIRONMENT_NAMES.flatMap(function _copyAllowed(name)
+	const toolchain = Object.fromEntries(_TOOLCHAIN_ENVIRONMENT_NAMES.flatMap((name) =>
 	{
 		return typeof parentEnvironment[name] === "string" ? [[name, parentEnvironment[name]]] : [];
 	}));
+
 	return { ...toolchain, ...explicitEnvironment };
 }
 
@@ -24,7 +40,13 @@ export async function runLocalCommand(command, argumentsList, options = {})
 		cwd: options.cwd,
 		detached: processHost.platform !== "win32",
 		env: createLocalChildEnvironment(processHost.env, options.environment),
-		stdio: options.inherit ? "inherit" : ["pipe", "pipe", "pipe"]
+		stdio: options.inherit
+			? "inherit"
+			: [
+				"pipe",
+				"pipe",
+				"pipe"
+			]
 	});
 
 	return await new Promise(function _waitForCommand(resolve, reject)
@@ -80,11 +102,19 @@ export async function runLocalCommand(command, argumentsList, options = {})
 					return;
 				}
 
-				const result = { status, signal, stdout, stderr };
+				const result = {
+					status,
+					signal,
+					stdout,
+					stderr
+				};
 
 				if (status !== 0 && !options.acceptFailure)
 				{
-					const detail = stderr.trim() || stdout.trim() || signal || `exit ${status}`;
+					const detail = stderr.trim()
+						|| stdout.trim()
+						|| signal
+						|| `exit ${status}`;
 					reject(new Error(`${command} ${argumentsList.join(" ")} failed: ${detail}`));
 					return;
 				}

@@ -29,9 +29,9 @@ test("selection consumes the model-routing public catalogue without divergence",
 {
 	const providers = readLocalProviderCatalog();
 	const publicCatalog = JSON.parse(fs.readFileSync(_PUBLIC_CATALOG_PATH, "utf8"));
-	const projectedCatalog = Object.fromEntries(providers.map(function _Project(provider)
-	{
+	const projectedCatalog = Object.fromEntries(providers.map((provider) => {
 		const publicProvider = publicCatalog[provider.name];
+
 		return [provider.name, {
 			litellmProvider: provider.litellmProvider,
 			defaultModel: provider.defaultModel,
@@ -39,20 +39,26 @@ test("selection consumes the model-routing public catalogue without divergence",
 			embeddingModel: publicProvider.embeddingModel,
 		}];
 	}));
-	const expectedCatalog = Object.fromEntries(Object.entries(publicCatalog).map(function _Project([name, provider])
-	{
+	const expectedCatalog = Object.fromEntries(Object.entries(publicCatalog).map(([name, provider]) => {
 		return [name, {
 			litellmProvider: provider.litellmProvider,
-			defaultModel: provider.models.find(function _Default(model) { return model.className === provider.defaultClass; })?.slug,
-			models: provider.models.map(function _Slug(model) { return model.slug; }),
+			defaultModel: provider.models.find((model) => model.className === provider.defaultClass)?.slug,
+			models: provider.models.map((model) => model.slug),
 			embeddingModel: provider.embeddingModel,
 		}];
 	}));
 
 	assert.deepEqual(projectedCatalog, expectedCatalog);
-	assert.deepEqual(providers.map(function _Name(provider) { return provider.name; }).sort(), ["anthropic", "deepseek", "gemini", "glm", "mistral", "openai"]);
-	assert.equal(providers.find(function _OpenAi(provider) { return provider.name === "openai"; })?.defaultModel, "openai/gpt-5.5");
-	assert.equal(providers.find(function _Glm(provider) { return provider.name === "glm"; })?.litellmProvider, "zai");
+	assert.deepEqual(providers.map((provider) => provider.name).sort(), [
+		"anthropic",
+		"deepseek",
+		"gemini",
+		"glm",
+		"mistral",
+		"openai",
+	]);
+	assert.equal(providers.find((provider) => provider.name === "openai")?.defaultModel, "openai/gpt-5.5");
+	assert.equal(providers.find((provider) => provider.name === "glm")?.litellmProvider, "zai");
 });
 
 test("selection is deterministic and enforces provider ownership", function _Selection()
@@ -65,7 +71,14 @@ test("selection is deterministic and enforces provider ownership", function _Sel
 		assert.equal(resolveLocalProviderSelection({ repositoryRoot }).provider.name, "anthropic");
 		assert.equal(resolveLocalProviderSelection({ repositoryRoot, provider: "openai" }).model, "openai/gpt-5.5");
 		assert.equal(resolveLocalProviderSelection({ repositoryRoot, model: "openai/gpt-5.4" }).provider.name, "openai");
-		assert.throws(function _Mismatch() { resolveLocalProviderSelection({ repositoryRoot, provider: "anthropic", model: "openai/gpt-5.4" }); }, /does not belong/);
+		assert.throws(function _Mismatch()
+		{
+			resolveLocalProviderSelection({
+				repositoryRoot,
+				provider: "anthropic",
+				model: "openai/gpt-5.4",
+			});
+		}, /does not belong/);
 	}
 	finally
 	{
@@ -98,7 +111,11 @@ test("generated configuration contains only the selected alias and environment r
 	{
 		_WriteKey(repositoryRoot, "openai", "never-write-this-secret");
 		const generatedDirectory = path.join(repositoryRoot, "generated");
-		const selection = resolveLocalProviderSelection({ repositoryRoot, provider: "openai", model: "openai/gpt-5.4" });
+		const selection = resolveLocalProviderSelection({
+			repositoryRoot,
+			provider: "openai",
+			model: "openai/gpt-5.4",
+		});
 		const prepared = prepareLocalLiteLLMConfiguration({ selection, generatedDirectory });
 		const content = fs.readFileSync(prepared.generatedConfigPath, "utf8");
 		assert.match(content, /model_name: auto/);
@@ -121,8 +138,19 @@ test("remote and simulated alternatives stay isolated from local provider creden
 		const remoteKey = path.join(repositoryRoot, "remote-admin-key");
 		fs.writeFileSync(remoteKey, "remote-secret\n", { mode: 0o600 });
 		assert.deepEqual(createModelCredentialPlan({ alternative: "simulated-llm", repositoryRoot }), { kind: "simulated" });
-		assert.equal(createModelCredentialPlan({ alternative: "remote-llm", repositoryRoot, remoteLiteLLMMasterKeyFile: remoteKey }).remoteMasterKeyPath, remoteKey);
-		assert.throws(function _Reuse() { createModelCredentialPlan({ alternative: "remote-llm", repositoryRoot, remoteLiteLLMMasterKeyFile: localKey }); }, /must not reuse/);
+		assert.equal(createModelCredentialPlan({
+			alternative: "remote-llm",
+			repositoryRoot,
+			remoteLiteLLMMasterKeyFile: remoteKey,
+		}).remoteMasterKeyPath, remoteKey);
+		assert.throws(function _Reuse()
+		{
+			createModelCredentialPlan({
+				alternative: "remote-llm",
+				repositoryRoot,
+				remoteLiteLLMMasterKeyFile: localKey,
+			});
+		}, /must not reuse/);
 	}
 	finally
 	{

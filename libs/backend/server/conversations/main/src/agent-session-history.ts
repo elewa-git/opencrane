@@ -1,5 +1,5 @@
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
-import { AgentIdentityStates, ConversationComputerStates, type AgentIdentity, type ConversationComputer } from "@opencrane/contracts";
+import { AgentIdentityKinds, AgentIdentityStates, ConversationComputerStates, type AgentIdentity, type ConversationComputer } from "@opencrane/contracts";
 import { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
 import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { ConversationModes } from "@opencrane/models/conversations";
@@ -40,7 +40,15 @@ export class AgentSessionHistory
 	/** Creates or verifies ordinary genesis; a duplicate append cannot change its mode or creator. */
 	public async createOrdinaryGenesis(caller: ConversationCaller, conversationId: string, mode: "direct" | "group"): Promise<void>
 	{
-		const genesis = { schemaVersion: 1 as const, conversationId, siloId: caller.siloId, mode, agentServiceId: null, createdByPrincipalId: caller.principalId, createdAt: new Date().toISOString() };
+		const genesis = {
+			schemaVersion: 1 as const,
+			conversationId,
+			siloId: caller.siloId,
+			mode,
+			agentServiceId: null,
+			createdByPrincipalId: caller.principalId,
+			createdAt: new Date().toISOString(),
+		};
 		const append = this.authority.genesisAppend(genesis, _DeterministicUuid("conversation-created", conversationId));
 		try
 		{
@@ -59,14 +67,32 @@ export class AgentSessionHistory
 	/** Creates or verifies one active proxied identity for the exact caller principal. */
 	private async _ensureIdentity(caller: ConversationCaller, candidate: AgentSessionCandidate, agentIdentityId: string): Promise<void>
 	{
-		const command = { siloId: caller.siloId, agentIdentityId, agentServiceId: candidate.agentServiceId, principalId: caller.principalId };
+		const command = {
+			siloId: caller.siloId,
+			agentIdentityId,
+			agentServiceId: candidate.agentServiceId,
+			principalId: caller.principalId,
+		};
 		const existing = await this.identities.load(command);
 		if (existing !== null)
 		{
 			await this.identities.loadActive(command);
 			return;
 		}
-		const identity: AgentIdentity = { schemaVersion: 1, id: agentIdentityId, siloId: caller.siloId, agentServiceId: candidate.agentServiceId, name: candidate.agentName, avatarArtifactRevisionId: null, state: AgentIdentityStates.Active, createdByPrincipalId: caller.principalId, createdAt: new Date().toISOString(), kind: "proxied", proxiedPrincipalId: caller.principalId, delegationPolicyId: "personal-agent-session-v1" };
+		const identity: AgentIdentity = {
+			schemaVersion: 1,
+			id: agentIdentityId,
+			siloId: caller.siloId,
+			agentServiceId: candidate.agentServiceId,
+			name: candidate.agentName,
+			avatarArtifactRevisionId: null,
+			state: AgentIdentityStates.Active,
+			createdByPrincipalId: caller.principalId,
+			createdAt: new Date().toISOString(),
+			kind: AgentIdentityKinds.Proxied,
+			proxiedPrincipalId: caller.principalId,
+			delegationPolicyId: "personal-agent-session-v1",
+		};
 		try
 		{
 			await this.identities.append({ expectedRevision: HistoryExpectedRevisions.NoStream, eventId: _DeterministicUuid("agent-identity-created", agentIdentityId), identity });
@@ -83,8 +109,28 @@ export class AgentSessionHistory
 	private async _ensureGenesisAndComputer(caller: ConversationCaller, candidate: AgentSessionCandidate, coordinates: AgentSessionCoordinates): Promise<void>
 	{
 		const now = new Date().toISOString();
-		const genesis = { schemaVersion: 1 as const, conversationId: coordinates.conversationId, siloId: caller.siloId, mode: "agent_session" as const, agentServiceId: candidate.agentServiceId, createdByPrincipalId: caller.principalId, createdAt: now };
-		const computer: ConversationComputer = { schemaVersion: 1, id: coordinates.computerId, siloId: caller.siloId, conversationId: coordinates.conversationId, agentIdentityId: coordinates.agentIdentityId, profileRevisionId: candidate.profileRevisionId, state: ConversationComputerStates.Cold, leaseGeneration: 1, workspaceCheckpoint: null, createdAt: now, updatedAt: now };
+		const genesis = {
+			schemaVersion: 1 as const,
+			conversationId: coordinates.conversationId,
+			siloId: caller.siloId,
+			mode: "agent_session" as const,
+			agentServiceId: candidate.agentServiceId,
+			createdByPrincipalId: caller.principalId,
+			createdAt: now,
+		};
+		const computer: ConversationComputer = {
+			schemaVersion: 1,
+			id: coordinates.computerId,
+			siloId: caller.siloId,
+			conversationId: coordinates.conversationId,
+			agentIdentityId: coordinates.agentIdentityId,
+			profileRevisionId: candidate.profileRevisionId,
+			state: ConversationComputerStates.Cold,
+			leaseGeneration: 1,
+			workspaceCheckpoint: null,
+			createdAt: now,
+			updatedAt: now,
+		};
 		const genesisAppend = this.authority.genesisAppend(genesis, _DeterministicUuid("conversation-created", coordinates.conversationId));
 		const computerAppend = { streamName: `conversation-computer-${coordinates.computerId}`, expectedRevision: HistoryExpectedRevisions.NoStream, events: [{ id: _DeterministicUuid("conversation-computer-created", coordinates.computerId), type: "opencrane.conversation-computer.v1", data: { computer, lease: null }, metadata: { siloId: caller.siloId, computerId: coordinates.computerId, conversationId: coordinates.conversationId, agentIdentityId: coordinates.agentIdentityId, profileRevisionId: candidate.profileRevisionId } }] };
 		try

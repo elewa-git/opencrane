@@ -2,7 +2,7 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 
 import { ConversationMode, Prisma, type PrismaClient } from "@prisma/client";
 import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
-import { ComputerLeaseStates, type ConversationEntry, type MessageEntry } from "@opencrane/contracts";
+import { ComputerLeaseStates, ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates, type ConversationEntry, type MessageEntry } from "@opencrane/contracts";
 
 import { ConversationHistoryAuthority } from "./conversation-history-authority";
 import { ConversationHistoryAppendOutcomes } from "./conversation-history-authority.types";
@@ -15,9 +15,9 @@ import { ConversationMessageActivations, ConversationMessageAdmissionOutcomes, t
 /** Limits checked-append retries without silently dropping a contending participant message. */
 const _APPEND_ATTEMPTS = 4;
 const _CONVERSATION_AUDIENCE = "conversation";
-const _MESSAGE_ENTRY_KIND = "message";
-const _A2UI_ENTRY_KIND = "a2ui";
-const _TEXT_BLOCK_KIND = "text";
+const _MESSAGE_ENTRY_KIND = ConversationEntryKinds.Message;
+const _A2UI_ENTRY_KIND = ConversationEntryKinds.A2UI;
+const _TEXT_BLOCK_KIND = ConversationMessageContentBlockKinds.Text;
 
 /** Participant authority joining PostgreSQL policy and encrypted payloads to KurrentDB history. */
 export class PrismaSelfConversationHistoryUnitOfWork implements SelfConversationHistoryAuthority
@@ -174,7 +174,40 @@ function _MessageEntry(caller: ConversationCaller, conversationId: string, comma
 {
 	if (caller.externalIssuer === undefined || caller.verifiedAuthenticationAt === undefined)
 		throw new Error("Conversation message admission requires verified requester evidence");
-	return { schemaVersion: 1, id: command.idempotencyKey, conversationId, position, author: { kind: "human", principalId: caller.principalId, participantId: caller.subjectId, issuer: caller.externalIssuer, authenticatedAt: caller.verifiedAuthenticationAt, name: projection.authorName, avatarArtifactRevisionId: null }, provenance: "human-authored", visibility: { audience: "conversation" }, runId: null, causationId: command.idempotencyKey, correlationId: command.idempotencyKey, idempotencyKey: command.idempotencyKey, occurredAt: new Date().toISOString(), attestation: null, kind: "message", state: "completed", blocks: [{ id: randomUUID(), kind: "text", payloadRef: payload.coordinates.payloadRef, ciphertextDigest: payload.ciphertextDigest }], replyToEntryId: null, addressedAgentIdentityId: projection.computerAgentIdentityId, activation: command.activation };
+	return {
+		schemaVersion: 1,
+		id: command.idempotencyKey,
+		conversationId,
+		position,
+		author: {
+			kind: ConversationAuthorKinds.Human,
+			principalId: caller.principalId,
+			participantId: caller.subjectId,
+			issuer: caller.externalIssuer,
+			authenticatedAt: caller.verifiedAuthenticationAt,
+			name: projection.authorName,
+			avatarArtifactRevisionId: null,
+		},
+		provenance: "human-authored",
+		visibility: { audience: "conversation" },
+		runId: null,
+		causationId: command.idempotencyKey,
+		correlationId: command.idempotencyKey,
+		idempotencyKey: command.idempotencyKey,
+		occurredAt: new Date().toISOString(),
+		attestation: null,
+		kind: ConversationEntryKinds.Message,
+		state: MessageStates.Completed,
+		blocks: [{
+			id: randomUUID(),
+			kind: ConversationMessageContentBlockKinds.Text,
+			payloadRef: payload.coordinates.payloadRef,
+			ciphertextDigest: payload.ciphertextDigest,
+		}],
+		replyToEntryId: null,
+		addressedAgentIdentityId: projection.computerAgentIdentityId,
+		activation: command.activation,
+	};
 }
 
 /** Returns whether an entry's immutable visibility includes this participant. */

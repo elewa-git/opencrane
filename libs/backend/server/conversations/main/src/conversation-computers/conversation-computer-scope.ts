@@ -9,7 +9,12 @@ import type { ComputerLease, ComputerScope, ConversationComputer, RealizedLeaseS
  */
 export function _ComputerScopeOf(computer: ConversationComputer): ComputerScope
 {
-	return { siloId: computer.siloId, conversationId: computer.conversationId, computerId: computer.id, agentIdentityId: computer.agentIdentityId };
+	return {
+		siloId: computer.siloId,
+		conversationId: computer.conversationId,
+		computerId: computer.id,
+		agentIdentityId: computer.agentIdentityId,
+	};
 }
 
 /**
@@ -21,5 +26,9 @@ export function _ComputerScopeOf(computer: ConversationComputer): ComputerScope
  */
 export function _LeaseScopeOf(lease: ComputerLease): RealizedLeaseScope
 {
-	return { leaseId: lease.id, leaseGeneration: lease.generation, realization: lease.realization };
+	return {
+		leaseId: lease.id,
+		leaseGeneration: lease.generation,
+		realization: lease.realization,
+	};
 }

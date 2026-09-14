@@ -4,6 +4,7 @@ import type { ExecutionSubjectHumanMembershipEvidence, RevisionBoundaryAttachmen
 import type { JsonValue } from "@opencrane/util";
 
 import type { ExecutionCapabilityEvidence } from "./execution-capability-evidence.types";
+import { ExecutionEvidenceOutcomes } from "./execution-evidence.types";
 
 /** Exact personal identity, requester, service, and revision coordinates presented for rechecking. */
 export interface PersonalExecutionEvidenceCommand
@@ -98,8 +99,8 @@ export enum PersonalExecutionEvidenceDenialReasons
 
 /** Result of one personal execution-evidence load. */
 export type PersonalExecutionEvidenceResult =
-	| { readonly outcome: "loaded"; readonly value: PersonalExecutionEvidence }
-	| { readonly outcome: "denied"; readonly reason: PersonalExecutionEvidenceDenialReasons };
+	| { readonly outcome: ExecutionEvidenceOutcomes.Loaded; readonly value: PersonalExecutionEvidence }
+	| { readonly outcome: ExecutionEvidenceOutcomes.Denied; readonly reason: PersonalExecutionEvidenceDenialReasons };
 
 /** Rechecks personal execution authority inside the transaction that persists the run. */
 export interface PersonalExecutionEvidenceAuthorityPort

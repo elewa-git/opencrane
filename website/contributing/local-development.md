@@ -86,7 +86,9 @@ above, not whenever a branch changes and not as a substitute for reading the fir
 Tier 2 runs the current server and live-gateway browser application on the workstation. It uses
 Docker for a clean-baseline PostgreSQL database and TLS KurrentDB; Agent profiles can also run a
 loopback LiteLLM container. Install the repository dependencies and make sure `docker`, `openssl`,
-`curl` and `jq` are available before starting it.
+`curl` and `jq` are available before starting it. On macOS or Windows, install and start Docker
+Desktop. On Linux, use a compatible Docker Engine with a working Docker CLI and socket. Verify the
+container runtime is ready with `docker info` before starting Tier 2.
 
 The coordinator pins the same KurrentDB operand used by the current develop-smoke profile. Local
 LiteLLM resolves the deployment-owned repository and reviewed tag to an immutable multi-platform

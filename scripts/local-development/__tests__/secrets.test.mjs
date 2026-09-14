@@ -33,10 +33,20 @@ test("session secrets use the current conversation keyring contract", async func
 {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), "opencrane-tier2-secret-test-"));
 	let secrets;
+	function _Bytes(size)
+	{
+		return Buffer.alloc(size, 7);
+	}
+
+	function _DifferentBytes(size)
+	{
+		return Buffer.alloc(size, 8);
+	}
+
 	try
 	{
 		secrets = await createLocalDevelopmentSecrets(_Configuration(path.join(root, "persistent")), {
-			randomBytes: function _Bytes(size) { return Buffer.alloc(size, 7); },
+			randomBytes: _Bytes,
 			runCommand: _CreateOpenSslOutputs,
 		});
 		const keyring = JSON.parse(fs.readFileSync(secrets.conversationKeyringPath, "utf8"));
@@ -46,7 +56,7 @@ test("session secrets use the current conversation keyring contract", async func
 		const firstKey = keyring.keys["tier2-persistent"];
 		removeLocalDevelopmentSecrets(secrets);
 		secrets = await createLocalDevelopmentSecrets(_Configuration(path.join(root, "persistent")), {
-			randomBytes: function _DifferentBytes(size) { return Buffer.alloc(size, 8); },
+			randomBytes: _DifferentBytes,
 			runCommand: _CreateOpenSslOutputs,
 		});
 		const reusedKeyring = JSON.parse(fs.readFileSync(secrets.conversationKeyringPath, "utf8"));
@@ -69,15 +79,18 @@ test("secret construction removes its session directory after an early credentia
 	const session = path.join(root, "session");
 	fs.mkdirSync(persistent);
 	fs.writeFileSync(path.join(persistent, "postgres-password"), "exposed\n", { mode: 0o644 });
+	function _SessionDirectory()
+	{
+		fs.mkdirSync(session);
+
+		return session;
+	}
+
 	try
 	{
 		await assert.rejects(createLocalDevelopmentSecrets(_Configuration(persistent), {
-			makeTemporaryDirectory: function _SessionDirectory()
-			{
-				fs.mkdirSync(session);
-				return session;
-			},
-			runCommand: _CreateOpenSslOutputs
+			makeTemporaryDirectory: _SessionDirectory,
+			runCommand: _CreateOpenSslOutputs,
 		}), /private regular file/);
 		assert.equal(fs.existsSync(session), false);
 	}

@@ -53,7 +53,12 @@ def _configuration() -> dict[str, str]:
         config["readyPath"] = _required("OPENCRANE_HOST_READY_PATH")
         config["tokenPath"] = _required("OPENCRANE_HOST_BEARER_PATH")
         endpoint = urllib.parse.urlparse(config["internalEndpoint"])
-        if endpoint.scheme != "http" or endpoint.hostname not in {"127.0.0.1", "localhost"} or endpoint.username or endpoint.password:
+        if (
+            endpoint.scheme != "http"
+            or endpoint.hostname not in {"127.0.0.1", "localhost"}
+            or endpoint.username
+            or endpoint.password
+        ):
             raise RuntimeError("host development requires a loopback private endpoint")
     else:
         config["reviewCredentialPath"] = os.environ.get("OPENCRANE_REVIEW_CREDENTIAL_PATH", _DEFAULT_REVIEW_CREDENTIAL_PATH)
@@ -65,7 +70,7 @@ def _read_token(path: str) -> str:
     """Read the mode-specific private bearer immediately before each server exchange."""
     token = Path(path).read_text(encoding="utf-8").strip()
     if not token:
-        raise RuntimeError("projected workload token is empty")
+        raise RuntimeError("conversation-computer bearer is empty")
     return token
 
 

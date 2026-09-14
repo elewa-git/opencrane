@@ -16,6 +16,22 @@ export enum AgentIdentityStates
 }
 
 /**
+ * Selects how an agent identity obtains the principal used for protected work.
+ *
+ * These values are persisted in identity history and cross package boundaries, so validators and
+ * consumers must reject unknown values instead of guessing a principal relationship.
+ */
+export enum AgentIdentityKinds
+{
+	/** Uses a current principal through a delegation policy; it owns no dedicated principal. */
+	Proxied = "proxied",
+	/** Uses the dedicated principal created for an OpenCrane-managed agent. */
+	Managed = "managed",
+	/** Uses a dedicated principal for one sub-chat while retaining its checked parent relationship. */
+	ManagedSubChat = "managed_subchat",
+}
+
+/**
  * Defines the shared contract coordinates for every agent identity.
  *
  * The concrete identity kind determines whose principal acts. The common fields keep the identity,
@@ -53,7 +69,7 @@ export interface AgentIdentityBase
 export interface ProxiedAgentIdentity extends AgentIdentityBase
 {
 	/** Selects the proxied identity handler. */
-	readonly kind: "proxied";
+	readonly kind: AgentIdentityKinds.Proxied;
 	/** Identifies the principal whose current authority is delegated. */
 	readonly proxiedPrincipalId: string;
 	/** Identifies the policy that limits this delegation. */
@@ -71,7 +87,7 @@ export interface ConstructedAgentIdentityBase extends AgentIdentityBase
 export interface ManagedAgentIdentity extends ConstructedAgentIdentityBase
 {
 	/** Selects the managed identity handler. */
-	readonly kind: "managed";
+	readonly kind: AgentIdentityKinds.Managed;
 }
 
 /**
@@ -83,7 +99,7 @@ export interface ManagedAgentIdentity extends ConstructedAgentIdentityBase
 export interface ManagedSubChatAgentIdentity extends ConstructedAgentIdentityBase
 {
 	/** Selects the managed-subchat identity handler. */
-	readonly kind: "managed_subchat";
+	readonly kind: AgentIdentityKinds.ManagedSubChat;
 	/** Identifies the parent agent identity that requested this sub-chat. */
 	readonly parentAgentIdentityId: string;
 	/** Captures the parent identity's dedicated principal for durable stream verification; it must differ from this sub-chat principal. */

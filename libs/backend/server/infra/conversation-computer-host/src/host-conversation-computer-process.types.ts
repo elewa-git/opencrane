@@ -18,6 +18,33 @@ export interface HostConversationComputerChild
 	removeListener(event: "close", listener: (code: number | null, signal: NodeJS.Signals | null) => void): unknown;
 }
 
+/** Retains one live child and the evidence needed to authenticate and stop it. */
+export interface HostConversationComputerProcessEntry
+{
+	/** Carries the bearer digest retained by the server instead of the bearer itself. */
+	readonly bearerDigest: Buffer;
+	/** Carries the child-process handle. */
+	readonly child: HostConversationComputerChild;
+	/** Identifies the computer that owns this process. */
+	readonly computerId: string;
+	/** Records the lease deadline currently applied to the shutdown timer. */
+	expiresAt: string;
+	/** Fences the process to one computer generation. */
+	readonly generation: number;
+	/** Identifies the lease that created this process. */
+	readonly leaseId: string;
+	/** Identifies the process without carrying its authentication secret. */
+	readonly processId: string;
+	/** Resolves after the child validates its configuration and writes its process marker. */
+	readonly startup: Promise<void>;
+	/** Stops the child when the current lease deadline arrives. */
+	shutdownTimer: NodeJS.Timeout | null;
+	/** Owns the private bearer file and its parent directory. */
+	readonly tokenDirectory: string;
+	/** Shares one cleanup attempt among release, expiry, child-close, and owner-close paths. */
+	stop: Promise<void> | null;
+}
+
 /** Supplies replaceable operating-system effects to the host process owner. */
 export interface HostConversationComputerProcessOwnerOptions
 {

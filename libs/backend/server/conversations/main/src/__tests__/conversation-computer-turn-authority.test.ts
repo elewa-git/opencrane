@@ -17,8 +17,16 @@ const _WORKLOAD = {
   serviceAccountName: "conversation-computer",
   podUid: "pod-1",
 };
-const _REALIZATION = { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g2", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.computers.svc.cluster.local" } as const;
-const _PROCESS = { kind: ConversationComputerRealizationKinds.AgentSandbox, workload: _WORKLOAD } as const;
+const _REALIZATION = {
+	kind: ConversationComputerRealizationKinds.AgentSandbox,
+	claimId: "computer-1-g2",
+	sandboxId: "sandbox-1",
+	serviceFQDN: "sandbox-1.computers.svc.cluster.local",
+} as const;
+const _PROCESS = {
+	kind: ConversationComputerRealizationKinds.AgentSandbox,
+	workload: _WORKLOAD,
+} as const;
 const _BINDING = {
   siloId: "testv5",
   conversationId: "conversation-1",
@@ -73,7 +81,11 @@ function _Harness() {
           maximumBudgetUsd: 0.1,
           credentialLifetimeSeconds: 300,
           credentialExpiresAt: "2099-01-01T00:00:00.000Z",
-          lease: { leaseId: "lease-1", leaseGeneration: 2, realization: _REALIZATION },
+          lease: {
+            leaseId: "lease-1",
+            leaseGeneration: 2,
+            realization: _REALIZATION,
+          },
         }),
       assertCurrent: vi.fn().mockResolvedValue(undefined),
       admit: vi.fn().mockResolvedValue(undefined),
@@ -153,7 +165,11 @@ function _Harness() {
 describe("ConversationComputerTurnAuthority", function _Suite() {
   it("hands out the derived review credential after Pod admission without compiling or admitting a run", async function _ReviewCredential() {
     const { authority, dependencies } = _Harness();
-    const command = { computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, process: _PROCESS };
+    const command = {
+      computerId: "computer-1",
+      lease: { leaseId: "lease-1", leaseGeneration: 2 },
+      process: _PROCESS,
+    };
     expect(await authority.reviewCredential(command)).toEqual({ reviewCredential: "keyed-review-secret" });
     expect(dependencies.candidates.admit).toHaveBeenCalledWith(command);
     expect(dependencies.reviewCredentials.derive).toHaveBeenCalledWith({ siloId: "testv5", computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 } });
@@ -236,7 +252,11 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
       "lifecycle unavailable",
     );
     const restartedWorker = new ConversationComputerTurnAuthority(dependencies);
-    await expect(restartedWorker.bootstrap({ computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, process: _PROCESS })).resolves.toBeNull();
+    await expect(restartedWorker.bootstrap({
+      computerId: "computer-1",
+      lease: { leaseId: "lease-1", leaseGeneration: 2 },
+      process: _PROCESS,
+    })).resolves.toBeNull();
     expect(append).toHaveBeenCalledTimes(2);
     expect(append.mock.calls[0]?.[0].event.id).toBe(
       append.mock.calls[1]?.[0].event.id,
@@ -261,7 +281,11 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
       maximumBudgetUsd: 0.1,
       credentialLifetimeSeconds: 300,
           credentialExpiresAt: "2099-01-01T00:00:00.000Z",
-      lease: { leaseId: "lease-1", leaseGeneration: 2, realization: _REALIZATION },
+      lease: {
+        leaseId: "lease-1",
+        leaseGeneration: 2,
+        realization: _REALIZATION,
+      },
     });
     await expect(authority.bootstrap(command)).rejects.toThrow(
       /recompiled input .* does not match the frozen turn digest/,
@@ -278,14 +302,21 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
       authority.bootstrap({
         computerId: "computer-1",
         lease: { leaseId: "lease-old", leaseGeneration: 3 },
-        process: { ..._PROCESS, workload: { ..._WORKLOAD, namespace: "foreign" } },
+        process: {
+          ..._PROCESS,
+          workload: { ..._WORKLOAD, namespace: "foreign" },
+        },
       }),
     ).rejects.toThrow(/stale lease/);
     expect(dependencies.credentials.issueOnce).not.toHaveBeenCalled();
   });
   it("uses the current absolute authority bound when reserving the model request", async function () {
     const { authority, dependencies } = _Harness();
-    const command = { computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, process: _PROCESS };
+    const command = {
+      computerId: "computer-1",
+      lease: { leaseId: "lease-1", leaseGeneration: 2 },
+      process: _PROCESS,
+    };
     const bootstrap = await authority.bootstrap(command);
     const candidate = await dependencies.candidates.resolve(command);
     const notAfter = new Date(Date.now() + 20_000).toISOString();

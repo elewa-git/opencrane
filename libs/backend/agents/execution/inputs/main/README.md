@@ -106,6 +106,9 @@ evidence reduces credential validity, while refreshed evidence never extends the
 - `ExecutionSubjectAuthority` — injects one current AgentIdentity, Principal, membership,
   capability, run, and ConversationComputer-lease proof. A requester remains provenance, never
   an execution identity.
+- `ConversationExecutionSubjectCoordinates` — carries the realization-neutral app-bound run,
+  requester, computer, profile, and lease coordinates rechecked by both personal and managed
+  subject authorities.
 - `PersonalConversationExecutionSubjectAuthority` — joins the checked current AgentIdentity head,
   transaction-bound personal service and authorization evidence, and the current active
   ConversationComputer lease. It rechecks every request, service, revision, profile, computer,

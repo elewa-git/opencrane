@@ -23,21 +23,21 @@ function _makeService(): ControlPlaneApiService
 	});
 }
 
-describe("ControlPlaneApiService.signInUrl", () =>
+describe("ControlPlaneApiService.signInUrl", function _ControlPlaneApiServiceSuite(): void
 {
 	afterEach(function _RestoreFetch(): void
 	{
 		vi.unstubAllGlobals();
 	});
 
-	it("builds the login URL against the configured API base", () =>
+	it("builds the login URL against the configured API base", function _BuildsLoginUrl(): void
 	{
 		const service = _makeService();
 
 		expect(service.signInUrl("/dashboard")).toBe(`${_ORIGIN}/api/v1/auth/login?returnTo=${encodeURIComponent("/dashboard")}`);
 	});
 
-	it("percent-encodes the returnTo (slash, query, ampersand)", () =>
+	it("percent-encodes the returnTo (slash, query, ampersand)", function _EncodesReturnTo(): void
 	{
 		const service = _makeService();
 		const returnTo = "/threads/t1?view=session&tab=context";
@@ -65,7 +65,11 @@ describe("ControlPlaneApiService.signInUrl", () =>
 			{
 				return new Response(null, { status: 204 });
 			}
-			return new Response(JSON.stringify({ authenticated: false, mode: "oidc", user: null }), { status: 200, headers: { "Content-Type": "application/json" } });
+			return new Response(JSON.stringify({
+				authenticated: false,
+				mode: "oidc",
+				user: null,
+			}), { status: 200, headers: { "Content-Type": "application/json" } });
 		}));
 		const credential = "private-development-session";
 		const injector = Injector.create({ providers: [
@@ -77,7 +81,11 @@ describe("ControlPlaneApiService.signInUrl", () =>
 
 		await service.client.GET("/auth/me", {});
 		await service.client.POST("/auth/logout");
-		await service.client.GET("/me/conversations/{conversationId}/events", { params: { path: { conversationId: "conversation-1" }, query: { afterPosition: "0" } }, headers: { Accept: "text/event-stream" }, parseAs: "stream" });
+		await service.client.GET("/me/conversations/{conversationId}/events", {
+			params: { path: { conversationId: "conversation-1" }, query: { afterPosition: "0" } },
+			headers: { Accept: "text/event-stream" },
+			parseAs: "stream",
+		});
 		await service.request("POST", "/transitional", { body: { value: true } });
 
 		expect(requests).toHaveLength(4);
@@ -88,12 +96,12 @@ describe("ControlPlaneApiService.signInUrl", () =>
 	});
 });
 
-describe("FleetManagerApiService.signInUrl", () =>
+describe("FleetManagerApiService.signInUrl", function _FleetManagerApiServiceSuite(): void
 {
 	/** A distinct origin proves the fleet client signs in against its OWN host, not the opencrane-ui's. */
 	const _FLEET_ORIGIN = "https://fleet.example";
 
-	it("builds the login URL against the fleet API base (self-contained auth, no opencrane-ui delegation)", () =>
+	it("builds the login URL against the fleet API base (self-contained auth, no opencrane-ui delegation)", function _BuildsFleetLoginUrl(): void
 	{
 		const injector = Injector.create({ providers: [{ provide: FLEET_MANAGER_BASE_URL, useValue: _FLEET_ORIGIN }, FleetManagerApiService] });
 		const service = runInInjectionContext(injector, function _resolve(): FleetManagerApiService

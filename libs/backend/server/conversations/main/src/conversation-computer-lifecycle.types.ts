@@ -39,7 +39,7 @@ export interface ConversationComputerLeaseProjectionCommand
  *
  * `clearActiveLease` returns false when the row belongs to another generation or when a pending approval
  * acquired the same transaction fence. The lifecycle authority must stop cleanup on false so it cannot
- * release a sandbox while that approval can still become executable. `extendActiveLease` moves the
+ * release a realization while that approval can still become executable. `extendActiveLease` moves the
  * projected expiry later and returns false when the exact row is absent or already replaced.
  *
  * Called by: {@link ConversationComputerLifecycleAuthority}.
@@ -64,11 +64,11 @@ export interface ConversationComputerLifecycleCommand extends ConversationComput
 /**
  * Enumerates the observable result of one lifecycle reconciliation.
  *
- * `current` means no transition was due. `renewed` extends a live process lease, while `cooling`
+ * `current` means no transition was due. `renewed` extends a live realization lease, while `cooling`
  * records that an idle computer stopped admitting new work. `active_attempt` defers cleanup because
  * an admitted attempt or approval still holds the projection fence. A completed release reports
  * `retired_to_checkpoint` when a workspace checkpoint exists, or `retired_without_checkpoint` when
- * the selected realization has no checkpoint capability. `lost` records expiry or a missing process;
+ * the selected realization has no checkpoint capability. `lost` records expiry or a missing realization;
  * `terminal` means the computer already has a state that needs no lifecycle work.
  *
  * These values are returned to the scheduler in memory and are not persisted. Callers must treat the

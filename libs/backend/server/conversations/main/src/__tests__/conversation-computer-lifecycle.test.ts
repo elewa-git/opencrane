@@ -8,8 +8,30 @@ import type { ConversationComputerActivity } from "../conversation-computer-acti
 const _NOW = new Date("2026-09-05T12:20:00.000Z");
 const _POLICY = { staleAfterMilliseconds: 300_000, retireAfterMilliseconds: 1_200_000, leaseTtlMilliseconds: 3_600_000 };
 const _COMPUTER: ConversationComputer = { schemaVersion: 1, id: "computer-1", siloId: "silo-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1", state: ConversationComputerStates.Warm, leaseGeneration: 2, workspaceCheckpoint: null, createdAt: "2026-09-05T12:00:00.000Z", updatedAt: "2026-09-05T12:00:00.000Z" };
-const _LEASE: ComputerLease = { schemaVersion: 1, id: "lease-2", computerId: "computer-1", generation: 2, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g2", sandboxId: "sandbox-2", serviceFQDN: "sandbox-2.silo-1.svc.cluster.local" }, state: ComputerLeaseStates.Active, claimedAt: "2026-09-05T12:00:00.000Z", expiresAt: "2026-09-05T13:00:00.000Z", releasedAt: null };
-const _CLAIM_COMMAND = { computerId: "computer-1", lease: { leaseId: "lease-2", leaseGeneration: 2, realization: _LEASE.realization } };
+const _LEASE: ComputerLease = {
+	schemaVersion: 1,
+	id: "lease-2",
+	computerId: "computer-1",
+	generation: 2,
+	realization: {
+		kind: ConversationComputerRealizationKinds.AgentSandbox,
+		claimId: "computer-1-g2",
+		sandboxId: "sandbox-2",
+		serviceFQDN: "sandbox-2.silo-1.svc.cluster.local",
+	},
+	state: ComputerLeaseStates.Active,
+	claimedAt: "2026-09-05T12:00:00.000Z",
+	expiresAt: "2026-09-05T13:00:00.000Z",
+	releasedAt: null,
+};
+const _REALIZATION_COMMAND = {
+	computerId: "computer-1",
+	lease: {
+		leaseId: "lease-2",
+		leaseGeneration: 2,
+		realization: _LEASE.realization,
+	},
+};
 
 function _Harness(computer: ConversationComputer = _COMPUTER, activeAttempt = false, lease: ComputerLease = _LEASE, activity: ConversationComputerActivity | null = null)
 {
@@ -19,10 +41,14 @@ function _Harness(computer: ConversationComputer = _COMPUTER, activeAttempt = fa
 	const checkpoint = { artifactRevisionId: "revision-checkpoint-1", digest: `sha256:${"a".repeat(64)}`, format: "opencrane-workspace-tar-v1", checkpointedAt: _NOW.toISOString() };
 	const checkpoints = { capture: vi.fn().mockResolvedValue(checkpoint) };
 	const attempts = { clearActiveLease: vi.fn().mockResolvedValue(!activeAttempt), extendActiveLease: vi.fn().mockResolvedValue(true) };
-	const claims = { inspect: vi.fn().mockResolvedValue({ shutdownTime: lease.expiresAt }), renew: vi.fn().mockResolvedValue("renewed"), release: vi.fn().mockResolvedValue("released") };
+	const realizer = {
+		inspect: vi.fn().mockResolvedValue({ shutdownTime: lease.expiresAt }),
+		renew: vi.fn().mockResolvedValue("renewed"),
+		release: vi.fn().mockResolvedValue("released"),
+	};
 	const activityReader = { lastActivity: vi.fn().mockResolvedValue(activity) };
-	const authority = new ConversationComputerLifecycleAuthority(history as never, checkpoints, attempts, claims, activityReader, _POLICY);
-	return { authority, history, append, checkpoints, attempts, claims, activityReader, checkpoint };
+	const authority = new ConversationComputerLifecycleAuthority(history as never, checkpoints, attempts, realizer, activityReader, _POLICY);
+	return { authority, history, append, checkpoints, attempts, realizer, activityReader, checkpoint };
 }
 
 const _SCOPE = { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", agentIdentityId: "identity-1" };
@@ -44,7 +70,15 @@ describe("ConversationComputerLifecycleAuthority", function _Suite()
 		const recent = _Harness(_COMPUTER, false, _LEASE, { lastActivityAt: new Date("2026-09-05T12:18:00.000Z"), busy: false });
 		await expect(recent.authority.reconcile(_COMMAND)).resolves.toBe("current");
 		expect(recent.append).not.toHaveBeenCalled();
-		expect(recent.activityReader.lastActivity).toHaveBeenCalledWith({ siloId: "silo-1", computerId: "computer-1", lease: { leaseId: "lease-2", leaseGeneration: 2, realization: _LEASE.realization } });
+		expect(recent.activityReader.lastActivity).toHaveBeenCalledWith({
+			siloId: "silo-1",
+			computerId: "computer-1",
+			lease: {
+				leaseId: "lease-2",
+				leaseGeneration: 2,
+				realization: _LEASE.realization,
+			},
+		});
 
 		const stale = _Harness(_COMPUTER, false, _LEASE, { lastActivityAt: new Date("2026-09-05T12:14:00.000Z"), busy: false });
 		await expect(stale.authority.reconcile(_COMMAND)).resolves.toBe("cooling");
@@ -60,38 +94,46 @@ describe("ConversationComputerLifecycleAuthority", function _Suite()
 	it("records an expired active lease as lost and cools the computer without a checkpoint", async function _LostAfterExpiry()
 	{
 		const lease = { ..._LEASE, expiresAt: "2026-09-05T12:10:00.000Z" };
-		const { authority, append, attempts, claims, checkpoints } = _Harness(_COMPUTER, false, lease);
+		const { authority, append, attempts, realizer, checkpoints } = _Harness(_COMPUTER, false, lease);
 		await expect(authority.reconcile(_COMMAND)).resolves.toBe("lost");
-		expect(claims.inspect).not.toHaveBeenCalled();
+		expect(realizer.inspect).not.toHaveBeenCalled();
 		expect(checkpoints.capture).not.toHaveBeenCalled();
-		expect(claims.release).toHaveBeenCalledWith(_CLAIM_COMMAND);
-		expect(attempts.clearActiveLease.mock.invocationCallOrder[0]).toBeLessThan(claims.release.mock.invocationCallOrder[0]!);
-		expect(claims.release.mock.invocationCallOrder[0]).toBeLessThan(append.mock.invocationCallOrder[0]!);
+		expect(realizer.release).toHaveBeenCalledWith(_REALIZATION_COMMAND);
+		expect(attempts.clearActiveLease.mock.invocationCallOrder[0]).toBeLessThan(realizer.release.mock.invocationCallOrder[0]!);
+		expect(realizer.release.mock.invocationCallOrder[0]).toBeLessThan(append.mock.invocationCallOrder[0]!);
 		expect(append).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: 2n, computer: expect.objectContaining({ state: ConversationComputerStates.Cold, updatedAt: _NOW.toISOString() }), lease: { ...lease, state: ComputerLeaseStates.Lost, releasedAt: _NOW.toISOString() } }));
 	});
 
-	it("records an active lease whose claim disappeared as lost", async function _LostClaim()
+	it("records an active lease whose realization disappeared as lost", async function _LostRealization()
 	{
-		const { authority, append, claims } = _Harness();
-		claims.inspect.mockResolvedValue(null);
+		const { authority, append, realizer } = _Harness();
+		realizer.inspect.mockResolvedValue(null);
 		await expect(authority.reconcile(_COMMAND)).resolves.toBe("lost");
-		expect(claims.release).toHaveBeenCalledWith(_CLAIM_COMMAND);
+		expect(realizer.release).toHaveBeenCalledWith(_REALIZATION_COMMAND);
 		expect(append).toHaveBeenCalledWith(expect.objectContaining({ lease: expect.objectContaining({ state: ComputerLeaseStates.Lost }) }));
 	});
 
 	it("keeps an expired lease fenced while an approval still holds the projection", async function _LostFence()
 	{
-		const { authority, append, claims } = _Harness(_COMPUTER, true, { ..._LEASE, expiresAt: "2026-09-05T12:10:00.000Z" });
+		const { authority, append, realizer } = _Harness(_COMPUTER, true, { ..._LEASE, expiresAt: "2026-09-05T12:10:00.000Z" });
 		await expect(authority.reconcile(_COMMAND)).resolves.toBe("active_attempt");
 		expect(append).not.toHaveBeenCalled();
-		expect(claims.release).not.toHaveBeenCalled();
+		expect(realizer.release).not.toHaveBeenCalled();
 	});
 
 	it("leaves a pending claim to the activation authority until its lease expires", async function _PendingClaim()
 	{
-		const claimed = { ..._LEASE, realization: { ..._LEASE.realization, sandboxId: null, serviceFQDN: null }, state: ComputerLeaseStates.Claimed };
+		const claimed = {
+			..._LEASE,
+			realization: {
+				..._LEASE.realization,
+				sandboxId: null,
+				serviceFQDN: null,
+			},
+			state: ComputerLeaseStates.Claimed,
+		};
 		const pending = _Harness({ ..._COMPUTER, state: ConversationComputerStates.ClaimPending }, false, claimed);
-		pending.claims.inspect.mockResolvedValue(null);
+		pending.realizer.inspect.mockResolvedValue(null);
 		await expect(pending.authority.reconcile(_COMMAND)).resolves.toBe("current");
 		expect(pending.append).not.toHaveBeenCalled();
 
@@ -103,73 +145,81 @@ describe("ConversationComputerLifecycleAuthority", function _Suite()
 	it("renews an in-use lease once less than half of its lifetime remains", async function _Renews()
 	{
 		const lease = { ..._LEASE, expiresAt: "2026-09-05T12:40:00.000Z" };
-		const { authority, append, attempts, claims } = _Harness(_COMPUTER, false, lease, { lastActivityAt: new Date("2026-09-05T12:19:00.000Z"), busy: false });
+		const { authority, append, attempts, realizer } = _Harness(_COMPUTER, false, lease, { lastActivityAt: new Date("2026-09-05T12:19:00.000Z"), busy: false });
 		await expect(authority.reconcile(_COMMAND)).resolves.toBe("renewed");
-		expect(claims.renew).toHaveBeenCalledWith({ ..._CLAIM_COMMAND, expiresAt: "2026-09-05T13:20:00.000Z" });
+		expect(realizer.renew).toHaveBeenCalledWith({ ..._REALIZATION_COMMAND, expiresAt: "2026-09-05T13:20:00.000Z" });
 		expect(append).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: 2n, computer: _COMPUTER, lease: { ...lease, expiresAt: "2026-09-05T13:20:00.000Z" } }));
-		expect(attempts.extendActiveLease).toHaveBeenCalledWith({ computer: _SCOPE, lease: { leaseId: "lease-2", leaseGeneration: 2, realization: _LEASE.realization, expiresAt: "2026-09-05T13:20:00.000Z" } });
-		expect(claims.renew.mock.invocationCallOrder[0]).toBeLessThan(append.mock.invocationCallOrder[0]!);
+		expect(attempts.extendActiveLease).toHaveBeenCalledWith({
+			computer: _SCOPE,
+			lease: {
+				leaseId: "lease-2",
+				leaseGeneration: 2,
+				realization: _LEASE.realization,
+				expiresAt: "2026-09-05T13:20:00.000Z",
+			},
+		});
+		expect(realizer.renew.mock.invocationCallOrder[0]).toBeLessThan(append.mock.invocationCallOrder[0]!);
 		expect(append.mock.invocationCallOrder[0]).toBeLessThan(attempts.extendActiveLease.mock.invocationCallOrder[0]!);
-		expect(claims.release).not.toHaveBeenCalled();
+		expect(realizer.release).not.toHaveBeenCalled();
 	});
 
-	it("re-patches a claim whose shutdown time lags the recorded lease", async function _RepatchesClaim()
+	it("updates a realization whose shutdown time lags the recorded lease", async function _UpdatesRealization()
 	{
-		const { authority, claims } = _Harness();
-		claims.inspect.mockResolvedValue({ shutdownTime: "2026-09-05T12:30:00.000Z" });
+		const { authority, realizer } = _Harness();
+		realizer.inspect.mockResolvedValue({ shutdownTime: "2026-09-05T12:30:00.000Z" });
 		await expect(authority.reconcile(_COMMAND)).resolves.toBe("renewed");
-		expect(claims.renew).toHaveBeenCalledWith(expect.objectContaining({ expiresAt: "2026-09-05T13:20:00.000Z" }));
+		expect(realizer.renew).toHaveBeenCalledWith(expect.objectContaining({ expiresAt: "2026-09-05T13:20:00.000Z" }));
 	});
 
 	it("does not renew for the controller's whole-second expiry serialization", async function _SerializedExpiry()
 	{
 		const lease = { ..._LEASE, expiresAt: "2026-09-05T13:00:00.999Z" };
-		const { authority, claims, append } = _Harness(_COMPUTER, false, lease, { lastActivityAt: _NOW, busy: true });
-		claims.inspect.mockResolvedValue({ shutdownTime: "2026-09-05T13:00:00Z" });
+		const { authority, realizer, append } = _Harness(_COMPUTER, false, lease, { lastActivityAt: _NOW, busy: true });
+		realizer.inspect.mockResolvedValue({ shutdownTime: "2026-09-05T13:00:00Z" });
 		await expect(authority.reconcile(_COMMAND)).resolves.toBe("current");
-		expect(claims.renew).not.toHaveBeenCalled();
+		expect(realizer.renew).not.toHaveBeenCalled();
 		expect(append).not.toHaveBeenCalled();
 	});
 
-	it("renews a claim that is a full upstream timestamp second behind", async function _WholeSecondLag()
+	it("renews a realization that is a full upstream timestamp second behind", async function _WholeSecondLag()
 	{
 		const lease = { ..._LEASE, expiresAt: "2026-09-05T13:00:00.999Z" };
-		const { authority, claims } = _Harness(_COMPUTER, false, lease, { lastActivityAt: _NOW, busy: true });
-		claims.inspect.mockResolvedValue({ shutdownTime: "2026-09-05T12:59:59Z" });
+		const { authority, realizer } = _Harness(_COMPUTER, false, lease, { lastActivityAt: _NOW, busy: true });
+		realizer.inspect.mockResolvedValue({ shutdownTime: "2026-09-05T12:59:59Z" });
 		await expect(authority.reconcile(_COMMAND)).resolves.toBe("renewed");
-		expect(claims.renew).toHaveBeenCalledOnce();
+		expect(realizer.renew).toHaveBeenCalledOnce();
 	});
 
 	it("retires an idle cooling computer instead of renewing its lease", async function _RetireBeforeRenew()
 	{
-		const { authority, claims, checkpoints } = _Harness({ ..._COMPUTER, state: ConversationComputerStates.Cooling }, false, { ..._LEASE, expiresAt: "2026-09-05T12:40:00.000Z" });
+		const { authority, realizer, checkpoints } = _Harness({ ..._COMPUTER, state: ConversationComputerStates.Cooling }, false, { ..._LEASE, expiresAt: "2026-09-05T12:40:00.000Z" });
 		await expect(authority.reconcile(_COMMAND)).resolves.toBe("retired_to_checkpoint");
-		expect(claims.renew).not.toHaveBeenCalled();
+		expect(realizer.renew).not.toHaveBeenCalled();
 		expect(checkpoints.capture).toHaveBeenCalledOnce();
 	});
 
 	it("keeps cooling after capture when an attempt wins the release fence", async function _ActiveAttempt()
 	{
-		const { authority, append, checkpoints, claims } = _Harness({ ..._COMPUTER, state: ConversationComputerStates.Cooling }, true);
+		const { authority, append, checkpoints, realizer } = _Harness({ ..._COMPUTER, state: ConversationComputerStates.Cooling }, true);
 		await expect(authority.reconcile(_COMMAND)).resolves.toBe("active_attempt");
 		expect(append).not.toHaveBeenCalled();
 		expect(checkpoints.capture).toHaveBeenCalledOnce();
-		expect(claims.release).not.toHaveBeenCalled();
+		expect(realizer.release).not.toHaveBeenCalled();
 	});
 
 	it("checkpoints before releasing and durably cools to zero after twenty minutes", async function _CheckpointRelease()
 	{
-		const { authority, append, checkpoints, attempts, claims, checkpoint } = _Harness({ ..._COMPUTER, state: ConversationComputerStates.Cooling });
+		const { authority, append, checkpoints, attempts, realizer, checkpoint } = _Harness({ ..._COMPUTER, state: ConversationComputerStates.Cooling });
 		await expect(authority.reconcile(_COMMAND)).resolves.toBe("retired_to_checkpoint");
 		expect(checkpoints.capture).toHaveBeenCalledWith(expect.objectContaining({ id: "computer-1" }), _LEASE);
-		expect(claims.release).toHaveBeenCalledWith(_CLAIM_COMMAND);
-		expect(checkpoints.capture.mock.invocationCallOrder[0]).toBeLessThan(claims.release.mock.invocationCallOrder[0]!);
+		expect(realizer.release).toHaveBeenCalledWith(_REALIZATION_COMMAND);
+		expect(checkpoints.capture.mock.invocationCallOrder[0]).toBeLessThan(realizer.release.mock.invocationCallOrder[0]!);
 		expect(attempts.clearActiveLease).toHaveBeenCalledOnce();
 		expect(attempts.clearActiveLease.mock.invocationCallOrder[0]).toBeLessThan(append.mock.invocationCallOrder[0]!);
 		expect(append).toHaveBeenNthCalledWith(1, expect.objectContaining({ computer: expect.objectContaining({ state: ConversationComputerStates.Cooling, workspaceCheckpoint: checkpoint }), lease: expect.objectContaining({ state: ComputerLeaseStates.Released, releasedAt: _NOW.toISOString() }) }));
 		expect(append).toHaveBeenNthCalledWith(2, expect.objectContaining({ computer: expect.objectContaining({ state: ConversationComputerStates.Cold, workspaceCheckpoint: checkpoint }), lease: expect.objectContaining({ state: ComputerLeaseStates.Released }) }));
-		expect(append.mock.invocationCallOrder[0]).toBeLessThan(claims.release.mock.invocationCallOrder[0]!);
-		expect(claims.release.mock.invocationCallOrder[0]).toBeLessThan(append.mock.invocationCallOrder[1]!);
+		expect(append.mock.invocationCallOrder[0]).toBeLessThan(realizer.release.mock.invocationCallOrder[0]!);
+		expect(realizer.release.mock.invocationCallOrder[0]).toBeLessThan(append.mock.invocationCallOrder[1]!);
 	});
 
 	it("releases a realization without fabricating an unsupported checkpoint", async function _ReleaseWithoutCheckpoint()
@@ -177,31 +227,48 @@ describe("ConversationComputerLifecycleAuthority", function _Suite()
 		const computer = { ..._COMPUTER, state: ConversationComputerStates.Cooling };
 		const harness = _Harness(computer);
 		harness.checkpoints.capture.mockResolvedValue(null);
-		harness.history.load.mockReset().mockResolvedValueOnce({ revision: 2n, streamName: "computer-computer-1", computer, lease: _LEASE }).mockResolvedValue({ revision: 3n, streamName: "computer-computer-1", computer: { ...computer, workspaceCheckpoint: null }, lease: { ..._LEASE, state: ComputerLeaseStates.Released, releasedAt: _NOW.toISOString() } });
+		harness.history.load
+			.mockReset()
+			.mockResolvedValueOnce({
+				revision: 2n,
+				streamName: "computer-computer-1",
+				computer,
+				lease: _LEASE,
+			})
+			.mockResolvedValue({
+				revision: 3n,
+				streamName: "computer-computer-1",
+				computer: { ...computer, workspaceCheckpoint: null },
+				lease: {
+					..._LEASE,
+					state: ComputerLeaseStates.Released,
+					releasedAt: _NOW.toISOString(),
+				},
+			});
 		await expect(harness.authority.reconcile(_COMMAND)).resolves.toBe("retired_without_checkpoint");
 		expect(harness.append).toHaveBeenNthCalledWith(1, expect.objectContaining({ computer: expect.objectContaining({ workspaceCheckpoint: null }) }));
 		expect(harness.append).toHaveBeenNthCalledWith(2, expect.objectContaining({ computer: expect.objectContaining({ state: ConversationComputerStates.Cold, workspaceCheckpoint: null }) }));
 	});
 
-	it("finishes claim deletion after a durable released event without recapturing", async function _ResumeRelease()
+	it("finishes realization release after a durable released event without recapturing", async function _ResumeRelease()
 	{
 		const releasedLease = { ..._LEASE, state: ComputerLeaseStates.Released, releasedAt: _NOW.toISOString() };
 		const computer = { ..._COMPUTER, state: ConversationComputerStates.Cooling, workspaceCheckpoint: { artifactRevisionId: "revision-checkpoint-1", digest: `sha256:${"a".repeat(64)}`, format: "opencrane-workspace-tar-v1", checkpointedAt: _NOW.toISOString() } };
-		const { authority, append, checkpoints, attempts, claims } = _Harness(computer, false, releasedLease);
+		const { authority, append, checkpoints, attempts, realizer } = _Harness(computer, false, releasedLease);
 		await expect(authority.reconcile(_COMMAND)).resolves.toBe("retired_to_checkpoint");
 		expect(checkpoints.capture).not.toHaveBeenCalled();
-		expect(claims.release).toHaveBeenCalledOnce();
-		expect(attempts.clearActiveLease.mock.invocationCallOrder[0]).toBeLessThan(claims.release.mock.invocationCallOrder[0]!);
+		expect(realizer.release).toHaveBeenCalledOnce();
+		expect(attempts.clearActiveLease.mock.invocationCallOrder[0]).toBeLessThan(realizer.release.mock.invocationCallOrder[0]!);
 		expect(append).toHaveBeenCalledWith(expect.objectContaining({ eventId: expect.not.stringMatching(_COMMAND.eventId), computer: expect.objectContaining({ state: ConversationComputerStates.Cold }), lease: releasedLease }));
 	});
 
 	it("stops release when a replacement lease won the projection fence", async function _ProjectionRace()
 	{
-		const { authority, append, attempts, claims } = _Harness({ ..._COMPUTER, state: ConversationComputerStates.Cooling });
+		const { authority, append, attempts, realizer } = _Harness({ ..._COMPUTER, state: ConversationComputerStates.Cooling });
 		attempts.clearActiveLease.mockResolvedValue(false);
 		await expect(authority.reconcile(_COMMAND)).resolves.toBe("active_attempt");
 		expect(append).not.toHaveBeenCalled();
-		expect(claims.release).not.toHaveBeenCalled();
+		expect(realizer.release).not.toHaveBeenCalled();
 	});
 });
 
@@ -209,13 +276,13 @@ describe("ConversationComputerLifecycleDueEnumerator", function _EnumeratorSuite
 {
 	const coordinate = { computer: _SCOPE, profileRevisionId: "profile-1" };
 
-	function _Enumerator(computer: ConversationComputer, lease: ComputerLease, activity: ConversationComputerActivity | null, claim: unknown = { shutdownTime: lease.expiresAt })
+	function _Enumerator(computer: ConversationComputer, lease: ComputerLease, activity: ConversationComputerActivity | null, realizationStatus: unknown = { shutdownTime: lease.expiresAt })
 	{
 		const projections = { enumerate: vi.fn().mockResolvedValue({ items: [coordinate], nextCursor: null }), resolve: vi.fn() };
 		const history = { load: vi.fn().mockResolvedValue({ revision: 2n, streamName: "computer-computer-1", computer, lease }) };
-		const claims = { inspect: vi.fn().mockResolvedValue(claim) };
+		const realizer = { inspect: vi.fn().mockResolvedValue(realizationStatus) };
 		const activityReader = { lastActivity: vi.fn().mockResolvedValue(activity) };
-		return new ConversationComputerLifecycleDueEnumerator(projections, history as never, activityReader, claims, "silo-1", _POLICY);
+		return new ConversationComputerLifecycleDueEnumerator(projections, history as never, activityReader, realizer, "silo-1", _POLICY);
 	}
 
 	it("does not enumerate a warm computer whose last turn settled recently", async function _RecentActivity()
@@ -227,7 +294,14 @@ describe("ConversationComputerLifecycleDueEnumerator", function _EnumeratorSuite
 	it("enumerates a warm computer whose last turn settled before the stale boundary", async function _StaleActivity()
 	{
 		const enumerator = _Enumerator(_COMPUTER, _LEASE, { lastActivityAt: new Date("2026-09-05T12:14:00.000Z"), busy: false });
-		await expect(enumerator.enumerateDue(_NOW, 10, null)).resolves.toEqual({ items: [{ ...coordinate, state: ConversationComputerStates.Warm, deadline: new Date("2026-09-05T12:19:00.000Z") }], nextCursor: null });
+		await expect(enumerator.enumerateDue(_NOW, 10, null)).resolves.toEqual({
+			items: [{
+				...coordinate,
+				state: ConversationComputerStates.Warm,
+				deadline: new Date("2026-09-05T12:19:00.000Z"),
+			}],
+			nextCursor: null,
+		});
 	});
 
 	it("enumerates a busy computer only when its lease needs renewal or is gone", async function _BusyRenewal()

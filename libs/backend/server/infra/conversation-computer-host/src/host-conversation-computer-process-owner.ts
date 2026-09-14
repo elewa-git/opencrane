@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { ConversationComputerRealizationKinds } from "@opencrane/contracts";
 
 import { _HostConversationComputerBearerDigest, _HostConversationComputerChildEnvironment, _HostConversationComputerDelay, _HostConversationComputerProcessId, _WaitForHostConversationComputerReadiness } from "./host-conversation-computer-process-support";
-import type { HostConversationComputerChild, HostConversationComputerProcessBindingCommand, HostConversationComputerProcessClaimCommand, HostConversationComputerProcessCommand, HostConversationComputerProcessCoordinates, HostConversationComputerProcessIdentity, HostConversationComputerProcessOwnerOptions, HostConversationComputerProcessRenewCommand, HostConversationComputerProcessReservation, HostConversationComputerProcessStatus } from "./host-conversation-computer-process.types";
+import type { HostConversationComputerChild, HostConversationComputerProcessBindingCommand, HostConversationComputerProcessClaimCommand, HostConversationComputerProcessCommand, HostConversationComputerProcessCoordinates, HostConversationComputerProcessEntry, HostConversationComputerProcessIdentity, HostConversationComputerProcessOwnerOptions, HostConversationComputerProcessRenewCommand, HostConversationComputerProcessReservation, HostConversationComputerProcessStatus } from "./host-conversation-computer-process.types";
 
 /** Prefixes private credential directories owned by workstation children. */
 const _TOKEN_DIRECTORY_PREFIX = join(tmpdir(), "opencrane-conversation-computer-");
@@ -18,33 +18,6 @@ const _TOKEN_FILE_NAME = "server-bearer";
 /** Gives a child this long to handle each shutdown signal before cleanup continues. */
 const _DEFAULT_SHUTDOWN_GRACE_MILLISECONDS = 2_000;
 
-/** Keeps one live child and the evidence needed to authenticate and stop it. */
-interface _HostProcessEntry
-{
-	/** Carries the bearer digest retained by the server instead of the bearer itself. */
-	readonly bearerDigest: Buffer;
-	/** Carries the child-process handle. */
-	readonly child: HostConversationComputerChild;
-	/** Identifies the computer that owns this process. */
-	readonly computerId: string;
-	/** Records the lease deadline currently applied to the shutdown timer. */
-	expiresAt: string;
-	/** Fences the process to one computer generation. */
-	readonly generation: number;
-	/** Identifies the lease that created this process. */
-	readonly leaseId: string;
-	/** Identifies the process without carrying its authentication secret. */
-	readonly processId: string;
-	/** Resolves after the child validates its configuration and writes its process marker. */
-	readonly startup: Promise<void>;
-	/** Stops the child when the current lease deadline arrives. */
-	shutdownTimer: NodeJS.Timeout | null;
-	/** Owns the private bearer file and its parent directory. */
-	readonly tokenDirectory: string;
-	/** Shares one cleanup attempt among release, expiry, child-close, and owner-close paths. */
-	stop: Promise<void> | null;
-}
-
 /**
  * Owns workstation conversation-computer children and their private bearer credentials.
  *
@@ -54,10 +27,10 @@ interface _HostProcessEntry
 export class HostConversationComputerProcessOwner
 {
 	/** Persists no product state; this map contains children owned by the current server process. */
-	private readonly entries = new Map<string, _HostProcessEntry>();
+	private readonly entries = new Map<string, HostConversationComputerProcessEntry>();
 
 	/** Shares one startup attempt among concurrent retries of the same process. */
-	private readonly starts = new Map<string, Promise<_HostProcessEntry>>();
+	private readonly starts = new Map<string, Promise<HostConversationComputerProcessEntry>>();
 
 	/** Supplies the loopback endpoint and replaceable operating-system effects. */
 	public constructor(private readonly options: HostConversationComputerProcessOwnerOptions) {}
@@ -74,11 +47,11 @@ export class HostConversationComputerProcessOwner
 	{
 		this._AssertPrepared(command);
 		const existing = this.entries.get(command.coordinates.processId);
-		if (existing !== undefined)
+		if (existing)
 		{
 			this._AssertEntry(existing, command.computerId, command.leaseId, command.generation);
 			await existing.startup;
-			if (existing.stop !== null)
+			if (existing.stop)
 			{
 				await existing.stop;
 				throw new Error("Host conversation computer is no longer active");
@@ -86,12 +59,12 @@ export class HostConversationComputerProcessOwner
 			return command.coordinates;
 		}
 		let start = this.starts.get(command.coordinates.processId);
-		if (start === undefined)
+		if (!start)
 		{
 			start = this._Start(command);
 			this.starts.set(command.coordinates.processId, start);
 		}
-		let entry: _HostProcessEntry;
+		let entry: HostConversationComputerProcessEntry;
 		try
 		{
 			entry = await start;
@@ -103,7 +76,7 @@ export class HostConversationComputerProcessOwner
 		try
 		{
 			await entry.startup;
-			if (this.entries.get(entry.processId) !== entry || entry.stop !== null)
+			if (this.entries.get(entry.processId) !== entry || entry.stop)
 			{
 				throw new Error("Host conversation computer exited before activation");
 			}
@@ -128,14 +101,14 @@ export class HostConversationComputerProcessOwner
 	public async inspect(command: HostConversationComputerProcessCommand): Promise<HostConversationComputerProcessStatus | null>
 	{
 		const entry = this._Entry(command);
-		return entry === null || entry.stop !== null ? null : { shutdownTime: entry.expiresAt };
+		return !entry || entry.stop ? null : { shutdownTime: entry.expiresAt };
 	}
 
 	/** Moves the selected child's shutdown deadline without changing its identity. */
 	public async renew(command: HostConversationComputerProcessRenewCommand): Promise<"renewed" | "absent">
 	{
 		const entry = this._Entry(command);
-		if (entry === null)
+		if (!entry || entry.stop)
 		{
 			return "absent";
 		}
@@ -147,7 +120,7 @@ export class HostConversationComputerProcessOwner
 	public async release(command: HostConversationComputerProcessCommand): Promise<"released" | "absent">
 	{
 		const entry = this._Entry(command);
-		if (entry === null)
+		if (!entry)
 		{
 			return "absent";
 		}
@@ -159,7 +132,7 @@ export class HostConversationComputerProcessOwner
 	public async bind(command: HostConversationComputerProcessBindingCommand): Promise<boolean>
 	{
 		const entry = this._Entry(command);
-		return entry !== null && entry.processId === command.process.processId;
+		return !!entry && entry.processId === command.process.processId;
 	}
 
 	/** Resolves a private bearer to the process that owns it. */
@@ -172,7 +145,11 @@ export class HostConversationComputerProcessOwner
 		const digest = _HostConversationComputerBearerDigest(bearer);
 		for (const entry of this.entries.values())
 		{
-			if (entry.stop === null && entry.bearerDigest.length === digest.length && timingSafeEqual(entry.bearerDigest, digest))
+			if (
+				!entry.stop
+				&& entry.bearerDigest.length === digest.length
+				&& timingSafeEqual(entry.bearerDigest, digest)
+			)
 			{
 				return { processId: entry.processId };
 			}
@@ -186,14 +163,14 @@ export class HostConversationComputerProcessOwner
 		const stops = Array.from(this.entries.values()).map(entry => this._Stop(entry));
 		const results = await Promise.allSettled(stops);
 		const failures = results.flatMap(result => result.status === "rejected" ? [result.reason] : []);
-		if (failures.length > 0)
+		if (failures.length)
 		{
 			throw new AggregateError(failures, "Host conversation-computer cleanup failed");
 		}
 	}
 
 	/** Starts one Python child after creating its private bearer file. */
-	private async _Start(command: HostConversationComputerProcessClaimCommand): Promise<_HostProcessEntry>
+	private async _Start(command: HostConversationComputerProcessClaimCommand): Promise<HostConversationComputerProcessEntry>
 	{
 		const tokenDirectory = await mkdtemp(_TOKEN_DIRECTORY_PREFIX);
 		const tokenPath = join(tokenDirectory, _TOKEN_FILE_NAME);
@@ -204,7 +181,11 @@ export class HostConversationComputerProcessOwner
 		{
 			await chmod(tokenDirectory, 0o700);
 			bearer = (this.options.randomBytes ?? randomBytes)(32).toString("base64url");
-			await writeFile(tokenPath, bearer, { encoding: "utf8", flag: "wx", mode: 0o600 });
+			await writeFile(tokenPath, bearer, {
+				encoding: "utf8",
+				flag: "wx",
+				mode: 0o600,
+			});
 			const environment = {
 				..._HostConversationComputerChildEnvironment(this.options.environment ?? process.env),
 				OPENCRANE_COMPUTER_REALIZATION_KIND: ConversationComputerRealizationKinds.HostDevelopmentProcess,
@@ -217,7 +198,12 @@ export class HostConversationComputerProcessOwner
 				OPENCRANE_HOST_READY_PATH: readinessPath,
 			};
 			const spawnProcess = this.options.spawnProcess ?? function _Spawn(executable, argumentsList, options): HostConversationComputerChild { return spawn(executable, argumentsList, options); };
-			child = spawnProcess(this.options.launch.executable, [...this.options.launch.arguments], { cwd: this.options.launch.workingDirectory, detached: false, env: environment, stdio: "inherit" });
+			child = spawnProcess(this.options.launch.executable, [...this.options.launch.arguments], {
+				cwd: this.options.launch.workingDirectory,
+				detached: false,
+				env: environment,
+				stdio: "inherit",
+			});
 		}
 		catch (error)
 		{
@@ -259,7 +245,19 @@ export class HostConversationComputerProcessOwner
 		});
 		const startup = spawned.then(function _WaitForReadinessMarker(): Promise<void> { return _WaitForHostConversationComputerReadiness(child, readinessPath, command.coordinates.processId); });
 		startup.catch(function _IgnoreUntilClaim(): void {});
-		const entry: _HostProcessEntry = { bearerDigest: _HostConversationComputerBearerDigest(bearer), child, computerId: command.computerId, expiresAt: command.expiresAt, generation: command.generation, leaseId: command.leaseId, processId: command.coordinates.processId, shutdownTimer: null, startup, stop: null, tokenDirectory };
+		const entry: HostConversationComputerProcessEntry = {
+			bearerDigest: _HostConversationComputerBearerDigest(bearer),
+			child,
+			computerId: command.computerId,
+			expiresAt: command.expiresAt,
+			generation: command.generation,
+			leaseId: command.leaseId,
+			processId: command.coordinates.processId,
+			shutdownTimer: null,
+			startup,
+			stop: null,
+			tokenDirectory,
+		};
 		this.entries.set(entry.processId, entry);
 		const owner = this;
 		child.once("close", function _Closed(): void { void owner._Stop(entry, false).catch(function _RetainCleanupFailure(): void {}); });
@@ -267,14 +265,14 @@ export class HostConversationComputerProcessOwner
 	}
 
 	/** Applies one validated lease deadline to the child. */
-	private _ScheduleShutdown(entry: _HostProcessEntry, expiresAt: string): void
+	private _ScheduleShutdown(entry: HostConversationComputerProcessEntry, expiresAt: string): void
 	{
 		const expiresAtEpochMilliseconds = Date.parse(expiresAt);
 		if (!Number.isFinite(expiresAtEpochMilliseconds))
 		{
 			throw new Error("Host conversation computer requires a valid lease deadline");
 		}
-		if (entry.shutdownTimer !== null)
+		if (entry.shutdownTimer)
 		{
 			clearTimeout(entry.shutdownTimer);
 		}
@@ -286,9 +284,9 @@ export class HostConversationComputerProcessOwner
 	}
 
 	/** Shares one cleanup attempt across every caller that stops the selected entry. */
-	private async _Stop(entry: _HostProcessEntry, signalChild = true): Promise<void>
+	private async _Stop(entry: HostConversationComputerProcessEntry, signalChild = true): Promise<void>
 	{
-		if (entry.stop !== null)
+		if (entry.stop)
 		{
 			return entry.stop;
 		}
@@ -297,9 +295,9 @@ export class HostConversationComputerProcessOwner
 	}
 
 	/** Revokes the bearer, then independently removes it and stops the child. */
-	private async _StopOnce(entry: _HostProcessEntry, signalChild: boolean): Promise<void>
+	private async _StopOnce(entry: HostConversationComputerProcessEntry, signalChild: boolean): Promise<void>
 	{
-		if (entry.shutdownTimer !== null)
+		if (entry.shutdownTimer)
 		{
 			clearTimeout(entry.shutdownTimer);
 			entry.shutdownTimer = null;
@@ -334,11 +332,11 @@ export class HostConversationComputerProcessOwner
 		{
 			failures.push(error);
 		}
-		if (failures.length === 0 && this.entries.get(entry.processId) === entry)
+		if (!failures.length && this.entries.get(entry.processId) === entry)
 		{
 			this.entries.delete(entry.processId);
 		}
-		if (failures.length > 0)
+		if (failures.length)
 		{
 			throw new AggregateError(failures, `Host conversation computer ${entry.processId} cleanup failed`);
 		}
@@ -351,14 +349,14 @@ export class HostConversationComputerProcessOwner
 	}
 
 	/** Resolves the entry selected by one persisted host-process coordinate set. */
-	private _Entry(command: HostConversationComputerProcessCommand): _HostProcessEntry | null
+	private _Entry(command: HostConversationComputerProcessCommand): HostConversationComputerProcessEntry | null
 	{
 		if (command.coordinates.endpoint !== this.options.internalEndpoint)
 		{
 			throw new Error("Host conversation computer endpoint changed");
 		}
 		const entry = this.entries.get(command.coordinates.processId) ?? null;
-		if (entry !== null)
+		if (entry)
 		{
 			this._AssertEntry(entry, command.computerId, command.leaseId, command.generation);
 		}
@@ -366,9 +364,13 @@ export class HostConversationComputerProcessOwner
 	}
 
 	/** Requires an entry to belong to all durable lease coordinates. */
-	private _AssertEntry(entry: _HostProcessEntry, computerId: string, leaseId: string, generation: number): void
+	private _AssertEntry(entry: HostConversationComputerProcessEntry, computerId: string, leaseId: string, generation: number): void
 	{
-		if (entry.computerId !== computerId || entry.leaseId !== leaseId || entry.generation !== generation)
+		if (
+			entry.computerId !== computerId
+			|| entry.leaseId !== leaseId
+			|| entry.generation !== generation
+		)
 		{
 			throw new Error("Host conversation computer lease coordinates changed");
 		}
@@ -388,7 +390,15 @@ export class HostConversationComputerProcessOwner
 	private _AssertLoopbackEndpoint(): void
 	{
 		const endpoint = new URL(this.options.internalEndpoint);
-		if (endpoint.protocol !== "http:" || endpoint.hostname !== "127.0.0.1" && endpoint.hostname !== "localhost" || endpoint.username || endpoint.password)
+		if (
+			endpoint.protocol !== "http:"
+			|| (
+				endpoint.hostname !== "127.0.0.1"
+				&& endpoint.hostname !== "localhost"
+			)
+			|| endpoint.username
+			|| endpoint.password
+		)
 		{
 			throw new Error("Host conversation computer endpoint must use loopback HTTP without credentials");
 		}

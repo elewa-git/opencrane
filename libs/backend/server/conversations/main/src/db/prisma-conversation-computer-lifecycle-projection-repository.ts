@@ -23,9 +23,36 @@ export class PrismaConversationComputerLifecycleProjectionRepository implements 
 	/** Enumerate one stable page of open agent-session coordinates for Kurrent-owned filtering. */
 	public async enumerate(siloId: string, afterConversationId: string | null, limit: number)
 	{
-		const rows = await this.prisma.conversation.findMany({ where: { siloId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, id: afterConversationId === null ? undefined : { gt: afterConversationId }, computerId: { not: null }, computerAgentIdentityId: { not: null }, computerProfileRevisionId: { not: null } }, select: { id: true, computerId: true, computerAgentIdentityId: true, computerProfileRevisionId: true }, orderBy: { id: "asc" }, take: limit });
+		const rows = await this.prisma.conversation.findMany({
+			where: {
+				siloId,
+				mode: ConversationMode.AgentSession,
+				lifecycle: ConversationLifecycle.Open,
+				id: afterConversationId === null ? undefined : { gt: afterConversationId },
+				computerId: { not: null },
+				computerAgentIdentityId: { not: null },
+				computerProfileRevisionId: { not: null },
+			},
+			select: {
+				id: true,
+				computerId: true,
+				computerAgentIdentityId: true,
+				computerProfileRevisionId: true,
+			},
+			orderBy: { id: "asc" },
+			take: limit,
+		});
+
 		return {
-			items: rows.map((row) => ({ computer: { siloId, computerId: row.computerId!, conversationId: row.id, agentIdentityId: row.computerAgentIdentityId! }, profileRevisionId: row.computerProfileRevisionId! })),
+			items: rows.map(row => ({
+				computer: {
+					siloId,
+					computerId: row.computerId!,
+					conversationId: row.id,
+					agentIdentityId: row.computerAgentIdentityId!,
+				},
+				profileRevisionId: row.computerProfileRevisionId!,
+			})),
 			nextCursor: rows.length === limit ? rows.at(-1)?.id ?? null : null,
 		};
 	}
@@ -36,7 +63,15 @@ export class PrismaConversationComputerLifecycleProjectionRepository implements 
 		const row = await this.prisma.conversation.findFirst({ where: { siloId, computerId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open }, select: { id: true, computerAgentIdentityId: true, computerProfileRevisionId: true } });
 		if (row === null || row.computerAgentIdentityId === null || row.computerProfileRevisionId === null)
 			return null;
-		return { computer: { siloId, computerId, conversationId: row.id, agentIdentityId: row.computerAgentIdentityId }, profileRevisionId: row.computerProfileRevisionId };
+		return {
+			computer: {
+				siloId,
+				computerId,
+				conversationId: row.id,
+				agentIdentityId: row.computerAgentIdentityId,
+			},
+			profileRevisionId: row.computerProfileRevisionId,
+		};
 	}
 
 	/** Move the projected expiry later for exactly the canonical lease that history just renewed. */
@@ -77,5 +112,12 @@ export class PrismaConversationComputerLifecycleProjectionRepository implements 
 function _ActiveLeaseRow(command: ConversationComputerLeaseProjectionCommand)
 {
 	const { computer, lease } = command;
-	return { siloId: computer.siloId, conversationId: computer.conversationId, computerId: computer.computerId, agentIdentityId: computer.agentIdentityId, leaseId: lease.leaseId, leaseGeneration: lease.leaseGeneration };
+	return {
+		siloId: computer.siloId,
+		conversationId: computer.conversationId,
+		computerId: computer.computerId,
+		agentIdentityId: computer.agentIdentityId,
+		leaseId: lease.leaseId,
+		leaseGeneration: lease.leaseGeneration,
+	};
 }

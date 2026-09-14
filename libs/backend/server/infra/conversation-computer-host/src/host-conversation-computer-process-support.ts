@@ -23,13 +23,22 @@ export function _HostConversationComputerBearerDigest(bearer: string): Buffer
 export function _HostConversationComputerChildEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv
 {
 	const environment: NodeJS.ProcessEnv = {};
-	for (const name of ["HOME", "LANG", "LC_ALL", "PATH", "PYTHONHOME", "SYSTEMROOT", "TMPDIR"])
+	for (const name of [
+		"HOME",
+		"LANG",
+		"LC_ALL",
+		"PATH",
+		"PYTHONHOME",
+		"SYSTEMROOT",
+		"TMPDIR",
+	])
 	{
 		if (source[name] !== undefined)
 		{
 			environment[name] = source[name];
 		}
 	}
+
 	return environment;
 }
 
@@ -57,7 +66,7 @@ export function _WaitForHostConversationComputerReadiness(child: HostConversatio
 		function _Cleanup(): void
 		{
 			clearTimeout(timeout);
-			if (pollTimer !== null)
+			if (pollTimer)
 			{
 				clearTimeout(pollTimer);
 			}

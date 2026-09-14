@@ -9,8 +9,21 @@ function _Command()
 {
 	return {
 		bootstrapId: "bootstrap-1",
-		computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "agent-1" },
-		lease: { leaseId: "lease-1", leaseGeneration: 1, realization: { kind: ConversationComputerRealizationKinds.HostDevelopmentProcess, processId: "local-computer-1", endpoint: "http://127.0.0.1:8081" } },
+		computer: {
+			siloId: "silo-1",
+			conversationId: "conversation-1",
+			computerId: "computer-1",
+			agentIdentityId: "agent-1",
+		},
+		lease: {
+			leaseId: "lease-1",
+			leaseGeneration: 1,
+			realization: {
+				kind: ConversationComputerRealizationKinds.HostDevelopmentProcess,
+				processId: "local-computer-1",
+				endpoint: "http://127.0.0.1:8081",
+			},
+		},
 		keyAlias: "attempt-1",
 		modelAlias: "simulated/model",
 		maxBudgetUsd: 0.1,
@@ -34,9 +47,17 @@ describe("Tier 2 simulated model boundary", function _Suite(): void
 		const command = _Command();
 		const first = await credentials.issueOnce(command);
 		await expect(credentials.issueOnce(command)).resolves.toEqual(first);
-		await expect(credentials.reuseExact({ ...command, expectedCredentialDigest: first.credentialDigest, expectedExpiresAt: first.expiresAt })).resolves.toEqual(first);
+		await expect(credentials.reuseExact({
+			...command,
+			expectedCredentialDigest: first.credentialDigest,
+			expectedExpiresAt: first.expiresAt,
+		})).resolves.toEqual(first);
 		await expect(credentials.issueOnce({ ...command, modelAlias: "changed/model" })).rejects.toThrow("coordinates changed");
 		await credentials.revoke(command.bootstrapId);
-		await expect(credentials.reuseExact({ ...command, expectedCredentialDigest: first.credentialDigest, expectedExpiresAt: first.expiresAt })).rejects.toThrow("does not exist");
+		await expect(credentials.reuseExact({
+			...command,
+			expectedCredentialDigest: first.credentialDigest,
+			expectedExpiresAt: first.expiresAt,
+		})).rejects.toThrow("does not exist");
 	});
 });

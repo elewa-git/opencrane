@@ -50,11 +50,11 @@ export interface ConversationComputerActivationParked
 }
 
 /**
- * Directs the listener to keep the delivery live because the sandbox is not assigned yet.
+ * Directs the listener to keep the delivery live because the selected realization is not ready yet.
  *
- * A gVisor Pod cold start takes seconds to minutes. This outcome is expected progress, not a
- * failure, so the listener waits with bounded backoff and asks KurrentDB to redeliver instead of
- * spending the group's retry budget on immediate retries.
+ * Starting an external realization can take seconds to minutes. This outcome is expected progress,
+ * so the listener waits with bounded backoff and asks KurrentDB to redeliver instead of spending
+ * the group's retry budget on immediate retries.
  */
 export interface ConversationComputerActivationPending
 {
@@ -216,7 +216,7 @@ export interface ConversationComputerActivationConsumer
  * Decides whether a validated computer generation can activate.
  *
  * The listener supplies a stream-bound command and maps this result to the persistent queue action;
- * the authority owns current computer, lease, and Agent Sandbox claim decisions.
+ * the authority owns current computer, lease, and realization decisions.
  */
 export interface ConversationComputerActivationAuthority
 {
@@ -254,7 +254,7 @@ export interface ConversationComputerActivationProjectionRepository
  * Carries the active lease coordinates copied into PostgreSQL after activation succeeds.
  *
  * Deferred approval transactions compare every field with the immutable execution subject. A missing,
- * expired, or replaced row therefore prevents a tool action from being approved for a released sandbox.
+ * expired, or replaced row therefore prevents a tool action from being approved for a released realization.
  * Lifecycle renewal reuses the same command to move the projected expiry later.
  */
 export interface ConversationComputerActiveLeaseProjectionCommand
