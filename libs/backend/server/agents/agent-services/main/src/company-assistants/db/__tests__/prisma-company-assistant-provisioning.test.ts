@@ -2,12 +2,13 @@ import { AgentRevisionState, AgentServiceKind, AgentServiceState, PrincipalProve
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions } from "@opencrane/models/authorization";
 import { describe, expect, it, vi } from "vitest";
 
+import { CompanyAssistantProvisioningDenied } from "../../company-assistant.errors";
 import { PrismaCompanyAssistantProvisioningRepository } from "../prisma-company-assistant-provisioning";
 
 const _NOW = new Date("2026-09-07T10:00:00.000Z");
 const _CALLER = { siloId: "silo-1", principalId: "admin" };
 const _COMMAND = { name: "Company assistant", modelDefinitionId: "model-1", invokerPrincipalIds: ["human-1"] };
-const _POLICY = { workloadProfile: "company", promptPolicyVersion: "1", budget: { maxTurns: 1, maxTokens: 4096, maxDurationMs: 60_000 } };
+const _POLICY = { workloadProfile: "company", promptPolicyVersion: "1", budget: { maxTurns: 1, maxTokens: 4096, maxCostUsdMicros: null, maxToolInvocations: 1, maxDurationMs: 60_000, maxLoopIterations: 1 } };
 
 /** Records writes separately so denial and existing-result tests prove that no authority was restored. */
 function _Fixture()
@@ -55,6 +56,18 @@ describe("PrismaCompanyAssistantProvisioningRepository", function _Suite()
 		}
 		await expect(f.authority.provision(_CALLER, _COMMAND, _NOW)).rejects.toThrow();
 		expect(f.transaction.principal.create).not.toHaveBeenCalled();
+		expect(f.reconcileManagedResourceGrants).not.toHaveBeenCalled();
+	});
+
+	it("rejects an incomplete deployment budget before creating the company principal or revision", async function _InvalidBudget()
+	{
+		const f = _Fixture();
+		const invalidPolicy = { ..._POLICY, budget: { ..._POLICY.budget, maxLoopIterations: 0 } };
+		const authority = new PrismaCompanyAssistantProvisioningRepository(f.transaction as never, invalidPolicy, { admitPrincipal: f.admitPrincipal } as never, { reconcileManagedResourceGrants: f.reconcileManagedResourceGrants });
+
+		await expect(authority.provision(_CALLER, _COMMAND, _NOW)).rejects.toBeInstanceOf(CompanyAssistantProvisioningDenied);
+		expect(f.transaction.principal.create).not.toHaveBeenCalled();
+		expect(f.transaction.agentRevision.create).not.toHaveBeenCalled();
 		expect(f.reconcileManagedResourceGrants).not.toHaveBeenCalled();
 	});
 

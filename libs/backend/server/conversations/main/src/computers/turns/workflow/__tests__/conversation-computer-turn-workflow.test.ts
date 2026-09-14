@@ -11,7 +11,7 @@ const _INPUT: ConversationComputerTurnTaskInput = { siloId: "silo-1", computerId
 const _TURN = { bootstrapId: "turn-1", siloId: "silo-1", binding: { conversationId: "conversation-1" }, latestPendingEntryId: _INPUT.causationId, latestPendingEntryPosition: _INPUT.causationPosition, compile: { runId: "run-1", attempt: 1 } };
 
 /** Capture the registered definition and expose deterministic durable-wait seams. */
-function _Fixture(progress: readonly Record<string, unknown>[])
+function _Fixture(progress: readonly Record<string, unknown>[], cacheCheckpoints = false)
 {
 	let definition!: IWorkflowTaskDefinition<ConversationComputerTurnTaskInput, unknown>;
 	const execution = { register: vi.fn(function _Register(value) { definition = value; }) };
@@ -21,8 +21,16 @@ function _Fixture(progress: readonly Record<string, unknown>[])
 	const receipts = { bind: vi.fn().mockResolvedValue(true) };
 	const approvalNotifications = { publishRequested: vi.fn().mockResolvedValue("published") };
 	const toolDispatch = { tryExecute: vi.fn().mockResolvedValue(false), settleExhausted: vi.fn().mockResolvedValue(true) };
+	const checkpoints = new Map<string, unknown>();
 	_RegisterConversationComputerTurnWorkflow(execution as never, { approvalNotifications, authority: authority as never, receipts, toolDispatch, siloId: "silo-1" });
-	const context = { task: _TASK, attempt: 1, checkpoint: vi.fn(async function _Checkpoint(_step, operation) { return operation(); }), spawnChild: vi.fn(), awaitChild: vi.fn(), sleepUntil: vi.fn().mockResolvedValue(undefined), waitForEvent: vi.fn().mockResolvedValue({ eventName: "tool-result:tool-1", payload: {} }) } as unknown as IWorkflowTaskContext;
+	const context = { task: _TASK, attempt: 1, checkpoint: vi.fn(async function _Checkpoint(step, operation)
+	{
+		if (!cacheCheckpoints)
+			return operation();
+		if (!checkpoints.has(step.stepName))
+			checkpoints.set(step.stepName, await operation());
+		return checkpoints.get(step.stepName);
+	}), spawnChild: vi.fn(), awaitChild: vi.fn(), sleepUntil: vi.fn().mockResolvedValue(undefined), waitForEvent: vi.fn().mockResolvedValue({ eventName: "tool-result:tool-1", payload: {} }) } as unknown as IWorkflowTaskContext;
 	return { approvalNotifications, authority, context, definition, receipts, toolDispatch };
 }
 
@@ -36,7 +44,7 @@ describe("conversation computer turn workflow", function _Suite()
 		expect(fixture.context.waitForEvent).toHaveBeenNthCalledWith(1, "tool-result:tool-1");
 		expect(fixture.context.waitForEvent).toHaveBeenNthCalledWith(2, "generated-output:file-1", { timeoutAt: new Date(deadline) });
 		expect(fixture.authority.advance).toHaveBeenCalledTimes(3);
-		expect(fixture.context.checkpoint).toHaveBeenCalledExactlyOnceWith({ stepName: "dispatch-mcp-invocation" }, expect.any(Function));
+		expect(fixture.context.checkpoint).toHaveBeenCalledExactlyOnceWith({ stepName: "dispatch-mcp-invocation:tool-1" }, expect.any(Function));
 		expect(fixture.toolDispatch.tryExecute).toHaveBeenCalledExactlyOnceWith({ siloId: "silo-1", runId: "run-1", attempt: 1, toolInvocationId: "tool-1" });
 		expect(fixture.context.sleepUntil).not.toHaveBeenCalled();
 	});
@@ -105,6 +113,44 @@ describe("conversation computer turn workflow", function _Suite()
 		expect(fixture.approvalNotifications.publishRequested.mock.invocationCallOrder[0]).toBeLessThan((fixture.context.waitForEvent as unknown as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]!);
 		expect(fixture.toolDispatch.tryExecute).not.toHaveBeenCalled();
 		expect(fixture.authority.advance).toHaveBeenCalledTimes(2);
+	});
+
+	it("keeps approval publication checkpoints distinct per invocation while replaying the same ID", async function _ApprovalCheckpointIdentity()
+	{
+		const fixture = _Fixture([
+			{ outcome: "tool_pending", toolInvocationId: "tool-1", waitFor: "approval" },
+			{ outcome: "tool_pending", toolInvocationId: "tool-1", waitFor: "approval" },
+			{ outcome: "tool_pending", toolInvocationId: "tool-2", waitFor: "approval" },
+			{ outcome: "completed" },
+		], true);
+
+		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "completed", turnId: "turn-1" });
+
+		expect(fixture.approvalNotifications.publishRequested).toHaveBeenCalledTimes(2);
+		expect(fixture.approvalNotifications.publishRequested).toHaveBeenNthCalledWith(1, expect.objectContaining({ approvalId: "tool-1" }));
+		expect(fixture.approvalNotifications.publishRequested).toHaveBeenNthCalledWith(2, expect.objectContaining({ approvalId: "tool-2" }));
+		expect(fixture.context.checkpoint).toHaveBeenNthCalledWith(1, { stepName: "publish-tool-approval-requested:tool-1" }, expect.any(Function));
+		expect(fixture.context.checkpoint).toHaveBeenNthCalledWith(2, { stepName: "publish-tool-approval-requested:tool-1" }, expect.any(Function));
+		expect(fixture.context.checkpoint).toHaveBeenNthCalledWith(3, { stepName: "publish-tool-approval-requested:tool-2" }, expect.any(Function));
+	});
+
+	it("keeps dispatch checkpoints distinct per invocation while replaying the same ID", async function _DispatchCheckpointIdentity()
+	{
+		const fixture = _Fixture([
+			{ outcome: "tool_pending", toolInvocationId: "tool-1" },
+			{ outcome: "tool_pending", toolInvocationId: "tool-1" },
+			{ outcome: "tool_pending", toolInvocationId: "tool-2" },
+			{ outcome: "completed" },
+		], true);
+
+		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "completed", turnId: "turn-1" });
+
+		expect(fixture.toolDispatch.tryExecute).toHaveBeenCalledTimes(2);
+		expect(fixture.toolDispatch.tryExecute).toHaveBeenNthCalledWith(1, expect.objectContaining({ toolInvocationId: "tool-1" }));
+		expect(fixture.toolDispatch.tryExecute).toHaveBeenNthCalledWith(2, expect.objectContaining({ toolInvocationId: "tool-2" }));
+		expect(fixture.context.checkpoint).toHaveBeenNthCalledWith(1, { stepName: "dispatch-mcp-invocation:tool-1" }, expect.any(Function));
+		expect(fixture.context.checkpoint).toHaveBeenNthCalledWith(2, { stepName: "dispatch-mcp-invocation:tool-1" }, expect.any(Function));
+		expect(fixture.context.checkpoint).toHaveBeenNthCalledWith(3, { stepName: "dispatch-mcp-invocation:tool-2" }, expect.any(Function));
 	});
 
 	it("resumes a saved approval through the workflow engine and admits one executor on replay", async function _ApprovalEngineJourney()

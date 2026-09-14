@@ -154,7 +154,7 @@ the original name. A recovered declaration must resolve to the same saved propos
 changing its name cannot move an existing invocation to another revision or obtain another model
 request. The model name itself grants no permission.
 
-A proposal keeps one invocation slot for its admitted run attempt. Its transaction reads the saved
+A proposal identifies one saved model step within its admitted run attempt. Its transaction reads the saved
 run and snapshot, records central permission evidence, checks current dispatch access and admits
 executor work together. A refusal after any write rolls back the whole transaction. Identical
 retries recover the original winning invocation; they never replace it with fresh evidence.
@@ -171,13 +171,30 @@ MCP assignment checks receive the saved execution Principal: the human for a per
 managed service for a company run. The MCP owner checks that Principal's current installation; a
 requester's or administrator's connection cannot substitute for it.
 
-After encrypted continuation custody accepts the exact result, the turn publishes one content-free
-tool log before it reserves the second model call. A private revision-zero receipt binds the saved
+After encrypted custody accepts the exact result, the turn publishes one content-free
+tool log before it reserves the next model call. A private revision-zero receipt binds the saved
 invocation, terminal outcome and result digest to that conversation entry. The participant log keeps
 the frozen tool name, public invocation identity and completed or failed phase, along with the author,
 time, visibility and identifiers required by conversation history. It never carries arguments, result
 content, result digests, credentials or provider metadata. Receipt recovery is idempotent; a new
 physical append repeats current result, run, conversation and lease checks.
+
+The turn keeps ordered model reservations, tool selections and private result references. Its pure
+protocol reducer owns legal transitions and cumulative model, completion-token, tool and cycle
+consumption; the Kurrent adapter owns event replay and competing writes. Saving a result spends no
+cycle until a new model reservation uses it. Replaying the same events spends nothing again.
+Every new model request reserves its entire token ceiling, even when its response is lost.
+
+Another tool may be offered only while the original allowance can also reserve a final text call.
+Later requests carry every accepted call/result pair in order and reuse the same attempt credential
+and expiry. Lost paid responses become durable unavailable progress; they cannot create replacement
+requests. Absurd selects saved progress and owns waits and recovery. The Pod retains only its
+lease-fenced isolated execution and review interactions.
+
+The model HTTP deadline limits acceptance of that response. An approval or tool wait may continue
+after it, within the original attempt authority and credential expiry. Each later reservation keeps
+the earlier authority ceiling and any shorter accepted result deadline. The server rechecks current
+authority after loading private history and immediately before the next model request.
 
 Approval-gated personal proposals preserve the frozen arguments, schema and run allowance in the
 existing invocation slot, then pause the run in `WaitingForInput` through deferred IAM approval.

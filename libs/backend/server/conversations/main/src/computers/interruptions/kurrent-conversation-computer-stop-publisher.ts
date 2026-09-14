@@ -105,11 +105,11 @@ export class KurrentConversationComputerStopPublisher implements ConversationCom
 		_AssertTarget(admission, turn);
 		if (outcome.decision === ConversationComputerStopDecisions.CancellationWon)
 		{
-			if (turn!.cancellationReceipt?.commandId !== admission.command.commandId || turn!.cancellationReceipt.commandDigest !== admission.commandDigest || outcome.outputReceiptDigest !== null)
+			if (turn!.protocol.cancellation?.commandId !== admission.command.commandId || turn!.protocol.cancellation.commandDigest !== admission.commandDigest || outcome.outputReceiptDigest !== null)
 				throw new Error("Conversation Stop receipt differs from its cancellation winner");
 			return;
 		}
-		const digest = turn!.outputReceipt === null ? null : ___DigestCanonicalJson(turn!.outputReceipt as unknown as JsonValue);
+		const digest = turn!.protocol.output === null ? null : ___DigestCanonicalJson(turn!.protocol.output.receipt as unknown as JsonValue);
 		if (outcome.decision !== ConversationComputerStopDecisions.OutputWon || outcome.outputReceiptDigest !== digest)
 			throw new Error("Conversation Stop receipt differs from its output winner");
 	}
@@ -139,9 +139,9 @@ export class KurrentConversationComputerStopPublisher implements ConversationCom
 	{
 		const turn = await this.turns.load(admission.target.bootstrapId);
 		_AssertTarget(admission, turn);
-		if (turn!.outputReceipt !== null)
-			return this._recordOutputWinner(admission, ___DigestCanonicalJson(turn!.outputReceipt as unknown as JsonValue));
-		if (turn!.cancellationReceipt !== null)
+		if (turn!.protocol.output !== null)
+			return this._recordOutputWinner(admission, ___DigestCanonicalJson(turn!.protocol.output.receipt as unknown as JsonValue));
+		if (turn!.protocol.cancellation !== null)
 			throw new Error("Conversation Stop cancellation winner omitted its atomic receipt");
 		const activeStream = _ConversationComputerActiveTurnStreamName({ siloId: admission.command.siloId, computerId: admission.command.computerId, lease: { leaseId: admission.target.leaseId, leaseGeneration: admission.target.leaseGeneration } });
 		const active = await _Last(this.history, activeStream);
@@ -165,8 +165,8 @@ export class KurrentConversationComputerStopPublisher implements ConversationCom
 			if (recovered !== null)
 				return recovered;
 			const winner = await this.turns.load(admission.target.bootstrapId);
-			if (winner !== null && winner.outputReceipt !== null)
-				return this._recordOutputWinner(admission, ___DigestCanonicalJson(winner.outputReceipt as unknown as JsonValue));
+			if (winner !== null && winner.protocol.output !== null)
+				return this._recordOutputWinner(admission, ___DigestCanonicalJson(winner.protocol.output.receipt as unknown as JsonValue));
 			if (contentionCount >= _MAX_TARGET_CONTENTION_RETRIES)
 				throw new Error("Conversation Stop target arbitration remained contended");
 			return this._publishTarget(admission, contentionCount + 1);

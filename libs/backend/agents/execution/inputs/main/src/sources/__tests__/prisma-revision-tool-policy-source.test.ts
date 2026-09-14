@@ -32,7 +32,7 @@ function _ToolPolicySource(transaction = _Transaction(_Revision())): PrismaRevis
 /** Creates a current revision with one MCP tool and one published skill artifact. */
 function _Revision(overrides: Record<string, unknown> = {})
 {
-	return { modelDefinition: { id: "model-definition-1", siloId: "silo-1", scope: ModelRoutingScope.ClusterTenant, clusterTenant: "silo-1", publicModelName: "tenant-model", litellmModelId: "litellm-deployment-1", generatedOutputCapabilities: [] }, mcpToolAssignments: [_McpToolAssignment()], skillAssignments: [{ skillRevisionId: "skill-revision-1" }], budget: { maxTurns: 4, maxTokens: 1024, maxDurationMs: 60_000 }, ...overrides };
+	return { modelDefinition: { id: "model-definition-1", siloId: "silo-1", scope: ModelRoutingScope.ClusterTenant, clusterTenant: "silo-1", publicModelName: "tenant-model", litellmModelId: "litellm-deployment-1", generatedOutputCapabilities: [] }, mcpToolAssignments: [_McpToolAssignment()], skillAssignments: [{ skillRevisionId: "skill-revision-1" }], budget: { maxTurns: 4, maxTokens: 1024, maxDurationMs: 60_000, maxToolInvocations: 1, maxLoopIterations: 4, maxCostUsdMicros: null }, ...overrides };
 }
 
 /** Creates one same-silo active skill whose selected revision is published. */
@@ -74,13 +74,31 @@ describe("PrismaRevisionBudgetPolicyAuthority", function _DescribePrismaRevision
 {
 	it("preserves the total run ceiling independently of the text-response limit", async function _LoadsBudget()
 	{
-		const transaction = _Transaction(_Revision({ budget: { maxTurns: 4, maxTokens: 256000, maxDurationMs: 60_000 } }));
-		await expect(new PrismaRevisionBudgetPolicyAuthority(transaction.prisma as never).load(_COMMAND, _RUN, transaction)).resolves.toEqual({ outcome: "loaded", value: { budgetPolicy: { maxModelTurns: 4, maxCompletionTokens: 256000, wallClockDeadlineEpochMs: Date.parse("2026-07-26T00:01:00.000Z") } } });
+		const transaction = _Transaction(_Revision({ budget: { maxTurns: 4, maxTokens: 256000, maxDurationMs: 60_000, maxToolInvocations: 1, maxLoopIterations: 4, maxCostUsdMicros: 500_000 } }));
+		await expect(new PrismaRevisionBudgetPolicyAuthority(transaction.prisma as never).load(_COMMAND, _RUN, transaction)).resolves.toEqual({ outcome: "loaded", value: { budgetPolicy: { maxModelTurns: 4, maxCompletionTokens: 256000, maxCostUsdMicros: 500_000, maxToolInvocations: 1, maxLoopIterations: 4, wallClockDeadlineEpochMs: Date.parse("2026-07-26T00:01:00.000Z") } } });
 	});
 
 	it("denies malformed budget policy before it can enter an immutable snapshot", async function _DeniesMalformedBudget()
 	{
-		const transaction = _Transaction(_Revision({ budget: { maxTurns: 0, maxTokens: 1024, maxDurationMs: 60_000 } }));
+		const transaction = _Transaction(_Revision({ budget: { maxTurns: 0, maxTokens: 1024, maxDurationMs: 60_000, maxToolInvocations: 1, maxLoopIterations: 4, maxCostUsdMicros: null } }));
 		await expect(new PrismaRevisionBudgetPolicyAuthority(transaction.prisma as never).load(_COMMAND, _RUN, transaction)).resolves.toEqual({ outcome: "denied", reason: "budget_unavailable" });
+	});
+
+	it.each([
+		["missing tool limit", { maxTurns: 4, maxTokens: 1024, maxDurationMs: 60_000, maxLoopIterations: 4, maxCostUsdMicros: null }],
+		["unknown field", { maxTurns: 4, maxTokens: 1024, maxDurationMs: 60_000, maxToolInvocations: 1, maxLoopIterations: 4, maxCostUsdMicros: null, unexpected: 1 }],
+		["negative tool limit", { maxTurns: 4, maxTokens: 1024, maxDurationMs: 60_000, maxToolInvocations: -1, maxLoopIterations: 4, maxCostUsdMicros: null }],
+		["zero loop limit", { maxTurns: 4, maxTokens: 1024, maxDurationMs: 60_000, maxToolInvocations: 0, maxLoopIterations: 0, maxCostUsdMicros: null }],
+		["overflow duration", { maxTurns: 4, maxTokens: 1024, maxDurationMs: Number.MAX_SAFE_INTEGER, maxToolInvocations: 0, maxLoopIterations: 4, maxCostUsdMicros: null }],
+	] as const)("denies %s before snapshot persistence", async function _DeniesBudget(_label, budget)
+	{
+		const transaction = _Transaction(_Revision({ budget }));
+		await expect(new PrismaRevisionBudgetPolicyAuthority(transaction.prisma as never).load(_COMMAND, _RUN, transaction)).resolves.toEqual({ outcome: "denied", reason: "budget_unavailable" });
+	});
+
+	it("accepts zero tool calls as an explicit text-only allowance", async function _AllowsTextOnly()
+	{
+		const transaction = _Transaction(_Revision({ budget: { maxTurns: 1, maxTokens: 1024, maxDurationMs: 60_000, maxToolInvocations: 0, maxLoopIterations: 1, maxCostUsdMicros: null } }));
+		await expect(new PrismaRevisionBudgetPolicyAuthority(transaction.prisma as never).load(_COMMAND, _RUN, transaction)).resolves.toMatchObject({ outcome: "loaded", value: { budgetPolicy: { maxToolInvocations: 0, maxLoopIterations: 1, maxCostUsdMicros: null } } });
 	});
 });

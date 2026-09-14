@@ -9,7 +9,7 @@ import { PrismaCompanyAssistantToolsRepository } from "../prisma-company-assista
 const _NOW = new Date("2026-09-09T03:00:00.000Z");
 const _CALLER = { siloId: "silo-1", principalId: "admin" };
 const _SERVICE_ID = __CompanyAssistantServiceId(_CALLER.siloId);
-const _POLICY = { workloadProfile: "company", promptPolicyVersion: "1", budget: { maxTurns: 2, maxTokens: 4096, maxDurationMs: 60_000 } };
+const _POLICY = { workloadProfile: "company", promptPolicyVersion: "1", budget: { maxTurns: 2, maxTokens: 4096, maxCostUsdMicros: null, maxToolInvocations: 1, maxDurationMs: 60_000, maxLoopIterations: 1 } };
 const _COMMAND = { expectedActiveRevisionId: "revision-1", toolRevisionIds: ["tool-retained", "tool-new"] };
 
 /** Keeps source content distinct from replacement tools so accidental content loss is observable. */
@@ -91,6 +91,18 @@ describe("company assistant tool assignment persistence", function _Suite()
 		f.transaction.mcpToolRevision.findMany.mockResolvedValue([]);
 		await expect(f.repository.setTools(_CALLER, _COMMAND, _NOW)).rejects.toBeInstanceOf(CompanyAssistantProvisioningDenied);
 		expect(f.transaction.mcpToolRevision.findMany).toHaveBeenCalledExactlyOnceWith({ where: { id: { in: ["tool-new", "tool-retained"] }, siloId: _CALLER.siloId, serverRevision: { is: { siloId: _CALLER.siloId, state: McpServerRevisionState.Ready, server: { is: { siloId: _CALLER.siloId, status: McpServerStatus.Active, approvalStatus: McpApprovalStatus.Published } } } } }, select: { id: true } });
+		expect(f.transaction.agentRevision.create).not.toHaveBeenCalled();
+		expect(f.reconcileManagedResourceGrants).not.toHaveBeenCalled();
+	});
+
+	it("refuses to clone a published revision whose saved budget is incomplete", async function _RequiresCompleteBudget()
+	{
+		const f = _Fixture();
+		const budget = { ...f.source.budget } as Partial<typeof f.source.budget>;
+		delete budget.maxLoopIterations;
+		f.transaction.agentService.findFirst.mockResolvedValue({ ...f.service, activeRevision: { ...f.source, budget } });
+
+		await expect(f.repository.setTools(_CALLER, _COMMAND, _NOW)).rejects.toThrow("Agent budget");
 		expect(f.transaction.agentRevision.create).not.toHaveBeenCalled();
 		expect(f.reconcileManagedResourceGrants).not.toHaveBeenCalled();
 	});

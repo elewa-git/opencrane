@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { AgentRevisionState, AgentServiceKind, AgentServiceState, OrgMemberStatus, PrincipalProvenance, type Prisma } from "@prisma/client";
 import { PrismaAuthorizationAuthority, PrismaManagedAuthorizationGrantRepository, type AuthorizationAuthority, type ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
+import { __ParseAgentBudget } from "@opencrane/models/agents";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
@@ -82,8 +83,16 @@ export class PrismaCompanyAssistantProvisioningRepository implements CompanyAssi
 	/** Requires a finite reviewed policy and explicit current human invokers before creating authority. */
 	private async _ValidateChoices(siloId: string, command: CompanyAssistantProvisioningCommand): Promise<void>
 	{
-		if (!command.name.trim() || command.name !== command.name.trim() || command.name.length > 120 || !command.modelDefinitionId.trim() || command.invokerPrincipalIds.length < 1 || command.invokerPrincipalIds.length > 100 || new Set(command.invokerPrincipalIds).size !== command.invokerPrincipalIds.length || !this.policy.workloadProfile.trim() || !this.policy.promptPolicyVersion.trim() || Object.values(this.policy.budget).some(value => !Number.isSafeInteger(value) || value <= 0))
+		if (!command.name.trim() || command.name !== command.name.trim() || command.name.length > 120 || !command.modelDefinitionId.trim() || command.invokerPrincipalIds.length < 1 || command.invokerPrincipalIds.length > 100 || new Set(command.invokerPrincipalIds).size !== command.invokerPrincipalIds.length || !this.policy.workloadProfile.trim() || !this.policy.promptPolicyVersion.trim())
 			throw new CompanyAssistantProvisioningDenied();
+		try
+		{
+			__ParseAgentBudget(this.policy.budget);
+		}
+		catch
+		{
+			throw new CompanyAssistantProvisioningDenied();
+		}
 		const principals = await this.transaction.principal.findMany({ where: { siloId, id: { in: [...command.invokerPrincipalIds] }, provenance: PrincipalProvenance.External }, select: { id: true, subject: true } });
 		if (principals.length !== command.invokerPrincipalIds.length)
 			throw new CompanyAssistantProvisioningDenied();

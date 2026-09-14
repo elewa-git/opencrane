@@ -1,6 +1,6 @@
 import { AgentRunState, type Prisma } from "@prisma/client";
 
-import { ___ExecutionSubjectSchema, type RunInputSnapshotMcpTool } from "@opencrane/contracts";
+import { ___ExecutionSubjectSchema, ___ParseRunBudgetPolicy, type RunBudgetPolicy, type RunInputSnapshotMcpTool } from "@opencrane/contracts";
 import { __AreRunInputSnapshotMcpToolsValid } from "@opencrane/backend/agents/execution/inputs";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -10,7 +10,7 @@ import { ConversationToolProposalRefusals, type PreparedConversationToolProposal
 import type { ConversationToolApprovalDisclosure, ConversationToolProposalRun, ConversationToolProposalRunReader } from "./conversation-tool-proposal-run.types";
 
 /**
- * Checks the running attempt, its saved input and the proposal slot without writing anything.
+ * Checks the running attempt, its saved input and the per-step proposal identity without writing anything.
  *
  * The caller must keep these reads and admission in the same Serializable transaction. Counting
  * existing calls before the insert lets PostgreSQL reject concurrent attempts to claim another slot.
@@ -64,11 +64,19 @@ export class PrismaConversationToolProposalRunRepository implements Conversation
 			select: { budgetPolicy: true, mcpTools: true, executionSubject: true },
 		} as const;
 		const snapshot = await this.transaction.runInputSnapshot.findFirst(query);
-		const budget = snapshot?.budgetPolicy;
+		let budget: RunBudgetPolicy;
+		try
+		{
+			budget = ___ParseRunBudgetPolicy(snapshot?.budgetPolicy);
+		}
+		catch
+		{
+			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
+		}
 		const tools = snapshot?.mcpTools;
-		if (snapshot === null || budget === undefined || budget === null || typeof budget !== "object" || Array.isArray(budget)
+		if (snapshot === null
 			|| budget.wallClockDeadlineEpochMs !== candidate.compiledInput.budget.wallClockDeadlineEpochMs
-			|| (budget.maxToolInvocations ?? null) !== candidate.compiledInput.budget.maxToolInvocations
+			|| budget.maxToolInvocations !== candidate.compiledInput.budget.maxToolInvocations
 			|| ___DigestCanonicalJson(snapshot.executionSubject as JsonValue) !== ___DigestCanonicalJson(run.subject as unknown as JsonValue)
 			|| !Array.isArray(tools) || !__AreRunInputSnapshotMcpToolsValid(tools as unknown as RunInputSnapshotMcpTool[]))
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
@@ -90,7 +98,7 @@ export class PrismaConversationToolProposalRunRepository implements Conversation
 		return { toolName: frozenTool.name, toolDescription: frozenTool.description, serverName: row.serverRevision.server.name };
 	}
 
-	/** Reject a changed retry and prevent a new proposal from taking an occupied call slot. */
+	/** Reject a changed retry and prevent a new proposal from exceeding the frozen invocation allowance. */
 	private async _checkSlot(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: PreparedConversationToolProposal): Promise<void>
 	{
 		const query = {
@@ -102,7 +110,7 @@ export class PrismaConversationToolProposalRunRepository implements Conversation
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Conflict);
 		const countQuery = { where: { runId: turn.compile.runId, attempt: turn.compile.attempt } };
 		const count = await this.transaction.toolInvocation.count(countQuery);
-		if (existing === null && count >= Math.min(1, candidate.compiledInput.budget.maxToolInvocations ?? 1))
+		if (existing === null && count >= candidate.compiledInput.budget.maxToolInvocations)
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 	}
 }

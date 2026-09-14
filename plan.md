@@ -81,16 +81,30 @@ remaining functional MVP journeys.
 
 ### Bounded multi-step tool reasoning — added MVP acceptance
 
-The current one-tool result and text-only continuation is an earlier delivery slice. The complete
+The ordered-turn implementation wave starts at immutable review base
+`d3986cc15c611f8aef836cd77ea420267dd2174c` on `feat/0.12-bounded-tool-reasoning`
+(draft #892, above #891). Architecture preflight passed. Three coordinated lanes replaced the
+fixed turn protocol, ordered private model history, and proposal/result workflow together. The
+source now supports repeated tool reasoning. Final validation passes 678 conversations tests,
+160 contracts tests, 192 model-routing tests, 161 asset tests and 159 application tests. Nx affected
+lint/type checks pass for 80 projects; style, Prisma ownership, module-growth, workload and agent
+boundaries pass. Final independent review and architecture post-review pass with no remaining
+findings. This source slice is ready for publication; provider backoff and live qualification remain.
+
+The one-tool result and text-only continuation was an earlier delivery slice. The complete
 MVP must support a repeated model → MCP call → persisted result → model cycle within one run.
 Absurd continues to select the next saved step and own waiting and recovery. The server owns model
 and tool authority; AgentSandbox owns isolated, lease-fenced execution. No second scheduler is added.
 
-- [ ] Freeze explicit model-call, token, tool-call, elapsed-time and loop limits at admission.
-  Every iteration debits that same allowance; recovery and continuation cannot replenish it.
-- [ ] Let each saved result inform the next exact tool selection, including discovery-dependent
-  sequences, pagination and intermediate reconciliation, before producing a grounded final answer.
-  Qualify with ordinary provider tools; an aggregate `inventory_total` tool is not a substitute.
+- [x] Freeze explicit model-call, token, tool-call, elapsed-time and loop limits at admission.
+  Revision authoring, compilation and recovered snapshots preserve the complete allowance.
+- [x] Debit every new ordered step from that same allowance; repeated recovery and continuation
+  never replenish it. The ordered protocol replaces the fixed one-tool runtime ceiling.
+- [x] Carry each saved call/result pair into subsequent model requests in order, allowing another
+  permitted tool selection before the final text answer. Two-tool and saved-result restart tests
+  exercise the real turn store and encrypted custody.
+- [ ] Qualify discovery-dependent sequences, pagination and intermediate reconciliation with
+  ordinary provider tools; an aggregate `inventory_total` tool is not a substitute.
 - [ ] Apply bounded backoff to proven retryable provider responses such as HTTP 429. Save the
   retry decision and deadline in the existing workflow. An uncertain effect remains unavailable
   for redispatch unless its existing recovery contract proves a safe outcome.
@@ -105,23 +119,65 @@ and tool authority; AgentSandbox owns isolated, lease-fenced execution. No secon
 - [ ] On testv6, complete a discovery-dependent multi-call business journey with pagination,
   reconciliation and a grounded answer, plus an approved write and its recovery/cancellation cases.
 
-The repeated loop is not implemented by the quality fixes described below. It remains a functional
-gate alongside memory, delegation, scheduling and administration before the goal can close.
+The source loop builds above the completed quality fixes. Provider backoff and live qualification
+remain functional gates alongside memory, delegation, scheduling and administration before the
+goal can close. The singular reservations, fixed Kurrent revisions, singular continuation custody
+and one-invocation proposal clamp are deleted together. Ordered reservations, aggregate accounting
+and distinct per-step proposal identities now enforce the admitted limits.
 
-The source preflight confirms that this limit is enforced by the existing conversation turn's
-singular reservations and fixed Kurrent revisions, its text-only continuation, and the tool proposal
-reader's one-invocation clamp. The next implementation must replace those owners together with a
-turn-local sequence of saved model and tool steps. It must not remove the clamp before the saved
-sequence, aggregate allowance checks and per-step proposal identity exist.
-
-Implement admission limits first, then the turn protocol and its exhaustive State × Event table,
-then repeated proposal/result progression through the existing Absurd and IAM owners. Keep model
+Admission limits, the exhaustive State × Event table and repeated proposal/result progression now
+use the existing Absurd and IAM owners. Keep model
 transport single-request. Reserve a final model call before admitting another tool; if the remaining
 allowance cannot support a grounded answer, end through the existing durable unavailable outcome.
 Carry the ordered accepted tool-result history into subsequent model requests under the existing
 private custody and context bounds. Restart tests must precede pagination and approved-write live
 qualification. Retry a rate-limited action only when its current adapter/recovery evidence proves
 that another dispatch is safe.
+
+### MVP continuation after cleanup — 2026-09-14
+
+Source work resumes on `feat/0.12-bounded-tool-reasoning`, with immutable review base
+`11b90e30a420f9c10485ce658ceb22d0a894408d` from cleanup PR #891. The integration reference is
+develop `d4bd0213c38e4fa70cbc3d93535857da9e381a32`. The live stack check confirms
+#888 → #891 before this wave. Keep the completed cleanup review stable while the remaining
+functional work builds directly on it.
+
+Cleanup CI also finishes on that exact base in run `34785528321`: build/test/lint, generated API,
+the Cognee provider contract, history recovery and all three image smokes pass. Its only failed
+checks remain the five remote-MCP SQL cases and 22 screenshot candidates already awaiting approval;
+133 unchanged screenshot states pass. No images are published from that failed draft run.
+
+| Wave | Result required before the next wave | Existing owner |
+| --- | --- | --- |
+| 1. Aggregate admission limits | Validated limits survive revision storage, input compilation and recovery without defaults that renew an allowance. Keep the current one-tool ceiling in place. | Agent revision models, agent services and execution inputs/runs. |
+| 2. Ordered turn protocol | An exhaustive State × Event table and saved per-step identities replace fixed first/continuation slots; restarts and competing appends cannot repeat a paid request. | Conversation turn state, private input custody and model reservations. |
+| 3. Repeated tool reasoning | Each saved tool result can inform one next model step under the same aggregate limits, with current permission and lease checks. | Conversation model flow, proposal admission and existing IAM invocation lifecycle. |
+| 4. Waiting and recovery | Absurd resumes exact steps after approvals, rate limits and restart; uncertain effects remain fenced and cancellation ends further admission. | Existing turn workflow and invocation recovery. |
+| 5. Business qualification | Testv6 proves discovery, pagination, reconciliation, a grounded answer and an approved write with recovery and cancellation. | App-owned deployment and authenticated live journey tests. |
+
+Admission, protocol and architecture analysis run concurrently. Implementation lanes split by their
+actual files after the shared contract is settled. Memory operations, delegation, scheduled work
+and administration remain subsequent MVP requirements. The pending remote-MCP SQL, visual review
+and scoped Zitadel callback approvals are unchanged; they do not prevent independent source work.
+
+The first slice keeps the current authored model-call, completion-token and duration limits and
+adds explicit tool and cycle limits. Personal revisions allow eight tool-result cycles; company
+revisions retain one. A cycle means one distinct saved tool result that may feed a later model
+step, not an Absurd delivery attempt, sleep or retry. The ordered-step wave above now removes
+the earlier one-tool runtime ceiling. An explicit null revision spend cap means the existing
+frozen server spend cap applies; no new dollar default or unbounded spending mode is introduced.
+The adjacent workflow prerequisite binds approval and remote-dispatch checkpoints to the exact
+invocation ID, preserving idempotent replay while preventing reuse across different calls.
+
+The first slice passes architecture preflight and independent integrated review. Review removes the
+unused attempt-credential helper and its private types, removes a repeated deadline check already
+owned by the shared validator, and corrects the token contract to describe generated tokens only.
+The live conversation owner remains responsible for its key and frozen server spend cap.
+Focused suites cover the contracts (158), agent models (39), agent services (163), inputs (155),
+runs (77), conversations (660), model routing (190), personal configuration (65) and server (159).
+Affected type checks pass for 81 projects and three dependency tasks; dependency, Prisma, workflow,
+authorization, style, module-growth and release-manifest checks pass. SQL-backed qualification will
+run in CI; no SQL baseline, release digest or screenshot baseline changes in this slice.
 
 ### Cleanup findings and evidence
 

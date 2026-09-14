@@ -106,7 +106,7 @@ describe("conversation tool proposal admission on fresh PostgreSQL", function _S
 		const call = { id: `call-${randomUUID()}`, name: f.tool.modelName, arguments: JSON.stringify(f.proposal.arguments), content: null };
 		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ index: 0, finish_reason: "tool_calls", message: { role: "assistant", content: null, tool_calls: [{ id: call.id, type: "function", function: { name: call.name, arguments: call.arguments } }] } }] }), { headers: { "content-type": "application/json; charset=utf-8" } }));
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModel({ compiledInput: f.candidate.compiledInput, endpoint: "https://model.example.test", key: "fixture-model-key", modelAlias: f.turn.modelAlias, maxCompletionTokens: 100, notAfterEpochMs: Date.now() + 30_000, tools: ConversationModelToolModes.Select, continuation: null })).resolves.toEqual({ kind: ConversationModelResponseKinds.Tool, call });
+		await expect(__RequestConversationModel({ compiledInput: f.candidate.compiledInput, endpoint: "https://model.example.test", key: "fixture-model-key", modelAlias: f.turn.modelAlias, maxCompletionTokens: 100, notAfterEpochMs: Date.now() + 30_000, tools: ConversationModelToolModes.Select, history: [] })).resolves.toEqual({ kind: ConversationModelResponseKinds.Tool, call });
 		const providerBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1].body));
 		expect(providerBody.tools).toEqual([{ type: "function", function: { name: f.tool.modelName, description: f.tool.description, parameters: f.tool.parametersSchema } }]);
 		expect(JSON.stringify(providerBody.tools)).not.toContain(sourceName);

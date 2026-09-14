@@ -26,6 +26,8 @@ export { ___GeneratedFileEventName } from "./mcp/generated-file-events";
 export * from "./model-routing/model-routing.types";
 export * from "./model-routing/model-routing.validator";
 export type * from "./inputs/compiled-run-input.types";
+export type { RunBudgetPolicy } from "./inputs/run-budget-policy.types";
+export { ___ParseRunBudgetPolicy } from "./inputs/run-budget-policy.validator";
 export * from "./inputs/prompt-compiler-version";
 export * from "./agents/personal-configuration.types";
 export * from "./api/public-health.types";
@@ -54,6 +56,6 @@ export type { ConversationToolProposal, ConversationToolProposalReceipt } from "
 export { ___ConversationToolArgumentsSchema, ___ConversationToolProposalSchema } from "./conversations/conversation-tool-proposal.validator";
 
 export * from "./conversations/conversation-model.types";
-export { ___ConversationModelToolCallSchema, ___ConversationModelContinuationSchema, ___ConversationModelResponseSchema } from "./conversations/conversation-model.validator";
+export { ___ConversationModelToolCallSchema, ___ConversationModelToolExchangeSchema, ___ConversationModelToolHistorySchema, ___ConversationModelResponseSchema } from "./conversations/conversation-model.validator";
 
 export * from "./mcp/protocol";

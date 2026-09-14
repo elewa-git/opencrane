@@ -4,13 +4,15 @@ import { readFile } from "node:fs/promises";
 import { PrismaClient } from "@prisma/client";
 import { Client } from "pg";
 
-import { AgentIdentityStates, ComputerLeaseStates, ConversationComputerStates, ExecutionSubjectMembershipKinds, PROMPT_COMPILER_VERSION, ___ExecutionSubjectSchema, type ConversationToolProposal, type RunInputSnapshot } from "@opencrane/contracts";
+import { AgentIdentityStates, ConversationModelToolModes, ComputerLeaseStates, ConversationComputerStates, ExecutionSubjectMembershipKinds, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, ___ExecutionSubjectSchema, type ConversationToolProposal, type RunInputSnapshot } from "@opencrane/contracts";
 import { PrismaPromptCompilerUnitOfWork } from "@opencrane/backend/agents/execution/inputs";
 import { __DigestRunInputSnapshot } from "@opencrane/backend/agents/execution/runs";
 import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
+
+import { _ConversationTurnRequest, _OpenConversationTurnProtocol, _ReserveConversationTurnModel } from "./conversation-turn-protocol.fixture";
 
 import { _CreateConversationToolDispatchDependencies } from "../../workflows/mcp-runtime-composition";
 
@@ -87,8 +89,8 @@ export async function _SeedConversationToolProposalSqlFixture(options: _FixtureO
 	const toolDescription = options.tool?.description ?? "Read a dedicated test record";
 	const toolSchemaDigest = ___DigestCanonicalJson(schema);
 	const serverName = "Records SQL proof";
-	const budgetPolicy = { maxModelTurns: 2, maxCompletionTokens: options.maximumCompletionTokens ?? 1_024, maxToolInvocations: 1, wallClockDeadlineEpochMs: now.getTime() + (options.runLifetimeMs ?? 240_000) };
-	const snapshot: RunInputSnapshot = { runId, attempt: 1, siloId, agentServiceId, agentRevisionId, snapshotVersion: 1, conversationId, messageIds: [], personaRevisionId: id("persona"), preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [{ toolRevisionId, name: toolName, description: toolDescription, inputSchema: schema, inputSchemaDigest: toolSchemaDigest }], modelRoute: { alias: modelId, modelDefinitionId: modelId, litellmModelId: `litellm-${modelId}`, maxOutputTokens: 512, generatedOutputCapabilities: [] }, budgetPolicy, executionSubject: subject, promptCompilerVersion: PROMPT_COMPILER_VERSION, digest: "", compiledAt: now.toISOString() };
+	const budgetPolicy = { maxModelTurns: 2, maxCompletionTokens: options.maximumCompletionTokens ?? 1_024, maxCostUsdMicros: null, maxToolInvocations: 1, maxLoopIterations: 1, wallClockDeadlineEpochMs: now.getTime() + (options.runLifetimeMs ?? 240_000) };
+	const snapshot: RunInputSnapshot = { runId, attempt: 1, siloId, agentServiceId, agentRevisionId, snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION, conversationId, messageIds: [], personaRevisionId: id("persona"), preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [{ toolRevisionId, name: toolName, description: toolDescription, inputSchema: schema, inputSchemaDigest: toolSchemaDigest }], modelRoute: { alias: modelId, modelDefinitionId: modelId, litellmModelId: `litellm-${modelId}`, maxOutputTokens: 512, generatedOutputCapabilities: [] }, budgetPolicy, executionSubject: subject, promptCompilerVersion: PROMPT_COMPILER_VERSION, digest: "", compiledAt: now.toISOString() };
 	const snapshotDigest = __DigestRunInputSnapshot(snapshot);
 	const setup = new Client({ connectionString: process.env.DATABASE_URL });
 	await setup.connect();
@@ -118,7 +120,7 @@ export async function _SeedConversationToolProposalSqlFixture(options: _FixtureO
 		await setup.query("SELECT pg_temp.seed_participant($1, $2)", [conversationId, principalId]);
 		await setup.query("INSERT INTO conversation_computer_active_leases (computer_id, silo_id, conversation_id, agent_identity_id, lease_id, lease_generation, expires_at, updated_at) VALUES ($1, $2, $3, $4, $5, 1, $6, $7)", [computerId, siloId, conversationId, agentIdentityId, lease.leaseId, leaseExpiresAt, now]);
 		await setup.query("INSERT INTO agent_runs (id, silo_id, agent_service_id, agent_revision_id, conversation_id, trigger, agent_identity_id, principal_id, execution_subject, request_idempotency_key, input_snapshot_digest) VALUES ($1, $2, $3, $4, $5, 'interactive', $6, $7, $8::jsonb, $9, $10)", [runId, siloId, agentServiceId, agentRevisionId, conversationId, agentIdentityId, principalId, JSON.stringify(subject), id("request"), snapshotDigest]);
-		await setup.query("INSERT INTO run_input_snapshots (id, run_id, attempt, snapshot_version, silo_id, agent_service_id, agent_revision_id, agent_identity_id, principal_id, execution_subject, conversation_id, model_route, mcp_tools, memory_query_policy, budget_policy, prompt_compiler_version, input_digest, created_at, persona_revision_id) VALUES ($1, $2, 1, 1, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11::jsonb, '{}'::jsonb, $12::jsonb, $13, $14, $15, $16)", [id("snapshot"), runId, siloId, agentServiceId, agentRevisionId, agentIdentityId, principalId, JSON.stringify(subject), conversationId, JSON.stringify(snapshot.modelRoute), JSON.stringify(snapshot.mcpTools), JSON.stringify(budgetPolicy), PROMPT_COMPILER_VERSION, snapshotDigest, now, id("persona")]);
+		await setup.query("INSERT INTO run_input_snapshots (id, run_id, attempt, snapshot_version, silo_id, agent_service_id, agent_revision_id, agent_identity_id, principal_id, execution_subject, conversation_id, model_route, mcp_tools, memory_query_policy, budget_policy, prompt_compiler_version, input_digest, created_at, persona_revision_id) VALUES ($1, $2, 1, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11::jsonb, $12::jsonb, '{}'::jsonb, $13::jsonb, $14, $15, $16, $17)", [id("snapshot"), runId, RUN_INPUT_SNAPSHOT_VERSION, siloId, agentServiceId, agentRevisionId, agentIdentityId, principalId, JSON.stringify(subject), conversationId, JSON.stringify(snapshot.modelRoute), JSON.stringify(snapshot.mcpTools), JSON.stringify(budgetPolicy), PROMPT_COMPILER_VERSION, snapshotDigest, now, id("persona")]);
 		await setup.query("SET CONSTRAINTS ALL IMMEDIATE");
 		await setup.query("UPDATE agent_runs SET state='running', started_at=$2 WHERE id=$1", [runId, now]);
 		for (const [kind, resourceId] of [[ProductAuthorizationResourceKinds.AgentService, agentServiceId], [ProductAuthorizationResourceKinds.Conversation, conversationId], [ProductAuthorizationResourceKinds.McpToolRevision, toolRevisionId]] as const)
@@ -163,11 +165,14 @@ export async function _SeedConversationToolProposalSqlFixture(options: _FixtureO
 		identities: { load: async function _Identity() { return { identity, revision: 0n, headDigest: subject.identity.headDigest, headEventId: id("identity-event"), streamName: id("identity-stream") }; } },
 		computers: { load: async function _Computer() { return { computer: { state: ConversationComputerStates.Warm, leaseGeneration: 1 }, lease: { state: ComputerLeaseStates.Active, id: lease.leaseId, generation: 1, computerId, sandboxId: id("sandbox"), expiresAt: leaseExpiresAt } } as never; } } };
 	const binding = { siloId, conversationId, computerId, leaseGeneration: 1, agentIdentityId, agentServiceId, agentName: "SQL assistant", agentAvatarArtifactRevisionId: null, runId, expectedRevision: 0n, maximumEntryBytes: 65_536 };
-	const turn: FrozenConversationComputerTurn = { bootstrapId: randomUUID(), siloId, computerId, lease, binding, latestPendingEntryId: id("message"), latestPendingEntryPosition: "1", modelAlias: modelId, maximumBudgetUsd: 1, credentialLifetimeSeconds: 120, compile: { runId, attempt: 1, promptCompilerVersion: compiledInput.promptCompilerVersion, digest: compiledInput.digest }, outputSourceCommandId: null, outputReceipt: null, cancellationReceipt: null, toolSelection: null, continuationReservation: null, modelReservation: null };
+	const frozenTurn: FrozenConversationComputerTurn = { bootstrapId: randomUUID(), siloId, computerId, lease, binding, latestPendingEntryId: id("message"), latestPendingEntryPosition: "1", modelAlias: modelId, maximumBudgetUsd: 1, credentialLifetimeSeconds: 120, compile: { runId, attempt: 1, promptCompilerVersion: compiledInput.promptCompilerVersion, digest: compiledInput.digest }, budget: compiledInput.budget, protocol: _OpenConversationTurnProtocol() };
+	const authorityExpiresAtEpochMs = Math.min(compiledInput.budget.wallClockDeadlineEpochMs, Date.parse(trustedUntil));
+	const reservation = _ConversationTurnRequest(frozenTurn, { ordinal: 1, invocationFence: randomUUID(), tools: ConversationModelToolModes.Select, maxCompletionTokens: 128, authorityExpiresAtEpochMs, dispatchDeadlineEpochMs: Math.min(authorityExpiresAtEpochMs, Date.now() + 25_000) });
+	const turn = _ReserveConversationTurnModel(frozenTurn, reservation);
 	const candidate: ConversationComputerTurnCandidate = { ...turn, compiledInput, credentialExpiresAt: trustedUntil };
 	const argumentsValue: ConversationToolProposal["arguments"] = options.tool?.arguments ?? (options.secretArguments === true ? { token: "sql-secret-never-visible" } : { query: "dedicated record" });
 	const proposal: ConversationToolProposal = { bootstrapId: turn.bootstrapId, toolRevisionId: tool.toolRevisionId, arguments: argumentsValue };
-	return { siloId, runId, principalId, subject, turn, candidate, dependencies, leaseExpiresAt, tool, serverName, proposal, recompile, toolGrantId: id(`grant-${ProductAuthorizationResourceKinds.McpToolRevision}`) };
+	return { siloId, runId, principalId, subject, frozenTurn, turn, candidate, dependencies, leaseExpiresAt, tool, serverName, proposal, recompile, toolGrantId: id(`grant-${ProductAuthorizationResourceKinds.McpToolRevision}`) };
 }
 
 /** Reuses the approved-persona sequence proved by personal-configuration-authority.sql. */

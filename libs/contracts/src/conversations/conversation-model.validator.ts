@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { ___CanonicalizeJson, ___ParseAndValidateJson, type JsonValue } from "@opencrane/util";
 
-import { ConversationModelResponseKinds, type ConversationModelContinuation, type ConversationModelResponse, type ConversationModelToolCall } from "./conversation-model.types";
+import { ConversationModelResponseKinds, type ConversationModelResponse, type ConversationModelToolCall, type ConversationModelToolExchange } from "./conversation-model.types";
 
 /**
- * These schemas turn remote declarations and saved continuation content into the shared models.
+ * These schemas turn remote declarations and saved tool history into the shared models.
  * They preserve the original strings, reject extra fields and malformed Unicode, and bound the
  * serialized content retained by the conversation owner. Change the models and schemas together.
  */
@@ -51,11 +51,30 @@ export const ___ConversationModelToolCallSchema: z.ZodType<ConversationModelTool
 	content: z.string().max(65_536).nullable(),
 }).strict().refine(_boundedContent);
 
-/** Bounds the combined declaration and result to the caller's private payload custody limit. */
-export const ___ConversationModelContinuationSchema: z.ZodType<ConversationModelContinuation> = z.object({
+/** Bounds one ordered assistant/tool exchange to the private payload custody limit. */
+export const ___ConversationModelToolExchangeSchema: z.ZodType<ConversationModelToolExchange> = z.object({
 	call: ___ConversationModelToolCallSchema,
 	resultContent: z.string().min(1).max(65_536),
 }).strict().refine(_boundedContent);
+
+/** Bounds and orders the complete saved assistant/tool history sent to one model request. */
+export const ___ConversationModelToolHistorySchema: z.ZodType<readonly ConversationModelToolExchange[]> = z.array(___ConversationModelToolExchangeSchema).max(128).superRefine(function _UniqueProviderCalls(history, context)
+{
+	try
+	{
+		if (new TextEncoder().encode(___CanonicalizeJson(history as unknown as JsonValue)).byteLength > 1024 * 1024)
+			context.addIssue({ code: z.ZodIssueCode.custom, path: ["__bytes"], message: "Tool history exceeds the serialized request bound" });
+	}
+	catch
+	{}
+	const ids = new Set<string>();
+	for (const [index, exchange] of history.entries())
+	{
+		if (ids.has(exchange.call.id))
+			context.addIssue({ code: z.ZodIssueCode.custom, path: [index, "call", "id"], message: "Tool call ids must be unique within ordered history" });
+		ids.add(exchange.call.id);
+	}
+});
 
 /** Checks completed text using the existing answer byte limit without changing whitespace. */
 function _validText(value: string): boolean

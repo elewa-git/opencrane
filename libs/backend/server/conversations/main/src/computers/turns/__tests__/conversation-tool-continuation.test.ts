@@ -4,6 +4,9 @@ import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { _ToolContinuationHarness } from "./conversation-tool-continuation.fixture";
 import { ConversationComputerToolResultOutcomes } from "../conversation-computer-continuation.types";
+import type { FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
+import { ConversationToolProposalRefusal } from "../../tools/proposal/conversation-tool-proposal-refusal";
+import { ConversationToolProposalRefusals } from "../../tools/proposal/conversation-tool-proposal.types";
 
 afterEach(() => { vi.restoreAllMocks(); });
 
@@ -15,6 +18,27 @@ function _Barrier()
 	return { promise, release };
 }
 
+function _CurrentSelection(turn: FrozenConversationComputerTurn)
+{
+	const selection = turn.protocol.steps.at(-1)?.selection;
+	if (selection === null || selection === undefined)
+		throw new Error("Expected the current ordered step to have a selection");
+	return selection;
+}
+
+function _LastSelection(turn: FrozenConversationComputerTurn)
+{
+	return turn.protocol.steps.at(-1)?.selection ?? [...turn.protocol.steps].reverse().find(step => step.result !== null)?.selection ?? _CurrentSelection(turn);
+}
+
+function _LastResult(turn: FrozenConversationComputerTurn)
+{
+	const step = [...turn.protocol.steps].reverse().find(candidate => candidate.result !== null);
+	if (step === undefined || step.result === null)
+		throw new Error("Expected a saved ordered result");
+	return step.result;
+}
+
 describe("one governed tool and its model continuation", function _Continuation()
 {
 	it("keeps original input and exact tool-call pairing, spends one shared allowance and posts one final answer", async function _Answer()
@@ -23,9 +47,9 @@ describe("one governed tool and its model continuation", function _Continuation(
 		expect(await f.authority.advance(f.step)).toEqual({ outcome: "completed" });
 		expect(f.model.request).toHaveBeenCalledTimes(2);
 		const [first, second] = f.model.request.mock.calls.map(call => call[0]);
-		expect(first).toMatchObject({ tools: ConversationModelToolModes.Select, maxCompletionTokens: 50, continuation: null });
-		expect(second).toMatchObject({ tools: ConversationModelToolModes.None, maxCompletionTokens: 50, continuation: { call: f.call } });
-		expect(second.continuation.resultContent).toContain("private-result");
+		expect(first).toMatchObject({ tools: ConversationModelToolModes.Select, maxCompletionTokens: 50, history: [] });
+		expect(second).toMatchObject({ tools: ConversationModelToolModes.None, maxCompletionTokens: 50, history: [{ call: f.call }] });
+		expect(second.history[0].resultContent).toContain("private-result");
 		expect(second.compiledInput).toEqual(first.compiledInput);
 		expect(second.key).toBe(first.key);
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
@@ -35,9 +59,10 @@ describe("one governed tool and its model continuation", function _Continuation(
 		expect(f.requestedNotifications.publishRequested.mock.invocationCallOrder[0]).toBeLessThan(f.results.read.mock.invocationCallOrder[0]!);
 		expect(f.toolFlags).toMatchObject({ executions: 1, acknowledgements: 1, consumed: true });
 		const turn = (await f.store.load(f.step))!;
-		expect(turn.toolSelection).not.toBeNull();
-		expect(turn.continuationReservation?.ordinal).toBe(2);
-		expect(turn.continuationReservation?.invocationFence).not.toBe(turn.modelReservation?.invocationFence);
+		expect(turn.protocol.steps[0]?.selection).not.toBeNull();
+		expect(turn.protocol.accounting.reservedModelCalls).toBe(2);
+		expect(turn.protocol.steps.at(-1)?.reservation.ordinal).toBe(2);
+		expect(turn.protocol.steps.at(-1)?.reservation.invocationFence).not.toBe(turn.protocol.steps[0]?.reservation.invocationFence);
 		expect(f.history.streams.get(f.stream)).toHaveLength(3);
 		const stored = JSON.stringify([...f.history.streams.values()], (_key, value) => typeof value === "bigint" ? String(value) : value);
 		for (const secret of ["private-query", "private-result", "Private assistant declaration", "test-only-key"])
@@ -59,7 +84,7 @@ describe("one governed tool and its model continuation", function _Continuation(
 			throw new Error("custody response lost");
 		});
 		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending" });
-		expect((await f.store.load(f.step))?.toolSelection).toBeNull();
+		expect((await f.store.load(f.step))?.protocol.steps.at(-1)?.selection).toBeNull();
 		now += 40_000;
 		expect(await f.restart().start(f.workflowCommand)).toMatchObject({ bootstrapId: f.step });
 		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
@@ -114,6 +139,16 @@ describe("one governed tool and its model continuation", function _Continuation(
 		expect(f.results.read).not.toHaveBeenCalled();
 	});
 
+	it("durably closes a selected proposal after a deterministic refusal", async function _DeterministicRefusal()
+	{
+		const f = await _ToolContinuationHarness();
+		f.proposals.admit.mockRejectedValue(new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied));
+		expect(await f.authority.advance(f.step)).toEqual({ outcome: "response_unavailable" });
+		expect((await f.store.load(f.step))?.protocol.unavailable?.reason).toBe("tool_result_unavailable");
+		expect(await f.restart().advance(f.step)).toEqual({ outcome: "response_unavailable" });
+		expect(f.requestedNotifications.publishRequested).not.toHaveBeenCalled();
+	});
+
 	it("does not poll a result when requested history loses current authority", async function _RequestedRefused()
 	{
 		const f = await _ToolContinuationHarness();
@@ -140,6 +175,22 @@ describe("one governed tool and its model continuation", function _Continuation(
 		expect(f.toolFlags.executions).toBe(1);
 	});
 
+	it("durably closes a saved selection when its tool preparation expires", async function _PreparationRefusal()
+	{
+		let now = Date.now();
+		vi.spyOn(Date, "now").mockImplementation(() => now);
+		const f = await _ToolContinuationHarness();
+		f.toolFlags.pending = true;
+		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "tool_pending" });
+		f.toolFlags.pending = false;
+		now = f.candidate.compiledInput.budget.wallClockDeadlineEpochMs + 1;
+		expect(await f.restart().advance(f.step)).toEqual({ outcome: "response_unavailable" });
+		expect((await f.store.load(f.step))?.protocol.unavailable?.reason).toBe("tool_result_unavailable");
+		expect(f.runLifecycle.enterRecoveryRequired).toHaveBeenCalledOnce();
+		expect(await f.restart().advance(f.step)).toEqual({ outcome: "response_unavailable" });
+		expect(f.model.request).toHaveBeenCalledOnce();
+	});
+
 	it("pauses an approval proposal, admits exactly once after the owner decision, and replays safely", async function _ApprovalReplay()
 	{
 		const f = await _ToolContinuationHarness();
@@ -149,13 +200,13 @@ describe("one governed tool and its model continuation", function _Continuation(
 		{
 			if (decision === "ready")
 				f.toolFlags.executions++;
-			return { proposalId: turn.toolSelection!.proposalId, outcome: ConversationToolProposalOutcomes.Existing };
+			return { proposalId: _CurrentSelection(turn).proposalId, outcome: ConversationToolProposalOutcomes.Existing };
 		});
 		f.results.read.mockImplementation(async function _Read(turn)
 		{
 			if (decision === "awaiting")
 				return { outcome: ConversationComputerToolResultOutcomes.Pending, waitFor: "approval", waitUntilEpochMs: Date.now() + 60_000 } as const;
-			const payload = { toolInvocationId: turn.toolSelection!.proposalId, outcome: "succeeded" as const, result: { record: "private-result" } };
+			const payload = { toolInvocationId: _LastSelection(turn).toolInvocationId, outcome: "succeeded" as const, result: { record: "private-result-1" } };
 			return { outcome: ConversationComputerToolResultOutcomes.Available, payload, payloadDigest: ___DigestCanonicalJson(payload), toolRevisionId: "tool-1", occurredAt: "2026-09-11T10:00:00.000Z", notAfterEpochMs: Date.now() + 60_000 } as const;
 		});
 
@@ -174,28 +225,29 @@ describe("one governed tool and its model continuation", function _Continuation(
 		const f = await _ToolContinuationHarness();
 		Object.assign(f.candidate.compiledInput.tools[0], { requiresApproval: true });
 		let denied = false;
-		f.proposals.admit.mockImplementation(async function _Admit(turn) { return { proposalId: turn.toolSelection!.proposalId, outcome: ConversationToolProposalOutcomes.Existing }; });
+		f.proposals.admit.mockImplementation(async function _Admit(turn) { return { proposalId: _CurrentSelection(turn).proposalId, outcome: ConversationToolProposalOutcomes.Existing }; });
 		f.results.read.mockImplementation(async function _Read()
 		{
 			return denied ? { outcome: ConversationComputerToolResultOutcomes.Unavailable } as const : { outcome: ConversationComputerToolResultOutcomes.Pending, waitFor: "approval" } as const;
 		});
 		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "tool_pending", waitFor: "approval" });
 		denied = true;
-		expect(await f.restart().advance(f.step)).toEqual({ outcome: "authority_ended" });
-		expect(f.toolFlags.executions).toBe(0);
+		expect(await f.restart().advance(f.step)).toEqual({ outcome: "response_unavailable" });
+			expect(f.toolFlags.executions).toBe(0);
+		expect((await f.store.load(f.step))?.protocol.unavailable?.reason).toBe("tool_result_unavailable");
 	});
 
 	it("recovers exact continuation custody after its response is lost before reservation", async function _ContinuationCustody()
 	{
 		const f = await _ToolContinuationHarness();
-		const store = f.custody.storeContinuation.bind(f.custody);
-		vi.spyOn(f.custody, "storeContinuation").mockImplementationOnce(async function _LostReply(turn, continuation)
+		const store = f.custody.storeExchange.bind(f.custody);
+		vi.spyOn(f.custody, "storeExchange").mockImplementationOnce(async function _LostReply(turn, exchange)
 		{
-			await store(turn, continuation);
-			throw new Error("continuation custody response lost");
+			await store(turn, exchange);
+			throw new Error("exchange custody response lost");
 		});
 		expect(await f.authority.advance(f.step)).toEqual({ outcome: "retry" });
-		expect((await f.store.load(f.step))?.continuationReservation).toBeNull();
+		expect((await f.store.load(f.step))?.protocol.steps.at(-1)?.result).toBeNull();
 		expect(f.toolFlags.consumed).toBe(false);
 		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
 		expect(f.model.request).toHaveBeenCalledTimes(2);
@@ -224,15 +276,16 @@ describe("one governed tool and its model continuation", function _Continuation(
 		if (boundary === "response")
 			f.model.request.mockResolvedValueOnce({ kind: ConversationModelResponseKinds.Tool, call: f.call }).mockRejectedValueOnce(new Error("paid response lost"));
 		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending" });
-		expect((await f.store.load(f.step))?.continuationReservation).not.toBeNull();
-		const reservation = (await f.store.load(f.step))!.continuationReservation;
+		const reservedTurn = (await f.store.load(f.step))!;
+		const reservation = reservedTurn.protocol.steps.at(-1)?.reservation;
+		expect(reservation).not.toBeNull();
 		now += 30_000;
 		f.runLifecycle.enterRecoveryRequired.mockRejectedValueOnce(new Error("run recovery write unavailable"));
 		await expect(f.restart().advance(f.step)).rejects.toThrow("run recovery write unavailable");
 		expect(await f.restart().advance(f.step)).toEqual({ outcome: "response_unavailable" });
 		expect(f.runLifecycle.enterRecoveryRequired).toHaveBeenCalledTimes(2);
 		expect(f.runLifecycle.complete).not.toHaveBeenCalled();
-		expect((await f.store.load(f.step))!.continuationReservation).toEqual(reservation);
+		expect((await f.store.load(f.step))!.protocol.steps.at(-1)?.reservation).toEqual(reservation);
 		expect(f.model.request).toHaveBeenCalledTimes(boundary === "response" ? 2 : 1);
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		expect(f.toolFlags.executions).toBe(1);
@@ -294,7 +347,7 @@ describe("one governed tool and its model continuation", function _Continuation(
 			};
 		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: accepted ? "retry" : "model_pending" });
 		expect(f.runLifecycle.enterRecoveryRequired).not.toHaveBeenCalled();
-		expect((await f.store.load(f.step))?.outputReceipt === null).toBe(!accepted);
+		expect((await f.store.load(f.step))?.protocol.output === null).toBe(!accepted);
 		f.toolFlags.allowed = false;
 		if (accepted)
 			await expect(f.restart().start(f.workflowCommand)).resolves.toBeNull();
@@ -320,7 +373,7 @@ describe("one governed tool and its model continuation", function _Continuation(
 			return { kind: ConversationModelResponseKinds.Text, text: "A private chosen answer" };
 		});
 		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending" });
-		expect((await f.store.load(f.step))?.outputReceipt).toBeNull();
+		expect((await f.store.load(f.step))?.protocol.output).toBeNull();
 		expect(f.history.streams.get(f.stream)).toHaveLength(2);
 	});
 
@@ -331,7 +384,17 @@ describe("one governed tool and its model continuation", function _Continuation(
 		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending" });
 		expect(f.toolFlags.executions).toBe(1);
 		expect(f.model.request).toHaveBeenCalledTimes(2);
-		expect((await f.store.load(f.step))?.outputReceipt).toBeNull();
+		expect((await f.store.load(f.step))?.protocol.output).toBeNull();
+	});
+
+	it("rejects a repeated provider call id before the next tool is admitted", async function _DuplicateCallId()
+	{
+		const f = await _ToolContinuationHarness(2);
+		f.model.request.mockResolvedValueOnce({ kind: ConversationModelResponseKinds.Tool, call: f.calls[0] }).mockResolvedValueOnce({ kind: ConversationModelResponseKinds.Tool, call: f.calls[0] });
+		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending", ordinal: 2 });
+		expect(f.model.request).toHaveBeenCalledTimes(2);
+		expect(f.toolFlags.executions).toBe(1);
+		expect((await f.store.load(f.step))?.protocol.steps).toHaveLength(2);
 	});
 
 	it("cannot issue another key when exact credential reuse fails", async function _ExpiredKey()
@@ -343,5 +406,54 @@ describe("one governed tool and its model continuation", function _Continuation(
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		expect(await f.restart().advance(f.step)).toMatchObject({ outcome: "model_pending" });
 		expect(f.credentials.reuseExact).toHaveBeenCalledOnce();
+	});
+
+	it("feeds two ordered assistant/tool exchanges into one final request", async function _TwoToolCycles()
+	{
+		const f = await _ToolContinuationHarness(2);
+		expect(await f.authority.advance(f.step)).toEqual({ outcome: "completed" });
+		expect(f.model.request).toHaveBeenCalledTimes(3);
+		const requests = f.model.request.mock.calls.map(call => call[0]);
+		expect(requests.map(request => request.history.length)).toEqual([0, 1, 2]);
+		expect(requests[2].history.map((exchange: { readonly call: { readonly id: string } }) => exchange.call.id)).toEqual([f.calls[0].id, f.calls[1].id]);
+		expect(requests[2].history.map((exchange: { readonly resultContent: string }) => exchange.resultContent)).toEqual([expect.stringContaining("private-result-1"), expect.stringContaining("private-result-2")]);
+		expect(new Set(f.model.request.mock.calls.map(call => call[0].key))).toHaveLength(1);
+		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
+		expect(f.credentials.reuseExact).toHaveBeenCalledTimes(2);
+		const turn = (await f.store.load(f.step))!;
+		expect(turn.protocol.accounting).toMatchObject({ reservedModelCalls: 3, reservedToolInvocations: 2, toolResultCyclesFed: 2 });
+		expect(turn.protocol.output).not.toBeNull();
+		expect(f.rows.size).toBe(4);
+	});
+
+	it("keeps a sparse completion-token budget viable across a tool cycle", async function _SparseTokens()
+	{
+		const f = await _ToolContinuationHarness(1, 3);
+		expect(await f.authority.advance(f.step)).toEqual({ outcome: "completed" });
+		expect(f.model.request).toHaveBeenCalledTimes(2);
+		expect(f.model.request.mock.calls.map(call => call[0].maxCompletionTokens)).toEqual([1, 2]);
+		expect((await f.store.load(f.step))?.protocol.accounting.reservedCompletionTokens).toBe(3);
+	});
+
+	it.each([2, 3])("restarts from ResultReady ordinal %s without paying or executing prior tools again", async function _ResultReadyRestart(failedOrdinal)
+	{
+		const f = await _ToolContinuationHarness(2);
+		let lost = false;
+		f.history.beforeAppend = async function _LoseNextReservation(command)
+		{
+			if (!lost && (command.events[0].data["reservation"] as { ordinal?: number } | undefined)?.ordinal === failedOrdinal)
+			{
+				lost = true;
+				throw new Error("successor reservation response lost");
+			}
+		};
+		expect(await f.authority.advance(f.step)).toEqual({ outcome: "retry" });
+		expect((await f.store.load(f.step))?.protocol.state).toBe("result_ready");
+		f.history.beforeAppend = async function _Before() {};
+		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
+		expect(f.model.request).toHaveBeenCalledTimes(3);
+		expect(f.toolFlags.executions).toBe(2);
+		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
+		expect(f.credentials.reuseExact).toHaveBeenCalledTimes(2);
 	});
 });

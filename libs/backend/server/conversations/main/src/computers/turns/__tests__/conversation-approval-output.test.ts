@@ -31,7 +31,7 @@ describe("approval history and the saved model continuation", function _Suite()
 		f.proposals.admit.mockImplementation(async function _AdmitAfterApproval(turn)
 		{
 			if (!approved)
-				return { proposalId: turn.toolSelection!.proposalId, outcome: ConversationToolProposalOutcomes.Existing };
+				return { proposalId: turn.protocol.steps.at(-1)!.selection!.proposalId, outcome: ConversationToolProposalOutcomes.Existing };
 			return admit(turn);
 		});
 		f.results.read.mockImplementation(async function _WaitForDecision(turn)
@@ -45,7 +45,7 @@ describe("approval history and the saved model continuation", function _Suite()
 		expect(f.model.request).toHaveBeenCalledOnce();
 		expect(f.toolFlags.executions).toBe(0);
 		const waiting = (await f.store.load(f.step))!;
-		const approvalId = waiting.toolSelection!.proposalId;
+		const approvalId = waiting.protocol.steps.at(-1)!.selection!.proposalId;
 		const command = { bootstrapId: f.step, siloId: waiting.siloId, conversationId: waiting.binding.conversationId, runId: waiting.compile.runId, attempt: waiting.compile.attempt, approvalId };
 		const request: ConversationElicitation = { version: CONVERSATION_ELICITATION_VERSION, requestId: approvalId, conversationId: command.conversationId, runId: command.runId, attempt: command.attempt, assignedParticipantId: "owner-1", purpose: ElicitationPurposes.ToolApproval, state: ElicitationRequestStates.Requested, body: { kind: ElicitationBodyKinds.Approval, prompt: "Allow this tool call?", action: "Invoke tool", target: "lookup_record", dataUse: "Send the reviewed arguments to the tool.", consequence: "Runs the selected tool once.", proposedArguments: { query: "private-query" } }, requiresStepUp: true, requestedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString() };
 		const requests = { readCurrent: vi.fn().mockResolvedValue(request) };
@@ -84,13 +84,13 @@ describe("approval history and the saved model continuation", function _Suite()
 		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
 		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
 		const completed = (await f.store.load(f.step))!;
-		expect(completed.modelReservation).toEqual(waiting.modelReservation);
-		expect(completed.continuationReservation?.ordinal).toBe(2);
-		expect(completed.outputReceipt?.expectedRevision).toBe("3");
+		expect(completed.protocol.steps[0].reservation).toEqual(waiting.protocol.steps[0].reservation);
+		expect(completed.protocol.steps.at(-1)?.reservation.ordinal).toBe(2);
+		expect(completed.protocol.output?.receipt.expectedRevision).toBe("3");
 		expect(f.history.streams.get(f.stream)).toHaveLength(5);
 		expect(f.history.streams.get(f.stream)![3].data["entry"]).toMatchObject({ logKind: "tool_call", toolCallId: approvalId, phase: "completed" });
 		expect(f.history.streams.get(f.stream)![3].id).not.toBe(approvalId);
-		expect(f.history.streams.get(f.stream)![4].data).toEqual(completed.outputReceipt!.event.data);
+		expect(f.history.streams.get(f.stream)![4].data).toEqual(completed.protocol.output!.receipt.event.data);
 		expect(f.history.streams.get(`conversation-approval-notification-${approvalId}`)).toHaveLength(1);
 		expect(JSON.stringify(f.history.streams.get(`conversation-approval-notification-${approvalId}`)![0].data)).not.toContain("private-query");
 		expect(f.model.request).toHaveBeenCalledTimes(2);

@@ -1,13 +1,14 @@
 import type { ConversationGeneratedFileOutputLinker } from "./generated-output/conversation-generated-file-output.types";
-import type { ConversationComputerContinuationReservation, ConversationComputerModelCustody, ConversationComputerToolResults, ConversationComputerToolSelection } from "./conversation-computer-continuation.types";
-import type { ConversationComputerModelProgress, ConversationComputerModelReservation, ConversationComputerModelTransport } from "./conversation-computer-model.types";
+import type { ConversationComputerModelCustody, ConversationComputerToolResults } from "./conversation-computer-continuation.types";
+import type { ConversationComputerModelProgress, ConversationComputerModelTransport } from "./conversation-computer-model.types";
+import type { ConversationComputerTurnBudget, ConversationComputerTurnCancellationReceipt, ConversationComputerTurnModelReservation, ConversationComputerTurnOutputReceipt, ConversationComputerTurnProtocolProjection, ConversationComputerTurnToolResult, ConversationComputerTurnToolSelection, ConversationComputerTurnUnavailableReceipt } from "./conversation-computer-turn-protocol.types";
 import type { ConversationToolProposalAdmission } from "../tools/proposal/conversation-tool-proposal.types";
 import type { AgentScope, ClaimedLeaseScope, CompiledRunInput, ComputerScope, LeaseScope } from "@opencrane/contracts";
 import type { PersonalConversationExecutionSubjectCoordinates } from "@opencrane/backend/agents/execution/inputs";
 import type { Logger } from "@opencrane/backend/observability";
 import type { RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 import type { BoundConversationWriter } from "@opencrane/backend/server/conversations/history";
-import type { BoundConversationWriterBinding, BoundConversationWriterIntent } from "@opencrane/backend/server/conversations/history";
+import type { BoundConversationWriterBinding } from "@opencrane/backend/server/conversations/history";
 import type { ConversationComputerLeaseCoordinates } from "@opencrane/backend/server/conversations/computers";
 import type { ConversationComputerReviewCredentialDeriver } from "../review/conversation-computer-review.types";
 import type { ConversationToolResultNotificationPort } from "./tool-result-notifications/conversation-tool-result-notification.types";
@@ -146,33 +147,11 @@ export interface FrozenConversationComputerTurn extends ConversationComputerTurn
 	readonly computerId: string;
 	/** Requires the server's recompiled input to match before model dispatch. */
 	readonly compile: ConversationComputerTurnCompileAnchor;
-	/** Source command of the accepted output, or null while the turn is still open. */
-	readonly outputSourceCommandId: string | null;
-	/** Receipt of the durable output, or null while the turn is still open. */
-	readonly outputReceipt: ConversationComputerTurnOutputReceipt | null;
-	/** Records the Stop command that won this turn's terminal revision, or null while output may still win. */
-	readonly cancellationReceipt: ConversationComputerTurnCancellationReceipt | null;
-	/** Identifies the saved model-selected tool; unresolved work cannot produce final output. */
-	readonly toolSelection: ConversationComputerToolSelection | null;
-	/** Consumes the second and final model allowance after the exact tool result is saved. */
-	readonly continuationReservation: ConversationComputerContinuationReservation | null;
-	/** Consumes the first model allowance across retries and process restarts. */
-	readonly modelReservation: ConversationComputerModelReservation | null;
+	/** Copies the validated admitted allowance so replay rejects progress beyond the run snapshot. */
+	readonly budget: ConversationComputerTurnBudget;
+	/** Contains the ordered, replay-derived progress and terminal decision. */
+	readonly protocol: ConversationComputerTurnProtocolProjection;
 }
-
-/** Minimal terminal decision retained in the turn stream when Stop wins against final output. */
-export interface ConversationComputerTurnCancellationReceipt
-{
-	/** Identifies the durable Stop control event. */
-	readonly commandId: string;
-	/** Binds the exact SQL-admitted command, target and original workflow receipt. */
-	readonly commandDigest: string;
-	/** Preserves the database-owned admission time across Kurrent retries. */
-	readonly occurredAt: string;
-}
-
-/** Keeps the complete server-stamped output intent in the existing durable turn decision. */
-export type ConversationComputerTurnOutputReceipt = BoundConversationWriterIntent;
 
 /** Returns the stored winning intent, whose timestamp may differ from a concurrent preparation. */
 export interface ConversationComputerOutputDecision
@@ -268,12 +247,14 @@ export interface ConversationComputerTurnStore
 	loadActive(command: ConversationComputerLeaseCoordinates): Promise<FrozenConversationComputerTurn | null>;
 	/** Appends the output receipt, or recognizes the same receipt on an uncertain retry. */
 	markOutput(bootstrapId: string, receipt: ConversationComputerTurnOutputReceipt): Promise<ConversationComputerOutputDecision>;
-	/** Reserves a proposal against the same turn revision as model dispatch, before database admission. */
-	selectTool(bootstrapId: string, selection: ConversationComputerToolSelection): Promise<void>;
-	/** Reserve the final request after exact result custody; only the live winner may send. */
-	reserveContinuation(bootstrapId: string, reservation: ConversationComputerContinuationReservation): Promise<boolean>;
+	/** Reserves a per-step proposal before database admission, or recovers the identical winner. */
+	selectTool(bootstrapId: string, selection: ConversationComputerTurnToolSelection): Promise<void>;
+	/** Records one exact private assistant/tool exchange, or recovers the identical winner. */
+	recordToolResult(bootstrapId: string, result: ConversationComputerTurnToolResult): Promise<void>;
 	/** Return true only when this call stored and read back its fresh model fence; false never permits dispatch. */
-	reserveModel(bootstrapId: string, reservation: ConversationComputerModelReservation): Promise<boolean>;
+	reserveModel(bootstrapId: string, reservation: ConversationComputerTurnModelReservation): Promise<boolean>;
+	/** Records one bounded unavailable result without clearing spent reservations. */
+	markResponseUnavailable(bootstrapId: string, receipt: ConversationComputerTurnUnavailableReceipt): Promise<void>;
 	/** Releases the lease's active-turn pointer after run completion and credential revocation. */
 	settle(turn: FrozenConversationComputerTurn): Promise<void>;
 }

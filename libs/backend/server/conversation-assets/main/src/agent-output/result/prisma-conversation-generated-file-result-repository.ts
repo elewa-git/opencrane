@@ -99,7 +99,7 @@ function _CommandMatches(command: ConversationGeneratedFileResultCommand, operat
 {
 	const { admission, invocation, turn } = command;
 	const subject = admission.subject;
-	const selection = turn.toolSelection;
+	const selection = turn.protocol.steps.find(step => step.selection?.toolInvocationId === invocation.toolInvocationId)?.selection;
 	return admission.identity.kind === AgentIdentityKinds.Proxied && admission.notAfterEpochMs > nowEpochMs
 		&& operation.siloId === turn.siloId && operation.siloId === turn.binding.siloId && operation.siloId === subject.siloId
 		&& operation.conversationId === turn.binding.conversationId && operation.conversationId === admission.conversationId
@@ -118,7 +118,7 @@ function _CommandMatches(command: ConversationGeneratedFileResultCommand, operat
 		&& invocation.siloId === operation.siloId && invocation.runId === operation.runId && invocation.attempt === operation.attempt
 		&& invocation.agentRevisionId === subject.runScope.agentRevisionId && invocation.requestIdentity.runtimeInstanceId === operation.computerId
 		&& invocation.requestIdentity.commandId === operation.bootstrapId && invocation.mcpTaskId === null
-		&& selection !== null && selection.proposalId === invocation.toolInvocationId && selection.requestFingerprint === invocation.requestFingerprint;
+		&& selection != null && selection.toolInvocationId === invocation.toolInvocationId && selection.requestFingerprint === invocation.requestFingerprint;
 }
 
 /** Compare the IAM payload with the one canonical metadata result rebuilt from persisted facts. */

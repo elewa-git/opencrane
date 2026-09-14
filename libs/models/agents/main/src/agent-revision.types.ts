@@ -13,15 +13,32 @@ export interface SkillRevisionReference
 	readonly revisionId: string;
 }
 
-/** Immutable budget ceilings applied to a run. */
+/**
+ * Limits an agent revision adds to every run admitted from it.
+ *
+ * The numeric values apply across the run, including recovery. A new revision is required to
+ * change them. A null cost leaves the separately configured spend cap in force; it does not permit
+ * unlimited provider spend.
+ */
 export interface AgentBudget
 {
-	/** Maximum model turns permitted in one run. */
+	/** Maximum model calls permitted in one run, including the final answer call. */
 	readonly maxTurns: number;
-	/** Maximum input and output tokens permitted in one run. */
+	/** Maximum generated completion tokens across one run; prompt input tokens are not counted here. */
 	readonly maxTokens: number;
+	/** Extra revision cost cap in micro-US-dollars, or null when the configured spend cap alone applies. */
+	readonly maxCostUsdMicros: number | null;
+	/** Maximum external tool calls permitted in one run; zero makes the revision text-only. */
+	readonly maxToolInvocations: number;
 	/** Maximum wall-clock duration permitted in milliseconds. */
 	readonly maxDurationMs: number;
+	/**
+	 * Maximum distinct saved tool-result cycles that may inform a later model call.
+	 *
+	 * Replaying the same saved cycle, waiting for it, or recovering it after restart does not spend
+	 * another iteration.
+	 */
+	readonly maxLoopIterations: number;
 }
 
 /**

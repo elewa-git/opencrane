@@ -1,15 +1,12 @@
 import { __SameMembershipBinding } from "@opencrane/backend/server/iam/membership";
 import { __DigestRunInputSnapshot, RunAdmissionBuildOutcomes, RunAdmissionExistingVerificationOutcomes, RunAdmissionMessageInputModes, RunAdmissionOutcomes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type InitialRunAuthority, type RunAdmissionCommit, type RunAdmissionPrepare } from "@opencrane/backend/agents/execution/runs";
-import type { RunInputSnapshot } from "@opencrane/contracts";
+import { RUN_INPUT_SNAPSHOT_VERSION, ___ParseRunBudgetPolicy, type RunBudgetPolicy, type RunInputSnapshot } from "@opencrane/contracts";
 import type { ExecutionSubject } from "@opencrane/models/agents";
-import { ___CloneCanonicalJson, ___SortBy, type JsonValue } from "@opencrane/util";
+import { ___CloneCanonicalJson, ___SortBy } from "@opencrane/util";
 
 import { __AreRunInputSnapshotMcpToolsValid } from "../sources/mcp-tool-snapshot.validator";
 import { RunInputSnapshotAdmissionOutcomes, SessionAssemblyOutcomes, type AssembleRunInputSnapshotResult, type SessionAssemblyRefusalReason } from "./session-assembly-result.types";
 import { RunInputMemoryScopes, SessionAssemblyLoadOutcomes, type ApprovedPersonaInput, type MemoryScopeInput, type SessionAssemblyAuthorities, type SessionAssemblyCommand, type ConversationContextInput, type ToolPolicyInput } from "./session-assembly.types";
-
-/** Snapshot format version this assembler stamps on every snapshot it writes. */
-const _SNAPSHOT_VERSION = 1;
 
 /** Maps the admission repository's serialized result into the public assembly vocabulary. */
 const _ADMISSION_OUTCOMES: Record<`${RunInputSnapshotAdmissionOutcomes}`, RunInputSnapshotAdmissionOutcomes> = {
@@ -208,7 +205,7 @@ function _publicReason(reason: SessionAssemblyRefusalReason | "authority_conflic
 }
 
 /** Compiles sorted source outputs into the one canonical shape and digests it without self-reference. */
-function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, run: InitialRunAuthority, persona: ApprovedPersonaInput, conversation: ConversationContextInput, preferences: readonly { readonly id: string }[], memory: MemoryScopeInput, tools: ToolPolicyInput, budgetPolicy: JsonValue, executionSubject: ExecutionSubject): RunInputSnapshot
+function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, run: InitialRunAuthority, persona: ApprovedPersonaInput, conversation: ConversationContextInput, preferences: readonly { readonly id: string }[], memory: MemoryScopeInput, tools: ToolPolicyInput, budgetPolicy: RunBudgetPolicy, executionSubject: ExecutionSubject): RunInputSnapshot
 {
 	const withoutDigest = {
 		runId: command.runId,
@@ -216,7 +213,7 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 		siloId: command.siloId,
 		agentServiceId: run.agentServiceId,
 		agentRevisionId: run.agentRevisionId,
-		snapshotVersion: _SNAPSHOT_VERSION,
+		snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION,
 		conversationId: command.conversationId,
 		messageIds: [...conversation.messageIds],
 		personaRevisionId: persona.personaRevisionId,
@@ -226,7 +223,7 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 		memoryQueryPolicy: ___CloneCanonicalJson(memory.memoryQueryPolicy),
 		mcpTools: _canonicalMcpTools(tools.mcpTools),
 		modelRoute: ___CloneCanonicalJson(tools.modelRoute),
-		budgetPolicy: ___CloneCanonicalJson(budgetPolicy),
+		budgetPolicy: ___ParseRunBudgetPolicy(___CloneCanonicalJson(budgetPolicy)),
 		executionSubject,
 		promptCompilerVersion: run.promptCompilerVersion,
 		compiledAt: admittedAt,

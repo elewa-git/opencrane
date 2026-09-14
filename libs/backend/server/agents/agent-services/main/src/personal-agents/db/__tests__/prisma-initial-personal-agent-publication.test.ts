@@ -108,7 +108,7 @@ describe("Prisma initial personal-Agent publication", function _Suite()
 		expect(productEffects.admitInitialPublication.mock.invocationCallOrder[0]).toBeGreaterThan(transaction.agentRevision.create.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER);
 		expect(transaction.agentService.create).toHaveBeenCalledWith({ data: expect.objectContaining({ id: _COMMAND.onboardingId, siloId: _COMMAND.siloId, kind: "Personal", state: "Draft", name: "The Commander", workloadProfile: "developer" }) });
 		expect(transaction.agentRevision.create).toHaveBeenCalledWith({
-			data: expect.objectContaining({ revision: 1, promptPolicyVersion: INITIAL_PERSONAL_AGENT_POLICY.promptPolicyVersion, personaRevisionId: _COMMAND.onboardingPersonaRevisionId, budget: { maxTurns: 64, maxTokens: 256_000, maxDurationMs: 3_600_000 }, modelDefinition: { connect: { id_siloId: { id: "configured-default", siloId: _COMMAND.siloId } } } }),
+			data: expect.objectContaining({ revision: 1, promptPolicyVersion: INITIAL_PERSONAL_AGENT_POLICY.promptPolicyVersion, personaRevisionId: _COMMAND.onboardingPersonaRevisionId, budget: { maxTurns: 64, maxTokens: 256_000, maxCostUsdMicros: null, maxToolInvocations: 8, maxDurationMs: 3_600_000, maxLoopIterations: 8 }, modelDefinition: { connect: { id_siloId: { id: "configured-default", siloId: _COMMAND.siloId } } } }),
 			include: expect.any(Object),
 		});
 		expect(transaction.agentRevision.update).toHaveBeenCalledWith({ where: { id_siloId: { id: "revision-a", siloId: _COMMAND.siloId } }, data: { state: "Published", publishedAt: _COMMAND.provisionedAt } });

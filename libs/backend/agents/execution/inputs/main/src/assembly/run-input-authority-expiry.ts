@@ -1,5 +1,5 @@
 import { __SameMembershipBinding } from "@opencrane/backend/server/iam/membership";
-import type { CompiledRunInput, RunInputSnapshot } from "@opencrane/contracts";
+import { ___ParseRunBudgetPolicy, type CompiledRunInput, type RunInputSnapshot } from "@opencrane/contracts";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 
 /**
@@ -28,13 +28,22 @@ export function __RunInputAuthorityExpiresAt(snapshot: RunInputSnapshot, compile
 		|| !__SameMembershipBinding(subject.membership, current.membership)
 		|| !__SameMembershipBinding(subject.requester.membership, current.requester.membership))
 		throw new Error("Conversation credential authority requires the same currently verified subject");
-	const budget = compiled.budget;
-	const deadline = budget.wallClockDeadlineEpochMs;
-	if (!_PositiveInteger(deadline) || !_PositiveInteger(budget.maxModelTurns) || !_PositiveInteger(budget.maxCompletionTokens)
-		|| !Number.isFinite(new Date(deadline).getTime()))
+	let budget: ReturnType<typeof ___ParseRunBudgetPolicy>;
+	try
+	{
+		budget = ___ParseRunBudgetPolicy(compiled.budget);
+	}
+	catch
+	{
 		throw new Error("Conversation credential authority requires a bounded compiled budget");
-	const policy = snapshot.budgetPolicy;
-	if (policy === null || typeof policy !== "object" || !("wallClockDeadlineEpochMs" in policy) || policy.wallClockDeadlineEpochMs !== deadline)
+	}
+	const policy = ___ParseRunBudgetPolicy(snapshot.budgetPolicy);
+	if (budget.maxModelTurns !== policy.maxModelTurns || budget.maxCompletionTokens !== policy.maxCompletionTokens
+		|| budget.maxCostUsdMicros !== policy.maxCostUsdMicros || budget.maxToolInvocations !== policy.maxToolInvocations
+		|| budget.maxLoopIterations !== policy.maxLoopIterations)
+		throw new Error("Conversation credential authority cannot replace the original budget allowance");
+	const deadline = budget.wallClockDeadlineEpochMs;
+	if (deadline !== policy.wallClockDeadlineEpochMs)
 		throw new Error("Conversation credential authority cannot replace the original budget deadline");
 	return new Date(Math.min(_EvidenceExpiry(subject.membership.trustedUntil), _EvidenceExpiry(subject.requester.membership.trustedUntil), _EvidenceExpiry(current.membership.trustedUntil), _EvidenceExpiry(current.requester.membership.trustedUntil), deadline)).toISOString();
 }
