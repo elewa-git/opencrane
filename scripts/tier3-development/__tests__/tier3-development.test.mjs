@@ -61,6 +61,27 @@ test("deletes only inspected resources and propagates cleanup failures", async f
 	await assert.rejects(downTier3Resources({ inspectResources: async function _Inspect() { return { clusterExists: true, existingOwner: owner, registryExists: true }; }, run: async function _Run() { throw new Error("daemon unavailable"); } }), /daemon unavailable/u);
 });
 
+test("retries cleanup after the registry was deleted but cluster deletion failed", async function _CleanupRetry()
+{
+	const calls = [];
+	const owner = (await import("../resource-ownership.mjs")).tier3ResourceIdentity(new URL("../../..", import.meta.url).pathname).owner;
+	const resources = { clusterExists: true, existingOwner: owner, registryExists: true };
+	let clusterAttempts = 0;
+	const operations = {
+		inspectResources: async function _Inspect() { return { ...resources }; },
+		run: async function _Run(_command, arguments_)
+		{
+			calls.push(arguments_.slice(0, 2));
+			if (arguments_[0] === "registry") resources.registryExists = false;
+			else if (clusterAttempts++ === 0) throw new Error("cluster deletion failed");
+			else resources.clusterExists = false;
+		},
+	};
+	await assert.rejects(downTier3Resources(operations), /cluster deletion failed/u);
+	await downTier3Resources(operations);
+	assert.deepEqual(calls, [["registry", "delete"], ["cluster", "delete"], ["cluster", "delete"]]);
+});
+
 test("reads only the Secret selected by the live Certificate", async function _Certificate()
 {
 	const calls = [];
