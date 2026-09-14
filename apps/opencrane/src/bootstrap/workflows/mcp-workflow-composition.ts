@@ -1,23 +1,16 @@
-import { _CreateMcpEraProbeAdapter, _CreateOciImageArtifactResolver } from "@opencrane/backend/server/gateways/mcp";
-import { _CreateOciRegistryAuthorizationReader } from "@opencrane/backend/server/infra/oci-registry";
-
-
-
 import type { PrismaClient } from "@prisma/client";
 
-import { CONVERSATION_COMPUTER_STOP_TASK, CONVERSATION_COMPUTER_TURN_TASK, GROUP_CHILD_TASK } from "@opencrane/backend/server/conversations";
-import { _CreateArtifactCatalogueRepository } from "@opencrane/backend/server/agents/artifacts";
 import { ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
-import { __CreateOciImageLayoutImporter, __CreateOciImageLayoutVerifier, __CreateOciImageValidationWorkflow, __CreateMcpEraProbeWorkflow, McpConnectionTaskNames, McpEraProbeTaskNames, McpTaskTaskNames, OciImageValidationTaskNames, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
-
+import { CONVERSATION_COMPUTER_STOP_TASK, CONVERSATION_COMPUTER_TURN_TASK, GROUP_CHILD_TASK, PERSONAL_MEMORY_OPERATION_TASK } from "@opencrane/backend/server/conversations";
+import { _CreateArtifactCatalogueRepository, _CreatePublishedArtifactReader } from "@opencrane/backend/server/agents/artifacts";
+import { _CreateMcpEraProbeAdapter, _CreateOciImageArtifactResolver, __CreateOciImageLayoutImporter, __CreateOciImageLayoutVerifier, __CreateOciImageValidationWorkflow, __CreateMcpEraProbeWorkflow, McpConnectionTaskNames, McpEraProbeTaskNames, McpTaskTaskNames, OciImageValidationTaskNames, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
 import { __CreateHttpsMcpRemoteClient } from "@opencrane/backend/server/infra/mcp-remote-client";
-import { __CreateOciRegistryClient } from "@opencrane/backend/server/infra/oci-registry";
+import { _CreateOciRegistryAuthorizationReader, __CreateOciRegistryClient } from "@opencrane/backend/server/infra/oci-registry";
 import { _CreateAbsurdWorkflowEngine } from "@opencrane/backend/server/infra/workflows/infra_absurd";
 import { __CreateWorkflowGuard, __CreateWorkflowTaskQueueAuthority } from "@opencrane/backend/server/infra/workflows/guard";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
-import { _CreatePublishedArtifactReader } from "@opencrane/backend/server/agents/artifacts";
 import type { OpenCraneWorkflowConfig } from "../configuration/config.types";
 import { _log } from "../process/log";
 import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
@@ -54,7 +47,7 @@ export function __DeclareArtifactPreprocessTask(execution: Pick<IWorkflowEngine,
 }
 
 /**
- * Create the guarded Absurd engine shared by remote MCP, OCI admission, skill validation, and artifact preprocessing.
+ * Creates the guarded Absurd engine shared by server jobs and declared controller tasks.
  *
  * The server declares remote controller tasks without adding local handlers. Artifact publication
  * transactions save PDF-task receipts here, while the controller remains responsible for running
@@ -62,12 +55,13 @@ export function __DeclareArtifactPreprocessTask(execution: Pick<IWorkflowEngine,
  *
  * @see SkillAuthoringValidationTaskDeclaration — defines the declaration the controller shares.
  */
-export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: OpenCraneWorkflowConfig): McpWorkflowComposition
+export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: OpenCraneWorkflowConfig, memoryGatewayTimeoutMilliseconds: number): McpWorkflowComposition
 {
 	const queueAuthority = __CreateWorkflowTaskQueueAuthority([
 		{ taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, queue: "control-plane" },
 		{ taskName: CONVERSATION_COMPUTER_STOP_TASK.taskName, queue: "control-plane" },
 		{ taskName: GROUP_CHILD_TASK.taskName, queue: "control-plane" },
+		{ taskName: PERSONAL_MEMORY_OPERATION_TASK.taskName, queue: "control-plane" },
 		{ taskName: McpEraProbeTaskNames.Probe, queue: "control-plane" },
 		{ taskName: McpConnectionTaskNames.Activate, queue: "control-plane" },
 		{ taskName: McpConnectionTaskNames.Revoke, queue: "control-plane" },
@@ -76,7 +70,8 @@ export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: Open
 		{ taskName: SkillAuthoringValidationTaskDeclaration.taskName, queue: "skill-authoring" },
 		{ taskName: ArtifactPreprocessTaskDeclaration.taskName, queue: "artifact-preprocessing" },
 	]);
-	const runtime = _CreateAbsurdWorkflowEngine({ databasePoolSize: config.databasePoolSize, databaseUrl: config.databaseUrl, log: _log, pollIntervalMs: config.pollIntervalMilliseconds, queueAuthority, workerConcurrency: config.workerConcurrency });
+	const checkpointOperationLeaseSeconds = _ServerCheckpointOperationLeaseSeconds(config, memoryGatewayTimeoutMilliseconds);
+	const runtime = _CreateAbsurdWorkflowEngine({ checkpointOperationLeaseSeconds, databasePoolSize: config.databasePoolSize, databaseUrl: config.databaseUrl, log: _log, pollIntervalMs: config.pollIntervalMilliseconds, queueAuthority, workerConcurrency: config.workerConcurrency });
 	const execution = __CreateWorkflowGuard({ execution: runtime, log: _log, queueAuthority, siloId: config.siloId });
 	__DeclareSkillAuthoringValidation(execution);
 	__DeclareArtifactPreprocessTask(execution);
@@ -93,4 +88,13 @@ export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: Open
 	const artifactCatalogue = _CreateArtifactCatalogueRepository(prisma);
 	const ociImageArtifacts = _CreateOciImageArtifactResolver(artifactCatalogue);
 	return { execution, runtime, unitOfWork, eraProbeWorkflow, ociImageValidationWorkflow, ociImageArtifacts, remoteClient: transport };
+}
+
+/** Keeps each configured external call inside a fresh claim, with a minute for response and checkpoint persistence. */
+export function _ServerCheckpointOperationLeaseSeconds(config: Pick<OpenCraneWorkflowConfig, "mcpRemoteTimeoutMilliseconds" | "ociRegistryTimeoutMilliseconds">, memoryGatewayTimeoutMilliseconds: number): number
+{
+	const timeouts = [memoryGatewayTimeoutMilliseconds, config.mcpRemoteTimeoutMilliseconds, config.ociRegistryTimeoutMilliseconds];
+	if (timeouts.some(timeout => !Number.isFinite(timeout) || timeout < 1_000 || timeout > 300_000))
+		throw new Error("Workflow checkpoints require bounded external-call timeouts");
+	return Math.max(120, Math.ceil(Math.max(...timeouts) / 1_000) + 60);
 }

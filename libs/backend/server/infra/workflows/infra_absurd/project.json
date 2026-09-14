@@ -7,6 +7,7 @@
   "targets": {
     "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/server/infra/workflows/infra_absurd" } },
     "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/server/infra/workflows/infra_absurd" } },
+    "test:sql": { "executor": "nx:run-commands", "cache": false, "options": { "command": "OPENCRANE_ABSURD_SQL_QUALIFICATION=1 vitest run src/qualification/__tests__/checkpoint-lease.integration.test.ts", "cwd": "libs/backend/server/infra/workflows/infra_absurd" } },
     "qualify-live": { "executor": "nx:run-commands", "options": { "command": "tsx src/qualification/qualify-workflow-engine.cli.ts", "cwd": "libs/backend/server/infra/workflows/infra_absurd" } }
   }
 }

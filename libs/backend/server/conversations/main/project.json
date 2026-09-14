@@ -26,9 +26,14 @@
     "test:sql": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "sh ../../../../../scripts/run-postgres-authority-tests.sh src/children/__tests__/group-child-authority.sql",
-        "cwd": "libs/backend/server/conversations/main"
-      }
+        "cwd": "libs/backend/server/conversations/main",
+        "commands": [
+          "sh ../../../../../scripts/run-postgres-authority-tests.sh src/children/__tests__/group-child-authority.sql",
+          "vitest run --config vitest.sql.config.ts"
+        ],
+        "parallel": false
+      },
+      "cache": false
     },
     "test:integration": {
       "executor": "nx:run-commands",

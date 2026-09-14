@@ -59,7 +59,7 @@ function _Admit(client: PrismaClient, command: AdmitPersonalMemoryOperationComma
 function _Owner(client: PrismaClient)
 {
 	const lifecycle = new PrismaPersonalMemoryOperationUnitOfWork(client);
-	return { admit(command: AdmitPersonalMemoryOperationCommand) { return _Admit(client, command); }, apply: lifecycle.apply.bind(lifecycle) };
+	return { admit(command: AdmitPersonalMemoryOperationCommand) { return _Admit(client, command); }, apply: lifecycle.apply.bind(lifecycle), load: lifecycle.load.bind(lifecycle) };
 }
 
 /** Creates a provisional dataset inside whichever transaction owns the command admission. */
@@ -115,6 +115,8 @@ describe("personal-memory operations on fresh PostgreSQL", function _Suite()
 		{
 				const restarted = _Owner(restartedClient);
 			await expect(restarted.admit(command)).resolves.toMatchObject({ outcome: PersonalMemoryOperationAdmissionOutcomes.Replayed, operation: { revision: 2, phase: PersonalMemoryOperationPhases.DocumentAddPending, admittedProviderDatasetId: null, providerDatasetId } });
+			await expect(restarted.load(command.siloId, command.operationId)).resolves.toMatchObject({ revision: 2, phase: PersonalMemoryOperationPhases.DocumentAddPending, admittedProviderDatasetId: null, providerDatasetId });
+			await expect(restarted.load(randomUUID(), command.operationId)).resolves.toBeNull();
 		}
 		finally { await restartedClient.$disconnect(); }
 	});
@@ -160,6 +162,7 @@ describe("personal-memory operations on fresh PostgreSQL", function _Suite()
 		{
 				const restarted = _Owner(restartedClient);
 			await expect(restarted.admit(command)).resolves.toMatchObject({ operation: { revision: 3, phase: PersonalMemoryOperationPhases.RecoveryRequired, recoveryPhase: PersonalMemoryOperationPhases.DocumentAddPending, failureCode: PersonalMemoryOperationFailureCodes.DocumentConflict, deliveryState: MemoryMutationDeliveryStates.Ambiguous } });
+			await expect(restarted.load(command.siloId, command.operationId)).resolves.toMatchObject({ revision: 3, phase: PersonalMemoryOperationPhases.RecoveryRequired, recoveryPhase: PersonalMemoryOperationPhases.DocumentAddPending, deliveryState: MemoryMutationDeliveryStates.Ambiguous });
 		}
 		finally { await restartedClient.$disconnect(); }
 	});

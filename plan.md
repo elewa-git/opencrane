@@ -85,6 +85,53 @@ build/test/lint, generated API, KurrentDB recovery and all three applicable imag
 existing remote-MCP database cases still fail; Storybook visual review also remains open. This run
 publishes no images and does not qualify testv6. Live stack integrity passes for #888 → #891 → #892.
 
+Gateway PR #893 at `ff714f3a844583a614e401a1627e0ab089eb12f3` passes affected build/test/lint,
+generated API, KurrentDB and three image smokes in CI run `34808953810`. Only the same five remote-MCP
+baseline cases and 22 screenshot candidates fail; 133 unchanged visuals pass. No images were
+published, and the dedicated Cognee image contract was skipped. Its live stack and corrected stack
+CI pass for #888 → #891 → #892 → #893.
+
+### Personal-memory saved-phase worker — source implemented
+
+The next slice starts from gateway PR #893 at
+`ff714f3a844583a614e401a1627e0ab089eb12f3`, on `feat/0.12-personal-memory-workflow`.
+Its source preflight identifies three owners: the personal-memory repository loads validated saved
+operations; the conversations authority selects and records one lifecycle step; app bootstrap
+registers that handler on the existing Absurd engine. No product command route, new grant, database
+model, credential path or worker runtime is added.
+
+The task must match its saved silo, operation, task ID, name and retry key before provider work.
+Current external-principal membership, dataset ownership, MemoryScope Manage/Forget permission and
+source evidence are checked again at the relevant step. Replayed checkpoint receipts pass the shared
+strict schema before any lifecycle event. The Absurd adapter renews the current claim immediately
+before an uncached effect for the configured external-call timeout plus a minute; a stale claim
+cannot enter the callback. Slow provider pre-reads happen before that renewal. Each effect callback
+contains at most one gateway request, and catalog authorization and writes share one transaction. This uses Absurd heartbeat, with no additional queue or timer loop.
+Completed receipts survive restart through named checkpoints. A concurrent revision winner is
+reloaded, and uncertain mutations keep their recovery phase; retries cannot replace saved operation
+identities. The gateway continues to own its provider-specific reconciliation protocol.
+
+Validation passes 722 conversations tests with four workers, 169 server tests, 59 personal-memory
+tests and 38 Absurd unit tests. One opt-in Absurd SQL case is skipped by its ordinary unit target and
+passes through the dedicated `test:sql` target. The unchanged baseline installs in a disposable
+PostgreSQL 17 database; all 13 personal-memory SQL tests and five authorized catalog SQL tests pass,
+as does the existing child-authority SQL suite. The catalog proofs cover commit, current revocation,
+conflict recovery and rollback. The Absurd SQL proof rejects a reclaimed worker before its effect
+and lets the replacement execute once. One initial full-suite run timed out under concurrent load;
+the affected router passed alone and the complete 722-test rerun passed with four workers.
+
+All eight affected packages pass lint/type checking. The server build and API generation, full
+ESLint boundaries, TypeScript/Prisma style, workload/domain guards and negative tests, workflow and
+authorization guards and negative tests, release checks and pre-publication stack check pass.
+Module growth has no errors; the two saved-phase owners have reviewed responsibility inventories.
+Independent review corrections cover pre-dispatch errors, corrupt receipt replay, late checkpoint
+persistence failure, catalog revocation/conflicts, lease timing and already-committed revision winners.
+
+This prepares execution but does not enable first-dataset admission. Its separate grant approval,
+product commands and complete live memory journeys remain outstanding. That later command unit of
+work must record central authorization evidence bound to the command digest in the same transaction
+as the operation and Absurd task. This worker only rechecks revocation of already-admitted authority.
+
 ### Personal-memory gateway steps — source continuation
 
 This slice starts at `c737beca00f9b9fdb156ab6d438a7a583f8fc523`, the published ordered-tool-loop
@@ -99,7 +146,7 @@ The connected harness has explicit Nx test/type-check cache inputs outside the p
 graph. Independent review found and fixed pre-dispatch Ensure/Delete read failures that incorrectly
 reported ambiguous mutation delivery. Independent integrated and architecture post-review pass. The remaining Low port-comment finding
 is corrected: mutation methods document the failure classes and when the caller must reconcile.
-The memory-gateway production bundle also builds successfully. Publication remains in progress.
+The memory-gateway production bundle also builds successfully. Published as draft #893 at `ff714f3a844583a614e401a1627e0ab089eb12f3`, directly on #892.
 
 The private gateway owns dataset/document operations through its existing authenticated Cognee
 session. The server client sends one request per method and validates every receipt against the

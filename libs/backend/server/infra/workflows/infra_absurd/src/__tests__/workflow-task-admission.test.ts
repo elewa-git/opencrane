@@ -137,6 +137,23 @@ describe("AbsurdWorkflowEngine queue authority", function _QueueAuthoritySuite()
 		expect(function _MissingCeiling(): void { new AbsurdWorkflowEngine({ databaseUrl: "postgresql://example.invalid/opencrane", databasePoolSize: 0, queueAuthority: queues }); }).toThrow("databasePoolSize must be a positive integer");
 	});
 
+	it("validates and normalizes the checkpoint operation lease", function _ValidatesCheckpointLease()
+	{
+		const queues = { queueForTask(): string { return "control-plane"; } };
+		const databasePool = new Pool({ connectionString: "postgresql://example.invalid/opencrane", max: 1 });
+		const execution = new AbsurdWorkflowEngine({ databaseUrl: "postgresql://example.invalid/opencrane", databasePool, databasePoolSize: 1, queueAuthority: queues, checkpointOperationLeaseSeconds: 37 });
+		const options = (execution as unknown as { options: { checkpointOperationLeaseSeconds?: number } }).options;
+		expect(options.checkpointOperationLeaseSeconds).toBe(37);
+
+		const defaultExecution = new AbsurdWorkflowEngine({ databaseUrl: "postgresql://example.invalid/opencrane", databasePool, databasePoolSize: 1, queueAuthority: queues });
+		const defaultOptions = (defaultExecution as unknown as { options: { checkpointOperationLeaseSeconds?: number } }).options;
+		expect(defaultOptions.checkpointOperationLeaseSeconds).toBe(120);
+		for (const value of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 1.5])
+		{
+			expect(function _InvalidCheckpointLease(): void { new AbsurdWorkflowEngine({ databaseUrl: "postgresql://example.invalid/opencrane", databasePool, databasePoolSize: 1, queueAuthority: queues, checkpointOperationLeaseSeconds: value }); }).toThrow("checkpointOperationLeaseSeconds must be a finite positive integer");
+		}
+	});
+
 	it("drains workers before ending its owned shared pool", async function _ClosesOwnedPool()
 	{
 		const order: string[] = [];

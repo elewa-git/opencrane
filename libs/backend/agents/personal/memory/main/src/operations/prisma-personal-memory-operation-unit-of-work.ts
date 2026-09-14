@@ -3,7 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 
 import { PrismaPersonalMemoryOperationRepository } from "./prisma-personal-memory-operation-repository";
-import type { PersonalMemoryOperationPersistenceResult, PersonalMemoryOperationUnitOfWork } from "./personal-memory-operation-persistence.types";
+import type { PersonalMemoryOperationPersistenceResult, PersonalMemoryOperationRecord, PersonalMemoryOperationUnitOfWork } from "./personal-memory-operation-persistence.types";
 import type { PersonalMemoryOperationEvent } from "./personal-memory-operation.types";
 
 /**
@@ -21,6 +21,16 @@ export class PrismaPersonalMemoryOperationUnitOfWork implements PersonalMemoryOp
 	constructor(prisma: PrismaClient)
 	{
 		this.prisma = prisma;
+	}
+
+	/** @inheritdoc */
+	async load(siloId: string, operationId: string): Promise<PersonalMemoryOperationRecord | null>
+	{
+		return ___RunInPrismaUnitOfWork(this.prisma, async function _Load(transaction)
+		{
+			const repository = new PrismaPersonalMemoryOperationRepository(transaction);
+			return repository.findById(siloId, operationId);
+		}, { isolationLevel: "Serializable", attemptLimit: 3, operation: "personal-memory operation load" });
 	}
 
 	/** @inheritdoc */

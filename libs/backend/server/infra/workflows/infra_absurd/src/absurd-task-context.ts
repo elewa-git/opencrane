@@ -1,4 +1,4 @@
-import { CancelledTask, SuspendTask, TimeoutError, type TaskContext } from "absurd-sdk";
+import { CancelledTask, FailedTask, SuspendTask, TimeoutError, type TaskContext } from "absurd-sdk";
 
 import { WorkflowError, WorkflowTaskCancelledError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowCheckpointOperation, IWorkflowCheckpointStep, IWorkflowTaskContext, IWorkflowTaskEvent, IWorkflowTaskReceipt, IWorkflowTaskSpawn } from "@opencrane/backend/server/infra/workflows/contract";
@@ -56,23 +56,44 @@ export class _AbsurdTaskContext implements IWorkflowTaskContext
 	readonly attempt: number;
 	/** Child-task admissions require the adapter's engine and queue policy. */
 	private readonly execution: AbsurdWorkflowEngine;
+	/** Lease extension required before an uncached external operation can begin. */
+	private readonly checkpointOperationLeaseSeconds: number;
 
 	/** Creates a contract context around one Absurd worker invocation. */
-	constructor(context: TaskContext, task: IWorkflowTaskReceipt, attempt: number, execution: AbsurdWorkflowEngine)
+	constructor(context: TaskContext, task: IWorkflowTaskReceipt, attempt: number, execution: AbsurdWorkflowEngine, checkpointOperationLeaseSeconds = 120)
 	{
 		this.context = context;
 		this.task = task;
 		this.attempt = attempt;
 		this.execution = execution;
+		this.checkpointOperationLeaseSeconds = checkpointOperationLeaseSeconds;
 	}
 
 	/** Persist or replay one named operation result. */
 	async checkpoint<TResult>(step: IWorkflowCheckpointStep, operation: IWorkflowCheckpointOperation<TResult>): Promise<TResult>
 	{
 		const stepName = _RequiredString("step.stepName", step.stepName);
+		const context = this.context;
+		const taskId = this.task.taskId;
+		const leaseSeconds = this.checkpointOperationLeaseSeconds;
 		try
 		{
-			return await this.context.step(stepName, operation);
+			return await context.step(stepName, async function _HeartbeatBeforeOperation(): Promise<TResult>
+			{
+				try
+				{
+					await context.heartbeat(leaseSeconds);
+				}
+				catch (error)
+				{
+					if (error instanceof FailedTask)
+					{
+						throw new WorkflowTaskCancelledError(taskId);
+					}
+					throw error;
+				}
+				return await operation();
+			});
 		}
 		catch (error)
 		{
