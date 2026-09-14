@@ -170,6 +170,12 @@ spec:
             - name: OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS
               value: {{ $membership.maximumStalenessMs | quote }}
             {{- if eq $membership.mode "standalone" }}
+            - name: OPENCRANE_MEMBERSHIP_TRUSTED_IDENTITY_ISSUER
+              {{- if eq $developmentAuthentication.mode "k3d" }}
+              value: https://identity.local.opencrane.test
+              {{- else }}
+              value: {{ .Values.clustertenantManager.oidc.issuerUrl | quote }}
+              {{- end }}
             - name: OPENCRANE_INVITATION_SIGNING_KEY_PATH
               value: /var/run/opencrane/invitation-signing/key
             - name: OPENCRANE_PUBLIC_BASE_URL

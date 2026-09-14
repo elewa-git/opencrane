@@ -14,6 +14,7 @@ test("parses the separate infra and agent contracts", function _Options()
 	assert.equal(parseTier3Options(["--profile", "agent", "--provider", "OpenAI", "--provider-key-file", "/tmp/key"]).provider, "openai");
 	assert.throws(function _Credentials() { parseTier3Options(["--profile", "infra", "--provider", "openai"]); }, /refuses provider credentials/u);
 	assert.throws(function _Missing() { parseTier3Options(["--profile", "agent"]); }, /requires --provider/u);
+	assert.throws(function _Unsupported() { parseTier3Options(["--profile", "agent", "--provider", "unsupported", "--provider-key-file", "/tmp/key"]); }, /provider must be one of/u);
 });
 
 test("reports exact minimum and recommended host shortfalls", function _Capacity()
@@ -83,4 +84,6 @@ test("keeps the shared smoke defaults compatible with CI", async function _Smoke
 	assert.match(source, /SMOKE_INGRESS_PORT="\$\{SMOKE_INGRESS_PORT:-8443\}"/u);
 	assert.match(source, /SMOKE_RESOURCE_OWNER="\$\{SMOKE_RESOURCE_OWNER:-\}"/u);
 	assert.match(source, /--runtime-label "opencrane\.tier3\.owner=\$\{SMOKE_RESOURCE_OWNER\}@server:\*"/u);
+	assert.match(source, /if \[\[ "\$KEEP_CLUSTER" == "1" && "\$SMOKE_CLUSTER_CREATED" == "1" \]\]; then/u);
+	assert.match(source, /SMOKE_CLUSTER_CREATED=1/u);
 });

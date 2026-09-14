@@ -7,20 +7,8 @@ import type { AuthenticatedPrincipalAdmission } from "@opencrane/backend/server/
 import type { AuthenticatedPrincipalCapabilityReader } from "@opencrane/backend/server/iam/identity";
 
 import type { PublicAuthenticationComposition } from "../app/public-app.types";
+import type { DevelopmentAuthenticationTransport } from "./authentication.types";
 import type { DevelopmentIdentity } from "./config.types";
-
-/** Exact hosts and origins accepted by one explicitly composed development transport. */
-export interface DevelopmentAuthenticationTransport
-{
-	/** Direct authority presented to the application after trusted proxy handling. */
-	readonly directHost: string;
-	/** Browser-facing authority accepted through the optional proxy target. */
-	readonly browserHost: string;
-	/** Proxy authorities allowed to forward the browser host. */
-	readonly proxyTargets: ReadonlySet<string>;
-	/** Scheme used by the exact direct and forwarded browser origins. */
-	readonly scheme: "http" | "https";
-}
 
 const _TIER2_TRANSPORT: DevelopmentAuthenticationTransport = Object.freeze({ browserHost: "local-development.localhost:4200", directHost: "local-development.localhost:8080", proxyTargets: new Set(["127.0.0.1:8080", "localhost:8080"]), scheme: "http" });
 

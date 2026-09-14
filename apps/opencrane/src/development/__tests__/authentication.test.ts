@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { AuthenticatedPrincipalAdmission } from "@opencrane/backend/server/infra/auth";
 import type { AuthenticatedPrincipalCapabilityReader } from "@opencrane/backend/server/iam/identity";
 
-import { _CreateDevelopmentAuthentication, type DevelopmentAuthenticationTransport } from "../authentication";
+import { _CreateDevelopmentAuthentication } from "../authentication";
+import type { DevelopmentAuthenticationTransport } from "../authentication.types";
 import { _DEVELOPMENT_IDENTITY } from "../config";
 
 /** Exact per-launch credential supplied to the focused browser boundary. */

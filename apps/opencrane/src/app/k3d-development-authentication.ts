@@ -19,7 +19,8 @@ export async function _CreateK3dDevelopmentAuthentication(prisma: Parameters<typ
 {
 	const principal = await _AdmitDevelopmentIdentity(prisma, config.identity, __CreateStandaloneFirstUserAdmissionAuditAppender(), log);
 	const credential = readFileSync(config.credentialPath, "utf8").trim();
-	if (!/^[A-Za-z0-9_-]{43}$/u.test(credential)) throw new Error("k3d development credential must contain one 32-byte base64url proof");
+	if (!/^[A-Za-z0-9_-]{43}$/u.test(credential))
+		throw new Error("k3d development credential must contain one 32-byte base64url proof");
 	const identity: DevelopmentIdentity = { displayName: config.identity.displayName, email: config.identity.email, issuer: config.identity.issuer, principalId: principal.principalId, siloId: config.identity.siloId, subjectId: config.identity.subject };
 	const capabilities = new PrismaAuthenticatedPrincipalCapabilityUnitOfWork(prisma, log);
 	const admission = new PrismaAuthenticatedPrincipalAdmissionUnitOfWork(prisma, log);

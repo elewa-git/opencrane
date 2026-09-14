@@ -15,6 +15,11 @@ if grep -Eq 'OPENCRANE_(DEVELOPMENT_AUTHENTICATION|K3D_DEVELOPMENT)|development-
   exit 1
 fi
 
+ordinary_oidc_rendered="$(helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
+  --set-string clustertenantManager.oidc.issuerUrl=https://issuer.example.test)"
+ordinary_membership_issuer="$(grep -A 1 '            - name: OPENCRANE_MEMBERSHIP_TRUSTED_IDENTITY_ISSUER' <<<"$ordinary_oidc_rendered")"
+grep -Fq '              value: "https://issuer.example.test"' <<<"$ordinary_membership_issuer"
+
 development_rendered="$(helm template opencrane-tier3 "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set-string clustertenantManager.firstUser.email=developer@example.test \
   --set-string clustertenantManager.firstUser.clusterTenant=opencrane-tier3 \
@@ -33,6 +38,8 @@ grep -Fq '            - name: OPENCRANE_K3D_DEVELOPMENT_HOST' <<<"$server_manife
 grep -Fq '              value: "opencrane-tier3.local.opencrane.test"' <<<"$server_manifest"
 grep -Fq '            - name: OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL_PATH' <<<"$server_manifest"
 grep -Fq '              value: /var/run/opencrane/development-session/credential' <<<"$server_manifest"
+membership_issuer="$(grep -A 1 '            - name: OPENCRANE_MEMBERSHIP_TRUSTED_IDENTITY_ISSUER' <<<"$server_manifest")"
+grep -Fq '              value: https://identity.local.opencrane.test' <<<"$membership_issuer"
 grep -Fq '              mountPath: /var/run/opencrane/development-session' <<<"$server_manifest"
 development_volume="$(grep -A 8 '        - name: development-session' <<<"$server_manifest")"
 grep -Fq '            secretName: "opencrane-tier3-development-session"' <<<"$development_volume"

@@ -231,7 +231,7 @@ are:
 | `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
 | `AGENT_RUN_ADMISSION_*` | Active and queued personal-conversation admission limits | bounded defaults |
-| `OPENCRANE_MEMBERSHIP_*` | Explicit issuer model; `fleet` mounts its verifier, `standalone` reads current local membership using the deployment silo and OIDC issuer | required |
+| `OPENCRANE_MEMBERSHIP_*` | Explicit issuer model; `fleet` mounts its verifier, while `standalone` reads current local membership using the deployment silo and a chart-selected trusted identity issuer | required |
 | `OPENCRANE_INVITATION_SIGNING_KEY_PATH`, `OPENCRANE_PUBLIC_BASE_URL`, `OPENCRANE_INVITATION_TTL_SECONDS` | Standalone invitation-link signing, public link origin, and bounded lifetime | required in standalone mode |
 | `OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_*` | Fleet-owned member directory, invitations, paid-seat, and payment decisions through one silo-scoped service credential | required in Fleet mode |
 | `ARTIFACT_SERVICE_URL` and mounted artifact keys | Private byte promotion/read brokers | required when used |

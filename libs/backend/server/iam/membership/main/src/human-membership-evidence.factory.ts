@@ -12,8 +12,9 @@ const _MAXIMUM_STALENESS_MILLISECONDS = 24 * 60 * 60 * 1_000;
 
 /**
  * Selects human membership authority from deployment settings, never from a request.
- * Fleet requires its mounted verification key. Standalone requires the local silo and trusted
- * OIDC issuer and reads active PostgreSQL membership; failed Fleet verification never falls back.
+ * Fleet requires its mounted verification key. Standalone requires the local silo and its
+ * deployment-owned identity issuer and reads active PostgreSQL membership; failed Fleet
+ * verification never falls back.
  * Called by: the OpenCrane conversation history and run-admission compositions at startup.
  * @throws Error when a required setting is missing or the trust lifetime exceeds 24 hours.
  */
@@ -23,7 +24,7 @@ export function _CreateHumanMembershipEvidenceConfig(environment: NodeJS.Process
 	const maximumStalenessMs = _PositiveInteger(environment, "OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS", _MAXIMUM_STALENESS_MILLISECONDS);
 	if (mode === FleetMembershipDeploymentModes.Standalone)
 	{
-		return { mode, siloId: _Required(environment, "OPENCRANE_SILO_ID"), trustedOidcIssuer: _Required(environment, "OIDC_ISSUER_URL"), maximumStalenessMs };
+		return { mode, siloId: _Required(environment, "OPENCRANE_SILO_ID"), trustedOidcIssuer: _Required(environment, "OPENCRANE_MEMBERSHIP_TRUSTED_IDENTITY_ISSUER"), maximumStalenessMs };
 	}
 	const trustedIssuerId = _Required(environment, "OPENCRANE_MEMBERSHIP_ISSUER_ID");
 	const issuerKeyId = _Required(environment, "OPENCRANE_MEMBERSHIP_KEY_ID");

@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+
 const _PROFILES = new Set(["infra", "agent"]);
 const _STORAGE_MODES = new Set(["fast", "full"]);
+const _PROVIDERS = new Set(Object.keys(JSON.parse(readFileSync(new URL("../../libs/backend/server/gateways/model-routing/main/byok-provider-catalog.json", import.meta.url), "utf8"))));
 
 export const TIER3_HELP = `Usage: node scripts/tier3-development.mjs --profile <infra|agent> [options]\n\nOptions:\n  --storage-mode <fast|full>   Select disposable or persistent storage qualification.\n  --proxy-port <port>          Bind the loopback browser proxy (default: 4200).\n  --replace-owned              Replace only a retained cluster owned by this worktree.\n  --smoke-only                 Qualify infrastructure without starting the browser proxy.\n  --provider <name>            BYOK provider required by the agent profile.\n  --provider-key-file <path>   Owner-only regular file containing the provider key.\n  --help                       Show this help.\n`;
 
@@ -26,6 +29,7 @@ export function parseTier3Options(arguments_)
 	if (!Number.isSafeInteger(options.proxyPort) || options.proxyPort < 1_024 || options.proxyPort > 65_535) throw new Error("Tier 3 proxy port must be a user port from 1024 through 65535.");
 	if (options.profile === "infra" && (options.provider !== null || options.providerKeyFile !== null)) throw new Error("Tier 3 infra refuses provider credentials.");
 	if (options.profile === "agent" && (!options.provider || !options.providerKeyFile)) throw new Error("Tier 3 agent requires --provider and --provider-key-file.");
+	if (options.profile === "agent" && !_PROVIDERS.has(options.provider)) throw new Error(`Tier 3 provider must be one of ${[..._PROVIDERS].join(", ")}.`);
 	if (options.profile === "agent" && options.smokeOnly) throw new Error("Tier 3 agent cannot use --smoke-only because it must prove a real assistant turn.");
 	return Object.freeze(options);
 }

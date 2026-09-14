@@ -30,6 +30,7 @@ SMOKE_RESOURCE_OWNER="${SMOKE_RESOURCE_OWNER:-}"
 OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL="${OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL:-}"
 SMOKE_LOCAL_REGISTRY_NAME="${CLUSTER_NAME}-registry"
 SMOKE_LOCAL_REGISTRY_ADDRESS=""
+SMOKE_CLUSTER_CREATED=0
 KEY_DIR=""
 CSI_DIR=""
 IMAGE_PREPARATION_PID=""
@@ -144,7 +145,7 @@ _cleanup()
   if [[ -n "$CSI_DIR" ]]; then
     rm -rf -- "$CSI_DIR"
   fi
-  if [[ "$KEEP_CLUSTER" == "1" ]]; then
+  if [[ "$KEEP_CLUSTER" == "1" && "$SMOKE_CLUSTER_CREATED" == "1" ]]; then
     echo "[develop-smoke] KEEP_CLUSTER=1; leaving '$CLUSTER_NAME' running"
   else
     _teardown_cluster_storage
@@ -559,6 +560,7 @@ if [[ -n "$SMOKE_RESOURCE_OWNER" ]]; then
   cluster_create_arguments+=(--runtime-label "opencrane.tier3.owner=${SMOKE_RESOURCE_OWNER}@server:*")
 fi
 k3d "${cluster_create_arguments[@]}"
+SMOKE_CLUSTER_CREATED=1
 
 echo "[develop-smoke] Installing external cluster prerequisites"
 if [[ "$SMOKE_STORAGE_MODE" == "full" ]]; then

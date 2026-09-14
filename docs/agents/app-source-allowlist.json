@@ -69,6 +69,7 @@
     { "path": "apps/opencrane/src/infra/health/public-health-probe.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/infra/health/public-health.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/development/authentication.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+	{ "path": "apps/opencrane/src/development/authentication.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
 	{ "path": "apps/opencrane/src/development/cleanup.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/development/composition.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/development/composition.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
