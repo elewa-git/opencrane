@@ -89,8 +89,8 @@ its resources to the lifecycle owner.
 - `src/app/public-app.ts` builds the browser-session-authenticated API.
 - The neutral [membership](../../libs/backend/server/iam/membership/main/README.md) package owns
   the deployment-selected human membership reader used by both admission paths. Fleet verifies
-  signed assertions; Standalone checks the configured silo, trusted OIDC Principal and active local
-  membership row. A failed Fleet proof never selects Standalone.
+  signed assertions; Standalone checks the configured silo, deployment-trusted Principal identity
+  and active local membership row. A failed Fleet proof never selects Standalone.
 - `src/app/internal-app.ts` builds the workload-facing API on its separate socket.
 - `src/app/conversation-computer-turn-composition.ts` binds the private tool-proposal route to
   the existing turn, membership, service and tool authorities. Kubernetes TokenReview checks the
