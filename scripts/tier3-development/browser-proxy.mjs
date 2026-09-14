@@ -5,7 +5,13 @@ const _SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const _UPGRADED_SOCKETS = new WeakMap();
 const _UPSTREAM_TIMEOUT_MILLISECONDS = 15_000;
 
-/** Create the loopback proxy that preserves the current k3d ingress Host and pinned TLS trust. */
+/**
+ * Creates the loopback proxy with the live ingress certificate and required upstream Host.
+ * It rejects foreign browser origins, discards browser-supplied forwarding claims, and adds the
+ * coordinator credential only for the Agent profile.
+ * @returns An unbound HTTP server; the coordinator chooses its loopback port.
+ * @throws When the configured upstream is not HTTPS or has no certificate.
+ */
 export function createTier3BrowserProxy(options)
 {
 	const upstream = new URL(options.upstreamOrigin);
@@ -37,7 +43,11 @@ export function createTier3BrowserProxy(options)
 	return server;
 }
 
-/** Close the listener and upgraded sockets retained outside Node's HTTP connection set. */
+/**
+ * Closes the listener, ordinary connections, and upgraded sockets tracked outside Node's HTTP set.
+ * The explicit socket teardown lets an interrupted or failed qualification release its local port.
+ * @returns When the listener and every tracked upgraded socket have closed.
+ */
 export async function closeTier3BrowserProxy(server)
 {
 	const sockets = [...(_UPGRADED_SOCKETS.get(server) ?? [])];
@@ -48,7 +58,12 @@ export async function closeTier3BrowserProxy(server)
 	await Promise.all([closedServer, ...closedSockets]);
 }
 
-/** Build the pinned ingress request while discarding browser-supplied forwarding claims. */
+/**
+ * Builds an ingress request from coordinator-owned trust values after discarding browser-supplied
+ * forwarding and development-session claims. State-changing requests keep their browser origin but
+ * rewrite it to the HTTPS ingress authority that the server is configured to trust.
+ * @returns HTTPS request options pinned to the live certificate, Host, and server name.
+ */
 export function buildTier3UpstreamRequestOptions(request, upstream, options)
 {
 	const headers = { ...request.headers };
@@ -82,7 +97,10 @@ function _HasExpectedBrowserOrigin(request)
 
 function _Track(sockets, socket) { sockets.add(socket); socket.once("close", function _Forget() { sockets.delete(socket); }); }
 
-/** Bound one upstream ingress request so a stalled k3d route cannot retain the local proxy. */
+/**
+ * Destroys an upstream request when its ingress deadline expires.
+ * This prevents a stalled k3d route from retaining the local proxy indefinitely.
+ */
 export function configureTier3UpstreamTimeout(request, milliseconds) { request.setTimeout(milliseconds, function _Timeout() { request.destroy(new Error(`Tier 3 ingress timed out after ${milliseconds} ms.`)); }); }
 
 function _UpgradeResponseHead(response) { const lines = [`HTTP/${response.httpVersion} ${response.statusCode} ${response.statusMessage}`]; for (let index = 0; index < response.rawHeaders.length; index += 2) lines.push(`${response.rawHeaders[index]}: ${response.rawHeaders[index + 1]}`); return `${lines.join("\r\n")}\r\n\r\n`; }

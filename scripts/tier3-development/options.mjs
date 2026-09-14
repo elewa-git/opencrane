@@ -4,9 +4,16 @@ const _PROFILES = new Set(["infra", "agent"]);
 const _STORAGE_MODES = new Set(["fast", "full"]);
 const _PROVIDERS = new Set(Object.keys(JSON.parse(readFileSync(new URL("../../libs/backend/server/gateways/model-routing/main/byok-provider-catalog.json", import.meta.url), "utf8"))));
 
+/** Explains the strict profile, storage, ownership, browser, and provider options accepted below. */
 export const TIER3_HELP = `Usage: node scripts/tier3-development.mjs --profile <infra|agent> [options]\n\nOptions:\n  --storage-mode <fast|full>   Select disposable or persistent storage qualification.\n  --proxy-port <port>          Bind the loopback browser proxy (default: 4200).\n  --replace-owned              Replace only a retained cluster owned by this worktree.\n  --smoke-only                 Qualify infrastructure without starting the browser proxy.\n  --provider <name>            BYOK provider required by the agent profile.\n  --provider-key-file <path>   Owner-only regular file containing the provider key.\n  --help                       Show this help.\n`;
 
-/** Parse one strict Tier 3 command before any host resource is acquired. */
+/**
+ * Parses and validates a Tier 3 command before any host resource is acquired.
+ * Infra mode refuses provider inputs, while Agent mode requires a provider from the server-owned
+ * catalog and a key-file path because its acceptance proof must perform a real provider turn.
+ * @returns Frozen options for exactly one admitted Tier 3 profile.
+ * @throws When an option is unknown, incomplete, unsupported, or incompatible with its profile.
+ */
 export function parseTier3Options(arguments_)
 {
 	const options = { help: false, profile: null, provider: null, providerKeyFile: null, proxyPort: 4_200, replaceOwned: false, smokeOnly: false, storageMode: "fast" };

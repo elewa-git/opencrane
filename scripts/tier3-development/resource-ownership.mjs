@@ -6,7 +6,11 @@ import { promisify } from "node:util";
 const _EXEC_FILE = promisify(execFile);
 const TIER3_OWNER_LABEL = "opencrane.tier3.owner";
 
-/** Derive stable, DNS-safe resource coordinates from the exact worktree path. */
+/**
+ * Derives stable, DNS-safe resource coordinates from the resolved worktree path.
+ * Separate worktrees therefore do not share a cluster, registry, namespace, release, or ingress port.
+ * @returns Frozen resource coordinates and the owner label expected during replacement and cleanup.
+ */
 export function tier3ResourceIdentity(repositoryRoot)
 {
 	const worktree = realpathSync(repositoryRoot);
@@ -15,7 +19,12 @@ export function tier3ResourceIdentity(repositoryRoot)
 	return Object.freeze({ clusterName: `opencrane-tier3-${digest}`, clusterTenant: `tier3-${digest}`, ingressPort: 20_000 + Number.parseInt(digest.slice(0, 4), 16) % 30_000, namespace: `opencrane-tier3-${digest}`, owner, registryName: `opencrane-tier3-${digest}-registry`, releaseName: `opencrane-tier3-${digest}`, worktree });
 }
 
-/** Read exact owner labels from the cluster server and registry containers. */
+/**
+ * Inspects the expected cluster server and registry without treating an unavailable Docker daemon
+ * as an empty result. A registry counts as associated only when it shares the cluster network.
+ * @returns Existing-resource flags and the proved owner, `unknown`, or null when neither exists.
+ * @throws When Docker inspection fails for a reason other than an explicitly missing object.
+ */
 export async function inspectTier3Resources(identity, operations = {})
 {
 	const inspect = operations.inspect ?? function _InspectResource(name) { return _Inspect(name, operations.execFile ?? _EXEC_FILE); };
@@ -27,7 +36,11 @@ export async function inspectTier3Resources(identity, operations = {})
 	return { clusterExists: true, existingOwner: registryAssociated ? cluster.owner ?? "unknown" : "unknown", registryExists: registry.exists };
 }
 
-/** Refuse implicit replacement and every resource not proven to belong to this worktree. */
+/**
+ * Allows replacement only when the retained resource owner matches this worktree and the caller
+ * selected `--replace-owned`. A fresh resource set needs no replacement permission.
+ * @throws When ownership is foreign or unknown, or replacement was not explicitly requested.
+ */
 export function assertTier3ResourceReplacement(existingOwner, expectedOwner, replaceOwned)
 {
 	if (existingOwner === null) return;

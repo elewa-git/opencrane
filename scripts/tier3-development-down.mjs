@@ -9,7 +9,11 @@ import { assertTier3ResourceReplacement, inspectTier3Resources, tier3ResourceIde
 const _EXEC_FILE = promisify(execFile);
 const _REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
-/** Delete only k3d resources whose owner label matches this worktree. */
+/**
+ * Deletes the retained cluster and registry after inspection proves that this worktree owns them.
+ * A missing resource is already clean; an unknown or foreign owner stops cleanup before deletion.
+ * @throws When ownership cannot be proved or a k3d deletion fails.
+ */
 export async function downTier3Resources(operations = {})
 {
 	const identity = tier3ResourceIdentity(_REPOSITORY_ROOT);

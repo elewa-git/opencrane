@@ -159,7 +159,11 @@ function _CreateAuthRouter(identity: DevelopmentIdentity, capabilities: Authenti
 /**
  * Compose a development-only browser identity over production Principal admission.
  *
+ * The caller supplies the accepted direct/proxy hosts and scheme; state-changing requests from any
+ * other origin fail before the fixed session is attached. Protected routes then re-read the durable
+ * Principal and current membership-managed capability instead of trusting the browser credential.
  * Called by: the Tier 2 entrypoint and the explicitly selected Tier 3 k3d composition.
+ * @returns Session, authentication, and `/api/v1/auth` middleware for the public application.
  */
 export function _CreateDevelopmentAuthentication(identity: DevelopmentIdentity, capabilities: AuthenticatedPrincipalCapabilityReader, admission: AuthenticatedPrincipalAdmission, browserSessionCredential: string, logger: Logger, transport: DevelopmentAuthenticationTransport = _TIER2_TRANSPORT): PublicAuthenticationComposition
 {

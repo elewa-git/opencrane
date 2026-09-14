@@ -1,4 +1,8 @@
-/** Fixed identity facts selected by an explicit local deployment profile. */
+/**
+ * Carries the identity facts selected by an explicit local deployment profile.
+ * The admission service projects this tuple into the existing Principal and standalone-owner
+ * authorities; request data cannot select or change these values.
+ */
 export interface DevelopmentIdentityAdmission
 {
 	/** Human-readable name shown by the development session. */

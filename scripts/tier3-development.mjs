@@ -14,7 +14,13 @@ import { assertTier3ResourceReplacement, inspectTier3Resources, tier3ResourceIde
 const _REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const _SMOKE_PATH = "apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh";
 
-/** Run current k3d qualification and retain its verified browser route. */
+/**
+ * Qualifies the current k3d silo before opening its certificate-pinned loopback browser route.
+ * Agent mode then completes the product journey, and closes the proxy if that proof fails so the
+ * command cannot leave a listener running after it reports failure.
+ * @returns The worktree resource identity and the profile that completed.
+ * @throws When capacity, ownership, cluster qualification, proxy startup, or Agent proof fails.
+ */
 export async function runTier3Development(options, operations = {})
 {
 	const write = operations.write ?? function _Write(message) { process.stdout.write(message); };

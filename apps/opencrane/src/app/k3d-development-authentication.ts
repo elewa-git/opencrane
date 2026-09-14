@@ -11,9 +11,13 @@ import type { K3dDevelopmentAuthenticationConfig } from "./config.types";
 import type { PublicAuthenticationComposition } from "./public-app.types";
 
 /**
- * Compose the local k3d session after current IAM admits its fixed deployment identity.
+ * Composes the local k3d session after current IAM admits its deployment-selected identity.
  *
+ * The credential is accepted only as a 32-byte base64url proof, and every protected request still
+ * resolves the durable Principal and current capabilities through the production authorities.
  * Called by: the production application root only when the Helm profile selects k3d development.
+ * @returns Authentication middleware and routes bound to the configured HTTPS ingress host.
+ * @throws When identity admission or the mounted credential contract fails.
  */
 export async function _CreateK3dDevelopmentAuthentication(prisma: Parameters<typeof _AdmitDevelopmentIdentity>[0], config: K3dDevelopmentAuthenticationConfig, log: Logger): Promise<PublicAuthenticationComposition>
 {

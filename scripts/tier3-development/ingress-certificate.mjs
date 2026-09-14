@@ -3,7 +3,12 @@ import { promisify } from "node:util";
 
 const _EXEC_FILE = promisify(execFile);
 
-/** Read the exact TLS Secret referenced by the retained ingress Certificate. */
+/**
+ * Reads the TLS Secret selected by the retained ingress Certificate instead of guessing its name.
+ * The returned PEM becomes the local proxy's trust root for the current k3d ingress.
+ * @returns The certificate stored in the Certificate-selected Secret.
+ * @throws When the Certificate has no Secret reference or the Secret does not contain a PEM certificate.
+ */
 export async function readTier3IngressCertificate(options, operations = {})
 {
 	const kubectl = operations.kubectl ?? async function _Kubectl(arguments_) { return (await _EXEC_FILE("kubectl", arguments_)).stdout.trim(); };

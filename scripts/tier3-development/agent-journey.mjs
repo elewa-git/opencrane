@@ -10,7 +10,13 @@ const _REQUEST_TIMEOUT_MILLISECONDS = 15_000;
 const _PROVIDER_TIMEOUT_MILLISECONDS = 60_000;
 const _ANSWER_TIMEOUT_MILLISECONDS = 300_000;
 
-/** Prove current IAM, BYOK, onboarding, KurrentDB, and Agent Sandbox with one real assistant turn. */
+/**
+ * Proves the current IAM, BYOK, onboarding, KurrentDB, and Agent Sandbox path with one real turn.
+ * Success means history contains the completed agent-authored reply correlated to this command;
+ * timeouts or an unrecognized intermediate product state fail the qualification.
+ * @returns The created conversation and the length of its participant-visible answer.
+ * @throws When credentials, product transitions, request deadlines, or response evidence fail.
+ */
 export async function runTier3AgentJourney(input, operations = {})
 {
 	const providerKey = await (operations.readProviderKey ?? readTier3ProviderKey)(input.options.providerKeyFile);
@@ -36,7 +42,12 @@ export async function runTier3AgentJourney(input, operations = {})
 	return { conversationId, responseLength: answer.length };
 }
 
-/** Read one owner-only provider key without following a symbolic link. */
+/**
+ * Reads a provider key from an absolute, owner-only regular file and rejects a symbolic-link key
+ * path. This check keeps the Agent profile from accepting a broadly readable credential.
+ * @returns The trimmed, non-empty provider key.
+ * @throws When the path or file permissions do not meet the credential contract.
+ */
 export async function readTier3ProviderKey(path)
 {
 	if (!isAbsolute(path)) throw new Error("Tier 3 provider key file must use an absolute path.");

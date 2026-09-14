@@ -1,4 +1,8 @@
-/** Exact hosts and origins accepted by one explicitly composed development transport. */
+/**
+ * Defines the browser authority, direct authority, forwarding targets, and scheme admitted by one
+ * development listener. The authentication middleware compares requests with this whole tuple so
+ * Tier 2 loopback HTTP and Tier 3 ingress HTTPS cannot silently accept each other's origins.
+ */
 export interface DevelopmentAuthenticationTransport
 {
 	/** Direct authority presented to the application after trusted proxy handling. */

@@ -136,7 +136,11 @@ export interface OpenCraneProcessConfig
 	readonly workflows: OpenCraneWorkflowConfig;
 }
 
-/** Deployment-bound coordinates for the current local k3d authentication seam. */
+/**
+ * Carries the identity and transport values selected by the explicit k3d development deployment.
+ * A normal release has no value of this type; startup also refuses to compose it beside OIDC or
+ * Fleet membership, so these coordinates cannot become a second production login path.
+ */
 export interface K3dDevelopmentAuthenticationConfig
 {
 	/** Absolute Secret-mounted path containing the per-launch proof. */

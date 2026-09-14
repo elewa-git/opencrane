@@ -8,10 +8,13 @@ import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmission
 import type { DevelopmentIdentityAdmission } from "./development-identity-admission.types";
 
 /**
- * Reconcile one deployment-selected development Principal and claim an empty standalone owner slot.
+ * Reconciles one deployment-selected development Principal and admits it as the standalone owner.
  *
+ * A repeat launch accepts the same identity when it already owns the slot; another owner or an
+ * unresolved Principal fails startup rather than creating a parallel development authority.
  * Called by: the OpenCrane k3d development composition before it opens the public listener.
  * @returns The durable Principal resolved from the current identity directory.
+ * @throws When owner admission refuses the identity or reconciliation leaves no resolvable Principal.
  */
 export async function _AdmitDevelopmentIdentity(prisma: ConstructorParameters<typeof PrismaGroupClaimProjectionUnitOfWork>[0], identity: DevelopmentIdentityAdmission, audit: StandaloneFirstUserAdmissionAuditPort, log: Logger): Promise<AuthenticatedPrincipal>
 {
