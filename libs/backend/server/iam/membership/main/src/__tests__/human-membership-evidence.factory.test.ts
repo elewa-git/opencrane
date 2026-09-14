@@ -32,7 +32,7 @@ describe("_CreateHumanMembershipEvidenceConfig", function _describeFleetMembersh
 
 	it("selects local membership with a deployment silo and trusted identity issuer", function _Standalone()
 	{
-		expect(_CreateHumanMembershipEvidenceConfig({ OPENCRANE_MEMBERSHIP_MODE: "standalone", OPENCRANE_SILO_ID: "silo-1", OPENCRANE_MEMBERSHIP_TRUSTED_IDENTITY_ISSUER: "https://issuer.example", OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS: "300000" })).toEqual({ mode: "standalone", siloId: "silo-1", trustedOidcIssuer: "https://issuer.example", maximumStalenessMs: 300000 });
+		expect(_CreateHumanMembershipEvidenceConfig({ OPENCRANE_MEMBERSHIP_MODE: "standalone", OPENCRANE_SILO_ID: "silo-1", OPENCRANE_MEMBERSHIP_TRUSTED_IDENTITY_ISSUER: "https://issuer.example", OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS: "300000" })).toEqual({ mode: "standalone", siloId: "silo-1", trustedIdentityIssuer: "https://issuer.example", maximumStalenessMs: 300000 });
 		expect(function _MissingSilo() { return _CreateHumanMembershipEvidenceConfig({ OPENCRANE_MEMBERSHIP_MODE: "standalone", OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS: "300000" }); }).toThrow("OPENCRANE_SILO_ID");
 		expect(function _MissingIssuer() { return _CreateHumanMembershipEvidenceConfig({ OPENCRANE_MEMBERSHIP_MODE: "standalone", OPENCRANE_SILO_ID: "silo-1", OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS: "300000" }); }).toThrow("OPENCRANE_MEMBERSHIP_TRUSTED_IDENTITY_ISSUER");
 	});

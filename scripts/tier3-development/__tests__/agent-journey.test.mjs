@@ -89,6 +89,26 @@ test("agent journey resumes current authorities and proves an agent-authored pri
 	assert.doesNotMatch(output.join(""), /provider-secret|session-proof/);
 });
 
+test("agent journey aborts a stalled request within its configured bound", async function _RequestTimeout()
+{
+	await assert.rejects(runTier3AgentJourney({ credential: "session-proof", origin: "http://127.0.0.1:4200", options: { provider: "openai", providerKeyFile: "/unused" } }, {
+		fetch: async function _Stalled(_url, options) { return new Promise(function _Wait(_resolve, reject) { options.signal.addEventListener("abort", function _Abort() { const error = new Error("aborted"); error.name = "AbortError"; reject(error); }, { once: true }); }); },
+		readProviderKey: async function _Key() { return "provider-secret"; },
+		requestTimeoutMilliseconds: 5,
+		write: function _Write() {},
+	}), /timed out after 5 ms/u);
+});
+
+test("agent journey aborts a stalled response body within its configured bound", async function _ResponseTimeout()
+{
+	await assert.rejects(runTier3AgentJourney({ credential: "session-proof", origin: "http://127.0.0.1:4200", options: { provider: "openai", providerKeyFile: "/unused" } }, {
+		fetch: async function _Response(_url, options) { return { status: 200, text: async function _StalledBody() { return new Promise(function _Wait(_resolve, reject) { options.signal.addEventListener("abort", function _Abort() { reject(new Error("aborted")); }, { once: true }); }); } }; },
+		readProviderKey: async function _Key() { return "provider-secret"; },
+		requestTimeoutMilliseconds: 5,
+		write: function _Write() {},
+	}), /timed out after 5 ms/u);
+});
+
 function _Response(status, body)
 {
 	return { status, text: async function _Text() { return body === undefined ? "" : JSON.stringify(body); } };

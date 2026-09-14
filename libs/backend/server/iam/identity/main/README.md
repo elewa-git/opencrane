@@ -56,11 +56,13 @@ the same Principal projection, serializable first-owner claim, audit and directo
 This is not a second authorization system: the caller must still pass current membership and product
 authorization checks, and ordinary releases never compose the seam.
 
-Invariant: every identity fact it emits is IdP-verified, not self-asserted — a caller can never
-obtain another user's tenant or claim admin rights they were not granted. The login callback's
-initial group mirror is best-effort, but every later product request must repeat reconciliation and
-exact Principal resolution through `PrismaAuthenticatedPrincipalAdmissionUnitOfWork`; persistence
-failure, missing projection, or an identity-tuple mismatch denies the request. A configured first-owner claim fails closed when the slot is still empty but the
+Invariant: ordinary identity facts are IdP-verified, while the isolated k3d identity is fixed by its
+deployment profile and is never accepted from browser or request data. Both paths produce an exact
+issuer, subject and silo tuple that must pass durable Principal, membership and central authorization
+checks, so a caller can never obtain another user's tenant or claim admin rights they were not granted.
+The login callback's initial group mirror is best-effort, but every later product request must repeat
+reconciliation and exact Principal resolution through `PrismaAuthenticatedPrincipalAdmissionUnitOfWork`;
+persistence failure, missing projection, or an identity-tuple mismatch denies the request. A configured first-owner claim fails closed when the slot is still empty but the
 identity is ineligible, or when persistence or auditing fails. Once another Owner has claimed the
 slot, an ordinary verified identity keeps its session so the separately guarded signed-invitation
 acceptance route can establish membership; it gains no Owner or administrator fact from login.

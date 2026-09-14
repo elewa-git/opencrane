@@ -21,9 +21,10 @@ export async function inspectTier3Resources(identity, operations = {})
 	const inspect = operations.inspect ?? _Inspect;
 	const cluster = await inspect(`k3d-${identity.clusterName}-server-0`);
 	const registry = await inspect(`k3d-${identity.registryName}`);
-	if (!cluster.exists && !registry.exists) return { existingOwner: null };
-	if (!cluster.exists && registry.exists) return { existingOwner: "unknown" };
-	return { existingOwner: cluster.owner ?? "unknown" };
+	if (!cluster.exists && !registry.exists) return { clusterExists: false, existingOwner: null, registryExists: false };
+	if (!cluster.exists && registry.exists) return { clusterExists: false, existingOwner: "unknown", registryExists: true };
+	const registryAssociated = !registry.exists || registry.networks.includes(`k3d-${identity.clusterName}`);
+	return { clusterExists: true, existingOwner: registryAssociated ? cluster.owner ?? "unknown" : "unknown", registryExists: registry.exists };
 }
 
 /** Refuse implicit replacement and every resource not proven to belong to this worktree. */
@@ -38,8 +39,9 @@ async function _Inspect(name)
 {
 	try
 	{
-		const result = await _EXEC_FILE("docker", ["inspect", "--format", `{{ index .Config.Labels \"${TIER3_OWNER_LABEL}\" }}`, name]);
-		return { exists: true, owner: result.stdout.trim() || null };
+		const result = await _EXEC_FILE("docker", ["inspect", name]);
+		const inspected = JSON.parse(result.stdout)[0];
+		return { exists: true, networks: Object.keys(inspected.NetworkSettings?.Networks ?? {}), owner: inspected.Config?.Labels?.[TIER3_OWNER_LABEL] ?? null };
 	}
 	catch (error)
 	{

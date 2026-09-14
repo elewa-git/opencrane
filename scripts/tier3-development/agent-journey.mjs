@@ -6,17 +6,21 @@ const _SESSION_HEADER = "x-opencrane-development-session";
 const _PROVIDER_RETRY_LIMIT = 30;
 const _ANSWER_POLL_LIMIT = 150;
 const _POLL_INTERVAL_MILLISECONDS = 2_000;
+const _REQUEST_TIMEOUT_MILLISECONDS = 15_000;
+const _PROVIDER_TIMEOUT_MILLISECONDS = 60_000;
+const _ANSWER_TIMEOUT_MILLISECONDS = 300_000;
 
 /** Prove current IAM, BYOK, onboarding, KurrentDB, and Agent Sandbox with one real assistant turn. */
 export async function runTier3AgentJourney(input, operations = {})
 {
 	const providerKey = await (operations.readProviderKey ?? readTier3ProviderKey)(input.options.providerKeyFile);
-	const request = _Client(input.origin, input.credential, operations.fetch ?? fetch);
+	const request = _Client(input.origin, input.credential, operations.fetch ?? fetch, operations.requestTimeoutMilliseconds ?? _REQUEST_TIMEOUT_MILLISECONDS);
 	const sleep = operations.sleep ?? _Sleep;
+	const now = operations.now ?? Date.now;
 	const uuid = operations.uuid ?? randomUUID;
 	const write = operations.write ?? function _Write(message) { process.stdout.write(message); };
 	write(`Tier 3 agent is configuring ${input.options.provider} through the current BYOK authority.\n`);
-	await _ConfigureProvider(request, input.options.provider, providerKey, sleep);
+	await _ConfigureProvider(request, input.options.provider, providerKey, sleep, now);
 	await request("GET", "/api/v1/me/onboarding");
 	await _CompletePersona(request);
 	await _CompleteBootstrapChat(request, uuid);
@@ -27,7 +31,7 @@ export async function runTier3AgentJourney(input, operations = {})
 	const messageId = uuid();
 	const accepted = await request("POST", `/api/v1/me/conversations/${encodeURIComponent(conversationId)}/messages`, { idempotencyKey: messageId, text: "Reply with a brief confirmation that the OpenCrane Tier 3 agent is ready.", activation: "start" });
 	if (typeof accepted.body?.position !== "string") throw new Error("Tier 3 agent message did not return its immutable history position.");
-	const answer = await _WaitForAgentAnswer(request, conversationId, accepted.body.position, messageId, sleep);
+	const answer = await _WaitForAgentAnswer(request, conversationId, accepted.body.position, messageId, sleep, now);
 	write(`Tier 3 agent proved a provider-backed response through Agent Sandbox (${answer.length} characters).\n`);
 	return { conversationId, responseLength: answer.length };
 }
@@ -44,13 +48,16 @@ export async function readTier3ProviderKey(path)
 	return key;
 }
 
-async function _ConfigureProvider(request, provider, apiKey, sleep)
+async function _ConfigureProvider(request, provider, apiKey, sleep, now)
 {
 	let commandId;
+	const deadline = now() + _PROVIDER_TIMEOUT_MILLISECONDS;
 	for (let attempt = 0; attempt < _PROVIDER_RETRY_LIMIT; attempt += 1)
 	{
+		const remainingMilliseconds = deadline - now();
+		if (remainingMilliseconds <= 0) break;
 		const body = commandId === undefined ? { apiKey } : { apiKey, commandId };
-		const result = await request("PUT", `/api/v1/providers/byok/${encodeURIComponent(provider)}`, body, new Set([200, 503]));
+		const result = await request("PUT", `/api/v1/providers/byok/${encodeURIComponent(provider)}`, body, new Set([200, 503]), remainingMilliseconds);
 		if (result.status === 200)
 		{
 			if (result.body?.provider !== provider || result.body?.configured !== true || result.body?.litellmRegistered !== true) throw new Error("Tier 3 BYOK response did not prove a usable provider connection.");
@@ -58,7 +65,7 @@ async function _ConfigureProvider(request, provider, apiKey, sleep)
 		}
 		if (result.body?.code !== "PROVIDER_EFFECT_PENDING" || typeof result.body?.commandId !== "string") throw new Error("Tier 3 BYOK delivery returned an unresumable pending response.");
 		commandId = result.body.commandId;
-		await sleep(_POLL_INTERVAL_MILLISECONDS);
+		await sleep(Math.min(_POLL_INTERVAL_MILLISECONDS, Math.max(0, deadline - now())));
 	}
 	throw new Error("Tier 3 BYOK delivery did not settle within one minute.");
 }
@@ -123,12 +130,15 @@ async function _ReadPersonalAgent(request)
 	return personalAgentRef;
 }
 
-async function _WaitForAgentAnswer(request, conversationId, initialPosition, messageId, sleep)
+async function _WaitForAgentAnswer(request, conversationId, initialPosition, messageId, sleep, now)
 {
 	let afterPosition = initialPosition;
+	const deadline = now() + _ANSWER_TIMEOUT_MILLISECONDS;
 	for (let attempt = 0; attempt < _ANSWER_POLL_LIMIT; attempt += 1)
 	{
-		const page = (await request("GET", `/api/v1/me/conversations/${encodeURIComponent(conversationId)}/history?afterPosition=${encodeURIComponent(afterPosition)}`)).body;
+		const remainingMilliseconds = deadline - now();
+		if (remainingMilliseconds <= 0) break;
+		const page = (await request("GET", `/api/v1/me/conversations/${encodeURIComponent(conversationId)}/history?afterPosition=${encodeURIComponent(afterPosition)}`, undefined, new Set([200]), remainingMilliseconds)).body;
 		for (const entry of page?.entries ?? [])
 		{
 			if (entry.kind !== "message" || entry.provenance !== "agent-authored" || entry.author?.kind !== "agent" || entry.state !== "completed" || entry.replyToEntryId !== messageId || entry.correlationId !== messageId || typeof entry.runId !== "string") continue;
@@ -136,33 +146,45 @@ async function _WaitForAgentAnswer(request, conversationId, initialPosition, mes
 			if (text) return text;
 		}
 		if (typeof page?.nextPosition === "string") afterPosition = page.nextPosition;
-		await sleep(_POLL_INTERVAL_MILLISECONDS);
+		await sleep(Math.min(_POLL_INTERVAL_MILLISECONDS, Math.max(0, deadline - now())));
 	}
 	throw new Error("Tier 3 agent did not produce a participant-visible response within five minutes.");
 }
 
-function _Client(origin, credential, fetchImplementation)
+function _Client(origin, credential, fetchImplementation, requestTimeoutMilliseconds)
 {
-	return async function _Request(method, path, body, acceptedStatuses = new Set([200, 201, 202]))
+	return async function _Request(method, path, body, acceptedStatuses = new Set([200, 201, 202]), maximumDurationMilliseconds = requestTimeoutMilliseconds)
 	{
 		const headers = { [_SESSION_HEADER]: credential };
-		const options = { method, headers };
+		const controller = new AbortController();
+		const timeoutMilliseconds = Math.min(requestTimeoutMilliseconds, maximumDurationMilliseconds);
+		const timeout = setTimeout(function _Abort() { controller.abort(); }, timeoutMilliseconds);
+		const options = { method, headers, signal: controller.signal };
 		if (body !== undefined)
 		{
 			headers["content-type"] = "application/json";
 			headers.origin = origin;
 			options.body = JSON.stringify(body);
 		}
-		const response = await fetchImplementation(new URL(path, origin), options);
-		const text = await response.text();
-		let parsed = null;
-		if (text)
+		try
 		{
-			try { parsed = JSON.parse(text); }
-			catch { throw new Error(`Tier 3 request ${method} ${path} returned non-JSON content.`); }
+			const response = await fetchImplementation(new URL(path, origin), options);
+			const text = await response.text();
+			let parsed = null;
+			if (text)
+			{
+				try { parsed = JSON.parse(text); }
+				catch { throw new Error(`Tier 3 request ${method} ${path} returned non-JSON content.`); }
+			}
+			if (!acceptedStatuses.has(response.status)) throw new Error(`Tier 3 request ${method} ${path} failed with HTTP ${response.status}${typeof parsed?.code === "string" ? ` (${parsed.code})` : ""}.`);
+			return { status: response.status, body: parsed };
 		}
-		if (!acceptedStatuses.has(response.status)) throw new Error(`Tier 3 request ${method} ${path} failed with HTTP ${response.status}${typeof parsed?.code === "string" ? ` (${parsed.code})` : ""}.`);
-		return { status: response.status, body: parsed };
+		catch (error)
+		{
+			if (controller.signal.aborted) throw new Error(`Tier 3 request ${method} ${path} timed out after ${timeoutMilliseconds} ms.`, { cause: error });
+			throw error;
+		}
+		finally { clearTimeout(timeout); }
 	};
 }
 

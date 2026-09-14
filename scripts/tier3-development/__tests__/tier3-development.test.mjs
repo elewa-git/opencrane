@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { classifyTier3Capacity, formatTier3Capacity } from "../host-capacity.mjs";
-import { buildTier3UpstreamRequestOptions } from "../browser-proxy.mjs";
+import { buildTier3UpstreamRequestOptions, configureTier3UpstreamTimeout } from "../browser-proxy.mjs";
 import { readTier3IngressCertificate } from "../ingress-certificate.mjs";
 import { parseTier3Options } from "../options.mjs";
-import { assertTier3ResourceReplacement } from "../resource-ownership.mjs";
+import { assertTier3ResourceReplacement, inspectTier3Resources } from "../resource-ownership.mjs";
+import { downTier3Resources } from "../../tier3-development-down.mjs";
 import { runTier3Development } from "../../tier3-development.mjs";
 
 test("parses the separate infra and agent contracts", function _Options()
@@ -30,6 +31,25 @@ test("refuses foreign and implicit owned replacement", function _Ownership()
 	assert.throws(function _Foreign() { assertTier3ResourceReplacement("other", "expected", true); }, /collision/u);
 	assert.throws(function _Implicit() { assertTier3ResourceReplacement("expected", "expected", false); }, /--replace-owned/u);
 	assert.doesNotThrow(function _Fresh() { assertTier3ResourceReplacement(null, "expected", false); });
+});
+
+test("accepts a registry only when it shares the owner-labelled cluster network", async function _RegistryOwnership()
+{
+	const identity = { clusterName: "cluster", registryName: "registry" };
+	const associated = await inspectTier3Resources(identity, { inspect: async function _Inspect(name) { return name.endsWith("server-0") ? { exists: true, networks: ["k3d-cluster"], owner: "owner" } : { exists: true, networks: ["k3d-cluster"], owner: null }; } });
+	assert.deepEqual(associated, { clusterExists: true, existingOwner: "owner", registryExists: true });
+	const foreign = await inspectTier3Resources(identity, { inspect: async function _Inspect(name) { return name.endsWith("server-0") ? { exists: true, networks: ["k3d-cluster"], owner: "owner" } : { exists: true, networks: ["bridge"], owner: null }; } });
+	assert.equal(foreign.existingOwner, "unknown");
+});
+
+test("deletes only inspected resources and propagates cleanup failures", async function _Cleanup()
+{
+	const calls = [];
+	const owner = (await import("../resource-ownership.mjs")).tier3ResourceIdentity(new URL("../../..", import.meta.url).pathname).owner;
+	await downTier3Resources({ inspectResources: async function _Inspect() { return { clusterExists: true, existingOwner: owner, registryExists: false }; }, run: async function _Run(command, arguments_) { calls.push([command, arguments_]); } });
+	assert.equal(calls.length, 1);
+	assert.deepEqual(calls[0][1].slice(0, 2), ["cluster", "delete"]);
+	await assert.rejects(downTier3Resources({ inspectResources: async function _Inspect() { return { clusterExists: true, existingOwner: owner, registryExists: true }; }, run: async function _Run() { throw new Error("daemon unavailable"); } }), /daemon unavailable/u);
 });
 
 test("reads only the Secret selected by the live Certificate", async function _Certificate()
@@ -61,6 +81,16 @@ test("pins Tier 3 proxy trust and replaces untrusted forwarding and credential c
 	assert.equal(infra.headers["x-opencrane-development-session"], undefined);
 });
 
+test("destroys an upstream request when its ingress deadline expires", function _ProxyTimeout()
+{
+	let timeoutHandler;
+	let destroyedWith;
+	const request = { destroy: function _Destroy(error) { destroyedWith = error; }, setTimeout: function _Set(milliseconds, handler) { assert.equal(milliseconds, 25); timeoutHandler = handler; } };
+	configureTier3UpstreamTimeout(request, 25);
+	timeoutHandler();
+	assert.match(destroyedWith.message, /timed out after 25 ms/u);
+});
+
 test("runs the current smoke before proxying and preserves recommended qualification", async function _Orchestrator()
 {
 	const order = [];
@@ -76,6 +106,23 @@ test("runs the current smoke before proxying and preserves recommended qualifica
 		write: function _Write() {},
 	});
 	assert.deepEqual(order, ["smoke", "certificate", "proxy", "listen", "shutdown"]);
+});
+
+test("closes the browser proxy when the agent qualification fails", async function _FailedAgentJourney()
+{
+	const order = [];
+	await assert.rejects(runTier3Development(parseTier3Options(["--profile", "agent", "--provider", "openai", "--provider-key-file", "/tmp/key"]), {
+		closeProxy: async function _Close() { order.push("close"); },
+		createProxy: function _Proxy() { return {}; },
+		inspectResources: async function _Inspect() { return { existingOwner: null }; },
+		listenProxy: async function _Listen() { order.push("listen"); },
+		measureCapacity: async function _Capacity() { return { cpu: 8, memoryGiB: 32, storageAvailableGiB: 80, storageGiB: 100 }; },
+		readCertificate: async function _Certificate() { return "certificate"; },
+		runAgentJourney: async function _Journey() { order.push("journey"); throw new Error("qualification failed"); },
+		runSmoke: async function _Smoke() {},
+		write: function _Write() {},
+	}), /qualification failed/u);
+	assert.deepEqual(order, ["listen", "journey", "close"]);
 });
 
 test("keeps the shared smoke defaults compatible with CI", async function _SmokeContract()

@@ -37,8 +37,16 @@ export async function runTier3Development(options, operations = {})
 	await (operations.listenProxy ?? _ListenProxy)(server, options.proxyPort);
 	write(`Tier 3 ${options.profile} is ready on http://127.0.0.1:${options.proxyPort}.\n`);
 	write("Keep the Codespaces forwarded port private. The owned k3d cluster remains available for diagnosis.\n");
-	if (options.profile === "agent") await (operations.runAgentJourney ?? runTier3AgentJourney)({ credential: developmentCredential, options, origin: `http://127.0.0.1:${options.proxyPort}` });
-	await (operations.waitForShutdown ?? _WaitForShutdown)(server);
+	try
+	{
+		if (options.profile === "agent") await (operations.runAgentJourney ?? runTier3AgentJourney)({ credential: developmentCredential, options, origin: `http://127.0.0.1:${options.proxyPort}` });
+		await (operations.waitForShutdown ?? _WaitForShutdown)(server);
+	}
+	catch (error)
+	{
+		await (operations.closeProxy ?? closeTier3BrowserProxy)(server);
+		throw error;
+	}
 	return { identity, profile: options.profile };
 }
 

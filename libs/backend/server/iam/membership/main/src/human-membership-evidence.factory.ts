@@ -24,7 +24,7 @@ export function _CreateHumanMembershipEvidenceConfig(environment: NodeJS.Process
 	const maximumStalenessMs = _PositiveInteger(environment, "OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS", _MAXIMUM_STALENESS_MILLISECONDS);
 	if (mode === FleetMembershipDeploymentModes.Standalone)
 	{
-		return { mode, siloId: _Required(environment, "OPENCRANE_SILO_ID"), trustedOidcIssuer: _Required(environment, "OPENCRANE_MEMBERSHIP_TRUSTED_IDENTITY_ISSUER"), maximumStalenessMs };
+		return { mode, siloId: _Required(environment, "OPENCRANE_SILO_ID"), trustedIdentityIssuer: _Required(environment, "OPENCRANE_MEMBERSHIP_TRUSTED_IDENTITY_ISSUER"), maximumStalenessMs };
 	}
 	const trustedIssuerId = _Required(environment, "OPENCRANE_MEMBERSHIP_ISSUER_ID");
 	const issuerKeyId = _Required(environment, "OPENCRANE_MEMBERSHIP_KEY_ID");

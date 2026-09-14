@@ -38,7 +38,7 @@ function _Fixture()
 		agentService: { findFirst: vi.fn().mockResolvedValue({ id: serviceId, principalId: "company-1", name: "Company", workloadProfile: "developer", activeRevisionId: revision.id, activeRevision: revision }) },
 		verifiedFleetMembershipRevision: { findFirst: vi.fn() },
 	};
-	const config = { mode: FleetMembershipDeploymentModes.Standalone, siloId: "silo-1", trustedOidcIssuer: principal.issuer, maximumStalenessMs: 5_000 } as const;
+	const config = { mode: FleetMembershipDeploymentModes.Standalone, siloId: "silo-1", trustedIdentityIssuer: principal.issuer, maximumStalenessMs: 5_000 } as const;
 	const baseIdentity = { schemaVersion: 1, id: "identity-1", siloId: "silo-1", agentServiceId: serviceId, name: "Assistant", avatarArtifactRevisionId: null, state: AgentIdentityStates.Active, createdByPrincipalId: "human-1", createdAt: new Date(1_000).toISOString() } as const;
 	const humanIdentity = { ...baseIdentity, kind: "proxied", proxiedPrincipalId: "human-1", delegationPolicyId: "policy-1" } as const;
 	const companyIdentity = { ...baseIdentity, kind: "managed", principalId: "company-1" } as const;

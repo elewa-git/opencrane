@@ -3,6 +3,7 @@ import https from "node:https";
 
 const _SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const _UPGRADED_SOCKETS = new WeakMap();
+const _UPSTREAM_TIMEOUT_MILLISECONDS = 15_000;
 
 /** Create the loopback proxy that preserves the current k3d ingress Host and pinned TLS trust. */
 export function createTier3BrowserProxy(options)
@@ -15,7 +16,9 @@ export function createTier3BrowserProxy(options)
 	{
 		if (!_HasExpectedBrowserOrigin(request)) { response.writeHead(403, { "content-type": "application/json" }); response.end(JSON.stringify({ code: "TIER3_ORIGIN_MISMATCH", error: "Tier 3 state changes require the forwarded browser origin." })); return; }
 		const upstreamRequest = https.request(buildTier3UpstreamRequestOptions(request, upstream, options), function _Respond(upstreamResponse) { response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.statusMessage, upstreamResponse.headers); upstreamResponse.pipe(response); });
+		configureTier3UpstreamTimeout(upstreamRequest, options.upstreamTimeoutMilliseconds ?? _UPSTREAM_TIMEOUT_MILLISECONDS);
 		upstreamRequest.once("error", function _Unavailable(error) { if (!response.headersSent) response.writeHead(502, { "content-type": "text/plain; charset=utf-8" }); response.end(`Tier 3 ingress is unavailable: ${error.message}\n`); });
+		request.once("aborted", function _Abort() { upstreamRequest.destroy(); });
 		request.pipe(upstreamRequest);
 	});
 	server.on("upgrade", function _Upgrade(request, socket, head)
@@ -23,6 +26,7 @@ export function createTier3BrowserProxy(options)
 		if (!_HasExpectedBrowserOrigin(request)) { socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"); return; }
 		_Track(sockets, socket);
 		const upstreamRequest = https.request(buildTier3UpstreamRequestOptions(request, upstream, options));
+		configureTier3UpstreamTimeout(upstreamRequest, options.upstreamTimeoutMilliseconds ?? _UPSTREAM_TIMEOUT_MILLISECONDS);
 		upstreamRequest.once("upgrade", function _Connected(upstreamResponse, upstreamSocket, upstreamHead) { _Track(sockets, upstreamSocket); socket.write(_UpgradeResponseHead(upstreamResponse)); if (upstreamHead.length) socket.write(upstreamHead); if (head.length) upstreamSocket.write(head); upstreamSocket.pipe(socket).pipe(upstreamSocket); });
 		upstreamRequest.once("response", function _Rejected() { socket.end("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n"); });
 		upstreamRequest.once("error", function _Failed() { socket.destroy(); });
@@ -77,4 +81,8 @@ function _HasExpectedBrowserOrigin(request)
 }
 
 function _Track(sockets, socket) { sockets.add(socket); socket.once("close", function _Forget() { sockets.delete(socket); }); }
+
+/** Bound one upstream ingress request so a stalled k3d route cannot retain the local proxy. */
+export function configureTier3UpstreamTimeout(request, milliseconds) { request.setTimeout(milliseconds, function _Timeout() { request.destroy(new Error(`Tier 3 ingress timed out after ${milliseconds} ms.`)); }); }
+
 function _UpgradeResponseHead(response) { const lines = [`HTTP/${response.httpVersion} ${response.statusCode} ${response.statusMessage}`]; for (let index = 0; index < response.rawHeaders.length; index += 2) lines.push(`${response.rawHeaders[index]}: ${response.rawHeaders[index + 1]}`); return `${lines.join("\r\n")}\r\n\r\n`; }
