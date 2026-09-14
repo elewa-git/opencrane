@@ -46,11 +46,16 @@ export { PrismaPersonalMemoryOperationActorUnitOfWork } from "./memory/workflow/
 export { PrismaPersonalMemoryOperationAuthorizationUnitOfWork } from "./memory/workflow/prisma-personal-memory-operation-authorization";
 export { PrismaPersonalMemoryOperationCatalogUnitOfWork } from "./memory/workflow/prisma-personal-memory-operation-catalog";
 export { _RegisterPersonalMemoryOperationWorkflow } from "./memory/workflow/personal-memory-operation-workflow";
-export { PersonalMemoryCommandDenied } from "./memory/commands/personal-memory-command.types";
-export type { PersonalMemoryCommand, PersonalMemoryCommandSourceSelection } from "./memory/commands/personal-memory-command.types";
 export { PrismaKurrentPersonalMemoryMessageSource } from "./memory/source/prisma-kurrent-personal-memory-message-source";
 export { PrismaPersonalMemoryMessageSourceRepository } from "./memory/source/prisma-personal-memory-message-source-repository";
 export type { PersonalMemoryMessageSourceRead, PersonalMemoryMessageSourceReader, PersonalMemoryMessageSourceRevalidator } from "./memory/source/personal-memory-message-source.types";
+export { PrismaPersonalMemoryCommandUnitOfWork } from "./memory/commands/prisma-personal-memory-command-unit-of-work";
+export { PersonalMemoryCommandAdmissionOutcomes, PersonalMemoryCommandConflict, PersonalMemoryCommandStates } from "./memory/commands/personal-memory-command-authority.types";
+export type { PersonalMemoryCommandAdmissionResult, PersonalMemoryCommandAuthority, PersonalMemoryCommandReceipt } from "./memory/commands/personal-memory-command-authority.types";
+export type { PersonalMemoryCommand, PersonalMemoryCommandSourceSelection } from "./memory/commands/personal-memory-command.types";
+export { _CreatePersonalMemoryCommandRouter } from "./memory/commands/personal-memory-command.router";
+export { _PersonalMemoryCommandOpenapiPaths } from "./memory/commands/personal-memory-command.openapi";
+export type { PersonalMemoryCommandRouterDependencies } from "./memory/commands/personal-memory-command.router.types";
 export type { ConversationMessageAdmission, ConversationMessageAttachment, ConversationMessageAttachmentAdmission, ConversationMessageAttachmentAdmissionCommand, ConversationMessageAttachmentAdmissionFactory, ConversationMessageAttachmentAdmissionResult } from "./messages/conversation-message-admission.types";
 export { KurrentConversationHistoryAdmissionReader } from "./messages/kurrent-conversation-history-admission-reader";
 export { PrismaKurrentConversationPromptMessageRepository } from "./messages/db/prisma-kurrent-conversation-prompt-message-repository";

@@ -1600,6 +1600,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/memory/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request one personal-memory change
+         * @description Admits one explicit Remember, Correct, or Forget request for the caller's existing active personal dataset. Remember and Correct require current MemoryScope Manage plus Conversation Read and an own authored source message; Forget requires current MemoryScope Forget for the own fact. The first dataset is not created by this route; retry an uncertain response with the same commandId. The response proves admission only and does not provide manual retry or recovery controls.
+         */
+        post: operations["admitMyPersonalMemoryCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/memory/commands/{commandId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read personal-memory command status
+         * @description Reads the caller's saved personal-memory command receipt after current membership, active dataset, and MemoryScope Read authorization checks. This route never dispatches, retries, or changes the operation.
+         */
+        get: operations["readMyPersonalMemoryCommand"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -8964,6 +9004,199 @@ export interface operations {
                 content?: never;
             };
             /** @description Assignment dependency unavailable; read current selection after an uncertain response. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admitMyPersonalMemoryCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    commandId: string;
+                    /** @constant */
+                    kind: "remember";
+                    source: {
+                        conversationId: string;
+                        messageId: string;
+                        /** @description Positive immutable message position no greater than 9223372036854775807. */
+                        messagePosition: string;
+                    };
+                } | {
+                    /** Format: uuid */
+                    commandId: string;
+                    /** @constant */
+                    kind: "correct";
+                    source: {
+                        conversationId: string;
+                        messageId: string;
+                        /** @description Positive immutable message position no greater than 9223372036854775807. */
+                        messagePosition: string;
+                    };
+                    targetFactId: string;
+                    expectedFactRevision: number;
+                } | {
+                    /** Format: uuid */
+                    commandId: string;
+                    /** @constant */
+                    kind: "forget";
+                    targetFactId: string;
+                    expectedFactRevision: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Exact command retry recovered its saved receipt. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        outcome: "idempotent";
+                        receipt: {
+                            /** Format: uuid */
+                            commandId: string;
+                            /** Format: uuid */
+                            operationId: string;
+                            /** @enum {string} */
+                            kind: "remember" | "correct" | "forget";
+                            /** @enum {string} */
+                            state: "pending" | "completed" | "needs_attention";
+                            revision: number;
+                            /** @description The created or corrected fact identifier after completion; null for pending, needs_attention, and forget operations. */
+                            resultFactId: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description New command admitted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        outcome: "accepted";
+                        receipt: {
+                            /** Format: uuid */
+                            commandId: string;
+                            /** Format: uuid */
+                            operationId: string;
+                            /** @enum {string} */
+                            kind: "remember" | "correct" | "forget";
+                            /** @enum {string} */
+                            state: "pending" | "completed" | "needs_attention";
+                            revision: number;
+                            /** @description The created or corrected fact identifier after completion; null for pending, needs_attention, and forget operations. */
+                            resultFactId: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description Malformed command, command identifier, or unsupported query parameter. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Personal memory command or already provisioned personal dataset is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The command UUID conflicts with previously saved action evidence. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Personal memory command authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readMyPersonalMemoryCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                commandId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Safe command receipt. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        commandId: string;
+                        /** Format: uuid */
+                        operationId: string;
+                        /** @enum {string} */
+                        kind: "remember" | "correct" | "forget";
+                        /** @enum {string} */
+                        state: "pending" | "completed" | "needs_attention";
+                        revision: number;
+                        /** @description The created or corrected fact identifier after completion; null for pending, needs_attention, and forget operations. */
+                        resultFactId: string | null;
+                    };
+                };
+            };
+            /** @description Malformed command, command identifier, or unsupported query parameter. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Personal memory command or already provisioned personal dataset is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Personal memory command authority unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;

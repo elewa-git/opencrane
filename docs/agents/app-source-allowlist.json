@@ -503,6 +503,16 @@
       "path": "apps/opencrane/src/bootstrap/conversations/personal-memory-operation-workflow-composition.types.ts",
       "owner": "apps/opencrane",
       "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/conversations/personal-memory-command-composition.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/conversations/conversation-history-composition.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
     }
   ],
   "requiredTaggedProjects": [

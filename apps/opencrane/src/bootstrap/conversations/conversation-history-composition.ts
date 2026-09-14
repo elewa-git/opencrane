@@ -1,4 +1,6 @@
 import { _CreatePersonalMemoryOperationWorkflowComposition } from "./personal-memory-operation-workflow-composition";
+import { _CreatePersonalMemoryCommandComposition } from "./personal-memory-command-composition";
+import type { ConversationHistoryComposition } from "./conversation-history-composition.types";
 import type { PersonalMemoryWorkflowCompositionOptions } from "./personal-memory-operation-workflow-composition.types";
 import { _ReadConversationPrivatePayloadKeyring } from "@opencrane/backend/server/conversations/history";
 
@@ -23,7 +25,8 @@ export function _CreateConversationHistoryComposition(
   releaseProfile: AgentSandboxReleaseProfileConfig,
   workflows: IWorkflowEngine,
   memoryWorkflow: PersonalMemoryWorkflowCompositionOptions,
-) {
+): ConversationHistoryComposition
+{
   const cipher = AesGcmConversationPrivatePayloadCipher.fromDocument(
     _ReadConversationPrivatePayloadKeyring(keyringPath),
   );
@@ -57,5 +60,5 @@ export function _CreateConversationHistoryComposition(
   router.use(
     _CreateSelfConversationHistoryRouter({ authority, resolveCaller, logger: _log, events: { historyStore, shutdownSignal: _ProcessShutdownSignal, logger: _log } }),
   );
-  return router;
+  return { conversations: router, memory: _CreatePersonalMemoryCommandComposition(prisma, authority, workflows) };
 }

@@ -87,9 +87,14 @@ with the operation advance.
 
 ## Boundary
 
-No production command path admits operations yet. The registered worker consumes only exact
-transaction-admitted saved tasks. The intended entry is
-[conversations](../../../../server/conversations/main/README.md): `POST /api/v1/me/conversations/:conversationId/messages` accepts
+The [conversations](../../../../server/conversations/main/README.md) command authority admits
+Remember, Correct and Forget through `POST /api/v1/me/memory/commands` for an existing Active dataset
+with a provider identity and current explicit grants. Its transaction records the authorization
+decision, operation and Absurd task together. The registered worker consumes those saved tasks.
+First-dataset creation and permission bootstrap remain separate unfinished work.
+
+Conversation turn admission remains a separate entry:
+`POST /api/v1/me/conversations/:conversationId/messages` accepts
 only a `conversationId` and `requestIdempotencyKey`; the authenticated session supplies the subject, the
 trusted host supplies the silo, and the server re-resolves the participant-bound conversation and personal
 agent service. Inside the final admission transaction, execution inputs verify the exact signed fleet
@@ -119,6 +124,10 @@ as the fact ID. Correct relies on PostgreSQL to mark its exact predecessor Corre
 hides its exact Active or Corrected target as `ForgetPending`, and finalization advances that same
 target to Forgotten. The database owns every fact revision increment.
 
+Fresh Correct admission additionally requires its exact-revision target to remain Active while the
+repository holds the fact lock. A corrected, hidden, or forgotten target cannot acquire another
+replacement operation; an exact replay still returns the original saved operation and task.
+
 ## Dependency direction
 
 Tagged `scope:personal-memory`, this backend package may depend only on its own scope and
@@ -133,10 +142,11 @@ fences target commands. Remember and Correct catalog rows retain only their prov
 content digest, fixed consent and sensitivity, and content-free Message provenance; no remembered
 text is copied into PostgreSQL. The operation stores immutable replay, source, target, and actual
 workflow receipt evidence plus write-once provider receipts and current lifecycle recovery fields.
-No memory outbox, queue, scheduler, route, provider call, or plaintext store is introduced.
+Conversations exposes the command routes and schedules this saved operation through Absurd.
+This package owns neither HTTP routes nor provider calls and stores no plaintext.
 
 ## See also
 
 - Parent group: [personal-agent domains](../../README.md)
-- Intended admission entry: [conversations](../../../../server/conversations/main/README.md)
+- Command admission: [conversations](../../../../server/conversations/main/README.md)
 - Snapshot assembly: [execution inputs](../../../execution/inputs/main/README.md)

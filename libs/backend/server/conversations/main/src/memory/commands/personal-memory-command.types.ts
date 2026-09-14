@@ -43,14 +43,3 @@ export type PersonalMemoryCommand =
 		/** Revision observed when the caller requested forgetting. */
 		readonly expectedFactRevision: number;
 	};
-
-/** Denies a memory command without exposing source, dataset or provider details. */
-export class PersonalMemoryCommandDenied extends Error
-{
-	/** Produces the same safe failure for missing or ended command authority. */
-	public constructor()
-	{
-		super("This personal memory command is unavailable.");
-		this.name = "PersonalMemoryCommandDenied";
-	}
-}

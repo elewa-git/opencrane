@@ -93,6 +93,8 @@ export class PrismaPersonalMemoryOperationRepository implements PersonalMemoryOp
 		this._assertAdmissionDataset(dataset, command);
 		if (facts.some(fact => fact.revision !== command.expectedFactRevision))
 			throw new PersonalMemoryOperationInvalidState("personal-memory target fact revision changed before admission");
+		if (command.kind === PersonalMemoryOperationKinds.Correct && facts.some(fact => fact.state !== MemoryFactState.Active))
+			throw new PersonalMemoryOperationInvalidState("personal-memory Correct target is not Active at the expected revision");
 		if (command.kind === PersonalMemoryOperationKinds.Forget)
 			await this._hideForgottenTarget(facts, command);
 
