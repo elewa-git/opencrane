@@ -53,14 +53,18 @@ not reinterpret old values.
   vocabulary, transition outcomes, denial reasons, and their public command and event types.
 - `PersonalMemoryOperationAdmissionOutcomes` / `PersonalMemoryOperationPersistenceOutcomes` —
   stable replay and persistence results, errors, records, repository ports, and lifecycle UnitOfWork
-  ports. Task coordinates omit an engine ID until the transaction-bound callback returns the actual
-  workflow receipt.
+  ports. `PersonalMemoryOperationCatalogConflict` is the content-free conflict raised before an
+  occupied provider document coordinate can abort a catalog transaction. Task coordinates omit an
+  engine ID until the transaction-bound callback returns the actual workflow receipt.
 - `PrismaPersonalMemoryOperationRepository` — transaction-scoped replay, locking, validation, and
   lifecycle CAS for the product command owner. Its scoped replay-key read returns validated immutable
-  evidence without claiming authority; admission reacquires every lock before deciding replay.
+  evidence without claiming authority; admission reacquires every lock before deciding replay. Its
+  exact `(siloId, operationId)` load also validates the current personal dataset owner and provider
+  UUID before a saved-phase worker can resume; the worker rechecks phase-specific state authority.
 - `PrismaPersonalMemoryOperationUnitOfWork` — serializable lifecycle wrapper. Admission stays in the
   composite conversation transaction that also creates or selects the dataset, records authority,
-  and admits the workflow task.
+  and admits the workflow task. Its `load` method opens the same transaction boundary for a
+  read-only restart lookup; `apply` remains the only lifecycle writer.
 - `PrismaPersonalMemoryCommandContextRepository` — selects the exact personal dataset and its
   target fact inside the caller's transaction. It returns domain states without exposing Prisma
   enums. Creation requires prior collection Create authority and returns a Provisioning dataset
@@ -71,18 +75,20 @@ not reinterpret old values.
 The `operations/` module owns the reviewed lifecycle, persistence validator,
 transaction-scoped `PrismaPersonalMemoryOperationRepository`, and
 `PrismaPersonalMemoryOperationUnitOfWork`. The repository locks the local dataset, referenced facts
-in sorted ID order, and then the operation. Exact command replays return the first row and its saved
-task without calling task admission. For a new command, the repository calls the transaction-bound
-task admission once after those locks, validates the returned UUID/name/key, and inserts that exact
-receipt. Conflicting command or task evidence fails. Accepted events use the shared lifecycle planner
-and a revision compare-and-set. Accepted catalog events first write the exact catalog evidence in
-the same transaction: Remember and Correct create one deterministic Active fact, while Forget
-finalizes only its revision-fenced hidden target. A lost compare-and-set after either catalog write
-throws so the caller rolls back the catalog mutation with the operation advance.
+in sorted ID order, an occupied provider-document fact when present, and then the operation. Exact
+command replays return the first row and its saved task without calling task admission. For a new
+command, the repository calls the transaction-bound task admission once after those locks, validates
+the returned UUID/name/key, and inserts that exact receipt. Conflicting command or task evidence
+fails. Accepted events use the shared lifecycle planner and a revision compare-and-set. Accepted
+catalog events first write the exact catalog evidence in the same transaction: Remember and Correct
+create one deterministic Active fact, while Forget finalizes only its revision-fenced hidden target.
+A lost compare-and-set after either catalog write throws so the caller rolls back the catalog mutation
+with the operation advance.
 
 ## Boundary
 
-The current production conversation path does not consume the operation persistence. The intended entry is
+No production command path admits operations yet. The registered worker consumes only exact
+transaction-admitted saved tasks. The intended entry is
 [conversations](../../../../server/conversations/main/README.md): `POST /api/v1/me/conversations/:conversationId/messages` accepts
 only a `conversationId` and `requestIdempotencyKey`; the authenticated session supplies the subject, the
 trusted host supplies the silo, and the server re-resolves the participant-bound conversation and personal

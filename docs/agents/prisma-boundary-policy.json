@@ -1604,6 +1604,20 @@
 				"contract": "RemoteMcpConnectionExecutionSettlementRepository",
 				"contractImportPath": "./remote-mcp-invocation.types",
 				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/memory/workflow/prisma-personal-memory-operation-actor-repository.ts",
+				"adapter": "PrismaPersonalMemoryOperationActorRepository",
+				"contract": "PersonalMemoryOperationActorResolver",
+				"contractImportPath": "./personal-memory-operation-authority.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/memory/workflow/prisma-personal-memory-operation-authorization-repository.ts",
+				"adapter": "PrismaPersonalMemoryOperationAuthorizationRepository",
+				"contract": "PersonalMemoryOperationAuthorization",
+				"contractImportPath": "./personal-memory-operation-authority.types",
+				"constructs": []
 			}
 		],
 		"unitsOfWork": [
@@ -2681,6 +2695,58 @@
 						"importPath": "../mcp-tasks/prisma-mcp-task-tool-invocation-lifecycle"
 					}
 				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/memory/workflow/prisma-personal-memory-operation-actor.ts",
+				"adapter": "PrismaPersonalMemoryOperationActorUnitOfWork",
+				"contract": "PersonalMemoryOperationActorResolver",
+				"contractImportPath": "./personal-memory-operation-authority.types",
+				"constructs": [
+					{
+						"adapter": "PrismaPersonalMemoryOperationActorRepository",
+						"importPath": "./prisma-personal-memory-operation-actor-repository"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/memory/workflow/prisma-personal-memory-operation-authorization.ts",
+				"adapter": "PrismaPersonalMemoryOperationAuthorizationUnitOfWork",
+				"contract": "PersonalMemoryOperationAuthorization",
+				"contractImportPath": "./personal-memory-operation-authority.types",
+				"constructs": [
+					{
+						"adapter": "PrismaPersonalMemoryOperationAuthorizationRepository",
+						"importPath": "./prisma-personal-memory-operation-authorization-repository"
+					},
+					{
+						"adapter": "PrismaAuthorizationAuthority",
+						"importPath": "@opencrane/backend/server/iam/authorization"
+					}
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/memory/workflow/prisma-personal-memory-operation-catalog.ts",
+				"adapter": "PrismaPersonalMemoryOperationCatalogUnitOfWork",
+				"contract": "PersonalMemoryOperationCatalogUnitOfWork",
+				"contractImportPath": "./personal-memory-operation-authority.types",
+				"constructs": [
+					{
+						"adapter": "PrismaPersonalMemoryOperationRepository",
+						"importPath": "@opencrane/backend/agents/personal/memory"
+					},
+					{
+						"adapter": "PrismaPersonalMemoryOperationActorRepository",
+						"importPath": "./prisma-personal-memory-operation-actor-repository"
+					},
+					{
+						"adapter": "PrismaPersonalMemoryOperationAuthorizationRepository",
+						"importPath": "./prisma-personal-memory-operation-authorization-repository"
+					},
+					{
+						"adapter": "PrismaAuthorizationAuthority",
+						"importPath": "@opencrane/backend/server/iam/authorization"
+					}
+				]
 			}
 		],
 		"compositions": [
@@ -2753,7 +2819,8 @@
 			"libs/backend/server/conversations/main/src/messages/conversation-prompt-document.types.ts",
 			"apps/opencrane/src/index.ts",
 			"libs/backend/server/conversation-assets/main/src/agent-output/persistence/prisma-conversation-generated-file-result.factory.ts",
-			"apps/opencrane/src/bootstrap/workflows/mcp-connection-composition.ts"
+			"apps/opencrane/src/bootstrap/workflows/mcp-connection-composition.ts",
+			"apps/opencrane/src/bootstrap/conversations/personal-memory-operation-workflow-composition.ts"
 		]
 	},
 	"rawProcedureCalls": [

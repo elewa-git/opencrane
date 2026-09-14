@@ -4,7 +4,7 @@ import { describe, expect, it, vi, type Mock } from "vitest";
 import { MemoryMutationDeliveryStates } from "@opencrane/contracts";
 
 import { _PersonalMemoryFactCreateData } from "../personal-memory-fact-catalog";
-import { PersonalMemoryOperationAdmissionOutcomes, PersonalMemoryOperationInvalidState, PersonalMemoryOperationPersistenceOutcomes, PersonalMemoryOperationReplayConflict, type AdmitPersonalMemoryOperationCommand, type PersonalMemoryOperationTaskAdmission } from "../personal-memory-operation-persistence.types";
+import { PersonalMemoryOperationAdmissionOutcomes, PersonalMemoryOperationCatalogConflict, PersonalMemoryOperationInvalidState, PersonalMemoryOperationPersistenceOutcomes, PersonalMemoryOperationReplayConflict, type AdmitPersonalMemoryOperationCommand, type PersonalMemoryOperationTaskAdmission } from "../personal-memory-operation-persistence.types";
 import { _PersonalMemoryOperationRecord } from "../prisma-personal-memory-operation-mapper";
 import { PrismaPersonalMemoryOperationRepository } from "../prisma-personal-memory-operation-repository";
 import { PersonalMemoryOperationEvents, PersonalMemoryOperationFailureCodes, PersonalMemoryOperationKinds, type PersonalMemoryOperationEvent } from "../personal-memory-operation.types";
@@ -39,6 +39,8 @@ interface _TransactionFixture
 	readonly updateFact: Mock;
 	/** Operation replay and lifecycle reads. */
 	readonly findOperation: Mock;
+	/** Exact silo and operation lookup reads. */
+	readonly findOperationById: Mock;
 	/** Operation no-change lock and lifecycle CAS updates. */
 	readonly updateOperation: Mock;
 	/** Operation insert used by a new admission. */
@@ -49,6 +51,43 @@ interface _TransactionFixture
 
 describe("PrismaPersonalMemoryOperationRepository", function _Suite()
 {
+	it("loads only the exact silo and operation and validates its current personal dataset", async function _FindById()
+	{
+		const fixture = _Fixture(_CorrectRow());
+		const repository = new PrismaPersonalMemoryOperationRepository(fixture.transaction);
+
+		await expect(repository.findById("silo-1", _OPERATION_ID)).resolves.toMatchObject({ operationId: _OPERATION_ID, providerDatasetId: _DATASET_PROVIDER_ID });
+		expect(fixture.findOperationById).toHaveBeenCalledWith({ where: { siloId: "silo-1", id: _OPERATION_ID }, include: { dataset: { select: { siloId: true, boundaryKind: true, boundaryPrincipalId: true, cogneeDatasetId: true, state: true } } } });
+
+		fixture.findOperationById.mockResolvedValueOnce(null);
+		await expect(repository.findById("other-silo", _OPERATION_ID)).resolves.toBeNull();
+	});
+
+	it("rejects an operation whose current dataset owner or provider identity changed", async function _FindByIdDatasetMismatch()
+	{
+		for (const dataset of [
+			{ ..._Dataset(MemoryDatasetState.Active, _DATASET_PROVIDER_ID), boundaryPrincipalId: "principal-2" },
+			{ ..._Dataset(MemoryDatasetState.Active, "00000000-0000-4000-8000-000000000099") },
+		])
+		{
+			const fixture = _Fixture(_CorrectRow(), [], dataset);
+			const repository = new PrismaPersonalMemoryOperationRepository(fixture.transaction);
+			await expect(repository.findById("silo-1", _OPERATION_ID)).rejects.toBeInstanceOf(PersonalMemoryOperationInvalidState);
+		}
+
+		const retired = _Fixture(_CorrectRow(), [], _Dataset(MemoryDatasetState.Retired, _DATASET_PROVIDER_ID));
+		await expect(new PrismaPersonalMemoryOperationRepository(retired.transaction).findById("silo-1", _OPERATION_ID)).resolves.toMatchObject({ operationId: _OPERATION_ID });
+	});
+
+	it("rejects invalid lookup coordinates without database I/O", async function _FindByIdInput()
+	{
+		const fixture = _Fixture(_CorrectRow());
+		const repository = new PrismaPersonalMemoryOperationRepository(fixture.transaction);
+		await expect(repository.findById("", _OPERATION_ID)).rejects.toBeInstanceOf(PersonalMemoryOperationInvalidState);
+		await expect(repository.findById("silo-1", "not-an-operation")).rejects.toBeInstanceOf(PersonalMemoryOperationInvalidState);
+		expect(fixture.findOperationById).not.toHaveBeenCalled();
+	});
+
 	it("reads a validated replay snapshot only through its silo-scoped digest key", async function _FindReplay()
 	{
 		const fixture = _Fixture(_CorrectRow());
@@ -331,6 +370,54 @@ describe("PrismaPersonalMemoryOperationRepository", function _Suite()
 		expect(concurrent.createFact).not.toHaveBeenCalled();
 	});
 
+	it("rejects an unrelated provider document collision before creating a fact", async function _RejectUnrelatedCatalogDocument()
+	{
+		const initial = _RememberCatalogRow();
+		const fixture = _Fixture(initial, [], undefined, undefined, { id: "other-fact", cogneeExternalId: _NEW_DOCUMENT_ID, contentDigest: _CIPHERTEXT_DIGEST, revision: 1, state: MemoryFactState.Active });
+		const repository = new PrismaPersonalMemoryOperationRepository(fixture.transaction);
+		const event: PersonalMemoryOperationEvent = { operationId: _OPERATION_ID, kind: PersonalMemoryOperationKinds.Remember, expectedRevision: 5, event: PersonalMemoryOperationEvents.CatalogCommitted };
+
+		await expect(repository.apply(event, _RECORDED_AT)).rejects.toBeInstanceOf(PersonalMemoryOperationCatalogConflict);
+		expect(fixture.createFact).not.toHaveBeenCalled();
+		expect(fixture.updateOperation).toHaveBeenCalledOnce();
+	});
+
+	it("rejects a Correct replacement that reuses its prior provider document", async function _RejectCorrectPriorDocumentReuse()
+	{
+		const initial = { ..._CorrectCatalogRow(), targetDocumentId: _NEW_DOCUMENT_ID.toUpperCase() };
+		const fixture = _Fixture(initial, [], undefined, _Fact(MemoryFactState.Active, 7, _NEW_DOCUMENT_ID.toUpperCase()));
+		const repository = new PrismaPersonalMemoryOperationRepository(fixture.transaction);
+		const event: PersonalMemoryOperationEvent = { operationId: _OPERATION_ID, kind: PersonalMemoryOperationKinds.Correct, expectedRevision: 4, event: PersonalMemoryOperationEvents.CatalogCommitted };
+
+		await expect(repository.apply(event, _RECORDED_AT)).rejects.toBeInstanceOf(PersonalMemoryOperationCatalogConflict);
+		expect(fixture.createFact).not.toHaveBeenCalled();
+		expect(fixture.updateOperation).toHaveBeenCalledOnce();
+	});
+
+	it("returns a newer operation winner before classifying a stale catalog collision", async function _IgnoreStaleCatalogCollision()
+	{
+		const initial = _RememberCatalogRow();
+		const winner = { ...initial, phase: PrismaPhase.Completed, revision: 6, completedAt: _RECORDED_AT };
+		const fixture = _Fixture(initial, [], undefined, undefined, { id: "other-fact", cogneeExternalId: _NEW_DOCUMENT_ID, contentDigest: _CIPHERTEXT_DIGEST, revision: 1, state: MemoryFactState.Active });
+		fixture.findOperation.mockReset().mockResolvedValueOnce(initial).mockResolvedValueOnce(winner);
+		const repository = new PrismaPersonalMemoryOperationRepository(fixture.transaction);
+		const event: PersonalMemoryOperationEvent = { operationId: _OPERATION_ID, kind: PersonalMemoryOperationKinds.Remember, expectedRevision: 5, event: PersonalMemoryOperationEvents.CatalogCommitted };
+
+		await expect(repository.apply(event, _RECORDED_AT)).resolves.toMatchObject({ outcome: PersonalMemoryOperationPersistenceOutcomes.ConcurrentWinner, operation: { revision: 6 } });
+		expect(fixture.createFact).not.toHaveBeenCalled();
+	});
+
+	it("returns an already committed winner when both reads begin after its revision", async function _ReturnAlreadyCommittedWinner()
+	{
+		const winner = { ..._CorrectCatalogRow(), phase: PrismaPhase.PriorDocumentDeletePending, revision: 5 };
+		const fixture = _Fixture(winner);
+		const repository = new PrismaPersonalMemoryOperationRepository(fixture.transaction);
+		const event: PersonalMemoryOperationEvent = { operationId: _OPERATION_ID, kind: PersonalMemoryOperationKinds.Correct, expectedRevision: 4, event: PersonalMemoryOperationEvents.CatalogCommitted };
+
+		await expect(repository.apply(event, _RECORDED_AT)).resolves.toMatchObject({ outcome: PersonalMemoryOperationPersistenceOutcomes.ConcurrentWinner, operation: { revision: 5 } });
+		expect(fixture.createFact).not.toHaveBeenCalled();
+	});
+
 	it("fails before the operation CAS when the Forget finalization fence is lost", async function _ForgetFence()
 	{
 		const initial = _ForgetCatalogRow();
@@ -339,7 +426,7 @@ describe("PrismaPersonalMemoryOperationRepository", function _Suite()
 		const repository = new PrismaPersonalMemoryOperationRepository(fixture.transaction);
 		const event: PersonalMemoryOperationEvent = { operationId: _OPERATION_ID, kind: PersonalMemoryOperationKinds.Forget, expectedRevision: 2, event: PersonalMemoryOperationEvents.CatalogFinalized };
 
-		await expect(repository.apply(event, _RECORDED_AT)).rejects.toBeInstanceOf(PersonalMemoryOperationInvalidState);
+		await expect(repository.apply(event, _RECORDED_AT)).rejects.toBeInstanceOf(PersonalMemoryOperationCatalogConflict);
 		expect(fixture.updateOperation).toHaveBeenCalledOnce();
 	});
 
@@ -580,9 +667,9 @@ function _Dataset(state: MemoryDatasetState, cogneeDatasetId: string | null)
 }
 
 /** Creates one target fact state returned by the fake transaction. */
-function _Fact(state: MemoryFactState, revision: number)
+function _Fact(state: MemoryFactState, revision: number, cogneeExternalId = _TARGET_DOCUMENT_ID)
 {
-	return { id: "fact-1", cogneeExternalId: _TARGET_DOCUMENT_ID, revision, state };
+	return { id: "fact-1", cogneeExternalId, revision, state };
 }
 
 /** Creates a synthetic transaction-bound task callback; it does not prove a real workflow engine. */
@@ -608,7 +695,7 @@ function _PrepareApply(fixture: _TransactionFixture, initial: PrismaOperationRow
 }
 
 /** Creates fake Prisma delegates and optionally records the externally visible lock sequence. */
-function _Fixture(row: PrismaOperationRow, callOrder: string[] = [], dataset = _Dataset(MemoryDatasetState.Active, _DATASET_PROVIDER_ID), fact = _Fact(MemoryFactState.Active, 7)): _TransactionFixture
+function _Fixture(row: PrismaOperationRow, callOrder: string[] = [], dataset = _Dataset(MemoryDatasetState.Active, _DATASET_PROVIDER_ID), fact = _Fact(MemoryFactState.Active, 7), catalogDocument: { readonly id: string; readonly cogneeExternalId: string; readonly contentDigest: string; readonly revision: number; readonly state: MemoryFactState } | null = null): _TransactionFixture
 {
 	const findDataset = vi.fn(async function _FindDataset()
 	{
@@ -622,6 +709,8 @@ function _Fixture(row: PrismaOperationRow, callOrder: string[] = [], dataset = _
 	});
 	const findFact = vi.fn(async function _FindFact(query)
 	{
+		if (query.where.cogneeExternalId !== undefined)
+			return catalogDocument;
 		const id = query.where.id;
 		callOrder.push(`fact-read:${id}`);
 		return { ...fact, id };
@@ -642,6 +731,10 @@ function _Fixture(row: PrismaOperationRow, callOrder: string[] = [], dataset = _
 		callOrder.push(callOrder.includes("operation-lock") ? "operation-reread" : "operation-read");
 		return row;
 	});
+	const findOperationById = vi.fn(async function _FindOperationById()
+	{
+		return { ...row, dataset };
+	});
 	const updateOperation = vi.fn(async function _UpdateOperation()
 	{
 		callOrder.push("operation-lock");
@@ -651,7 +744,7 @@ function _Fixture(row: PrismaOperationRow, callOrder: string[] = [], dataset = _
 	const transaction = {
 		memoryDataset: { findFirst: findDataset, updateMany: updateDataset },
 		memoryFactCatalog: { findFirst: findFact, updateMany: updateFact, create: createFact },
-		personalMemoryOperation: { findUnique: findOperation, updateMany: updateOperation, create: createOperation },
+		personalMemoryOperation: { findUnique: findOperation, findFirst: findOperationById, updateMany: updateOperation, create: createOperation },
 	} as unknown as Prisma.TransactionClient;
-	return { transaction, findDataset, updateDataset, findFact, updateFact, findOperation, updateOperation, createOperation, createFact };
+	return { transaction, findDataset, updateDataset, findFact, updateFact, findOperation, findOperationById, updateOperation, createOperation, createFact };
 }

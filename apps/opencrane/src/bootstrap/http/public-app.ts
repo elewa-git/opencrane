@@ -1,3 +1,4 @@
+import type { PersonalMemoryWorkflowCompositionOptions } from "../conversations/personal-memory-operation-workflow-composition.types";
 import type * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 import express, { type Express } from "express";
@@ -50,7 +51,7 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
  * @param mcpWorkflows - Shared transaction and worker authority for saved MCP jobs.
  * @returns The public Express listener before the lifecycle starts it.
  */
-export function _CreatePublicApp(prisma: PrismaClient, authentication: PublicAuthenticationComposition, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition, providerEffects: ProviderEffectCommandExecutor, historyStore?: HistoryStore, conversationPrivatePayloadKeyringPath?: string, agentSandboxReleaseProfile?: AgentSandboxReleaseProfileConfig): Express
+export function _CreatePublicApp(prisma: PrismaClient, authentication: PublicAuthenticationComposition, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition, providerEffects: ProviderEffectCommandExecutor, memoryWorkflow: PersonalMemoryWorkflowCompositionOptions, historyStore?: HistoryStore, conversationPrivatePayloadKeyringPath?: string, agentSandboxReleaseProfile?: AgentSandboxReleaseProfileConfig): Express
 {
 	const app = express();
 
@@ -77,7 +78,7 @@ export function _CreatePublicApp(prisma: PrismaClient, authentication: PublicAut
 		app.use(organizationMembers.productAccess);
 
 	// 5. Mount authenticated product routes, then terminate failures through one structured handler.
-	_RegisterRoutes(app, prisma, artifactScannerEnabled, organizationMembers.router, mcpWorkflows, mcpRuntime, providerEffects, historyStore, conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
+	_RegisterRoutes(app, prisma, artifactScannerEnabled, organizationMembers.router, mcpWorkflows, mcpRuntime, providerEffects, memoryWorkflow, historyStore, conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

@@ -27,10 +27,10 @@ import { FailedTask } from "absurd-sdk";
 import { AbsurdWorkflowEngine } from "../absurd-workflow-engine";
 
 /** Create one adapter whose database writes can be asserted without a live engine. */
-function _Harness(run: (context: IWorkflowTaskContext) => Promise<unknown>)
+function _Harness(run: (context: IWorkflowTaskContext) => Promise<unknown>, checkpointOperationLeaseSeconds = 120)
 {
 	const query = vi.fn().mockResolvedValue({ rows: [] });
-	const execution = new AbsurdWorkflowEngine({ databaseUrl: "postgresql://unused", databasePoolSize: 1, databasePool: { query } as unknown as Pool, queueAuthority: { queueForTask: function _Queue(): string { return "control-plane"; } } });
+	const execution = new AbsurdWorkflowEngine({ checkpointOperationLeaseSeconds, databaseUrl: "postgresql://unused", databasePoolSize: 1, databasePool: { query } as unknown as Pool, queueAuthority: { queueForTask: function _Queue(): string { return "control-plane"; } } });
 	execution.register({ taskName: "test.task", retryPolicy: { maximumAttempts: 5, backoff: { kind: WorkflowTaskRetryBackoffKinds.Exponential, initialDelaySeconds: 30 } }, run });
 	return { query, handler: _SDK.handler as NonNullable<typeof _SDK.handler> };
 }
@@ -63,5 +63,20 @@ describe("Absurd terminal task failures", function _TerminalTaskFailuresSuite()
 		await harness.handler({ idempotencyKey: "stable-key", input: null, inputUndefined: false }, { taskID: "33333333-3333-4333-8333-333333333333", task: { attempt: 4 } });
 
 		expect(run).toHaveBeenCalledWith(expect.objectContaining({ attempt: 4 }), null);
+	});
+
+	it("threads the configured checkpoint lease into the task context", async function _ThreadsCheckpointLease()
+	{
+		const heartbeat = vi.fn().mockResolvedValue(undefined);
+		const step = vi.fn(async function _Step(_name: string, operation: () => Promise<string>): Promise<string> { return await operation(); });
+		const run = async function _Run(context: IWorkflowTaskContext): Promise<string>
+		{
+			return await context.checkpoint({ stepName: "external-effect" }, async function _Effect(): Promise<string> { return "completed"; });
+		};
+		const harness = _Harness(run, 41);
+
+		await harness.handler({ idempotencyKey: "stable-key", input: null, inputUndefined: false }, { taskID: "44444444-4444-4444-8444-444444444444", task: { attempt: 1 }, step, heartbeat } as never);
+
+		expect(heartbeat).toHaveBeenCalledExactlyOnceWith(41);
 	});
 });

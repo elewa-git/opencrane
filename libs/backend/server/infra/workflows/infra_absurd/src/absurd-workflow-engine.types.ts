@@ -25,4 +25,6 @@ export interface IAbsurdWorkflowEngineOptions
 	readonly workerConcurrency?: number;
 	/** Idle polling interval in milliseconds. */
 	readonly pollIntervalMs?: number;
+	/** Lease extension used immediately before an uncached checkpoint operation. */
+	readonly checkpointOperationLeaseSeconds?: number;
 }

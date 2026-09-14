@@ -2,10 +2,30 @@ import { AuthorizationBoundaryKind, MemoryConsentState, MemoryDatasetState, Memo
 
 import { _PersonalMemoryFactCreateData } from "./personal-memory-fact-catalog";
 import { __CreatePersonalMemoryOperationLifecycle, __PlanPersonalMemoryOperationLifecycle } from "./personal-memory-operation-lifecycle";
-import { ___AdmitPersonalMemoryOperationCommandSchema, ___PersonalMemoryOperationReplayLookupSchema, ___PersonalMemoryOperationTaskIdentitySchema } from "./personal-memory-operation-persistence.validator";
-import { PersonalMemoryOperationAdmissionOutcomes, PersonalMemoryOperationInvalidState, PersonalMemoryOperationPersistenceOutcomes, PersonalMemoryOperationReplayConflict, type AdmitPersonalMemoryOperationCommand, type PersonalMemoryOperationAdmissionResult, type PersonalMemoryOperationMessageSource, type PersonalMemoryOperationPersistenceResult, type PersonalMemoryOperationRecord, type PersonalMemoryOperationRepository, type PersonalMemoryOperationTaskAdmission } from "./personal-memory-operation-persistence.types";
+import { ___AdmitPersonalMemoryOperationCommandSchema, ___PersonalMemoryOperationIdLookupSchema, ___PersonalMemoryOperationReplayLookupSchema, ___PersonalMemoryOperationTaskIdentitySchema } from "./personal-memory-operation-persistence.validator";
+import { PersonalMemoryOperationAdmissionOutcomes, PersonalMemoryOperationCatalogConflict, PersonalMemoryOperationInvalidState, PersonalMemoryOperationPersistenceOutcomes, PersonalMemoryOperationReplayConflict, type AdmitPersonalMemoryOperationCommand, type PersonalMemoryOperationAdmissionResult, type PersonalMemoryOperationMessageSource, type PersonalMemoryOperationPersistenceResult, type PersonalMemoryOperationRecord, type PersonalMemoryOperationRepository, type PersonalMemoryOperationTaskAdmission } from "./personal-memory-operation-persistence.types";
 import { _PersonalMemoryOperationCreateData, _PersonalMemoryOperationLifecycle, _PersonalMemoryOperationLifecycleUpdate, _PersonalMemoryOperationRecord } from "./prisma-personal-memory-operation-mapper";
 import { PersonalMemoryOperationEvents, PersonalMemoryOperationKinds, PersonalMemoryOperationTransitionOutcomes, type PersonalMemoryOperationEvent } from "./personal-memory-operation.types";
+
+interface _CatalogDocumentCheck
+{
+	readonly conflict: boolean;
+	readonly alreadyWritten: boolean;
+}
+
+/** Compares provider UUID coordinates across canonical lowercase and uppercase spellings. */
+function _SameUuid(first: string, second: string): boolean
+{
+	return first.toLowerCase() === second.toLowerCase();
+}
+
+/** Compares nullable provider UUID coordinates while preserving null as an absent value. */
+function _SameOptionalUuid(first: string | null, second: string | null): boolean
+{
+	if (first === null || second === null)
+		return first === second;
+	return _SameUuid(first, second);
+}
 
 /** Uses one caller-owned Prisma transaction for replay, locking, validation, and revision CAS. */
 export class PrismaPersonalMemoryOperationRepository implements PersonalMemoryOperationRepository
@@ -17,6 +37,23 @@ export class PrismaPersonalMemoryOperationRepository implements PersonalMemoryOp
 	constructor(transaction: Prisma.TransactionClient)
 	{
 		this.transaction = transaction;
+	}
+
+	/** @inheritdoc */
+	async findById(siloId: string, operationId: string): Promise<PersonalMemoryOperationRecord | null>
+	{
+		const lookup = ___PersonalMemoryOperationIdLookupSchema.safeParse({ siloId, operationId });
+		if (!lookup.success)
+			throw new PersonalMemoryOperationInvalidState("personal-memory operation id lookup is invalid");
+		const row = await this.transaction.personalMemoryOperation.findFirst({
+			where: { siloId: lookup.data.siloId, id: lookup.data.operationId },
+			include: { dataset: { select: { siloId: true, boundaryKind: true, boundaryPrincipalId: true, cogneeDatasetId: true, state: true } } },
+		});
+		if (row === null)
+			return null;
+		const operation = _PersonalMemoryOperationRecord(row);
+		this._assertCurrentDatasetCoordinates(row.dataset, operation);
+		return operation;
 	}
 
 	/** @inheritdoc */
@@ -80,9 +117,14 @@ export class PrismaPersonalMemoryOperationRepository implements PersonalMemoryOp
 		// Read coordinates first, then take the dataset, sorted fact, and operation locks in that order.
 		const dataset = await this._lockDataset(initial.datasetId, initial.siloId);
 		await this._lockFacts(initial.datasetId, initial.targetFactId === null ? [] : [initial.targetFactId], initial.targetDocumentId);
+		const catalogDocument = await this._lockCatalogDocument(initial, event);
 		const operation = await this._lockOperation(initialRow);
 		if (operation.revision !== initial.revision)
 			return { outcome: PersonalMemoryOperationPersistenceOutcomes.ConcurrentWinner, operation };
+		if (event.operationId === operation.operationId && event.kind === operation.kind && event.expectedRevision < operation.revision)
+			return { outcome: PersonalMemoryOperationPersistenceOutcomes.ConcurrentWinner, operation };
+		if (catalogDocument.conflict)
+			throw new PersonalMemoryOperationCatalogConflict();
 
 		const planned = __PlanPersonalMemoryOperationLifecycle(_PersonalMemoryOperationLifecycle(operation), event);
 		if (planned.outcome === PersonalMemoryOperationTransitionOutcomes.Denied)
@@ -92,7 +134,7 @@ export class PrismaPersonalMemoryOperationRepository implements PersonalMemoryOp
 		if (planned.operation === undefined)
 			throw new PersonalMemoryOperationInvalidState("personal-memory lifecycle accepted an event without next state");
 		const adoptedDataset = await this._adoptDatasetForEvent(dataset, operation, event);
-		const changedCatalog = await this._applyCatalogEvent(operation, event, recordedAt);
+		const changedCatalog = await this._applyCatalogEvent(operation, event, recordedAt, catalogDocument.alreadyWritten);
 
 		const update = await this.transaction.personalMemoryOperation.updateMany({
 			where: { id: operation.operationId, revision: operation.revision },
@@ -109,6 +151,15 @@ export class PrismaPersonalMemoryOperationRepository implements PersonalMemoryOp
 			return { outcome: PersonalMemoryOperationPersistenceOutcomes.ConcurrentWinner, operation: durable };
 		}
 		return { outcome: PersonalMemoryOperationPersistenceOutcomes.Advanced, operation: durable };
+	}
+
+	/** Requires the current dataset to retain the operation's personal owner and provider coordinate. */
+	private _assertCurrentDatasetCoordinates(dataset: { readonly siloId: string; readonly boundaryKind: AuthorizationBoundaryKind; readonly boundaryPrincipalId: string | null; readonly cogneeDatasetId: string | null }, operation: PersonalMemoryOperationRecord): void
+	{
+		if (dataset.siloId !== operation.siloId || dataset.boundaryKind !== AuthorizationBoundaryKind.Personal || dataset.boundaryPrincipalId !== operation.actorPrincipalId)
+			throw new PersonalMemoryOperationInvalidState("personal-memory operation dataset owner is no longer valid");
+		if (!_SameOptionalUuid(dataset.cogneeDatasetId, operation.providerDatasetId))
+			throw new PersonalMemoryOperationInvalidState("personal-memory operation provider dataset is no longer current");
 	}
 
 	/** Locks and verifies the local dataset through an ORM update that does not change its state. */
@@ -134,7 +185,7 @@ export class PrismaPersonalMemoryOperationRepository implements PersonalMemoryOp
 				throw new PersonalMemoryOperationInvalidState("new personal-memory dataset is not waiting for provider adoption");
 			return;
 		}
-		if (dataset.state !== MemoryDatasetState.Active || dataset.cogneeDatasetId !== command.providerDatasetId)
+		if (dataset.state !== MemoryDatasetState.Active || !_SameOptionalUuid(dataset.cogneeDatasetId, command.providerDatasetId))
 			throw new PersonalMemoryOperationInvalidState("personal-memory command does not match an active adopted dataset");
 	}
 
@@ -147,7 +198,7 @@ export class PrismaPersonalMemoryOperationRepository implements PersonalMemoryOp
 			throw new PersonalMemoryOperationInvalidState("personal-memory dataset adoption lost its personal owner");
 		if (dataset.state === MemoryDatasetState.Active)
 		{
-			if (dataset.cogneeDatasetId !== event.providerDatasetId)
+			if (dataset.cogneeDatasetId === null || !_SameUuid(dataset.cogneeDatasetId, event.providerDatasetId))
 				throw new PersonalMemoryOperationInvalidState("active personal-memory dataset has another provider UUID");
 			return false;
 		}
@@ -163,10 +214,12 @@ export class PrismaPersonalMemoryOperationRepository implements PersonalMemoryOp
 	}
 
 	/** Applies exact catalog evidence only after the lifecycle planner accepts the event. */
-	private async _applyCatalogEvent(operation: PersonalMemoryOperationRecord, event: PersonalMemoryOperationEvent, recordedAt: Date): Promise<boolean>
+	private async _applyCatalogEvent(operation: PersonalMemoryOperationRecord, event: PersonalMemoryOperationEvent, recordedAt: Date, catalogAlreadyWritten: boolean): Promise<boolean>
 	{
 		if (event.event === PersonalMemoryOperationEvents.CatalogCommitted)
 		{
+			if (catalogAlreadyWritten)
+				return false;
 			const data = _PersonalMemoryFactCreateData(operation, recordedAt);
 			if (data === null)
 				throw new PersonalMemoryOperationInvalidState("personal-memory catalog commit lacks immutable fact evidence");
@@ -182,8 +235,26 @@ export class PrismaPersonalMemoryOperationRepository implements PersonalMemoryOp
 			data: { state: MemoryFactState.Forgotten, forgottenAt: recordedAt },
 		});
 		if (finalized.count !== 1)
-			throw new PersonalMemoryOperationInvalidState("personal-memory Forget target lost its finalization fence");
+			throw new PersonalMemoryOperationCatalogConflict();
 		return true;
+	}
+
+	/** Locks an occupied provider document coordinate before catalog creation can hit a unique key. */
+	private async _lockCatalogDocument(operation: PersonalMemoryOperationRecord, event: PersonalMemoryOperationEvent): Promise<_CatalogDocumentCheck>
+	{
+		if (event.event !== PersonalMemoryOperationEvents.CatalogCommitted || operation.documentId === null)
+			return { conflict: false, alreadyWritten: false };
+		if (operation.kind === PersonalMemoryOperationKinds.Correct && operation.targetDocumentId !== null && _SameUuid(operation.targetDocumentId, operation.documentId))
+			return { conflict: true, alreadyWritten: false };
+		const existing = await this.transaction.memoryFactCatalog.findFirst({ where: { datasetId: operation.datasetId, cogneeExternalId: { equals: operation.documentId, mode: "insensitive" } }, select: { id: true, contentDigest: true, state: true } });
+		if (existing === null)
+			return { conflict: false, alreadyWritten: false };
+		const locked = await this.transaction.memoryFactCatalog.updateMany({ where: { id: existing.id, datasetId: operation.datasetId, state: existing.state }, data: { state: existing.state } });
+		if (locked.count !== 1)
+			throw new PersonalMemoryOperationInvalidState("personal-memory catalog document changed before it could be checked");
+		if (existing.id !== operation.operationId || existing.contentDigest !== operation.expectedContentDigest)
+			return { conflict: true, alreadyWritten: false };
+		return { conflict: false, alreadyWritten: true };
 	}
 
 	/** Locks referenced facts by sorted ID and verifies the target provider document coordinate. */
@@ -194,7 +265,7 @@ export class PrismaPersonalMemoryOperationRepository implements PersonalMemoryOp
 		for (const factId of ordered)
 		{
 			const fact = await this.transaction.memoryFactCatalog.findFirst({ where: { id: factId, datasetId }, select: { id: true, cogneeExternalId: true, revision: true, state: true } });
-			if (fact === null || (targetDocumentId !== null && fact.cogneeExternalId !== targetDocumentId))
+			if (fact === null || (targetDocumentId !== null && !_SameUuid(fact.cogneeExternalId, targetDocumentId)))
 				throw new PersonalMemoryOperationInvalidState("personal-memory target fact does not match the admitted dataset and document");
 			const locked = await this.transaction.memoryFactCatalog.updateMany({ where: { id: fact.id, datasetId, state: fact.state }, data: { state: fact.state } });
 			if (locked.count !== 1)
