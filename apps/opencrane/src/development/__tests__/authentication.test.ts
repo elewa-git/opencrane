@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AuthenticatedPrincipalAdmission } from "@opencrane/backend/server/infra/auth";
 import type { AuthenticatedPrincipalCapabilityReader } from "@opencrane/backend/server/iam/identity";
 
-import { _CreateDevelopmentAuthentication } from "../authentication";
+import { _CreateDevelopmentAuthentication, type DevelopmentAuthenticationTransport } from "../authentication";
 import { _DEVELOPMENT_IDENTITY } from "../config";
 
 /** Exact per-launch credential supplied to the focused browser boundary. */
@@ -19,10 +19,10 @@ function _Admission(): AuthenticatedPrincipalAdmission
 }
 
 /** Build the development middleware in listener order. */
-function _App(admission: AuthenticatedPrincipalAdmission = _Admission())
+function _App(admission: AuthenticatedPrincipalAdmission = _Admission(), transport?: DevelopmentAuthenticationTransport)
 {
 	const capabilities: AuthenticatedPrincipalCapabilityReader = { canAdministerOrganization: vi.fn().mockResolvedValue(true) };
-	const authentication = _CreateDevelopmentAuthentication(_DEVELOPMENT_IDENTITY, capabilities, admission, _BROWSER_CREDENTIAL, { warn: vi.fn() } as unknown as Logger);
+	const authentication = _CreateDevelopmentAuthentication(_DEVELOPMENT_IDENTITY, capabilities, admission, _BROWSER_CREDENTIAL, { warn: vi.fn() } as unknown as Logger, transport);
 	const app = express();
 	app.use(...authentication.sessionMiddleware);
 	app.use("/api/v1/auth", authentication.router);
@@ -75,6 +75,15 @@ describe("Tier 2 development authentication", function _Suite(): void
 	{
 		const response = await request(_App()).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "local-development.localhost:4200").set("Origin", "http://local-development.localhost:4200").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
 		expect(response.status).toBe(204);
+	});
+
+	it("accepts only the selected HTTPS k3d ingress transport", async function _AcceptsK3dTransport(): Promise<void>
+	{
+		const transport = { browserHost: "opencrane.local.opencrane.test", directHost: "opencrane.local.opencrane.test", proxyTargets: new Set(["opencrane.local.opencrane.test"]), scheme: "https" as const };
+		const accepted = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "opencrane.local.opencrane.test").set("X-Forwarded-Host", "opencrane.local.opencrane.test").set("Origin", "https://opencrane.local.opencrane.test").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const refused = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "opencrane.local.opencrane.test").set("X-Forwarded-Host", "opencrane.local.opencrane.test").set("Origin", "http://opencrane.local.opencrane.test").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		expect(accepted.status).toBe(204);
+		expect(refused.status).toBe(403);
 	});
 
 	it("fails closed when the durable Principal is absent", async function _RejectsAbsentPrincipal(): Promise<void>

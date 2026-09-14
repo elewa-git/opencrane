@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { classifyTier3Capacity, formatTier3Capacity } from "../host-capacity.mjs";
+import { buildTier3UpstreamRequestOptions } from "../browser-proxy.mjs";
 import { readTier3IngressCertificate } from "../ingress-certificate.mjs";
 import { parseTier3Options } from "../options.mjs";
 import { assertTier3ResourceReplacement } from "../resource-ownership.mjs";
@@ -37,6 +38,22 @@ test("reads only the Secret selected by the live Certificate", async function _C
 	const result = await readTier3IngressCertificate({ certificateName: "release-clustertenant-tls", namespace: "tier3" }, { kubectl: async function _Kubectl(arguments_) { calls.push(arguments_); return calls.length === 1 ? "release-tls-secret" : Buffer.from(certificate).toString("base64"); } });
 	assert.equal(result, certificate);
 	assert.equal(calls[1][2], "release-tls-secret");
+});
+
+test("pins Tier 3 proxy trust and replaces untrusted forwarding claims", function _ProxyRequest()
+{
+	const request = { method: "POST", url: "/api/v1/me/persona", headers: { host: "127.0.0.1:4200", origin: "http://127.0.0.1:4200", referer: "http://127.0.0.1:4200/onboarding", forwarded: "for=attacker", "x-forwarded-host": "attacker.example", "x-forwarded-proto": "http", "x-opencrane-development-session": "session-proof" } };
+	const built = buildTier3UpstreamRequestOptions(request, new URL("https://127.0.0.1:28443"), { upstreamCertificate: "certificate", upstreamHost: "tier3.local.opencrane.test" });
+	assert.equal(built.servername, "tier3.local.opencrane.test");
+	assert.equal(built.ca, "certificate");
+	assert.equal(built.rejectUnauthorized, true);
+	assert.equal(built.headers.host, "tier3.local.opencrane.test");
+	assert.equal(built.headers["x-forwarded-host"], "tier3.local.opencrane.test");
+	assert.equal(built.headers["x-forwarded-proto"], "https");
+	assert.equal(built.headers.origin, "https://tier3.local.opencrane.test");
+	assert.equal(built.headers.referer, "https://tier3.local.opencrane.test/");
+	assert.equal(built.headers.forwarded, undefined);
+	assert.equal(built.headers["x-opencrane-development-session"], "session-proof");
 });
 
 test("runs the current smoke before proxying and preserves recommended qualification", async function _Orchestrator()

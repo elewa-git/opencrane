@@ -50,6 +50,12 @@ also reconciles stable `group:<Group.id>` claims into normalized direct membersh
 as externally managed. It never creates a group from a claim, treats unknown IDs as non-authoritative,
 and never prunes membership in locally managed groups.
 
+An explicitly selected standalone k3d development deployment may supply one fixed local identity
+instead of an OIDC callback. `_AdmitDevelopmentIdentity` sends that deployment-owned tuple through
+the same Principal projection, serializable first-owner claim, audit and directory authorities.
+This is not a second authorization system: the caller must still pass current membership and product
+authorization checks, and ordinary releases never compose the seam.
+
 Invariant: every identity fact it emits is IdP-verified, not self-asserted — a caller can never
 obtain another user's tenant or claim admin rights they were not granted. The login callback's
 initial group mirror is best-effort, but every later product request must repeat reconciliation and
@@ -72,6 +78,8 @@ acceptance route can establish membership; it gains no Owner or administrator fa
   verified `{siloId, issuer, subject}` tuple.
 - `StandaloneFirstUserAdmissionConfig`, `StandaloneFirstUserAdmissionAuditPort` — composition
   contracts that configure the optional standalone first-owner claim.
+- `_AdmitDevelopmentIdentity`, `DevelopmentIdentityAdmission` — admit the fixed identity selected by
+  the isolated Tier 3 k3d profile through current Principal and standalone-owner authorities.
 - `AgentIdentityHistory` — appends and loads the checked KurrentDB history of an agent identity,
   returning current state plus the exact head event ID, revision, and digest only when silo,
   service, and acting-principal coordinates agree.

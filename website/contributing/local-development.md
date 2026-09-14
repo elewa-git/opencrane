@@ -159,14 +159,74 @@ dynamic-import failure.
 
 ## Tier 3 — k3d and Codespaces
 
-Tier 3 is being rebuilt as the child of Tier 2. Until its successor pull request lands, do not treat
-the closed historical branch as a supported setup path.
+Tier 3 installs the current silo and its prerequisites into a k3d cluster owned by the exact Git
+worktree. It uses the same PostgreSQL target baseline, KurrentDB history, Cognee memory service,
+LiteLLM model gateway and Agent Sandbox contracts as the current deployment path. It does not
+restore a 0.10 upgrade path or a retired runtime.
 
 | Profile | Intended boundary | Status |
 | --- | --- | --- |
-| Tier 3 infra | `npm run dev:tier3` or `npm run dev:tier3:infra` — current silo and prerequisites in disposable k3d, including Codespaces browser routing | 🔶 Rebuild planned |
-| Tier 3 agent | `npm run dev:tier3:agent` — infra plus one governed provider setup and one Agent Sandbox conversation turn | 🔶 Rebuild planned |
+| Tier 3 infra | Current silo and prerequisites in owned k3d, including private Codespaces browser routing | ✅ Ready for review; live host qualification remains required |
+| Tier 3 agent | Infra plus governed provider setup, onboarding and one real Agent Sandbox conversation turn | ✅ Ready for review; requires a provider key |
 
-Tier 3 retains the historical minimum target of 4 cores, 16 GB memory and 32 GB storage, with 8
-cores, 32 GB memory and 64 GB storage recommended. A minimum-host run must report a storage
-shortfall instead of deleting unrelated dependency caches, clusters or other developer state.
+The checked-in development container pins Node.js 24, Docker 28.5.1, Helm 4.1.4, k3d 5.8.3 and
+kubectl 1.30.10. A local workstation can use its own compatible tools. Tier 3 requires at least 4
+cores, 16 GB memory and 32 GB total storage; 8 cores, 32 GB memory and 64 GB storage are recommended.
+The command reports both the measured total and available storage. It stops on a minimum shortfall
+without deleting dependency caches, clusters, images or other developer state.
+
+Start the credential-free infrastructure profile:
+
+```bash
+npm run dev:tier3
+# The explicit equivalent:
+npm run dev:tier3:infra
+```
+
+The default `fast` storage mode uses disposable local-path storage. Use the full expandable-storage
+qualification when changing storage-sensitive code:
+
+```bash
+SMOKE_HOST_PROFILE=recommended npm run dev:tier3:infra -- --storage-mode full
+```
+
+`SMOKE_HOST_PROFILE=recommended` asks the underlying qualification to enforce the recommended host
+capacity instead of accepting the minimum. `--smoke-only` completes the cluster qualification and
+returns without keeping the browser proxy open.
+
+For the Agent profile, place one supported provider key in an owner-only ordinary file. The file
+must use an absolute path and must not be a symbolic link:
+
+```bash
+chmod 600 /absolute/path/to/openai-key
+npm run dev:tier3:agent -- \
+  --provider openai \
+  --provider-key-file /absolute/path/to/openai-key
+```
+
+Supported providers are `openai`, `anthropic`, `gemini`, `mistral`, `deepseek` and `glm`. The
+coordinator sends the key only through the current bring-your-own-key (BYOK) product authority; it
+does not put it into Helm values or print it. The proof completes the current persona survey and
+guided onboarding, creates the published personal Agent, submits one message and waits for the
+correlated provider-backed response from a current Agent Sandbox run. A deterministic or simulated
+model response is not accepted as Tier 3 Agent proof.
+
+After infrastructure qualification, the command prints a loopback browser URL. In GitHub
+Codespaces, keep the forwarded port **private**. The proxy pins the certificate named by the live
+Kubernetes `Certificate`, preserves the exact `.test` ingress authority and refuses state-changing
+requests from another browser origin. The per-launch development identity is available only in this
+explicit standalone k3d profile; ordinary releases remain OpenID Connect (OIDC)-only.
+
+Each worktree derives its own cluster, namespace, release, registry, ingress port and owner label.
+If a previous run retained those exact owned resources, choose explicitly between replacing them
+and inspecting them:
+
+```bash
+npm run dev:tier3:infra -- --replace-owned
+npm run dev:tier3:down
+```
+
+`--replace-owned` refuses a similarly named cluster with a missing or different owner label.
+`dev:tier3:down` removes only the resources proven to belong to the current worktree. Changing the
+0.11 database baseline means rebuilding this disposable environment; there is no pre-1.0 migration
+or backwards-compatibility route between stale and current Tier 3 data.

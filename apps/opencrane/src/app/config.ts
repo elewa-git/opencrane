@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
 
-import type { AgentSandboxReleaseProfileConfig, OpenCraneHistoryStoreConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
+import type { AgentSandboxReleaseProfileConfig, K3dDevelopmentAuthenticationConfig, OpenCraneHistoryStoreConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig, OpenCraneWorkflowConfig } from "./config.types";
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */
@@ -108,6 +108,7 @@ function _readArtifactPreprocessorBodyLimit(): number
 /** Read the email and ClusterTenant that let one verified OIDC user claim this standalone silo's owner slot; both must be set or neither. */
 function _readStandaloneFirstUserAdmission(): StandaloneFirstUserAdmissionConfig | null
 {
+	if (process.env.OPENCRANE_DEVELOPMENT_AUTHENTICATION?.trim() === "k3d") return null;
 	const email = process.env.OPENCRANE_STANDALONE_FIRST_USER_EMAIL?.trim().toLowerCase() ?? "";
 	const clusterTenant = process.env.OPENCRANE_STANDALONE_CLUSTER_TENANT?.trim() ?? "";
 	const issuer = process.env.OIDC_ISSUER_URL?.trim() ?? "";
@@ -128,6 +129,34 @@ function _readStandaloneFirstUserAdmission(): StandaloneFirstUserAdmissionConfig
 		throw new Error("standalone first-user admission requires OIDC_ISSUER_URL");
 	}
 	return { email, clusterTenant, issuer };
+}
+
+/** Read the local k3d identity only when the deployment selected that exact development mode. */
+function _readK3dDevelopmentAuthentication(): K3dDevelopmentAuthenticationConfig | null
+{
+	const mode = process.env.OPENCRANE_DEVELOPMENT_AUTHENTICATION?.trim() ?? "";
+	if (!mode) return null;
+	if (mode !== "k3d") throw new Error("OPENCRANE_DEVELOPMENT_AUTHENTICATION must be k3d when configured");
+	if (process.env.OIDC_ISSUER_URL || process.env.OIDC_CLIENT_ID || process.env.OIDC_CLIENT_SECRET || process.env.OPENCRANE_OIDC_CLIENT_SECRET || process.env.OIDC_SESSION_SECRET || process.env.OPENCRANE_OIDC_SESSION_SECRET)
+	{
+		throw new Error("k3d development authentication cannot coexist with OIDC configuration");
+	}
+	if (process.env.OPENCRANE_MEMBERSHIP_MODE !== FleetMembershipDeploymentModes.Standalone) throw new Error("k3d development authentication requires standalone membership");
+	const publicHost = _readRequired("OPENCRANE_K3D_DEVELOPMENT_HOST").toLowerCase();
+	if (!/^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\.[a-z0-9](?:[-a-z0-9]*[a-z0-9])?)*\.test$/u.test(publicHost)) throw new Error("OPENCRANE_K3D_DEVELOPMENT_HOST must be a DNS authority below .test");
+	const siloId = _readRequired("OPENCRANE_SILO_ID");
+	const email = _readRequired("OPENCRANE_STANDALONE_FIRST_USER_EMAIL").toLowerCase();
+	return {
+		credentialPath: _readRequiredAbsolutePath("OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL_PATH"),
+		identity: {
+			displayName: "OpenCrane Tier 3 developer",
+			email,
+			issuer: "https://identity.local.opencrane.test",
+			siloId,
+			subject: "opencrane-tier3-developer",
+		},
+		publicHost,
+	};
 }
 
 /**
@@ -215,6 +244,7 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 		authWatchNamespace: process.env.WATCH_NAMESPACE ?? process.env.NAMESPACE ?? "default",
 		conversationPrivatePayloadKeyringPath: _readRequiredAbsolutePath("CONVERSATION_PRIVATE_PAYLOAD_KEYRING_PATH"),
 		historyStore: _readHistoryStoreConfig(),
+		k3dDevelopmentAuthentication: _readK3dDevelopmentAuthentication(),
 		internalPort: Number(process.env.INTERNAL_PORT ?? "8081"),
 		publicPort: Number(process.env.PORT ?? "8080"),
 		runAdmission: {

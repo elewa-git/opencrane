@@ -79,7 +79,12 @@ proxy workload or routing registry is involved.
 its resources to the lifecycle owner.
 
 - `src/app/config.ts` reads one startup snapshot for listener and worker configuration, including
-  the all-or-nothing standalone first-owner contract and HTTPS-only Fleet membership receiver.
+  the all-or-nothing standalone first-owner contract, HTTPS-only Fleet membership receiver and the
+  explicit standalone-only k3d development identity.
+- `src/app/k3d-development-authentication.ts` admits the deployment-selected local identity through
+  the current Principal and standalone-owner authorities, then composes the shared development
+  session checks against the exact HTTPS `.test` ingress host. It exists only when Helm selects the
+  Tier 3 Agent profile; ordinary releases continue to compose OIDC.
 - `src/app/kubernetes-clients.ts` constructs the exact Kubernetes clients the process needs.
 - `src/app/public-app.ts` builds the browser-session-authenticated API.
 - The neutral [membership](../../libs/backend/server/iam/membership/main/README.md) package owns
@@ -220,7 +225,8 @@ are:
 | `OPENCRANE_WORKFLOW_*` | Absurd database pool, worker concurrency, and polling limits | small development defaults |
 | `OPENCRANE_MCP_ERA_PROBE_*` | Timeout and response-size limit for remote MCP protocol checks | 5 seconds / 64 KiB |
 | `OPENCRANE_OCI_REGISTRY_*` | Fixed HTTPS registry repository, request timeout, and optional Secret-backed authorization used to import admitted MCP images by digest | deployment profile / 30 seconds / no credential |
-| `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |
+| `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required for ordinary releases; absent only in explicit Tier 3 k3d development |
+| `OPENCRANE_DEVELOPMENT_AUTHENTICATION`, `OPENCRANE_K3D_DEVELOPMENT_*` | Explicit standalone Tier 3 identity, exact `.test` host and read-only per-launch proof mount; mutually exclusive with OIDC | disabled |
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
 | `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |

@@ -14,7 +14,7 @@ export function createTier3BrowserProxy(options)
 	const server = http.createServer(function _Forward(request, response)
 	{
 		if (!_HasExpectedBrowserOrigin(request)) { response.writeHead(403, { "content-type": "application/json" }); response.end(JSON.stringify({ code: "TIER3_ORIGIN_MISMATCH", error: "Tier 3 state changes require the forwarded browser origin." })); return; }
-		const upstreamRequest = https.request(_RequestOptions(request, upstream, options), function _Respond(upstreamResponse) { response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.statusMessage, upstreamResponse.headers); upstreamResponse.pipe(response); });
+		const upstreamRequest = https.request(buildTier3UpstreamRequestOptions(request, upstream, options), function _Respond(upstreamResponse) { response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.statusMessage, upstreamResponse.headers); upstreamResponse.pipe(response); });
 		upstreamRequest.once("error", function _Unavailable(error) { if (!response.headersSent) response.writeHead(502, { "content-type": "text/plain; charset=utf-8" }); response.end(`Tier 3 ingress is unavailable: ${error.message}\n`); });
 		request.pipe(upstreamRequest);
 	});
@@ -22,7 +22,7 @@ export function createTier3BrowserProxy(options)
 	{
 		if (!_HasExpectedBrowserOrigin(request)) { socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"); return; }
 		_Track(sockets, socket);
-		const upstreamRequest = https.request(_RequestOptions(request, upstream, options));
+		const upstreamRequest = https.request(buildTier3UpstreamRequestOptions(request, upstream, options));
 		upstreamRequest.once("upgrade", function _Connected(upstreamResponse, upstreamSocket, upstreamHead) { _Track(sockets, upstreamSocket); socket.write(_UpgradeResponseHead(upstreamResponse)); if (upstreamHead.length) socket.write(upstreamHead); if (head.length) upstreamSocket.write(head); upstreamSocket.pipe(socket).pipe(upstreamSocket); });
 		upstreamRequest.once("response", function _Rejected() { socket.end("HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\n\r\n"); });
 		upstreamRequest.once("error", function _Failed() { socket.destroy(); });
@@ -44,7 +44,8 @@ export async function closeTier3BrowserProxy(server)
 	await Promise.all([closedServer, ...closedSockets]);
 }
 
-function _RequestOptions(request, upstream, options)
+/** Build the pinned ingress request while discarding browser-supplied forwarding claims. */
+export function buildTier3UpstreamRequestOptions(request, upstream, options)
 {
 	const headers = { ...request.headers };
 	for (const name of Object.keys(headers)) if (name === "forwarded" || name.startsWith("x-forwarded-")) delete headers[name];

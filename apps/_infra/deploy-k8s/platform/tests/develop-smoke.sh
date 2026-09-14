@@ -27,6 +27,7 @@ SMOKE_REGISTRY="${SMOKE_REGISTRY:-ghcr.io/elewa-git}"
 SMOKE_STORAGE_MODE="${SMOKE_STORAGE_MODE:-full}"
 SMOKE_INGRESS_PORT="${SMOKE_INGRESS_PORT:-8443}"
 SMOKE_RESOURCE_OWNER="${SMOKE_RESOURCE_OWNER:-}"
+OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL="${OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL:-}"
 SMOKE_LOCAL_REGISTRY_NAME="${CLUSTER_NAME}-registry"
 SMOKE_LOCAL_REGISTRY_ADDRESS=""
 KEY_DIR=""
@@ -535,6 +536,10 @@ if ! [[ "$SMOKE_INGRESS_PORT" =~ ^[0-9]+$ ]] || (( SMOKE_INGRESS_PORT < 1024 || 
   echo "[develop-smoke] SMOKE_INGRESS_PORT must be a user port from 1024 through 65535." >&2
   exit 1
 fi
+if [[ -n "$OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL" ]] && ! [[ "$OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL" =~ ^[A-Za-z0-9_-]{43}$ ]]; then
+  echo "[develop-smoke] OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL must contain one 32-byte base64url proof." >&2
+  exit 1
+fi
 
 # Image preparation is the longest independent lane. Start it before k3d so cluster creation and
 # external-controller readiness consume the same wall-clock time without serialising all builds
@@ -619,6 +624,26 @@ kubectl create secret generic opencrane-fleet-membership-verification \
   --from-file=public-key.pem="$KEY_DIR/public-key.pem" \
   --dry-run=client -o yaml | kubectl apply -f -
 
+DEVELOPMENT_AUTH_HELM_ARGS=(--set-string "clustertenantManager.developmentAuthentication.mode=")
+if [[ -n "$OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL" ]]; then
+  development_credential_file="$KEY_DIR/development-session"
+  printf '%s' "$OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL" >"$development_credential_file"
+  chmod 600 "$development_credential_file"
+  kubectl create secret generic "${RELEASE_NAME}-development-session" \
+    --namespace "$NAMESPACE" \
+    --from-file=credential="$development_credential_file" \
+    --dry-run=client -o yaml | kubectl apply -f -
+  DEVELOPMENT_AUTH_HELM_ARGS=(
+    --set-string "clustertenantManager.developmentAuthentication.mode=k3d"
+    --set-string "clustertenantManager.developmentAuthentication.publicHost=${CONTROL_PLANE_HOST}"
+    --set-string "clustertenantManager.developmentAuthentication.existingSecret=${RELEASE_NAME}-development-session"
+    --set-string "clustertenantManager.oidc.issuerUrl="
+    --set-string "clustertenantManager.oidc.clientId="
+    --set-string "clustertenantManager.oidc.redirectUri="
+    --set-string "clustertenantManager.oidc.existingSecret="
+  )
+fi
+
 echo "[develop-smoke] Installing the current silo through its app-owned deploy entrypoint"
 export OIDC_ISSUER_URL="https://issuer.opencrane.test"
 export OIDC_CLIENT_ID="develop-smoke"
@@ -656,6 +681,7 @@ export TIMEOUT_SECONDS
   --set-string "agentSandbox.serviceAccountName=${RELEASE_NAME}-agent-sandbox" \
   --set-string "agentSandbox.profiles[0].image.repository=${registry_repository}/opencrane-conversation-computer" \
   --set-string "agentSandbox.profiles[0].image.digest=${computer_digest}" \
+  "${DEVELOPMENT_AUTH_HELM_ARGS[@]}" \
   --set "certManager.mode=selfSigned" \
   --set "certManager.issuerName=opencrane-develop-smoke-issuer"
 
