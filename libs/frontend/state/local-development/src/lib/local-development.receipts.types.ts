@@ -2,51 +2,51 @@ import type { GroupChildCreateCommand, GroupChildShareCommand, GroupChildView } 
 import type { ConversationAsset, ReserveConversationAssetUpload } from "@opencrane/state/conversation/assets";
 import type { ConversationWorkspaceDetail, CreateConversationCommand, SubmitConversationMessageCommand } from "@opencrane/state/conversation/workspace";
 
-/** Accepted creation input and the stable conversation it established. */
+/** Records an accepted creation command and the conversation it established for later retries. */
 export interface _LocalDevelopmentConversationReceipt
 {
-	/** Immutable creation command bound to the retry key. */
+	/** Preserves the creation command bound to the retry key. */
 	readonly command: CreateConversationCommand;
-	/** Stable conversation coordinate created by the command. */
+	/** Identifies the conversation created by the accepted command. */
 	readonly conversationId: ConversationWorkspaceDetail["id"];
 }
 
-/** Accepted participant message bound to its conversation-scoped retry key. */
+/** Records the participant message accepted for a conversation-scoped retry key. */
 export interface _LocalDevelopmentMessageReceipt
 {
-	/** Immutable message command accepted into local history. */
+	/** Preserves the message command accepted into local history. */
 	readonly command: SubmitConversationMessageCommand;
 }
 
-/** Accepted reservation input and the stable file coordinate it established. */
+/** Records an accepted reservation and the file coordinate it established for later retries. */
 export interface _LocalDevelopmentAssetReceipt
 {
-	/** Conversation that scopes the reservation key. */
+	/** Identifies the conversation that scopes the reservation key. */
 	readonly conversationId: string;
-	/** Immutable reservation request bound to the retry key. */
+	/** Preserves the reservation request bound to the retry key. */
 	readonly request: ReserveConversationAssetUpload;
-	/** Stable file coordinate created by the reservation. */
+	/** Identifies the file created by the accepted reservation. */
 	readonly assetId: ConversationAsset["id"];
 }
 
-/** Accepted group-child input and the stable request projection it established. */
+/** Records an accepted group-child command and the child projection it established for later retries. */
 export interface _LocalDevelopmentGroupChildReceipt
 {
-	/** Parent group that scopes the admitted request. */
+	/** Identifies the parent group that scopes the accepted request. */
 	readonly parentConversationId: string;
-	/** Immutable child-creation command bound to the retry key. */
+	/** Preserves the child-creation command bound to the retry key. */
 	readonly command: GroupChildCreateCommand;
-	/** Stable child projection created by the request. */
+	/** Preserves the child projection created by the accepted request. */
 	readonly child: GroupChildView;
 }
 
-/** Accepted reviewed share bound to its parent-scoped retry key. */
+/** Records the reviewed share accepted for a parent-scoped retry key. */
 export interface _LocalDevelopmentGroupShareReceipt
 {
-	/** Child whose reviewed result supplied the share. */
+	/** Identifies the child whose reviewed result supplied the share. */
 	readonly childConversationId: string;
-	/** Parent group that owns the appended human message. */
+	/** Identifies the parent group that owns the appended human message. */
 	readonly parentConversationId: string;
-	/** Immutable reviewed share bound to the retry key. */
+	/** Preserves the reviewed-share command bound to the retry key. */
 	readonly command: GroupChildShareCommand;
 }

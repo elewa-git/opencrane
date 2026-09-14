@@ -1,27 +1,27 @@
 import type { PersonaFirstChatArchetypes, PersonaFirstChatColours } from "@opencrane/models/user-onboarding";
 import type { PersonaColours } from "@opencrane/state/onboarding";
 
-/** Reviewed first-chat content pinned by the clean target baseline. */
+/** Carries the first-chat content copied from the reviewed clean target baseline. */
 export interface LocalDevelopmentBootstrapFixture
 {
-	/** Local command vocabulary for this fixture. */
+	/** Selects the named local command that uses this fixture. */
 	readonly archetype: PersonaFirstChatArchetypes;
-	/** Current public first-chat archetype vocabulary. */
+	/** Supplies the public archetype sent through the first-chat model. */
 	readonly firstChatArchetype: PersonaFirstChatArchetypes;
-	/** Current public first-chat colour vocabulary. */
+	/** Supplies the public colour sent through the first-chat model. */
 	readonly firstChatColour: PersonaFirstChatColours;
-	/** Current persona-onboarding colour vocabulary. */
+	/** Supplies the colour used by the persona-onboarding model. */
 	readonly personaColour: PersonaColours;
-	/** Reviewed owner-visible name. */
+	/** Displays the reviewed persona name to the local developer. */
 	readonly displayName: string;
-	/** Immutable baseline content revision. */
+	/** Identifies the baseline content revision pinned to the first chat. */
 	readonly revisionId: string;
-	/** Reviewed source path recorded by the target baseline. */
+	/** Records the reviewed source path included in the target baseline. */
 	readonly sourceLabel: string;
-	/** SHA-256 digest recorded by the target baseline. */
+	/** Records the SHA-256 digest included in the target baseline. */
 	readonly digest: string;
-	/** Exact reviewed opening text without Markdown quotation markers. */
+	/** Preserves the reviewed opening text without Markdown quotation markers. */
 	readonly opening: string;
-	/** Exact three reviewed prompts in their server order. */
+	/** Preserves the three reviewed prompts in server order. */
 	readonly questions: readonly string[];
 }

@@ -1,47 +1,47 @@
 import type { PersonaColours, PersonaColourScores, PersonaModifiers, PersonaOpennessScores, PersonaResolutionKinds } from "@opencrane/state/onboarding";
 
-/** One reviewed scoring row pinned by the version-one target baseline. */
+/** Stores the six contributions from a scoring row in the version-one target baseline. */
 export interface _LocalDevelopmentScoringWeight
 {
-	/** Red contribution. */
+	/** Adds this amount to the red score. */
 	readonly red: number;
-	/** Yellow contribution. */
+	/** Adds this amount to the yellow score. */
 	readonly yellow: number;
-	/** Green contribution. */
+	/** Adds this amount to the green score. */
 	readonly green: number;
-	/** Blue contribution. */
+	/** Adds this amount to the blue score. */
 	readonly blue: number;
-	/** Explorer contribution. */
+	/** Adds this amount to the Explorer score. */
 	readonly explorer: number;
-	/** Guardian contribution. */
+	/** Adds this amount to the Guardian score. */
 	readonly guardian: number;
 }
 
-/** Colour or working-style selection accepted at a current scoring tie. */
+/** Restricts a tie choice to a colour or working style presented by the scorer. */
 export type _LocalDevelopmentScoreSelection = PersonaColours | PersonaModifiers;
 
-/** Owner choice retained while the local scorer advances through ordered ties. */
+/** Records an owner choice while the local scorer advances through ordered ties. */
 export interface _LocalDevelopmentTieChoice
 {
-	/** Tie boundary the owner resolved. */
+	/** Identifies the tie that the owner resolved. */
 	readonly kind: PersonaResolutionKinds;
-	/** Candidate selected from the exact presented set. */
+	/** Keeps the candidate selected from the presented set. */
 	readonly selectedValue: _LocalDevelopmentScoreSelection;
 }
 
-/** Current score and its next unresolved tie. */
+/** Carries the current score and the next tie that still needs an owner choice. */
 export interface _LocalDevelopmentScore
 {
-	/** Raw colour totals from all ten reviewed answers. */
+	/** Stores colour totals from all ten reviewed answers. */
 	readonly colours: PersonaColourScores;
-	/** Raw working-style totals from the reviewed openness answers. */
+	/** Stores working-style totals from the reviewed openness answers. */
 	readonly openness: PersonaOpennessScores;
-	/** Selected primary colour, or null until its tie is resolved. */
+	/** Holds the selected primary colour, or null until its tie is resolved. */
 	readonly primary: PersonaColours | null;
-	/** Selected secondary colour, or null until its tie is resolved. */
+	/** Holds the selected secondary colour, or null until its tie is resolved. */
 	readonly secondary: PersonaColours | null;
-	/** Selected working style, or null until its tie is resolved. */
+	/** Holds the selected working style, or null until its tie is resolved. */
 	readonly modifier: PersonaModifiers | null;
-	/** Next tie the owner must resolve, or null when scoring is complete. */
+	/** Holds the next tie the owner must resolve, or null when scoring is complete. */
 	readonly resolution: { readonly kind: PersonaResolutionKinds; readonly candidates: readonly _LocalDevelopmentScoreSelection[] } | null;
 }

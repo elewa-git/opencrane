@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { PersonaFirstChatArchetypes } from "@opencrane/models/user-onboarding";
 
 import { APP_ROUTES, _LocalDevelopmentEntryRoute } from "../app.routes.local";
@@ -16,9 +17,11 @@ describe("Tier 1 local routes", function _TierOneLocalRoutes()
 
 	it("mounts only onboarding and chats without the live authentication guard", function _SupportedRoutes()
 	{
-		const mountedRoutes = APP_ROUTES.filter(function _MountedRoute(route) { return route.loadChildren !== undefined; });
-		expect(mountedRoutes.map(function _Path(route) { return route.path; })).toEqual(["onboarding", "chats"]);
-		expect(mountedRoutes.every(function _HasNoGuard(route) { return route.canActivate === undefined; })).toBe(true);
-		expect(APP_ROUTES.some(function _LiveOnlyRoute(route) { return route.path === "admin" || route.path === "settings" || route.path === "invite"; })).toBe(false);
+		const mountedRoutes = APP_ROUTES.filter(route => Boolean(route.loadChildren));
+		expect(mountedRoutes.map(route => route.path)).toEqual(["onboarding", "chats"]);
+		expect(mountedRoutes.every(route => !route.canActivate)).toBe(true);
+		expect(APP_ROUTES.some(route => route.path === "admin"
+			|| route.path === "settings"
+			|| route.path === "invite")).toBe(false);
 	});
 });

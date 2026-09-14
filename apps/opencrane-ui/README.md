@@ -64,11 +64,17 @@ acceptance), and `admin` (MCP tool administration). The root route redirects to
 remain on the ordinary chat route; the retired relational Agent-thread projection has no child URL.
 
 For frontend-only work, the default local command replaces live gateways with one disposable
-in-memory profile and starts at onboarding:
+in-memory profile and starts at onboarding. The same command also starts the interactive Storybook
+catalogue against its mocks and runs the Playwright visual pass against a separate static catalogue:
 
 ```bash
 npm run serve:opencrane-ui
 ```
+
+Open the routed application at `http://localhost:4200` and Storybook at
+`http://127.0.0.1:4400`. The static Playwright workbench uses port `4401` so it cannot compete with
+the interactive catalogue. Playwright finishes after checking every tagged visual contract while
+the routed application and Storybook continue running until the command is stopped.
 
 The four reviewed archetypes can open their deterministic personal-Agent conversation directly:
 

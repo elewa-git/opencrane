@@ -16,92 +16,92 @@ export type _LocalDevelopmentFirstChatGateway = typeof PERSONA_FIRST_CHAT_GATEWA
 /** Recovers the current first-chat answer command from its token-owned port. */
 export type _LocalDevelopmentFirstChatAnswerCommand = Parameters<_LocalDevelopmentFirstChatGateway["answer"]>[0];
 
-/** Accepted first-chat command retained so an exact retry returns the same projection. */
+/** Retains an accepted first-chat command so the same retry key returns its existing projection. */
 export interface _LocalDevelopmentFirstChatReceipt
 {
-	/** Original retry coordinate and payload. */
+	/** Preserves the coordinates and payload accepted for this retry key. */
 	readonly command: _LocalDevelopmentFirstChatAnswerCommand;
 }
 
-/** Mutable disposable data shared by every local gateway binding. */
+/** Shares the disposable, mutable fixture data used by every local gateway binding. */
 export interface _LocalDevelopmentState
 {
-	/** Currently selected reviewed archetype. */
+	/** Stores the reviewed archetype selected for this browser process. */
 	archetype: PersonaFirstChatArchetypes;
-	/** Selected deterministic scenario. */
+	/** Stores the deterministic scenario selected for this browser process. */
 	scenario: LocalDevelopmentScenarios;
-	/** Current persona workflow projection. */
+	/** Holds the current persona workflow projection. */
 	persona: PersonaOnboardingSnapshot;
-	/** Whether the one-time first chat exists. */
+	/** Marks whether the first chat has started. */
 	firstChatStarted: boolean;
-	/** Whether the one-time first chat passed validation. */
+	/** Marks whether the first chat has passed completion validation. */
 	firstChatCompleted: boolean;
-	/** Answers accepted into the first chat. */
+	/** Stores answers accepted into the first chat in question order. */
 	firstChatAnswers: string[];
-	/** Current reviewed persona tie choices in authority order. */
+	/** Stores reviewed persona tie choices by the scoring stage they resolve. */
 	personaResolutions: Map<PersonaResolutionKinds, PersonaColours | PersonaModifiers>;
-	/** First-chat successes indexed by retry key. */
+	/** Indexes accepted first-chat answers by retry key. */
 	firstChatReceipts: Map<string, _LocalDevelopmentFirstChatReceipt>;
-	/** Conversation creations indexed by their caller-scoped retry key. */
+	/** Indexes accepted conversation creations by caller-scoped retry key. */
 	conversationReceipts: Map<string, _LocalDevelopmentConversationReceipt>;
-	/** Participant messages indexed by conversation and retry key. */
+	/** Indexes accepted participant messages by conversation and retry key. */
 	messageReceipts: Map<string, _LocalDevelopmentMessageReceipt>;
-	/** File reservations indexed by conversation and retry key. */
+	/** Indexes accepted file reservations by conversation and retry key. */
 	assetReceipts: Map<string, _LocalDevelopmentAssetReceipt>;
-	/** Group-child requests indexed by their caller-scoped retry key. */
+	/** Indexes accepted group-child requests by caller-scoped retry key. */
 	groupChildReceipts: Map<string, _LocalDevelopmentGroupChildReceipt>;
-	/** Reviewed shares indexed by parent conversation and retry key. */
+	/** Indexes accepted reviewed shares by parent conversation and retry key. */
 	groupShareReceipts: Map<string, _LocalDevelopmentGroupShareReceipt>;
-	/** Whether the retry scenario still owes its single failure. */
+	/** Marks whether the retry scenario still owes its configured failure. */
 	retryAvailable: boolean;
-	/** Current conversation metadata rows. */
+	/** Stores the current conversation metadata rows. */
 	conversations: ConversationWorkspaceDetail[];
-	/** Current immutable history projections by conversation. */
+	/** Stores the current immutable-history projection for each conversation. */
 	histories: Map<string, ConversationHistoryProjection>;
-	/** Current file metadata by conversation. */
+	/** Stores the current file metadata for each conversation. */
 	assets: Map<string, ConversationAsset[]>;
-	/** Disposable file bytes by asset coordinate. */
+	/** Stores disposable file bytes by asset coordinate. */
 	assetBytes: Map<string, Blob>;
-	/** Current group-child request projections. */
+	/** Stores the current group-child request projections. */
 	children: GroupChildView[];
 }
 
-/** Ports whose behavior is owned by the shared workspace data. */
+/** Groups the workspace ports that read and mutate the shared fixture data. */
 export interface _LocalDevelopmentWorkspacePorts
 {
-	/** Conversation metadata and commands. */
+	/** Provides conversation metadata and commands. */
 	readonly workspace: ConversationWorkspaceGateway;
-	/** Immutable-history updates. */
+	/** Provides immutable-history reads and updates. */
 	readonly stream: ConversationEventStream;
-	/** File metadata and bytes. */
+	/** Provides conversation file metadata and bytes. */
 	readonly assets: ConversationAssetsGateway;
-	/** Personal activity rows. */
+	/** Provides personal activity rows. */
 	readonly personalRuns: ConversationPersonalRunsGateway;
-	/** Group-child requests and shares. */
+	/** Provides group-child requests and reviewed-result sharing. */
 	readonly groupChildren: ConversationGroupChildGateway;
-	/** Fail-closed computer review. */
+	/** Rejects computer review because Tier 1 has no Agent Sandbox. */
 	readonly computerReview: ConversationComputerReviewGateway;
 }
 
-/** Private collection of ports backed by one disposable local state owner. */
+/** Exposes the ports backed by one disposable local state owner to the provider factory. */
 export interface LocalDevelopmentOwnerPorts
 {
-	/** Persona interview commands and reads. */
+	/** Provides persona interview commands and reads. */
 	readonly persona: PersonaGateway;
-	/** First-chat commands and reads. */
+	/** Provides first-chat commands and reads. */
 	readonly firstChat: _LocalDevelopmentFirstChatGateway;
-	/** Conversation directory, snapshot, and message commands. */
+	/** Provides conversation directory, snapshot, and message commands. */
 	readonly workspace: ConversationWorkspaceGateway;
-	/** Conversation event updates. */
+	/** Provides conversation event reads and updates. */
 	readonly stream: ConversationEventStream;
-	/** Conversation file commands. */
+	/** Provides conversation file commands. */
 	readonly assets: ConversationAssetsGateway;
-	/** Recent personal run reads. */
+	/** Provides recent personal-run reads. */
 	readonly personalRuns: ConversationPersonalRunsGateway;
-	/** Group child commands. */
+	/** Provides group-child commands. */
 	readonly groupChildren: ConversationGroupChildGateway;
-	/** Active-computer review commands that fail closed locally. */
+	/** Rejects active-computer review commands because Tier 1 has no Agent Sandbox. */
 	readonly computerReview: ConversationComputerReviewGateway;
-	/** Fixed verified local subject used by own-message controls. */
+	/** Identifies the local subject that own-message controls treat as signed in. */
 	readonly subject: Signal<string | null>;
 }

@@ -12,7 +12,7 @@ const _LOCAL_DEVELOPMENT_ARCHETYPES = new Set<string>(Object.values(PersonaFirst
  *
  * @param value - Build-time value after Angular has replaced the constant.
  * @returns The exact reviewed archetype, or undefined for the plain onboarding build.
- * @throws When a named build embeds a value outside the current reviewed vocabulary.
+ * @throws When a named build embeds a value outside the current reviewed archetypes.
  */
 export function _ParseLocalDevelopmentArchetype(value: unknown): PersonaFirstChatArchetypes | undefined
 {
@@ -60,7 +60,7 @@ export function _ConfiguredLocalDevelopmentArchetype(): PersonaFirstChatArchetyp
 export function _ResolveLocalDevelopmentArchetype(explicitArchetype: PersonaFirstChatArchetypes | undefined): PersonaFirstChatArchetypes
 {
 	const parsedArchetype = _ParseLocalDevelopmentArchetype(explicitArchetype);
-	if (parsedArchetype !== undefined)
+	if (parsedArchetype)
 	{
 		return parsedArchetype;
 	}
@@ -79,7 +79,7 @@ export function _ResolveLocalDevelopmentArchetype(explicitArchetype: PersonaFirs
 export function _LocalDevelopmentScenario(search: string): LocalDevelopmentScenarios
 {
 	const value = new URLSearchParams(search).get("mockScenario");
-	if (value !== null && _LOCAL_DEVELOPMENT_SCENARIOS.has(value))
+	if (value && _LOCAL_DEVELOPMENT_SCENARIOS.has(value))
 	{
 		return value as LocalDevelopmentScenarios;
 	}
