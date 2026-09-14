@@ -79,6 +79,46 @@ review blocked private-session inspection. No identity-provider, credential boot
 controller restore or fresh testv6 deployment has run. These preparation results do not complete the
 remaining functional MVP journeys.
 
+The published ordered-loop commit `c737beca00f9b9fdb156ab6d438a7a583f8fc523` passes affected
+build/test/lint, generated API, KurrentDB recovery and all three applicable image smokes in run
+`34792406250`. Its PostgreSQL proposal (18), approval (3) and tool-result (4) cases pass. The five
+existing remote-MCP database cases still fail; Storybook visual review also remains open. This run
+publishes no images and does not qualify testv6. Live stack integrity passes for #888 → #891 → #892.
+
+### Personal-memory gateway steps — source continuation
+
+This slice starts at `c737beca00f9b9fdb156ab6d438a7a583f8fc523`, the published ordered-tool-loop
+commit in draft #892, on `feat/0.12-personal-memory-gateway-steps`. Architecture preflight passes
+for the shared contract, private gateway and existing server client. Provider operations and server
+transport now use the content-free deletion receipt. Validation passes 75 private-gateway tests,
+14 server-client tests, 162 shared-contract tests and 12 app/harness tests, including seven cases
+through both real HTTP adapters. All 80 affected packages pass lint/type checking. Full ESLint
+boundaries, workload/domain guards and their negative tests, release-manifest validation and
+TypeScript/Prisma style checks pass. Module growth has two reviewed responsibility inventories.
+The connected harness has explicit Nx test/type-check cache inputs outside the production package
+graph. Independent review found and fixed pre-dispatch Ensure/Delete read failures that incorrectly
+reported ambiguous mutation delivery. Independent integrated and architecture post-review pass. The remaining Low port-comment finding
+is corrected: mutation methods document the failure classes and when the caller must reconcile.
+The memory-gateway production bundle also builds successfully. Publication remains in progress.
+
+The private gateway owns dataset/document operations through its existing authenticated Cognee
+session. The server client sends one request per method and validates every receipt against the
+requested coordinates. The later personal-memory workflow remains the sole owner of saved phases,
+waiting and recovery; this slice does not register that worker or expose product commands.
+
+Replace the three unused, throwing personal-write methods with dataset/document step methods.
+Keep the public query and scoped-memory APIs and their existing consumers. Replace the old inbound
+search path with the shared memory-search contract on both ends; Cognee's upstream route remains
+inside the provider adapter. Delete superseded validators, receipt helpers and claims with the
+replacement. No new queue, schema, deployment or credential path is needed.
+
+First-dataset authorization remains blocked on the existing explicit source approval for
+`MemoryScopeCollection/Create`. Its recorded automatic-review rejection covers the persistent
+active-member grant expansion. The earlier ten-file client deletion proposal is not applied: this
+narrower edit preserves the working APIs, transport entrypoint and caller integration. Source tests
+will cover request authorization, delivery ambiguity, exact receipt binding and query regressions.
+Complete Remember/Recall/Correct/Forget journeys and testv6 qualification remain later gates.
+
 ### Bounded multi-step tool reasoning — added MVP acceptance
 
 The ordered-turn implementation wave starts at immutable review base
@@ -89,7 +129,8 @@ source now supports repeated tool reasoning. Final validation passes 678 convers
 160 contracts tests, 192 model-routing tests, 161 asset tests and 159 application tests. Nx affected
 lint/type checks pass for 80 projects; style, Prisma ownership, module-growth, workload and agent
 boundaries pass. Final independent review and architecture post-review pass with no remaining
-findings. This source slice is ready for publication; provider backoff and live qualification remain.
+findings. The source is published in #892 at `c737beca00f9b9fdb156ab6d438a7a583f8fc523`;
+provider backoff and live qualification remain.
 
 The one-tool result and text-only continuation was an earlier delivery slice. The complete
 MVP must support a repeated model → MCP call → persisted result → model cycle within one run.
@@ -118,6 +159,12 @@ and tool authority; AgentSandbox owns isolated, lease-fenced execution. No secon
   pagination and 429 backoff, revoked authority, requester approval, cancellation and loop exhaustion.
 - [ ] On testv6, complete a discovery-dependent multi-call business journey with pagination,
   reconciliation and a grounded answer, plus an approved write and its recovery/cancellation cases.
+
+The provider-backoff preflight confirms that read-only MCP discovery already uses bounded Absurd
+retries. Generic effectful `callTool` responses, including HTTP 429, remain `MaybeDispatched` and
+enter recovery without another call. `Retry-After` supplies a delay, not proof that no effect
+occurred. Automatic effectful backoff needs a trusted adapter contract proving rejection before
+tool admission; that contract is absent from the current generic remote MCP registration.
 
 The source loop builds above the completed quality fixes. Provider backoff and live qualification
 remain functional gates alongside memory, delegation, scheduling and administration before the

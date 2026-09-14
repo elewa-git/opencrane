@@ -15,6 +15,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Fixed
 
+- **Memory integrations can execute and verify individual provider steps through the private gateway.**
+  Dataset lookup, document storage, indexing and deletion return typed receipts that can be checked
+  against saved operation coordinates. Add and delete reconcile existing provider state before
+  repeating a mutation; unknown delivery remains distinct from success or an empty recall. The
+  server retains its query and scoped-memory APIs. Product Remember, Correct and Forget commands,
+  first-dataset permission and live memory qualification remain unfinished.
+
 - **Run recovery cannot replace the original model, token, tool, cycle or time allowance.** New
   revisions and admitted inputs carry explicit limits, including an optional extra revision spend
   cap. Missing or malformed limits fail closed, and compilation preserves the original deadline.

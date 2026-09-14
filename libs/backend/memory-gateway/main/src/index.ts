@@ -7,3 +7,5 @@ export { __CreateCogneeProviderSession } from "./provider/auth/cognee-provider-s
 export { CogneeProviderSessionError } from "./provider/auth/cognee-provider-session-error";
 export { CogneeProviderSessionFailureCodes } from "./provider/auth/cognee-provider-session.types";
 export type { CogneeProviderCredentialReader, CogneeProviderCredentials, CogneeProviderSession, CogneeProviderSessionOptions } from "./provider/auth/cognee-provider-session.types";
+export { _CreateCogneeMemoryGatewayProviderOperations } from "./provider/operations/cognee-memory-gateway-provider-operations";
+export type { MemoryGatewayProviderOperations } from "./provider/operations/memory-gateway-provider-operations.types";

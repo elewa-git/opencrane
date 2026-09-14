@@ -1,4 +1,6 @@
-import { MemoryGatewayErrorCodes, MemoryMutationDeliveryStates } from "@opencrane/contracts";
+import { createHash } from "node:crypto";
+
+import { MEMORY_GATEWAY_LIMITS, MemoryGatewayErrorCodes, MemoryMutationDeliveryStates } from "@opencrane/contracts";
 import { z, type ZodType } from "zod";
 
 import { CogneeProviderSessionError } from "../auth/cognee-provider-session-error";
@@ -10,6 +12,12 @@ import { MemoryGatewayProviderMutationError, MemoryGatewayProviderReadError } fr
 export function _CanonicalProviderUuid(value: string): string
 {
 	return value.toLowerCase();
+}
+
+/** Calculate the stable digest over complete provider document bytes. */
+export function _ContentDigest(bytes: Uint8Array): string
+{
+	return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 
 /** Decode provider JSON without retaining its parse failure or content. */
@@ -105,3 +113,6 @@ export function _ProviderJson(value: unknown): string
 
 /** UUID-keyed map returned by blocking Cognify. */
 export const _ProviderRunMapSchema = z.record(z.string().uuid(), z.unknown());
+
+/** Bound provider document listing and reconciliation work. */
+export const _MaximumProviderDocuments = MEMORY_GATEWAY_LIMITS.DocumentResultsMaximum;
