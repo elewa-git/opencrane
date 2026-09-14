@@ -3,5 +3,8 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 import { _PackageCacheDir } from "../../../../../vitest.cache";
 
-/** Exercises command admission and catalog transactions against the checked-in PostgreSQL baseline. */
-export default defineConfig({ cacheDir: _PackageCacheDir(import.meta.url), plugins: [tsconfigPaths({ projects: ["../../../../../tsconfig.vitest.json"] })], test: { include: ["src/memory/workflow/__tests__/*.sql.test.ts", "src/memory/commands/__tests__/*.sql.test.ts"] } });
+/**
+ * Runs the suites separately because their Serializable transactions share database tables.
+ * Each test still runs its explicit concurrent requests to prove admission and replay races.
+ */
+export default defineConfig({ cacheDir: _PackageCacheDir(import.meta.url), plugins: [tsconfigPaths({ projects: ["../../../../../tsconfig.vitest.json"] })], test: { fileParallelism: false, include: ["src/memory/workflow/__tests__/*.sql.test.ts", "src/memory/commands/__tests__/*.sql.test.ts"] } });
