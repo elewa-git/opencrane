@@ -179,10 +179,15 @@ restore a 0.10 upgrade path or a retired runtime.
 | Tier 3 agent | Infra plus governed provider setup, onboarding and one real Agent Sandbox conversation turn | Implemented; live host qualification and a provider key remain required |
 
 The checked-in development container pins Node.js 24, Docker 28.5.1, Helm 4.1.4, k3d 5.8.3 and
-kubectl 1.30.10. A local workstation can use its own compatible tools. Tier 3 requires at least 4
-cores, 16 GB memory and 32 GB total storage; 8 cores, 32 GB memory and 64 GB storage are recommended.
-The command reports both the measured total and available storage. It stops on a minimum shortfall
-without deleting dependency caches, clusters, images or other developer state.
+kubectl 1.30.10 on both amd64 and arm64 Codespaces. A local workstation can use its own compatible
+tools. Tier 3 requires at least 4 cores, 16 GB memory and 32 GB total storage; 8 cores, 32 GB memory
+and 64 GB storage are recommended.
+The command measures total and available space on Docker's backing filesystem, where k3d stores its
+nodes and images; it does not substitute the checkout filesystem when Docker Desktop uses a separate
+VM disk. The total-space thresholds retain the host requirements above, while available space is
+reported for diagnosis. A lightweight BusyBox probe image may be pulled when it is not already
+present. The command stops on a minimum shortfall without deleting dependency caches, clusters,
+images or other developer state.
 
 Start the credential-free infrastructure profile:
 

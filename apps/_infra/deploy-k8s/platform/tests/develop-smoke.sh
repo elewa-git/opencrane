@@ -26,11 +26,12 @@ SMOKE_BASE_SHA="${SMOKE_BASE_SHA:-}"
 SMOKE_REGISTRY="${SMOKE_REGISTRY:-ghcr.io/elewa-git}"
 SMOKE_STORAGE_MODE="${SMOKE_STORAGE_MODE:-full}"
 SMOKE_INGRESS_PORT="${SMOKE_INGRESS_PORT:-8443}"
-SMOKE_RESOURCE_OWNER="${SMOKE_RESOURCE_OWNER:-}"
+SMOKE_RESOURCE_OWNER="${SMOKE_RESOURCE_OWNER:-develop-smoke-$$}"
 OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL="${OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL:-}"
 SMOKE_LOCAL_REGISTRY_NAME="${CLUSTER_NAME}-registry"
 SMOKE_LOCAL_REGISTRY_ADDRESS=""
 SMOKE_CLUSTER_CREATED=0
+SMOKE_REGISTRY_CREATED=0
 KEY_DIR=""
 CSI_DIR=""
 IMAGE_PREPARATION_PID=""
@@ -93,6 +94,35 @@ _diagnostics()
   echo "[develop-smoke] ===== end diagnostics ====="
 }
 
+# Refuse to replace a same-named resource unless its server label and registry network still match
+# this invocation. The coordinator performs an earlier check, but the smoke repeats it next to the
+# destructive command so a changed Docker object is not treated as the one that was reviewed.
+_assert_owned_resource_set()
+{
+  local cluster_container="k3d-${CLUSTER_NAME}-server-0"
+  local registry_container="k3d-${SMOKE_LOCAL_REGISTRY_NAME}"
+  local current_owner=""
+  local registry_networks=""
+  if docker inspect "$cluster_container" >/dev/null 2>&1; then
+    current_owner="$(docker inspect --format '{{ index .Config.Labels "opencrane.tier3.owner" }}' "$cluster_container")"
+    if [[ "$current_owner" != "$SMOKE_RESOURCE_OWNER" ]]; then
+      echo "[develop-smoke] Refusing resource replacement: '$cluster_container' is owned by '${current_owner:-unknown}'." >&2
+      return 1
+    fi
+  fi
+  if docker inspect "$registry_container" >/dev/null 2>&1; then
+    if ! docker inspect "$cluster_container" >/dev/null 2>&1 && [[ "$SMOKE_REGISTRY_CREATED" != "1" ]]; then
+      echo "[develop-smoke] Refusing registry replacement without its owner-labelled cluster." >&2
+      return 1
+    fi
+    registry_networks="$(docker inspect --format '{{json .NetworkSettings.Networks}}' "$registry_container")"
+    if docker inspect "$cluster_container" >/dev/null 2>&1 && [[ "$registry_networks" != *"\"k3d-${CLUSTER_NAME}\""* ]]; then
+      echo "[develop-smoke] Refusing registry replacement outside the owner-labelled cluster network." >&2
+      return 1
+    fi
+  fi
+}
+
 # Remove everything the run left in the Docker daemon: the cluster, any node containers a
 # killed earlier run stranded, their named + anonymous volumes, and the label-scoped images.
 # Without this, repeated smoke runs accumulate multi-GB writable layers and dangling image
@@ -100,6 +130,7 @@ _diagnostics()
 _teardown_cluster_storage()
 {
   local containers volumes volume
+  _assert_owned_resource_set || return 1
   containers="$(docker ps -aq --filter "name=^k3d-${CLUSTER_NAME}-" 2>/dev/null || true)"
   volumes=""
   if [[ -n "$containers" ]]; then
@@ -549,16 +580,16 @@ _prepare_images &
 IMAGE_PREPARATION_PID=$!
 
 echo "[develop-smoke] Creating disposable k3d cluster '$CLUSTER_NAME'"
+_assert_owned_resource_set
 k3d cluster delete "$CLUSTER_NAME" >/dev/null 2>&1 || true
 k3d registry delete "$SMOKE_LOCAL_REGISTRY_NAME" >/dev/null 2>&1 || true
 k3d registry create "$SMOKE_LOCAL_REGISTRY_NAME" --port 127.0.0.1:0 --no-help
+SMOKE_REGISTRY_CREATED=1
 registry_port="$(docker inspect --format '{{(index (index .NetworkSettings.Ports "5000/tcp") 0).HostPort}}' "k3d-${SMOKE_LOCAL_REGISTRY_NAME}")"
 [[ "$registry_port" =~ ^[0-9]+$ ]] || { echo "[develop-smoke] Registry has no loopback host port" >&2; exit 1; }
 SMOKE_LOCAL_REGISTRY_ADDRESS="127.0.0.1:${registry_port}"
 cluster_create_arguments=(cluster create "$CLUSTER_NAME" --image "$K3S_IMAGE" --port "${SMOKE_INGRESS_PORT}:443@loadbalancer" --registry-use "k3d-${SMOKE_LOCAL_REGISTRY_NAME}:5000" --wait)
-if [[ -n "$SMOKE_RESOURCE_OWNER" ]]; then
-  cluster_create_arguments+=(--runtime-label "opencrane.tier3.owner=${SMOKE_RESOURCE_OWNER}@server:*")
-fi
+cluster_create_arguments+=(--runtime-label "opencrane.tier3.owner=${SMOKE_RESOURCE_OWNER}@server:*")
 k3d "${cluster_create_arguments[@]}"
 SMOKE_CLUSTER_CREATED=1
 

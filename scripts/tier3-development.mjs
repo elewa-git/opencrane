@@ -25,7 +25,7 @@ export async function runTier3Development(options, operations = {})
 {
 	const write = operations.write ?? function _Write(message) { process.stdout.write(message); };
 	const environment = operations.environment ?? process.env;
-	const capacity = classifyTier3Capacity(await (operations.measureCapacity ?? measureTier3Capacity)(_REPOSITORY_ROOT));
+	const capacity = classifyTier3Capacity(await (operations.measureCapacity ?? measureTier3Capacity)());
 	write(`${formatTier3Capacity(capacity)}\n`);
 	if (capacity.minimumShortfalls.length) throw new Error(`Tier 3 minimum is not met: ${capacity.minimumShortfalls.join(", ")}. No caches, clusters, or images were deleted.`);
 	if (capacity.recommendedShortfalls.length) write(`Tier 3 recommendation not met: ${capacity.recommendedShortfalls.join(", ")}. The minimum profile remains supported.\n`);

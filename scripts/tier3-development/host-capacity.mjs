@@ -4,23 +4,19 @@ import { promisify } from "node:util";
 
 const _EXEC_FILE = promisify(execFile);
 const _GIB = 1_073_741_824;
+const _STORAGE_PROBE_IMAGE = "busybox:1.36.1";
 const TIER3_MINIMUM_CAPACITY = Object.freeze({ cpu: 4, memoryGiB: 16, storageGiB: 32 });
 const TIER3_RECOMMENDED_CAPACITY = Object.freeze({ cpu: 8, memoryGiB: 32, storageGiB: 64 });
 
 /**
- * Measures CPU, memory, and the filesystem that holds the current checkout.
- * The coordinator reports these values before acquiring or deleting any host resource.
+ * Measures CPU, memory, and the Docker filesystem that will hold the k3d nodes and images.
+ * The lightweight probe container sees Docker Desktop's VM disk as well as a local Linux daemon,
+ * while the workstation checkout filesystem can be a different device.
  * @returns The measured CPU count and memory, total storage, and available storage in GiB.
  */
-export async function measureTier3Capacity(repositoryRoot, operations = {})
+export async function measureTier3Capacity(operations = {})
 {
-	const stat = operations.stat ?? async function _Stat(path)
-	{
-		const result = await _EXEC_FILE("df", ["-Pk", path]);
-		const fields = result.stdout.trim().split("\n").at(-1).trim().split(/\s+/u);
-		return { availableGiB: Number(fields[3]) * 1_024 / _GIB, totalGiB: Number(fields[1]) * 1_024 / _GIB };
-	};
-	const storage = await stat(repositoryRoot);
+	const storage = await (operations.measureStorage ?? _MeasureDockerStorage)(operations.execFile ?? _EXEC_FILE);
 	return { cpu: (operations.cpus ?? cpus)().length, memoryGiB: (operations.totalmem ?? totalmem)() / _GIB, storageAvailableGiB: storage.availableGiB, storageGiB: storage.totalGiB };
 }
 
@@ -51,6 +47,17 @@ function _Shortfalls(measured, target)
 	if (measured.cpu < target.cpu) shortfalls.push(`${target.cpu - measured.cpu} more CPU required`);
 	if (measured.memoryGiB < target.memoryGiB) shortfalls.push(`${(target.memoryGiB - measured.memoryGiB).toFixed(1)} GiB more memory required`);
 	if (measured.storageGiB < target.storageGiB) shortfalls.push(`${(target.storageGiB - measured.storageGiB).toFixed(1)} GiB more allocated storage required`);
-	if (measured.storageAvailableGiB < target.storageGiB) shortfalls.push(`${(target.storageGiB - measured.storageAvailableGiB).toFixed(1)} GiB more available storage required`);
 	return shortfalls;
+}
+
+/** Measure the filesystem exposed to containers without reading an unrelated checkout device. */
+async function _MeasureDockerStorage(execFileImplementation)
+{
+	const result = await execFileImplementation("docker", ["run", "--rm", "--pull=missing", "--network", "none", "--read-only", _STORAGE_PROBE_IMAGE, "df", "-Pk", "/"]);
+	const fields = result.stdout.trim().split("\n").at(-1)?.trim().split(/\s+/u) ?? [];
+	const totalKiB = Number(fields[1]);
+	const availableKiB = Number(fields[3]);
+	if (!Number.isFinite(totalKiB) || !Number.isFinite(availableKiB) || totalKiB <= 0 || availableKiB < 0)
+		throw new Error("Tier 3 could not read Docker backing-storage capacity from its probe container.");
+	return { availableGiB: availableKiB * 1_024 / _GIB, totalGiB: totalKiB * 1_024 / _GIB };
 }

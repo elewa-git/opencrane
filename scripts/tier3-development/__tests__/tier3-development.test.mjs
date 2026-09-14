@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
-import { classifyTier3Capacity, formatTier3Capacity } from "../host-capacity.mjs";
+import { classifyTier3Capacity, formatTier3Capacity, measureTier3Capacity } from "../host-capacity.mjs";
 import { buildTier3UpstreamRequestOptions, configureTier3UpstreamTimeout } from "../browser-proxy.mjs";
 import { readTier3IngressCertificate } from "../ingress-certificate.mjs";
 import { parseTier3Options } from "../options.mjs";
@@ -22,8 +23,25 @@ test("reports exact minimum and recommended host shortfalls", function _Capacity
 {
 	const result = classifyTier3Capacity({ cpu: 4, memoryGiB: 16, storageAvailableGiB: 40, storageGiB: 64 });
 	assert.deepEqual(result.minimumShortfalls, []);
-	assert.deepEqual(result.recommendedShortfalls, ["4 more CPU required", "16.0 GiB more memory required", "24.0 GiB more available storage required"]);
+	assert.deepEqual(result.recommendedShortfalls, ["4 more CPU required", "16.0 GiB more memory required"]);
 	assert.match(formatTier3Capacity(result), /4 CPU, 16\.0 GiB memory, 64\.0 GiB storage \(40\.0 GiB available\)/u);
+});
+
+test("measures the Docker backing filesystem instead of the checkout device", async function _DockerCapacity()
+{
+	const calls = [];
+	const measured = await measureTier3Capacity({
+		cpus: function _Cpus() { return [{}, {}, {}, {}]; },
+		execFile: async function _Run(command, arguments_)
+		{
+			calls.push([command, arguments_]);
+			return { stdout: "Filesystem 1024-blocks Used Available Capacity Mounted on\noverlay 67108864 1048576 66060288 2% /\n" };
+		},
+		totalmem: function _Memory() { return 16 * 1_073_741_824; },
+	});
+	assert.deepEqual(measured, { cpu: 4, memoryGiB: 16, storageAvailableGiB: 63, storageGiB: 64 });
+	assert.equal(calls[0][0], "docker");
+	assert.deepEqual(calls[0][1].slice(0, 3), ["run", "--rm", "--pull=missing"]);
 });
 
 test("refuses foreign and implicit owned replacement", function _Ownership()
@@ -80,6 +98,22 @@ test("retries cleanup after the registry was deleted but cluster deletion failed
 	await assert.rejects(downTier3Resources(operations), /cluster deletion failed/u);
 	await downTier3Resources(operations);
 	assert.deepEqual(calls, [["registry", "delete"], ["cluster", "delete"], ["cluster", "delete"]]);
+});
+
+test("rechecks ownership immediately before deleting a retained resource", async function _CleanupOwnershipRace()
+{
+	let inspections = 0;
+	let deleted = false;
+	const owner = (await import("../resource-ownership.mjs")).tier3ResourceIdentity(new URL("../../..", import.meta.url).pathname).owner;
+	await assert.rejects(downTier3Resources({
+		inspectResources: async function _Inspect()
+		{
+			inspections += 1;
+			return { clusterExists: true, existingOwner: inspections === 1 ? owner : "replacement-owner", registryExists: false };
+		},
+		run: async function _Run() { deleted = true; },
+	}), /resource collision/u);
+	assert.equal(deleted, false);
 });
 
 test("reads only the Secret selected by the live Certificate", async function _Certificate()
@@ -157,10 +191,24 @@ test("closes the browser proxy when the agent qualification fails", async functi
 
 test("keeps the shared smoke defaults compatible with CI", async function _SmokeContract()
 {
-	const source = await import("node:fs/promises").then(function _Read(fs) { return fs.readFile(new URL("../../../apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh", import.meta.url), "utf8"); });
+	const source = await readFile(new URL("../../../apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh", import.meta.url), "utf8");
 	assert.match(source, /SMOKE_INGRESS_PORT="\$\{SMOKE_INGRESS_PORT:-8443\}"/u);
-	assert.match(source, /SMOKE_RESOURCE_OWNER="\$\{SMOKE_RESOURCE_OWNER:-\}"/u);
+	assert.match(source, /SMOKE_RESOURCE_OWNER="\$\{SMOKE_RESOURCE_OWNER:-develop-smoke-\$\$\}"/u);
 	assert.match(source, /--runtime-label "opencrane\.tier3\.owner=\$\{SMOKE_RESOURCE_OWNER\}@server:\*"/u);
+	assert.match(source, /_assert_owned_resource_set/u);
 	assert.match(source, /if \[\[ "\$KEEP_CLUSTER" == "1" && "\$SMOKE_CLUSTER_CREATED" == "1" \]\]; then/u);
 	assert.match(source, /SMOKE_CLUSTER_CREATED=1/u);
+});
+
+test("pins the Tier 3 devcontainer tools for amd64 and arm64", async function _DevcontainerContract()
+{
+	const source = await readFile(new URL("../../../.devcontainer/Dockerfile", import.meta.url), "utf8");
+	assert.match(source, /ARG TARGETARCH/u);
+	assert.match(source, /amd64\) HELM_SHA256="\$\{HELM_SHA256_AMD64\}"; K3D_SHA256="\$\{K3D_SHA256_AMD64\}"; KUBECTL_SHA256="\$\{KUBECTL_SHA256_AMD64\}"/u);
+	assert.match(source, /arm64\) HELM_SHA256="\$\{HELM_SHA256_ARM64\}"; K3D_SHA256="\$\{K3D_SHA256_ARM64\}"; KUBECTL_SHA256="\$\{KUBECTL_SHA256_ARM64\}"/u);
+	assert.match(source, /Unsupported Tier 3 devcontainer architecture/u);
+	assert.match(source, /helm-\$\{HELM_VERSION\}-linux-\$\{TARGETARCH\}\.tar\.gz/u);
+	assert.match(source, /k3d-linux-\$\{TARGETARCH\}/u);
+	assert.match(source, /bin\/linux\/\$\{TARGETARCH\}\/kubectl/u);
+	assert.equal((source.match(/sha256sum --check -/gu) ?? []).length, 3);
 });

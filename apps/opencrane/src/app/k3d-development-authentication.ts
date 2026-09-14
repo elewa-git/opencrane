@@ -21,10 +21,10 @@ import type { PublicAuthenticationComposition } from "./public-app.types";
  */
 export async function _CreateK3dDevelopmentAuthentication(prisma: Parameters<typeof _AdmitDevelopmentIdentity>[0], config: K3dDevelopmentAuthenticationConfig, log: Logger): Promise<PublicAuthenticationComposition>
 {
-	const principal = await _AdmitDevelopmentIdentity(prisma, config.identity, __CreateStandaloneFirstUserAdmissionAuditAppender(), log);
 	const credential = readFileSync(config.credentialPath, "utf8").trim();
 	if (!/^[A-Za-z0-9_-]{43}$/u.test(credential))
 		throw new Error("k3d development credential must contain one 32-byte base64url proof");
+	const principal = await _AdmitDevelopmentIdentity(prisma, config.identity, __CreateStandaloneFirstUserAdmissionAuditAppender(), log);
 	const identity: DevelopmentIdentity = { displayName: config.identity.displayName, email: config.identity.email, issuer: config.identity.issuer, principalId: principal.principalId, siloId: config.identity.siloId, subjectId: config.identity.subject };
 	const capabilities = new PrismaAuthenticatedPrincipalCapabilityUnitOfWork(prisma, log);
 	const admission = new PrismaAuthenticatedPrincipalAdmissionUnitOfWork(prisma, log);

@@ -17,12 +17,27 @@ const _REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url));
 export async function downTier3Resources(operations = {})
 {
 	const identity = tier3ResourceIdentity(_REPOSITORY_ROOT);
-	const resources = await (operations.inspectResources ?? inspectTier3Resources)(identity);
+	const inspectResources = operations.inspectResources ?? inspectTier3Resources;
+	let resources = await inspectResources(identity);
 	if (resources.existingOwner === null) return;
 	assertTier3ResourceReplacement(resources.existingOwner, identity.owner, true);
 	const run = operations.run ?? async function _Run(command, arguments_) { await _EXEC_FILE(command, arguments_); };
-	if (resources.registryExists) await run("k3d", ["registry", "delete", identity.registryName]);
-	if (resources.clusterExists) await run("k3d", ["cluster", "delete", identity.clusterName]);
+	if (resources.registryExists)
+	{
+		resources = await inspectResources(identity);
+		if (resources.existingOwner !== null)
+			assertTier3ResourceReplacement(resources.existingOwner, identity.owner, true);
+		if (resources.registryExists)
+			await run("k3d", ["registry", "delete", identity.registryName]);
+	}
+	if (resources.clusterExists)
+	{
+		resources = await inspectResources(identity);
+		if (resources.existingOwner !== null)
+			assertTier3ResourceReplacement(resources.existingOwner, identity.owner, true);
+		if (resources.clusterExists)
+			await run("k3d", ["cluster", "delete", identity.clusterName]);
+	}
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) downTier3Resources().catch(function _Failure(error) { process.stderr.write(`Tier 3 cleanup failed: ${error.message}\n`); process.exitCode = 1; });
