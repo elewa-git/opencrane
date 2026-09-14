@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { Absurd } from "absurd-sdk";
-import { MemoryFactState, OrgMemberStatus, PrismaClient } from "@prisma/client";
+import { MemoryFactState, OrgMemberStatus, Prisma, PrismaClient } from "@prisma/client";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -146,6 +146,51 @@ describe("personal-memory command admission on PostgreSQL and Absurd", function 
 			expect(await _QueueOwner.fetchTaskResult(receipts[0]!.taskId)).not.toBeNull();
 		}
 		finally { await firstEngine.close(); await secondEngine.close(); }
+	});
+
+	it("retries a proven P2034 rollback after real spawn and commits only the fresh task", async function _RetryRolledBackSpawn()
+	{
+		const fixture = await _PersonalMemoryCommandSqlFixture(_Database);
+		const commandId = randomUUID();
+		const operationId = randomUUID();
+		const command = _Forget(commandId, fixture);
+		const engine = _Engine();
+		const receipts: IWorkflowTaskReceipt[] = [];
+		const admit = PrismaPersonalMemoryOperationRepository.prototype.admit;
+		let attempts = 0;
+		const conflict = vi.spyOn(PrismaPersonalMemoryOperationRepository.prototype, "admit").mockImplementation(async function _ForceFirstConflict(this: PrismaPersonalMemoryOperationRepository, operation, admitTask)
+		{
+			const result = await admit.call(this, operation, admitTask);
+			attempts += 1;
+			if (attempts === 1)
+				throw new Prisma.PrismaClientKnownRequestError("forced transaction rollback after real task admission", { code: "P2034", clientVersion: "test" });
+			return result;
+		});
+		try
+		{
+			await expect(_Authority(_Database, _ObservedEngine(engine, receipts), operationId).admit(fixture.caller, command)).resolves.toMatchObject({ outcome: PersonalMemoryCommandAdmissionOutcomes.Accepted, receipt: { operationId } });
+			expect(attempts).toBe(2);
+			expect(receipts).toHaveLength(2);
+			const operation = await _Observer.personalMemoryOperation.findUniqueOrThrow({ where: { id: operationId } });
+			expect(operation.workflowTaskId).toBe(receipts[1]!.taskId);
+			expect(await _QueueOwner.fetchTaskResult(receipts[0]!.taskId)).toBeNull();
+			expect(await _QueueOwner.fetchTaskResult(operation.workflowTaskId)).not.toBeNull();
+			expect(await _Observer.personalMemoryOperation.count({ where: { siloId: fixture.caller.siloId } })).toBe(1);
+			expect(await _AuditCount(fixture.caller.siloId)).toBe(1);
+			expect(await _Observer.memoryFactCatalog.findUniqueOrThrow({ where: { id: fixture.factId } })).toMatchObject({ state: MemoryFactState.ForgetPending, revision: 2 });
+			const restartedClient = new PrismaClient();
+			const restartedEngine = _Engine();
+			try
+			{
+				await expect(_Authority(restartedClient, _ObservedEngine(restartedEngine, receipts), operationId).admit(fixture.caller, command)).resolves.toMatchObject({ outcome: PersonalMemoryCommandAdmissionOutcomes.Idempotent, receipt: { operationId } });
+			}
+			finally { await restartedClient.$disconnect(); await restartedEngine.close(); }
+			expect(receipts).toHaveLength(2);
+			expect(await _Observer.personalMemoryOperation.count({ where: { siloId: fixture.caller.siloId } })).toBe(1);
+			expect(await _AuditCount(fixture.caller.siloId)).toBe(1);
+			expect(await _QueueOwner.fetchTaskResult(operation.workflowTaskId)).not.toBeNull();
+		}
+		finally { conflict.mockRestore(); await engine.close(); }
 	});
 
 	it("a failure after real spawn rolls back the audit, operation, task and Forget hide", async function _Rollback()

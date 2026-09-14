@@ -261,10 +261,17 @@ Run `nx run backend-server-conversations:test:integration` with `KURRENTDB_INTEG
 exercise approval, tool-result and answer recovery against a real history server. Ordinary package
 tests use controlled ports.
 
-`nx run backend-server-conversations:test:sql` runs the existing group-child SQL checks and the
-personal-memory catalog commit, authority-revocation, rollback, and conflict cases against the
-unchanged database baseline. Those fixtures create synthetic grants for the test only; production
-still has no personal-memory command grant or admission route.
+`nx run backend-server-conversations:test:sql` runs the group-child SQL checks, personal-memory
+catalog checks, and command admission against the unchanged database baseline and actual Absurd
+tasks. The command cases cover committed audit evidence, concurrent replay, rollback and current
+authority. The fixtures create synthetic grants for these tests. Production command routes require
+an existing active dataset and current permissions; they do not create the first dataset or grant
+themselves access.
+
+The memory SQL files run separately so unrelated fixture writes cannot exhaust each other's
+Serializable retries. Tests still start concurrent command requests where admission races are the
+subject of the test. Rollback checks inspect committed database state: obtaining a task receipt
+inside a transaction does not mean that transaction committed.
 
 ## See also
 
