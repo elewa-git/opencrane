@@ -19,7 +19,11 @@ export default defineConfig({
 
   head: [
     // base-aware so the favicon resolves under project pages (/opencrane/) too.
-    ['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}logo.svg` }],
+    ['link', {
+      rel: 'icon',
+      type: 'image/svg+xml',
+      href: `${base}logo.svg`,
+    }],
     ['meta', { name: 'theme-color', content: '#14a8c4' }],
   ],
 

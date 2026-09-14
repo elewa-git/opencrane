@@ -5,7 +5,7 @@ import { provideLocalDevelopmentGateways } from "@opencrane/state/local-developm
 import { _BrowserLocalDevelopmentScenario, _ConfiguredLocalDevelopmentArchetype, _ResolveLocalDevelopmentArchetype } from "./local-development-profile";
 
 /** Records whether the plain command must run the complete onboarding journey. */
-const _LOCAL_DEVELOPMENT_STARTS_WITH_ONBOARDING = _ConfiguredLocalDevelopmentArchetype() === undefined;
+const _LOCAL_DEVELOPMENT_STARTS_WITH_ONBOARDING = !_ConfiguredLocalDevelopmentArchetype();
 
 /** Stores the deterministic archetype used by this disposable local profile. */
 const _LOCAL_DEVELOPMENT_ARCHETYPE = _ResolveLocalDevelopmentArchetype(_ConfiguredLocalDevelopmentArchetype());

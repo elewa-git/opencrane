@@ -14,7 +14,7 @@ import { _ConfiguredLocalDevelopmentArchetype } from "./local-development-profil
  */
 export function _LocalDevelopmentEntryRoute(explicitArchetype: PersonaFirstChatArchetypes | undefined): string
 {
-	if (explicitArchetype === undefined)
+	if (!explicitArchetype)
 	{
 		return "onboarding";
 	}
@@ -25,8 +25,26 @@ export function _LocalDevelopmentEntryRoute(explicitArchetype: PersonaFirstChatA
 /** Stores one entry decision for every redirect in this build. */
 const _LOCAL_DEVELOPMENT_ENTRY_ROUTE = _LocalDevelopmentEntryRoute(_ConfiguredLocalDevelopmentArchetype());
 
+/** Loads the current onboarding feature without making it a static Tier 1 dependency. */
+function loadOnboardingRoutes()
+{
+	return import("@opencrane/features/onboarding").then(function pickOnboardingRoutes(module)
+	{
+		return module.ONBOARDING_ROUTES;
+	});
+}
+
+/** Loads the current conversation workspace without making it a static Tier 1 dependency. */
+function loadConversationWorkspaceRoutes()
+{
+	return import("@opencrane/features/conversation-workspace").then(function pickConversationWorkspaceRoutes(module)
+	{
+		return module.CONVERSATION_WORKSPACE_ROUTES;
+	});
+}
+
 /**
- * Routes supported by the backend-free Tier 1 profile.
+ * Defines the routes supported by the backend-free Tier 1 profile.
  *
  * The local profile mounts the current onboarding and chat features without the live authentication
  * guard. Backend-owned administration, settings, invitation, and sign-in routes redirect to the
@@ -42,24 +60,16 @@ export const APP_ROUTES: Routes =
 	},
 	{
 		path: "onboarding",
-		loadChildren: function loadOnboardingRoutes()
-		{
-			return import("@opencrane/features/onboarding").then(function pickOnboardingRoutes(module)
-			{
-				return module.ONBOARDING_ROUTES;
-			});
-		}
+		loadChildren: loadOnboardingRoutes
 	},
 	{
 		path: "chats",
-		loadChildren: function loadConversationWorkspaceRoutes()
-		{
-			return import("@opencrane/features/conversation-workspace").then(function pickConversationWorkspaceRoutes(module)
-			{
-				return module.CONVERSATION_WORKSPACE_ROUTES;
-			});
-		}
+		loadChildren: loadConversationWorkspaceRoutes
 	},
-	{ path: "", pathMatch: "full", redirectTo: _LOCAL_DEVELOPMENT_ENTRY_ROUTE },
+	{
+		path: "",
+		pathMatch: "full",
+		redirectTo: _LOCAL_DEVELOPMENT_ENTRY_ROUTE
+	},
 	{ path: "**", redirectTo: _LOCAL_DEVELOPMENT_ENTRY_ROUTE }
 ];

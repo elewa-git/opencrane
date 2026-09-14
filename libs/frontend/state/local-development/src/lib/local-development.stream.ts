@@ -12,22 +12,39 @@ function _Delay(milliseconds: number): Promise<void>
 /** Creates deterministic live, slow, reconnecting, and access-changed stream behavior. */
 export function _CreateLocalDevelopmentStream(state: _LocalDevelopmentState): ConversationEventStream
 {
-	return { stream: async function _Stream(command: StreamConversationEventsCommand)
+	async function _Stream(command: StreamConversationEventsCommand)
 	{
 		const history = state.histories.get(command.conversationId) ?? __CreateConversationHistoryProjection();
+
 		if (state.scenario === LocalDevelopmentScenarios.Slow)
 		{
 			await _Delay(80);
 		}
+
 		if (state.scenario === LocalDevelopmentScenarios.AccessChanged)
 		{
 			const empty = __CreateConversationHistoryProjection();
-			command.onUpdate?.({ status: ConversationEventStreamStatuses.AccessChanged, state: empty, reconnectAttempt: 0, lastHeartbeatAt: Date.now() });
+			command.onUpdate?.({
+				status: ConversationEventStreamStatuses.AccessChanged,
+				state: empty,
+				reconnectAttempt: 0,
+				lastHeartbeatAt: Date.now()
+			});
+
 			return empty;
 		}
+
 		const reconnecting = state.scenario === LocalDevelopmentScenarios.Reconnecting;
 		const status = reconnecting ? ConversationEventStreamStatuses.Reconnecting : ConversationEventStreamStatuses.Live;
-		command.onUpdate?.({ status, state: history, reconnectAttempt: reconnecting ? 1 : 0, lastHeartbeatAt: Date.now() });
+		command.onUpdate?.({
+			status,
+			state: history,
+			reconnectAttempt: reconnecting ? 1 : 0,
+			lastHeartbeatAt: Date.now()
+		});
+
 		return history;
-	} };
+	}
+
+	return { stream: _Stream };
 }

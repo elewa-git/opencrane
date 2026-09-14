@@ -10,15 +10,22 @@ current local server and then a disposable Kubernetes cluster.
 
 ## Tier 1 — frontend-only work
 
-Tier 1 serves the real OpenCrane Angular application over one disposable in-memory profile. It
-uses the current onboarding and conversation components, but it makes no application API request and needs no
-PostgreSQL, KurrentDB, Docker, model provider, Cognee, Agent Sandbox or Kubernetes installation.
+Tier 1 serves the real OpenCrane Angular application over one disposable in-memory profile. The same
+command starts Storybook against the reviewed mocks and runs the Playwright visual pass against that
+catalogue. It uses the current onboarding and conversation components, but it makes no application
+API request and needs no PostgreSQL, KurrentDB, Docker, model provider, Cognee, Agent Sandbox or
+Kubernetes installation.
 
 Start the complete onboarding journey:
 
 ```bash
 npm run serve:opencrane-ui
 ```
+
+Open the routed application at `http://localhost:4200` and the interactive Storybook catalogue at
+`http://127.0.0.1:4400`. Playwright uses a separate static Storybook workbench on port `4401`, checks
+the tagged visual contracts once, and exits; the application and interactive catalogue remain ready
+until you stop the command.
 
 The plain command always opens onboarding with Commander as its deterministic initial fixture. The
 reviewed survey result becomes the personal-Agent archetype used by first chat and the workspace.
