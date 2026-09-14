@@ -25,6 +25,8 @@ SMOKE_AFFECTED_PROJECTS="${SMOKE_AFFECTED_PROJECTS-all}"
 SMOKE_BASE_SHA="${SMOKE_BASE_SHA:-}"
 SMOKE_REGISTRY="${SMOKE_REGISTRY:-ghcr.io/elewa-git}"
 SMOKE_STORAGE_MODE="${SMOKE_STORAGE_MODE:-full}"
+SMOKE_INGRESS_PORT="${SMOKE_INGRESS_PORT:-8443}"
+SMOKE_RESOURCE_OWNER="${SMOKE_RESOURCE_OWNER:-}"
 SMOKE_LOCAL_REGISTRY_NAME="${CLUSTER_NAME}-registry"
 SMOKE_LOCAL_REGISTRY_ADDRESS=""
 KEY_DIR=""
@@ -429,11 +431,11 @@ EOF
 # intentionally empty. Reporting it as disabled rather than unavailable is tracked separately.
 _assert_ingress_health()
 {
-  local health_url="https://${CONTROL_PLANE_HOST}:8443/healthz"
+  local health_url="https://${CONTROL_PLANE_HOST}:${SMOKE_INGRESS_PORT}/healthz"
   local deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
   local response=""
   until response="$(curl --connect-timeout 2 --max-time 5 --fail --silent --show-error --insecure \
-    --resolve "${CONTROL_PLANE_HOST}:8443:127.0.0.1" "$health_url" 2>/dev/null)" \
+    --resolve "${CONTROL_PLANE_HOST}:${SMOKE_INGRESS_PORT}:127.0.0.1" "$health_url" 2>/dev/null)" \
     && jq -e '
       .ready == true
       and (.services | keys == ["api", "database", "files", "memory", "models"])
@@ -529,6 +531,10 @@ if [[ "$SMOKE_STORAGE_MODE" != "fast" && "$SMOKE_STORAGE_MODE" != "full" ]]; the
   echo "[develop-smoke] SMOKE_STORAGE_MODE must be 'fast' or 'full', got '$SMOKE_STORAGE_MODE'." >&2
   exit 1
 fi
+if ! [[ "$SMOKE_INGRESS_PORT" =~ ^[0-9]+$ ]] || (( SMOKE_INGRESS_PORT < 1024 || SMOKE_INGRESS_PORT > 65535 )); then
+  echo "[develop-smoke] SMOKE_INGRESS_PORT must be a user port from 1024 through 65535." >&2
+  exit 1
+fi
 
 # Image preparation is the longest independent lane. Start it before k3d so cluster creation and
 # external-controller readiness consume the same wall-clock time without serialising all builds
@@ -543,8 +549,11 @@ k3d registry create "$SMOKE_LOCAL_REGISTRY_NAME" --port 127.0.0.1:0 --no-help
 registry_port="$(docker inspect --format '{{(index (index .NetworkSettings.Ports "5000/tcp") 0).HostPort}}' "k3d-${SMOKE_LOCAL_REGISTRY_NAME}")"
 [[ "$registry_port" =~ ^[0-9]+$ ]] || { echo "[develop-smoke] Registry has no loopback host port" >&2; exit 1; }
 SMOKE_LOCAL_REGISTRY_ADDRESS="127.0.0.1:${registry_port}"
-k3d cluster create "$CLUSTER_NAME" --image "$K3S_IMAGE" --port "8443:443@loadbalancer" \
-  --registry-use "k3d-${SMOKE_LOCAL_REGISTRY_NAME}:5000" --wait
+cluster_create_arguments=(cluster create "$CLUSTER_NAME" --image "$K3S_IMAGE" --port "${SMOKE_INGRESS_PORT}:443@loadbalancer" --registry-use "k3d-${SMOKE_LOCAL_REGISTRY_NAME}:5000" --wait)
+if [[ -n "$SMOKE_RESOURCE_OWNER" ]]; then
+  cluster_create_arguments+=(--runtime-label "opencrane.tier3.owner=${SMOKE_RESOURCE_OWNER}@server:*")
+fi
+k3d "${cluster_create_arguments[@]}"
 
 echo "[develop-smoke] Installing external cluster prerequisites"
 if [[ "$SMOKE_STORAGE_MODE" == "full" ]]; then
