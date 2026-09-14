@@ -519,9 +519,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get global monthly spend ceiling */
+        /** Get the global spend ceiling */
         get: operations["getGlobalBudget"];
-        /** Update the global monthly spend ceiling */
+        /** Update the global spend ceiling */
         put: operations["updateGlobalBudget"];
         post?: never;
         delete?: never;
@@ -537,7 +537,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List all per-account monthly spend ceilings */
+        /** List per-account spend ceilings */
         get: operations["listAccountBudgets"];
         put?: never;
         post?: never;
@@ -555,11 +555,28 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Create or update the budget ceiling for a specific account */
+        /** Create or update an account spend ceiling */
         put: operations["upsertAccountBudget"];
         post?: never;
-        /** Remove the per-account budget ceiling */
+        /** Remove an account spend ceiling */
         delete: operations["deleteAccountBudget"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/token-usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List authorised token usage */
+        get: operations["listTokenUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1872,6 +1889,44 @@ export interface components {
         RemoveOrganizationMemberResult: {
             member: components["schemas"]["OrganizationMember"];
         };
+        AuditEntry: {
+            /** Format: date-time */
+            timestamp: string;
+            tenant?: string;
+            action: string;
+            resource: string;
+            message: string;
+        };
+        Budget: {
+            /** @description ISO currency code stored with the ceiling. */
+            currency: string;
+            /** @description Monthly spend ceiling in the stated currency. */
+            ceilingAmount: number;
+        };
+        AccountBudget: {
+            /** @description Account whose ceiling is configured. */
+            userId: string;
+            /** @description ISO currency code stored with the ceiling. */
+            currency: string;
+            /** @description Monthly spend ceiling in the stated currency. */
+            ceilingAmount: number;
+        };
+        TokenUsage: {
+            /** @description Account whose usage was sampled. */
+            userId: string;
+            /** @description Input tokens counted in the snapshot. */
+            inputTokens: number;
+            /** @description Output tokens counted in the snapshot. */
+            outputTokens: number;
+            /** @description Combined input and output token count. */
+            totalTokens: number;
+            /** @description Currency used for the recorded cost. */
+            currency: string;
+            /** @description Provider cost recorded for the snapshot. */
+            totalCost: number;
+            /** @description Effective account or global ceiling in the same currency, when configured. */
+            budgetCeiling?: number;
+        };
         McpConnectionCommand: {
             /** @description Caller key that returns the same admitted generation after an uncertain response. */
             idempotencyKey: string;
@@ -2208,14 +2263,6 @@ export interface components {
             /** @description Total GPUs the customer may request. */
             gpu?: number;
         };
-        AuditEntry: {
-            /** Format: date-time */
-            timestamp?: string;
-            tenant?: string;
-            action?: string;
-            resource?: string;
-            message?: string;
-        };
         ByokProviderKeyStatus: {
             /**
              * @description The provider this status describes.
@@ -2392,12 +2439,6 @@ export interface components {
                 explorationRate: number;
             } | null;
         };
-        Budget: {
-            monthlyLimitUsd?: number;
-            currentSpendUsd?: number;
-            /** @enum {string} */
-            budgetAlertState?: "ok" | "warning" | "exceeded";
-        };
         ThirdPartySource: {
             id?: string;
             name?: string;
@@ -2406,15 +2447,6 @@ export interface components {
             syncStatus?: string;
             /** Format: date-time */
             lastSyncedAt?: string;
-        };
-        TokenUsage: {
-            tenant?: string;
-            model?: string;
-            inputTokens?: number;
-            outputTokens?: number;
-            totalCostUsd?: number;
-            /** Format: date-time */
-            recordedAt?: string;
         };
         SelfRunStatus: {
             runId: string;
@@ -4447,6 +4479,24 @@ export interface operations {
                     "application/json": components["schemas"]["Budget"];
                 };
             };
+            /** @description The authenticated Principal is not authorised or the spend operation failed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The authenticated Principal is not authorised or the spend operation failed. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     updateGlobalBudget: {
@@ -4459,18 +4509,52 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    monthlyLimitUsd: number;
+                    /**
+                     * @description ISO currency code; defaults to USD when omitted.
+                     * @default USD
+                     */
+                    currency?: string;
+                    /**
+                     * @description Monthly spend ceiling in the stated currency; defaults to 0 when omitted.
+                     * @default 0
+                     */
+                    ceilingAmount?: number;
                 };
             };
         };
         responses: {
-            /** @description Global budget updated. */
-            200: {
+            /** @description Global budget updated; the response has no body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The request body contained malformed JSON. */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Budget"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The authenticated Principal is not authorised or the spend operation failed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The authenticated Principal is not authorised or the spend operation failed. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -4490,7 +4574,25 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Budget"][];
+                    "application/json": components["schemas"]["AccountBudget"][];
+                };
+            };
+            /** @description The authenticated Principal is not authorised or the spend operation failed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The authenticated Principal is not authorised or the spend operation failed. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -4507,18 +4609,52 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    monthlyLimitUsd: number;
+                    /**
+                     * @description ISO currency code; defaults to USD when omitted.
+                     * @default USD
+                     */
+                    currency?: string;
+                    /**
+                     * @description Monthly spend ceiling in the stated currency; defaults to 0 when omitted.
+                     * @default 0
+                     */
+                    ceilingAmount?: number;
                 };
             };
         };
         responses: {
-            /** @description Account budget updated. */
-            200: {
+            /** @description Account budget updated; the response has no body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The request body contained malformed JSON. */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Budget"];
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The authenticated Principal is not authorised or the spend operation failed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The authenticated Principal is not authorised or the spend operation failed. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -4534,13 +4670,67 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Budget removed. */
+            /** @description Account budget removed; the response has no body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The authenticated Principal is not authorised or the spend operation failed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The authenticated Principal is not authorised or the spend operation failed. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listTokenUsage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorised token-usage rows. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": Record<string, never>;
+                    "application/json": components["schemas"]["TokenUsage"][];
+                };
+            };
+            /** @description The authenticated Principal is not authorised or the spend operation failed. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The authenticated Principal is not authorised or the spend operation failed. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -4569,6 +4759,24 @@ export interface operations {
                         data: components["schemas"]["AuditEntry"][];
                         pagination: components["schemas"]["Pagination"];
                     };
+                };
+            };
+            /** @description The audit cursor is malformed or incomplete. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description An authenticated Principal is required to read audit entries. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
