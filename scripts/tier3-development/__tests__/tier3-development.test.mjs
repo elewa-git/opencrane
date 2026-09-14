@@ -42,6 +42,15 @@ test("accepts a registry only when it shares the owner-labelled cluster network"
 	assert.equal(foreign.existingOwner, "unknown");
 });
 
+test("treats only an explicit missing Docker object as absent", async function _DockerInspection()
+{
+	const identity = { clusterName: "cluster", registryName: "registry" };
+	const missing = Object.assign(new Error("missing"), { code: 1, stderr: "Error: No such object: test" });
+	assert.deepEqual(await inspectTier3Resources(identity, { execFile: async function _Missing() { throw missing; } }), { clusterExists: false, existingOwner: null, registryExists: false });
+	const unavailable = Object.assign(new Error("daemon unavailable"), { code: 1, stderr: "Cannot connect to the Docker daemon" });
+	await assert.rejects(inspectTier3Resources(identity, { execFile: async function _Unavailable() { throw unavailable; } }), /daemon unavailable/u);
+});
+
 test("deletes only inspected resources and propagates cleanup failures", async function _Cleanup()
 {
 	const calls = [];

@@ -18,7 +18,7 @@ export function tier3ResourceIdentity(repositoryRoot)
 /** Read exact owner labels from the cluster server and registry containers. */
 export async function inspectTier3Resources(identity, operations = {})
 {
-	const inspect = operations.inspect ?? _Inspect;
+	const inspect = operations.inspect ?? function _InspectResource(name) { return _Inspect(name, operations.execFile ?? _EXEC_FILE); };
 	const cluster = await inspect(`k3d-${identity.clusterName}-server-0`);
 	const registry = await inspect(`k3d-${identity.registryName}`);
 	if (!cluster.exists && !registry.exists) return { clusterExists: false, existingOwner: null, registryExists: false };
@@ -35,17 +35,17 @@ export function assertTier3ResourceReplacement(existingOwner, expectedOwner, rep
 	if (!replaceOwned) throw new Error("This worktree already owns retained Tier 3 resources; rerun with --replace-owned or run npm run dev:tier3:down.");
 }
 
-async function _Inspect(name)
+async function _Inspect(name, execFile)
 {
 	try
 	{
-		const result = await _EXEC_FILE("docker", ["inspect", name]);
+		const result = await execFile("docker", ["inspect", name]);
 		const inspected = JSON.parse(result.stdout)[0];
 		return { exists: true, networks: Object.keys(inspected.NetworkSettings?.Networks ?? {}), owner: inspected.Config?.Labels?.[TIER3_OWNER_LABEL] ?? null };
 	}
 	catch (error)
 	{
-		if (error.code === 1) return { exists: false, owner: null };
+		if (error.code === 1 && /No such object:/u.test(error.stderr ?? "")) return { exists: false, owner: null };
 		throw error;
 	}
 }
