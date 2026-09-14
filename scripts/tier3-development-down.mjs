@@ -10,7 +10,7 @@ const _EXEC_FILE = promisify(execFile);
 const _REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 /** Delete only k3d resources whose owner label matches this worktree. */
-export async function downTier3Resources(operations = {})
+async function downTier3Resources(operations = {})
 {
 	const identity = tier3ResourceIdentity(_REPOSITORY_ROOT);
 	const resources = await (operations.inspectResources ?? inspectTier3Resources)(identity);

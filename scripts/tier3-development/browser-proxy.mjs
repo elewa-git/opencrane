@@ -49,6 +49,8 @@ export function buildTier3UpstreamRequestOptions(request, upstream, options)
 {
 	const headers = { ...request.headers };
 	for (const name of Object.keys(headers)) if (name === "forwarded" || name.startsWith("x-forwarded-")) delete headers[name];
+	delete headers["x-opencrane-development-session"];
+	if (options.developmentCredential !== null) headers["x-opencrane-development-session"] = options.developmentCredential;
 	headers.host = options.upstreamHost;
 	headers["x-forwarded-host"] = options.upstreamHost;
 	headers["x-forwarded-proto"] = "https";

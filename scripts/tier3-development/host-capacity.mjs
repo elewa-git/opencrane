@@ -4,8 +4,8 @@ import { promisify } from "node:util";
 
 const _EXEC_FILE = promisify(execFile);
 const _GIB = 1_073_741_824;
-export const TIER3_MINIMUM_CAPACITY = Object.freeze({ cpu: 4, memoryGiB: 16, storageGiB: 32 });
-export const TIER3_RECOMMENDED_CAPACITY = Object.freeze({ cpu: 8, memoryGiB: 32, storageGiB: 64 });
+const TIER3_MINIMUM_CAPACITY = Object.freeze({ cpu: 4, memoryGiB: 16, storageGiB: 32 });
+const TIER3_RECOMMENDED_CAPACITY = Object.freeze({ cpu: 8, memoryGiB: 32, storageGiB: 64 });
 
 /** Measure CPU, memory, and the filesystem that must hold the current checkout. */
 export async function measureTier3Capacity(repositoryRoot, operations = {})

@@ -4,7 +4,7 @@ import { realpathSync } from "node:fs";
 import { promisify } from "node:util";
 
 const _EXEC_FILE = promisify(execFile);
-export const TIER3_OWNER_LABEL = "opencrane.tier3.owner";
+const TIER3_OWNER_LABEL = "opencrane.tier3.owner";
 
 /** Derive stable, DNS-safe resource coordinates from the exact worktree path. */
 export function tier3ResourceIdentity(repositoryRoot)

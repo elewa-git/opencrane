@@ -33,7 +33,7 @@ export async function runTier3Development(options, operations = {})
 	if (options.smokeOnly) return { identity, profile: options.profile };
 	const upstreamCertificate = await (operations.readCertificate ?? readTier3IngressCertificate)({ certificateName: `${identity.releaseName}-clustertenant-tls`, namespace: identity.namespace });
 	const upstreamHost = `${identity.clusterTenant}.local.opencrane.test`;
-	const server = (operations.createProxy ?? createTier3BrowserProxy)({ upstreamCertificate, upstreamHost, upstreamOrigin: `https://127.0.0.1:${identity.ingressPort}` });
+	const server = (operations.createProxy ?? createTier3BrowserProxy)({ developmentCredential, upstreamCertificate, upstreamHost, upstreamOrigin: `https://127.0.0.1:${identity.ingressPort}` });
 	await (operations.listenProxy ?? _ListenProxy)(server, options.proxyPort);
 	write(`Tier 3 ${options.profile} is ready on http://127.0.0.1:${options.proxyPort}.\n`);
 	write("Keep the Codespaces forwarded port private. The owned k3d cluster remains available for diagnosis.\n");

@@ -166,8 +166,8 @@ restore a 0.10 upgrade path or a retired runtime.
 
 | Profile | Intended boundary | Status |
 | --- | --- | --- |
-| Tier 3 infra | Current silo and prerequisites in owned k3d, including private Codespaces browser routing | ✅ Ready for review; live host qualification remains required |
-| Tier 3 agent | Infra plus governed provider setup, onboarding and one real Agent Sandbox conversation turn | ✅ Ready for review; requires a provider key |
+| Tier 3 infra | Current silo and prerequisites in owned k3d, including private Codespaces browser routing | Implemented; live host qualification remains required |
+| Tier 3 agent | Infra plus governed provider setup, onboarding and one real Agent Sandbox conversation turn | Implemented; live host qualification and a provider key remain required |
 
 The checked-in development container pins Node.js 24, Docker 28.5.1, Helm 4.1.4, k3d 5.8.3 and
 kubectl 1.30.10. A local workstation can use its own compatible tools. Tier 3 requires at least 4

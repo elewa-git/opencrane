@@ -40,10 +40,10 @@ test("reads only the Secret selected by the live Certificate", async function _C
 	assert.equal(calls[1][2], "release-tls-secret");
 });
 
-test("pins Tier 3 proxy trust and replaces untrusted forwarding claims", function _ProxyRequest()
+test("pins Tier 3 proxy trust and replaces untrusted forwarding and credential claims", function _ProxyRequest()
 {
 	const request = { method: "POST", url: "/api/v1/me/persona", headers: { host: "127.0.0.1:4200", origin: "http://127.0.0.1:4200", referer: "http://127.0.0.1:4200/onboarding", forwarded: "for=attacker", "x-forwarded-host": "attacker.example", "x-forwarded-proto": "http", "x-opencrane-development-session": "session-proof" } };
-	const built = buildTier3UpstreamRequestOptions(request, new URL("https://127.0.0.1:28443"), { upstreamCertificate: "certificate", upstreamHost: "tier3.local.opencrane.test" });
+	const built = buildTier3UpstreamRequestOptions(request, new URL("https://127.0.0.1:28443"), { developmentCredential: "coordinator-proof", upstreamCertificate: "certificate", upstreamHost: "tier3.local.opencrane.test" });
 	assert.equal(built.servername, "tier3.local.opencrane.test");
 	assert.equal(built.ca, "certificate");
 	assert.equal(built.rejectUnauthorized, true);
@@ -53,7 +53,11 @@ test("pins Tier 3 proxy trust and replaces untrusted forwarding claims", functio
 	assert.equal(built.headers.origin, "https://tier3.local.opencrane.test");
 	assert.equal(built.headers.referer, "https://tier3.local.opencrane.test/");
 	assert.equal(built.headers.forwarded, undefined);
-	assert.equal(built.headers["x-opencrane-development-session"], "session-proof");
+	assert.equal(built.headers["x-opencrane-development-session"], "coordinator-proof");
+	const absent = buildTier3UpstreamRequestOptions({ ...request, headers: { ...request.headers, "x-opencrane-development-session": undefined } }, new URL("https://127.0.0.1:28443"), { developmentCredential: "coordinator-proof", upstreamCertificate: "certificate", upstreamHost: "tier3.local.opencrane.test" });
+	assert.equal(absent.headers["x-opencrane-development-session"], "coordinator-proof");
+	const infra = buildTier3UpstreamRequestOptions(request, new URL("https://127.0.0.1:28443"), { developmentCredential: null, upstreamCertificate: "certificate", upstreamHost: "tier3.local.opencrane.test" });
+	assert.equal(infra.headers["x-opencrane-development-session"], undefined);
 });
 
 test("runs the current smoke before proxying and preserves recommended qualification", async function _Orchestrator()
@@ -65,7 +69,7 @@ test("runs the current smoke before proxying and preserves recommended qualifica
 		measureCapacity: async function _Capacity() { return { cpu: 8, memoryGiB: 32, storageAvailableGiB: 80, storageGiB: 100 }; },
 		readCertificate: async function _Certificate() { order.push("certificate"); return "certificate"; },
 		runSmoke: async function _Smoke(environment) { order.push("smoke"); assert.equal(environment.SMOKE_HOST_PROFILE, "recommended"); assert.equal(environment.KEEP_CLUSTER, "1"); assert.match(environment.SMOKE_RESOURCE_OWNER, /^worktree-/u); },
-		createProxy: function _Proxy() { order.push("proxy"); return {}; },
+		createProxy: function _Proxy(options) { order.push("proxy"); assert.equal(options.developmentCredential, null); return {}; },
 		listenProxy: async function _Listen() { order.push("listen"); },
 		waitForShutdown: async function _Shutdown() { order.push("shutdown"); },
 		write: function _Write() {},
