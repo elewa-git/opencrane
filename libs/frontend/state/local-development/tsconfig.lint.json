@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "composite": false, "declaration": false, "incremental": false, "noEmit": true, "types": ["vitest/globals"] },
+  "include": ["src/**/*.ts"],
+  "exclude": ["**/*.spec.ts", "**/*.stories.ts"],
+  "references": []
+}

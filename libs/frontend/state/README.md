@@ -20,6 +20,7 @@ owns the client-side stores and caches that hold fetched data.
 | [`conversation/elicitation`](./conversation/elicitation/README.md) | Recoverable participant-input gateway, store, and Activity mapping. |
 | [`conversation/workspace`](./conversation/workspace/README.md) | Snapshot-tail conversation workspace and separate run command state. |
 | [`conversation/workspace/adapter`](./conversation/workspace/adapter/README.md) | Signed-in generated-client adapter for workspace commands. |
+| [`local-development`](./local-development/README.md) | Disposable Tier 1 onboarding and conversation gateways over current frontend ports. |
 | [`assets/adapter`](./assets/adapter/README.md) | Live owner-bound personal-asset catalogue gateway. |
 | [`conversation/assets`](./conversation/assets/README.md) | Component-scoped conversation upload, retry, and safe lifecycle state. |
 | [`mcp/adapter`](./mcp/adapter/README.md) | Live MCP gateway. |

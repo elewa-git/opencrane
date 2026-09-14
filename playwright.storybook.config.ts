@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
-/** Fixed Storybook origin shared by the Nx static server and visual tests. */
-const STORYBOOK_BASE_URL = "http://127.0.0.1:4400";
+/** Reserves the static Storybook origin for interaction and visual checks while the interactive catalogue uses port 4400. */
+const STORYBOOK_BASE_URL = "http://127.0.0.1:4401";
 
 /** Catalogue-wide budget for rendering every tagged visual contract serially. */
 const STORYBOOK_VISUAL_TEST_TIMEOUT_MS = 180_000;

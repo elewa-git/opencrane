@@ -32,7 +32,6 @@ changing feature code.
 ## Public surface
 
 - `provideControlPlaneGateways()` — returns the live gateway providers for `opencrane-ui`.
-- `GatewayMode` / `GATEWAY_MODE` — exposes the active gateway mode to presentation code.
 
 ## Boundary
 
