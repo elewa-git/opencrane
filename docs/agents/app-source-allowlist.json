@@ -23,6 +23,7 @@
 	{ "path": "apps/opencrane/src/app/conversation-computer-activation-composition.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
 	{ "path": "apps/opencrane/src/app/conversation-computer-lifecycle-composition.ts", "owner": "apps/opencrane", "classification": "process-composition" },
 	{ "path": "apps/opencrane/src/app/conversation-computer-turn-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
+	{ "path": "apps/opencrane/src/app/conversation-computer-turn-composition.types.ts", "owner": "apps/opencrane", "classification": "route-composition" },
 	{ "path": "apps/opencrane/src/app/history-store-composition.ts", "owner": "apps/opencrane", "classification": "process-composition" },
 	{ "path": "apps/opencrane/src/app/history-store-composition.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
 	{ "path": "apps/opencrane/src/app/history-store-silo-guard.ts", "owner": "apps/opencrane", "classification": "process-composition" },
@@ -86,6 +87,7 @@
     { "path": "apps/opencrane/src/development/public-app.ts", "owner": "apps/opencrane", "classification": "route-composition" },
     { "path": "apps/opencrane/src/development/public-app.types.ts", "owner": "apps/opencrane", "classification": "route-composition" },
     { "path": "apps/opencrane/src/development/simulated-conversation-model.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+    { "path": "apps/opencrane/src/development/simulated-conversation-model.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/vitest.config.ts", "owner": "apps/opencrane", "classification": "test-config" },
 
     { "path": "apps/opencrane-ui/src/app/app.component.ts", "owner": "apps/opencrane-ui", "classification": "browser-composition" },
