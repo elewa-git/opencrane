@@ -131,6 +131,17 @@ describe("PrismaPersonalMemoryOperationRepository", function _Suite()
 		expect(data).toMatchObject({ sourcePayloadRef: "payload-1", sourceCiphertextDigest: _CIPHERTEXT_DIGEST, contentDigest: _CONTENT_DIGEST, workflowTaskId: _TASK_ID });
 	});
 
+	it("rejects Correct when its exact-revision target is no longer Active", async function _RejectCorrectedTarget()
+	{
+		const fixture = _Fixture(_CorrectRow(), [], _Dataset(MemoryDatasetState.Active, _DATASET_PROVIDER_ID), _Fact(MemoryFactState.Corrected, 7));
+		fixture.findOperation.mockResolvedValueOnce(null);
+		const admitTask = _TaskAdmission();
+
+		await expect(new PrismaPersonalMemoryOperationRepository(fixture.transaction).admit(_CorrectCommand(), admitTask)).rejects.toBeInstanceOf(PersonalMemoryOperationInvalidState);
+		expect(admitTask).not.toHaveBeenCalled();
+		expect(fixture.createOperation).not.toHaveBeenCalled();
+	});
+
 	it("returns the original operation for an exact replay and conflicts when immutable evidence changes", async function _Replay()
 	{
 		const exact = _Fixture(_CorrectRow());

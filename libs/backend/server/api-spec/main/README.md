@@ -21,6 +21,9 @@ and the cross-cutting endpoints that belong to no single domain — the auth flo
 The conversation domain contributes the participant-owned list, create, open, message, archive,
 close, and replay paths. Generated clients therefore receive `conversationId` as the durable API
 coordinate; the immutable history API uses `conversationId` throughout.
+It also contributes existing-dataset memory commands and status reads. Their receipts contain
+progress and local result identity, while provider coordinates and selected-message evidence stay
+behind the command authority.
 
 Used by the running server, which serves this document at `/openapi.json`, and by the SDK/client
 generation step, which reads it to emit the typed contracts client. Editing a route means editing its

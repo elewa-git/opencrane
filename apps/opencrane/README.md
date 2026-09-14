@@ -50,7 +50,10 @@ Startup proceeds in five visible stages:
 
 Personal-memory tasks carry only silo and operation IDs. Their conversations-owned worker loads
 saved progress, checks current memory permission, and uses one process-wide private gateway client.
-The app adds no public memory command route; first-dataset admission remains unfinished. Before
+Authenticated memory commands and status reads use `/api/v1/me/memory/commands`. Commands require
+an already Active personal dataset and existing Manage or Forget permission; they commit the
+authorization decision, operation and Absurd task together. Status reads separately require Read
+permission. First-dataset admission remains unfinished. Before
 an uncached workflow effect, the Absurd adapter verifies and renews its claim beyond the longest
 configured memory, remote-tool or registry call, with a minute for completion evidence. Memory
 pre-reads finish before the mutation checkpoint renews its lease. Catalog permission checks and
@@ -62,7 +65,7 @@ The route registry is deliberately a catalogue rather than a second application 
 | --- | --- | --- |
 | Public `:8080` | Identity and access | audit, groups, grants, resource shares |
 | Public `:8080` | Agents | agent-service management and governed skill catalogue |
-| Public `:8080` | Personal workspace | guided onboarding, assets, persona, approvals, runs, model and tool configuration, conversations |
+| Public `:8080` | Personal workspace | guided onboarding, assets, persona, approvals, runs, model and tool configuration, conversations, existing-dataset memory commands |
 | Public `:8080` | Gateways | MCP catalogue and durable tool tasks, OCI image promotion, model routing, providers, bring-your-own-key, model registry |
 | Public `:8080` | Knowledge and reporting | retrieval sources, budgets, token usage |
 | Internal `:8081` | Controller | run-attempt, workflow-owned skill-authoring validation, and OCI MCP Job dispatch |

@@ -3,6 +3,9 @@ import { PersonalMemoryOperationKinds } from "@opencrane/backend/agents/personal
 
 import type { PersonalMemoryCommand } from "./personal-memory-command.types";
 
+/** Validates the stable command UUID reused for exact retries and receipt reads. */
+export const _PersonalMemoryCommandIdSchema = z.string().uuid();
+
 /** Keeps public coordinates bounded and rejects normalization that would change command identity. */
 const _Identifier = z.string().min(1).max(128).refine(function _IsCanonical(value) { return value === value.trim(); });
 /** Binds a bounded read to the requested immutable message, without accepting encrypted payload fields. */
@@ -17,7 +20,7 @@ const _Target = { targetFactId: _Identifier, expectedFactRevision: z.number().in
 
 /** Rejects plaintext, authority claims and provider coordinates before command preparation. */
 export const _PersonalMemoryCommandSchema: z.ZodType<PersonalMemoryCommand> = z.discriminatedUnion("kind", [
-	z.object({ commandId: z.string().uuid(), kind: z.literal(PersonalMemoryOperationKinds.Remember), source: _Source }).strict(),
-	z.object({ commandId: z.string().uuid(), kind: z.literal(PersonalMemoryOperationKinds.Correct), source: _Source, ..._Target }).strict(),
-	z.object({ commandId: z.string().uuid(), kind: z.literal(PersonalMemoryOperationKinds.Forget), ..._Target }).strict(),
+	z.object({ commandId: _PersonalMemoryCommandIdSchema, kind: z.literal(PersonalMemoryOperationKinds.Remember), source: _Source }).strict(),
+	z.object({ commandId: _PersonalMemoryCommandIdSchema, kind: z.literal(PersonalMemoryOperationKinds.Correct), source: _Source, ..._Target }).strict(),
+	z.object({ commandId: _PersonalMemoryCommandIdSchema, kind: z.literal(PersonalMemoryOperationKinds.Forget), ..._Target }).strict(),
 ]);

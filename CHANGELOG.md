@@ -20,15 +20,15 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   gateway. Saved receipts retain the original provider coordinates; uncertain delivery remains
   recoverable. Current membership and MemoryScope permission gate new effects, and catalog writes
   check that authority in their own transaction. An expired worker cannot start another provider
-  step after Absurd assigns the work to a replacement. Product command admission and live memory
+  step after Absurd assigns the work to a replacement. First-dataset admission and live memory
   qualification remain separate work.
 
 - **Memory integrations can execute and verify individual provider steps through the private gateway.**
   Dataset lookup, document storage, indexing and deletion return typed receipts that can be checked
   against saved operation coordinates. Add and delete reconcile existing provider state before
   repeating a mutation; unknown delivery remains distinct from success or an empty recall. The
-  server retains its query and scoped-memory APIs. Product Remember, Correct and Forget commands,
-  first-dataset permission and live memory qualification remain unfinished.
+  server retains its query and scoped-memory APIs. Existing-dataset product commands now use these
+  receipts; first-dataset permission and live memory qualification remain separate work.
 
 - **Run recovery cannot replace the original model, token, tool, cycle or time allowance.** New
   revisions and admitted inputs carry explicit limits, including an optional extra revision spend
@@ -153,8 +153,16 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   Gateway adapters can now associate an indexing result with the saved operation and document
   snapshot. They retain the provider's pipeline receipt and reject mismatched or unfinished
   responses; document evidence contains identifiers, content digests and sizes without fact text.
-  Authenticated product command composition, worker/provider wiring and the complete memory
-  journey remain unfinished.
+  The authenticated command surface uses this evidence for existing active personal datasets;
+  first-dataset authorization and live memory qualification remain open.
+
+- **Signed-in clients can submit Remember, Correct and Forget commands and check their progress.**
+  The API requires an existing active personal dataset and current memory permission. Remember and
+  Correct select an exact message authored by the caller; Forget selects the caller's existing
+  fact. Retrying a lost response preserves one saved operation and task. Status reads separately
+  require Read permission and expose progress without private content or provider coordinates.
+  Correct only replaces a fact that is still Active when its lock is held. First-dataset creation,
+  its grants and live memory qualification remain separate work.
 
 - **Conversation participants can open ready uploaded files from the Files panel.** Supported
   previews and downloads use the current authorized content read, show loading and safe retry
