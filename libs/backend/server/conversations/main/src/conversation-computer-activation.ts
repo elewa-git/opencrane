@@ -29,7 +29,7 @@ const _STOPPED = Symbol("conversation computer activation consumer stopped");
  * Returns the bounded exponential wait for one redelivery.
  *
  * With a 60 retry budget the waits sum to well over nine minutes before a delivery parks, which
- * covers a slow gVisor cold start while still parking a claim that never converges.
+ * covers a slow external realization while still parking a reservation that never converges.
  * @param retryCount - Number of times KurrentDB has already redelivered this event.
  */
 export function _ActivationRetryDelayMilliseconds(retryCount: number): number
@@ -41,7 +41,7 @@ export function _ActivationRetryDelayMilliseconds(retryCount: number): number
 /**
  * Resolves one persistent computer-activation delivery through its explicit queue action.
  *
- * A malformed stream-bound command is parked before it reaches authority. A pending sandbox and a
+ * A malformed stream-bound command is parked before it reaches authority. A pending realization and a
  * transient authority failure both wait with bounded backoff and then retry, while a terminal
  * authority outcome chooses acknowledge or park. A failed queue action propagates so KurrentDB
  * retains responsibility for redelivery.
@@ -109,8 +109,8 @@ export async function __RunConversationComputerActivationListener(subscription: 
  *
  * Every opencrane-server replica starts one of these against the same consumer group. Deliveries are
  * handled sequentially inside a replica; across replicas KurrentDB shares them round-robin. That is
- * safe because the authority fences every write with an expected revision and a deterministic claim
- * name, so two replicas handling the same computer converge instead of double-activating.
+ * safe because the authority fences every write with an expected revision and deterministic realization
+ * coordinates, so two replicas handling the same computer converge instead of double-activating.
  *
  * A dropped or ended subscription, or a failed queue action, closes the session and reopens it after
  * a jittered wait. Once the consecutive-failure budget is used the consumer reports `Failed` and

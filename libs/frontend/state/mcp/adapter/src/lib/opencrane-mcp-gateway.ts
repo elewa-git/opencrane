@@ -16,7 +16,7 @@ import { _MapInstalled, _MapServer } from "./mcp-mapper.util";
  * The MCP paths are not yet in the pinned OpenAPI contract (backend P0, in
  * parallel), so calls go through {@link ControlPlaneApiService.request} with locally
  * projected wire types until the endpoints are synced into the generated client.
- * Bound in `live` mode by `provideControlPlaneGateways`.
+ * The live application composition binds this gateway through `provideControlPlaneGateways`.
  *
  * Credential-bearing operations are intentionally absent until a verified
  * custody boundary is composed.

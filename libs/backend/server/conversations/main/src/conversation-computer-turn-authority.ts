@@ -1,10 +1,11 @@
-import { _AdvanceConversationComputerModel, _ConversationModelReservationStatus } from "./conversation-computer-model-flow";
-import { _ConversationFailureDiagnostic } from "./conversation-failure-diagnostic";
-import { ConversationComputerModelStepOutcomes, type ConversationComputerModelStepCommand, type ConversationComputerModelStepResult } from "./conversation-computer-model.types";
-import { __AssertConversationComputerAnswerAuthority } from "./conversation-computer-answer-authority";
 import { createHash } from "node:crypto";
-import type { CompiledRunInput } from "@opencrane/contracts";
 
+import { ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates, type CompiledRunInput } from "@opencrane/contracts";
+
+import { __AssertConversationComputerAnswerAuthority } from "./conversation-computer-answer-authority";
+import { _ConversationFailureDiagnostic } from "./conversation-failure-diagnostic";
+import { _AdvanceConversationComputerModel, _ConversationModelReservationStatus } from "./conversation-computer-model-flow";
+import { ConversationComputerModelStepOutcomes, type ConversationComputerModelStepCommand, type ConversationComputerModelStepResult } from "./conversation-computer-model.types";
 import type { ConversationComputerBootstrap, ConversationComputerBootstrapCommand, ConversationComputerOutputCommand, ConversationComputerReviewCredentialGrant, ConversationComputerRunLifecycleCommand, ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityPort, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 
 /** Coordinates one durable, lease-fenced conversation turn for a bound realized process. */
@@ -100,7 +101,17 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 			throw new Error("Conversation computer output requires an admitted bootstrap");
 		await this._AdmitOutputProcess(turn, command.process);
 		const reservation = turn.continuationReservation ?? turn.modelReservation;
-		if (turn.toolSelection !== null && turn.continuationReservation === null || reservation === null || reservation.invocationFence !== command.modelInvocationFence || command.sourceCommandId !== command.modelInvocationFence || !Number.isSafeInteger(command.modelNotAfterEpochMs) || command.modelNotAfterEpochMs > reservation.dispatchDeadlineEpochMs)
+		if (
+			(
+				turn.toolSelection
+				&& !turn.continuationReservation
+			)
+			|| !reservation
+			|| reservation.invocationFence !== command.modelInvocationFence
+			|| command.sourceCommandId !== command.modelInvocationFence
+			|| !Number.isSafeInteger(command.modelNotAfterEpochMs)
+			|| command.modelNotAfterEpochMs > reservation.dispatchDeadlineEpochMs
+		)
 			throw new Error("Conversation computer output cannot finish unresolved tool work");
 		if (turn.outputSourceCommandId !== null)
 		{
@@ -108,8 +119,14 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 				throw new Error("Conversation computer turn already has a different output");
 			const payload = await this.dependencies.outputPayloads.store(turn, command.sourceCommandId, command.text);
 			const entry = turn.outputReceipt.event.data.entry;
-			if (entry.kind !== "message" || entry.blocks.length !== 1 || entry.blocks[0].kind !== "text"
-				|| entry.blocks[0].id !== payload.blockId || entry.blocks[0].payloadRef !== payload.payloadRef || entry.blocks[0].ciphertextDigest !== payload.ciphertextDigest)
+			if (
+					entry.kind !== ConversationEntryKinds.Message
+				|| entry.blocks.length !== 1
+				|| entry.blocks[0].kind !== ConversationMessageContentBlockKinds.Text
+				|| entry.blocks[0].id !== payload.blockId
+				|| entry.blocks[0].payloadRef !== payload.payloadRef
+				|| entry.blocks[0].ciphertextDigest !== payload.ciphertextDigest
+			)
 				throw new Error("Conversation computer output retry has a different saved payload");
 			await this._FinishOutput(turn, command.process);
 			return "idempotent";
@@ -117,11 +134,33 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		const notAfter = Math.min(command.modelNotAfterEpochMs, await __AssertConversationComputerAnswerAuthority(turn, command.process, this.dependencies));
 		const payload = await this.dependencies.outputPayloads.store(turn, command.sourceCommandId, command.text);
 		const writer = this.dependencies.writers.create(turn, command.process);
-		const receipt = await writer.prepare({ sourceCommandId: command.sourceCommandId, entry: { kind: "message", state: "completed", blocks: [{ id: payload.blockId, kind: "text", payloadRef: payload.payloadRef, ciphertextDigest: payload.ciphertextDigest }], replyToEntryId: turn.latestPendingEntryId, addressedAgentIdentityId: null, activation: "none", visibility: { audience: "conversation" }, causationId: turn.latestPendingEntryId, correlationId: turn.latestPendingEntryId } });
+		const receipt = await writer.prepare({
+			sourceCommandId: command.sourceCommandId,
+			entry: {
+					kind: ConversationEntryKinds.Message,
+				state: MessageStates.Completed,
+				blocks: [{
+					id: payload.blockId,
+					kind: ConversationMessageContentBlockKinds.Text,
+					payloadRef: payload.payloadRef,
+					ciphertextDigest: payload.ciphertextDigest,
+				}],
+				replyToEntryId: turn.latestPendingEntryId,
+				addressedAgentIdentityId: null,
+				activation: "none",
+				visibility: { audience: "conversation" },
+				causationId: turn.latestPendingEntryId,
+				correlationId: turn.latestPendingEntryId,
+			},
+		});
 		if (Date.now() >= Math.min(reservation.dispatchDeadlineEpochMs, notAfter))
 			throw new Error("Conversation computer model response missed its fixed dispatch deadline");
 		const decision = await this.dependencies.store.markOutput(turn.bootstrapId, receipt);
-		await this._FinishOutput({ ...turn, outputSourceCommandId: decision.receipt.event.id, outputReceipt: decision.receipt }, command.process);
+		await this._FinishOutput({
+			...turn,
+			outputSourceCommandId: decision.receipt.event.id,
+			outputReceipt: decision.receipt,
+		}, command.process);
 		return decision.outcome;
 	}
 
@@ -130,7 +169,11 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 	{
 		if (turn.siloId !== this.dependencies.siloId)
 			throw new Error("Conversation computer output crossed its admitted silo");
-		await this.dependencies.candidates.admit({ computerId: turn.computerId, lease: turn.lease, process });
+		await this.dependencies.candidates.admit({
+			computerId: turn.computerId,
+			lease: turn.lease,
+			process,
+		});
 	}
 
 	/** Confirm the saved event before completing idempotent run, credential and active-pointer work. */
@@ -151,7 +194,16 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 /** Copies only the immutable attempt and lease fence needed by run lifecycle. */
 function _RunLifecycleCommand(turn: FrozenConversationComputerTurn): ConversationComputerRunLifecycleCommand
 {
-	return { runId: turn.compile.runId, siloId: turn.siloId, attempt: turn.compile.attempt, computerId: turn.computerId, lease: { leaseId: turn.lease.leaseId, leaseGeneration: turn.lease.leaseGeneration } };
+	return {
+		runId: turn.compile.runId,
+		siloId: turn.siloId,
+		attempt: turn.compile.attempt,
+		computerId: turn.computerId,
+		lease: {
+			leaseId: turn.lease.leaseId,
+			leaseGeneration: turn.lease.leaseGeneration,
+		},
+	};
 }
 
 /**
@@ -167,13 +219,22 @@ function _Freeze(candidate: ConversationComputerTurnCandidate, command: Conversa
 		bootstrapId,
 		siloId: candidate.binding.siloId,
 		computerId: command.computerId,
-		lease: { leaseId: candidate.lease.leaseId, leaseGeneration: candidate.lease.leaseGeneration, realization: candidate.lease.realization },
+		lease: {
+			leaseId: candidate.lease.leaseId,
+			leaseGeneration: candidate.lease.leaseGeneration,
+			realization: candidate.lease.realization,
+		},
 		binding: candidate.binding,
 		latestPendingEntryId: candidate.latestPendingEntryId,
 		modelAlias: candidate.modelAlias,
 		maximumBudgetUsd: candidate.maximumBudgetUsd,
 		credentialLifetimeSeconds: candidate.credentialLifetimeSeconds,
-		compile: { runId: input.runId, attempt: input.attempt, promptCompilerVersion: input.promptCompilerVersion, digest: input.digest },
+		compile: {
+			runId: input.runId,
+			attempt: input.attempt,
+			promptCompilerVersion: input.promptCompilerVersion,
+			digest: input.digest,
+		},
 		outputSourceCommandId: null,
 		outputReceipt: null,
 		toolSelection: null,
@@ -186,7 +247,12 @@ function _Freeze(candidate: ConversationComputerTurnCandidate, command: Conversa
 function _AssertRecompiledInput(turn: FrozenConversationComputerTurn, compiledInput: CompiledRunInput): void
 {
 	const anchor = turn.compile;
-	if (compiledInput.digest !== anchor.digest || compiledInput.runId !== anchor.runId || compiledInput.attempt !== anchor.attempt || compiledInput.promptCompilerVersion !== anchor.promptCompilerVersion)
+	if (
+		compiledInput.digest !== anchor.digest
+		|| compiledInput.runId !== anchor.runId
+		|| compiledInput.attempt !== anchor.attempt
+		|| compiledInput.promptCompilerVersion !== anchor.promptCompilerVersion
+	)
 		throw new Error(`Conversation computer recompiled input ${compiledInput.digest} does not match the frozen turn digest ${anchor.digest}`);
 }
 
@@ -202,6 +268,15 @@ function _Uuid(domain: string, coordinates: readonly string[]): string
 /** Reject a conflicting event at the deterministic bootstrap coordinate. */
 function _AssertSameTurn(expected: FrozenConversationComputerTurn, actual: FrozenConversationComputerTurn): void
 {
-	if (actual.bootstrapId !== expected.bootstrapId || actual.siloId !== expected.siloId || actual.computerId !== expected.computerId || actual.lease.leaseGeneration !== expected.lease.leaseGeneration || actual.lease.leaseId !== expected.lease.leaseId || actual.latestPendingEntryId !== expected.latestPendingEntryId || actual.binding.expectedRevision !== expected.binding.expectedRevision || actual.modelAlias !== expected.modelAlias)
+	if (
+		actual.bootstrapId !== expected.bootstrapId
+		|| actual.siloId !== expected.siloId
+		|| actual.computerId !== expected.computerId
+		|| actual.lease.leaseGeneration !== expected.lease.leaseGeneration
+		|| actual.lease.leaseId !== expected.lease.leaseId
+		|| actual.latestPendingEntryId !== expected.latestPendingEntryId
+		|| actual.binding.expectedRevision !== expected.binding.expectedRevision
+		|| actual.modelAlias !== expected.modelAlias
+	)
 		throw new Error("Conversation computer bootstrap conflicts with its durable turn record");
 }

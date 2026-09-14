@@ -38,8 +38,17 @@ const _DEVELOPMENT_BROWSER_ORIGIN = "http://local-development.localhost:4200";
 /** Stable current local profile identity persisted with development conversation-computer history. */
 const _DEVELOPMENT_PROFILE_REVISION = `sha256:${createHash("sha256").update("opencrane-0.11-tier2-conversation-computer-profile-v1").digest("hex")}`;
 
+/** Report that the selected Tier 2 profile did not start the probed service. */
+async function _CheckUnavailableService(): Promise<void> { throw new Error("service is not part of the selected Tier 2 profile"); }
+
 /** Fixed unavailable probe used for optional services that the core profile does not start. */
-const _UNAVAILABLE_HEALTH_PROBE = { async check(): Promise<void> { throw new Error("service is not part of the selected Tier 2 profile"); } };
+const _UNAVAILABLE_HEALTH_PROBE = { check: _CheckUnavailableService };
+
+/** Return the current time for the public health-report cache. */
+function _NowEpochMilliseconds(): number { return Date.now(); }
+
+/** Refuse workload tool invocation because Tier 2 has no workload-side tool runner. */
+async function _RefuseWorkloadToolInvocation(): Promise<boolean> { return false; }
 
 /** Build current workflow settings whose external targets remain inert until explicitly requested. */
 function _CreateWorkflowConfig(config: DevelopmentConfig): OpenCraneWorkflowConfig
@@ -85,11 +94,17 @@ function _ReadInvitationSigningKey(path: string): Uint8Array
 function _ReadBrowserSessionCredential(path: string): string
 {
 	const statistics = lstatSync(path);
-	if (!statistics.isFile() || statistics.isSymbolicLink() || (statistics.mode & 0o077) !== 0)
+
+	if (
+		!statistics.isFile()
+		|| statistics.isSymbolicLink()
+		|| (statistics.mode & 0o077) !== 0
+	)
 	{
 		throw new Error("Tier 2 browser session credential must be an owner-only regular file");
 	}
 	const credential = readFileSync(path, "utf8").trim();
+
 	if (!/^[A-Za-z0-9_-]{43}$/u.test(credential))
 	{
 		throw new Error("Tier 2 browser session credential must contain 32 base64url bytes");
@@ -104,14 +119,30 @@ function _CreateDevelopmentConversationComputer(config: DevelopmentConfig, prism
 	{
 		return null;
 	}
-	const owner = _CreateHostDevelopmentConversationComputerRealization({ internalEndpoint: `http://127.0.0.1:${config.internalPort}`, launch: { executable: "python3", arguments: ["-B", "-m", "src.main"], workingDirectory: join(process.cwd(), "apps/conversation-computer") } });
+	const owner = _CreateHostDevelopmentConversationComputerRealization({
+		internalEndpoint: `http://127.0.0.1:${config.internalPort}`,
+		launch: {
+			executable: "python3",
+			arguments: [
+				"-B",
+				"-m",
+				"src.main",
+			],
+			workingDirectory: join(process.cwd(), "apps/conversation-computer"),
+		},
+	});
 	const runAdmission = _CreateProductionConversationRunAdmission(prisma, history, config.conversationPrivatePayloadKeyringPath, { maxConcurrentAdmissions: 4, maxQueuedAdmissions: 16 });
 	const simulated = config.profile === DevelopmentProfileKinds.AgentSimulated;
 	const cipher = AesGcmConversationPrivatePayloadCipher.fromDocument(_ReadConversationPrivatePayloadKeyring(config.conversationPrivatePayloadKeyringPath));
 	const credentials = simulated
 		? new DevelopmentConversationComputerCredentialIssuer()
-		: new PrismaConversationComputerCredentialUnitOfWork(prisma, cipher, { issue: _IssueAttemptLiteLlmKey, revoke: _RevokeAttemptLiteLlmKey, revokeByAlias: _RevokeAttemptLiteLlmKeyByAlias }, config.identity.siloId);
+		: new PrismaConversationComputerCredentialUnitOfWork(prisma, cipher, {
+			issue: _IssueAttemptLiteLlmKey,
+			revoke: _RevokeAttemptLiteLlmKey,
+			revokeByAlias: _RevokeAttemptLiteLlmKeyByAlias,
+		}, config.identity.siloId);
 	const endpoint = simulated ? "simulated://tier2" : process.env.LITELLM_ENDPOINT?.trim() ?? "";
+
 	if (!simulated && !endpoint)
 	{
 		throw new Error("Tier 2 Agent model profiles require LITELLM_ENDPOINT");
@@ -126,11 +157,20 @@ function _CreateDevelopmentConversationComputer(config: DevelopmentConfig, prism
 		prisma,
 		realizer: owner.realizer,
 		runAdmission,
-		runtimeAdmission: async function _RefuseWorkloadToolInvocation(): Promise<boolean> { return false; },
+		runtimeAdmission: _RefuseWorkloadToolInvocation,
 		siloId: config.identity.siloId,
 	});
-	const privateApp = _CreateHostDevelopmentConversationComputerPrivateApp({ authenticator: owner.authenticator, authority, logger: _log });
-	const supervisor = new HostDevelopmentConversationComputerSupervisor({ app: privateApp, port: config.internalPort, processes: { close: owner.stop } });
+	const privateApp = _CreateHostDevelopmentConversationComputerPrivateApp({
+		authenticator: owner.authenticator,
+		authority,
+		logger: _log,
+	});
+	const supervisor = new HostDevelopmentConversationComputerSupervisor({
+		app: privateApp,
+		port: config.internalPort,
+		processes: { close: owner.stop },
+	});
+
 	return new DevelopmentConversationComputerRuntime(
 		function _StartLifecycle() { return _StartDevelopmentConversationComputerLifecycle(prisma, history, owner.realizer, config.identity.siloId, profile); },
 		function _StartActivations() { return _StartConversationComputerActivationConsumer(prisma, history, config.identity.siloId, profile, owner.realizer); },
@@ -155,7 +195,7 @@ export async function _CreateDevelopmentServerComposition(config: DevelopmentCon
 		const providerEffects = _CreateProviderEffectCommandExecutor(prisma, null, null, _log);
 		const health = _CreatePublicHealthReportReader({
 			cacheMilliseconds: 5_000,
-			clock: { nowEpochMilliseconds: function _Now(): number { return Date.now(); } },
+			clock: { nowEpochMilliseconds: _NowEpochMilliseconds },
 			database: ___CreateDbHealthProbe(prisma),
 			files: _UNAVAILABLE_HEALTH_PROBE,
 			logger: _log,
@@ -171,9 +211,28 @@ export async function _CreateDevelopmentServerComposition(config: DevelopmentCon
 			},
 		});
 		const conversationComputer = _CreateDevelopmentConversationComputer(config, prisma, historyStore.historyStore, profile);
-		const app = _CreateDevelopmentPublicApp({ artifactScannerEnabled: false, browserSessionCredential: _ReadBrowserSessionCredential(config.browserSessionCredentialPath), conversationPrivatePayloadKeyringPath: config.conversationPrivatePayloadKeyringPath, health, historyStore: historyStore.historyStore, mcpWorkflows: workflows, organizationMembers, prisma, profile, providerEffects });
+		const app = _CreateDevelopmentPublicApp({
+			artifactScannerEnabled: false,
+			browserSessionCredential: _ReadBrowserSessionCredential(config.browserSessionCredentialPath),
+			conversationPrivatePayloadKeyringPath: config.conversationPrivatePayloadKeyringPath,
+			health,
+			historyStore: historyStore.historyStore,
+			mcpWorkflows: workflows,
+			organizationMembers,
+			prisma,
+			profile,
+			providerEffects,
+		});
 		app.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);
-		return { app, conversationComputer, historyStore, prisma, providerEffects, workflowRuntime: workflows.runtime };
+
+		return {
+			app,
+			conversationComputer,
+			historyStore,
+			prisma,
+			providerEffects,
+			workflowRuntime: workflows.runtime,
+		};
 	}
 	catch (error)
 	{

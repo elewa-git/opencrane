@@ -2,7 +2,7 @@ import type { ConversationComputerContinuationReservation, ConversationComputerM
 import type { ConversationComputerModelReservation, ConversationComputerModelStepCommand, ConversationComputerModelStepResult, ConversationComputerModelTransport } from "./conversation-computer-model.types";
 import type { ConversationToolProposalAdmission } from "./conversation-tool-proposal.types";
 import type { AgentScope, CompiledRunInput, ComputerScope, LeaseScope, RealizedLeaseScope } from "@opencrane/contracts";
-import type { PersonalConversationExecutionSubjectCoordinates } from "@opencrane/backend/agents/execution/inputs";
+import type { ConversationExecutionSubjectCoordinates } from "@opencrane/backend/agents/execution/inputs";
 import type { Logger } from "@opencrane/backend/observability";
 import type { BoundConversationWriter } from "./bound-conversation-writer";
 import type { BoundConversationWriterBinding, BoundConversationWriterIntent } from "./bound-conversation-writer.types";
@@ -146,6 +146,16 @@ export interface FrozenConversationComputerTurn extends ConversationComputerTurn
 	readonly modelReservation: ConversationComputerModelReservation | null;
 }
 
+/** Stores a frozen turn with flat lease coordinates and a string stream revision. */
+export type StoredFrozenConversationComputerTurn = Omit<FrozenConversationComputerTurn, "lease" | "binding" | "outputSourceCommandId" | "outputReceipt" | "toolSelection" | "continuationReservation" | "modelReservation"> & {
+	readonly generation: number;
+	readonly leaseId: string;
+	readonly realization: FrozenConversationComputerTurn["lease"]["realization"];
+	readonly binding: Omit<FrozenConversationComputerTurn["binding"], "expectedRevision"> & {
+		readonly expectedRevision: string;
+	};
+};
+
 /** Keeps the complete server-stamped output intent in the existing durable turn decision. */
 export type ConversationComputerTurnOutputReceipt = BoundConversationWriterIntent;
 
@@ -206,7 +216,7 @@ export interface ConversationComputerPrePersistedMessageInput
 }
 
 /** Server-resolved authority facts passed to the application-owned run admission composition. */
-export interface ConversationComputerRunAdmissionCommand extends PersonalConversationExecutionSubjectCoordinates
+export interface ConversationComputerRunAdmissionCommand extends ConversationExecutionSubjectCoordinates
 {
 	/** Selects the already persisted Kurrent entry without asking run admission to write it again. */
 	readonly messageInput: ConversationComputerPrePersistedMessageInput;

@@ -49,6 +49,8 @@ until those capabilities have a supported company policy.
 - `PrismaPersonalAgentProductEffectsAuthority` records onboarding product-resource decisions.
 - `PrismaPersonalExecutionEvidenceRepository` and `PersonalExecutionEvidenceAuthority` prove current
   personal execution eligibility inside run admission.
+- `ExecutionEvidenceOutcomes` names the shared loaded and denied wire states returned by personal
+  and managed execution-evidence authorities.
 - `PrismaRuntimeAgentEffectEligibilityAuthority` rechecks the active service and revision before an
   external runtime effect.
 - `__ExecutionCapabilityEvidence` canonicalizes the immutable personal execution evidence digest.

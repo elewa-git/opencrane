@@ -30,7 +30,11 @@ export abstract class OpenCraneApiClientBase<TPaths extends object>
 	protected constructor(protected readonly _origin: string, private readonly _requestHeaders: Readonly<Record<string, string>> = {})
 	{
 		this._baseUrl = `${this._origin}/api/v1`;
-		this.client = createClient<TPaths>({ baseUrl: this._baseUrl, credentials: "include", headers: this._requestHeaders });
+		this.client = createClient<TPaths>({
+			baseUrl: this._baseUrl,
+			credentials: "include",
+			headers: this._requestHeaders,
+		});
 		this.client.use(this._buildAuthMiddleware());
 	}
 
@@ -49,7 +53,11 @@ export abstract class OpenCraneApiClientBase<TPaths extends object>
 	public async request<TResponse>(method: string, path: string, options?: { body?: unknown; query?: Record<string, string | number | boolean> }): Promise<TResponse>
 	{
 		const search = options?.query ? this._queryString(options.query) : "";
-		const init: RequestInit = { method, credentials: "include", headers: { "Content-Type": "application/json", ...this._requestHeaders } };
+		const init: RequestInit = {
+			method,
+			credentials: "include",
+			headers: { "Content-Type": "application/json", ...this._requestHeaders },
+		};
 		if (options?.body !== undefined)
 		{
 			init.body = JSON.stringify(options.body);

@@ -52,7 +52,7 @@ export function _CreateConversationComputerTurnRouter(options: ConversationCompu
 	router.post("/model-step", async function _ModelStep(request: Request, response: Response): Promise<void>
 	{
 		const process = await _Process(request, options);
-		if (process === null)
+		if (!process)
 		{
 			response.sendStatus(401);
 			return;
@@ -85,7 +85,7 @@ async function _LeaseCommand(request: Request, response: Response, options: Conv
 	const computerId = _String(request.query["computerId"]);
 	const leaseId = _String(request.query["leaseId"]);
 	const generation = Number(request.query["generation"]);
-	if (process === null)
+	if (!process)
 	{
 		response.sendStatus(401);
 		return null;
@@ -95,7 +95,11 @@ async function _LeaseCommand(request: Request, response: Response, options: Conv
 		response.sendStatus(400);
 		return null;
 	}
-	return { computerId, lease: { leaseId, leaseGeneration: generation }, process };
+	return {
+		computerId,
+		lease: { leaseId, leaseGeneration: generation },
+		process,
+	};
 }
 
 /** Authenticate one process bearer without exposing denial details. */

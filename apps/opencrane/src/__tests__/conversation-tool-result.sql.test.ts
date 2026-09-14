@@ -3,7 +3,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, ConversationComputerRealizationKinds, ConversationModelToolModes } from "@opencrane/contracts";
-import { KurrentConversationComputerTurnStore, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, type ConversationComputerContinuationReservation, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
+import { KurrentConversationComputerTurnStore, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, type ConversationComputerContinuationReservation, type ConversationComputerTurnCandidateResolver, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -89,10 +89,25 @@ async function _Completed(reserve = true)
 /** Retain real authority composition; only the already-TokenReviewed Pod binding is a fixed test port. */
 function _Owner(client: PrismaClient, f: Awaited<ReturnType<typeof _Completed>>)
 {
-	return new PrismaConversationToolResultsUnitOfWork(client, f.fixture.siloId, f.store, { async admit(command)
+	async function _Admit(command: Parameters<ConversationComputerTurnCandidateResolver["admit"]>[0])
 	{
-		expect(command).toEqual({ computerId: f.turn.computerId, lease: f.turn.lease, process: { kind: ConversationComputerRealizationKinds.AgentSandbox, workload: _WORKLOAD } });
-	} }, f.fixture.dependencies);
+		expect(command).toEqual({
+			computerId: f.turn.computerId,
+			lease: f.turn.lease,
+			process: {
+				kind: ConversationComputerRealizationKinds.AgentSandbox,
+				workload: _WORKLOAD,
+			},
+		});
+	}
+
+	return new PrismaConversationToolResultsUnitOfWork(
+		client,
+		f.fixture.siloId,
+		f.store,
+		{ admit: _Admit },
+		f.fixture.dependencies,
+	);
 }
 
 /** Let both independent transactions read the pending delivery before either acknowledges it. */

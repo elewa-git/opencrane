@@ -1,21 +1,18 @@
-import type { DevelopmentConversationComputerSupervisor } from "./composition.types";
+import type { DevelopmentConversationComputerSupervisor, DevelopmentWorkerHandle } from "./composition.types";
 import type { HostDevelopmentConversationComputerSupervisor } from "./conversation-computer-host-supervisor";
 import { _RethrowAfterDevelopmentCleanup, _RunDevelopmentCleanup } from "./cleanup";
-
-/** Handle shared by the lifecycle scheduler, activation subscriber, and private listener. */
-type _DevelopmentWorkerHandle = { readonly stop: () => Promise<void> };
 
 /** Starts retained-state convergence, activation, and the private listener in authority order. */
 export class DevelopmentConversationComputerRuntime implements DevelopmentConversationComputerSupervisor
 {
 	/** Compose replaceable start boundaries so ordering and failure cleanup remain directly testable. */
-	public constructor(private readonly startLifecycle: () => Promise<_DevelopmentWorkerHandle>, private readonly startActivations: () => Promise<_DevelopmentWorkerHandle>, private readonly privateListener: Pick<HostDevelopmentConversationComputerSupervisor, "start" | "stop">) {}
+	public constructor(private readonly startLifecycle: () => Promise<DevelopmentWorkerHandle>, private readonly startActivations: () => Promise<DevelopmentWorkerHandle>, private readonly privateListener: Pick<HostDevelopmentConversationComputerSupervisor, "start" | "stop">) {}
 
 	/** Reconcile retained leases before subscribing to activation and accepting private traffic. */
-	public async start(): Promise<_DevelopmentWorkerHandle>
+	public async start(): Promise<DevelopmentWorkerHandle>
 	{
-		let lifecycle: _DevelopmentWorkerHandle | null = null;
-		let activations: _DevelopmentWorkerHandle | null = null;
+		let lifecycle: DevelopmentWorkerHandle | null = null;
+		let activations: DevelopmentWorkerHandle | null = null;
 		try
 		{
 			lifecycle = await this.startLifecycle();
@@ -36,7 +33,9 @@ export class DevelopmentConversationComputerRuntime implements DevelopmentConver
 		const activationWorker = activations;
 		const listener = this.privateListener;
 		let stopped = false;
-		return { stop: async function _Stop(): Promise<void>
+
+		/** Stop every runtime worker once, in the reverse order of startup authority. */
+		async function _Stop(): Promise<void>
 		{
 			if (stopped)
 			{
@@ -47,6 +46,8 @@ export class DevelopmentConversationComputerRuntime implements DevelopmentConver
 				[activationWorker.stop, lifecycleWorker.stop],
 				[listener.stop.bind(listener)],
 			], "Tier 2 conversation-computer runtime cleanup failed");
-		} };
+		}
+
+		return { stop: _Stop };
 	}
 }

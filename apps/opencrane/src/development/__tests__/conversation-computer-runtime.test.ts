@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DevelopmentConversationComputerRuntime } from "../conversation-computer-runtime";
 import { _StartDevelopmentServer } from "../lifecycle";
@@ -13,6 +13,11 @@ function _Handle(stop = vi.fn().mockResolvedValue(undefined))
 
 describe("Tier 2 conversation-computer startup order", function _Suite(): void
 {
+	afterEach(function _RestoreTimers(): void
+	{
+		vi.useRealTimers();
+	});
+
 	it("finishes retained-state reconciliation before activation and the private listener", async function _OrdersPrivateRuntime(): Promise<void>
 	{
 		const order: string[] = [];
@@ -44,7 +49,11 @@ describe("Tier 2 conversation-computer startup order", function _Suite(): void
 		expect(startActivations).not.toHaveBeenCalled();
 		finishReconciliation(_Handle());
 		const handle = await starting;
-		expect(order).toEqual(["reconcile", "activate", "private-listener"]);
+		expect(order).toEqual([
+			"reconcile",
+			"activate",
+			"private-listener",
+		]);
 		await handle.stop();
 	});
 
@@ -78,7 +87,11 @@ describe("Tier 2 conversation-computer startup order", function _Suite(): void
 			},
 		};
 		const handle = await _StartDevelopmentServer(composition as never, 8080);
-		expect(order).toEqual(["workflow-workers", "conversation-computer", "public-listener"]);
+		expect(order).toEqual([
+			"workflow-workers",
+			"conversation-computer",
+			"public-listener",
+		]);
 		await handle.stop();
 	});
 
@@ -105,7 +118,11 @@ describe("Tier 2 conversation-computer startup order", function _Suite(): void
 		finishActivationStop();
 
 		await expect(starting).rejects.toThrow("private port occupied");
-		expect(order).toEqual(["activation-stop", "lifecycle-stop", "listener-stop"]);
+		expect(order).toEqual([
+			"activation-stop",
+			"lifecycle-stop",
+			"listener-stop",
+		]);
 	});
 
 	it("finishes every runtime cleanup stage and reports worker failures", async function _ReportsRuntimeCleanupFailure(): Promise<void>
@@ -124,5 +141,72 @@ describe("Tier 2 conversation-computer startup order", function _Suite(): void
 		expect(activationStop).toHaveBeenCalledOnce();
 		expect(lifecycleStop).toHaveBeenCalledOnce();
 		expect(listenerStop).toHaveBeenCalledOnce();
+	});
+
+	it("serializes provider reconciliation and drains it before resource cleanup", async function _DrainsProviderPass(): Promise<void>
+	{
+		vi.useFakeTimers();
+		const order: string[] = [];
+		let finishProviderPass = function _MissingProviderPass(): void
+		{
+			throw new Error("Provider reconciliation pass did not start");
+		};
+		const providerPass = new Promise<boolean>(function _BlockProviderPass(resolve): void
+		{
+			finishProviderPass = function _FinishProviderPass(): void
+			{
+				order.push("provider-settled");
+				resolve(false);
+			};
+		});
+		const reconcileNext = vi.fn().mockReturnValue(providerPass);
+		const server = Object.assign(new EventEmitter(), {
+			close: vi.fn(function _Close(callback): void
+			{
+				order.push("server-close");
+				callback();
+			}),
+		});
+		const composition = {
+			app: {
+				listen: vi.fn(function _Listen()
+				{
+					void Promise.resolve().then(function _Ready(): void { server.emit("listening"); });
+					return server;
+				}),
+			},
+			conversationComputer: null,
+			historyStore: { close: vi.fn(async function _CloseHistory(): Promise<void> { order.push("history-close"); }) },
+			prisma: { $disconnect: vi.fn(async function _Disconnect(): Promise<void> { order.push("prisma-disconnect"); }) },
+			providerEffects: { reconcileNext },
+			workflowRuntime: {
+				startWorkers: vi.fn().mockResolvedValue(undefined),
+				close: vi.fn(async function _CloseWorkflow(): Promise<void> { order.push("workflow-close"); }),
+			},
+		};
+		const handle = await _StartDevelopmentServer(composition as never, 8080);
+
+		await vi.advanceTimersByTimeAsync(1_000);
+		expect(reconcileNext).toHaveBeenCalledOnce();
+		await vi.advanceTimersByTimeAsync(4_000);
+		expect(reconcileNext).toHaveBeenCalledOnce();
+
+		const stopping = handle.stop();
+		await Promise.resolve();
+		expect(server.close).not.toHaveBeenCalled();
+		expect(composition.historyStore.close).not.toHaveBeenCalled();
+		expect(composition.prisma.$disconnect).not.toHaveBeenCalled();
+		await vi.advanceTimersByTimeAsync(4_000);
+		expect(reconcileNext).toHaveBeenCalledOnce();
+
+		finishProviderPass();
+		await stopping;
+		expect(order).toEqual([
+			"provider-settled",
+			"server-close",
+			"workflow-close",
+			"history-close",
+			"prisma-disconnect",
+		]);
 	});
 });

@@ -9,6 +9,12 @@ import type { ___CreatePrismaClient } from "../infra/db/db";
 /** Product database client returned by the application-owned Prisma adapter. */
 type DevelopmentPrismaClient = ReturnType<typeof ___CreatePrismaClient>;
 
+/** Stops one retained Tier 2 worker after its owning runtime has started it. */
+export interface DevelopmentWorkerHandle
+{
+	readonly stop: () => Promise<void>;
+}
+
 /** Current Tier 2 public server and the process-owned dependencies it must drain. */
 export interface DevelopmentServerComposition
 {
@@ -37,5 +43,5 @@ export interface DevelopmentServerHandle
 export interface DevelopmentConversationComputerSupervisor
 {
 	/** Starts the current supervisor and returns the cleanup handle for its listener and child processes. */
-	readonly start: () => Promise<{ readonly stop: () => Promise<void> }>;
+	readonly start: () => Promise<DevelopmentWorkerHandle>;
 }

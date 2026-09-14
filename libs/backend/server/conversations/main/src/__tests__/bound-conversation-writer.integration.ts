@@ -50,7 +50,16 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 		await history.append(genesis);
 		const turn: FrozenConversationComputerTurn = {
 			bootstrapId: randomUUID(), siloId, computerId,
-			lease: { leaseId: randomUUID(), leaseGeneration: 1, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: `${computerId}-g1`, sandboxId: `${computerId}-sandbox`, serviceFQDN: `${computerId}.computers.svc.cluster.local` } },
+			lease: {
+				leaseId: randomUUID(),
+				leaseGeneration: 1,
+				realization: {
+					kind: ConversationComputerRealizationKinds.AgentSandbox,
+					claimId: `${computerId}-g1`,
+					sandboxId: `${computerId}-sandbox`,
+					serviceFQDN: `${computerId}.computers.svc.cluster.local`,
+				},
+			},
 			latestPendingEntryId: randomUUID(), modelAlias: "proof-model", maximumBudgetUsd: 0.05,
 			credentialLifetimeSeconds: 60, outputSourceCommandId: null, outputReceipt: null, toolSelection: null, continuationReservation: null, modelReservation: null,
 			binding: { siloId, conversationId, computerId, leaseGeneration: 1, agentIdentityId: randomUUID(), agentServiceId: randomUUID(), agentName: "Ada", agentAvatarArtifactRevisionId: null, runId, expectedRevision: 0n, maximumEntryBytes: 65_536 },

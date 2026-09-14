@@ -75,6 +75,7 @@ export type { GroupChildAgentCandidate, GroupChildAgentResolver, GroupChildAutho
 export type { CompanyAssistantDirectory } from "./conversation-metadata.types";
 
 export { PrismaConversationToolDispatchAuthority } from "./db/prisma-conversation-tool-dispatch-authority";
+export { ConversationToolEvidenceOutcomes } from "./conversation-tool-dispatch.types";
 export type { ConversationToolDispatchAuthority, ConversationToolDispatchDependencies, ConversationToolExecutionEvidence, ConversationToolAssignmentAuthority, ConversationToolAssignmentCommand } from "./conversation-tool-dispatch.types";
 
 export { PrismaConversationToolProposalUnitOfWork, PrismaConversationToolProposalRepository } from "./db/prisma-conversation-tool-proposal";

@@ -1,12 +1,36 @@
 {
-  "name": "frontend-state-local-development",
-  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
-  "projectType": "library",
-  "sourceRoot": "libs/frontend/state/local-development/src",
-  "prefix": "wo",
-  "tags": ["scope:local-development", "type:lib", "layer:frontend", "frontend-role:adapter"],
-  "targets": {
-    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.lint.json", "cwd": "libs/frontend/state/local-development" } },
-    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run --passWithNoTests", "cwd": "libs/frontend/state/local-development" } }
-  }
+	"name": "frontend-state-local-development",
+	"$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+	"projectType": "library",
+	"sourceRoot": "libs/frontend/state/local-development/src",
+	"prefix": "wo",
+	"tags": [
+		"scope:local-development",
+		"type:lib",
+		"layer:frontend",
+		"frontend-role:adapter"
+	],
+	"targets": {
+		"lint": {
+			"executor": "nx:run-commands",
+			"options": {
+				"command": "tsc -p tsconfig.lint.json",
+				"cwd": "libs/frontend/state/local-development"
+			}
+		},
+		"test": {
+			"executor": "nx:run-commands",
+			"inputs": [
+				"default",
+				"^production",
+				"{workspaceRoot}/apps/opencrane/prisma/bootstrap/target-baseline.sql",
+				"{workspaceRoot}/docs/design/persona-archetypes/bootstrap-*.md",
+				"{workspaceRoot}/libs/frontend/features/onboarding/src/lib/chat/__tests__/persona-first-chat.component.stories.ts"
+			],
+			"options": {
+				"command": "vitest run --passWithNoTests",
+				"cwd": "libs/frontend/state/local-development"
+			}
+		}
+	}
 }

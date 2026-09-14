@@ -13,7 +13,11 @@ import type { DevelopmentIdentity } from "./config.types";
 const _TIER2_TRANSPORT: DevelopmentAuthenticationTransport = Object.freeze({ browserHost: "local-development.localhost:4200", directHost: "local-development.localhost:8080", proxyTargets: new Set(["127.0.0.1:8080", "localhost:8080"]), scheme: "http" });
 
 /** Request methods that cannot change application state. */
-const _SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const _SAFE_METHODS = new Set([
+	"GET",
+	"HEAD",
+	"OPTIONS",
+]);
 
 /** Carries the per-launch credential set only by the dedicated Tier 2 browser or Tier 3 proxy. */
 const _DEVELOPMENT_SESSION_HEADER = "x-opencrane-development-session";
@@ -26,6 +30,7 @@ function _HasExpectedHost(request: Request, transport: DevelopmentAuthentication
 {
 	const host = request.get("host")?.trim().toLowerCase() ?? "";
 	const forwardedHost = request.headers["x-forwarded-host"];
+
 	if (typeof forwardedHost === "string")
 	{
 		return forwardedHost.trim().toLowerCase() === transport.browserHost && transport.proxyTargets.has(host);
@@ -52,15 +57,18 @@ function _HasExpectedOrigin(request: Request, transport: DevelopmentAuthenticati
 	}
 	const expected = _ExpectedOrigin(request, transport);
 	const origin = request.get("origin");
+
 	if (origin)
 	{
 		return origin === expected;
 	}
 	const referer = request.get("referer");
+
 	if (!referer)
 	{
 		return false;
 	}
+
 	try
 	{
 		return new URL(referer).origin === expected;
@@ -95,18 +103,20 @@ function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionC
 			return;
 		}
 		const now = new Date();
-		request.session = { authUser: {
-			authenticatedAt: now.toISOString(),
-			authorizationExpiresAt: new Date(now.getTime() + _AUTHORIZATION_LIFETIME_MILLISECONDS).toISOString(),
-			email: identity.email,
-			emailVerified: true,
-			groups: [],
-			isPlatformOperator: false,
-			issuer: identity.issuer,
-			name: identity.displayName,
-			siloId: identity.siloId,
-			sub: identity.subjectId,
-		} } as never;
+		request.session = {
+			authUser: {
+				authenticatedAt: now.toISOString(),
+				authorizationExpiresAt: new Date(now.getTime() + _AUTHORIZATION_LIFETIME_MILLISECONDS).toISOString(),
+				email: identity.email,
+				emailVerified: true,
+				groups: [],
+				isPlatformOperator: false,
+				issuer: identity.issuer,
+				name: identity.displayName,
+				siloId: identity.siloId,
+				sub: identity.subjectId,
+			},
+		} as never;
 		next();
 	};
 }
@@ -123,8 +133,17 @@ function _CreateAdmissionMiddleware(identity: DevelopmentIdentity, admission: Au
 		}
 		try
 		{
-			const principal = await admission.admit({ siloId: identity.siloId, issuer: identity.issuer, subject: identity.subjectId });
-			if (principal === null || principal.principalId !== identity.principalId || principal.siloId !== identity.siloId)
+			const principal = await admission.admit({
+				siloId: identity.siloId,
+				issuer: identity.issuer,
+				subject: identity.subjectId,
+			});
+
+			if (
+				!principal
+				|| principal.principalId !== identity.principalId
+				|| principal.siloId !== identity.siloId
+			)
 			{
 				response.status(401).json({ error: "authenticated_principal_required" });
 				return;
@@ -146,13 +165,30 @@ function _CreateAuthRouter(identity: DevelopmentIdentity, capabilities: Authenti
 	const router = Router();
 	router.get("/me", async function _ReadSession(_request, response): Promise<void>
 	{
-		const administerOrganization = await capabilities.canAdministerOrganization({ siloId: identity.siloId, issuer: identity.issuer, subject: identity.subjectId });
-		response.json({ authenticated: true, mode: "development", user: { clusterTenant: identity.siloId, email: identity.email, groups: [], isPlatformOperator: false, name: identity.displayName, productCapabilities: { administerOrganization }, sub: identity.subjectId } });
+		const administerOrganization = await capabilities.canAdministerOrganization({
+			siloId: identity.siloId,
+			issuer: identity.issuer,
+			subject: identity.subjectId,
+		});
+		response.json({
+			authenticated: true,
+			mode: "development",
+			user: {
+				clusterTenant: identity.siloId,
+				email: identity.email,
+				groups: [],
+				isPlatformOperator: false,
+				name: identity.displayName,
+				productCapabilities: { administerOrganization },
+				sub: identity.subjectId,
+			},
+		});
 	});
 	router.post("/logout", function _KeepFixedSession(_request, response): void
 	{
 		response.status(204).end();
 	});
+
 	return router;
 }
 

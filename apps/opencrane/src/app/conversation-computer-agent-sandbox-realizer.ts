@@ -25,17 +25,38 @@ export class AgentSandboxConversationComputerRealizer implements ConversationCom
 	/** Derive the deterministic pending claim recorded before Kubernetes mutation. */
 	public prepare(command: Omit<ConversationComputerRealizationClaimCommand, "realization">): ConversationComputerRealization
 	{
-		return { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: `${command.computerId}-g${command.generation}`, sandboxId: null, serviceFQDN: null };
+		return {
+			kind: ConversationComputerRealizationKinds.AgentSandbox,
+			claimId: `${command.computerId}-g${command.generation}`,
+			sandboxId: null,
+			serviceFQDN: null,
+		};
 	}
 
 	/** Create or observe the exact claim and return its current controller coordinates. */
 	public async claim(command: ConversationComputerRealizationClaimCommand): Promise<ConversationComputerRealization>
 	{
 		const realization = this._AgentSandbox(command.realization);
-		const claim = await this.claims.claim({ siloId: command.siloId, computerId: command.computerId, leaseId: command.leaseId, generation: command.generation, namespace: this.profile.namespace, profileName: this.profile.profileName, warmPoolName: this.profile.warmPoolName, expiresAt: command.expiresAt, reason: command.reason });
+		const claim = await this.claims.claim({
+			siloId: command.siloId,
+			computerId: command.computerId,
+			leaseId: command.leaseId,
+			generation: command.generation,
+			namespace: this.profile.namespace,
+			profileName: this.profile.profileName,
+			warmPoolName: this.profile.warmPoolName,
+			expiresAt: command.expiresAt,
+			reason: command.reason,
+		});
+
 		if (claim.claimId !== realization.claimId)
 			throw new Error("Agent Sandbox returned a different conversation-computer claim");
-		return { ...realization, sandboxId: claim.sandboxId, serviceFQDN: claim.serviceFQDN };
+
+		return {
+			...realization,
+			sandboxId: claim.sandboxId,
+			serviceFQDN: claim.serviceFQDN,
+		};
 	}
 
 	/** Read the exact claim selected by the persisted realization. */
@@ -43,7 +64,7 @@ export class AgentSandboxConversationComputerRealizer implements ConversationCom
 	{
 		const realization = this._AgentSandbox(command.lease.realization);
 		const status = await this.claims.inspect(this._ClaimCommand(command, realization));
-		return status === null ? null : { shutdownTime: status.shutdownTime };
+		return status ? { shutdownTime: status.shutdownTime } : null;
 	}
 
 	/** Extend the exact claim selected by the persisted realization. */
@@ -66,7 +87,13 @@ export class AgentSandboxConversationComputerRealizer implements ConversationCom
 		if (command.process.kind !== ConversationComputerRealizationKinds.AgentSandbox)
 			return false;
 		const realization = this._AgentSandbox(command.lease.realization);
-		return this.pods.verify({ computerId: command.computerId, lease: command.lease, realization, workload: command.process.workload });
+
+		return this.pods.verify({
+			computerId: command.computerId,
+			lease: command.lease,
+			realization,
+			workload: command.process.workload,
+		});
 	}
 
 	/** Refuse a host-process realization at the production Kubernetes adapter. */
@@ -80,7 +107,13 @@ export class AgentSandboxConversationComputerRealizer implements ConversationCom
 	/** Map neutral lease coordinates to the exact SandboxClaim operation. */
 	private _ClaimCommand(command: ConversationComputerRealizationCommand, realization: AgentSandboxConversationComputerRealization)
 	{
-		return { namespace: this.profile.namespace, claimId: realization.claimId, computerId: command.computerId, leaseId: command.lease.leaseId, generation: command.lease.leaseGeneration };
+		return {
+			namespace: this.profile.namespace,
+			claimId: realization.claimId,
+			computerId: command.computerId,
+			leaseId: command.lease.leaseId,
+			generation: command.lease.leaseGeneration,
+		};
 	}
 }
 
@@ -94,6 +127,12 @@ export class KubernetesConversationComputerProcessAuthenticator implements Conve
 	public async authenticate(bearer: string)
 	{
 		const workload = await this.reviewer.__Review(bearer);
-		return workload === null ? null : { kind: ConversationComputerRealizationKinds.AgentSandbox as const, workload };
+
+		return workload
+			? {
+				kind: ConversationComputerRealizationKinds.AgentSandbox as const,
+				workload,
+			}
+			: null;
 	}
 }

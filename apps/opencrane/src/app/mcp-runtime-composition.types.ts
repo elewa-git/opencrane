@@ -1,7 +1,10 @@
 import type { Router } from "express";
 
 import type { McpRuntimeAuthority, McpTaskWorkflow } from "@opencrane/backend/server/gateways/mcp";
-import type { ConversationToolProposalRuntimeAdmission } from "@opencrane/backend/server/conversations";
+import type { ConversationToolDispatchDependencies, ConversationToolProposalRuntimeAdmission } from "@opencrane/backend/server/conversations";
+
+/** Describes the execution-evidence readers bound to one conversation-tool transaction. */
+export type McpExecutionEvidenceComposition = ReturnType<ConversationToolDispatchDependencies["executionEvidence"]>;
 
 /** Product-facing MCP authority that does not assume a workload realization. */
 export interface PublicMcpRuntimeComposition

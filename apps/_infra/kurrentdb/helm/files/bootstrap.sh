@@ -2,8 +2,8 @@
 set -eu
 umask 077
 
-# The same policy runs in the Helm bootstrap Job and in an app-owned local session.
-# Every deployment coordinate stays explicit so callers cannot silently weaken TLS.
+# Helm and local development both run this policy. Requiring the endpoint, credential paths, silo
+# ID, and limits prevents either caller from weakening TLS through defaults.
 : "${KURRENTDB_BOOTSTRAP_ENDPOINT:?KURRENTDB_BOOTSTRAP_ENDPOINT is required}"
 : "${KURRENTDB_BOOTSTRAP_CA_FILE:?KURRENTDB_BOOTSTRAP_CA_FILE is required}"
 : "${KURRENTDB_BOOTSTRAP_ADMIN_PASSWORD_FILE:?KURRENTDB_BOOTSTRAP_ADMIN_PASSWORD_FILE is required}"
@@ -63,7 +63,9 @@ admin_password="$(cat "$KURRENTDB_BOOTSTRAP_ADMIN_PASSWORD_FILE")"
 history_username="$(cat "$KURRENTDB_HISTORY_USERNAME_FILE")"
 history_password="$(cat "$KURRENTDB_HISTORY_PASSWORD_FILE")"
 
-if [ "$history_username" != "opencrane-history" ] || [ -z "$admin_password" ] || [ -z "$history_password" ]; then
+if [ "$history_username" != "opencrane-history" ] \
+  || [ -z "$admin_password" ] \
+  || [ -z "$history_password" ]; then
   echo "KurrentDB bootstrap credentials must contain the fixed non-empty service identity." >&2
   exit 1
 fi
@@ -148,7 +150,9 @@ cat > "$settings_body" <<'JSON'
 ]
 JSON
 settings_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --cacert "$ca_file" --header "@$admin_authorization_header" --header 'Content-Type: application/vnd.kurrent.events+json' --header 'Kurrent-ExpectedVersion: -1' --data-binary "@$settings_body" "$endpoint/streams/%24settings")"
-if [ "$settings_status" != "201" ] && [ "$settings_status" != "200" ] && [ "$settings_status" != "400" ]; then
+if [ "$settings_status" != "201" ] \
+  && [ "$settings_status" != "200" ] \
+  && [ "$settings_status" != "400" ]; then
   echo "KurrentDB refused the HistoryStore default ACL write (HTTP $settings_status)." >&2
   exit 1
 fi
@@ -185,7 +189,8 @@ case "$subscription_status" in
   200)
     ;;
   404)
-    # The bounded retry horizon covers a slow Agent Sandbox start without redelivering a held event.
+    # The retry window gives a slow Agent Sandbox time to start without causing KurrentDB to
+    # redeliver an event the consumer is still processing.
     jq -n --argjson maxSubscribers "$KURRENTDB_BOOTSTRAP_MAX_SUBSCRIBERS" '{
       resolveLinktos: false,
       startFrom: 0,

@@ -31,7 +31,16 @@ export class HttpConversationComputerCheckpointSandbox implements ConversationCo
 	/** Restore one verified stream through the derived review credential. */
 	public async restore(computer: Parameters<ConversationComputerCheckpointSandbox["restore"]>[0], lease: Parameters<ConversationComputerCheckpointSandbox["restore"]>[1], bytes: AsyncIterable<Uint8Array>): Promise<void>
 	{
-		const response = await fetch(_SandboxUrl(_SandboxService(lease), "/v1/checkpoints/restore"), { method: "POST", headers: { authorization: `Bearer ${this._Credential(computer, lease)}`, "content-type": "application/vnd.opencrane.workspace-tar+gzip" }, body: Readable.toWeb(Readable.from(bytes)) as unknown as BodyInit, duplex: "half", signal: AbortSignal.timeout(30_000) } as RequestInit);
+		const response = await fetch(_SandboxUrl(_SandboxService(lease), "/v1/checkpoints/restore"), {
+			method: "POST",
+			headers: {
+				authorization: `Bearer ${this._Credential(computer, lease)}`,
+				"content-type": "application/vnd.opencrane.workspace-tar+gzip",
+			},
+			body: Readable.toWeb(Readable.from(bytes)) as unknown as BodyInit,
+			duplex: "half",
+			signal: AbortSignal.timeout(30_000),
+		} as RequestInit);
 		if (!response.ok)
 			throw new Error(`Conversation computer checkpoint restore failed with ${response.status}`);
 	}
@@ -39,7 +48,11 @@ export class HttpConversationComputerCheckpointSandbox implements ConversationCo
 	/** Bind the bearer to the exact computer, generation and lease the Pod was admitted with, under every keyring key. */
 	private _Credential(computer: Parameters<ConversationComputerCheckpointSandbox["capture"]>[0], lease: Parameters<ConversationComputerCheckpointSandbox["capture"]>[1]): string
 	{
-		return this.credentials.bearer({ siloId: computer.siloId, computerId: computer.id, lease: _LeaseScopeOf(lease) });
+		return this.credentials.bearer({
+			siloId: computer.siloId,
+			computerId: computer.id,
+			lease: _LeaseScopeOf(lease),
+		});
 	}
 }
 
@@ -56,12 +69,34 @@ export class ConversationComputerCheckpointFenceAdapter
 		if (coordinates === null)
 			throw new Error("Conversation computer checkpoint projection is unavailable");
 		const current = await this.dependencies.history.load(coordinates);
-		if (current === null || current.lease === null || current.lease.state !== ComputerLeaseStates.Active || current.lease.id !== command.lease.leaseId || current.lease.generation !== command.lease.leaseGeneration || current.lease.realization.kind !== ConversationComputerRealizationKinds.AgentSandbox || current.lease.realization.sandboxId === null)
+
+		if (
+			!current
+			|| !current.lease
+			|| current.lease.state !== ComputerLeaseStates.Active
+			|| current.lease.id !== command.lease.leaseId
+			|| current.lease.generation !== command.lease.leaseGeneration
+			|| current.lease.realization.kind !== ConversationComputerRealizationKinds.AgentSandbox
+			|| current.lease.realization.sandboxId === null
+		)
 			throw new Error("Conversation computer checkpoint requires the current lease generation");
+
 		const profile = this.dependencies.profile;
-		const workload = { namespace: profile.namespace, serviceAccountName: profile.serviceAccountName, podUid: command.podUid, subject: `system:serviceaccount:${profile.namespace}:${profile.serviceAccountName}` };
-		if (!await this.dependencies.pods.verify({ computerId: command.computerId, lease: command.lease, realization: current.lease.realization, workload }))
+		const workload = {
+			namespace: profile.namespace,
+			serviceAccountName: profile.serviceAccountName,
+			podUid: command.podUid,
+			subject: `system:serviceaccount:${profile.namespace}:${profile.serviceAccountName}`,
+		};
+
+		if (!await this.dependencies.pods.verify({
+			computerId: command.computerId,
+			lease: command.lease,
+			realization: current.lease.realization,
+			workload,
+		}))
 			throw new Error("Conversation computer checkpoint Pod is not lease-bound");
+
 		return { computer: current.computer, lease: current.lease };
 	}
 }
@@ -69,13 +104,13 @@ export class ConversationComputerCheckpointFenceAdapter
 /**
  * Filters rebuildable relational coordinates through authoritative Kurrent lifecycle deadlines.
  *
- * A computer is due when its lease expired, its process disappeared, its lease needs renewal, or its
+ * A computer is due when its lease expired, its realization disappeared, its lease needs renewal, or its
  * newest turn activity crossed the stale or retire boundary. The reconciler re-reads history and
  * decides the actual transition.
  */
 export class ConversationComputerLifecycleDueEnumerator
 {
-	/** Binds a silo projection to Kurrent history, turn activity, process status, and the idle policy. */
+	/** Binds a silo projection to Kurrent history, turn activity, realization status, and the idle policy. */
 	public constructor(private readonly projections: ConversationComputerLifecycleProjection, private readonly history: ConversationComputerHistory, private readonly activity: ConversationComputerActivityReader, private readonly realizer: Pick<ConversationComputerRealizer, "inspect">, private readonly siloId: string, private readonly policy: ConversationComputerIdlePolicy)
 	{
 		_ValidateConversationComputerIdlePolicy(policy);
@@ -89,12 +124,24 @@ export class ConversationComputerLifecycleDueEnumerator
 		for (const coordinate of page.items)
 		{
 			const current = await this.history.load(coordinate);
-			if (current === null || current.computer.state === ConversationComputerStates.Cold || current.computer.state === ConversationComputerStates.RecoveryRequired || current.computer.state === ConversationComputerStates.Retired)
+			if (
+				!current
+				|| current.computer.state === ConversationComputerStates.Cold
+				|| current.computer.state === ConversationComputerStates.RecoveryRequired
+				|| current.computer.state === ConversationComputerStates.Retired
+			)
 				continue;
+
 			const deadline = await this._deadline(current, now);
+
 			if (deadline !== null && deadline <= now)
-				candidates.push({ ...coordinate, state: current.computer.state, deadline });
+				candidates.push({
+					...coordinate,
+					state: current.computer.state,
+					deadline,
+				});
 		}
+
 		return { items: candidates, nextCursor: page.nextCursor };
 	}
 
@@ -109,10 +156,21 @@ export class ConversationComputerLifecycleDueEnumerator
 		const expiresAt = new Date(lease.expiresAt);
 		if (lease.state === ComputerLeaseStates.Claimed || expiresAt <= now)
 			return expiresAt;
-		const claim = await this.realizer.inspect({ computerId: current.computer.id, lease: { leaseId: lease.id, leaseGeneration: lease.generation, realization: lease.realization } });
-		if (claim === null || _ConversationComputerRenewalDue(lease, claim.shutdownTime, this.policy, now))
+		const realizationStatus = await this.realizer.inspect({
+			computerId: current.computer.id,
+			lease: {
+				leaseId: lease.id,
+				leaseGeneration: lease.generation,
+				realization: lease.realization,
+			},
+		});
+		if (realizationStatus === null || _ConversationComputerRenewalDue(lease, realizationStatus.shutdownTime, this.policy, now))
 			return now;
-		const activity = await this.activity.lastActivity({ siloId: current.computer.siloId, computerId: current.computer.id, lease: _LeaseScopeOf(lease) });
+		const activity = await this.activity.lastActivity({
+			siloId: current.computer.siloId,
+			computerId: current.computer.id,
+			lease: _LeaseScopeOf(lease),
+		});
 		if (activity?.busy)
 			return expiresAt;
 		const delay = current.computer.state === ConversationComputerStates.Warm ? this.policy.staleAfterMilliseconds : this.policy.retireAfterMilliseconds;
@@ -135,21 +193,67 @@ export class ConversationComputerLifecycleWorker
 	/** Process timer stopped during coordinated application shutdown. */
 	private readonly timer: NodeJS.Timeout;
 
+	/** Retains the one admitted pass until it settles. */
+	private currentPass: Promise<void> | null = null;
+
+	/** Prevents queued timer callbacks from admitting work after shutdown starts. */
+	private stopped = false;
+
+	/** Shares one drain promise across repeated stop calls. */
+	private stopping: Promise<void> | null = null;
+
 	/** Start one non-blocking bounded scheduler cadence. */
-	public constructor(scheduler: ConversationComputerLifecycleScheduler, logger: ConversationComputerLifecycleLogger, intervalMilliseconds = 30_000)
+	public constructor(private readonly scheduler: ConversationComputerLifecycleScheduler, private readonly logger: ConversationComputerLifecycleLogger, intervalMilliseconds = 30_000)
 	{
-		this.timer = setInterval(function _ReconcileComputers() { void scheduler.reconcileDue(new Date()).catch(function _LogFailure(error: unknown) { logger.error({ err: error }, "conversation computer lifecycle pass failed"); }); }, intervalMilliseconds);
+		this.timer = setInterval(this._StartPass.bind(this), intervalMilliseconds);
 		this.timer.unref();
 	}
 
-	/** Stop future lifecycle passes during coordinated shutdown. */
-	public async stop(): Promise<void> { clearInterval(this.timer); }
+	/** Stop future lifecycle passes and drain the currently admitted pass. */
+	public stop(): Promise<void>
+	{
+		if (this.stopping)
+			return this.stopping;
+		this.stopped = true;
+		clearInterval(this.timer);
+		this.stopping = this.currentPass ?? Promise.resolve();
+		return this.stopping;
+	}
+
+	/** Admit one pass only when no earlier pass is still using lifecycle resources. */
+	private _StartPass(): void
+	{
+		if (this.stopped || this.currentPass)
+			return;
+		this.currentPass = Promise.resolve().then(this._RunPass.bind(this));
+	}
+
+	/** Run one reconciler pass, preserving the existing logged-failure contract. */
+	private async _RunPass(): Promise<void>
+	{
+		try
+		{
+			await this.scheduler.reconcileDue(new Date());
+		}
+		catch (error)
+		{
+			this.logger.error({ err: error }, "conversation computer lifecycle pass failed");
+		}
+		finally
+		{
+			this.currentPass = null;
+		}
+	}
 }
 
 /** Restrict checkpoint traffic to a controller-reported cluster-local Service. */
 function _SandboxUrl(serviceFQDN: string | null, path: string): string
 {
-	if (serviceFQDN === null || !/^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$/.test(serviceFQDN) || !serviceFQDN.endsWith(".svc.cluster.local"))
+	if (
+		!serviceFQDN
+		|| !/^[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?$/.test(serviceFQDN)
+		|| !serviceFQDN.endsWith(".svc.cluster.local")
+	)
 		throw new Error("Conversation computer checkpoint requires a valid sandbox Service FQDN");
 	return `http://${serviceFQDN}:8090${path}`;
 }

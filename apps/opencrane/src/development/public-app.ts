@@ -10,10 +10,11 @@ import type { DevelopmentPublicAppDependencies } from "./public-app.types";
  * Compose the current authenticated product routes with the development-only browser boundary.
  *
  * The caller must provide the same current HistoryStore, workflows, model/provider effects, and
- * profile contracts used by production. This seam changes only browser identity establishment; it
- * does not replace product route authority, run admission, conversation history, or output paths.
+ * profile contracts used by production. This adapter replaces only browser authentication; it
+ * retains the production route, run-admission, conversation-history, and output authorities.
  *
- * Called by: the Tier 2 process composition after it starts its exact owned dependencies.
+ * Called by: the Tier 2 process composition after it starts the dependencies supplied through
+ * `DevelopmentPublicAppDependencies`.
  */
 export function _CreateDevelopmentPublicApp(dependencies: DevelopmentPublicAppDependencies)
 {

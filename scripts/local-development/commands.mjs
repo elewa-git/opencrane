@@ -1,7 +1,7 @@
 import { createDockerLabelArguments } from "./docker-resources.mjs";
 import { LOCAL_DEVELOPMENT_ALTERNATIVES } from "./profiles.mjs";
 
-/** Builds the exact-owned PostgreSQL container for the current release operand. */
+/** Builds the PostgreSQL container labeled for this checkout and target baseline. */
 export function createPostgresCommand(configuration, secrets)
 {
 	return {
@@ -15,11 +15,15 @@ export function createPostgresCommand(configuration, secrets)
 			"--env", "POSTGRES_USER", "--env", "POSTGRES_PASSWORD", "--env", "POSTGRES_DB",
 			configuration.postgresImage
 		],
-		environment: { POSTGRES_USER: "opencrane", POSTGRES_PASSWORD: secrets.postgresPassword, POSTGRES_DB: "opencrane" }
+		environment: {
+			POSTGRES_USER: "opencrane",
+			POSTGRES_PASSWORD: secrets.postgresPassword,
+			POSTGRES_DB: "opencrane"
+		}
 	};
 }
 
-/** Builds the secure exact-owned KurrentDB container used by the production TLS adapter. */
+/** Builds the TLS-enabled KurrentDB container labeled for this checkout and target baseline. */
 export function createKurrentCommand(configuration, secrets)
 {
 	return {
@@ -44,7 +48,10 @@ export function createKurrentCommand(configuration, secrets)
 			"--env", "KURRENTDB_DEFAULT_OPS_PASSWORD",
 			configuration.kurrentImage
 		],
-		environment: { KURRENTDB_DEFAULT_ADMIN_PASSWORD: secrets.kurrentAdminPassword, KURRENTDB_DEFAULT_OPS_PASSWORD: secrets.kurrentOpsPassword }
+		environment: {
+			KURRENTDB_DEFAULT_ADMIN_PASSWORD: secrets.kurrentAdminPassword,
+			KURRENTDB_DEFAULT_OPS_PASSWORD: secrets.kurrentOpsPassword
+		}
 	};
 }
 
@@ -52,6 +59,7 @@ export function createKurrentCommand(configuration, secrets)
 export function createKurrentTlsVolumeCommand(configuration, secrets)
 {
 	const install = "set -eu; rm -rf /target/node /target/ca; mkdir -p /target/node /target/ca; cp /source/kurrentdb.crt /target/node/tls.crt; cp /source/kurrentdb.key /target/node/tls.key; cp /source/kurrentdb-ca.crt /target/ca/ca.crt; chown -R 1001:1001 /target/node /target/ca; chmod 0700 /target/node /target/ca; chmod 0600 /target/node/tls.key; chmod 0644 /target/node/tls.crt /target/ca/ca.crt";
+
 	return {
 		command: "docker",
 		arguments: [
@@ -82,7 +90,10 @@ export function createLiteLLMCommand(configuration, secrets, provider)
 			configuration.liteLLMImage,
 			"--config", "/app/config.yaml", "--port", "4000"
 		],
-		environment: { [provider.providerKeyEnvironmentVariable]: provider.providerKey, LITELLM_MASTER_KEY: secrets.liteLLMMasterKey }
+		environment: {
+			[provider.providerKeyEnvironmentVariable]: provider.providerKey,
+			LITELLM_MASTER_KEY: secrets.liteLLMMasterKey
+		}
 	};
 }
 
@@ -104,18 +115,41 @@ export function createApplicationCommands(configuration, secrets)
 		PORT: String(configuration.publicPort),
 		INTERNAL_PORT: String(configuration.internalPort)
 	};
+
 	if (configuration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM)
 	{
 		serverEnvironment.LITELLM_ENDPOINT = `http://127.0.0.1:${configuration.liteLLMPort}`;
 		serverEnvironment.LITELLM_MASTER_KEY = secrets.liteLLMMasterKey;
 	}
+
 	if (configuration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.RemoteLiteLLM)
 	{
 		serverEnvironment.LITELLM_ENDPOINT = configuration.remoteLiteLLMEndpoint;
 		serverEnvironment.LITELLM_MASTER_KEY = secrets.liteLLMMasterKey;
 	}
+
 	return [
-		{ name: "opencrane-server", command: "npx", arguments: ["tsx", "apps/opencrane/src/development/index.ts"], environment: serverEnvironment },
-		{ name: "opencrane-ui", command: "npx", arguments: ["nx", "serve", "opencrane-ui", "--configuration=tier2", "--host=local-development.localhost", `--port=${configuration.uiPort}`, "--output-style=stream"], environment: { NX_TUI: "false", NX_TASKS_RUNNER_DYNAMIC_OUTPUT: "false" } }
+		{
+			name: "opencrane-server",
+			command: "npx",
+			arguments: ["tsx", "apps/opencrane/src/development/index.ts"],
+			environment: serverEnvironment
+		},
+		{
+			name: "opencrane-ui",
+			command: "npx",
+			arguments: [
+				"nx",
+				"run",
+				"opencrane-ui:serve-browser:tier2",
+				"--host=local-development.localhost",
+				`--port=${configuration.uiPort}`,
+				"--output-style=stream"
+			],
+			environment: {
+				NX_TUI: "false",
+				NX_TASKS_RUNNER_DYNAMIC_OUTPUT: "false"
+			}
+		}
 	];
 }

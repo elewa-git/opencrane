@@ -48,20 +48,28 @@ test("container commands keep database credentials out of process arguments", fu
 	assert.equal(kurrent.arguments.includes("KURRENTDB_INSECURE=false"), true);
 	assert.match(kurrent.arguments.join(" "), /127\.0\.0\.1:21139:2113/u);
 	assert.equal(kurrent.arguments.includes("KURRENTDB_TRUSTED_ROOT_CERTIFICATES_PATH=/var/run/opencrane/local-tls/ca"), true);
-	assert.equal(kurrent.arguments.some(function _KeyInRoots(argument) { return argument.includes("target=/var/run/opencrane/local-tls/ca/tls.key"); }), false);
+	assert.equal(kurrent.arguments.some((argument) => argument.includes("target=/var/run/opencrane/local-tls/ca/tls.key")), false);
 	assert.equal(kurrent.arguments.includes("--group-add"), false);
-	assert.equal(kurrent.arguments.some(function _TlsVolume(argument) { return argument.includes("source=kurrent-tls-volume,target=/var/run/opencrane/local-tls,readonly"); }), true);
+	assert.equal(kurrent.arguments.some((argument) => argument.includes("source=kurrent-tls-volume,target=/var/run/opencrane/local-tls,readonly")), true);
 	const provision = createKurrentTlsVolumeCommand(configuration, { ...secrets, directory: "/tmp/session" });
 	assert.equal(provision.arguments.join(" ").includes("admin-secret"), false);
 	assert.equal(provision.arguments.includes("0:0"), true);
-	assert.equal(provision.arguments.some(function _CopiesOwnerOnlySource(argument) { return argument.includes("source=/tmp/session,target=/source,readonly"); }), true);
+	assert.equal(provision.arguments.some((argument) => argument.includes("source=/tmp/session,target=/source,readonly")), true);
 });
 
 test("application plans start only the current server and Tier 2 UI", function _CurrentProcesses()
 {
 	const commands = createApplicationCommands(configuration, secrets);
-	assert.deepEqual(commands.map(function _Name(command) { return command.name; }), ["opencrane-server", "opencrane-ui"]);
+	assert.deepEqual(commands.map((command) => command.name), ["opencrane-server", "opencrane-ui"]);
 	assert.deepEqual(commands[0].arguments, ["tsx", "apps/opencrane/src/development/index.ts"]);
+	assert.deepEqual(commands[1].arguments, [
+		"nx",
+		"run",
+		"opencrane-ui:serve-browser:tier2",
+		"--host=local-development.localhost",
+		"--port=4200",
+		"--output-style=stream",
+	]);
 	assert.equal(commands[0].environment.OPENCRANE_LOCAL_DEVELOPMENT_PROFILE, "core");
 	assert.equal(commands[0].environment.OPENCRANE_LOCAL_KURRENTDB_CA_PATH, secrets.caCertificatePath);
 	assert.equal(commands[0].environment.OPENCRANE_LOCAL_BROWSER_SESSION_CREDENTIAL_PATH, secrets.browserSessionCredentialPath);

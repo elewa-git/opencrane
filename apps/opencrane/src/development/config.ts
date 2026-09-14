@@ -17,7 +17,12 @@ export const _DEVELOPMENT_IDENTITY: DevelopmentIdentity = Object.freeze({
 function _ReadPort(name: string, fallback: number): number
 {
 	const value = Number(process.env[name] ?? fallback);
-	if (!Number.isSafeInteger(value) || value < 1_024 || value > 65_535)
+
+	if (
+		!Number.isSafeInteger(value)
+		|| value < 1_024
+		|| value > 65_535
+	)
 	{
 		throw new Error(`${name} must be a local user port`);
 	}
@@ -28,6 +33,7 @@ function _ReadPort(name: string, fallback: number): number
 function _ReadAbsolutePath(name: string): string
 {
 	const value = process.env[name]?.trim() ?? "";
+
 	if (!value || !isAbsolute(value))
 	{
 		throw new Error(`${name} must be an absolute path`);
@@ -41,7 +47,13 @@ function _ReadKurrentEndpoint(): string
 	const value = process.env.OPENCRANE_LOCAL_KURRENTDB_ENDPOINT?.trim() ?? "";
 	const match = /^(127\.0\.0\.1|localhost):(\d{1,5})$/u.exec(value);
 	const port = Number(match?.[2]);
-	if (!match || !Number.isSafeInteger(port) || port < 1_024 || port > 65_535)
+
+	if (
+		!match
+		|| !Number.isSafeInteger(port)
+		|| port < 1_024
+		|| port > 65_535
+	)
 	{
 		throw new Error("OPENCRANE_LOCAL_KURRENTDB_ENDPOINT must be a loopback host and user port");
 	}
@@ -56,6 +68,7 @@ function _ReadProfile(): DevelopmentProfileKinds
 	{
 		return value as DevelopmentProfileKinds;
 	}
+
 	throw new Error("OPENCRANE_LOCAL_DEVELOPMENT_PROFILE must be core, agent-local, agent-remote, or agent-simulated");
 }
 
@@ -85,11 +98,13 @@ function _AssertDevelopmentBoundary(databaseUrl: string): void
 export function _ReadDevelopmentConfig(): DevelopmentConfig
 {
 	const databaseUrl = process.env.DATABASE_URL?.trim() ?? "";
+
 	if (!databaseUrl)
 	{
 		throw new Error("DATABASE_URL is required for Tier 2");
 	}
 	_AssertDevelopmentBoundary(databaseUrl);
+
 	return Object.freeze({
 		browserSessionCredentialPath: _ReadAbsolutePath("OPENCRANE_LOCAL_BROWSER_SESSION_CREDENTIAL_PATH"),
 		conversationPrivatePayloadKeyringPath: _ReadAbsolutePath("OPENCRANE_LOCAL_CONVERSATION_KEYRING_PATH"),

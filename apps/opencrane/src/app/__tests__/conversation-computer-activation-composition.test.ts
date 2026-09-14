@@ -13,7 +13,14 @@ vi.mock("../log", function _Log() { return { _log }; });
 import { _StartConversationComputerActivationConsumer } from "../conversation-computer-activation-composition";
 
 const _PROFILE: AgentSandboxReleaseProfileConfig = { profileRevisionId: `sha256:${"a".repeat(64)}`, profileName: "developer", warmPoolName: "developer-pool", namespace: "testv5-computers", serviceAccountName: "computer", leaseTtlMilliseconds: 3_600_000, maximumTurnCostUsdMicros: 1 };
-const _REALIZER = { prepare: vi.fn(), claim: vi.fn(), inspect: vi.fn(), renew: vi.fn(), release: vi.fn(), bind: vi.fn() };
+const _REALIZER = {
+	prepare: vi.fn(),
+	claim: vi.fn(),
+	inspect: vi.fn(),
+	renew: vi.fn(),
+	release: vi.fn(),
+	bind: vi.fn(),
+};
 
 /** A subscription that never delivers, so the composition's lifecycle is the only thing under test. */
 function _IdleSubscription(): HistoryPersistentSubscription
@@ -67,7 +74,11 @@ describe("conversation computer activation worker composition", function _Suite(
 		const subscribePersistent = vi.fn().mockRejectedValue(new Error("kurrentdb unreachable"));
 		const onExhausted = vi.fn();
 
-		const worker = await _StartConversationComputerActivationConsumer({} as PrismaClient, _HistoryStore(subscribePersistent), "silo-1", _PROFILE, _REALIZER as never, { onExhausted, wait: _instantWait, resubscribe: { maxConsecutiveFailures: 2 } });
+		const worker = await _StartConversationComputerActivationConsumer({} as PrismaClient, _HistoryStore(subscribePersistent), "silo-1", _PROFILE, _REALIZER as never, {
+			onExhausted,
+			wait: _instantWait,
+			resubscribe: { maxConsecutiveFailures: 2 },
+		});
 		await vi.waitFor(function _Exhausted() { expect(onExhausted).toHaveBeenCalledOnce(); });
 
 		expect(subscribePersistent).toHaveBeenCalledTimes(2);

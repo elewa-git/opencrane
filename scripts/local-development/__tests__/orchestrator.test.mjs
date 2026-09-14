@@ -18,10 +18,18 @@ test("the production credential path enforces remote administrator-key separatio
 	fs.writeFileSync(remoteKeyPath, "remote-administrator\n", { mode: 0o600 });
 	try
 	{
-		const remote = await prepareModelCredentials({ alternative: "remote-llm", remoteLiteLLMMasterKeyFile: remoteKeyPath, repositoryRoot });
+		const remote = await prepareModelCredentials({
+			alternative: "remote-llm",
+			remoteLiteLLMMasterKeyFile: remoteKeyPath,
+			repositoryRoot,
+		});
 		assert.equal(remote.kind, "remote");
 		assert.equal(remote.remoteMasterKey, "remote-administrator");
-		await assert.rejects(prepareModelCredentials({ alternative: "remote-llm", remoteLiteLLMMasterKeyFile: localKeyPath, repositoryRoot }), /must not reuse/);
+		await assert.rejects(prepareModelCredentials({
+			alternative: "remote-llm",
+			remoteLiteLLMMasterKeyFile: localKeyPath,
+			repositoryRoot,
+		}), /must not reuse/);
 	}
 	finally
 	{
@@ -34,7 +42,9 @@ test("a normal stop removes reverse-owned resources and preserves paired volumes
 	const events = [];
 	const processHost = new EventEmitter();
 	processHost.platform = "darwin";
-	processHost.kill = function _Kill() {};
+	function _Kill() {}
+
+	processHost.kill = _Kill;
 	const configuration = {
 		alternative: "simulated-llm",
 		developmentProfile: "agent-simulated",
@@ -50,20 +60,71 @@ test("a normal stop removes reverse-owned resources and preserves paired volumes
 		repositoryRoot: "/repo",
 		reset: false
 	};
+	async function _Baseline()
+	{
+		events.push("baseline");
+	}
+
+	async function _Bootstrap()
+	{
+		events.push("bootstrap");
+	}
+
+	async function _Secrets()
+	{
+		return { browserSessionCredential: "browser-session", directory: "/tmp/session" };
+	}
+
+	async function _Network()
+	{
+		events.push("network");
+	}
+
+	async function _Volume(name)
+	{
+		events.push(`volume:${name}`);
+	}
+
+	async function _Credentials()
+	{
+		return { kind: "simulated" };
+	}
+
+	function _SecretsCleanup()
+	{
+		events.push("remove:secrets");
+	}
+
+	async function _Remove(kind, name)
+	{
+		events.push(`remove:${kind}:${name}`);
+	}
+
+	async function _Processes() {}
+
+	async function _Start(specification)
+	{
+		events.push(`start:${specification.arguments[3]}`);
+	}
+
+	async function _Validate() {}
+
+	async function _Wait() {}
+
 	await runLocalDevelopmentSession(configuration, {
-		applyTargetBaseline: async function _Baseline() { events.push("baseline"); },
-		bootstrapKurrent: async function _Bootstrap() { events.push("bootstrap"); },
-		createLocalDevelopmentSecrets: async function _Secrets() { return { browserSessionCredential: "browser-session", directory: "/tmp/session" }; },
-		ensureOwnedNetwork: async function _Network() { events.push("network"); },
-		ensureOwnedVolume: async function _Volume(name) { events.push(`volume:${name}`); },
+		applyTargetBaseline: _Baseline,
+		bootstrapKurrent: _Bootstrap,
+		createLocalDevelopmentSecrets: _Secrets,
+		ensureOwnedNetwork: _Network,
+		ensureOwnedVolume: _Volume,
 		processHost,
-		prepareModelCredentials: async function _Credentials() { return { kind: "simulated" }; },
-		removeLocalDevelopmentSecrets: function _SecretsCleanup() { events.push("remove:secrets"); },
-		removeOwnedDockerResource: async function _Remove(kind, name) { events.push(`remove:${kind}:${name}`); },
-		runDevelopmentProcesses: async function _Processes() {},
-		runSpecification: async function _Start(specification) { events.push(`start:${specification.arguments[3]}`); },
-		validateInputs: async function _Validate() {},
-		waitForPostgres: async function _Wait() {}
+		prepareModelCredentials: _Credentials,
+		removeLocalDevelopmentSecrets: _SecretsCleanup,
+		removeOwnedDockerResource: _Remove,
+		runDevelopmentProcesses: _Processes,
+		runSpecification: _Start,
+		validateInputs: _Validate,
+		waitForPostgres: _Wait,
 	});
 	assert.equal(events.includes("remove:volume:postgres-volume"), false);
 	assert.equal(events.includes("remove:volume:kurrent-volume"), false);
@@ -82,7 +143,12 @@ test("terminal suspend resumes the process group, aborts children, and cleans re
 	const events = [];
 	const processHost = new EventEmitter();
 	processHost.platform = "darwin";
-	processHost.kill = function _Kill(processId, signal) { events.push(`signal:${processId}:${signal}`); };
+	function _Kill(processId, signal)
+	{
+		events.push(`signal:${processId}:${signal}`);
+	}
+
+	processHost.kill = _Kill;
 	const configuration = {
 		alternative: "simulated-llm",
 		developmentProfile: "agent-simulated",
@@ -98,24 +164,60 @@ test("terminal suspend resumes the process group, aborts children, and cleans re
 		repositoryRoot: "/repo",
 		reset: false
 	};
+	async function _Baseline() {}
+
+	async function _Bootstrap() {}
+
+	async function _Secrets()
+	{
+		return { browserSessionCredential: "browser-session", directory: "/tmp/session" };
+	}
+
+	async function _Network() {}
+
+	async function _Volume() {}
+
+	async function _Credentials()
+	{
+		return { kind: "simulated" };
+	}
+
+	function _SecretsCleanup()
+	{
+		events.push("remove:secrets");
+	}
+
+	async function _Remove(kind, name)
+	{
+		events.push(`remove:${kind}:${name}`);
+	}
+
+	async function _Processes(_commands, _root, options)
+	{
+		processHost.emit("SIGTSTP");
+		assert.equal(options.signal.aborted, true);
+	}
+
+	async function _Start() {}
+
+	async function _Validate() {}
+
+	async function _Wait() {}
+
 	await runLocalDevelopmentSession(configuration, {
-		applyTargetBaseline: async function _Baseline() {},
-		bootstrapKurrent: async function _Bootstrap() {},
-		createLocalDevelopmentSecrets: async function _Secrets() { return { browserSessionCredential: "browser-session", directory: "/tmp/session" }; },
-		ensureOwnedNetwork: async function _Network() {},
-		ensureOwnedVolume: async function _Volume() {},
+		applyTargetBaseline: _Baseline,
+		bootstrapKurrent: _Bootstrap,
+		createLocalDevelopmentSecrets: _Secrets,
+		ensureOwnedNetwork: _Network,
+		ensureOwnedVolume: _Volume,
 		processHost,
-		prepareModelCredentials: async function _Credentials() { return { kind: "simulated" }; },
-		removeLocalDevelopmentSecrets: function _SecretsCleanup() { events.push("remove:secrets"); },
-		removeOwnedDockerResource: async function _Remove(kind, name) { events.push(`remove:${kind}:${name}`); },
-		runDevelopmentProcesses: async function _Processes(_commands, _root, options)
-		{
-			processHost.emit("SIGTSTP");
-			assert.equal(options.signal.aborted, true);
-		},
-		runSpecification: async function _Start() {},
-		validateInputs: async function _Validate() {},
-		waitForPostgres: async function _Wait() {}
+		prepareModelCredentials: _Credentials,
+		removeLocalDevelopmentSecrets: _SecretsCleanup,
+		removeOwnedDockerResource: _Remove,
+		runDevelopmentProcesses: _Processes,
+		runSpecification: _Start,
+		validateInputs: _Validate,
+		waitForPostgres: _Wait,
 	});
 	assert.equal(events.includes("signal:0:SIGCONT"), true);
 	assert.equal(events.at(-1), "remove:secrets");
@@ -126,7 +228,9 @@ test("a network acquisition failure removes a resource created before the operat
 	const events = [];
 	const processHost = new EventEmitter();
 	processHost.platform = "darwin";
-	processHost.kill = function _Kill() {};
+	function _Kill() {}
+
+	processHost.kill = _Kill;
 	const configuration = {
 		developmentProfile: "core",
 		kurrentContainerName: "kurrent",
@@ -140,28 +244,52 @@ test("a network acquisition failure removes a resource created before the operat
 		repositoryRoot: "/repo",
 		reset: false
 	};
+	async function _Secrets()
+	{
+		return { browserSessionCredential: "browser-session", directory: "/tmp/session" };
+	}
+
+	async function _Network()
+	{
+		events.push("created:network");
+		throw new Error("network inspection interrupted");
+	}
+
+	function _SecretsCleanup()
+	{
+		events.push("remove:secrets");
+	}
+
+	async function _Remove(kind, name)
+	{
+		events.push(`remove:${kind}:${name}`);
+	}
+
+	async function _Validate() {}
 
 	await assert.rejects(runLocalDevelopmentSession(configuration, {
-		createLocalDevelopmentSecrets: async function _Secrets() { return { browserSessionCredential: "browser-session", directory: "/tmp/session" }; },
-		ensureOwnedNetwork: async function _Network()
-		{
-			events.push("created:network");
-			throw new Error("network inspection interrupted");
-		},
+		createLocalDevelopmentSecrets: _Secrets,
+		ensureOwnedNetwork: _Network,
 		processHost,
-		removeLocalDevelopmentSecrets: function _SecretsCleanup() { events.push("remove:secrets"); },
-		removeOwnedDockerResource: async function _Remove(kind, name) { events.push(`remove:${kind}:${name}`); },
-		validateInputs: async function _Validate() {},
+		removeLocalDevelopmentSecrets: _SecretsCleanup,
+		removeOwnedDockerResource: _Remove,
+		validateInputs: _Validate,
 	}), /network inspection interrupted/u);
 
-	assert.deepEqual(events, ["created:network", "remove:network:network", "remove:secrets"]);
+	assert.deepEqual(events, [
+		"created:network",
+		"remove:network:network",
+		"remove:secrets",
+	]);
 });
 
 test("a failed startup reports both its primary error and a cleanup failure", async function _PrimaryAndCleanupFailures()
 {
 	const processHost = new EventEmitter();
 	processHost.platform = "darwin";
-	processHost.kill = function _Kill() {};
+	function _Kill() {}
+
+	processHost.kill = _Kill;
 	const configuration = {
 		developmentProfile: "core",
 		kurrentContainerName: "kurrent",
@@ -175,14 +303,32 @@ test("a failed startup reports both its primary error and a cleanup failure", as
 		repositoryRoot: "/repo",
 		reset: false
 	};
+	async function _Secrets()
+	{
+		return { browserSessionCredential: "browser-session", directory: "/tmp/session" };
+	}
+
+	async function _Network()
+	{
+		throw new Error("network inspection interrupted");
+	}
+
+	function _SecretsCleanup() {}
+
+	async function _Remove()
+	{
+		throw new Error("Docker daemon unavailable during cleanup");
+	}
+
+	async function _Validate() {}
 
 	await assert.rejects(runLocalDevelopmentSession(configuration, {
-		createLocalDevelopmentSecrets: async function _Secrets() { return { browserSessionCredential: "browser-session", directory: "/tmp/session" }; },
-		ensureOwnedNetwork: async function _Network() { throw new Error("network inspection interrupted"); },
+		createLocalDevelopmentSecrets: _Secrets,
+		ensureOwnedNetwork: _Network,
 		processHost,
-		removeLocalDevelopmentSecrets: function _SecretsCleanup() {},
-		removeOwnedDockerResource: async function _Remove() { throw new Error("Docker daemon unavailable during cleanup"); },
-		validateInputs: async function _Validate() {},
+		removeLocalDevelopmentSecrets: _SecretsCleanup,
+		removeOwnedDockerResource: _Remove,
+		validateInputs: _Validate,
 	}), function _ContainsBothFailures(error)
 	{
 		assert.equal(error instanceof AggregateError, true);
@@ -198,7 +344,9 @@ test("a TLS-volume acquisition failure removes a volume created before the opera
 	const events = [];
 	const processHost = new EventEmitter();
 	processHost.platform = "darwin";
-	processHost.kill = function _Kill() {};
+	function _Kill() {}
+
+	processHost.kill = _Kill;
 	const configuration = {
 		developmentProfile: "core",
 		kurrentContainerName: "kurrent",
@@ -212,25 +360,51 @@ test("a TLS-volume acquisition failure removes a volume created before the opera
 		repositoryRoot: "/repo",
 		reset: false
 	};
+	async function _Baseline() {}
+
+	async function _Secrets()
+	{
+		return { browserSessionCredential: "browser-session", directory: "/tmp/session" };
+	}
+
+	async function _Network() {}
+
+	async function _Volume(name)
+	{
+		if (name === configuration.kurrentTlsVolumeName)
+		{
+			events.push("created:tls-volume");
+			throw new Error("TLS volume inspection interrupted");
+		}
+	}
+
+	function _SecretsCleanup()
+	{
+		events.push("remove:secrets");
+	}
+
+	async function _Remove(kind, name)
+	{
+		events.push(`remove:${kind}:${name}`);
+	}
+
+	async function _Start() {}
+
+	async function _Validate() {}
+
+	async function _Wait() {}
 
 	await assert.rejects(runLocalDevelopmentSession(configuration, {
-		applyTargetBaseline: async function _Baseline() {},
-		createLocalDevelopmentSecrets: async function _Secrets() { return { browserSessionCredential: "browser-session", directory: "/tmp/session" }; },
-		ensureOwnedNetwork: async function _Network() {},
-		ensureOwnedVolume: async function _Volume(name)
-		{
-			if (name === configuration.kurrentTlsVolumeName)
-			{
-				events.push("created:tls-volume");
-				throw new Error("TLS volume inspection interrupted");
-			}
-		},
+		applyTargetBaseline: _Baseline,
+		createLocalDevelopmentSecrets: _Secrets,
+		ensureOwnedNetwork: _Network,
+		ensureOwnedVolume: _Volume,
 		processHost,
-		removeLocalDevelopmentSecrets: function _SecretsCleanup() { events.push("remove:secrets"); },
-		removeOwnedDockerResource: async function _Remove(kind, name) { events.push(`remove:${kind}:${name}`); },
-		runSpecification: async function _Start() {},
-		validateInputs: async function _Validate() {},
-		waitForPostgres: async function _Wait() {},
+		removeLocalDevelopmentSecrets: _SecretsCleanup,
+		removeOwnedDockerResource: _Remove,
+		runSpecification: _Start,
+		validateInputs: _Validate,
+		waitForPostgres: _Wait,
 	}), /TLS volume inspection interrupted/u);
 
 	assert.equal(events.includes("remove:volume:kurrent-tls-volume"), true);

@@ -1,4 +1,4 @@
-import { AgentIdentityStates, type AgentIdentity } from "@opencrane/contracts";
+import { AgentIdentityKinds, AgentIdentityStates, type AgentIdentity } from "@opencrane/contracts";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 
 import type { AgentIdentityCurrentCommand } from "./agent-identity-history.types";
@@ -66,7 +66,11 @@ export function _ValidatedAgentIdentity(value: unknown): AgentIdentity
 {
 	if (!_Record(value))
 		throw new Error("Agent identity history requires a valid discriminated identity");
-	if (value.kind !== "proxied" && value.kind !== "managed" && value.kind !== "managed_subchat")
+	if (
+		value.kind !== AgentIdentityKinds.Proxied
+		&& value.kind !== AgentIdentityKinds.Managed
+		&& value.kind !== AgentIdentityKinds.ManagedSubChat
+	)
 		throw new Error("Agent identity history received an unsupported identity kind");
 	if (!_ExactKeys(value, _BaseKeys(value.kind)))
 		throw new Error("Agent identity history requires a valid discriminated identity");
@@ -75,15 +79,15 @@ export function _ValidatedAgentIdentity(value: unknown): AgentIdentity
 
 	switch (value.kind)
 	{
-		case "proxied":
+		case AgentIdentityKinds.Proxied:
 			if (!_PrincipalIdentifier(value.proxiedPrincipalId) || !_Identifier(value.delegationPolicyId))
 				throw new Error("Agent identity history requires valid proxied identity coordinates");
 			return value as unknown as AgentIdentity;
-		case "managed":
+		case AgentIdentityKinds.Managed:
 			if (!_PrincipalIdentifier(value.principalId))
 				throw new Error("Agent identity history requires a managed identity principal");
 			return value as unknown as AgentIdentity;
-		case "managed_subchat":
+		case AgentIdentityKinds.ManagedSubChat:
 			if (!_PrincipalIdentifier(value.principalId) || !_Identifier(value.parentAgentIdentityId) || !_PrincipalIdentifier(value.parentPrincipalId) || !_Identifier(value.parentConversationId) || !_Identifier(value.conversationId) || !_PrincipalIdentifier(value.requestedByPrincipalId))
 				throw new Error("Agent identity history requires complete managed sub-chat coordinates");
 			if (value.parentAgentIdentityId === value.id || value.parentPrincipalId === value.principalId || value.parentConversationId === value.conversationId)
@@ -95,7 +99,7 @@ export function _ValidatedAgentIdentity(value: unknown): AgentIdentity
 /** Extracts the authority principal for every closed identity kind. */
 export function _AgentIdentityPrincipalId(identity: AgentIdentity): string
 {
-	if (identity.kind === "proxied")
+	if (identity.kind === AgentIdentityKinds.Proxied)
 		return identity.proxiedPrincipalId;
 	return identity.principalId;
 }
@@ -105,20 +109,20 @@ export function _SameAgentIdentityCoordinates(first: AgentIdentity, current: Age
 {
 	if (first.schemaVersion !== current.schemaVersion || first.id !== current.id || first.siloId !== current.siloId || first.agentServiceId !== current.agentServiceId || first.kind !== current.kind || first.createdByPrincipalId !== current.createdByPrincipalId || first.createdAt !== current.createdAt || _AgentIdentityPrincipalId(first) !== _AgentIdentityPrincipalId(current))
 		return false;
-	if (first.kind === "proxied" && current.kind === "proxied")
+	if (first.kind === AgentIdentityKinds.Proxied && current.kind === AgentIdentityKinds.Proxied)
 		return first.delegationPolicyId === current.delegationPolicyId;
-	if (first.kind === "managed_subchat" && current.kind === "managed_subchat")
+	if (first.kind === AgentIdentityKinds.ManagedSubChat && current.kind === AgentIdentityKinds.ManagedSubChat)
 		return first.parentAgentIdentityId === current.parentAgentIdentityId && first.parentPrincipalId === current.parentPrincipalId && first.parentConversationId === current.parentConversationId && first.conversationId === current.conversationId && first.requestedByPrincipalId === current.requestedByPrincipalId;
 	return true;
 }
 
 /** Builds the exact allowed key set for one closed identity kind. */
-function _BaseKeys(kind: "proxied" | "managed" | "managed_subchat"): readonly string[]
+function _BaseKeys(kind: AgentIdentityKinds): readonly string[]
 {
 	const common = ["schemaVersion", "id", "siloId", "agentServiceId", "name", "avatarArtifactRevisionId", "state", "createdByPrincipalId", "createdAt", "kind"];
-	if (kind === "proxied")
+	if (kind === AgentIdentityKinds.Proxied)
 		return [...common, "proxiedPrincipalId", "delegationPolicyId"];
-	if (kind === "managed")
+	if (kind === AgentIdentityKinds.Managed)
 		return [...common, "principalId"];
 	return [...common, "principalId", "parentAgentIdentityId", "parentPrincipalId", "parentConversationId", "conversationId", "requestedByPrincipalId"];
 }

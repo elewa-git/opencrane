@@ -1,5 +1,5 @@
 import { AgentRevisionState, AuditDecisionActorKind, OrgMemberStatus, PrincipalProvenance, type Prisma } from "@prisma/client";
-import { AgentIdentityStates } from "@opencrane/contracts";
+import { AgentIdentityKinds, AgentIdentityStates } from "@opencrane/contracts";
 import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { FleetMembershipDeploymentModes, __DigestHumanMembershipEvidence } from "@opencrane/backend/server/iam/membership";
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
@@ -12,6 +12,7 @@ import { PrismaPersonalExecutionEvidenceRepository } from "../db/prisma-personal
 import { ManagedExecutionEvidenceAuthority } from "../managed-execution-evidence";
 import { PersonalExecutionEvidenceAuthority } from "../personal-execution-evidence";
 import { __CompanyAssistantServiceId } from "../managed-agent-identity";
+import { ExecutionEvidenceOutcomes } from "../execution-evidence.types";
 
 /** Runs local membership and central grant/audit code against separate human and company rows. */
 function _Fixture()
@@ -40,8 +41,8 @@ function _Fixture()
 	};
 	const config = { mode: FleetMembershipDeploymentModes.Standalone, siloId: "silo-1", trustedIdentityIssuer: principal.issuer, maximumStalenessMs: 5_000 } as const;
 	const baseIdentity = { schemaVersion: 1, id: "identity-1", siloId: "silo-1", agentServiceId: serviceId, name: "Assistant", avatarArtifactRevisionId: null, state: AgentIdentityStates.Active, createdByPrincipalId: "human-1", createdAt: new Date(1_000).toISOString() } as const;
-	const humanIdentity = { ...baseIdentity, kind: "proxied", proxiedPrincipalId: "human-1", delegationPolicyId: "policy-1" } as const;
-	const companyIdentity = { ...baseIdentity, kind: "managed", principalId: "company-1" } as const;
+	const humanIdentity = { ...baseIdentity, kind: AgentIdentityKinds.Proxied, proxiedPrincipalId: "human-1", delegationPolicyId: "policy-1" } as const;
+	const companyIdentity = { ...baseIdentity, kind: AgentIdentityKinds.Managed, principalId: "company-1" } as const;
 	const runTransaction = { authorization: new PrismaAuthorizationAuthority(transaction as never), admittedAtEpochMs: 2_000 };
 	const personal = new PersonalExecutionEvidenceAuthority(new PrismaPersonalExecutionEvidenceRepository(transaction as never, config));
 	const managed = new ManagedExecutionEvidenceAuthority(new PrismaManagedExecutionEvidenceRepository(transaction as never, config));
@@ -79,14 +80,14 @@ describe("standalone execution through IAM and the central recorder", function _
 	it("keeps company execution evidence separate and bounded by the local human deadline", async function _Managed()
 	{
 		const f = _Fixture();
-		await expect(f.managed.load({ identity: f.companyIdentity, requesterPrincipalId: "human-1", agentRevisionId: "revision-1" }, f.runTransaction)).resolves.toMatchObject({ outcome: "loaded", value: { membership: { kind: ExecutionSubjectMembershipKinds.Managed, principalId: "company-1", trustedUntil: new Date(7_000).toISOString() }, requesterMembership: { kind: ExecutionSubjectMembershipKinds.Standalone, principalId: "human-1", membershipId: "local-1" } } });
+		await expect(f.managed.load({ identity: f.companyIdentity, requesterPrincipalId: "human-1", agentRevisionId: "revision-1" }, f.runTransaction)).resolves.toMatchObject({ outcome: ExecutionEvidenceOutcomes.Loaded, value: { membership: { kind: ExecutionSubjectMembershipKinds.Managed, principalId: "company-1", trustedUntil: new Date(7_000).toISOString() }, requesterMembership: { kind: ExecutionSubjectMembershipKinds.Standalone, principalId: "human-1", membershipId: "local-1" } } });
 	});
 
 	it("cannot borrow human model permissions for the company", async function _OwnGrants()
 	{
 		const f = _Fixture();
 		f.transaction.authorizationGrant.findMany.mockResolvedValue(f.grants.map(grant => grant.resourceKind === ProductAuthorizationResourceKinds.ModelDefinition ? { ...grant, subjectPrincipalId: "human-1", boundaryPrincipalId: "human-1" } : grant));
-		await expect(f.managed.load({ identity: f.companyIdentity, requesterPrincipalId: "human-1", agentRevisionId: "revision-1" }, f.runTransaction)).resolves.toMatchObject({ outcome: "denied", reason: "product_authorization_unavailable" });
+		await expect(f.managed.load({ identity: f.companyIdentity, requesterPrincipalId: "human-1", agentRevisionId: "revision-1" }, f.runTransaction)).resolves.toMatchObject({ outcome: ExecutionEvidenceOutcomes.Denied, reason: "product_authorization_unavailable" });
 		await expect(f.resolver.list({ siloId: "silo-1", principalId: "human-1" })).resolves.toEqual([]);
 	});
 
@@ -94,8 +95,8 @@ describe("standalone execution through IAM and the central recorder", function _
 	{
 		const f = _Fixture();
 		f.transaction.orgMembership.findUnique.mockResolvedValue({ ...f.membership, status: OrgMemberStatus.Suspended });
-		await expect(f.personal.load({ identity: f.humanIdentity, requesterPrincipalId: "human-1", agentRevisionId: "revision-1" }, f.runTransaction)).resolves.toMatchObject({ outcome: "denied", reason: "membership_stale" });
-		await expect(f.managed.load({ identity: f.companyIdentity, requesterPrincipalId: "human-1", agentRevisionId: "revision-1" }, f.runTransaction)).resolves.toMatchObject({ outcome: "denied", reason: "membership_stale" });
+		await expect(f.personal.load({ identity: f.humanIdentity, requesterPrincipalId: "human-1", agentRevisionId: "revision-1" }, f.runTransaction)).resolves.toMatchObject({ outcome: ExecutionEvidenceOutcomes.Denied, reason: "membership_stale" });
+		await expect(f.managed.load({ identity: f.companyIdentity, requesterPrincipalId: "human-1", agentRevisionId: "revision-1" }, f.runTransaction)).resolves.toMatchObject({ outcome: ExecutionEvidenceOutcomes.Denied, reason: "membership_stale" });
 		await expect(f.resolver.list({ siloId: "silo-1", principalId: "human-1" })).resolves.toEqual([]);
 		expect(f.transaction.auditDecision.create).not.toHaveBeenCalled();
 	});

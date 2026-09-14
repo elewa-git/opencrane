@@ -1,4 +1,4 @@
-import type { MessageEntry } from "@opencrane/contracts";
+import { ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates, type MessageEntry } from "@opencrane/contracts";
 import type { SelfConversationHistoryAuthority } from "./self-conversation-history.types";
 import type { ConversationCaller } from "./types/conversation-caller.types";
 
@@ -13,12 +13,12 @@ export async function _ReadGroupChildSource(history: Pick<SelfConversationHistor
 	if (page === null || page.entries.length !== 1)
 		return null;
 	const entry = page.entries[0]!;
-	if (entry.id !== entryId || entry.position !== position.toString() || entry.kind !== "message" || entry.state !== "completed" || entry.blocks.length === 0 || entry.blocks.some(block => block.kind !== "text"))
+	if (entry.id !== entryId || entry.position !== position.toString() || entry.kind !== ConversationEntryKinds.Message || entry.state !== MessageStates.Completed || entry.blocks.length === 0 || entry.blocks.some(block => block.kind !== ConversationMessageContentBlockKinds.Text))
 		return null;
 	const texts: string[] = [];
 	for (const block of entry.blocks)
 	{
-		if (block.kind !== "text" || typeof page.payloads[block.payloadRef] !== "string")
+		if (block.kind !== ConversationMessageContentBlockKinds.Text || typeof page.payloads[block.payloadRef] !== "string")
 			return null;
 		texts.push(page.payloads[block.payloadRef]!);
 	}

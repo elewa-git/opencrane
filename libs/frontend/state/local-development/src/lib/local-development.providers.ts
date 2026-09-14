@@ -18,6 +18,7 @@ import type { LocalDevelopmentConfig } from "./local-development.types";
 export function provideLocalDevelopmentGateways(config: LocalDevelopmentConfig = {}): Provider[]
 {
 	const owner = _CreateLocalDevelopmentOwner(config);
+
 	return [
 		{ provide: PERSONA_GATEWAY, useValue: owner.persona },
 		{ provide: PERSONA_FIRST_CHAT_GATEWAY, useValue: owner.firstChat },

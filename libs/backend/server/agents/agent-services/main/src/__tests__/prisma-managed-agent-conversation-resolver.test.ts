@@ -1,6 +1,6 @@
 import { AuditDecisionActorKind, type Prisma } from "@prisma/client";
 import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
-import { AgentIdentityStates } from "@opencrane/contracts";
+import { AgentIdentityKinds, AgentIdentityStates } from "@opencrane/contracts";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +8,7 @@ import { PrismaManagedAgentConversationResolver } from "../db/prisma-managed-age
 import { PrismaManagedExecutionEvidenceRepository } from "../db/prisma-managed-execution-evidence-repository";
 import { __CompanyAssistantServiceId, __ManagedAgentIdentityId } from "../managed-agent-identity";
 import { ManagedExecutionEvidenceAuthority } from "../managed-execution-evidence";
+import { ExecutionEvidenceOutcomes } from "../execution-evidence.types";
 
 const _SERVICE = __CompanyAssistantServiceId("silo-1");
 const _CALLER = { siloId: "silo-1", principalId: "human-1" };
@@ -36,7 +37,7 @@ function _Fixture()
 		authorizationGrant: { findMany: vi.fn().mockResolvedValue(grants) },
 		auditDecision: { create: vi.fn(async function _Persist(_command: { data: Prisma.AuditDecisionUncheckedCreateInput }) { return {}; }) },
 	};
-	const identityHistory = { load: vi.fn().mockResolvedValue({ identity: { kind: "managed", state: AgentIdentityStates.Active } }) };
+	const identityHistory = { load: vi.fn().mockResolvedValue({ identity: { kind: AgentIdentityKinds.Managed, state: AgentIdentityStates.Active } }) };
 	const dependencies = { identityHistory, membershipConfig: {} as never, profiles: [{ workloadProfile: "company", profileRevisionId: "profile-1" }], nowEpochMs: function _Now() { return 2_000; } };
 	return { admit, decide, grants, transaction, membership, identityHistory, dependencies, resolver: new PrismaManagedAgentConversationResolver(transaction as never, dependencies) };
 }
@@ -86,7 +87,7 @@ describe("PrismaManagedAgentConversationResolver", function _Suite()
 		const ambiguous = new PrismaManagedAgentConversationResolver({} as never, { ...f.dependencies, profiles: [...f.dependencies.profiles, ...f.dependencies.profiles] });
 		await expect(ambiguous.resolve(_CALLER, _SERVICE)).resolves.toBeNull();
 		expect(f.admit).not.toHaveBeenCalled();
-		f.identityHistory.load.mockResolvedValue({ identity: { kind: "managed", state: AgentIdentityStates.Suspended } });
+		f.identityHistory.load.mockResolvedValue({ identity: { kind: AgentIdentityKinds.Managed, state: AgentIdentityStates.Suspended } });
 		await expect(f.resolver.resolve(_CALLER, _SERVICE)).resolves.toBeNull();
 		expect(f.admit).not.toHaveBeenCalled();
 	});
@@ -109,7 +110,7 @@ describe("managed run admission through the central audit writer", function _Sui
 		const revision = { agentServiceId: _SERVICE, agentRevisionId: "revision-1", agentRevisionDigest: `sha256:${"a".repeat(64)}`, principalId: "company-principal", name: "Company", workloadProfile: "company", modelDefinitionId: "model-1", budget: { maxDurationMs: 60_000 } };
 		const human = { kind: "fleet", principalId: "human-1", siloId: "silo-1", decisionEvidenceId: "human-assertion", revision: 7, assertionId: "human-assertion", payloadDigest: `sha256:${"b".repeat(64)}`, trustedUntil: new Date(6_000).toISOString() };
 		const repository = { loadCurrent: vi.fn().mockResolvedValue(revision), verifyRequesterMembership: vi.fn().mockResolvedValue(human) };
-		const command = { identity: { schemaVersion: 1, kind: "managed", id: __ManagedAgentIdentityId(_SERVICE), siloId: "silo-1", agentServiceId: _SERVICE, principalId: "company-principal", name: "Company", avatarArtifactRevisionId: null, state: AgentIdentityStates.Active, createdByPrincipalId: "human-1", createdAt: new Date(1_000).toISOString() } as const, requesterPrincipalId: "human-1", agentRevisionId: "revision-1" };
+		const command = { identity: { schemaVersion: 1, kind: AgentIdentityKinds.Managed, id: __ManagedAgentIdentityId(_SERVICE), siloId: "silo-1", agentServiceId: _SERVICE, principalId: "company-principal", name: "Company", avatarArtifactRevisionId: null, state: AgentIdentityStates.Active, createdByPrincipalId: "human-1", createdAt: new Date(1_000).toISOString() } as const, requesterPrincipalId: "human-1", agentRevisionId: "revision-1" };
 		const authority = new ManagedExecutionEvidenceAuthority(repository);
 		const transaction = { authorization: new PrismaAuthorizationAuthority(f.transaction as never), admittedAtEpochMs: 2_000 };
 		return { ...f, authority, command, runTransaction: transaction };
@@ -118,7 +119,7 @@ describe("managed run admission through the central audit writer", function _Sui
 	it("records the requesting human and executing company as separate actors before runtime starts", async function _RecordsExecutionPrincipal()
 	{
 		const f = _RunFixture();
-		await expect(f.authority.load(f.command, f.runTransaction)).resolves.toMatchObject({ outcome: "loaded", value: { membership: { principalId: "company-principal", trustedUntil: new Date(6_000).toISOString() }, requesterMembership: { principalId: "human-1", revision: 7 } } });
+		await expect(f.authority.load(f.command, f.runTransaction)).resolves.toMatchObject({ outcome: ExecutionEvidenceOutcomes.Loaded, value: { membership: { principalId: "company-principal", trustedUntil: new Date(6_000).toISOString() }, requesterMembership: { principalId: "human-1", revision: 7 } } });
 		expect(f.transaction.auditDecision.create.mock.calls.map(call => call[0].data)).toEqual([
 			expect.objectContaining({ actorKind: AuditDecisionActorKind.User, actorId: "human-1", action: ProductAuthorizationActions.Invoke, membershipRevision: 7 }),
 			expect.objectContaining({ actorKind: AuditDecisionActorKind.AgentService, actorId: "company-principal", action: ProductAuthorizationActions.Use, membershipRevision: undefined, audience: undefined, namespace: undefined, serviceAccountName: undefined, workloadKind: undefined, workloadUid: undefined, podUid: undefined }),
@@ -129,7 +130,7 @@ describe("managed run admission through the central audit writer", function _Sui
 	{
 		const f = _RunFixture();
 		f.transaction.authorizationGrant.findMany.mockResolvedValue(f.grants.map(grant => grant.resourceKind === ProductAuthorizationResourceKinds.ModelDefinition ? { ...grant, subjectPrincipalId: "human-1", boundaryPrincipalId: "human-1" } : grant));
-		await expect(f.authority.load(f.command, f.runTransaction)).resolves.toMatchObject({ outcome: "denied", reason: "product_authorization_unavailable" });
+		await expect(f.authority.load(f.command, f.runTransaction)).resolves.toMatchObject({ outcome: ExecutionEvidenceOutcomes.Denied, reason: "product_authorization_unavailable" });
 		expect(f.transaction.auditDecision.create.mock.calls.map(call => call[0].data.action)).toEqual([ProductAuthorizationActions.Invoke]);
 	});
 });

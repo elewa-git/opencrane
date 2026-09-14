@@ -32,7 +32,15 @@ class ConfigurationTests(unittest.TestCase):
             "OPENCRANE_INTERNAL_ENDPOINT": "http://opencrane-internal:8081",
         }
         with patch.dict(os.environ, environment, clear=True):
-            self.assertEqual(_configuration(), {"computerId": "computer-1", "generation": "3", "internalEndpoint": "http://opencrane-internal:8081", "leaseId": "lease-1", "realizationKind": "agent_sandbox", "reviewCredentialPath": "/var/run/opencrane/review/credential", "tokenPath": "/var/run/secrets/opencrane/token"})
+            self.assertEqual(_configuration(), {
+                "computerId": "computer-1",
+                "generation": "3",
+                "internalEndpoint": "http://opencrane-internal:8081",
+                "leaseId": "lease-1",
+                "realizationKind": "agent_sandbox",
+                "reviewCredentialPath": "/var/run/opencrane/review/credential",
+                "tokenPath": "/var/run/secrets/opencrane/token",
+            })
 
     def test_accepts_a_host_process_with_a_loopback_bearer_file(self) -> None:
         """Keep workstation identity separate from projected Kubernetes credentials."""
@@ -47,7 +55,16 @@ class ConfigurationTests(unittest.TestCase):
             "OPENCRANE_INTERNAL_ENDPOINT": "http://127.0.0.1:8081",
         }
         with patch.dict(os.environ, environment, clear=True):
-            self.assertEqual(_configuration(), {"computerId": "computer-1", "generation": "3", "internalEndpoint": "http://127.0.0.1:8081", "leaseId": "lease-1", "processId": "local-computer-1", "readyPath": "/tmp/opencrane-computer/ready", "realizationKind": "host_development_process", "tokenPath": "/tmp/opencrane-computer/bearer"})
+            self.assertEqual(_configuration(), {
+                "computerId": "computer-1",
+                "generation": "3",
+                "internalEndpoint": "http://127.0.0.1:8081",
+                "leaseId": "lease-1",
+                "processId": "local-computer-1",
+                "readyPath": "/tmp/opencrane-computer/ready",
+                "realizationKind": "host_development_process",
+                "tokenPath": "/tmp/opencrane-computer/bearer",
+            })
 
     def test_rejects_a_non_loopback_host_process_endpoint(self) -> None:
         """Do not let workstation process traffic leave the host through a configured endpoint."""

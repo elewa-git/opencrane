@@ -129,7 +129,14 @@ export class PrismaConversationToolResultsUnitOfWork implements ConversationComp
 						|| stored.continuationReservation.compiledInputDigest !== stored.compile.digest
 						|| ___DigestCanonicalJson(expected.continuationReservation as unknown as JsonValue) !== ___DigestCanonicalJson(stored.continuationReservation as unknown as JsonValue)))
 						return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
-					await candidates.admit({ computerId: stored.computerId, lease: stored.lease, process: { kind: ConversationComputerRealizationKinds.AgentSandbox, workload: reviewedWorkload } });
+						await candidates.admit({
+							computerId: stored.computerId,
+							lease: stored.lease,
+							process: {
+								kind: ConversationComputerRealizationKinds.AgentSandbox,
+								workload: reviewedWorkload,
+							},
+						});
 					const repository = new PrismaConversationToolResultsRepository(transaction, dependencies);
 					return consume ? repository.consume(stored, reviewedWorkload) : repository.read(stored, reviewedWorkload);
 				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, operation: "conversation tool result", attemptLimit: 3, timeout: 10_000 });

@@ -31,7 +31,11 @@ describe("Tier 2 development configuration", function _Suite(): void
 		_ConfigureDevelopment();
 		const config = _ReadDevelopmentConfig();
 		expect(config.profile).toBe(DevelopmentProfileKinds.Core);
-		expect(config.identity).toMatchObject({ principalId: "local-development-principal", siloId: "local-development", subjectId: "local-development-user" });
+		expect(config.identity).toMatchObject({
+			principalId: "local-development-principal",
+			siloId: "local-development",
+			subjectId: "local-development-user",
+		});
 		expect(config.historyStore.endpoint).toBe("127.0.0.1:21139");
 	});
 

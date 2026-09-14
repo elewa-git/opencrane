@@ -306,13 +306,13 @@ shared group-child journey and its durable recovery worker. The public routes ar
   activation subscription in delivery order. It validates the stream-bound command before calling
   the computer authority, parks malformed input and an explicitly parked authority outcome,
   acknowledges activated, idempotent, or denied outcomes, waits with bounded exponential backoff
-  before retrying a pending sandbox assignment or a transient authority failure, and leaves an
+	before retrying a pending realization or a transient authority failure, and leaves an
   acknowledgement failure for KurrentDB to redeliver.
 - Parked activation replay belongs to the deployment maintenance command `--kurrentdb-replay-parked`.
   The application history identity can consume, retry and park deliveries, but cannot administer the queue.
 - `ConversationComputerLifecycleAuthority` measures idleness from the newest turn activity on the
   lease's active-turn stream (`KurrentConversationComputerActivityReader`), renews an in-use lease at
-  half of its lifetime, records an expired or claim-less lease as `lost` with a cold computer, and
+  half of its lifetime, records an expired lease or a missing realized process as `lost` with a cold computer, and
   otherwise cools and releases. The production Agent Sandbox composition captures a checkpoint and
   compares claim lag at Kubernetes' whole-second timestamp precision so discarded milliseconds do
   not trigger repeated renewals. Host development has no checkpoint transport. Activation opens

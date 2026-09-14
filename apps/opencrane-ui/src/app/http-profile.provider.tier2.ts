@@ -37,7 +37,7 @@ export const OPENCRANE_HTTP_PROVIDER = makeEnvironmentProviders([
 	provideHttpClient(withFetch()),
 	{
 		provide: CONTROL_PLANE_REQUEST_HEADERS,
-		useValue: _DEVELOPMENT_SESSION_CREDENTIAL === null
+		useValue: !_DEVELOPMENT_SESSION_CREDENTIAL
 			? {}
 			: { "X-OpenCrane-Development-Session": _DEVELOPMENT_SESSION_CREDENTIAL }
 	}

@@ -6,9 +6,11 @@ import type { DevelopmentServerHandle } from "./composition.types";
 export async function _RunDevelopmentCleanup(stages: ReadonlyArray<ReadonlyArray<() => Promise<unknown>>>, message: string): Promise<void>
 {
 	const failures: unknown[] = [];
+
 	for (const stage of stages)
 	{
-		const results = await Promise.allSettled(stage.map(async function _Run(action): Promise<unknown> { return action(); }));
+		const results = await Promise.allSettled(stage.map(async action => action()));
+
 		for (const result of results)
 		{
 			if (result.status === "rejected")
@@ -17,7 +19,8 @@ export async function _RunDevelopmentCleanup(stages: ReadonlyArray<ReadonlyArray
 			}
 		}
 	}
-	if (failures.length > 0)
+
+	if (failures.length)
 	{
 		throw new AggregateError(failures, message);
 	}
@@ -34,6 +37,7 @@ export async function _RethrowAfterDevelopmentCleanup(primaryFailure: unknown, s
 	{
 		throw new AggregateError([primaryFailure, cleanupFailure], `${message} after an earlier failure`);
 	}
+
 	throw primaryFailure;
 }
 
@@ -43,7 +47,7 @@ export function _BindDevelopmentSignalCleanup(handle: DevelopmentServerHandle, s
 	let stopping: Promise<void> | null = null;
 	function _Stop(signal: NodeJS.Signals): void
 	{
-		if (stopping !== null)
+		if (stopping)
 		{
 			return;
 		}

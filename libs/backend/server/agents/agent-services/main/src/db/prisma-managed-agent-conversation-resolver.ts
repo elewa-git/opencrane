@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
 import { __DigestHumanMembershipEvidence, __HumanMembershipRevision } from "@opencrane/backend/server/iam/membership";
-import { AgentIdentityStates } from "@opencrane/contracts";
+import { AgentIdentityKinds, AgentIdentityStates } from "@opencrane/contracts";
 import { PrismaAuthorizationAuthority, __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
@@ -76,7 +76,11 @@ export class PrismaManagedAgentConversationResolver
 			return null;
 		const agentIdentityId = __ManagedAgentIdentityId(agentServiceId);
 		const current = await this.dependencies.identityHistory.load({ siloId: caller.siloId, agentIdentityId, agentServiceId, principalId: service.principalId });
-		if (current === null || current.identity.kind !== "managed" || current.identity.state !== AgentIdentityStates.Active)
+		if (
+			current === null
+			|| current.identity.kind !== AgentIdentityKinds.Managed
+			|| current.identity.state !== AgentIdentityStates.Active
+		)
 			return null;
 		const nowEpochMs = this.dependencies.nowEpochMs?.() ?? Date.now();
 		const membership = await repository.verifyRequesterMembership(caller.siloId, caller.principalId, nowEpochMs);

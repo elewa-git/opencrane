@@ -21,7 +21,7 @@ function _expectedLabels(configuration)
 /** Produces Docker label arguments from this checkout and target baseline. */
 export function createDockerLabelArguments(configuration)
 {
-	return Object.entries(_expectedLabels(configuration)).flatMap(function _toLabel([name, value])
+	return Object.entries(_expectedLabels(configuration)).flatMap(([name, value]) =>
 	{
 		return ["--label", `${name}=${value}`];
 	});
@@ -31,10 +31,17 @@ export function createDockerLabelArguments(configuration)
 export async function inspectOwnedDockerResource(kind, name, configuration, operations = {})
 {
 	const runCommand = operations.runCommand ?? runLocalCommand;
-	const result = await runCommand("docker", [kind, "inspect", name, "--format", "{{json .Labels}}"], {
+	const result = await runCommand("docker", [
+		kind,
+		"inspect",
+		name,
+		"--format",
+		"{{json .Labels}}"
+	], {
 		acceptFailure: true,
 		signal: operations.signal
 	});
+
 	if (result.status !== 0)
 	{
 		return false;
@@ -49,17 +56,20 @@ export async function inspectOwnedDockerResource(kind, name, configuration, oper
 	{
 		throw new Error(`Docker ${kind} ${name} returned invalid ownership labels`);
 	}
+
 	for (const [label, expected] of Object.entries(_expectedLabels(configuration)))
 	{
 		if (label === _LABELS.baseline && operations.allowBaselineMismatch)
 		{
 			continue;
 		}
+
 		if (labels?.[label] !== expected)
 		{
 			throw new Error(`Docker ${kind} ${name} is not owned by this checkout and target baseline`);
 		}
 	}
+
 	return true;
 }
 
@@ -67,9 +77,15 @@ export async function inspectOwnedDockerResource(kind, name, configuration, oper
 export async function ensureOwnedVolume(name, configuration, operations = {})
 {
 	const runCommand = operations.runCommand ?? runLocalCommand;
+
 	if (!await inspectOwnedDockerResource("volume", name, configuration, operations))
 	{
-		await runCommand("docker", ["volume", "create", ...createDockerLabelArguments(configuration), name], { signal: operations.signal });
+		await runCommand("docker", [
+			"volume",
+			"create",
+			...createDockerLabelArguments(configuration),
+			name
+		], { signal: operations.signal });
 	}
 }
 
@@ -77,9 +93,15 @@ export async function ensureOwnedVolume(name, configuration, operations = {})
 export async function ensureOwnedNetwork(configuration, operations = {})
 {
 	const runCommand = operations.runCommand ?? runLocalCommand;
+
 	if (!await inspectOwnedDockerResource("network", configuration.networkName, configuration, operations))
 	{
-		await runCommand("docker", ["network", "create", ...createDockerLabelArguments(configuration), configuration.networkName], { signal: operations.signal });
+		await runCommand("docker", [
+			"network",
+			"create",
+			...createDockerLabelArguments(configuration),
+			configuration.networkName
+		], { signal: operations.signal });
 	}
 }
 
@@ -87,11 +109,24 @@ export async function ensureOwnedNetwork(configuration, operations = {})
 export async function removeOwnedDockerResource(kind, name, configuration, operations = {})
 {
 	const runCommand = operations.runCommand ?? runLocalCommand;
+
 	if (!await inspectOwnedDockerResource(kind, name, configuration, operations))
 	{
 		return;
 	}
-	const argumentsList = kind === "container" ? [kind, "rm", "--force", name] : [kind, "rm", name];
+
+	const argumentsList = kind === "container"
+		? [
+			kind,
+			"rm",
+			"--force",
+			name
+		]
+		: [
+			kind,
+			"rm",
+			name
+		];
 	await runCommand("docker", argumentsList, { signal: operations.signal });
 }
 
@@ -99,6 +134,7 @@ export async function removeOwnedDockerResource(kind, name, configuration, opera
 export async function resetOwnedPersistentState(configuration, operations = {})
 {
 	const resetOperations = { ...operations, allowBaselineMismatch: true };
+
 	await removeOwnedDockerResource("container", configuration.liteLLMContainerName, configuration, resetOperations);
 	await removeOwnedDockerResource("container", configuration.kurrentContainerName, configuration, resetOperations);
 	await removeOwnedDockerResource("container", configuration.kurrentTlsProvisionerContainerName, configuration, resetOperations);

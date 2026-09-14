@@ -12,7 +12,16 @@ const _NOW = Date.parse("2026-09-09T00:00:00.000Z");
 const _DIGEST = `sha256:${"a".repeat(64)}`;
 const _TURN = {
 	bootstrapId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", siloId: "silo-1", computerId: "computer-1",
-	lease: { leaseId: "lease-1", leaseGeneration: 1, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g1", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.computers.svc.cluster.local" } },
+	lease: {
+		leaseId: "lease-1",
+		leaseGeneration: 1,
+		realization: {
+			kind: ConversationComputerRealizationKinds.AgentSandbox,
+			claimId: "computer-1-g1",
+			sandboxId: "sandbox-1",
+			serviceFQDN: "sandbox-1.computers.svc.cluster.local",
+		},
+	},
 	latestPendingEntryId: "entry-1", modelAlias: "model-1", maximumBudgetUsd: 0.05, credentialLifetimeSeconds: 300,
 	outputSourceCommandId: null, outputReceipt: null, toolSelection: null, continuationReservation: null,
 	binding: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Ada", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 1n, maximumEntryBytes: 65_536 },

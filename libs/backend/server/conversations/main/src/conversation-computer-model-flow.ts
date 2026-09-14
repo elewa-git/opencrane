@@ -23,7 +23,7 @@ export async function _AdvanceConversationComputerModel(turn: FrozenConversation
 	if (turn.modelReservation !== null)
 	{
 		const saved = await dependencies.modelCustody.loadDeclaration(turn);
-		return saved === null ? _ConversationModelReservationStatus(turn.modelReservation) : _ContinueTool(turn, saved.declaration, saved.reference, process, dependencies, appendOutput);
+		return !saved ? _ConversationModelReservationStatus(turn.modelReservation) : _ContinueTool(turn, saved.declaration, saved.reference, process, dependencies, appendOutput);
 	}
 	const candidate = await _Current(turn, process, dependencies);
 	const reservation = _FirstReservation(turn, candidate);
@@ -36,7 +36,14 @@ export async function _AdvanceConversationComputerModel(turn: FrozenConversation
 	const response = await dependencies.model.request({ compiledInput: current.compiledInput, endpoint: dependencies.endpoint, key: credential.key, modelAlias: turn.modelAlias, maxCompletionTokens: reservation.maxCompletionTokens, notAfterEpochMs: notAfter, tools: reservation.tools, continuation: null });
 	if (response.kind === ConversationModelResponseKinds.Text)
 	{
-		await appendOutput({ bootstrapId: turn.bootstrapId, sourceCommandId: reservation.invocationFence, modelInvocationFence: reservation.invocationFence, modelNotAfterEpochMs: notAfter, text: response.text, process });
+		await appendOutput({
+			bootstrapId: turn.bootstrapId,
+			sourceCommandId: reservation.invocationFence,
+			modelInvocationFence: reservation.invocationFence,
+			modelNotAfterEpochMs: notAfter,
+			text: response.text,
+			process,
+		});
 		return { outcome: ConversationComputerModelStepOutcomes.Completed };
 	}
 	if (reservation.tools !== ConversationModelToolModes.Select || response.kind !== ConversationModelResponseKinds.Tool)
@@ -92,7 +99,14 @@ async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: 
 	const response = await dependencies.model.request({ compiledInput: dispatchCandidate.compiledInput, endpoint: dependencies.endpoint, key: credential.key, modelAlias: turn.modelAlias, maxCompletionTokens: reservation.maxCompletionTokens, notAfterEpochMs: notAfter, tools: ConversationModelToolModes.None, continuation: { call: saved.call, resultContent: saved.resultContent } });
 	if (response.kind !== ConversationModelResponseKinds.Text)
 		throw new Error("Conversation continuation cannot request another tool");
-	await appendOutput({ bootstrapId: turn.bootstrapId, sourceCommandId: reservation.invocationFence, modelInvocationFence: reservation.invocationFence, modelNotAfterEpochMs: notAfter, text: response.text, process });
+	await appendOutput({
+		bootstrapId: turn.bootstrapId,
+		sourceCommandId: reservation.invocationFence,
+		modelInvocationFence: reservation.invocationFence,
+		modelNotAfterEpochMs: notAfter,
+		text: response.text,
+		process,
+	});
 	return { outcome: ConversationComputerModelStepOutcomes.Completed };
 }
 

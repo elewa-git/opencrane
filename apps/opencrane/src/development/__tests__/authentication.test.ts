@@ -16,7 +16,14 @@ const _BROWSER_CREDENTIAL = "a".repeat(43);
 /** Build durable admission for the seeded identity. */
 function _Admission(): AuthenticatedPrincipalAdmission
 {
-	return { admit: vi.fn().mockResolvedValue({ issuer: _DEVELOPMENT_IDENTITY.issuer, principalId: _DEVELOPMENT_IDENTITY.principalId, siloId: _DEVELOPMENT_IDENTITY.siloId, subject: _DEVELOPMENT_IDENTITY.subjectId }) };
+	return {
+		admit: vi.fn().mockResolvedValue({
+			issuer: _DEVELOPMENT_IDENTITY.issuer,
+			principalId: _DEVELOPMENT_IDENTITY.principalId,
+			siloId: _DEVELOPMENT_IDENTITY.siloId,
+			subject: _DEVELOPMENT_IDENTITY.subjectId,
+		}),
+	};
 }
 
 /** Build the development middleware in listener order. */

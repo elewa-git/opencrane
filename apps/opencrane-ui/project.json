@@ -177,7 +177,7 @@
 			},
 			"defaultConfiguration": "production"
 		},
-		"serve": {
+		"serve-browser": {
 			"executor": "@angular-devkit/build-angular:dev-server",
 			"options": {
 				"allowedHosts": [
@@ -214,6 +214,68 @@
 						"local-development.localhost"
 					],
 					"proxyConfig": "apps/opencrane-ui/proxy.tier2.conf.json"
+				}
+			},
+			"defaultConfiguration": "development"
+		},
+		"serve": {
+			"executor": "nx:run-commands",
+			"continuous": true,
+			"options": {
+				"parallel": true,
+				"args": "--uiConfiguration=development",
+				"commands": [
+					{
+						"command": "nx run opencrane-ui:serve-browser:{args.uiConfiguration}",
+						"forwardAllArgs": false,
+						"prefix": "UI",
+						"prefixColor": "cyan"
+					},
+					{
+						"command": "nx run frontend-elements-ui:storybook",
+						"forwardAllArgs": false,
+						"prefix": "Storybook",
+						"prefixColor": "magenta"
+					},
+					{
+						"command": "nx run frontend-elements-ui:test-storybook-visual",
+						"forwardAllArgs": false,
+						"prefix": "Playwright",
+						"prefixColor": "yellow"
+					}
+				]
+			},
+			"configurations": {
+				"production": {
+					"args": "--uiConfiguration=production",
+					"commands": [
+						{
+							"command": "nx run opencrane-ui:serve-browser:{args.uiConfiguration}",
+							"forwardAllArgs": false
+						}
+					]
+				},
+				"development-live": {
+					"args": "--uiConfiguration=development-live",
+					"commands": [
+						{
+							"command": "nx run opencrane-ui:serve-browser:{args.uiConfiguration}",
+							"forwardAllArgs": false
+						}
+					]
+				},
+				"development": {},
+				"commander": {
+					"args": "--uiConfiguration=commander"
+				},
+				"catalyst": {
+					"args": "--uiConfiguration=catalyst"
+				},
+				"anchor": {
+					"args": "--uiConfiguration=anchor"
+				},
+				"analyst": {
+					"args": "--uiConfiguration=analyst"
 				}
 			},
 			"defaultConfiguration": "development"

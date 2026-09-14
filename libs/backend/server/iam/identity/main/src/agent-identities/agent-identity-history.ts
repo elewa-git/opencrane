@@ -1,4 +1,4 @@
-import { AgentIdentityStates, type AgentIdentity } from "@opencrane/contracts";
+import { AgentIdentityKinds, AgentIdentityStates, type AgentIdentity } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryAppendReceipt, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -109,7 +109,7 @@ export class AgentIdentityHistory
 	/** Resolves the active parent chain and returns every checked parent head for an atomic child append. */
 	private async _ParentBinding(identity: AgentIdentity, visited: ReadonlySet<string>): Promise<readonly CurrentAgentIdentity[]>
 	{
-		if (identity.kind !== "managed_subchat")
+		if (identity.kind !== AgentIdentityKinds.ManagedSubChat)
 			return [];
 		if (visited.has(identity.parentAgentIdentityId))
 			throw new Error("Agent identity history detected a managed sub-chat parent cycle");

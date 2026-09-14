@@ -8,15 +8,23 @@ test("local LiteLLM readiness proves authenticated model access before continuin
 	const calls = [];
 	const configuration = { abortSignal: new AbortController().signal, liteLLMPort: 4_000 };
 	const secrets = { liteLLMMasterAuthorizationHeaderPath: "/private/session/litellm-header" };
+	async function _Delay()
+	{
+		calls.push("delay");
+	}
+
+	async function _Run(command, argumentsList)
+	{
+		calls.push({ command, argumentsList });
+
+		return { status: calls.filter((call) => typeof call === "object").length === 1 ? 22 : 0 };
+	}
+
 	await waitForLocalLiteLLM(configuration, secrets, {
-		delay: async function _Delay() { calls.push("delay"); },
-		runCommand: async function _Run(command, argumentsList)
-		{
-			calls.push({ command, argumentsList });
-			return { status: calls.filter(function _Command(call) { return typeof call === "object"; }).length === 1 ? 22 : 0 };
-		}
+		delay: _Delay,
+		runCommand: _Run,
 	});
-	const commands = calls.filter(function _Command(call) { return typeof call === "object"; });
+	const commands = calls.filter((call) => typeof call === "object");
 	assert.equal(commands.length, 2);
 	assert.equal(calls[1], "delay");
 	assert.equal(commands[0].command, "curl");

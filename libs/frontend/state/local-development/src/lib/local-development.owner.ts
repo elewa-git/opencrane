@@ -17,13 +17,19 @@ function _ResetWorkspace(state: _LocalDevelopmentState): void
 	const conversations = [
 		...(state.persona.state === PersonaOnboardingStates.Ready ? [_CreateLocalDevelopmentAgentConversation(state)] : []),
 		_CreateLocalDevelopmentOrdinaryConversation("local-conversation-direct", ConversationModes.Direct, [_LOCAL_DEVELOPMENT_SUBJECT, "local-peer"]),
-		_CreateLocalDevelopmentOrdinaryConversation("local-conversation-group", ConversationModes.Group, [_LOCAL_DEVELOPMENT_SUBJECT, "local-peer", "local-peer-two"])
+		_CreateLocalDevelopmentOrdinaryConversation("local-conversation-group", ConversationModes.Group, [
+			_LOCAL_DEVELOPMENT_SUBJECT,
+			"local-peer",
+			"local-peer-two"
+		])
 	];
 	const histories = new Map<string, ReturnType<typeof _CreateLocalDevelopmentHistory>>();
+
 	for (const conversation of conversations)
 	{
 		histories.set(conversation.id, _CreateLocalDevelopmentHistory(state, conversation.id));
 	}
+
 	state.conversations = conversations;
 	state.histories = histories;
 }
@@ -32,8 +38,12 @@ function _ResetWorkspace(state: _LocalDevelopmentState): void
 export function _CreateLocalDevelopmentOwner(config: LocalDevelopmentConfig): LocalDevelopmentOwnerPorts
 {
 	const archetype = config.archetype ?? PersonaFirstChatArchetypes.Commander;
-	const startsWithOnboarding = config.startWithOnboarding ?? config.archetype === undefined;
-	const firstChatAnswers = startsWithOnboarding ? [] : ["Current OpenCrane work", "Repeated setup", "Use direct evidence"];
+	const startsWithOnboarding = config.startWithOnboarding ?? !config.archetype;
+	const firstChatAnswers = startsWithOnboarding ? [] : [
+		"Current OpenCrane work",
+		"Repeated setup",
+		"Use direct evidence"
+	];
 	const state: _LocalDevelopmentState = {
 		archetype,
 		scenario: config.scenario ?? LocalDevelopmentScenarios.HappyPath,
@@ -60,5 +70,11 @@ export function _CreateLocalDevelopmentOwner(config: LocalDevelopmentConfig): Lo
 	const persona = _CreateLocalDevelopmentPersonaGateway(state, function _ResetPersonaWorkspace() { _ResetWorkspace(state); });
 	const firstChat = _CreateLocalDevelopmentFirstChatGateway(state);
 	const workspacePorts = _CreateLocalDevelopmentWorkspacePorts(state, function _FirstChatSnapshot() { return _CreateLocalDevelopmentFirstChatSnapshot(state); });
-	return { persona, firstChat, ...workspacePorts, subject: signal<string | null>(_LOCAL_DEVELOPMENT_SUBJECT).asReadonly() };
+
+	return {
+		persona,
+		firstChat,
+		...workspacePorts,
+		subject: signal<string | null>(_LOCAL_DEVELOPMENT_SUBJECT).asReadonly()
+	};
 }

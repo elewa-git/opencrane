@@ -3,8 +3,8 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { MCP_EXECUTOR_PROFILE_NAME, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 import { PrismaToolInvocationLifecycleEventUnitOfWork, PrismaToolInvocationRunRecoveryAuthority, PrismaToolRecoveryEventReporter } from "@opencrane/backend/agents/execution/runs";
 import { __CreateMcpOciServerPromotionRouter, __CreateMcpRuntimeCompanionRouter, __CreateMcpRuntimeControllerRouter, __CreateMcpTaskWorkflow, PrismaMcpRuntimeUnitOfWork, PrismaMcpToolInvocationAdmissionRepository, PrismaRuntimeMcpEffectEligibilityAuthority } from "@opencrane/backend/server/gateways/mcp";
-import { ManagedExecutionEvidenceAuthority, PersonalExecutionEvidenceAuthority, PrismaManagedExecutionEvidenceRepository, PrismaPersonalExecutionEvidenceRepository } from "@opencrane/backend/server/agents/agent-services";
-import { ConversationComputerHistory, PrismaConversationToolDispatchAuthority, type ConversationToolDispatchDependencies } from "@opencrane/backend/server/conversations";
+import { ExecutionEvidenceOutcomes, ManagedExecutionEvidenceAuthority, PersonalExecutionEvidenceAuthority, PrismaManagedExecutionEvidenceRepository, PrismaPersonalExecutionEvidenceRepository } from "@opencrane/backend/server/agents/agent-services";
+import { ConversationComputerHistory, ConversationToolEvidenceOutcomes, PrismaConversationToolDispatchAuthority, type ConversationToolDispatchDependencies } from "@opencrane/backend/server/conversations";
 import { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
 import { __HumanMembershipRevision, _CreateHumanMembershipEvidenceConfig, type HumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
@@ -14,7 +14,7 @@ import { _CreateAgentControllerTokenReviewer, _CreateMcpExecutorTokenReviewer, _
 
 import type { InternalRuntimeConfig } from "./config.types";
 import { _log } from "./log";
-import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
+import type { McpExecutionEvidenceComposition, McpRuntimeComposition } from "./mcp-runtime-composition.types";
 import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
 
 /** Polling cadence for durable public task completion after runtime admission. */
@@ -74,17 +74,43 @@ export function _CreateMcpRuntimeComposition(prisma: PrismaClient, authApi: Proj
 /** Bind current execution and assignment readers without moving their domain decisions into the app. */
 export function _CreateConversationToolDispatchDependencies(history: HistoryStore, membership: HumanMembershipEvidenceConfig): ConversationToolDispatchDependencies
 {
+	function _Evidence(transactionValue: Parameters<ConversationToolDispatchDependencies["executionEvidence"]>[0]): McpExecutionEvidenceComposition
+	{
+		const transaction = transactionValue as Prisma.TransactionClient;
+		const personal = new PersonalExecutionEvidenceAuthority(new PrismaPersonalExecutionEvidenceRepository(transaction, membership));
+		const managed = new ManagedExecutionEvidenceAuthority(new PrismaManagedExecutionEvidenceRepository(transaction, membership));
+		async function _LoadPersonal(command: Parameters<McpExecutionEvidenceComposition["loadPersonal"]>[0], evidenceTransaction: Parameters<McpExecutionEvidenceComposition["loadPersonal"]>[1]): ReturnType<McpExecutionEvidenceComposition["loadPersonal"]>
+		{
+			const result = await personal.load(command, evidenceTransaction);
+
+			return result.outcome === ExecutionEvidenceOutcomes.Loaded
+				? { outcome: ConversationToolEvidenceOutcomes.Loaded, value: result.value }
+				: { outcome: ConversationToolEvidenceOutcomes.Denied, reason: result.reason };
+		}
+		async function _LoadManaged(command: Parameters<McpExecutionEvidenceComposition["loadManaged"]>[0], evidenceTransaction: Parameters<McpExecutionEvidenceComposition["loadManaged"]>[1]): ReturnType<McpExecutionEvidenceComposition["loadManaged"]>
+		{
+			const result = await managed.load(command, evidenceTransaction);
+
+			return result.outcome === ExecutionEvidenceOutcomes.Loaded
+				? { outcome: ConversationToolEvidenceOutcomes.Loaded, value: result.value }
+				: { outcome: ConversationToolEvidenceOutcomes.Denied, reason: result.reason };
+		}
+
+		return {
+			loadPersonal: _LoadPersonal,
+			loadManaged: _LoadManaged,
+		};
+	}
+	function _Eligibility(transaction: Parameters<ConversationToolDispatchDependencies["toolEligibility"]>[0]): ReturnType<ConversationToolDispatchDependencies["toolEligibility"]>
+	{
+		return new PrismaRuntimeMcpEffectEligibilityAuthority(transaction as Prisma.TransactionClient);
+	}
+
 	return {
 		identities: new AgentIdentityHistory(history),
 		computers: new ConversationComputerHistory(history),
 		membershipRevision: __HumanMembershipRevision,
-		executionEvidence: function _Evidence(transactionValue)
-		{
-			const transaction = transactionValue as Prisma.TransactionClient;
-			const personal = new PersonalExecutionEvidenceAuthority(new PrismaPersonalExecutionEvidenceRepository(transaction, membership));
-			const managed = new ManagedExecutionEvidenceAuthority(new PrismaManagedExecutionEvidenceRepository(transaction, membership));
-			return { loadPersonal: personal.load.bind(personal), loadManaged: managed.load.bind(managed) };
-		},
-		toolEligibility: function _Eligibility(transaction) { return new PrismaRuntimeMcpEffectEligibilityAuthority(transaction as Prisma.TransactionClient); },
+		executionEvidence: _Evidence,
+		toolEligibility: _Eligibility,
 	};
 }

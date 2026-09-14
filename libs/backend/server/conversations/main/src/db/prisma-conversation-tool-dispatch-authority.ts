@@ -1,11 +1,11 @@
 import { AgentRunState, type Prisma } from "@prisma/client";
 
-import { AgentIdentityStates, ComputerLeaseStates, ConversationComputerRealizationKinds, ConversationComputerStates } from "@opencrane/contracts";
+import { AgentIdentityKinds, AgentIdentityStates, ComputerLeaseStates, ConversationComputerRealizationKinds, ConversationComputerStates } from "@opencrane/contracts";
 import { __DigestCanonicalJson, PrismaAuthorizationAuthority, type ToolInvocationRecord, type ProductAuthorizationWorkloadContext } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { ConversationToolDispatchAuthority, ConversationToolDispatchDependencies } from "../conversation-tool-dispatch.types";
+import { ConversationToolEvidenceOutcomes, type ConversationToolDispatchAuthority, type ConversationToolDispatchDependencies } from "../conversation-tool-dispatch.types";
 import { PrismaConversationComputerLifecycleProjectionRepository } from "./prisma-conversation-computer-lifecycle-projection-repository";
 import { PrismaGroupChildAccessRepository } from "./prisma-group-child-access-repository";
 
@@ -65,10 +65,19 @@ export class PrismaConversationToolDispatchAuthority implements ConversationTool
 			return null;
 		const current = await this.dependencies.computers.load(coordinates);
 		const lease = current?.lease;
-		if (current === null || current.computer.state !== ConversationComputerStates.Warm || lease === null || lease === undefined
-			|| lease.state !== ComputerLeaseStates.Active || lease.id !== subject.computerScope.leaseId
-			|| lease.generation !== subject.computerScope.leaseGeneration || current.computer.leaseGeneration !== lease.generation
-			|| lease.computerId !== subject.computerScope.computerId || lease.realization.kind !== ConversationComputerRealizationKinds.AgentSandbox || lease.realization.sandboxId === null || Date.parse(lease.expiresAt) <= now.getTime())
+		if (
+			!current
+			|| current.computer.state !== ConversationComputerStates.Warm
+			|| !lease
+			|| lease.state !== ComputerLeaseStates.Active
+			|| lease.id !== subject.computerScope.leaseId
+			|| lease.generation !== subject.computerScope.leaseGeneration
+			|| current.computer.leaseGeneration !== lease.generation
+			|| lease.computerId !== subject.computerScope.computerId
+			|| lease.realization.kind !== ConversationComputerRealizationKinds.AgentSandbox
+			|| lease.realization.sandboxId === null
+			|| Date.parse(lease.expiresAt) <= now.getTime()
+		)
 			return null;
 		const decisionTime = Math.max(now.getTime(), Date.now());
 		const authorization = new PrismaAuthorizationAuthority(this.transaction);
@@ -77,18 +86,18 @@ export class PrismaConversationToolDispatchAuthority implements ConversationTool
 		const command = { identity: identity.identity, requesterPrincipalId: subject.requester.requesterPrincipalId, agentRevisionId: scope.agentRevisionId };
 		let membership;
 		let executionTrustedUntil;
-		if (identity.identity.kind === "proxied")
+		if (identity.identity.kind === AgentIdentityKinds.Proxied)
 		{
 			const result = await execution.loadPersonal({ ...command, identity: identity.identity }, evidenceTransaction);
-			if (result.outcome !== "loaded")
+			if (result.outcome !== ConversationToolEvidenceOutcomes.Loaded)
 				return null;
 			membership = result.value.membership;
 			executionTrustedUntil = membership.trustedUntil;
 		}
-		else if (identity.identity.kind === "managed")
+		else if (identity.identity.kind === AgentIdentityKinds.Managed)
 		{
 			const result = await execution.loadManaged({ ...command, identity: identity.identity }, evidenceTransaction);
-			if (result.outcome !== "loaded")
+			if (result.outcome !== ConversationToolEvidenceOutcomes.Loaded)
 				return null;
 			membership = result.value.requesterMembership;
 			executionTrustedUntil = result.value.membership.trustedUntil;

@@ -10,9 +10,22 @@ function _Harness()
 {
 	const process = { kind: ConversationComputerRealizationKinds.HostDevelopmentProcess, processId: "local-computer-1" } as const;
 	const authenticator = { authenticate: vi.fn().mockResolvedValue(process) };
-	const authority = { reviewCredential: vi.fn(), bootstrap: vi.fn().mockResolvedValue({ bootstrapId: "11111111-1111-5111-8111-111111111111", outcome: "ready" }), modelStep: vi.fn().mockResolvedValue({ outcome: "completed" }) };
+	const authority = {
+		reviewCredential: vi.fn(),
+		bootstrap: vi.fn().mockResolvedValue({ bootstrapId: "11111111-1111-5111-8111-111111111111", outcome: "ready" }),
+		modelStep: vi.fn().mockResolvedValue({ outcome: "completed" }),
+	};
 	const logger = { warn: vi.fn() };
-	return { app: _CreateHostDevelopmentConversationComputerPrivateApp({ authenticator, authority, logger }), authenticator, authority, process };
+	return {
+		app: _CreateHostDevelopmentConversationComputerPrivateApp({
+			authenticator,
+			authority,
+			logger,
+		}),
+		authenticator,
+		authority,
+		process,
+	};
 }
 
 describe("Tier 2 host conversation-computer private app", function _Suite(): void
@@ -20,10 +33,18 @@ describe("Tier 2 host conversation-computer private app", function _Suite(): voi
 	it("admits bootstrap through the host bearer identity", async function _Bootstrap(): Promise<void>
 	{
 		const harness = _Harness();
-		const response = await request(harness.app).get("/api/internal/conversation-computer/bootstrap").query({ computerId: "computer-1", generation: 3, leaseId: "lease-3" }).set("Authorization", "Bearer private-bearer");
+		const response = await request(harness.app).get("/api/internal/conversation-computer/bootstrap").query({
+			computerId: "computer-1",
+			generation: 3,
+			leaseId: "lease-3",
+		}).set("Authorization", "Bearer private-bearer");
 		expect(response.status).toBe(200);
 		expect(harness.authenticator.authenticate).toHaveBeenCalledWith("private-bearer");
-		expect(harness.authority.bootstrap).toHaveBeenCalledWith({ computerId: "computer-1", lease: { leaseId: "lease-3", leaseGeneration: 3 }, process: harness.process });
+		expect(harness.authority.bootstrap).toHaveBeenCalledWith({
+			computerId: "computer-1",
+			lease: { leaseId: "lease-3", leaseGeneration: 3 },
+			process: harness.process,
+		});
 	});
 
 	it("admits only the existing model-step envelope", async function _ModelStep(): Promise<void>
@@ -49,7 +70,11 @@ describe("Tier 2 host conversation-computer private app", function _Suite(): voi
 	{
 		const harness = _Harness();
 		harness.authenticator.authenticate.mockResolvedValue(null);
-		const response = await request(harness.app).get("/api/internal/conversation-computer/bootstrap").query({ computerId: "computer-1", generation: 3, leaseId: "lease-3" }).set("Authorization", "Bearer invalid");
+		const response = await request(harness.app).get("/api/internal/conversation-computer/bootstrap").query({
+			computerId: "computer-1",
+			generation: 3,
+			leaseId: "lease-3",
+		}).set("Authorization", "Bearer invalid");
 		expect(response.status).toBe(401);
 		expect(harness.authority.bootstrap).not.toHaveBeenCalled();
 	});

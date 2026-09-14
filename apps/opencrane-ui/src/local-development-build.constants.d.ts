@@ -2,7 +2,7 @@ import type { PersonaFirstChatArchetypes } from "@opencrane/models/user-onboardi
 
 declare global
 {
-	/** Archetype embedded by a named Tier 1 development build; absent for the plain onboarding build. */
+	/** Supplies the archetype embedded by a named Tier 1 build; the plain build leaves it absent to start onboarding. */
 	const OPENCRANE_LOCAL_DEVELOPMENT_ARCHETYPE: PersonaFirstChatArchetypes | undefined;
 }
 
