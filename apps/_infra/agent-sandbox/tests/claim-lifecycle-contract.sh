@@ -98,7 +98,7 @@ if (args.includes('auth')) {
     throw new Error(`Unexpected read: ${resource}`);
   }
 } else if (args.includes('exec')) {
-  if (args.includes('--container=opencrane-server')) {
+  if (args.includes('--container=opencrane-ui')) {
     assert(args.includes('deployment/smoke-opencrane-server'));
     assert(args.includes('node'));
     assert(args.includes('smoke-litellm.smoke.svc.cluster.local'));

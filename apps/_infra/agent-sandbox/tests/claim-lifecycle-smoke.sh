@@ -139,7 +139,7 @@ MODEL_PORT="$(kubectl --context "$CONTEXT" get "service/${RELEASE}-litellm" -n "
 MODEL_HOST="${RELEASE}-litellm.${NAMESPACE}.svc.cluster.local"
 # Prove the model listener is live from the server before treating a refused sandbox connection as
 # a denied path. Otherwise an empty Service could make this negative test pass without isolation.
-kubectl --context "$CONTEXT" exec -i "deployment/${RELEASE}-opencrane-server" -n "$NAMESPACE" --container=opencrane-server -- node --input-type=module - "$MODEL_HOST" "$MODEL_PORT" <<'NODE'
+kubectl --context "$CONTEXT" exec -i "deployment/${RELEASE}-opencrane-server" -n "$NAMESPACE" --container=opencrane-ui -- node --input-type=module - "$MODEL_HOST" "$MODEL_PORT" <<'NODE'
 import net from "node:net";
 
 const host = process.argv[2];
