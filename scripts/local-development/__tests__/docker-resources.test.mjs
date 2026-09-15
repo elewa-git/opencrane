@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { inspectOwnedDockerResource, removeOwnedDockerResource, resetOwnedPersistentState } from "../docker-resources.mjs";
+import { ensureOwnedVolume, inspectOwnedDockerResource, removeOwnedDockerResource, resetOwnedPersistentState } from "../docker-resources.mjs";
 
 const configuration = {
 	baselineDigest: "current",
@@ -13,6 +13,7 @@ const configuration = {
 	networkName: "network",
 	postgresContainerName: "postgres",
 	postgresVolumeName: "postgres-volume",
+	postgresVolumeProvisionerContainerName: "postgres-volume-provisioner",
 	repositoryIdentity: "repository",
 	worktreeIdentity: "worktree"
 };
@@ -90,6 +91,22 @@ test("ordinary reuse rejects a stale target baseline", async function _RejectSta
 	}), /not owned by this checkout and target baseline/u);
 });
 
+test("a PostgreSQL volume from another worktree is refused before provisioning", async function _ForeignVolume()
+{
+	const commands = [];
+	async function _Docker(_command, argumentsList)
+	{
+		commands.push(argumentsList);
+
+		return { status: 0, stdout: _labels("current", "other") };
+	}
+
+	await assert.rejects(ensureOwnedVolume("postgres-volume", configuration, { runCommand: _Docker }), /not owned by this checkout/u);
+	assert.deepEqual(commands, [
+		["volume", "inspect", "postgres-volume", "--format", "{{json .Labels}}"]
+	]);
+});
+
 test("reset accepts a stale baseline but removes only this checkout resources", async function _ResetStale()
 {
 	const removals = [];
@@ -113,6 +130,7 @@ test("reset accepts a stale baseline but removes only this checkout resources", 
 		"kurrent",
 		"kurrent-tls-provisioner",
 		"postgres",
+		"postgres-volume-provisioner",
 		"network",
 		"kurrent-tls-volume",
 		"kurrent-volume",

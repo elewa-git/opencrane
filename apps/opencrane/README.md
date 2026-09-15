@@ -248,6 +248,11 @@ ordinary shutdown removes session resources while preserving the paired data vol
 database credentials and conversation keyring. `--reset` is the explicit fresh-install path for a
 stale target baseline and removes the volumes and their paired credentials before applying the
 current 0.11 baseline. It is not a migration or upgrade path.
+Before launching the unprivileged PostgreSQL process, Tier 2 validates its named volume and uses a
+short, network-disabled helper from the same pinned image to set ownership and permissions on the
+volume's top directory. Stored database files are left alone; a permission failure does not call for
+`--reset`. The unprivileged process uses a temporary UID-26 socket directory, not the data volume,
+for its runtime files.
 An ARM64 Docker daemon needs the explicit `--emulate-amd64` option for the pinned PostgreSQL and
 KurrentDB images; it can be slow or fail and does not change the target baseline. Codespaces uses
 one private HTTPS forwarded browser port, while the product and dependency listeners stay local.

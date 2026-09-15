@@ -101,6 +101,15 @@ The pinned LiteLLM image is multi-platform and is not forced through AMD64 emula
 Docker daemon the launcher stops before acquiring containers and explains the two choices below;
 changing the database image would change the current release operand, not just this local workflow.
 
+The PostgreSQL image starts as an unprivileged user. Before starting it, the coordinator checks that
+the named data volume belongs to this repository worktree and target baseline. A short, network-disabled
+helper from the same pinned image then gives **only the volume's top directory** to that user and
+restricts its permissions. The database still runs unprivileged; the helper does not rewrite stored
+files or clear data. If Docker refuses that ownership change, startup fails and preserves the volume.
+The process gets a separate, temporary socket directory owned by the image's UID 26; it does not
+store database data there. Do not use `--reset` for a volume-permission error: it deletes data
+without fixing the Docker host.
+
 Start the core application profile:
 
 ```bash
@@ -163,7 +172,8 @@ Engine needs compatible QEMU/binfmt support. Emulation can make image pulls, bui
 much slower, and some builds or containers can fail. This is a best-effort local option, not the
 qualified path for deployment or Codespaces. `--emulate-amd64` affects only the pinned PostgreSQL
 and KurrentDB containers and the KurrentDB TLS provisioner; it does not change the release manifest
-or the LiteLLM image. Prefer an AMD64 Codespace when emulation is unreliable. Do not use `--reset`
+or the LiteLLM image. The short PostgreSQL volume helper uses the same pinned image and therefore
+also runs under emulation. Prefer an AMD64 Codespace when emulation is unreliable. Do not use `--reset`
 for an architecture mismatch: it deletes local database data but cannot change image support.
 
 Local provider keys are owner-only regular files named `keys/.openai-key`,

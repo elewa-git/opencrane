@@ -140,6 +140,7 @@ export async function resetOwnedPersistentState(configuration, operations = {})
 	await removeOwnedDockerResource("container", configuration.kurrentContainerName, configuration, resetOperations);
 	await removeOwnedDockerResource("container", configuration.kurrentTlsProvisionerContainerName, configuration, resetOperations);
 	await removeOwnedDockerResource("container", configuration.postgresContainerName, configuration, resetOperations);
+	await removeOwnedDockerResource("container", configuration.postgresVolumeProvisionerContainerName, configuration, resetOperations);
 	await removeOwnedDockerResource("network", configuration.networkName, configuration, resetOperations);
 	await removeOwnedDockerResource("volume", configuration.kurrentTlsVolumeName, configuration, resetOperations);
 	await removeOwnedDockerResource("volume", configuration.kurrentVolumeName, configuration, resetOperations);
