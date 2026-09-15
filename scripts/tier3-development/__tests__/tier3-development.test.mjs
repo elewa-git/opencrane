@@ -79,8 +79,16 @@ test("reports exact minimum and recommended host shortfalls", function _Capacity
 {
 	const result = classifyTier3Capacity({ cpu: 4, memoryGiB: 16, storageAvailableGiB: 40, storageGiB: 64 });
 	assert.deepEqual(result.minimumShortfalls, []);
-	assert.deepEqual(result.recommendedShortfalls, ["4 more CPU required", "16.0 GiB more memory required"]);
+	assert.deepEqual(result.recommendedShortfalls, ["4 more CPU required", "13.8 GiB more memory required"]);
 	assert.match(formatTier3Capacity(result), /4 CPU, 16\.0 GiB memory, 64\.0 GiB storage \(40\.0 GiB available\)/u);
+});
+
+test("accepts the Codespaces decimal-GB minimum and rejects a real shortfall", function _CodespacesCapacity()
+{
+	const codespace = classifyTier3Capacity({ cpu: 4, memoryGiB: 15.6, storageAvailableGiB: 25.5, storageGiB: 31.3 });
+	assert.deepEqual(codespace.minimumShortfalls, []);
+	const undersized = classifyTier3Capacity({ cpu: 4, memoryGiB: 14.8, storageAvailableGiB: 25.5, storageGiB: 29.7 });
+	assert.deepEqual(undersized.minimumShortfalls, ["0.1 GiB more memory required", "0.1 GiB more allocated storage required"]);
 });
 
 test("measures the Docker backing filesystem instead of the checkout device", async function _DockerCapacity()

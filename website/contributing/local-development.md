@@ -184,10 +184,11 @@ tools. Tier 3 requires at least 4 cores, 16 GB memory and 32 GB total storage; 8
 and 64 GB storage are recommended.
 The command measures total and available space on Docker's backing filesystem, where k3d stores its
 nodes and images; it does not substitute the checkout filesystem when Docker Desktop uses a separate
-VM disk. The total-space thresholds retain the host requirements above, while available space is
-reported for diagnosis. A lightweight BusyBox probe image may be pulled when it is not already
-present. The command stops on a minimum shortfall without deleting dependency caches, clusters,
-images or other developer state.
+VM disk. It displays measurements in GiB but compares them with the decimal-GB requirements above;
+for example, a reported 15.6 GiB of memory and 31.3 GiB of total storage meet the minimum.
+Available space is reported for diagnosis. A lightweight BusyBox probe image may be pulled when it
+is not already present. The command stops on a minimum shortfall without deleting dependency caches,
+clusters, images or other developer state.
 
 Start the credential-free infrastructure profile:
 

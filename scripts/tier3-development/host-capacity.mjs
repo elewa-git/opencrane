@@ -3,10 +3,11 @@ import { cpus, totalmem } from "node:os";
 import { promisify } from "node:util";
 
 const _EXEC_FILE = promisify(execFile);
+const _GB = 1_000_000_000;
 const _GIB = 1_073_741_824;
 const _STORAGE_PROBE_IMAGE = "busybox:1.36.1";
-const TIER3_MINIMUM_CAPACITY = Object.freeze({ cpu: 4, memoryGiB: 16, storageGiB: 32 });
-const TIER3_RECOMMENDED_CAPACITY = Object.freeze({ cpu: 8, memoryGiB: 32, storageGiB: 64 });
+const TIER3_MINIMUM_CAPACITY = Object.freeze({ cpu: 4, memoryGiB: 16 * _GB / _GIB, storageGiB: 32 * _GB / _GIB });
+const TIER3_RECOMMENDED_CAPACITY = Object.freeze({ cpu: 8, memoryGiB: 32 * _GB / _GIB, storageGiB: 64 * _GB / _GIB });
 
 /**
  * Measures CPU, memory, and the Docker filesystem that will hold the k3d nodes and images.
@@ -21,7 +22,7 @@ export async function measureTier3Capacity(operations = {})
 }
 
 /**
- * Compares a host measurement with the documented minimum and recommended Tier 3 profiles.
+ * Compares GiB measurements with the documented decimal-GB Tier 3 host requirements.
  * The result reports every shortfall and does not prune caches, images, or clusters to manufacture
  * capacity.
  * @returns The original measurements and separate minimum and recommended shortfall lists.
