@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
-import { closeTier3BrowserProxy, createTier3BrowserProxy } from "./tier3-development/browser-proxy.mjs";
+import { closeTier3BrowserProxy, createTier3BrowserProxy, tier3BrowserOrigins } from "./tier3-development/browser-proxy.mjs";
 import { runTier3AgentJourney } from "./tier3-development/agent-journey.mjs";
 import { classifyTier3Capacity, formatTier3Capacity, measureTier3Capacity } from "./tier3-development/host-capacity.mjs";
 import { readTier3IngressCertificate } from "./tier3-development/ingress-certificate.mjs";
@@ -25,6 +25,7 @@ export async function runTier3Development(options, operations = {})
 {
 	const write = operations.write ?? function _Write(message) { process.stdout.write(message); };
 	const environment = operations.environment ?? process.env;
+	const allowedBrowserOrigins = options.smokeOnly ? null : tier3BrowserOrigins(options.proxyPort, environment);
 	const capacity = classifyTier3Capacity(await (operations.measureCapacity ?? measureTier3Capacity)());
 	write(`${formatTier3Capacity(capacity)}\n`);
 	if (capacity.minimumShortfalls.length) throw new Error(`Tier 3 minimum is not met: ${capacity.minimumShortfalls.join(", ")}. No caches, clusters, or images were deleted.`);
@@ -39,7 +40,14 @@ export async function runTier3Development(options, operations = {})
 	if (options.smokeOnly) return { identity, profile: options.profile };
 	const upstreamCertificate = await (operations.readCertificate ?? readTier3IngressCertificate)({ certificateName: `${identity.releaseName}-clustertenant-tls`, namespace: identity.namespace });
 	const upstreamHost = `${identity.clusterTenant}.local.opencrane.test`;
-	const server = (operations.createProxy ?? createTier3BrowserProxy)({ developmentCredential, upstreamCertificate, upstreamHost, upstreamOrigin: `https://127.0.0.1:${identity.ingressPort}` });
+	const proxyOptions = {
+		allowedBrowserOrigins,
+		developmentCredential,
+		upstreamCertificate,
+		upstreamHost,
+		upstreamOrigin: `https://127.0.0.1:${identity.ingressPort}`,
+	};
+	const server = (operations.createProxy ?? createTier3BrowserProxy)(proxyOptions);
 	await (operations.listenProxy ?? _ListenProxy)(server, options.proxyPort);
 	write(`Tier 3 ${options.profile} is ready on http://127.0.0.1:${options.proxyPort}.\n`);
 	write("Keep the Codespaces forwarded port private. The owned k3d cluster remains available for diagnosis.\n");

@@ -227,9 +227,11 @@ model response is not accepted as Tier 3 Agent proof.
 
 After infrastructure qualification, the command prints a loopback browser URL. In GitHub
 Codespaces, keep the forwarded port **private**. The proxy pins the certificate named by the live
-Kubernetes `Certificate`, preserves the exact `.test` ingress authority and refuses state-changing
-requests from another browser origin. The per-launch development identity is available only in this
-explicit standalone k3d profile; ordinary releases remain OpenID Connect (OIDC)-only.
+Kubernetes `Certificate`, preserves the exact `.test` ingress authority and accepts only the
+launcher's loopback browser address or its exact Codespaces forwarded address. Unknown browser
+addresses are rejected even for reads; state changes require the matching browser origin, and
+WebSocket upgrades require an `Origin` header. The per-launch development identity is available
+only in this explicit standalone k3d profile; ordinary releases remain OpenID Connect (OIDC)-only.
 
 Each worktree derives its own cluster, namespace, release, registry, ingress port and owner label.
 If a previous run retained those exact owned resources, choose explicitly between replacing them
@@ -241,6 +243,9 @@ npm run dev:tier3:down
 ```
 
 `--replace-owned` refuses a similarly named cluster with a missing or different owner label.
-`dev:tier3:down` removes only the resources proven to belong to the current worktree. Changing the
-0.11 database baseline means rebuilding this disposable environment; there is no pre-1.0 migration
-or backwards-compatibility route between stale and current Tier 3 data.
+`dev:tier3:down` checks the complete k3d node and image-volume set before deleting the exact
+owned cluster and associated registry. It then removes only that worktree's smoke image references
+and layers. If an orphan or foreign resource cannot be proved owned, cleanup stops and leaves it in
+place for inspection. Changing the 0.11 database baseline means rebuilding this disposable
+environment; there is no pre-1.0 migration or backwards-compatibility route between stale and
+current Tier 3 data.

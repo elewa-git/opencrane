@@ -7,8 +7,8 @@ const _UPSTREAM_TIMEOUT_MILLISECONDS = 15_000;
 
 /**
  * Creates the loopback proxy with the live ingress certificate and required upstream Host.
- * It rejects foreign browser origins, discards browser-supplied forwarding claims, and adds the
- * coordinator credential only for the Agent profile.
+ * It admits only coordinator-selected browser authorities before attaching the Agent credential,
+ * rejects foreign origins for state changes, and discards browser-supplied forwarding claims.
  * @returns An unbound HTTP server; the coordinator chooses its loopback port.
  * @throws When the configured upstream is not HTTPS or has no certificate.
  */
@@ -17,10 +17,21 @@ export function createTier3BrowserProxy(options)
 	const upstream = new URL(options.upstreamOrigin);
 	if (upstream.protocol !== "https:") throw new Error("Tier 3 browser proxy requires HTTPS ingress.");
 	if (!options.upstreamCertificate) throw new Error("Tier 3 browser proxy requires the ingress certificate.");
+	if (!options.allowedBrowserOrigins?.length) throw new Error("Tier 3 browser proxy requires coordinator-selected browser origins.");
 	const sockets = new Set();
 	const server = http.createServer(function _Forward(request, response)
 	{
-		if (!_HasExpectedBrowserOrigin(request)) { response.writeHead(403, { "content-type": "application/json" }); response.end(JSON.stringify({ code: "TIER3_ORIGIN_MISMATCH", error: "Tier 3 state changes require the forwarded browser origin." })); return; }
+		if (!isAllowedTier3BrowserRequest(request, options.allowedBrowserOrigins))
+		{
+			const rejection = {
+				code: "TIER3_ORIGIN_MISMATCH",
+				error: "Tier 3 requires a coordinator-selected browser authority and origin.",
+			};
+			response.writeHead(403, { "content-type": "application/json" });
+			response.end(JSON.stringify(rejection));
+			return;
+		}
+
 		const upstreamRequest = https.request(buildTier3UpstreamRequestOptions(request, upstream, options), function _Respond(upstreamResponse) { response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.statusMessage, upstreamResponse.headers); upstreamResponse.pipe(response); });
 		configureTier3UpstreamTimeout(upstreamRequest, options.upstreamTimeoutMilliseconds ?? _UPSTREAM_TIMEOUT_MILLISECONDS);
 		upstreamRequest.once("error", function _Unavailable(error) { if (!response.headersSent) response.writeHead(502, { "content-type": "text/plain; charset=utf-8" }); response.end(`Tier 3 ingress is unavailable: ${error.message}\n`); });
@@ -29,7 +40,12 @@ export function createTier3BrowserProxy(options)
 	});
 	server.on("upgrade", function _Upgrade(request, socket, head)
 	{
-		if (!_HasExpectedBrowserOrigin(request)) { socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"); return; }
+		if (!isAllowedTier3BrowserRequest(request, options.allowedBrowserOrigins))
+		{
+			socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+			return;
+		}
+
 		_Track(sockets, socket);
 		const upstreamRequest = https.request(buildTier3UpstreamRequestOptions(request, upstream, options));
 		configureTier3UpstreamTimeout(upstreamRequest, options.upstreamTimeoutMilliseconds ?? _UPSTREAM_TIMEOUT_MILLISECONDS);
@@ -41,6 +57,60 @@ export function createTier3BrowserProxy(options)
 	});
 	_UPGRADED_SOCKETS.set(server, sockets);
 	return server;
+}
+
+/**
+ * Returns the browser origins the coordinator can prove from its own port and Codespaces identity.
+ * Codespaces forwarding names come from GitHub's runtime environment, not request headers.
+ * @returns The exact local origin and, in Codespaces, its exact private forwarded origin.
+ * @throws When Codespaces claims lack a valid forwarding identity or domain.
+ */
+export function tier3BrowserOrigins(port, environment)
+{
+	const origins = [`http://127.0.0.1:${port}`];
+
+	if (environment.CODESPACES !== "true") return origins;
+	const name = environment.CODESPACE_NAME;
+	const domain = environment.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN;
+	const dnsLabel = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u;
+
+	if (typeof name !== "string" || !dnsLabel.test(name) || typeof domain !== "string" || !domain.split(".").every(function _Label(label) { return dnsLabel.test(label); }))
+		throw new Error("Tier 3 Codespaces forwarding requires a valid codespace name and port-forwarding domain.");
+	origins.push(`https://${name}-${port}.${domain}`);
+	return origins;
+}
+
+/**
+ * Rejects unknown browser authorities on every request, including safe reads. A mutation needs
+ * a matching Origin or Referer; a WebSocket upgrade requires its browser-generated Origin.
+ * Browser-supplied forwarding headers cannot expand the set of accepted authorities.
+ * @returns Whether the request may reach the certificate-pinned upstream.
+ */
+export function isAllowedTier3BrowserRequest(request, allowedBrowserOrigins)
+{
+	const host = request.headers.host;
+
+	if (typeof host !== "string") return false;
+	const expected = allowedBrowserOrigins.find(function _Matches(origin) { return new URL(origin).host === host; });
+
+	if (!expected) return false;
+	const origin = request.headers.origin;
+
+	if (origin !== undefined && origin !== expected) return false;
+	const upgrade = request.headers.upgrade;
+
+	if (upgrade !== undefined && (typeof upgrade !== "string" || upgrade.toLowerCase() !== "websocket")) return false;
+	const requiresOrigin = !_SAFE_METHODS.has(request.method ?? "GET") || upgrade !== undefined;
+
+	if (!requiresOrigin) return true;
+	if (upgrade !== undefined) return origin === expected;
+	if (origin === expected) return true;
+	const referer = request.headers.referer;
+
+	if (typeof referer !== "string") return false;
+
+	try { return new URL(referer).origin === expected; }
+	catch { return false; }
 }
 
 /**
@@ -79,20 +149,6 @@ export function buildTier3UpstreamRequestOptions(request, upstream, options)
 		if (typeof request.headers.referer === "string") headers.referer = `https://${options.upstreamHost}/`;
 	}
 	return { protocol: upstream.protocol, hostname: upstream.hostname, port: upstream.port, method: request.method, path: request.url, headers, servername: options.upstreamHost, ca: options.upstreamCertificate, rejectUnauthorized: true };
-}
-
-function _HasExpectedBrowserOrigin(request)
-{
-	if (_SAFE_METHODS.has(request.method ?? "GET") && request.headers.upgrade?.toLowerCase() !== "websocket") return true;
-	const host = request.headers.host;
-	if (!host) return false;
-	const forwarded = request.headers["x-forwarded-proto"];
-	const protocol = typeof forwarded === "string" ? forwarded.split(",")[0].trim() : "http";
-	const expected = `${protocol}://${host}`;
-	if (typeof request.headers.origin === "string") return request.headers.origin === expected;
-	if (typeof request.headers.referer !== "string") return false;
-	try { return new URL(request.headers.referer).origin === expected; }
-	catch { return false; }
 }
 
 function _Track(sockets, socket) { sockets.add(socket); socket.once("close", function _Forget() { sockets.delete(socket); }); }
