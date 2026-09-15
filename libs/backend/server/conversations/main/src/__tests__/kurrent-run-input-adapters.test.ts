@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { MessageEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates, type MessageEntry } from "@opencrane/contracts";
 
 import { PrismaConversationHistoryRepository } from "../db/prisma-conversation-history-repository";
 import { ConversationHistoryReader } from "../conversation-history-reader";
@@ -10,7 +10,7 @@ import { KurrentConversationHistoryAdmissionReader } from "../kurrent-conversati
 /** Build one completed human message with exact identity and encrypted-payload evidence. */
 function _Message(id: string, position: string): MessageEntry
 {
-	return { schemaVersion: 1, id, conversationId: "conversation-1", position, author: { kind: "human", principalId: "principal-1", participantId: "subject-1", issuer: "https://issuer.example", authenticatedAt: "2026-09-06T00:00:00.000Z", name: "Jente", avatarArtifactRevisionId: null }, provenance: "human-authored", visibility: { audience: "conversation" }, runId: null, causationId: id, correlationId: id, idempotencyKey: id, occurredAt: "2026-09-06T00:00:00.000Z", attestation: null, kind: "message", state: "completed", blocks: [{ id: `block-${id}`, kind: "text", payloadRef: `payload-${id}`, ciphertextDigest: `sha256:${id}` }], replyToEntryId: null, addressedAgentIdentityId: null, activation: "start" };
+	return { schemaVersion: 1, id, conversationId: "conversation-1", position, author: { kind: ConversationAuthorKinds.Human, principalId: "principal-1", participantId: "subject-1", issuer: "https://issuer.example", authenticatedAt: "2026-09-06T00:00:00.000Z", name: "Jente", avatarArtifactRevisionId: null }, provenance: "human-authored", visibility: { audience: "conversation" }, runId: null, causationId: id, correlationId: id, idempotencyKey: id, occurredAt: "2026-09-06T00:00:00.000Z", attestation: null, kind: ConversationEntryKinds.Message, state: MessageStates.Completed, blocks: [{ id: `block-${id}`, kind: ConversationMessageContentBlockKinds.Text, payloadRef: `payload-${id}`, ciphertextDigest: `sha256:${id}` }], replyToEntryId: null, addressedAgentIdentityId: null, activation: "start" };
 }
 
 describe("Kurrent run-input adapters", function _KurrentRunInputAdaptersSuite()

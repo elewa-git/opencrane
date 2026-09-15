@@ -95,10 +95,11 @@ watch or mutate Pods or read Pods in a foreign namespace. Authorization reviews 
 without submitting Pod writes. Every server impersonation includes its service-account groups so
 group grants are covered. It reads the named Pod as that server identity, then checks the controlling
 owner UID, Sandbox and Pod lease labels, running Pod, cluster DNS, private server transport, denied
-direct model access and same-namespace Service address. The model probe requires a connection timeout;
-a refused connection does not prove isolation. It also rejects a controller-created template policy, then
-deletes that exact claim and waits for
-foreground cleanup. It rejects other contexts. This proves controller reconciliation, without
+direct model access and same-namespace Service address. Before the denied model probe, the server
+must connect to the model listener as a positive control. A timeout or refusal from the computer then
+proves the direct path is blocked while the listener is live. It also rejects a controller-created
+template policy, then deletes that exact claim and waits for foreground cleanup. It rejects other
+contexts. This proves controller reconciliation, without
 claiming PostgreSQL admission, computer readiness or an assistant answer; live journeys prove those.
 
 ## See also

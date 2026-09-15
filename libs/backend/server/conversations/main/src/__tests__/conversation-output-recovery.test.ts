@@ -115,7 +115,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 			f.flags.mayUseVisibility = false;
 		if (kind === "lease")
 			f.current.lease.expiresAt = "2000-01-01T00:00:00.000Z";
-		const command = kind === "pod" ? { ...f.command, workload: { ...f.command.workload, podUid: "foreign-pod" } } : f.command;
+		const command = kind === "pod" ? { ...f.command, process: { ...f.command.process, workload: { ...f.command.process.workload, podUid: "foreign-pod" } } } : f.command;
 		await expect(f.restart().bootstrap(command)).rejects.toThrow();
 		expect(f.history.streams.get(f.stream)!).toHaveLength(2);
 		expect(f.runLifecycle.complete).not.toHaveBeenCalled();
@@ -126,7 +126,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		const f = await _OutputRecoveryHarness();
 		f.runLifecycle.complete.mockRejectedValueOnce(new Error("completion unavailable"));
 		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("completion unavailable");
-		await expect(f.restart().bootstrap({ ...f.command, workload: { ...f.command.workload, podUid: "foreign-pod" } })).rejects.toThrow("lease-bound Sandbox Pod");
+		await expect(f.restart().bootstrap({ ...f.command, process: { ...f.command.process, workload: { ...f.command.process.workload, podUid: "foreign-pod" } } })).rejects.toThrow("not bound to the active realization");
 		expect(f.credentials.revoke).not.toHaveBeenCalled();
 	});
 

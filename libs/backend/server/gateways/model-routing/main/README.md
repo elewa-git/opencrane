@@ -43,7 +43,10 @@ caller's transaction, then resolves the selected public name to exactly one tena
 definition. Missing, foreign-only, or ambiguous definitions fail closed. The
 off-policy-evaluation (OPE) and savings helpers are likewise pure estimators used to decide, in
 shadow mode, whether a cheaper candidate model would hold quality before it ever routes live
-traffic. The BYOK (bring-your-own-key) model catalogue (`_BYOK_PROVIDER_CATALOG`) is data, tuned as providers ship models.
+traffic. The BYOK (bring-your-own-key) model catalogue (`_BYOK_PROVIDER_CATALOG`) is loaded from the
+package-root `byok-provider-catalog.json` public machine-readable authority. Production routing and
+local development both consume that artifact; neither keeps a private copy. Tune that one file as
+providers ship models.
 
 Model registration reads LiteLLM inventory before creating anything. The pinned 1.81.0 proxy's
 `/v2/model/info` route returns an empty catalogue on a fresh installation, allowing its first model
@@ -81,7 +84,8 @@ derived from their governed Global resource, so a late first POST cannot create 
   `_UpsertLiteLlmCredential`, `_DeleteLiteLlmCredential`, and `_EnsureProviderEmbeddingModels` —
   fixed-coordinate custody and LiteLLM adapters used only after a durable provider command commits.
 - `_EstimateSavings`, `_ReplayEstimate`, `_DoublyRobustEstimate`, `_OpeEstimateWithCi` — the pure
-  shadow-router estimators. `_BYOK_PROVIDER_CATALOG` — the per-provider default model catalogue.
+  shadow-router estimators. `_BYOK_PROVIDER_CATALOG` — the typed per-provider default model
+  catalogue loaded from the package's public `byok-provider-catalog.json` artifact.
 - `_IssueAttemptLiteLlmKey` — mint one short-lived, alias- and budget-bound LiteLLM virtual key for a
   single agent-run attempt (fails hard; the master key never leaves the control plane), with its
   request/result shapes `AttemptLiteLlmKeyRequest` and `AttemptLiteLlmKey`. Issuance requires an

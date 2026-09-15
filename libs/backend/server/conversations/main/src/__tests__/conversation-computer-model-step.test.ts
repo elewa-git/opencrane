@@ -13,7 +13,7 @@ function _Gate()
 /** The private transport accepts only these request coordinates and supplies the reviewed workload. */
 function _Command(f: Awaited<ReturnType<typeof _OutputRecoveryHarness>>)
 {
-	return { bootstrapId: f.output.bootstrapId, workload: f.command.workload };
+	return { bootstrapId: f.output.bootstrapId, process: f.command.process };
 }
 
 describe("one server-owned model request across process restarts", function _Suite()
@@ -191,7 +191,7 @@ describe("one server-owned model request across process restarts", function _Sui
 	it("requires current Pod admission even for an already reserved request", async function _WrongPod()
 	{
 		const f = await _OutputRecoveryHarness();
-		await expect(f.restart().modelStep({ ..._Command(f), workload: { ...f.command.workload, podUid: "other-pod" } })).rejects.toThrow("lease-bound");
+		await expect(f.restart().modelStep({ ..._Command(f), process: { ...f.command.process, workload: { ...f.command.process.workload, podUid: "other-pod" } } })).rejects.toThrow("not bound to the active realization");
 		expect(f.model.request).not.toHaveBeenCalled();
 		expect(f.credentials.issueOnce).not.toHaveBeenCalled();
 	});

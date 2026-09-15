@@ -1,4 +1,4 @@
-import type { AgentIdentity } from "@opencrane/contracts";
+import { AgentIdentityKinds, type AgentIdentity } from "@opencrane/contracts";
 import type { AuthorizationAuthority, ProductAuthorizationWorkloadContext, ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import type { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
 import type { ExecutionSubject, ExecutionSubjectHumanMembershipEvidence } from "@opencrane/models/agents";
@@ -9,13 +9,27 @@ import type { ConversationComputerHistory } from "./conversation-computers";
 export interface ConversationToolExecutionEvidence
 {
 	/** Read the personal service and the proxied human's current membership and permissions. */
-	loadPersonal(command: { readonly identity: Extract<AgentIdentity, { kind: "proxied" }>; readonly requesterPrincipalId: string; readonly agentRevisionId: string }, transaction: ConversationToolEvidenceTransaction): Promise<ConversationToolEvidenceResult<{ readonly membership: ExecutionSubjectHumanMembershipEvidence }>>;
+	loadPersonal(command: { readonly identity: Extract<AgentIdentity, { kind: AgentIdentityKinds.Proxied }>; readonly requesterPrincipalId: string; readonly agentRevisionId: string }, transaction: ConversationToolEvidenceTransaction): Promise<ConversationToolEvidenceResult<{ readonly membership: ExecutionSubjectHumanMembershipEvidence }>>;
 	/** Read company execution separately from the requesting human's membership and permissions. */
-	loadManaged(command: { readonly identity: Extract<AgentIdentity, { kind: "managed" }>; readonly requesterPrincipalId: string; readonly agentRevisionId: string }, transaction: ConversationToolEvidenceTransaction): Promise<ConversationToolEvidenceResult<{ readonly membership: { readonly trustedUntil: string }; readonly requesterMembership: ExecutionSubjectHumanMembershipEvidence }>>;
+	loadManaged(command: { readonly identity: Extract<AgentIdentity, { kind: AgentIdentityKinds.Managed }>; readonly requesterPrincipalId: string; readonly agentRevisionId: string }, transaction: ConversationToolEvidenceTransaction): Promise<ConversationToolEvidenceResult<{ readonly membership: { readonly trustedUntil: string }; readonly requesterMembership: ExecutionSubjectHumanMembershipEvidence }>>;
+}
+
+/**
+ * Names the transient result states accepted by the conversation tool evidence port.
+ *
+ * The dispatch authority branches on these process-local values before a provider claim. The
+ * values are not persisted or sent through an external API, and the port rejects unknown states.
+ */
+export enum ConversationToolEvidenceOutcomes
+{
+	/** The evidence owner proved the current execution facts. */
+	Loaded = "loaded",
+	/** The evidence owner refused to issue current execution facts. */
+	Denied = "denied",
 }
 
 /** Retain the existing evidence owner's loaded/denied result without copying its internal facts. */
-export type ConversationToolEvidenceResult<T> = { readonly outcome: "loaded"; readonly value: T } | { readonly outcome: "denied"; readonly reason: string };
+export type ConversationToolEvidenceResult<T> = { readonly outcome: ConversationToolEvidenceOutcomes.Loaded; readonly value: T } | { readonly outcome: ConversationToolEvidenceOutcomes.Denied; readonly reason: string };
 
 /** Share the central authorization authority and server observation time with the evidence owner. */
 export interface ConversationToolEvidenceTransaction

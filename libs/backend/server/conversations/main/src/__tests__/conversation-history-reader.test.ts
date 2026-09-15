@@ -1,4 +1,4 @@
-import type { ConversationEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryKinds, type ConversationEntry } from "@opencrane/contracts";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 import { describe, expect, it, vi } from "vitest";
 
@@ -24,7 +24,7 @@ function _Event(revision: bigint, entryId = _FIRST_ENTRY_ID): HistoryRecordedEve
 		id: entryId,
 		conversationId: "conversation-1",
 		position: revision.toString(),
-		author: { kind: "agent", agentIdentityId: "identity-1", agentServiceId: "service-1", name: "Archive", avatarArtifactRevisionId: null },
+		author: { kind: ConversationAuthorKinds.Agent, agentIdentityId: "identity-1", agentServiceId: "service-1", name: "Archive", avatarArtifactRevisionId: null },
 		provenance: "agent-authored",
 		visibility: { audience: "conversation" },
 		runId: "run-1",
@@ -33,7 +33,7 @@ function _Event(revision: bigint, entryId = _FIRST_ENTRY_ID): HistoryRecordedEve
 		idempotencyKey: entryId,
 		occurredAt: "2026-09-01T00:00:00.000Z",
 		attestation: null,
-		kind: "a2ui",
+		kind: ConversationEntryKinds.A2UI,
 		surfaceId: "surface-1",
 		a2uiSchemaVersion: "0.8",
 		operation: "remove",

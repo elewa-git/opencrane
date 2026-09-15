@@ -122,6 +122,21 @@ its resources to the lifecycle owner.
 - `src/app/lifecycle.ts` starts workers before both listeners, aborts active external exchanges during
   shutdown, closes conversation sockets, drains requests and workers, disconnects Prisma, and
   flushes telemetry.
+- `src/development/index.ts` is the Tier 2 workstation or AMD64 Codespaces entrypoint. It composes current
+  product and run-admission authorities against the reviewed development seed, while a
+  loopback-only host-process realizer replaces the production Agent Sandbox boundary. The core
+  profile omits Conversation Computer startup; Agent profiles select local LiteLLM, a remote
+  LiteLLM gateway, or the deterministic simulated transport. A private per-launch browser credential,
+  exact local or private Codespaces host pair and origin check protect the fixed development Principal; every protected request
+  still re-reads the durable Principal projection. This entrypoint does not mount the Kubernetes-only
+  internal listener, MCP workload routes, review commands, or durable workspace checkpointing.
+  Before composing those product routes, the validated development process pins standalone
+  membership to the seed's silo and OIDC issuer with a five-minute evidence lifetime. The shared
+  production membership reader still requires an explicit deployment mode and has no fallback.
+  Tier 2 has no ArtifactStore service, scanner or mounted artifact keys, so it omits conversation-file
+  byte routes and the unused upload gateway. The read-only personal asset metadata catalogue remains;
+  its live API description omits the unavailable file routes. Production still requires its private
+  ArtifactStore address and mounted keys and keeps the complete generated-client API description.
 - `prisma/schema/*.prisma` defines the product's durable domain models.
 - `prisma/bootstrap/target-baseline.sql` defines a clean OpenCrane database. The baseline publisher
   installs the pinned `pg_cron` prerequisite before it switches to the application owner, then this
@@ -208,6 +223,7 @@ are:
 | `PORT` / `INTERNAL_PORT` | Public and workload-facing listeners | `8080` / `8081` |
 | `DATABASE_URL` | PostgreSQL connection string | required |
 | `OPENCRANE_HISTORY_STORE_*` | TLS-only KurrentDB endpoint plus read-only CA, username, and password mounts used for checked event history | required |
+| `OPENCRANE_LOCAL_BROWSER_ORIGIN` | Tier 2-only exact local or private Codespaces browser authority for host, origin and invitation-link checks | local development host |
 | `OPENCRANE_SILO_ID` | Silo that owns tasks admitted by this server | required |
 | `OPENCRANE_WORKFLOW_*` | Absurd database pool, worker concurrency, and polling limits | small development defaults |
 | `OPENCRANE_MCP_ERA_PROBE_*` | Timeout and response-size limit for remote MCP protocol checks | 5 seconds / 64 KiB |
@@ -231,6 +247,22 @@ from the production image's workspace-scoped install.
 The history client verifies the mounted CA and supplies its mounted service credential through
 the SDK credential provider. Passwords stay out of the connection URL: the native transport
 otherwise preserves percent-encoded password characters and rejects valid generated credentials.
+
+For workstation or AMD64 Codespaces application development, use the repository-owned Tier 2 commands documented in
+the [local-development guide](../../website/contributing/local-development.md). Those commands own
+their PostgreSQL, KurrentDB and optional LiteLLM resources by repository and worktree identity;
+ordinary shutdown removes session resources while preserving the paired data volumes, owner-only
+database credentials and conversation keyring. `--reset` is the explicit fresh-install path for a
+stale target baseline and removes the volumes and their paired credentials before applying the
+current 0.11 baseline. It is not a migration or upgrade path.
+Before launching the unprivileged PostgreSQL process, Tier 2 validates its named volume and uses a
+short, network-disabled helper from the same pinned image to set ownership and permissions on the
+volume's top directory. Stored database files are left alone; a permission failure does not call for
+`--reset`. The unprivileged process uses a temporary UID-26 socket directory, not the data volume,
+for its runtime files.
+An ARM64 Docker daemon needs the explicit `--emulate-amd64` option for the pinned PostgreSQL and
+KurrentDB images; it can be slow or fail and does not change the target baseline. Codespaces uses
+one private HTTPS forwarded browser port, while the product and dependency listeners stay local.
 
 ### Conversation-computer activation consumer
 

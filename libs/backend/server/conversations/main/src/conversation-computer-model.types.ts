@@ -1,8 +1,8 @@
 import type { ConversationModelRequest, ConversationModelResponse, ConversationModelToolModes } from "@opencrane/contracts";
-import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
+import type { ConversationComputerProcessIdentity } from "./conversation-computer-realization.types";
 
 /**
- * Tells the Pod whether a model step completed or must wait for recovery.
+ * Tells the realized process whether a model step completed or must wait for recovery.
  * These closed values cross the private HTTP API and are checked by the Python worker; changing a
  * wire value breaks that contract. They are derived from saved turn progress, not stored as run state.
  */
@@ -18,16 +18,19 @@ export enum ConversationComputerModelStepOutcomes
 	AuthorityEnded = "authority_ended",
 }
 
-/** Advances the saved turn without accepting prompts, credentials, ordinals or limits from a Pod. */
+/** Advances the saved turn without accepting prompts, credentials, ordinals, or limits from the realized process. */
 export interface ConversationComputerModelStepCommand
 {
+	/** Identifies the saved turn whose reserved work may advance. */
 	readonly bootstrapId: string;
-	readonly workload: RuntimeWorkloadIdentity;
+	/** Carries the independently authenticated process identity checked against the active lease. */
+	readonly process: ConversationComputerProcessIdentity;
 }
 
 /** Reports progress without exposing a model credential or provider response. */
 export interface ConversationComputerModelStepResult
 {
+	/** Tells the process whether the saved step completed, remains pending, or cannot continue. */
 	readonly outcome: ConversationComputerModelStepOutcomes;
 }
 
