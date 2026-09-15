@@ -45,13 +45,37 @@ case "$KURRENTDB_BOOTSTRAP_TIMEOUT_SECONDS" in
     ;;
 esac
 
+# Kubernetes Secret volumes expose each key through a ..data symlink. The chart opts into that
+# exact projection shape; local development keeps the stricter ordinary-file policy.
+is_projected_secret_file() {
+  credential_path="$1"
+  credential_directory="${credential_path%/*}"
+  credential_name="${credential_path##*/}"
+
+  [ "${KURRENTDB_BOOTSTRAP_PROJECTED_SECRETS:-}" = "kubernetes" ] || return 1
+  [ "$(readlink "$credential_path")" = "..data/$credential_name" ] || return 1
+
+  data_target="$(readlink "$credential_directory/..data")" || return 1
+  case "$data_target" in
+    ..[0-9]*) ;;
+    *) return 1 ;;
+  esac
+  case "$data_target" in
+    */*) return 1 ;;
+  esac
+
+  [ -d "$credential_directory/$data_target" ] \
+    && [ ! -L "$credential_directory/$data_target" ]
+}
+
 for credential_path in \
   "$KURRENTDB_BOOTSTRAP_CA_FILE" \
   "$KURRENTDB_BOOTSTRAP_ADMIN_PASSWORD_FILE" \
   "$KURRENTDB_HISTORY_USERNAME_FILE" \
   "$KURRENTDB_HISTORY_PASSWORD_FILE"
 do
-  if [ ! -f "$credential_path" ] || [ -L "$credential_path" ]; then
+  if [ ! -f "$credential_path" ] \
+    || { [ -L "$credential_path" ] && ! is_projected_secret_file "$credential_path"; }; then
     echo "KurrentDB bootstrap input must be a regular, non-symbolic-link file: $credential_path" >&2
     exit 1
   fi

@@ -105,6 +105,8 @@ spec:
               value: {{ $history.activationSubscription.maxSubscriberCount | quote }}
             - name: KURRENTDB_BOOTSTRAP_TIMEOUT_SECONDS
               value: {{ $history.bootstrap.timeoutSeconds | quote }}
+            - name: KURRENTDB_BOOTSTRAP_PROJECTED_SECRETS
+              value: kubernetes
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
