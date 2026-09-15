@@ -7,7 +7,7 @@ export function createPostgresCommand(configuration, secrets)
 	return {
 		command: "docker",
 		arguments: [
-			"run", "--detach", "--name", configuration.postgresContainerName,
+			"run", ...(configuration.emulateAmd64 ? ["--platform", "linux/amd64"] : []), "--detach", "--name", configuration.postgresContainerName,
 			...createDockerLabelArguments(configuration),
 			"--network", configuration.networkName,
 			"--publish", `127.0.0.1:${configuration.postgresPort}:5432`,
@@ -29,7 +29,7 @@ export function createKurrentCommand(configuration, secrets)
 	return {
 		command: "docker",
 		arguments: [
-			"run", "--detach", "--name", configuration.kurrentContainerName,
+			"run", ...(configuration.emulateAmd64 ? ["--platform", "linux/amd64"] : []), "--detach", "--name", configuration.kurrentContainerName,
 			...createDockerLabelArguments(configuration),
 			"--network", configuration.networkName,
 			"--publish", `127.0.0.1:${configuration.kurrentPort}:2113`,
@@ -63,7 +63,7 @@ export function createKurrentTlsVolumeCommand(configuration, secrets)
 	return {
 		command: "docker",
 		arguments: [
-			"run", "--rm", "--name", configuration.kurrentTlsProvisionerContainerName,
+			"run", ...(configuration.emulateAmd64 ? ["--platform", "linux/amd64"] : []), "--rm", "--name", configuration.kurrentTlsProvisionerContainerName,
 			...createDockerLabelArguments(configuration),
 			"--network", "none", "--user", "0:0",
 			"--mount", `type=bind,source=${secrets.directory},target=/source,readonly`,
@@ -104,6 +104,7 @@ export function createApplicationCommands(configuration, secrets)
 		NODE_ENV: "development",
 		OPENCRANE_LOCAL_DEVELOPMENT: "true",
 		OPENCRANE_LOCAL_DEVELOPMENT_PROFILE: configuration.developmentProfile,
+		OPENCRANE_LOCAL_BROWSER_ORIGIN: configuration.browserOrigin,
 		OPENCRANE_LOCAL_BROWSER_SESSION_CREDENTIAL_PATH: secrets.browserSessionCredentialPath,
 		DATABASE_URL: `postgresql://opencrane:${encodeURIComponent(secrets.postgresPassword)}@127.0.0.1:${configuration.postgresPort}/opencrane`,
 		OPENCRANE_LOCAL_KURRENTDB_ENDPOINT: `127.0.0.1:${configuration.kurrentPort}`,
@@ -115,6 +116,13 @@ export function createApplicationCommands(configuration, secrets)
 		PORT: String(configuration.publicPort),
 		INTERNAL_PORT: String(configuration.internalPort)
 	};
+
+	if (configuration.codespaceName)
+	{
+		serverEnvironment.CODESPACES = "true";
+		serverEnvironment.CODESPACE_NAME = configuration.codespaceName;
+		serverEnvironment.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN = configuration.codespacesForwardingDomain;
+	}
 
 	if (configuration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM)
 	{
@@ -142,13 +150,14 @@ export function createApplicationCommands(configuration, secrets)
 				"nx",
 				"run",
 				"opencrane-ui:serve-browser:tier2",
-				"--host=local-development.localhost",
+				`--host=${configuration.codespaceName ? "0.0.0.0" : "local-development.localhost"}`,
 				`--port=${configuration.uiPort}`,
 				"--output-style=stream"
 			],
 			environment: {
 				NX_TUI: "false",
-				NX_TASKS_RUNNER_DYNAMIC_OUTPUT: "false"
+				NX_TASKS_RUNNER_DYNAMIC_OUTPUT: "false",
+				...(configuration.codespaceName ? { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: new URL(configuration.browserOrigin).hostname } : {})
 			}
 		}
 	];

@@ -32,9 +32,6 @@ import { DevelopmentConversationComputerRuntime } from "./conversation-computer-
 import { _CreateDevelopmentPublicApp } from "./public-app";
 import { DeterministicDevelopmentConversationModelTransport, DevelopmentConversationComputerCredentialIssuer } from "./simulated-conversation-model";
 
-/** Browser origin reserved for the Tier 2 Angular server and its invitation links. */
-const _DEVELOPMENT_BROWSER_ORIGIN = "http://local-development.localhost:4200";
-
 /** Stable current local profile identity persisted with development conversation-computer history. */
 const _DEVELOPMENT_PROFILE_REVISION = `sha256:${createHash("sha256").update("opencrane-0.11-tier2-conversation-computer-profile-v1").digest("hex")}`;
 
@@ -207,12 +204,13 @@ export async function _CreateDevelopmentServerComposition(config: DevelopmentCon
 			standalone: {
 				invitationSigningKey: _ReadInvitationSigningKey(config.invitationSigningKeyPath),
 				invitationTtlMilliseconds: 604_800_000,
-				publicBaseUrl: _DEVELOPMENT_BROWSER_ORIGIN,
+				publicBaseUrl: config.browserOrigin,
 			},
 		});
 		const conversationComputer = _CreateDevelopmentConversationComputer(config, prisma, historyStore.historyStore, profile);
 		const app = _CreateDevelopmentPublicApp({
 			artifactScannerEnabled: false,
+			browserOrigin: config.browserOrigin,
 			browserSessionCredential: _ReadBrowserSessionCredential(config.browserSessionCredentialPath),
 			conversationPrivatePayloadKeyringPath: config.conversationPrivatePayloadKeyringPath,
 			health,

@@ -11,6 +11,8 @@ export interface DevelopmentAuthenticationTransport
 	readonly browserHost: string;
 	/** Proxy authorities allowed to forward the browser host. */
 	readonly proxyTargets: ReadonlySet<string>;
-	/** Scheme used by the exact direct and forwarded browser origins. */
+	/** Scheme used by the direct origin and, by default, the forwarded browser origin. */
 	readonly scheme: "http" | "https";
+	/** Browser scheme when a private Codespaces proxy terminates HTTPS before the local listener. */
+	readonly browserScheme?: "http" | "https";
 }

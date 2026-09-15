@@ -20,7 +20,15 @@ export function _CreateDevelopmentPublicApp(dependencies: DevelopmentPublicAppDe
 {
 	const principalAdmission = new PrismaAuthenticatedPrincipalAdmissionUnitOfWork(dependencies.prisma, _log);
 	const principalCapabilities = new PrismaAuthenticatedPrincipalCapabilityUnitOfWork(dependencies.prisma, _log);
-	const authentication = _CreateDevelopmentAuthentication(_DEVELOPMENT_IDENTITY, principalCapabilities, principalAdmission, dependencies.browserSessionCredential, _log);
+	const browserOrigin = new URL(dependencies.browserOrigin);
+	const transport = {
+		browserHost: browserOrigin.host,
+		browserScheme: browserOrigin.protocol === "https:" ? "https" as const : "http" as const,
+		directHost: "local-development.localhost:8080",
+		proxyTargets: new Set(["127.0.0.1:8080", "localhost:8080"]),
+		scheme: "http" as const,
+	};
+	const authentication = _CreateDevelopmentAuthentication(_DEVELOPMENT_IDENTITY, principalCapabilities, principalAdmission, dependencies.browserSessionCredential, _log, transport);
 	return _CreatePublicApp(
 		dependencies.prisma,
 		authentication,

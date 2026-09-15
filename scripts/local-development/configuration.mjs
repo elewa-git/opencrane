@@ -52,6 +52,23 @@ function _port(environment, name, defaultValue)
 	return value;
 }
 
+/** Resolve only the private Codespaces port selected by the repository devcontainer. */
+function _browserOrigin(environment)
+{
+	if (environment.CODESPACES !== "true")
+		return "http://local-development.localhost:4200";
+
+	const name = environment.CODESPACE_NAME;
+	const domain = environment.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN;
+	const label = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u;
+	const labels = domain?.split(".") ?? [];
+
+	if (!name || !label.test(name) || labels.length < 2 || !labels.every((part) => label.test(part)))
+		throw new Error("Codespaces requires a valid CODESPACE_NAME and GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN");
+
+	return `https://${name}-4200.${domain}`;
+}
+
 /** Resolves current release inputs and worktree-specific Docker resource names. */
 export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, environment = process.env)
 {
@@ -72,6 +89,7 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 	const postgresPort = _port(environment, "OPENCRANE_LOCAL_POSTGRES_PORT", "54329");
 	const kurrentPort = _port(environment, "OPENCRANE_LOCAL_KURRENTDB_PORT", "21139");
 	const liteLLMPort = _port(environment, "OPENCRANE_LOCAL_LITELLM_PORT", "4000");
+	const browserOrigin = _browserOrigin(environment);
 	const occupiedPorts = [
 		postgresPort,
 		kurrentPort,
@@ -106,6 +124,9 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 		postgresPort,
 		kurrentPort,
 		liteLLMPort,
+		browserOrigin,
+		codespaceName: environment.CODESPACES === "true" ? environment.CODESPACE_NAME : undefined,
+		codespacesForwardingDomain: environment.CODESPACES === "true" ? environment.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN : undefined,
 		publicPort: 8_080,
 		internalPort: 8_081,
 		uiPort: 4_200,

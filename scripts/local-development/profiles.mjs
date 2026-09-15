@@ -70,6 +70,7 @@ export function parseLocalDevelopmentArguments(argumentsList)
 		remoteLiteLLMEndpoint: undefined,
 		remoteLiteLLMMasterKeyFile: undefined,
 		reset: false,
+		emulateAmd64: false,
 		help: false
 	};
 
@@ -111,6 +112,10 @@ export function parseLocalDevelopmentArguments(argumentsList)
 
 			case "--reset":
 				parsed.reset = true;
+				break;
+
+			case "--emulate-amd64":
+				parsed.emulateAmd64 = true;
 				break;
 
 			case "--help":

@@ -104,6 +104,10 @@ keeps the backend-free Tier 1 configurations unchanged. The Tier 2 build consume
 private `development-session` URL parameter once, removes it from browser history, retains it in that
 tab, and adds it only to relative `/api/v1` requests. Production, development-live and Tier 1 builds
 do not contain that build-specific request-header policy.
+In a Tier 2 Codespace the coordinator binds this browser server for private port 4200 forwarding
+and adds only the exact forwarded hostname to Vite's allowed-host list. The API proxy still targets
+the local product listener; the Codespaces port must remain private because its URL carries a
+per-launch development credential.
 
 ## Boundary
 

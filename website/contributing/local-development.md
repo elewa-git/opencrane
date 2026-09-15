@@ -83,7 +83,8 @@ above, not whenever a branch changes and not as a substitute for reading the fir
 
 ## Tier 2 — local application work
 
-Tier 2 runs the current server and live-gateway browser application on the workstation. It uses
+Tier 2 runs the current server and live-gateway browser application on a workstation or an AMD64
+Codespace. It uses
 Docker for a clean-baseline PostgreSQL database and TLS KurrentDB; Agent profiles can also run a
 loopback LiteLLM container. Install the repository dependencies and make sure `docker`, `openssl`,
 `curl` and `jq` are available before starting it. On macOS or Windows, install and start Docker
@@ -95,6 +96,11 @@ LiteLLM resolves the deployment-owned repository and reviewed tag to an immutabl
 digest, so a later vendor tag update cannot change an existing Tier 2 branch silently. CI rejects
 drift between those deployment-owned coordinates and Tier 2.
 
+The current release-bound PostgreSQL image and pinned KurrentDB image need an AMD64 Docker daemon.
+The pinned LiteLLM image is multi-platform and is not forced through AMD64 emulation. On an ARM64
+Docker daemon the launcher stops before acquiring containers and explains the two choices below;
+changing the database image would change the current release operand, not just this local workflow.
+
 Start the core application profile:
 
 ```bash
@@ -105,7 +111,9 @@ The coordinator binds the browser to `http://local-development.localhost:4200`, 
 `/api/v1` to the loopback server and seeds one fixed development identity. It prints a private URL
 with a new browser-session credential on every launch. Open that exact URL: the Tier 2 build removes
 the credential from the address bar, retains it in that browser tab, and sends it only to same-origin
-product API routes. An old tab cannot authenticate a later launch. The server does not mount the
+product API routes. An old tab cannot authenticate a later launch. On a workstation, the browser
+uses `local-development.localhost`; in Codespaces, it uses the one private HTTPS port-forwarding
+host described below. The server does not mount the
 production Kubernetes workload listener or accept a non-loopback PostgreSQL server.
 
 Use an Agent profile when the change needs one current Conversation Computer:
@@ -126,6 +134,38 @@ npm run dev:tier2:agent:remote-llm -- \
 npm run dev:tier2:agent:simulated-llm
 ```
 
+### Run Tier 2 in Codespaces or on ARM
+
+[Issue #684](https://github.com/elewa-git/opencrane/issues/684) calls for a 2-core, 8 GB Codespace
+for Tier 2. When creating the Codespace, choose the `OpenCrane Tier 2` configuration at
+`.devcontainer/tier2/devcontainer.json` and an AMD64 machine with at least those resources. That
+configuration installs Docker-in-Docker and the Tier 2 command-line tools, runs `npm ci`, and
+forwards only browser port 4200. Check the Architecture line in `docker info` reports `amd64`
+or `x86_64`, then run the same core or Agent command above without an emulation flag.
+
+Keep the forwarded 4200 port **private** in the Codespaces Ports view. The launcher derives one
+HTTPS browser URL from the Codespace's forwarding variables and prints a fresh per-launch credential
+in it. Open that exact URL after GitHub authenticates access to the private port. The UI accepts
+only that Codespace hostname, and the server rejects other forwarded hosts or state-changing
+origins. Do not make the port public to work around a browser or proxy error; neither the backend
+nor the database/model ports should be forwarded.
+
+On an ARM64 workstation, opt in to Docker's AMD64 emulation instead:
+
+```bash
+npm run dev:tier2 -- --emulate-amd64
+# Or keep the selected Agent alternative:
+npm run dev:tier2:agent:simulated-llm -- --emulate-amd64
+```
+
+On Apple Silicon this needs Docker Desktop with AMD64 emulation available; an ARM Linux Docker
+Engine needs compatible QEMU/binfmt support. Emulation can make image pulls, builds and startup
+much slower, and some builds or containers can fail. This is a best-effort local option, not the
+qualified path for deployment or Codespaces. `--emulate-amd64` affects only the pinned PostgreSQL
+and KurrentDB containers and the KurrentDB TLS provisioner; it does not change the release manifest
+or the LiteLLM image. Prefer an AMD64 Codespace when emulation is unreliable. Do not use `--reset`
+for an architecture mismatch: it deletes local database data but cannot change image support.
+
 Local provider keys are owner-only regular files named `keys/.openai-key`,
 `keys/.anthropic-key`, `keys/.gemini-key`, `keys/.mistral-key`, `keys/.deepseek-key` or
 `keys/.glm-key`. They must not be symbolic links. The local LiteLLM configuration contains an
@@ -145,6 +185,11 @@ credential and other session secrets owned by that repository worktree. The pair
 KurrentDB data volumes remain for the next launch. Their database credentials and conversation
 payload keyring remain owner-only on disk so the retained data stays readable. Failed startup uses
 the same cleanup path.
+
+Codespaces VM stop or suspension may not deliver a shutdown signal to the launcher. The platform
+may preserve or reclaim its Docker-in-Docker state; on the next run the launcher removes stale
+containers owned by the same worktree. Do not rely on a Codespace suspension as a guaranteed
+resource-cleanup event.
 
 The repository uses the 0.11 fresh-install baseline. If the launcher reports that the persistent
 database uses a different target baseline, recreate both persistent stores together:

@@ -94,6 +94,24 @@ describe("Tier 2 development authentication", function _Suite(): void
 		expect(refused.status).toBe(403);
 	});
 
+	it("admits only the selected private HTTPS Codespaces proxy tuple", async function _CodespacesProxy(): Promise<void>
+	{
+		const browserOrigin = "https://careful-crane-123-4200.app.github.dev";
+		const transport: DevelopmentAuthenticationTransport = {
+			browserHost: "careful-crane-123-4200.app.github.dev",
+			browserScheme: "https",
+			directHost: "local-development.localhost:8080",
+			proxyTargets: new Set(["127.0.0.1:8080", "localhost:8080"]),
+			scheme: "http",
+		};
+		const accepted = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Origin", browserOrigin).set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const wrongHost = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "other-4200.app.github.dev").set("Origin", browserOrigin).set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const wrongScheme = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Origin", "http://careful-crane-123-4200.app.github.dev").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		expect(accepted.status).toBe(204);
+		expect(wrongHost.status).toBe(403);
+		expect(wrongScheme.status).toBe(403);
+	});
+
 	it("fails closed when the durable Principal is absent", async function _RejectsAbsentPrincipal(): Promise<void>
 	{
 		const admission: AuthenticatedPrincipalAdmission = { admit: vi.fn().mockResolvedValue(null) };

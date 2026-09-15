@@ -43,7 +43,7 @@ function _ExpectedOrigin(request: Request, transport: DevelopmentAuthenticationT
 {
 	if (typeof request.headers["x-forwarded-host"] === "string")
 	{
-		return `${transport.scheme}://${transport.browserHost}`;
+		return `${transport.browserScheme ?? transport.scheme}://${transport.browserHost}`;
 	}
 	return `${transport.scheme}://${transport.directHost}`;
 }

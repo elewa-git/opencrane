@@ -33,6 +33,14 @@ test("core accepts reset without admitting model options", function _CoreProfile
 	], /Model alternatives apply only/u);
 });
 
+test("ARM emulation remains an explicit option for either profile", function _EmulationOption()
+{
+	const core = parseLocalDevelopmentArguments(["--profile", "core", "--emulate-amd64"]);
+	const agent = parseLocalDevelopmentArguments(["--profile", "agent", "--alternative", "simulated-llm", "--emulate-amd64"]);
+	assert.equal(core.emulateAmd64, true);
+	assert.equal(agent.emulateAmd64, true);
+});
+
 test("agent defaults to local LiteLLM and accepts its provider coordinates", function _LocalAgent()
 {
 	const defaults = parseLocalDevelopmentArguments(["--profile", "agent"]);

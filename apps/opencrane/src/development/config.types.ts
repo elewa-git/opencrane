@@ -39,6 +39,8 @@ export interface DevelopmentIdentity
 /** Frozen Tier 2 server settings supplied by the repository-owned coordinator. */
 export interface DevelopmentConfig
 {
+	/** Exact local or private Codespaces browser origin selected by the coordinator. */
+	readonly browserOrigin: string;
 	/** Absolute path to the per-launch browser credential delivered through the private URL. */
 	readonly browserSessionCredentialPath: string;
 	/** Absolute path to the generated development conversation-payload keyring. */

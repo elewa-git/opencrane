@@ -15,6 +15,7 @@ Usage:
   npm run dev:tier2:agent:local-llm
   npm run dev:tier2:agent:remote-llm -- --remote-litellm-endpoint https://… --remote-litellm-master-key-file /absolute/path
   npm run dev:tier2:agent:simulated-llm
+  npm run dev:tier2 -- --emulate-amd64
 
 Profiles:
   core           PostgreSQL, KurrentDB, the current server, and the live-gateway UI
@@ -27,6 +28,7 @@ Agent alternatives:
 
 State:
   --reset        Recreate the paired PostgreSQL and KurrentDB fresh-install state
+  --emulate-amd64  Opt in to AMD64 PostgreSQL and KurrentDB emulation on an ARM Docker daemon
 `;
 
 /** Runs the coordinator worker after the foreground launcher has isolated terminal signals. */

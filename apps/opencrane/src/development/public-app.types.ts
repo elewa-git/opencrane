@@ -13,6 +13,8 @@ type DevelopmentPrismaClient = ReturnType<typeof ___CreatePrismaClient>;
 /** Current product-route dependencies supplied by the Tier 2 process composition. */
 export interface DevelopmentPublicAppDependencies
 {
+	/** Exact browser origin allowed through the development session boundary. */
+	readonly browserOrigin: string;
 	/** Whether the local profile starts an artifact scanner consumer. */
 	readonly artifactScannerEnabled: boolean;
 	/** Per-launch browser credential read from an owner-only coordinator file. */
