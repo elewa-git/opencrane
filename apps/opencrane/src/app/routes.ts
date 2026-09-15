@@ -12,7 +12,6 @@ import { _CreateGlobalModelRoutingDefaultCommandPort, providerByokRouter, modelR
 import { PrismaResourceShareUnitOfWork, ResourceShareService, resourceSharesRouter, type ResourceShareCallerResolver } from "@opencrane/backend/server/iam/grants";
 import { PrismaAuthenticatedPrincipalDirectoryUnitOfWork, type AuthenticatedPrincipalDirectory } from "@opencrane/backend/server/iam/identity";
 import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
-import { spec } from "@opencrane/backend/server/api-spec";
 import { _CreateSelfElicitationActivityRouter, _CreateSelfElicitationRouter } from "@opencrane/backend/agents/execution/elicitation";
 import { _CreateSelfRunStatusRouter } from "@opencrane/backend/agents/execution/runs";
 import { _CreatePersonaOnboardingRouter } from "@opencrane/backend/agents/personal/personas";
@@ -35,6 +34,7 @@ import { _CreatePersonaAgentRevisionSelectionFactory } from "./persona-approval-
 import type { ResourceSharesRouteOptions, RouteMount } from "./routes.types";
 import { _CreateCompanyAssistantComposition } from "./company-assistant-composition";
 import { _CreateUserOnboardingComposition } from "./user-onboarding-composition";
+import { _CreatePublicOpenapiSpec } from "./openapi-composition";
 import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-upload.factory";
 import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
 import type { McpRuntimeComposition, PublicMcpRuntimeComposition } from "./mcp-runtime-composition.types";
@@ -47,12 +47,13 @@ import type { McpRuntimeComposition, PublicMcpRuntimeComposition } from "./mcp-r
  * @param app - Public Express listener, already protected by browser-session authentication.
  * @param prisma - The main product database client.
  * @param artifactScannerEnabled - Whether upload admission has a live scanner consumer.
+ * @param artifactStorageAvailable - Whether conversation-file byte routes have ArtifactStore.
  * @param organizationMembersRouter - Startup-selected standalone or Fleet member authority.
  * @param mcpWorkflows - Shared guarded workflow engine plus saved MCP task authorities.
  * @returns The configured public listener.
  * @throws When the deployment has not supplied its conversation-computer profile.
  */
-export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpWorkflows: McpWorkflowComposition, mcpRuntime: PublicMcpRuntimeComposition | null, providerEffects: ProviderEffectCommandExecutor, historyStore?: HistoryStore, conversationPrivatePayloadKeyringPath?: string, releaseProfile?: ConversationComputerReleaseProfileConfig, sandboxReviewNamespace?: string): Express
+export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpWorkflows: McpWorkflowComposition, mcpRuntime: PublicMcpRuntimeComposition | null, providerEffects: ProviderEffectCommandExecutor, historyStore?: HistoryStore, conversationPrivatePayloadKeyringPath?: string, releaseProfile?: ConversationComputerReleaseProfileConfig, artifactStorageAvailable = true, sandboxReviewNamespace?: string): Express
 {
 	if (!releaseProfile)
 		throw new Error("Product routes require the configured conversation-computer profile");
@@ -82,6 +83,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScan
 			logger: _log,
 		}, _ResolveRequestPrincipal);
 	const principalDirectory = new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma);
+	const publicSpec = _CreatePublicOpenapiSpec(artifactStorageAvailable);
 	const identityAndAccessRoutes: readonly RouteMount[] = [
 		{
 			method: "use",
@@ -147,15 +149,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScan
 			path: "/api/v1/me/runs",
 			handler: _CreateSelfRunStatusRouter(prisma, _log),
 		},
-		{
-			method: "use",
-			path: "/api/v1/me/conversations",
-			handler: __CreateConversationAssetRouter({
-				resolveCaller: _ResolveConversationAssetCaller,
-				authority: _CreateConversationAssetAuthority(prisma, process.env, artifactScannerEnabled),
-				logger: _log,
-			}),
-		},
+		..._CreateConversationAssetRoutes(prisma, artifactScannerEnabled, artifactStorageAvailable),
 		..._OptionalRoute("/api/v1/me/conversations", conversationHistory),
 		..._OptionalRoute("/api/v1/me/conversations", computerReview),
 		{
@@ -214,7 +208,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScan
 		{
 			method: "use",
 			path: "/api/v1/openapi.json",
-			handler: _OpenapiRouter(spec),
+			handler: _OpenapiRouter(publicSpec),
 		},
 	];
 	_MountRouteAreas(app, [
@@ -228,6 +222,27 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScan
 	]);
 
 	return app;
+}
+
+/**
+ * Mount conversation-file routes only when this process has the real ArtifactStore service and keys.
+ *
+ * Tier 2 does not start that service; production still constructs its fail-closed asset authority.
+ */
+export function _CreateConversationAssetRoutes(prisma: PrismaClient, artifactScannerEnabled: boolean, artifactStorageAvailable: boolean): readonly RouteMount[]
+{
+	if (!artifactStorageAvailable)
+		return [];
+
+	const options = {
+		resolveCaller: _ResolveConversationAssetCaller,
+		authority: _CreateConversationAssetAuthority(prisma, process.env, artifactScannerEnabled),
+		logger: _log,
+	};
+	const router = __CreateConversationAssetRouter(options);
+	const routes = _OptionalRoute("/api/v1/me/conversations", router);
+
+	return routes;
 }
 
 /** Resolve the onboarding owner only from the authenticated user on the request, never from the request body. */

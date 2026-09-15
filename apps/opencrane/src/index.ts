@@ -58,7 +58,7 @@ async function _Main(): Promise<void>
 		? _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission)
 		: await _CreateK3dDevelopmentAuthentication(prisma, config.k3dDevelopmentAuthentication, _log);
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
-	const publicApp = _CreatePublicApp(prisma, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile, undefined, agentSandboxReleaseProfile.namespace);
+	const publicApp = _CreatePublicApp(prisma, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile, undefined, true, agentSandboxReleaseProfile.namespace);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);
 	const conversationRunAdmission = _CreateProductionConversationRunAdmission(prisma, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, config.runAdmission);
 	const conversationComputerTurn = _CreateConversationComputerTurnComposition(prisma, historyStore.historyStore, kubernetes.authApi, kubernetes.coreApi, kubernetes.customApi, config.workflows.siloId, agentSandboxReleaseProfile, config.conversationPrivatePayloadKeyringPath, conversationRunAdmission, mcpRuntime.admitToolInvocationInTransaction);
