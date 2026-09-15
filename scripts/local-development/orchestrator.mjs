@@ -21,6 +21,22 @@ async function _runSpecification(specification, configuration)
 	});
 }
 
+/** Require a daemon that can run the pinned operands natively or by explicit AMD64 emulation. */
+export function validateDockerArchitecture(architectureValue, emulateAmd64)
+{
+	const architecture = architectureValue.trim().toLowerCase();
+	const nativeAmd64 = ["amd64", "x86_64"].includes(architecture);
+	const nativeArm64 = ["arm64", "aarch64"].includes(architecture);
+
+	if (!nativeAmd64 && !nativeArm64)
+		throw new Error(`Tier 2 requires an AMD64 or ARM64 Docker daemon; found ${architecture || "unknown"}`);
+
+	if (nativeArm64 && !emulateAmd64)
+		throw new Error("The pinned PostgreSQL and KurrentDB images require AMD64. Use an AMD64 Codespace or rerun with --emulate-amd64 on an ARM Docker daemon; emulation can be slow or fail.");
+
+	return nativeArm64;
+}
+
 /** Validates required host commands and immutable repository inputs before acquiring resources. */
 async function _validateInputs(configuration)
 {
@@ -38,6 +54,12 @@ async function _validateInputs(configuration)
 	{
 		await runLocalCommand(command, argumentsList, { signal: configuration.abortSignal });
 	}
+
+	const docker = await runLocalCommand("docker", ["info", "--format", "{{.Architecture}}"], { signal: configuration.abortSignal });
+	const nativeArm64 = validateDockerArchitecture(docker.stdout, configuration.emulateAmd64);
+
+	if (nativeArm64)
+		process.stdout.write("Tier 2 is emulating AMD64 PostgreSQL and KurrentDB on an ARM Docker daemon; startup can be slow or fail.\n");
 
 	const requiredPaths = [
 		configuration.baselinePath,
@@ -166,7 +188,7 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 		}
 
 		process.stdout.write(`Starting Tier 2 ${sessionConfiguration.developmentProfile}${provider ? ` with ${provider.selection.provider.name}/${provider.selection.model}` : ""}\n`);
-		process.stdout.write(`Open the private Tier 2 browser URL: http://local-development.localhost:4200/?development-session=${encodeURIComponent(secrets.browserSessionCredential)}\n`);
+		process.stdout.write(`Open the private Tier 2 browser URL: ${sessionConfiguration.browserOrigin}/?development-session=${encodeURIComponent(secrets.browserSessionCredential)}\n`);
 		await operations.runDevelopmentProcesses(createApplicationCommands(sessionConfiguration, secrets), sessionConfiguration.repositoryRoot, { signal: shutdown.signal });
 	}
 	catch (error)

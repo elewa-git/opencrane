@@ -9,9 +9,6 @@ import type { AuthenticatedPrincipalCapabilityReader } from "@opencrane/backend/
 import type { PublicAuthenticationComposition } from "../app/public-app.types";
 import type { DevelopmentIdentity } from "./config.types";
 
-/** Browser hostname emitted by the dedicated Angular Tier 2 server. */
-const _EXPECTED_BROWSER_HOST = "local-development.localhost:4200";
-
 /** Direct API hostname allowed for focused diagnostics. */
 const _EXPECTED_DIRECT_HOST = "local-development.localhost:8080";
 
@@ -32,37 +29,37 @@ const _DEVELOPMENT_SESSION_HEADER = "x-opencrane-development-session";
 const _AUTHORIZATION_LIFETIME_MILLISECONDS = 5 * 60 * 1_000;
 
 /** Return true only for the direct development host or its exact Angular proxy pair. */
-function _HasExpectedHost(request: Request): boolean
+function _HasExpectedHost(request: Request, browserHost: string): boolean
 {
 	const host = request.get("host")?.trim().toLowerCase() ?? "";
 	const forwardedHost = request.headers["x-forwarded-host"];
 
 	if (typeof forwardedHost === "string")
 	{
-		return forwardedHost.trim().toLowerCase() === _EXPECTED_BROWSER_HOST && _EXPECTED_PROXY_TARGETS.has(host);
+		return forwardedHost.trim().toLowerCase() === browserHost && _EXPECTED_PROXY_TARGETS.has(host);
 	}
 
 	return host === _EXPECTED_DIRECT_HOST;
 }
 
 /** Resolve the browser origin after the host pair has already been checked. */
-function _ExpectedOrigin(request: Request): string
+function _ExpectedOrigin(request: Request, browserOrigin: string): string
 {
 	if (typeof request.headers["x-forwarded-host"] === "string")
 	{
-		return `http://${_EXPECTED_BROWSER_HOST}`;
+		return browserOrigin;
 	}
 	return `http://${_EXPECTED_DIRECT_HOST}`;
 }
 
 /** Refuse state-changing requests from pages outside the exact local development origin. */
-function _HasExpectedOrigin(request: Request): boolean
+function _HasExpectedOrigin(request: Request, browserOrigin: string): boolean
 {
 	if (_SAFE_METHODS.has(request.method))
 	{
 		return true;
 	}
-	const expected = _ExpectedOrigin(request);
+	const expected = _ExpectedOrigin(request, browserOrigin);
 	const origin = request.get("origin");
 
 	if (origin)
@@ -87,11 +84,13 @@ function _HasExpectedOrigin(request: Request): boolean
 }
 
 /** Attach the fixed session only after exact host and origin validation. */
-function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionCredential: string): RequestHandler
+function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionCredential: string, browserOrigin: string): RequestHandler
 {
+	const browserHost = new URL(browserOrigin).host;
+
 	return function _DevelopmentSession(request, response, next): void
 	{
-		if (!_HasExpectedHost(request))
+		if (!_HasExpectedHost(request, browserHost))
 		{
 			response.status(403).json({
 				code: "DEVELOPMENT_HOST_MISMATCH",
@@ -111,7 +110,7 @@ function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionC
 			return;
 		}
 
-		if (!_HasExpectedOrigin(request))
+		if (!_HasExpectedOrigin(request, browserOrigin))
 		{
 			response.status(403).json({
 				code: "DEVELOPMENT_ORIGIN_MISMATCH",
@@ -218,11 +217,11 @@ function _CreateAuthRouter(identity: DevelopmentIdentity, capabilities: Authenti
  *
  * Called by: the Tier 2 development entrypoint for its loopback-only public listener.
  */
-export function _CreateDevelopmentAuthentication(identity: DevelopmentIdentity, capabilities: AuthenticatedPrincipalCapabilityReader, admission: AuthenticatedPrincipalAdmission, browserSessionCredential: string, logger: Logger): PublicAuthenticationComposition
+export function _CreateDevelopmentAuthentication(identity: DevelopmentIdentity, capabilities: AuthenticatedPrincipalCapabilityReader, admission: AuthenticatedPrincipalAdmission, browserSessionCredential: string, logger: Logger, browserOrigin = "http://local-development.localhost:4200"): PublicAuthenticationComposition
 {
 	return {
 		authMiddleware: _CreateAdmissionMiddleware(identity, admission, logger),
 		router: _CreateAuthRouter(identity, capabilities),
-		sessionMiddleware: [_CreateSessionMiddleware(identity, browserSessionCredential)],
+		sessionMiddleware: [_CreateSessionMiddleware(identity, browserSessionCredential, browserOrigin)],
 	};
 }

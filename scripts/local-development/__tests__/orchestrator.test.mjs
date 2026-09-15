@@ -5,7 +5,21 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { prepareModelCredentials, runLocalDevelopmentSession } from "../orchestrator.mjs";
+import { prepareModelCredentials, runLocalDevelopmentSession, validateDockerArchitecture } from "../orchestrator.mjs";
+
+test("ARM Docker requires opt-in while AMD64 Codespaces remain native", function _DockerArchitecture()
+{
+	assert.equal(validateDockerArchitecture("x86_64\n", false), false);
+	assert.equal(validateDockerArchitecture("aarch64\n", true), true);
+	assert.throws(function _ArmWithoutEmulation()
+	{
+		validateDockerArchitecture("aarch64", false);
+	}, /--emulate-amd64/u);
+	assert.throws(function _UnknownArchitecture()
+	{
+		validateDockerArchitecture("s390x", true);
+	}, /AMD64 or ARM64 Docker daemon/u);
+});
 
 test("the production credential path enforces remote administrator-key separation", async function _CredentialPlan()
 {
@@ -47,6 +61,7 @@ test("a normal stop removes reverse-owned resources and preserves paired volumes
 	processHost.kill = _Kill;
 	const configuration = {
 		alternative: "simulated-llm",
+		browserOrigin: "http://local-development.localhost:4200",
 		developmentProfile: "agent-simulated",
 		kurrentContainerName: "kurrent",
 		kurrentImage: "kurrent@sha256:test",
@@ -151,6 +166,7 @@ test("terminal suspend resumes the process group, aborts children, and cleans re
 	processHost.kill = _Kill;
 	const configuration = {
 		alternative: "simulated-llm",
+		browserOrigin: "http://local-development.localhost:4200",
 		developmentProfile: "agent-simulated",
 		kurrentContainerName: "kurrent",
 		kurrentImage: "kurrent@sha256:test",

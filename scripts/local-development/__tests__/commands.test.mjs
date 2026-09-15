@@ -7,6 +7,7 @@ import { createLocalChildEnvironment } from "../command-runner.mjs";
 const configuration = {
 	alternative: undefined,
 	baselineDigest: "baseline",
+	browserOrigin: "http://local-development.localhost:4200",
 	developmentProfile: "core",
 	internalPort: 8_081,
 	kurrentContainerName: "kurrent",
@@ -57,6 +58,19 @@ test("container commands keep database credentials out of process arguments", fu
 	assert.equal(provision.arguments.some((argument) => argument.includes("source=/tmp/session,target=/source,readonly")), true);
 });
 
+test("opt-in emulation targets only AMD64-pinned database and TLS provisioner images", function _Amd64Emulation()
+{
+	const emulated = { ...configuration, emulateAmd64: true };
+	const postgres = createPostgresCommand(emulated, secrets);
+	const kurrent = createKurrentCommand(emulated, secrets);
+	const provisioner = createKurrentTlsVolumeCommand(emulated, { ...secrets, directory: "/tmp/session" });
+
+	for (const specification of [postgres, kurrent, provisioner])
+	{
+		assert.deepEqual(specification.arguments.slice(0, 3), ["run", "--platform", "linux/amd64"]);
+	}
+});
+
 test("application plans start only the current server and Tier 2 UI", function _CurrentProcesses()
 {
 	const commands = createApplicationCommands(configuration, secrets);
@@ -73,6 +87,20 @@ test("application plans start only the current server and Tier 2 UI", function _
 	assert.equal(commands[0].environment.OPENCRANE_LOCAL_DEVELOPMENT_PROFILE, "core");
 	assert.equal(commands[0].environment.OPENCRANE_LOCAL_KURRENTDB_CA_PATH, secrets.caCertificatePath);
 	assert.equal(commands[0].environment.OPENCRANE_LOCAL_BROWSER_SESSION_CREDENTIAL_PATH, secrets.browserSessionCredentialPath);
+});
+
+test("Codespaces UI and server share one exact HTTPS forwarded browser origin", function _CodespacesProcesses()
+{
+	const codespace = {
+		...configuration,
+		browserOrigin: "https://careful-crane-123-4200.app.github.dev",
+		codespaceName: "careful-crane-123",
+		codespacesForwardingDomain: "app.github.dev"
+	};
+	const commands = createApplicationCommands(codespace, secrets);
+	assert.equal(commands[0].environment.OPENCRANE_LOCAL_BROWSER_ORIGIN, codespace.browserOrigin);
+	assert.equal(commands[1].arguments.includes("--host=0.0.0.0"), true);
+	assert.equal(commands[1].environment.__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS, "careful-crane-123-4200.app.github.dev");
 });
 
 test("child processes receive explicit settings without ambient credentials", function _FilteredEnvironment()

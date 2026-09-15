@@ -37,6 +37,20 @@ describe("Tier 2 development configuration", function _Suite(): void
 			subjectId: "local-development-user",
 		});
 		expect(config.historyStore.endpoint).toBe("127.0.0.1:21139");
+		expect(config.browserOrigin).toBe("http://local-development.localhost:4200");
+	});
+
+	it("accepts only the exact private Codespaces browser origin", function _CodespaceOrigin(): void
+	{
+		_ConfigureDevelopment();
+		vi.stubEnv("CODESPACES", "true");
+		vi.stubEnv("CODESPACE_NAME", "careful-crane-123");
+		vi.stubEnv("GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN", "app.github.dev");
+		vi.stubEnv("OPENCRANE_LOCAL_BROWSER_ORIGIN", "https://careful-crane-123-4200.app.github.dev");
+		expect(_ReadDevelopmentConfig().browserOrigin).toBe("https://careful-crane-123-4200.app.github.dev");
+
+		vi.stubEnv("OPENCRANE_LOCAL_BROWSER_ORIGIN", "https://other-4200.app.github.dev");
+		expect(function _Read(): void { _ReadDevelopmentConfig(); }).toThrow("exact private Codespaces");
 	});
 
 	it("refuses a non-loopback KurrentDB endpoint", function _RejectsRemoteHistory(): void

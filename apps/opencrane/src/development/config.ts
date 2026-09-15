@@ -60,6 +60,33 @@ function _ReadKurrentEndpoint(): string
 	return value;
 }
 
+/** Accept only the coordinator's local origin or the exact private Codespaces forwarding tuple. */
+function _ReadBrowserOrigin(): string
+{
+	const localOrigin = "http://local-development.localhost:4200";
+	const value = process.env.OPENCRANE_LOCAL_BROWSER_ORIGIN?.trim() || localOrigin;
+
+	if (value === localOrigin)
+		return value;
+
+	const name = process.env.CODESPACE_NAME;
+	const domain = process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN;
+	const label = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/u;
+	const labels = domain?.split(".") ?? [];
+
+	if (
+		process.env.CODESPACES !== "true"
+		|| !name
+		|| !label.test(name)
+		|| labels.length < 2
+		|| !labels.every(part => label.test(part))
+		|| value !== `https://${name}-4200.${domain}`
+	)
+		throw new Error("Tier 2 browser origin must be the exact private Codespaces port 4200 or the local development host");
+
+	return value;
+}
+
 /** Parse the explicit current Tier 2 composition without accepting retired runtime names. */
 function _ReadProfile(): DevelopmentProfileKinds
 {
@@ -106,6 +133,7 @@ export function _ReadDevelopmentConfig(): DevelopmentConfig
 	_AssertDevelopmentBoundary(databaseUrl);
 
 	return Object.freeze({
+		browserOrigin: _ReadBrowserOrigin(),
 		browserSessionCredentialPath: _ReadAbsolutePath("OPENCRANE_LOCAL_BROWSER_SESSION_CREDENTIAL_PATH"),
 		conversationPrivatePayloadKeyringPath: _ReadAbsolutePath("OPENCRANE_LOCAL_CONVERSATION_KEYRING_PATH"),
 		databaseUrl,

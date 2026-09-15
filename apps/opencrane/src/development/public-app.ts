@@ -20,7 +20,7 @@ export function _CreateDevelopmentPublicApp(dependencies: DevelopmentPublicAppDe
 {
 	const principalAdmission = new PrismaAuthenticatedPrincipalAdmissionUnitOfWork(dependencies.prisma, _log);
 	const principalCapabilities = new PrismaAuthenticatedPrincipalCapabilityUnitOfWork(dependencies.prisma, _log);
-	const authentication = _CreateDevelopmentAuthentication(_DEVELOPMENT_IDENTITY, principalCapabilities, principalAdmission, dependencies.browserSessionCredential, _log);
+	const authentication = _CreateDevelopmentAuthentication(_DEVELOPMENT_IDENTITY, principalCapabilities, principalAdmission, dependencies.browserSessionCredential, _log, dependencies.browserOrigin);
 	return _CreatePublicApp(
 		dependencies.prisma,
 		authentication,
