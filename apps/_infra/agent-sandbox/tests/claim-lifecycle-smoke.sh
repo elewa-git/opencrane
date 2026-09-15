@@ -136,7 +136,27 @@ done
 
 # The computer must reach the private server while its direct model connection is denied.
 MODEL_PORT="$(kubectl --context "$CONTEXT" get "service/${RELEASE}-litellm" -n "$NAMESPACE" -o jsonpath='{.spec.ports[0].port}')"
-kubectl --context "$CONTEXT" exec -i "$SANDBOX_NAME" -n "$NAMESPACE" --container=conversation-computer -- python3 - "${RELEASE}-litellm.${NAMESPACE}.svc.cluster.local" "$MODEL_PORT" <<'PY'
+MODEL_HOST="${RELEASE}-litellm.${NAMESPACE}.svc.cluster.local"
+# Prove the model listener is live from the server before treating a refused sandbox connection as
+# a denied path. Otherwise an empty Service could make this negative test pass without isolation.
+kubectl --context "$CONTEXT" exec -i "deployment/${RELEASE}-opencrane-server" -n "$NAMESPACE" --container=opencrane-server -- node --input-type=module - "$MODEL_HOST" "$MODEL_PORT" <<'NODE'
+import net from "node:net";
+
+const host = process.argv[2];
+const port = Number(process.argv[3]);
+
+if (!host || !Number.isInteger(port) || port < 1 || port > 65535)
+  throw new Error("The model positive control requires a service host and port.");
+
+await new Promise((resolve, reject) => {
+  const socket = net.connect({ host, port });
+  socket.setTimeout(5000, () => socket.destroy(new Error("The server could not reach the model listener.")));
+  socket.once("connect", () => { socket.destroy(); resolve(); });
+  socket.once("error", reject);
+});
+console.log("Server-to-model listener positive control: PASS");
+NODE
+kubectl --context "$CONTEXT" exec -i "$SANDBOX_NAME" -n "$NAMESPACE" --container=conversation-computer -- python3 - "$MODEL_HOST" "$MODEL_PORT" <<'PY'
 import os
 import socket
 import sys
@@ -153,7 +173,7 @@ with socket.create_connection((endpoint.hostname, endpoint.port), timeout=10):
 try:
     with socket.create_connection((sys.argv[1], int(sys.argv[2])), timeout=5):
         raise RuntimeError("The computer can reach the forbidden direct model service")
-except TimeoutError:
+except (TimeoutError, ConnectionRefusedError):
     pass
 print("Computer cluster DNS, private server transport and denied direct model access: PASS")
 PY
