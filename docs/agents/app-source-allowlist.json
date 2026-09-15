@@ -40,6 +40,7 @@
 	{ "path": "apps/opencrane/src/app/mcp-runtime-composition.types.ts", "owner": "apps/opencrane", "classification": "route-composition" },
 	{ "path": "apps/opencrane/src/app/organization-members-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
 	{ "path": "apps/opencrane/src/app/organization-members-composition.types.ts", "owner": "apps/opencrane", "classification": "route-composition" },
+	{ "path": "apps/opencrane/src/app/openapi-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
 	{ "path": "apps/opencrane/src/app/run-admission-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
 	{ "path": "apps/opencrane/src/app/run-admission-composition.types.ts", "owner": "apps/opencrane", "classification": "route-composition" },
     { "path": "apps/opencrane/src/app/persona-approval-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
