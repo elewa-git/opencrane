@@ -56,4 +56,49 @@ if env -i "${COMMON_ENV[@]}" \
 fi
 grep -Fq 'regular, non-symbolic-link file' "$FIXTURE_DIR/link.out"
 
+mkdir -p "$FIXTURE_DIR/projected/..2026_09_15_10_37"
+printf '%s\n' ca > "$FIXTURE_DIR/projected/..2026_09_15_10_37/ca.crt"
+ln -s '..2026_09_15_10_37' "$FIXTURE_DIR/projected/..data"
+ln -s '..data/ca.crt' "$FIXTURE_DIR/projected/ca.crt"
+for secret_input in 'admin admin-password password' 'username history-username username' 'history history-password password'; do
+  read -r mount_name source_name projected_name <<< "$secret_input"
+  mkdir -p "$FIXTURE_DIR/$mount_name/..2026_09_15_10_37"
+  cp "$FIXTURE_DIR/$source_name" "$FIXTURE_DIR/$mount_name/..2026_09_15_10_37/$projected_name"
+  ln -s '..2026_09_15_10_37' "$FIXTURE_DIR/$mount_name/..data"
+  ln -s "..data/$projected_name" "$FIXTURE_DIR/$mount_name/$projected_name"
+done
+if env -i "${COMMON_ENV[@]}" \
+  KURRENTDB_BOOTSTRAP_ENDPOINT=https://127.0.0.1:2113 \
+  KURRENTDB_BOOTSTRAP_CA_FILE="$FIXTURE_DIR/projected/ca.crt" \
+  /bin/sh "$POLICY" >"$FIXTURE_DIR/projected-without-opt-in.out" 2>&1; then
+  echo "KurrentDB bootstrap accepted a projected Secret without chart opt-in" >&2
+  exit 1
+fi
+grep -Fq 'regular, non-symbolic-link file' "$FIXTURE_DIR/projected-without-opt-in.out"
+
+if env -i "${COMMON_ENV[@]}" \
+  KURRENTDB_BOOTSTRAP_ENDPOINT=https://127.0.0.1:2113 \
+  KURRENTDB_BOOTSTRAP_CA_FILE="$FIXTURE_DIR/projected/ca.crt" \
+  KURRENTDB_BOOTSTRAP_ADMIN_PASSWORD_FILE="$FIXTURE_DIR/admin/password" \
+  KURRENTDB_HISTORY_USERNAME_FILE="$FIXTURE_DIR/username/username" \
+  KURRENTDB_HISTORY_PASSWORD_FILE="$FIXTURE_DIR/history/password" \
+  KURRENTDB_BOOTSTRAP_PROJECTED_SECRETS=kubernetes \
+  KURRENTDB_BOOTSTRAP_TIMEOUT_SECONDS=1 \
+  /bin/sh "$POLICY" >"$FIXTURE_DIR/projected-with-opt-in.out" 2>&1; then
+  echo "KurrentDB bootstrap unexpectedly reached an unavailable fixture endpoint" >&2
+  exit 1
+fi
+grep -Fq 'KurrentDB did not become ready before the bootstrap deadline' "$FIXTURE_DIR/projected-with-opt-in.out"
+
+ln -s "$FIXTURE_DIR/ca.crt" "$FIXTURE_DIR/projected/bad-ca.crt"
+if env -i "${COMMON_ENV[@]}" \
+  KURRENTDB_BOOTSTRAP_ENDPOINT=https://127.0.0.1:2113 \
+  KURRENTDB_BOOTSTRAP_CA_FILE="$FIXTURE_DIR/projected/bad-ca.crt" \
+  KURRENTDB_BOOTSTRAP_PROJECTED_SECRETS=kubernetes \
+  /bin/sh "$POLICY" >"$FIXTURE_DIR/unsafe-projection.out" 2>&1; then
+  echo "KurrentDB bootstrap accepted an arbitrary symbolic-link trust root" >&2
+  exit 1
+fi
+grep -Fq 'regular, non-symbolic-link file' "$FIXTURE_DIR/unsafe-projection.out"
+
 echo "KurrentDB bootstrap policy contract: PASS"

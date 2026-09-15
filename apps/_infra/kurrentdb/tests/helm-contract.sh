@@ -142,6 +142,26 @@ printf '%s\n' "$rendered" | node -e '
   const bootstrap = resources.find(function _IsKurrentBootstrapScript(resource) {
     return resource?.kind === "ConfigMap" && resource.metadata?.name === "opencrane-testv5-kurrentdb-bootstrap";
   }).data["bootstrap.sh"];
+  const bootstrapJob = resources.find(function _IsKurrentBootstrapJob(resource) {
+    return resource?.kind === "Job" && resource.metadata?.name === "opencrane-testv5-kurrentdb-bootstrap";
+  }).spec.template.spec;
+  const bootstrapContainer = bootstrapJob.containers.find(function _IsBootstrapContainer(candidate) {
+    return candidate.name === "bootstrap";
+  });
+  const bootstrapEnvironment = Object.fromEntries(bootstrapContainer.env.map(function _ReadBootstrapEnvironment(entry) {
+    return [entry.name, entry.value];
+  }));
+  assert.equal(bootstrapEnvironment.KURRENTDB_BOOTSTRAP_PROJECTED_SECRETS, "kubernetes");
+  for (const mountName of ["kurrentdb-tls", "kurrentdb-bootstrap-admin", "kurrentdb-service"]) {
+    const mount = bootstrapContainer.volumeMounts.find(function _IsBootstrapSecretMount(candidate) {
+      return candidate.name === mountName;
+    });
+    assert.equal(mount?.readOnly, true, `${mountName} must be read-only`);
+    const volume = bootstrapJob.volumes.find(function _IsBootstrapSecretVolume(candidate) {
+      return candidate.name === mountName;
+    });
+    assert.ok(volume?.secret, `${mountName} must be a Secret volume`);
+  }
   assert.equal(bootstrap, fs.readFileSync(process.argv[2], "utf8"),
     "Helm and local development must execute the same app-owned bootstrap policy");
   assert.ok(bootstrap.includes("$endpoint/streams/%24settings/head"), "Bootstrap must read the current ACL event");

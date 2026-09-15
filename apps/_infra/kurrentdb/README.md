@@ -40,7 +40,9 @@ policies.
 Tier 2 local development. Callers provide the endpoint, CA, administrator password, service
 credential, silo, subscriber limit, and timeout through the named `KURRENTDB_BOOTSTRAP_*` and
 `KURRENTDB_HISTORY_*` environment variables. Local development may change only how those inputs are
-mounted; it does not keep a second ACL, identity, or subscription implementation.
+mounted; it does not keep a second ACL, identity, or subscription implementation. The Helm Job
+accepts only Kubernetes Secret projection links inside its read-only mounts. Local credential files
+must be regular files without symbolic links.
 
 `helm/templates/_backup.tpl` — exports `opencrane.kurrentdb.backup`, the scheduled backup CronJob
 with its scripts, ServiceAccount, and (per mode) archive PVC or snapshot Role. `_resources.tpl`
