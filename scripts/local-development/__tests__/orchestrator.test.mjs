@@ -72,6 +72,7 @@ test("a normal stop removes reverse-owned resources and preserves paired volumes
 		networkName: "network",
 		postgresContainerName: "postgres",
 		postgresVolumeName: "postgres-volume",
+		postgresVolumeProvisionerContainerName: "postgres-volume-provisioner",
 		repositoryRoot: "/repo",
 		reset: false
 	};
@@ -143,11 +144,14 @@ test("a normal stop removes reverse-owned resources and preserves paired volumes
 	});
 	assert.equal(events.includes("remove:volume:postgres-volume"), false);
 	assert.equal(events.includes("remove:volume:kurrent-volume"), false);
-	assert.deepEqual(events.slice(-6), [
+	assert.equal(events.indexOf("remove:container:postgres") < events.indexOf("start:postgres-volume-provisioner"), true);
+	assert.equal(events.indexOf("start:postgres-volume-provisioner") < events.indexOf("start:postgres"), true);
+	assert.deepEqual(events.slice(-7), [
 		"remove:container:kurrent",
 		"remove:container:kurrent-tls-provisioner",
 		"remove:volume:kurrent-tls-volume",
 		"remove:container:postgres",
+		"remove:container:postgres-volume-provisioner",
 		"remove:network:network",
 		"remove:secrets",
 	]);
@@ -177,6 +181,7 @@ test("terminal suspend resumes the process group, aborts children, and cleans re
 		networkName: "network",
 		postgresContainerName: "postgres",
 		postgresVolumeName: "postgres-volume",
+		postgresVolumeProvisionerContainerName: "postgres-volume-provisioner",
 		repositoryRoot: "/repo",
 		reset: false
 	};
@@ -239,6 +244,83 @@ test("terminal suspend resumes the process group, aborts children, and cleans re
 	assert.equal(events.at(-1), "remove:secrets");
 });
 
+test("a failed PostgreSQL permission helper cleans its container without resetting data", async function _PostgresHelperFailure()
+{
+	const events = [];
+	const processHost = new EventEmitter();
+	processHost.platform = "darwin";
+	function _Kill() {}
+
+	processHost.kill = _Kill;
+	const configuration = {
+		baselineDigest: "baseline",
+		developmentProfile: "core",
+		kurrentVolumeName: "kurrent-volume",
+		networkName: "network",
+		postgresImage: "postgres@sha256:test",
+		postgresContainerName: "postgres",
+		postgresVolumeName: "postgres-volume",
+		postgresVolumeProvisionerContainerName: "postgres-volume-provisioner",
+		profile: "core",
+		repositoryIdentity: "repository",
+		repositoryRoot: "/repo",
+		reset: false,
+		worktreeIdentity: "worktree"
+	};
+	async function _Secrets()
+	{
+		return { browserSessionCredential: "browser-session", directory: "/tmp/session" };
+	}
+
+	async function _Network()
+	{
+		events.push("created:network");
+	}
+
+	async function _Volume(name)
+	{
+		events.push(`retained:volume:${name}`);
+	}
+
+	function _SecretsCleanup()
+	{
+		events.push("remove:secrets");
+	}
+
+	async function _Remove(kind, name)
+	{
+		events.push(`remove:${kind}:${name}`);
+	}
+
+	async function _Start(specification)
+	{
+		assert.equal(specification.arguments.includes(configuration.postgresVolumeProvisionerContainerName), true);
+		throw new Error("permission helper could not chown the owned volume");
+	}
+
+	async function _Validate() {}
+
+	const operations = {
+		createLocalDevelopmentSecrets: _Secrets,
+		ensureOwnedNetwork: _Network,
+		ensureOwnedVolume: _Volume,
+		processHost,
+		removeLocalDevelopmentSecrets: _SecretsCleanup,
+		removeOwnedDockerResource: _Remove,
+		runSpecification: _Start,
+		validateInputs: _Validate
+	};
+
+	await assert.rejects(runLocalDevelopmentSession(configuration, operations), /permission helper could not chown/u);
+	assert.equal(events.includes("remove:volume:postgres-volume"), false);
+	assert.equal(events.filter((event) => event === "remove:container:postgres-volume-provisioner").length, 2);
+	assert.deepEqual(events.slice(-3), [
+		"remove:container:postgres-volume-provisioner",
+		"remove:network:network",
+		"remove:secrets"
+	]);
+});
+
 test("a network acquisition failure removes a resource created before the operation rejected", async function _NetworkAcquisitionCleanup()
 {
 	const events = [];
@@ -256,6 +338,7 @@ test("a network acquisition failure removes a resource created before the operat
 		networkName: "network",
 		postgresContainerName: "postgres",
 		postgresVolumeName: "postgres-volume",
+		postgresVolumeProvisionerContainerName: "postgres-volume-provisioner",
 		profile: "core",
 		repositoryRoot: "/repo",
 		reset: false
@@ -315,6 +398,7 @@ test("a failed startup reports both its primary error and a cleanup failure", as
 		networkName: "network",
 		postgresContainerName: "postgres",
 		postgresVolumeName: "postgres-volume",
+		postgresVolumeProvisionerContainerName: "postgres-volume-provisioner",
 		profile: "core",
 		repositoryRoot: "/repo",
 		reset: false
@@ -372,6 +456,7 @@ test("a TLS-volume acquisition failure removes a volume created before the opera
 		networkName: "network",
 		postgresContainerName: "postgres",
 		postgresVolumeName: "postgres-volume",
+		postgresVolumeProvisionerContainerName: "postgres-volume-provisioner",
 		profile: "core",
 		repositoryRoot: "/repo",
 		reset: false

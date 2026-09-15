@@ -12,6 +12,7 @@ export function createPostgresCommand(configuration, secrets)
 			"--network", configuration.networkName,
 			"--publish", `127.0.0.1:${configuration.postgresPort}:5432`,
 			"--mount", `type=volume,source=${configuration.postgresVolumeName},target=/var/lib/postgresql/data`,
+			"--tmpfs", "/var/run/postgresql:uid=26,gid=26,mode=0700,size=16m",
 			"--env", "POSTGRES_USER", "--env", "POSTGRES_PASSWORD", "--env", "POSTGRES_DB",
 			configuration.postgresImage
 		],
@@ -20,6 +21,25 @@ export function createPostgresCommand(configuration, secrets)
 			POSTGRES_PASSWORD: secrets.postgresPassword,
 			POSTGRES_DB: "opencrane"
 		}
+	};
+}
+
+/** Gives the labeled PostgreSQL volume's mount root to the image's UID 26 without changing stored files. */
+export function createPostgresVolumeProvisionerCommand(configuration)
+{
+	const prepare = "set -eu; chown 26:26 /target; chmod 0700 /target";
+
+	return {
+		command: "docker",
+		arguments: [
+			"run", ...(configuration.emulateAmd64 ? ["--platform", "linux/amd64"] : []), "--rm", "--name", configuration.postgresVolumeProvisionerContainerName,
+			...createDockerLabelArguments(configuration),
+			"--network", "none", "--user", "0:0", "--read-only",
+			"--cap-drop", "ALL", "--cap-add", "CHOWN", "--cap-add", "FOWNER",
+			"--mount", `type=volume,source=${configuration.postgresVolumeName},target=/target`,
+			"--entrypoint", "/bin/sh", configuration.postgresImage, "-c", prepare
+		],
+		environment: {}
 	};
 }
 

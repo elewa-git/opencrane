@@ -29,6 +29,7 @@ test("Tier 2 operand images stay aligned with the current deployment profiles", 
 	assert.match(deploymentValues, new RegExp(`tag: ${_Pattern(liteLLMTag)}`, "u"));
 	assert.match(liteLLMDigest, /^sha256:[a-f0-9]{64}$/u);
 	assert.equal(configuration.liteLLMImage, "ghcr.io/berriai/litellm-non_root:main-v1.81.0-stable@sha256:39718a9cc9138c99ec812bcde24896411cf54502967a36b19897c539b796fdc7");
+	assert.equal(configuration.postgresVolumeProvisionerContainerName.startsWith("opencrane-tier2-postgres-volume-"), true);
 });
 
 test("Codespaces uses only its exact private port 4200 browser origin", function _CodespaceOrigin()

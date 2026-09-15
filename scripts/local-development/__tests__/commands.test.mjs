@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createApplicationCommands, createKurrentCommand, createKurrentTlsVolumeCommand, createPostgresCommand } from "../commands.mjs";
+import { createApplicationCommands, createKurrentCommand, createKurrentTlsVolumeCommand, createPostgresCommand, createPostgresVolumeProvisionerCommand } from "../commands.mjs";
 import { createLocalChildEnvironment } from "../command-runner.mjs";
 
 const configuration = {
@@ -21,6 +21,7 @@ const configuration = {
 	postgresImage: "postgres@sha256:test",
 	postgresPort: 54_329,
 	postgresVolumeName: "postgres-volume",
+	postgresVolumeProvisionerContainerName: "postgres-volume-provisioner",
 	publicPort: 8_080,
 	repositoryIdentity: "repository",
 	uiPort: 4_200,
@@ -64,11 +65,35 @@ test("opt-in emulation targets only AMD64-pinned database and TLS provisioner im
 	const postgres = createPostgresCommand(emulated, secrets);
 	const kurrent = createKurrentCommand(emulated, secrets);
 	const provisioner = createKurrentTlsVolumeCommand(emulated, { ...secrets, directory: "/tmp/session" });
+	const postgresProvisioner = createPostgresVolumeProvisionerCommand(emulated);
 
-	for (const specification of [postgres, kurrent, provisioner])
+	for (const specification of [postgres, kurrent, provisioner, postgresProvisioner])
 	{
 		assert.deepEqual(specification.arguments.slice(0, 3), ["run", "--platform", "linux/amd64"]);
 	}
+});
+
+test("PostgreSQL volume helper changes only the owned mount root while the server stays non-root", function _PostgresVolumePermissions()
+{
+	const helper = createPostgresVolumeProvisionerCommand(configuration);
+	const postgres = createPostgresCommand(configuration, secrets);
+	const argumentsList = helper.arguments;
+
+	assert.equal(argumentsList.includes("postgres-volume-provisioner"), true);
+	assert.equal(argumentsList.includes("--rm"), true);
+	assert.equal(argumentsList.includes("--read-only"), true);
+	assert.equal(argumentsList.includes("none"), true);
+	assert.equal(argumentsList.includes("0:0"), true);
+	assert.equal(argumentsList.includes("--privileged"), false);
+	assert.equal(argumentsList.includes("type=volume,source=postgres-volume,target=/target"), true);
+	assert.equal(argumentsList.some((argument) => argument.startsWith("type=bind,")), false);
+	assert.equal(argumentsList.at(-3), "postgres@sha256:test");
+	assert.equal(argumentsList.at(-1), "set -eu; chown 26:26 /target; chmod 0700 /target");
+	assert.equal(argumentsList.at(-1).includes("-R"), false);
+	assert.equal(postgres.arguments.includes("--user"), false);
+	assert.equal(postgres.arguments.includes("/var/run/postgresql:uid=26,gid=26,mode=0700,size=16m"), true);
+	assert.equal(postgres.arguments.filter((argument) => argument === "--tmpfs").length, 1);
+	assert.deepEqual(helper.environment, {});
 });
 
 test("application plans start only the current server and Tier 2 UI", function _CurrentProcesses()

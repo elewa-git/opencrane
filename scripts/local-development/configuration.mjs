@@ -132,6 +132,7 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 		uiPort: 4_200,
 		developmentProfile: parsed.profile === "core" ? "core" : `agent-${parsed.alternative.replace("-llm", "")}`,
 		postgresContainerName: `opencrane-tier2-postgres-${suffix}`,
+		postgresVolumeProvisionerContainerName: `opencrane-tier2-postgres-volume-${suffix}`,
 		kurrentContainerName: `opencrane-tier2-kurrentdb-${suffix}`,
 		kurrentTlsProvisionerContainerName: `opencrane-tier2-kurrentdb-tls-${suffix}`,
 		liteLLMContainerName: `opencrane-tier2-litellm-${suffix}`,
