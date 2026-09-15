@@ -2,8 +2,8 @@ import fs from "node:fs";
 
 import { runLocalCommand } from "./command-runner.mjs";
 
-/** Builds an authenticated psql invocation inside the PostgreSQL container labeled for this checkout and target baseline. */
-function _postgresArguments(configuration, ...argumentsList)
+/** Builds a psql invocation inside the PostgreSQL container labeled for this checkout and target baseline. */
+function _postgresArguments(configuration, databaseName, ...argumentsList)
 {
 	return [
 		"exec",
@@ -13,7 +13,7 @@ function _postgresArguments(configuration, ...argumentsList)
 		"--username",
 		"opencrane",
 		"--dbname",
-		"opencrane",
+		databaseName,
 		"--set",
 		"ON_ERROR_STOP=1",
 		...argumentsList
@@ -72,7 +72,7 @@ async function _containerState(runCommand, configuration)
 	return state;
 }
 
-/** Waits for PostgreSQL, reporting an early container exit and its last startup logs before cleanup. */
+/** Waits for the final TCP server, not the socket-only server used while PostgreSQL initializes its databases. */
 export async function waitForPostgres(configuration, operations = {})
 {
 	const runCommand = operations.runCommand ?? runLocalCommand;
@@ -87,10 +87,12 @@ export async function waitForPostgres(configuration, operations = {})
 			"exec",
 			configuration.postgresContainerName,
 			"pg_isready",
+			"--host",
+			"127.0.0.1",
 			"--username",
 			"opencrane",
 			"--dbname",
-			"opencrane"
+			"postgres"
 		], { acceptFailure: true, signal: configuration.abortSignal });
 
 		if (result.status === 0)
@@ -115,13 +117,33 @@ export async function waitForPostgres(configuration, operations = {})
 	throw new Error(`Tier 2 PostgreSQL did not become ready within ${seconds} seconds. Last startup logs:\n${logs}`);
 }
 
+/** Completes a missing application database in an owned cluster without replacing its existing data. */
+async function _ensureOpencraneDatabase(runCommand, configuration)
+{
+	const inventoryArguments = _postgresArguments(configuration, "postgres", "--tuples-only", "--no-align", "--command", "SELECT 1 FROM pg_database WHERE datname = 'opencrane';");
+	const databaseCheck = await runCommand("docker", inventoryArguments, { signal: configuration.abortSignal });
+	const databaseExists = databaseCheck.stdout.trim();
+
+	if (!databaseExists)
+	{
+		const createArguments = _postgresArguments(configuration, "postgres", "--command", "CREATE DATABASE opencrane;");
+		await runCommand("docker", createArguments, { signal: configuration.abortSignal });
+	}
+	else if (databaseExists !== "1")
+	{
+		throw new Error("Tier 2 PostgreSQL returned an unexpected database inventory");
+	}
+}
+
 /** Applies only the reviewed target baseline to an empty database, then replays the local seed. */
 export async function applyTargetBaseline(configuration, operations = {})
 {
 	const runCommand = operations.runCommand ?? runLocalCommand;
+	await _ensureOpencraneDatabase(runCommand, configuration);
+
 	async function _query(sql)
 	{
-		const result = await runCommand("docker", _postgresArguments(configuration, "--tuples-only", "--no-align", "--command", sql), { signal: configuration.abortSignal });
+		const result = await runCommand("docker", _postgresArguments(configuration, "opencrane", "--tuples-only", "--no-align", "--command", sql), { signal: configuration.abortSignal });
 
 		return result.stdout.trim();
 	}
@@ -144,12 +166,12 @@ export async function applyTargetBaseline(configuration, operations = {})
 			throw new Error("The local database has an untracked schema; rerun with --reset");
 		}
 
-		await runCommand("docker", _postgresArguments(configuration), { input: fs.readFileSync(configuration.baselinePath), signal: configuration.abortSignal });
+		await runCommand("docker", _postgresArguments(configuration, "opencrane"), { input: fs.readFileSync(configuration.baselinePath), signal: configuration.abortSignal });
 		const stateSql = `CREATE TABLE opencrane_local_development_state (id text PRIMARY KEY, target_baseline_sha256 text NOT NULL); INSERT INTO opencrane_local_development_state VALUES ('baseline', '${configuration.baselineDigest}');`;
-		await runCommand("docker", _postgresArguments(configuration, "--command", stateSql), { signal: configuration.abortSignal });
+		await runCommand("docker", _postgresArguments(configuration, "opencrane", "--command", stateSql), { signal: configuration.abortSignal });
 	}
 
-	await runCommand("docker", _postgresArguments(configuration), { input: fs.readFileSync(configuration.seedPath), signal: configuration.abortSignal });
+	await runCommand("docker", _postgresArguments(configuration, "opencrane"), { input: fs.readFileSync(configuration.seedPath), signal: configuration.abortSignal });
 }
 
 /** Invokes the same KurrentDB identity, ACL, and activation-subscription bootstrap as Helm. */
