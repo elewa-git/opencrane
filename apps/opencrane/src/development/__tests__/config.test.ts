@@ -54,12 +54,13 @@ describe("Tier 2 development configuration", function _Suite(): void
 		expect(environment.OPENCRANE_SILO_ID).toBe(config.identity.siloId);
 		expect(environment.OIDC_ISSUER_URL).toBe(config.identity.issuer);
 		expect(environment.OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS).toBe("300000");
-		expect(membership).toMatchObject({
+		const expectedMembership = {
 			mode: FleetMembershipDeploymentModes.Standalone,
 			siloId: config.identity.siloId,
 			trustedOidcIssuer: config.identity.issuer,
 			maximumStalenessMs: 300_000,
-		});
+		};
+		expect(membership).toMatchObject(expectedMembership);
 	});
 
 	it("refuses membership binding outside the validated development boundary", function _RejectsMembershipBinding(): void
