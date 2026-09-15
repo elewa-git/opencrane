@@ -52,11 +52,12 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
  * @param prisma - The main product database client.
  * @param authentication - One browser-session composition shared with the internal resolver.
  * @param artifactScannerEnabled - Whether newly quarantined conversation files can be consumed.
+ * @param artifactStorageAvailable - Whether this process has ArtifactStore and its mounted keys.
  * @param health - Cached public service report reader with no topology or error details.
  * @param mcpWorkflows - Shared transaction and worker authority for saved MCP jobs.
  * @returns The public Express listener before the lifecycle starts it.
  */
-export function _CreatePublicApp(prisma: PrismaClient, authentication: PublicAuthenticationComposition, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition, mcpRuntime: PublicMcpRuntimeComposition | null, providerEffects: ProviderEffectCommandExecutor, historyStore?: HistoryStore, conversationPrivatePayloadKeyringPath?: string, releaseProfile?: ConversationComputerReleaseProfileConfig, suppliedOrganizationMembers?: OrganizationMembersComposition, sandboxReviewNamespace?: string): Express
+export function _CreatePublicApp(prisma: PrismaClient, authentication: PublicAuthenticationComposition, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition, mcpRuntime: PublicMcpRuntimeComposition | null, providerEffects: ProviderEffectCommandExecutor, historyStore?: HistoryStore, conversationPrivatePayloadKeyringPath?: string, releaseProfile?: ConversationComputerReleaseProfileConfig, suppliedOrganizationMembers?: OrganizationMembersComposition, artifactStorageAvailable = true, sandboxReviewNamespace?: string): Express
 {
 	const app = express();
 
@@ -84,7 +85,7 @@ export function _CreatePublicApp(prisma: PrismaClient, authentication: PublicAut
 		app.use(organizationMembers.productAccess);
 
 	// 5. Mount authenticated product routes, then terminate failures through one structured handler.
-	_RegisterRoutes(app, prisma, artifactScannerEnabled, organizationMembers.router, mcpWorkflows, mcpRuntime, providerEffects, historyStore, conversationPrivatePayloadKeyringPath, releaseProfile, sandboxReviewNamespace);
+	_RegisterRoutes(app, prisma, artifactScannerEnabled, organizationMembers.router, mcpWorkflows, mcpRuntime, providerEffects, historyStore, conversationPrivatePayloadKeyringPath, releaseProfile, artifactStorageAvailable, sandboxReviewNamespace);
 	app.use(_ErrorHandler(_log));
 
 	return app;

@@ -17,7 +17,6 @@ import { _log } from "../app/log";
 import { _CreateMcpWorkflowComposition } from "../app/mcp-workflow-composition";
 import { _CreateOrganizationMembersComposition } from "../app/organization-members-composition";
 import { _CreateProductionConversationRunAdmission } from "../app/run-admission-composition";
-import { _CreateArtifactUploadGateway } from "../infra/artifacts/artifact-upload.factory";
 import { ___CreateDbHealthProbe, ___CreatePrismaClient } from "../infra/db/db";
 import { _CreatePublicHealthReportReader } from "../infra/health/public-health";
 import type { DevelopmentConversationComputerSupervisor, DevelopmentServerComposition } from "./composition.types";
@@ -221,8 +220,6 @@ export async function _CreateDevelopmentServerComposition(config: DevelopmentCon
 			profile,
 			providerEffects,
 		});
-		app.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);
-
 		return {
 			app,
 			conversationComputer,

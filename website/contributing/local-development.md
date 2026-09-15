@@ -187,6 +187,15 @@ It binds only to loopback, is fenced to the current lease and does not advertise
 gVisor, browser/CDP, review-command or durable workspace-checkpoint capabilities. Use Tier 3 to
 prove those deployment boundaries.
 
+::: info Conversation files need the full silo
+Tier 2 does not start the private ArtifactStore service or file scanner, and it does not mount the
+keys used to authorise file bytes. Conversation-file upload, download and listing routes are
+unavailable in Tier 2; the personal asset metadata catalogue remains available. Use Tier 3 to test
+file storage and scanning against the current deployment rather than supplying a made-up local
+ArtifactStore URL or keys. Tier 2's live OpenAPI document omits these file routes; the production
+document and generated client still describe the full silo.
+:::
+
 ### Stop or reset Tier 2
 
 Interrupting, terminating or suspending the command stops the processes and removes only the

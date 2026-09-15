@@ -122,8 +122,8 @@ its resources to the lifecycle owner.
 - `src/app/lifecycle.ts` starts workers before both listeners, aborts active external exchanges during
   shutdown, closes conversation sockets, drains requests and workers, disconnects Prisma, and
   flushes telemetry.
-- `src/development/index.ts` is the Tier 2 workstation or AMD64 Codespaces entrypoint. It composes the same public
-  product routes and run-admission authorities against the reviewed development seed, while a
+- `src/development/index.ts` is the Tier 2 workstation or AMD64 Codespaces entrypoint. It composes current
+  product and run-admission authorities against the reviewed development seed, while a
   loopback-only host-process realizer replaces the production Agent Sandbox boundary. The core
   profile omits Conversation Computer startup; Agent profiles select local LiteLLM, a remote
   LiteLLM gateway, or the deterministic simulated transport. A private per-launch browser credential,
@@ -133,6 +133,10 @@ its resources to the lifecycle owner.
   Before composing those product routes, the validated development process pins standalone
   membership to the seed's silo and OIDC issuer with a five-minute evidence lifetime. The shared
   production membership reader still requires an explicit deployment mode and has no fallback.
+  Tier 2 has no ArtifactStore service, scanner or mounted artifact keys, so it omits conversation-file
+  byte routes and the unused upload gateway. The read-only personal asset metadata catalogue remains;
+  its live API description omits the unavailable file routes. Production still requires its private
+  ArtifactStore address and mounted keys and keeps the complete generated-client API description.
 - `prisma/schema/*.prisma` defines the product's durable domain models.
 - `prisma/bootstrap/target-baseline.sql` defines a clean OpenCrane database. The baseline publisher
   installs the pinned `pg_cron` prerequisite before it switches to the application owner, then this

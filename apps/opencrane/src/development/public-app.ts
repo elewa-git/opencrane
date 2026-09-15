@@ -10,8 +10,9 @@ import type { DevelopmentPublicAppDependencies } from "./public-app.types";
  * Compose the current authenticated product routes with the development-only browser boundary.
  *
  * The caller must provide the same current HistoryStore, workflows, model/provider effects, and
- * profile contracts used by production. This adapter replaces only browser authentication; it
- * retains the production route, run-admission, conversation-history, and output authorities.
+ * profile contracts used by production. This adapter replaces browser authentication and omits
+ * conversation-file byte routes because Tier 2 does not start ArtifactStore or mount its keys.
+ * Other product, run-admission, and conversation-history authorities remain current.
  *
  * Called by: the Tier 2 process composition after it starts the dependencies supplied through
  * `DevelopmentPublicAppDependencies`.
@@ -33,5 +34,6 @@ export function _CreateDevelopmentPublicApp(dependencies: DevelopmentPublicAppDe
 		dependencies.conversationPrivatePayloadKeyringPath,
 		dependencies.profile,
 		dependencies.organizationMembers,
+		false,
 	);
 }
