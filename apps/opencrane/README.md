@@ -130,6 +130,9 @@ its resources to the lifecycle owner.
   exact local or private Codespaces host pair and origin check protect the fixed development Principal; every protected request
   still re-reads the durable Principal projection. This entrypoint does not mount the Kubernetes-only
   internal listener, MCP workload routes, review commands, or durable workspace checkpointing.
+  Before composing those product routes, the validated development process pins standalone
+  membership to the seed's silo and OIDC issuer with a five-minute evidence lifetime. The shared
+  production membership reader still requires an explicit deployment mode and has no fallback.
 - `prisma/schema/*.prisma` defines the product's durable domain models.
 - `prisma/bootstrap/target-baseline.sql` defines a clean OpenCrane database. The baseline publisher
   installs the pinned `pg_cron` prerequisite before it switches to the application owner, then this

@@ -6,7 +6,7 @@ import { ___BindConsole, ___ShutdownTelemetry } from "@opencrane/backend/observa
 import { _log } from "../app/log";
 import { _CreateDevelopmentServerComposition } from "./composition";
 import { _BindDevelopmentSignalCleanup } from "./cleanup";
-import { _ReadDevelopmentConfig } from "./config";
+import { _ReadDevelopmentConfig, _SetDevelopmentMembershipEnvironment } from "./config";
 import { _StartDevelopmentServer } from "./lifecycle";
 
 /** Compose the selected Tier 2 process and retain one idempotent signal cleanup path. */
@@ -14,6 +14,7 @@ async function _Main(): Promise<void>
 {
 	const unbindConsole = ___BindConsole(_log);
 	const config = _ReadDevelopmentConfig();
+	_SetDevelopmentMembershipEnvironment(config);
 	const composition = await _CreateDevelopmentServerComposition(config);
 	const handle = await _StartDevelopmentServer(composition, config.publicPort);
 	_BindDevelopmentSignalCleanup(handle, ___ShutdownTelemetry, unbindConsole, process, _log);
