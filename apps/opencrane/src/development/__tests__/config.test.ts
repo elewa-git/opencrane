@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { _ReadDevelopmentConfig } from "../config";
+import { _CreateHumanMembershipEvidenceConfig, FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
+
+import { _ReadDevelopmentConfig, _SetDevelopmentMembershipEnvironment } from "../config";
 import { DevelopmentProfileKinds } from "../config.types";
 
 /** Restore process settings after every boundary test. */
@@ -38,6 +40,47 @@ describe("Tier 2 development configuration", function _Suite(): void
 		});
 		expect(config.historyStore.endpoint).toBe("127.0.0.1:21139");
 		expect(config.browserOrigin).toBe("http://local-development.localhost:4200");
+	});
+
+	it("binds the fixed standalone membership authority before product composition", function _BindsMembership(): void
+	{
+		_ConfigureDevelopment();
+		const config = _ReadDevelopmentConfig();
+		const environment: NodeJS.ProcessEnv = { OPENCRANE_MEMBERSHIP_MODE: FleetMembershipDeploymentModes.Fleet };
+		_SetDevelopmentMembershipEnvironment(config, environment);
+		const membership = _CreateHumanMembershipEvidenceConfig(environment);
+
+		expect(environment.OPENCRANE_MEMBERSHIP_MODE).toBe(FleetMembershipDeploymentModes.Standalone);
+		expect(environment.OPENCRANE_SILO_ID).toBe(config.identity.siloId);
+		expect(environment.OIDC_ISSUER_URL).toBe(config.identity.issuer);
+		expect(environment.OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS).toBe("300000");
+		expect(membership).toMatchObject({
+			mode: FleetMembershipDeploymentModes.Standalone,
+			siloId: config.identity.siloId,
+			trustedOidcIssuer: config.identity.issuer,
+			maximumStalenessMs: 300_000,
+		});
+	});
+
+	it("refuses membership binding outside the validated development boundary", function _RejectsMembershipBinding(): void
+	{
+		_ConfigureDevelopment();
+		const config = _ReadDevelopmentConfig();
+		const environment: NodeJS.ProcessEnv = {};
+		vi.stubEnv("NODE_ENV", "production");
+		expect(function _BindProduction(): void { _SetDevelopmentMembershipEnvironment(config, environment); }).toThrow("non-production");
+		expect(environment).toEqual({});
+
+		vi.stubEnv("NODE_ENV", "development");
+		vi.stubEnv("DATABASE_URL", "postgresql://opencrane:opencrane@database.example.test:5432/opencrane");
+		expect(function _ReadRemote(): void { _ReadDevelopmentConfig(); }).toThrow("non-loopback");
+		expect(environment).toEqual({});
+	});
+
+	it("keeps the shared membership factory fail-closed", function _RejectsMissingMembershipMode(): void
+	{
+		expect(function _ReadMissing(): void { _CreateHumanMembershipEvidenceConfig({}); }).toThrow("must be standalone or fleet");
+		expect(function _ReadUnknown(): void { _CreateHumanMembershipEvidenceConfig({ OPENCRANE_MEMBERSHIP_MODE: "unknown" }); }).toThrow("must be standalone or fleet");
 	});
 
 	it("accepts only the exact private Codespaces browser origin", function _CodespaceOrigin(): void

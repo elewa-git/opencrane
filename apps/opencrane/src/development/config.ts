@@ -1,5 +1,7 @@
 import { isAbsolute } from "node:path";
 
+import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
+
 import type { DevelopmentConfig, DevelopmentIdentity } from "./config.types";
 import { DevelopmentProfileKinds } from "./config.types";
 
@@ -149,4 +151,19 @@ export function _ReadDevelopmentConfig(): DevelopmentConfig
 		profile: _ReadProfile(),
 		publicPort: _ReadPort("PORT", 8_080),
 	});
+}
+
+/**
+ * Bind standalone membership to the validated Tier 2 identity before product routes compose.
+ *
+ * Called by: the dedicated development entrypoint after it reads the local server boundary.
+ * @throws Error when the process is not an explicit non-production, loopback development run.
+ */
+export function _SetDevelopmentMembershipEnvironment(config: DevelopmentConfig, environment: NodeJS.ProcessEnv = process.env): void
+{
+	_AssertDevelopmentBoundary(config.databaseUrl);
+	environment.OPENCRANE_MEMBERSHIP_MODE = FleetMembershipDeploymentModes.Standalone;
+	environment.OPENCRANE_SILO_ID = config.identity.siloId;
+	environment.OIDC_ISSUER_URL = config.identity.issuer;
+	environment.OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS = "300000";
 }
