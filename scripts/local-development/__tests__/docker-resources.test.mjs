@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { inspectOwnedDockerResource, resetOwnedPersistentState } from "../docker-resources.mjs";
+import { inspectOwnedDockerResource, removeOwnedDockerResource, resetOwnedPersistentState } from "../docker-resources.mjs";
 
 const configuration = {
 	baselineDigest: "current",
@@ -26,6 +26,57 @@ function _labels(baseline, worktree = "worktree")
 		"opencrane.local-development.baseline": baseline
 	});
 }
+
+test("container reuse reads Config.Labels and removes only its owned name", async function _RemoveOwnedContainer()
+{
+	const commands = [];
+	async function _Docker(_command, argumentsList)
+	{
+		commands.push(argumentsList);
+
+		return { status: 0, stdout: _labels("current") };
+	}
+
+	await removeOwnedDockerResource("container", "postgres", configuration, { runCommand: _Docker });
+	assert.deepEqual(commands, [
+		["container", "inspect", "postgres", "--format", "{{json .Config.Labels}}"],
+		["container", "rm", "--force", "postgres"]
+	]);
+});
+
+test("container reuse refuses a matching name from another worktree", async function _RejectOtherContainer()
+{
+	const commands = [];
+	async function _Docker(_command, argumentsList)
+	{
+		commands.push(argumentsList);
+
+		return { status: 0, stdout: _labels("current", "other") };
+	}
+
+	await assert.rejects(removeOwnedDockerResource("container", "postgres", configuration, {
+		runCommand: _Docker
+	}), /not owned by this checkout/u);
+	assert.deepEqual(commands, [
+		["container", "inspect", "postgres", "--format", "{{json .Config.Labels}}"]
+	]);
+});
+
+test("volumes keep their top-level Labels format", async function _InspectVolume()
+{
+	async function _Docker(_command, argumentsList)
+	{
+		assert.deepEqual(argumentsList, [
+			"volume", "inspect", "postgres-volume", "--format", "{{json .Labels}}"
+		]);
+
+		return { status: 0, stdout: _labels("current") };
+	}
+
+	assert.equal(await inspectOwnedDockerResource("volume", "postgres-volume", configuration, {
+		runCommand: _Docker
+	}), true);
+});
 
 test("ordinary reuse rejects a stale target baseline", async function _RejectStale()
 {

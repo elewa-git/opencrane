@@ -31,12 +31,13 @@ export function createDockerLabelArguments(configuration)
 export async function inspectOwnedDockerResource(kind, name, configuration, operations = {})
 {
 	const runCommand = operations.runCommand ?? runLocalCommand;
+	const labelFormat = kind === "container" ? "{{json .Config.Labels}}" : "{{json .Labels}}";
 	const result = await runCommand("docker", [
 		kind,
 		"inspect",
 		name,
 		"--format",
-		"{{json .Labels}}"
+		labelFormat
 	], {
 		acceptFailure: true,
 		signal: operations.signal
