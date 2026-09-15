@@ -20,12 +20,68 @@ function _postgresArguments(configuration, ...argumentsList)
 	];
 }
 
-/** Waits for the clean local PostgreSQL operand to accept connections. */
+function _sleep(milliseconds)
+{
+	return new Promise(function _wait(resolve) { setTimeout(resolve, milliseconds); });
+}
+
+async function _startupLogs(runCommand, configuration)
+{
+	const result = await runCommand("docker", [
+		"logs",
+		"--tail",
+		"30",
+		configuration.postgresContainerName
+	], { acceptFailure: true, signal: configuration.abortSignal });
+
+	if (result.status !== 0)
+		return "Docker startup logs were unavailable.";
+
+	const output = [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n");
+
+	return output ? output.slice(-4_000) : "PostgreSQL wrote no startup logs.";
+}
+
+async function _containerState(runCommand, configuration)
+{
+	const result = await runCommand("docker", [
+		"container",
+		"inspect",
+		configuration.postgresContainerName,
+		"--format",
+		"{{json .State}}"
+	], { acceptFailure: true, signal: configuration.abortSignal });
+
+	if (result.status !== 0)
+		throw new Error("Tier 2 PostgreSQL container disappeared during startup");
+
+	let state;
+
+	try
+	{
+		state = JSON.parse(result.stdout.trim());
+	}
+	catch
+	{
+		throw new Error("Tier 2 PostgreSQL container returned invalid Docker state");
+	}
+
+	if (typeof state?.Running !== "boolean")
+		throw new Error("Tier 2 PostgreSQL container returned incomplete Docker state");
+
+	return state;
+}
+
+/** Waits for PostgreSQL, reporting an early container exit and its last startup logs before cleanup. */
 export async function waitForPostgres(configuration, operations = {})
 {
 	const runCommand = operations.runCommand ?? runLocalCommand;
+	const now = operations.now ?? Date.now;
+	const sleep = operations.sleep ?? _sleep;
+	const timeoutMilliseconds = configuration.emulateAmd64 ? 120_000 : 30_000;
+	const deadline = now() + timeoutMilliseconds;
 
-	for (let attempt = 0; attempt < 120; attempt += 1)
+	while (now() < deadline)
 	{
 		const result = await runCommand("docker", [
 			"exec",
@@ -38,14 +94,25 @@ export async function waitForPostgres(configuration, operations = {})
 		], { acceptFailure: true, signal: configuration.abortSignal });
 
 		if (result.status === 0)
-		{
 			return;
+
+		const state = await _containerState(runCommand, configuration);
+
+		if (!state.Running)
+		{
+			const logs = await _startupLogs(runCommand, configuration);
+			const reason = state.OOMKilled ? " (out of memory)" : "";
+
+			throw new Error(`Tier 2 PostgreSQL exited with code ${state.ExitCode}${reason} before it became ready. Last startup logs:\n${logs}`);
 		}
 
-		await new Promise(function _wait(resolve) { setTimeout(resolve, 250); });
+		await sleep(250);
 	}
 
-	throw new Error("Tier 2 PostgreSQL did not become ready within 30 seconds");
+	const logs = await _startupLogs(runCommand, configuration);
+	const seconds = timeoutMilliseconds / 1_000;
+
+	throw new Error(`Tier 2 PostgreSQL did not become ready within ${seconds} seconds. Last startup logs:\n${logs}`);
 }
 
 /** Applies only the reviewed target baseline to an empty database, then replays the local seed. */
