@@ -35,6 +35,7 @@ for contract in \
   kurrentdb-bootstrap-retry-contract.sh \
   kurrentdb-replay-contract.sh \
   kurrentdb-restore-contract.sh \
+  k3d-development-auth-contract.sh \
   silo-deploy-profile-contract.sh \
   silo-teardown-contract.sh \
   skill-authoring-contract.sh; do

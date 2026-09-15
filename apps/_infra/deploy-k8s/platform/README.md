@@ -67,6 +67,14 @@ disposable cluster and its private registry for diagnosis in an authorised envir
 and production storage, DNS, and transport remain separate live
 qualifications.
 
+The repository-level Tier 3 coordinator reuses this smoke with worktree-derived cluster, namespace,
+release, registry, ingress-port and owner coordinates. Its infrastructure profile supplies no human
+or provider credential. Its Agent profile supplies a generated per-launch development-session
+Secret, disables OIDC in the rendered disposable silo, and then exercises BYOK, onboarding and one
+Agent Sandbox turn through the product API. The smoke still owns installation and readiness; the
+coordinator owns the loopback certificate-pinned browser route and the post-install product proof.
+See the [local-development guide](../../../../website/contributing/local-development.md#tier-3--k3d-and-codespaces).
+
 Business logic does not belong here. Server-process infrastructure belongs in `libs/backend/server/infra`;
 backend capabilities belong in `libs/backend/server`; independently owned third-party workloads
 belong in sibling `apps/_infra/<service>` projects.

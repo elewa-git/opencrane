@@ -1,11 +1,11 @@
-/** Verified OIDC facts admitted against the silo selected by the trusted request host. */
+/** Deployment-trusted identity facts admitted against the silo selected by the trusted request host. */
 export interface AuthenticatedPrincipalAdmissionInput
 {
 	/** Silo derived from the trusted request host. */
 	readonly siloId: string;
-	/** OIDC issuer already matched to the configured authentication authority. */
+	/** Identity issuer already matched to the configured authentication authority. */
 	readonly issuer: string;
-	/** Stable subject from the verified OIDC token. */
+	/** Stable subject from the verified deployment credential. */
 	readonly subject: string;
 }
 
@@ -16,9 +16,9 @@ export interface AuthenticatedRequestPrincipal
 	readonly principalId: string;
 	/** Silo selected from the trusted request host and matched by the local Principal. */
 	readonly siloId: string;
-	/** Verified OIDC issuer used to resolve the local Principal. */
+	/** Verified identity issuer used to resolve the local Principal. */
 	readonly issuer: string;
-	/** Verified OIDC subject used to resolve the local Principal. */
+	/** Verified identity subject used to resolve the local Principal. */
 	readonly subject: string;
 }
 
