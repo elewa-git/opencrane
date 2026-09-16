@@ -19,7 +19,7 @@ function _writeWarning(message)
 	process.stderr.write(message);
 }
 
-/** Writes one lifecycle instruction after resource cleanup completes. */
+/** Writes one launcher status message. */
 function _writeStatus(message)
 {
 	process.stdout.write(message);
@@ -141,7 +141,7 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 	const shutdown = new AbortController();
 	const ledger = createAcquisitionLedger();
 	const sessionConfiguration = { ...configuration, abortSignal: shutdown.signal };
-	let browserSessionPublished = false;
+	let browserSessionReady = false;
 	function _stop() { shutdown.abort(new Error("Tier 2 local development stopped")); }
 	function _resumeAndStop()
 	{
@@ -218,9 +218,14 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 			await operations.waitForLocalLiteLLM(sessionConfiguration, secrets);
 		}
 
-		process.stdout.write(`Starting Tier 2 ${sessionConfiguration.developmentProfile}${provider ? ` with ${provider.selection.provider.name}/${provider.selection.model}` : ""}\n`);
-		process.stdout.write(`Open the private Tier 2 browser URL: ${sessionConfiguration.browserOrigin}/#development-session=${encodeURIComponent(secrets.browserSessionCredential)}\n`);
-		browserSessionPublished = true;
+		const browserUrl = new URL("/", sessionConfiguration.browserOrigin).toString();
+		const launchStatus = [
+			`Starting Tier 2 ${sessionConfiguration.developmentProfile}${provider ? ` with ${provider.selection.provider.name}/${provider.selection.model}` : ""}`,
+			`Tier 2 browser: ${browserUrl}`,
+			`Select "Open current Tier 2 session" when the page loads.`,
+		].join("\n");
+		operations.writeStatus(`${launchStatus}\n`);
+		browserSessionReady = true;
 		await operations.runDevelopmentProcesses(createApplicationCommands(sessionConfiguration, secrets), sessionConfiguration.repositoryRoot, { signal: shutdown.signal });
 	}
 	catch (error)
@@ -248,7 +253,7 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 				: cleanupFailure;
 		}
 
-		if (browserSessionPublished)
+		if (browserSessionReady)
 			operations.writeStatus("Tier 2 stopped. Close the browser tab from this launch before restarting it.\n");
 	}
 

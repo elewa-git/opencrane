@@ -63,12 +63,29 @@ test("the production credential path enforces remote administrator-key separatio
 	}
 });
 
-test("a normal stop removes reverse-owned resources and preserves paired volumes", async function _CleanupOrder()
+test("a normal run prints only the safe browser URL and removes reverse-owned resources", async function _CleanupOrder()
 {
 	const events = [];
-	const statuses = [];
+	let terminalOutput = "";
+	const stdoutWrite = process.stdout.write;
 	const processHost = new EventEmitter();
 	processHost.platform = "darwin";
+	function _CaptureStdout(chunk, encodingOrCallback, callback)
+	{
+		terminalOutput += String(chunk);
+
+		if (typeof encodingOrCallback === "function")
+		{
+			encodingOrCallback();
+		}
+		else if (callback)
+		{
+			callback();
+		}
+
+		return true;
+	}
+
 	function _Kill() {}
 
 	processHost.kill = _Kill;
@@ -102,7 +119,7 @@ test("a normal stop removes reverse-owned resources and preserves paired volumes
 
 	async function _Secrets()
 	{
-		return { browserSessionCredential: "browser-session", directory: "/tmp/session" };
+		return { browserSessionCredential: "credential-that-must-not-be-printed", directory: "/tmp/session" };
 	}
 
 	async function _Network()
@@ -141,27 +158,30 @@ test("a normal stop removes reverse-owned resources and preserves paired volumes
 
 	async function _Wait() {}
 
-	function _WriteStatus(message)
+	process.stdout.write = _CaptureStdout;
+	try
 	{
-		statuses.push(message);
+		await runLocalDevelopmentSession(configuration, {
+			applyTargetBaseline: _Baseline,
+			bootstrapKurrent: _Bootstrap,
+			createLocalDevelopmentSecrets: _Secrets,
+			ensureOwnedNetwork: _Network,
+			ensureOwnedVolume: _Volume,
+			processHost,
+			prepareModelCredentials: _Credentials,
+			removeLocalDevelopmentSecrets: _SecretsCleanup,
+			removeOwnedDockerResource: _Remove,
+			runDevelopmentProcesses: _Processes,
+			runSpecification: _Start,
+			validateInputs: _Validate,
+			waitForPostgres: _Wait,
+		});
+	}
+	finally
+	{
+		process.stdout.write = stdoutWrite;
 	}
 
-	await runLocalDevelopmentSession(configuration, {
-		applyTargetBaseline: _Baseline,
-		bootstrapKurrent: _Bootstrap,
-		createLocalDevelopmentSecrets: _Secrets,
-		ensureOwnedNetwork: _Network,
-		ensureOwnedVolume: _Volume,
-		processHost,
-		prepareModelCredentials: _Credentials,
-		removeLocalDevelopmentSecrets: _SecretsCleanup,
-		removeOwnedDockerResource: _Remove,
-		runDevelopmentProcesses: _Processes,
-		runSpecification: _Start,
-		validateInputs: _Validate,
-		waitForPostgres: _Wait,
-		writeStatus: _WriteStatus,
-	});
 	assert.equal(events.includes("remove:volume:postgres-volume"), false);
 	assert.equal(events.includes("remove:volume:kurrent-volume"), false);
 	assert.equal(events.indexOf("remove:container:postgres") < events.indexOf("start:postgres-volume-provisioner"), true);
@@ -175,7 +195,16 @@ test("a normal stop removes reverse-owned resources and preserves paired volumes
 		"remove:network:network",
 		"remove:secrets",
 	]);
-	assert.deepEqual(statuses, ["Tier 2 stopped. Close the browser tab from this launch before restarting it.\n"]);
+	const expectedOutput = [
+		"Starting Tier 2 agent-simulated",
+		"Tier 2 browser: http://local-development.localhost:4200/",
+		"Select \"Open current Tier 2 session\" when the page loads.",
+		"Tier 2 stopped. Close the browser tab from this launch before restarting it.",
+		"",
+	].join("\n");
+	assert.equal(terminalOutput, expectedOutput);
+	assert.doesNotMatch(terminalOutput, /credential-that-must-not-be-printed/u);
+	assert.doesNotMatch(terminalOutput, /development-session=/u);
 });
 
 test("a second command warns without touching the active session", async function _ConcurrentSession()

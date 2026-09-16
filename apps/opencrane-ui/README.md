@@ -100,12 +100,13 @@ npm exec nx run opencrane-ui:serve-browser:tier2 -- --host local-development.loc
 
 The root `npm run dev:tier2*` commands own this child process in normal use. The distinct
 `proxy.tier2.conf.json` file leaves `development-live` pointed at the shared development service and
-keeps the backend-free Tier 1 configurations unchanged. The Tier 2 build consumes the launcher's
-private `development-session` URL fragment once, removes it from browser history, retains it in that
-tab, and adds it only to relative `/api/v1` requests. Production, development-live and Tier 1 builds
-do not contain that build-specific request-header or route policy. An independently opened fresh tab at the plain
-Tier 2 address shows a dedicated launcher-handoff page and makes no product authentication request.
-Its same-tab **Open current Tier 2 session** link performs a verified same-origin navigation through
+keeps the backend-free Tier 1 configurations unchanged. The Tier 2 launcher prints only the safe
+browser address. A fresh tab at that address uses the same-tab **Open current Tier 2 session** button
+to obtain the launcher's private `development-session` URL fragment. The Tier 2 build consumes that
+fragment once, removes it from browser history, retains it in that tab, and adds it only to relative
+`/api/v1` requests. Production, development-live and Tier 1 builds do not contain that build-specific
+request-header or route policy. The launcher-handoff page makes no product authentication request.
+Its button performs a verified same-origin navigation through
 the development-only handoff route. The server redirects that user action to the private fragment
 without returning the credential in JSON or HTML. After the build consumes it, the plain address
 loads the normal application for the rest of that tab's lifetime. Independently opened tabs need the
@@ -113,8 +114,8 @@ handoff again because the credential is stored in `sessionStorage`, not durable 
 storage. A same-origin tab created with an opener can inherit a copy of that storage.
 In a Tier 2 Codespace the coordinator binds this browser server for private port 4200 forwarding
 and adds only the exact forwarded hostname to Vite's allowed-host list. The API proxy still targets
-the local product listener; the Codespaces port must remain private because its URL carries a
-per-launch development credential.
+the local product listener. The Codespaces port must remain private because the handoff grants a
+per-launch development credential to the admitted browser tab.
 
 One Tier 2 command owns a repository worktree at a time. A concurrent command prints a warning and
 exits without removing or replacing the active command's containers. When the owning command stops,
