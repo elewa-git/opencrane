@@ -34,6 +34,14 @@ set -euo pipefail
 printf '%s\n' "$*" >>"$BOOTSTRAP_KUBECTL_CALLS"
 if [[ "$1" == create && "$2" == namespace ]]; then printf 'kind: Namespace\n'; exit 0; fi
 if [[ "$1" == apply ]]; then cat >/dev/null; exit 0; fi
+if [[ "${KURRENTDB_SECRETS_ABSENT:-0}" == 1 ]]; then
+  if [[ "$1" == get && "$2" == secret ]]; then exit 1; fi
+  if [[ "$1" == create && "$2" == secret ]]; then
+    printf '{"apiVersion":"v1","kind":"Secret","metadata":{"name":"test"}}\n'
+    exit 0
+  fi
+  if [[ "$1" == create && "$2" == -f ]]; then cat >/dev/null; exit 0; fi
+fi
 [[ "$1" == get && "$2" == secret ]] || exit 1
 secret="$3"
 arguments="$*"
@@ -141,4 +149,9 @@ if bash "$DEPLOY_SCRIPT" --provision-kurrentdb-bootstrap-secrets \
   exit 1
 fi
 grep -Fq 'is not a server certificate signed by its CA' "$TEST_DIRECTORY/purpose.error"
+
+: >"$BOOTSTRAP_KUBECTL_CALLS"
+KURRENTDB_SECRETS_ABSENT=1 bash "$DEPLOY_SCRIPT" --provision-kurrentdb-bootstrap-secrets \
+  --namespace opencrane-tier3-7a97351fbc --release opencrane-tier3-7a97351fbc >/dev/null
+grep -Fq 'create secret generic opencrane-tier3-7a97351fbc-kurrentdb-tls' "$BOOTSTRAP_KUBECTL_CALLS"
 echo 'PostgreSQL and KurrentDB bootstrap Secrets entrypoint contract: PASS'
