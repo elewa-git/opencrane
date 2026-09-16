@@ -101,14 +101,16 @@ npm exec nx run opencrane-ui:serve-browser:tier2 -- --host local-development.loc
 The root `npm run dev:tier2*` commands own this child process in normal use. The distinct
 `proxy.tier2.conf.json` file leaves `development-live` pointed at the shared development service and
 keeps the backend-free Tier 1 configurations unchanged. The Tier 2 build consumes the launcher's
-private `development-session` URL parameter once, removes it from browser history, retains it in that
+private `development-session` URL fragment once, removes it from browser history, retains it in that
 tab, and adds it only to relative `/api/v1` requests. Production, development-live and Tier 1 builds
 do not contain that build-specific request-header or route policy. An independently opened fresh tab at the plain
-Tier 2 address shows a dedicated launcher-handoff page and makes no authentication request. Open the
-complete private URL printed by the current launcher in that tab. After the build consumes it, the
-plain address loads the normal application for the rest of that tab's lifetime. Independently opened
-tabs need the private URL again because the credential is stored in `sessionStorage`, not durable
-shared browser storage. A same-origin tab created with an opener can inherit a copy of that storage.
+Tier 2 address shows a dedicated launcher-handoff page and makes no product authentication request.
+Its same-tab **Open current Tier 2 session** link performs a verified same-origin navigation through
+the development-only handoff route. The server redirects that user action to the private fragment
+without returning the credential in JSON or HTML. After the build consumes it, the plain address
+loads the normal application for the rest of that tab's lifetime. Independently opened tabs need the
+handoff again because the credential is stored in `sessionStorage`, not durable shared browser
+storage. A same-origin tab created with an opener can inherit a copy of that storage.
 In a Tier 2 Codespace the coordinator binds this browser server for private port 4200 forwarding
 and adds only the exact forwarded hostname to Vite's allowed-host list. The API proxy still targets
 the local product listener; the Codespaces port must remain private because its URL carries a
@@ -139,7 +141,7 @@ Build-time and container config (there is no server-side env here — it is a st
 | Concern | Where | Notes |
 |---|---|---|
 | Gateway/route profile | `src/app/gateway-profile.providers*.ts`, `src/app/app.routes*.ts` | local fixtures for default/named Tier 1 development · live adapters for production, development-live and Tier 2; chosen by build `fileReplacements` |
-| Tier 2 browser session and proxy | `src/app/app.routes.tier2.ts`, `src/app/local-development/tier2-development-session.ts`, `src/app/http-profile.provider.tier2.ts`, `proxy.tier2.conf.json` | shows launcher guidance before the tab consumes its private URL, carries that credential on `/api/v1` only, forwards those routes to the loopback Tier 2 server, and preserves the browser's dedicated local host for server-side origin checks |
+| Tier 2 browser session and proxy | `src/app/app.routes.tier2.ts`, `src/app/local-development/tier2-development-session.ts`, `src/app/http-profile.provider.tier2.ts`, `proxy.tier2.conf.json` | offers a verified same-origin launcher handoff before the tab consumes its private fragment, carries that credential on `/api/v1` only, forwards those routes to the loopback Tier 2 server, and preserves the browser's dedicated local host for server-side origin checks |
 | Static serving | `deploy/nginx.conf` | `nginxinc/nginx-unprivileged`, listens `:8080`, `/healthz` probe, immutable caching for hashed assets, SPA fallback to `index.html` |
 | Image | `deploy/Dockerfile` | `ghcr.io/elewa-git/opencrane-ui` |
 | Chart-native SPA workload | `helm/templates/_deployment.tpl`, `_service.tpl` | This app owns its optional Deployment/Service as named templates (see `HELM.md`), composed by the silo umbrella chart. The composer supplies the reviewed image's exact OCI digest; deployment fails rather than reporting success if this workload does not roll out with that digest. |

@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 
-import { Router, type Request, type RequestHandler } from "express";
+import { Router, type Request, type RequestHandler, type Response } from "express";
 import type { Logger } from "pino";
 
 import type { AuthenticatedPrincipalAdmission } from "@opencrane/backend/server/infra/auth";
@@ -24,6 +24,9 @@ const _SAFE_METHODS = new Set([
 
 /** Carries the per-launch credential set only by the dedicated Tier 2 browser. */
 const _DEVELOPMENT_SESSION_HEADER = "x-opencrane-development-session";
+
+/** Development-only route that converts a verified browser click into the private landing URL. */
+const _DEVELOPMENT_SESSION_HANDOFF_PATH = "/api/v1/auth/development-session";
 
 /** Short authorization lifetime forces every long-running local session to be re-projected. */
 const _AUTHORIZATION_LIFETIME_MILLISECONDS = 5 * 60 * 1_000;
@@ -83,7 +86,37 @@ function _HasExpectedOrigin(request: Request, browserOrigin: string): boolean
 	}
 }
 
-/** Attach the fixed session only after exact host and origin validation. */
+/** Checks whether the configured Tier 2 browser origin started a user-activated top-level navigation. */
+function _HasExpectedHandoffNavigation(request: Request, browserOrigin: string): boolean
+{
+	if (
+		request.method !== "GET"
+		|| typeof request.headers["x-forwarded-host"] !== "string"
+		|| request.get("sec-fetch-site") !== "same-origin"
+		|| request.get("sec-fetch-mode") !== "navigate"
+		|| request.get("sec-fetch-dest") !== "document"
+		|| request.get("sec-fetch-user") !== "?1"
+	)
+	{
+		return false;
+	}
+
+	const referer = request.get("referer");
+
+	if (!referer)
+		return false;
+
+	try
+	{
+		return new URL(referer).origin === browserOrigin;
+	}
+	catch
+	{
+		return false;
+	}
+}
+
+/** Checks the configured host before forwarding a handoff or attaching the fixed development session. */
 function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionCredential: string, browserOrigin: string): RequestHandler
 {
 	const browserHost = new URL(browserOrigin).host;
@@ -98,6 +131,22 @@ function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionC
 			});
 			return;
 		}
+
+		if (request.path === _DEVELOPMENT_SESSION_HANDOFF_PATH)
+		{
+			if (!_HasExpectedHandoffNavigation(request, browserOrigin))
+			{
+				response.status(403).json({
+					code: "DEVELOPMENT_SESSION_HANDOFF_REFUSED",
+					error: "Tier 2 session handoff requires a same-origin browser action.",
+				});
+				return;
+			}
+
+			next();
+			return;
+		}
+
 		const suppliedCredential = request.get(_DEVELOPMENT_SESSION_HEADER) ?? "";
 		const expected = Buffer.from(browserSessionCredential, "utf8");
 		const supplied = Buffer.from(suppliedCredential, "utf8");
@@ -180,9 +229,28 @@ function _CreateAdmissionMiddleware(identity: DevelopmentIdentity, admission: Au
 }
 
 /** Build the development session endpoint used by the live frontend. */
-function _CreateAuthRouter(identity: DevelopmentIdentity, capabilities: AuthenticatedPrincipalCapabilityReader): Router
+function _CreateAuthRouter(identity: DevelopmentIdentity, capabilities: AuthenticatedPrincipalCapabilityReader, browserSessionCredential: string, browserOrigin: string): Router
 {
 	const router = Router();
+	/** Redirect a verified same-origin click without serializing the credential into a response body. */
+	function _CompleteDevelopmentSessionHandoff(_request: Request, response: Response): void
+	{
+		const landingUrl = new URL(browserOrigin);
+		const fragment = new URLSearchParams({ "development-session": browserSessionCredential });
+		landingUrl.hash = fragment.toString();
+		const headers = {
+			"Cache-Control": "no-store",
+			"Location": landingUrl.toString(),
+			"Pragma": "no-cache",
+			"Referrer-Policy": "no-referrer",
+		};
+		response
+			.status(303)
+			.set(headers)
+			.end();
+	}
+
+	router.get("/development-session", _CompleteDevelopmentSessionHandoff);
 	router.get("/me", async function _ReadSession(_request, response): Promise<void>
 	{
 		const administerOrganization = await capabilities.canAdministerOrganization({
@@ -221,7 +289,7 @@ export function _CreateDevelopmentAuthentication(identity: DevelopmentIdentity, 
 {
 	return {
 		authMiddleware: _CreateAdmissionMiddleware(identity, admission, logger),
-		router: _CreateAuthRouter(identity, capabilities),
+		router: _CreateAuthRouter(identity, capabilities, browserSessionCredential, browserOrigin),
 		sessionMiddleware: [_CreateSessionMiddleware(identity, browserSessionCredential, browserOrigin)],
 	};
 }

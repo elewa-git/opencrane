@@ -1,5 +1,5 @@
-/** Names the query parameter used to deliver one private Tier 2 browser session. */
-const _CREDENTIAL_QUERY = "development-session";
+/** Names the URL fragment field used to deliver one private Tier 2 browser session. */
+const _CREDENTIAL_FRAGMENT = "development-session";
 
 /** Names the session-scoped browser storage entry cleared when its browsing context closes. */
 const _CREDENTIAL_STORAGE = "opencrane.tier2.development-session";
@@ -16,17 +16,23 @@ function _isDevelopmentSessionCredential(value: string | null): value is string
 /**
  * Reads a private Tier 2 browser credential without writing it to durable browser storage.
  *
- * A supplied query value always replaces or clears the prior tab value and is then removed from
- * browser history. A plain URL can reuse a valid credential after the private URL has been consumed
- * in this browsing context, or when a same-origin opener caused the context to inherit a copy.
+ * A supplied fragment value always replaces or clears the prior tab value and is then removed from
+ * browser history. Fragments stay out of HTTP requests, proxy logs and referrers. A plain URL can
+ * reuse a valid credential after the private URL has been consumed in this browsing context, or
+ * when a same-origin opener caused the context to inherit a copy.
  */
 function _readDevelopmentSessionCredential(): string | null
 {
 	const url = new URL(window.location.href);
-	const supplied = url.searchParams.get(_CREDENTIAL_QUERY);
-	if (supplied !== null)
+	const fragment = new URLSearchParams(url.hash.slice(1));
+	const suppliedValues = fragment.getAll(_CREDENTIAL_FRAGMENT);
+
+	if (suppliedValues.length > 0)
 	{
-		url.searchParams.delete(_CREDENTIAL_QUERY);
+		const supplied = suppliedValues.length === 1 && Array.from(fragment.keys()).length === 1
+			? suppliedValues[0] ?? null
+			: null;
+		url.hash = "";
 		window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
 		if (_isDevelopmentSessionCredential(supplied))
 		{
