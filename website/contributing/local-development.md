@@ -152,9 +152,9 @@ npm run dev:tier2:agent:simulated-llm
 
 ### Run Tier 2 in Codespaces or on ARM
 
-[Issue #684](https://github.com/elewa-git/opencrane/issues/684) calls for a 2-core, 8 GB Codespace
-for Tier 2. When creating the Codespace, choose the `OpenCrane Tier 2` configuration at
-`.devcontainer/tier2/devcontainer.json` and an AMD64 machine with at least those resources. That
+Use an AMD64 Codespace with at least 2 cores and 8 GB of memory for Tier 2. When creating the
+Codespace, choose the `OpenCrane Tier 2` configuration at
+`.devcontainer/tier2/devcontainer.json`. That
 configuration installs Docker-in-Docker and the Tier 2 command-line tools, runs `npm ci`, and
 forwards only browser port 4200. Check the Architecture line in `docker info` reports `amd64`
 or `x86_64`, then run the same core or Agent command above without an emulation flag.
@@ -211,6 +211,16 @@ credential and other session secrets owned by that repository worktree. The pair
 KurrentDB data volumes remain for the next launch. Their database credentials and conversation
 payload keyring remain owner-only on disk so the retained data stays readable. Failed startup uses
 the same cleanup path.
+
+After the command reports that Tier 2 has stopped, close the browser tab or tabs opened for that
+launch before restarting it. The launcher cannot close browser windows on your behalf. Closing the
+tabs ends their page sessions, so they cannot reuse the previous launch's browser credential after
+the next command creates a new one.
+
+Only one Tier 2 command can own a repository worktree at a time. If another core or Agent command is
+already running, a second invocation prints a warning and exits before it inspects, removes or starts
+any Docker resource. Continue using the existing terminal, or stop it and wait for its cleanup and
+browser-tab reminder before starting another profile.
 
 Codespaces VM stop or suspension may not deliver a shutdown signal to the launcher. The platform
 may preserve or reclaim its Docker-in-Docker state; on the next run the launcher removes stale

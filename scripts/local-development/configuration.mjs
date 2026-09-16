@@ -83,7 +83,8 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 		throw new Error("The current target baseline does not match releases/0.11.0.json");
 	}
 
-	const repositoryIdentity = _identity(_repositoryGitDirectory(realRoot));
+	const repositoryGitDirectory = _repositoryGitDirectory(realRoot);
+	const repositoryIdentity = _identity(repositoryGitDirectory);
 	const worktreeIdentity = _identity(realRoot);
 	const suffix = `${repositoryIdentity.slice(0, 8)}-${worktreeIdentity.slice(0, 8)}`;
 	const postgresPort = _port(environment, "OPENCRANE_LOCAL_POSTGRES_PORT", "54329");
@@ -118,6 +119,7 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 		seedPath: path.join(realRoot, "apps/opencrane/prisma/development/seed.sql"),
 		kurrentBootstrapPath: path.join(realRoot, "apps/_infra/kurrentdb/helm/files/bootstrap.sh"),
 		persistentSecretsDirectory: path.join(realRoot, "keys/tier2-local-development"),
+		sessionLockPath: path.join(repositoryGitDirectory, "opencrane-local-development", `${worktreeIdentity}.lock`),
 		postgresImage: manifest.database.operandImage,
 		kurrentImage: "docker.kurrent.io/kurrent-latest/kurrentdb@sha256:e5c9d59716174a4a47f9d54d6ce45aaaca48114b7ee668135aeb9f16934d74c8",
 		liteLLMImage: "ghcr.io/berriai/litellm-non_root:main-v1.81.0-stable@sha256:39718a9cc9138c99ec812bcde24896411cf54502967a36b19897c539b796fdc7",

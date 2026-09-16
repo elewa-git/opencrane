@@ -11,6 +11,19 @@ import { LOCAL_DEVELOPMENT_ALTERNATIVES } from "./profiles.mjs";
 import { waitForLocalLiteLLM } from "./model-gateway.mjs";
 import { createAcquisitionLedger } from "./resource-ledger.mjs";
 import { createLocalDevelopmentSecrets, removeLocalDevelopmentSecrets, removePersistentLocalDevelopmentSecrets } from "./secrets.mjs";
+import { acquireLocalDevelopmentSessionLock } from "./session-lock.mjs";
+
+/** Writes a non-failing launcher warning for a command that does not acquire resources. */
+function _writeWarning(message)
+{
+	process.stderr.write(message);
+}
+
+/** Writes one lifecycle instruction after resource cleanup completes. */
+function _writeStatus(message)
+{
+	process.stdout.write(message);
+}
 
 /** Runs one command plan through the shared command runner. */
 async function _runSpecification(specification, configuration)
@@ -104,6 +117,7 @@ export async function prepareModelCredentials(configuration)
 export async function runLocalDevelopmentSession(configuration, operationOverrides = {})
 {
 	const operations = {
+		acquireSessionLock: acquireLocalDevelopmentSessionLock,
 		applyTargetBaseline,
 		bootstrapKurrent,
 		createLocalDevelopmentSecrets,
@@ -119,12 +133,15 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 		validateInputs: _validateInputs,
 		waitForLocalLiteLLM,
 		waitForPostgres,
+		writeStatus: _writeStatus,
+		writeWarning: _writeWarning,
 		processHost: process,
 		...operationOverrides
 	};
 	const shutdown = new AbortController();
 	const ledger = createAcquisitionLedger();
 	const sessionConfiguration = { ...configuration, abortSignal: shutdown.signal };
+	let browserSessionPublished = false;
 	function _stop() { shutdown.abort(new Error("Tier 2 local development stopped")); }
 	function _resumeAndStop()
 	{
@@ -138,11 +155,22 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 
 	operations.processHost.once("SIGINT", _stop);
 	operations.processHost.once("SIGTERM", _stop);
+	operations.processHost.once("SIGHUP", _stop);
 	operations.processHost.once("SIGTSTP", _resumeAndStop);
 	let primaryFailure;
 
 	try
 	{
+		const sessionLock = operations.acquireSessionLock(sessionConfiguration.sessionLockPath);
+
+		if (!sessionLock.acquired)
+		{
+			const owner = sessionLock.ownerPid ? ` (process ${sessionLock.ownerPid})` : "";
+			operations.writeWarning(`Tier 2 is already running for this worktree${owner}. Use the existing terminal, or stop that command before starting another.\n`);
+			return;
+		}
+
+		ledger.acquire("session lock", async function _releaseSessionLock() { sessionLock.release(); });
 		await operations.validateInputs(sessionConfiguration);
 		const modelCredentials = sessionConfiguration.profile === "core"
 			? undefined
@@ -192,6 +220,7 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 
 		process.stdout.write(`Starting Tier 2 ${sessionConfiguration.developmentProfile}${provider ? ` with ${provider.selection.provider.name}/${provider.selection.model}` : ""}\n`);
 		process.stdout.write(`Open the private Tier 2 browser URL: ${sessionConfiguration.browserOrigin}/?development-session=${encodeURIComponent(secrets.browserSessionCredential)}\n`);
+		browserSessionPublished = true;
 		await operations.runDevelopmentProcesses(createApplicationCommands(sessionConfiguration, secrets), sessionConfiguration.repositoryRoot, { signal: shutdown.signal });
 	}
 	catch (error)
@@ -205,6 +234,7 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 	{
 		operations.processHost.removeListener("SIGINT", _stop);
 		operations.processHost.removeListener("SIGTERM", _stop);
+		operations.processHost.removeListener("SIGHUP", _stop);
 		operations.processHost.removeListener("SIGTSTP", _resumeAndStop);
 
 		try
@@ -217,6 +247,9 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 				? new AggregateError([primaryFailure, cleanupFailure], "Tier 2 session failed and resource cleanup also failed")
 				: cleanupFailure;
 		}
+
+		if (browserSessionPublished)
+			operations.writeStatus("Tier 2 stopped. Close the browser tab from this launch before restarting it.\n");
 	}
 
 	if (primaryFailure)
