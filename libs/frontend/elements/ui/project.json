@@ -39,7 +39,8 @@
 				"{workspaceRoot}/libs/frontend/features/conversation-elicitation/src/**/*",
 				"{workspaceRoot}/libs/frontend/elements/conversation/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/conversation-workspace/src/**/*",
-				"{workspaceRoot}/libs/frontend/features/settings/src/**/*"
+				"{workspaceRoot}/libs/frontend/features/settings/src/**/*",
+				"{workspaceRoot}/apps/opencrane-ui/src/app/local-development/**/*"
 			],
 			"options": {
 				"browserTarget": "frontend-elements-ui:build-storybook",
@@ -74,7 +75,8 @@
 				"{workspaceRoot}/libs/frontend/features/conversation-elicitation/src/**/*",
 				"{workspaceRoot}/libs/frontend/elements/conversation/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/conversation-workspace/src/**/*",
-				"{workspaceRoot}/libs/frontend/features/settings/src/**/*"
+				"{workspaceRoot}/libs/frontend/features/settings/src/**/*",
+				"{workspaceRoot}/apps/opencrane-ui/src/app/local-development/**/*"
 			],
 			"outputs": [
 				"{options.outputDir}"
