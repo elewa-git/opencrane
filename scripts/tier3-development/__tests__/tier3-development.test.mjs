@@ -383,6 +383,19 @@ test("runs the current smoke before proxying and preserves recommended qualifica
 	assert.deepEqual(order, ["smoke", "certificate", "proxy", "listen", "shutdown"]);
 });
 
+test("defaults Tier 3 qualification to the minimum host profile", async function _MinimumHostProfile()
+{
+	let smokeHostProfile;
+	await runTier3Development(parseTier3Options(["--profile", "infra", "--smoke-only"]), {
+		environment: {},
+		inspectResources: async function _Inspect() { return { existingOwner: null }; },
+		measureCapacity: async function _Capacity() { return { cpu: 4, memoryGiB: 16, storageAvailableGiB: 40, storageGiB: 40 }; },
+		runSmoke: async function _Smoke(environment) { smokeHostProfile = environment.SMOKE_HOST_PROFILE; },
+		write: function _Write() {},
+	});
+	assert.equal(smokeHostProfile, "minimum");
+});
+
 test("rejects invalid Codespaces forwarding identity before acquiring k3d resources", async function _CodespacesPreflight()
 {
 	let acquired = false;

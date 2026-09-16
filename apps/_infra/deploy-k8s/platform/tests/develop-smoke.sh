@@ -25,6 +25,7 @@ SMOKE_AFFECTED_PROJECTS="${SMOKE_AFFECTED_PROJECTS-all}"
 SMOKE_BASE_SHA="${SMOKE_BASE_SHA:-}"
 SMOKE_REGISTRY="${SMOKE_REGISTRY:-ghcr.io/elewa-git}"
 SMOKE_STORAGE_MODE="${SMOKE_STORAGE_MODE:-full}"
+SMOKE_HOST_PROFILE="${SMOKE_HOST_PROFILE:-recommended}"
 SMOKE_INGRESS_PORT="${SMOKE_INGRESS_PORT:-8443}"
 SMOKE_RESOURCE_OWNER="${SMOKE_RESOURCE_OWNER:-develop-smoke-$$}"
 SMOKE_IMAGE_TAG="${SMOKE_RESOURCE_OWNER}-$$"
@@ -75,6 +76,8 @@ _retry()
     attempt=$((attempt + 1))
   done
 }
+
+source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-image-storage.sh"
 
 _diagnostics()
 {
@@ -377,6 +380,7 @@ _publish_smoke_image()
     "http://${SMOKE_LOCAL_REGISTRY_ADDRESS}/v2/${repository}/manifests/${SMOKE_IMAGE_TAG}" \
     | openssl dgst -sha256 -r | awk '{print $1}')" || return 1
   [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || return 1
+  _release_published_smoke_image "$image" "$target" || return 1
   printf 'sha256:%s\n' "$digest"
 }
 
@@ -670,10 +674,14 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-for command in curl docker git helm jq k3d kubectl openssl; do _require_command "$command"; done
+for command in awk curl docker git helm jq k3d kubectl npm openssl; do _require_command "$command"; done
 docker info >/dev/null 2>&1 || { echo "[develop-smoke] Docker daemon is not reachable." >&2; exit 1; }
 if [[ "$SMOKE_STORAGE_MODE" != "fast" && "$SMOKE_STORAGE_MODE" != "full" ]]; then
   echo "[develop-smoke] SMOKE_STORAGE_MODE must be 'fast' or 'full', got '$SMOKE_STORAGE_MODE'." >&2
+  exit 1
+fi
+if [[ "$SMOKE_HOST_PROFILE" != "minimum" && "$SMOKE_HOST_PROFILE" != "recommended" ]]; then
+  echo "[develop-smoke] SMOKE_HOST_PROFILE must be 'minimum' or 'recommended', got '$SMOKE_HOST_PROFILE'." >&2
   exit 1
 fi
 if ! [[ "$SMOKE_INGRESS_PORT" =~ ^[0-9]+$ ]] || (( SMOKE_INGRESS_PORT < 1024 || SMOKE_INGRESS_PORT > 65535 )); then
@@ -700,6 +708,7 @@ elif docker inspect "k3d-${SMOKE_LOCAL_REGISTRY_NAME}" >/dev/null 2>&1; then
 fi
 _assert_owned_resource_set
 _prune_owned_smoke_images
+_prepare_smoke_host_storage
 
 # Image preparation is the longest independent lane. Start it before k3d so cluster creation and
 # external-controller readiness consume the same wall-clock time without serialising all builds
@@ -759,8 +768,8 @@ if ! wait "$IMAGE_PREPARATION_PID"; then
   exit 1
 fi
 IMAGE_PREPARATION_PID=""
-echo "[develop-smoke] Importing the tag-based service images in one k3d transfer"
-_retry 3 k3d image import "${SMOKE_IMAGES[@]}" --cluster "$CLUSTER_NAME" --mode direct
+echo "[develop-smoke] Importing the tag-based service images"
+_import_smoke_images
 bootstrap_digest="$(_publish_smoke_image "opencrane/kurrentdb-bootstrap:${SMOKE_IMAGE_TAG}" opencrane-kurrentdb-bootstrap)"
 computer_digest="$(_publish_smoke_image "opencrane/conversation-computer:${SMOKE_IMAGE_TAG}" opencrane-conversation-computer)"
 registry_repository="k3d-${SMOKE_LOCAL_REGISTRY_NAME}:5000"

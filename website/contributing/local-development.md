@@ -274,8 +274,19 @@ nodes and images; it does not substitute the checkout filesystem when Docker Des
 VM disk. It displays measurements in GiB but compares them with the decimal-GB requirements above;
 for example, a reported 15.6 GiB of memory and 31.3 GiB of total storage meet the minimum.
 Available space is reported for diagnosis. A lightweight BusyBox probe image may be pulled when it
-is not already present. The command stops on a minimum shortfall without deleting dependency caches,
-clusters, images or other developer state.
+is not already present. The coordinator stops on a CPU, memory or total-storage shortfall without
+deleting dependency caches, clusters, images or other developer state.
+
+After that admission check, the default minimum-host qualification bounds Docker storage before it
+builds the silo. It removes the reproducible root `node_modules` tree, clears the user-wide npm
+package cache, prunes unused data from the active shared BuildKit builder towards 13 GiB free, prunes
+daemon-wide dangling images and requires at least 12 GiB free on Docker's backing filesystem. These
+cache operations can affect other checkouts that use the same account or Docker daemon. After
+building, it imports the five tag-based service images separately, publishes the two digest-selected
+images to the owned loopback registry, releases each accepted local source tag, clears completed
+BuildKit cache and checks the 12 GiB deployment reserve again. This prevents a minimum Codespace from
+entering Kubernetes `DiskPressure` during deployment. Reinstall dependencies after the qualification
+if you need host-side Nx, lint or test commands.
 
 Start the credential-free infrastructure profile:
 
@@ -292,9 +303,9 @@ qualification when changing storage-sensitive code:
 SMOKE_HOST_PROFILE=recommended npm run dev:tier3:infra -- --storage-mode full
 ```
 
-`SMOKE_HOST_PROFILE=recommended` asks the underlying qualification to enforce the recommended host
-capacity instead of accepting the minimum. `--smoke-only` completes the cluster qualification and
-returns without keeping the browser proxy open.
+`SMOKE_HOST_PROFILE=recommended` preserves reusable dependencies, images and build cache on a larger
+development or CI host. `--smoke-only` completes the cluster qualification and returns without
+keeping the browser proxy open.
 
 For the Agent profile, place one supported provider key in an owner-only ordinary file. The file
 must use an absolute path and must not be a symbolic link:

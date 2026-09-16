@@ -29,6 +29,7 @@ for contract in \
   post-deploy-health-contract.sh \
   qualified-release-image-contract.sh \
   control-plane-image-policy-contract.sh \
+  develop-smoke-image-storage-contract.sh \
   agent-sandbox-contract.sh \
   cluster-tenant-crd-policy-contract.sh \
   kurrentdb-bootstrap-secrets-contract.sh \

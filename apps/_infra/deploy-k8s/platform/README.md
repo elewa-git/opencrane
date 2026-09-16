@@ -40,8 +40,11 @@ cluster does not match the assumptions needed to do that job safely.
 `tests/develop-smoke.sh` exercises the real silo deploy entrypoint. It rebuilds Nx-affected images
 from the checkout through a per-project BuildKit cache and resolves unaffected owners from the exact
 digest of the last validated image set. Its concurrent image lane overlaps cluster and controller
-preparation, then imports the tag-based service images in one k3d transfer. The KurrentDB bootstrap
-and conversation-computer images go into a disposable registry bound to loopback; their stored
+preparation. The default `recommended` profile imports the five tag-based service images in one k3d
+transfer and retains reusable cache. The Tier 3 coordinator uses `minimum` by default: it clears the
+user npm cache and unused shared Docker builder state, imports those five images individually, and
+releases each accepted local tag. The KurrentDB bootstrap and conversation-computer images go into a
+disposable registry bound to loopback; their stored
 manifest digests become the exact references used inside k3d. Nothing is published to a public
 registry. A pull request bypasses that cluster only when one positive proof binds its exact base SHA to a completed successful push or
 manual-dispatch k3d job, no affected container owner, and only explicitly non-deployment paths. The same evidence works
