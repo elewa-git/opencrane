@@ -114,6 +114,12 @@ and adds only the exact forwarded hostname to Vite's allowed-host list. The API 
 the local product listener; the Codespaces port must remain private because its URL carries a
 per-launch development credential.
 
+One Tier 2 command owns a repository worktree at a time. A concurrent command prints a warning and
+exits without removing or replacing the active command's containers. When the owning command stops,
+it removes its disposable containers and session resources, then reminds the developer to close the
+browser tab from that launch before restarting Tier 2. Closing the tab ends that page session so an
+old browser credential is not reused with the next launch.
+
 ## Boundary
 
 Browser-only presentation. It holds no server secrets and no database; onboarding progress, persona

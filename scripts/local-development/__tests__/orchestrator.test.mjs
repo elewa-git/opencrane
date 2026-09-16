@@ -6,6 +6,18 @@ import path from "node:path";
 import test from "node:test";
 
 import { prepareModelCredentials, runLocalDevelopmentSession, validateDockerArchitecture } from "../orchestrator.mjs";
+import { acquireLocalDevelopmentSessionLock } from "../session-lock.mjs";
+
+/** Sequence that keeps each session-lock fixture independent inside this test process. */
+let _sessionLockSequence = 0;
+
+/** Returns a unique lock path for one orchestrator test. */
+function _SessionLockPath()
+{
+	_sessionLockSequence += 1;
+
+	return path.join(os.tmpdir(), `opencrane-tier2-orchestrator-${process.pid}-${_sessionLockSequence}.lock`);
+}
 
 test("ARM Docker requires opt-in while AMD64 Codespaces remain native", function _DockerArchitecture()
 {
@@ -54,6 +66,7 @@ test("the production credential path enforces remote administrator-key separatio
 test("a normal stop removes reverse-owned resources and preserves paired volumes", async function _CleanupOrder()
 {
 	const events = [];
+	const statuses = [];
 	const processHost = new EventEmitter();
 	processHost.platform = "darwin";
 	function _Kill() {}
@@ -74,7 +87,8 @@ test("a normal stop removes reverse-owned resources and preserves paired volumes
 		postgresVolumeName: "postgres-volume",
 		postgresVolumeProvisionerContainerName: "postgres-volume-provisioner",
 		repositoryRoot: "/repo",
-		reset: false
+		reset: false,
+		sessionLockPath: _SessionLockPath()
 	};
 	async function _Baseline()
 	{
@@ -127,6 +141,11 @@ test("a normal stop removes reverse-owned resources and preserves paired volumes
 
 	async function _Wait() {}
 
+	function _WriteStatus(message)
+	{
+		statuses.push(message);
+	}
+
 	await runLocalDevelopmentSession(configuration, {
 		applyTargetBaseline: _Baseline,
 		bootstrapKurrent: _Bootstrap,
@@ -141,6 +160,7 @@ test("a normal stop removes reverse-owned resources and preserves paired volumes
 		runSpecification: _Start,
 		validateInputs: _Validate,
 		waitForPostgres: _Wait,
+		writeStatus: _WriteStatus,
 	});
 	assert.equal(events.includes("remove:volume:postgres-volume"), false);
 	assert.equal(events.includes("remove:volume:kurrent-volume"), false);
@@ -155,6 +175,47 @@ test("a normal stop removes reverse-owned resources and preserves paired volumes
 		"remove:network:network",
 		"remove:secrets",
 	]);
+	assert.deepEqual(statuses, ["Tier 2 stopped. Close the browser tab from this launch before restarting it.\n"]);
+});
+
+test("a second command warns without touching the active session", async function _ConcurrentSession()
+{
+	const lockPath = _SessionLockPath();
+	const owner = acquireLocalDevelopmentSessionLock(lockPath);
+	const processHost = new EventEmitter();
+	const warnings = [];
+	let validated = false;
+	processHost.platform = "darwin";
+	function _Kill() {}
+
+	processHost.kill = _Kill;
+	function _WriteWarning(message)
+	{
+		warnings.push(message);
+	}
+
+	async function _Validate()
+	{
+		validated = true;
+	}
+
+	try
+	{
+		assert.equal(owner.acquired, true);
+		await runLocalDevelopmentSession({ sessionLockPath: lockPath }, {
+			processHost,
+			validateInputs: _Validate,
+			writeWarning: _WriteWarning,
+		});
+		assert.equal(fs.existsSync(lockPath), true);
+	}
+	finally
+	{
+		owner.release();
+	}
+
+	assert.equal(validated, false);
+	assert.deepEqual(warnings, [`Tier 2 is already running for this worktree (process ${process.pid}). Use the existing terminal, or stop that command before starting another.\n`]);
 });
 
 test("terminal suspend resumes the process group, aborts children, and cleans resources", async function _SuspendCleanup()
@@ -183,7 +244,8 @@ test("terminal suspend resumes the process group, aborts children, and cleans re
 		postgresVolumeName: "postgres-volume",
 		postgresVolumeProvisionerContainerName: "postgres-volume-provisioner",
 		repositoryRoot: "/repo",
-		reset: false
+		reset: false,
+		sessionLockPath: _SessionLockPath()
 	};
 	async function _Baseline() {}
 
@@ -265,6 +327,7 @@ test("a failed PostgreSQL permission helper cleans its container without resetti
 		repositoryIdentity: "repository",
 		repositoryRoot: "/repo",
 		reset: false,
+		sessionLockPath: _SessionLockPath(),
 		worktreeIdentity: "worktree"
 	};
 	async function _Secrets()
@@ -341,7 +404,8 @@ test("a network acquisition failure removes a resource created before the operat
 		postgresVolumeProvisionerContainerName: "postgres-volume-provisioner",
 		profile: "core",
 		repositoryRoot: "/repo",
-		reset: false
+		reset: false,
+		sessionLockPath: _SessionLockPath()
 	};
 	async function _Secrets()
 	{
@@ -401,7 +465,8 @@ test("a failed startup reports both its primary error and a cleanup failure", as
 		postgresVolumeProvisionerContainerName: "postgres-volume-provisioner",
 		profile: "core",
 		repositoryRoot: "/repo",
-		reset: false
+		reset: false,
+		sessionLockPath: _SessionLockPath()
 	};
 	async function _Secrets()
 	{
@@ -459,7 +524,8 @@ test("a TLS-volume acquisition failure removes a volume created before the opera
 		postgresVolumeProvisionerContainerName: "postgres-volume-provisioner",
 		profile: "core",
 		repositoryRoot: "/repo",
-		reset: false
+		reset: false,
+		sessionLockPath: _SessionLockPath()
 	};
 	async function _Baseline() {}
 

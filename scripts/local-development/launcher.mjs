@@ -28,6 +28,7 @@ export async function runLocalDevelopmentLauncher(argumentsList, entrypointPath,
 		{
 			processHost.removeListener("SIGINT", _onInterrupt);
 			processHost.removeListener("SIGTERM", _onTerminate);
+			processHost.removeListener("SIGHUP", _onHangup);
 			processHost.removeListener("SIGTSTP", _onSuspend);
 		}
 
@@ -42,6 +43,7 @@ export async function runLocalDevelopmentLauncher(argumentsList, entrypointPath,
 
 		function _onInterrupt() { _request("SIGINT"); }
 		function _onTerminate() { _request("SIGTERM"); }
+		function _onHangup() { _request("SIGTERM"); }
 		function _onSuspend()
 		{
 			if (processHost.platform !== "win32")
@@ -54,6 +56,7 @@ export async function runLocalDevelopmentLauncher(argumentsList, entrypointPath,
 
 		processHost.on("SIGINT", _onInterrupt);
 		processHost.on("SIGTERM", _onTerminate);
+		processHost.on("SIGHUP", _onHangup);
 		processHost.on("SIGTSTP", _onSuspend);
 		child.once("error", function _rejectStart(error)
 		{
