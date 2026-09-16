@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/angular";
+import { expect, within } from "storybook/test";
 
 import { Tier2DevelopmentSessionRequiredPageComponent } from "../tier2-development-session-required-page.component";
 
@@ -14,7 +15,7 @@ const meta: Meta<Tier2DevelopmentSessionRequiredPageComponent> =
 		{
 			description:
 			{
-				component: "The Tier 2-only entry page shown when this page session has no credential from the private URL printed by its current launcher. It displays no credential and performs no authentication request."
+				component: "The Tier 2-only entry page shown when this page session has not joined its current launcher. Its same-origin link performs one user-activated handoff without displaying the credential."
 			}
 		}
 	}
@@ -25,14 +26,27 @@ export default meta;
 /** Local story type for the fixed missing-session state. */
 type Story = StoryObj<Tier2DevelopmentSessionRequiredPageComponent>;
 
-/** Desktop state for a page session that has no current launcher credential. */
+/** Assert the current-launch action stays a same-tab, same-origin handoff. */
+async function _AssertCurrentLaunchAction({ canvasElement }: { canvasElement: HTMLElement }): Promise<void>
+{
+	const canvas = within(canvasElement);
+	const action = canvas.getByRole("link", { name: "Open current Tier 2 session" });
+
+	await expect(action).toHaveAttribute("href", "/api/v1/auth/development-session");
+	await expect(action).not.toHaveAttribute("target");
+	await expect(canvasElement).not.toHaveTextContent("development-session=");
+}
+
+/** Desktop state for a page session ready to join its current launcher. */
 export const MissingBrowserSession: Story =
 {
-	tags: ["visual-test", "visual-test-full-viewport"]
+	tags: ["visual-test", "visual-test-full-viewport"],
+	play: _AssertCurrentLaunchAction
 };
 
-/** Narrow state proving that missing-session guidance fits a supported mobile viewport. */
+/** Narrow state proving that the current-launch action fits a supported mobile viewport. */
 export const MissingBrowserSessionNarrow: Story =
 {
-	tags: ["visual-test", "visual-test-full-viewport", "visual-test-narrow"]
+	tags: ["visual-test", "visual-test-full-viewport", "visual-test-narrow"],
+	play: _AssertCurrentLaunchAction
 };

@@ -1,15 +1,13 @@
 <wo-journey-shell
-	title="Open the private URL printed by the Tier 2 launcher"
+	title="Join the current Tier 2 session"
 	description="This tab has not joined the current local-development session."
 	[layout]="layout"
 >
 	<p-message journey-status severity="info" [closable]="false">
-		Tier 2 requires the private browser URL generated for this launch.
+		Continue through the current launcher before using the local application.
 	</p-message>
-	<ol class="tier2-session-help__steps">
-		<li>Keep the Tier 2 command running.</li>
-		<li>Find the line beginning <code>Open the private Tier 2 browser URL:</code> in that terminal.</li>
-		<li>Open the complete URL in this tab.</li>
-	</ol>
-	<p class="tier2-session-help__privacy">The URL changes on every launch. Do not share it.</p>
+	<p class="tier2-session-help__privacy">
+		The private browser session changes on every launch. Do not share the redirected URL.
+	</p>
+	<a pButton journey-actions class="tier2-session-help__action" href="/api/v1/auth/development-session">Open current Tier 2 session</a>
 </wo-journey-shell>

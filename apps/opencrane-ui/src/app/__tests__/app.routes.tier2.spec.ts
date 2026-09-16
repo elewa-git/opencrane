@@ -34,7 +34,7 @@ describe("Tier 2 browser entry routes", function _Tier2BrowserEntryRoutes()
 
 	it("restores the unchanged live routes after this tab consumes a private URL", async function _AdmittedSession()
 	{
-		window.history.replaceState({}, "", `/?development-session=${_CREDENTIAL}`);
+		window.history.replaceState({}, "", `/#development-session=${_CREDENTIAL}`);
 		const routes = await _routes();
 		const paths = routes.map(function _RoutePath(route) { return route.path; });
 
@@ -42,6 +42,6 @@ describe("Tier 2 browser entry routes", function _Tier2BrowserEntryRoutes()
 		expect(paths).toContain("onboarding");
 		expect(paths).toContain("chats");
 		expect(paths.at(-1)).toBe("**");
-		expect(window.location.search).toBe("");
+		expect(window.location.hash).toBe("");
 	});
 });
