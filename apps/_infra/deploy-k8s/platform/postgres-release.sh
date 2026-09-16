@@ -48,39 +48,6 @@ wait_for_postgres_resource()
   fi
 }
 
-wait_for_postgres_resource_creation()
-{
-  local resource="$1"
-  local message="$2"
-  local deadline=$((SECONDS + TIMEOUT))
-  local observed_resource
-  local command_status
-  local pause_seconds
-  local remaining
-  local request_timeout
-  while (( (remaining = deadline - SECONDS) > 0 )); do
-    request_timeout="$remaining"
-    if (( request_timeout > 30 )); then request_timeout=30; fi
-    if observed_resource="$(kubectl get "$resource" -n "$NAMESPACE" --ignore-not-found \
-      -o name --request-timeout="${request_timeout}s")"; then
-      if [[ -n "$observed_resource" ]]; then
-        return 0
-      fi
-    else
-      command_status=$?
-      err "Unable to inspect $resource while waiting for its creation."
-      return "$command_status"
-    fi
-    remaining=$((deadline - SECONDS))
-    if (( remaining <= 0 )); then break; fi
-    pause_seconds=2
-    if (( remaining < pause_seconds )); then pause_seconds="$remaining"; fi
-    sleep "$pause_seconds"
-  done
-  err "$message"
-  return 1
-}
-
 install_postgres_release()
 {
   local privileges_enabled="$1"
@@ -88,7 +55,7 @@ install_postgres_release()
   log "Reconciling PostgreSQL server…"
   helm "${POSTGRES_ARGS[@]}" || { err "PostgreSQL Helm reconciliation failed."; return 1; }
   wait_for_postgres_resource condition=Ready "cluster/${POSTGRES_RELEASE}" "PostgreSQL Cluster did not become Ready." || return $?
-  wait_for_postgres_resource_creation "deployment/${POSTGRES_RELEASE}-pooler" "PostgreSQL pooler Deployment was not created." || return $?
+  wait_for_postgres_resource create "deployment/${POSTGRES_RELEASE}-pooler" "PostgreSQL pooler Deployment was not created." || return $?
   wait_for_postgres_resource condition=available "deployment/${POSTGRES_RELEASE}-pooler" "PostgreSQL pooler Deployment did not become Available." || return $?
   wait_for_postgres_resource "jsonpath={.status.applied}=true" "database/${POSTGRES_RELEASE}-litellm" "LiteLLM database was not applied." || return $?
   if [[ "$privileges_enabled" == "true" ]]; then
