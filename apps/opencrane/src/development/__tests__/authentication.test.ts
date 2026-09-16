@@ -1,6 +1,6 @@
 import express from "express";
 import type { Logger } from "pino";
-import request from "supertest";
+import request, { type Test } from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AuthenticatedPrincipalAdmission } from "@opencrane/backend/server/infra/auth";
@@ -44,6 +44,24 @@ function _App(admission: AuthenticatedPrincipalAdmission = _Admission(), transpo
 		response.status(204).end();
 	});
 	return app;
+}
+
+/** Build a Supertest request with the headers expected from an Angular-proxied, same-origin browser click. */
+function _BrowserHandoff(app: ReturnType<typeof _App>, browserOrigin = "http://local-development.localhost:4200"): Test
+{
+	const browserHost = new URL(browserOrigin).host;
+	const headers = {
+		"Host": "127.0.0.1:8080",
+		"Referer": `${browserOrigin}/`,
+		"Sec-Fetch-Dest": "document",
+		"Sec-Fetch-Mode": "navigate",
+		"Sec-Fetch-Site": "same-origin",
+		"Sec-Fetch-User": "?1",
+		"X-Forwarded-Host": browserHost,
+	};
+	const navigation = request(app).get("/api/v1/auth/development-session").set(headers);
+
+	return navigation;
 }
 
 describe("Tier 2 development authentication", function _Suite(): void
@@ -92,6 +110,78 @@ describe("Tier 2 development authentication", function _Suite(): void
 		const refused = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "opencrane.local.opencrane.test").set("X-Forwarded-Host", "opencrane.local.opencrane.test").set("Origin", "http://opencrane.local.opencrane.test").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
 		expect(accepted.status).toBe(204);
 		expect(refused.status).toBe(403);
+	});
+
+	it("redirects a same-origin browser click to the private fragment without a response body", async function _CompletesHandoff(): Promise<void>
+	{
+		const admission = _Admission();
+		const response = await _BrowserHandoff(_App(admission));
+
+		expect(response.status).toBe(303);
+		expect(response.headers.location).toBe(`http://local-development.localhost:4200/#development-session=${_BROWSER_CREDENTIAL}`);
+		expect(response.headers["cache-control"]).toBe("no-store");
+		expect(response.headers.pragma).toBe("no-cache");
+		expect(response.headers["referrer-policy"]).toBe("no-referrer");
+		expect(response.text).toBe("");
+		expect(admission.admit).not.toHaveBeenCalled();
+	});
+
+	it("redirects only through the selected private Codespaces proxy tuple", async function _CompletesCodespacesHandoff(): Promise<void>
+	{
+		const browserOrigin = "https://careful-crane-123-4200.app.github.dev";
+		const transport: DevelopmentAuthenticationTransport = {
+			browserHost: "careful-crane-123-4200.app.github.dev",
+			browserScheme: "https",
+			directHost: "local-development.localhost:8080",
+			proxyTargets: new Set(["127.0.0.1:8080", "localhost:8080"]),
+			scheme: "http",
+		};
+		const response = await _BrowserHandoff(_App(_Admission(), transport), browserOrigin);
+
+		expect(response.status).toBe(303);
+		expect(response.headers.location).toBe(`${browserOrigin}/#development-session=${_BROWSER_CREDENTIAL}`);
+	});
+
+	it("refuses a handoff from another host or browser origin", async function _RejectsHandoffOrigin(): Promise<void>
+	{
+		const wrongHost = await _BrowserHandoff(_App()).set("X-Forwarded-Host", "other.localhost:4200");
+		const wrongReferer = await _BrowserHandoff(_App()).set("Referer", "http://attacker.localhost:4200/");
+
+		expect(wrongHost.status).toBe(403);
+		expect(wrongReferer.status).toBe(403);
+	});
+
+	it("refuses scripted, embedded or non-user-activated handoff requests", async function _RejectsNonUserNavigation(): Promise<void>
+	{
+		const scripted = await _BrowserHandoff(_App()).set("Sec-Fetch-Mode", "cors");
+		const embedded = await _BrowserHandoff(_App()).set("Sec-Fetch-Dest", "iframe");
+		const crossSite = await _BrowserHandoff(_App()).set("Sec-Fetch-Site", "cross-site");
+		const noActivation = await _BrowserHandoff(_App()).unset("Sec-Fetch-User");
+		const direct = await _BrowserHandoff(_App()).unset("Referer");
+
+		expect(scripted.status).toBe(403);
+		expect(embedded.status).toBe(403);
+		expect(crossSite.status).toBe(403);
+		expect(noActivation.status).toBe(403);
+		expect(direct.status).toBe(403);
+	});
+
+	it("refuses non-GET methods before the development authentication router", async function _RejectsHandoffMethod(): Promise<void>
+	{
+		const headers = {
+			"Host": "127.0.0.1:8080",
+			"Referer": "http://local-development.localhost:4200/",
+			"Sec-Fetch-Dest": "document",
+			"Sec-Fetch-Mode": "navigate",
+			"Sec-Fetch-Site": "same-origin",
+			"Sec-Fetch-User": "?1",
+			"X-Forwarded-Host": "local-development.localhost:4200",
+		};
+		const post = await request(_App()).post("/api/v1/auth/development-session").set(headers);
+		const head = await request(_App()).head("/api/v1/auth/development-session").set(headers);
+
+		expect(post.status).toBe(403);
+		expect(head.status).toBe(403);
 	});
 
 	it("admits only the selected private HTTPS Codespaces proxy tuple", async function _CodespacesProxy(): Promise<void>

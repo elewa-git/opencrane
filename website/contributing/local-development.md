@@ -119,14 +119,13 @@ npm run dev:tier2
 The coordinator binds the browser to `http://local-development.localhost:4200`, proxies only
 `/api/v1` to the loopback server and seeds one fixed development identity. It prints a private URL
 with a new browser-session credential on every launch. Open that exact URL: the Tier 2 build removes
-the credential from the address bar, retains it in that browser tab, and sends it only to same-origin
-product API routes. If you first open the plain Tier 2 address in a fresh tab, the frontend shows
-**Open the private URL printed by the Tier 2 launcher** instead of sending you to a backend JSON
-error. Return to the running terminal and open its complete private URL in that tab. The plain
-address then loads the normal application in the same tab. An independently opened fresh tab still
-needs the private URL because the credential is kept in browser session storage rather than durable
-shared storage. A same-origin tab created with an opener can inherit a copy of that storage. An old
-tab cannot authenticate a later launch.
+the credential fragment from the address bar, retains it in that browser tab, and sends it only to
+same-origin product API routes. If you first open the plain Tier 2 address in a fresh tab, select
+**Open current Tier 2 session**. That same-origin browser action redirects the current tab through
+the development-only handoff to the private URL; it does not expose the credential as page text or a
+general API response. An independently opened fresh tab still needs this handoff because the
+credential is kept in browser session storage rather than durable shared storage. A same-origin tab
+created with an opener can inherit a copy of that storage. An old tab cannot authenticate a later launch.
 On a workstation, the browser
 uses `local-development.localhost`; in Codespaces, it uses the one private HTTPS port-forwarding
 host described below. The server does not mount the

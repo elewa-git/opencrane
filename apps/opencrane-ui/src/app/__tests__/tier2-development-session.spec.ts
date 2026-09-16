@@ -23,14 +23,14 @@ beforeEach(function _ResetBrowserState()
 
 describe("Tier 2 browser development session", function _Tier2DevelopmentSessionSuite()
 {
-	it("keeps a supplied credential in this tab and removes only its query value", async function _ConsumePrivateUrl()
+	it("keeps a supplied credential in this tab and removes its URL fragment", async function _ConsumePrivateUrl()
 	{
-		window.history.replaceState({}, "", `/?view=onboarding&development-session=${_CREDENTIAL}#question`);
+		window.history.replaceState({}, "", `/?view=onboarding#development-session=${_CREDENTIAL}`);
 
 		await expect(_credential()).resolves.toBe(_CREDENTIAL);
 		expect(window.location.pathname).toBe("/");
 		expect(window.location.search).toBe("?view=onboarding");
-		expect(window.location.hash).toBe("#question");
+		expect(window.location.hash).toBe("");
 		expect(window.sessionStorage.getItem("opencrane.tier2.development-session")).toBe(_CREDENTIAL);
 	});
 
@@ -45,10 +45,10 @@ describe("Tier 2 browser development session", function _Tier2DevelopmentSession
 	{
 		window.sessionStorage.setItem("opencrane.tier2.development-session", _CREDENTIAL);
 		window.localStorage.setItem("opencrane.tier2.development-session", _CREDENTIAL);
-		window.history.replaceState({}, "", "/?development-session=not-a-launch-credential");
+		window.history.replaceState({}, "", "/#development-session=not-a-launch-credential&unexpected=value");
 
 		await expect(_credential()).resolves.toBeNull();
-		expect(window.location.search).toBe("");
+		expect(window.location.hash).toBe("");
 		expect(window.sessionStorage.getItem("opencrane.tier2.development-session")).toBeNull();
 		expect(window.localStorage.getItem("opencrane.tier2.development-session")).toBe(_CREDENTIAL);
 	});

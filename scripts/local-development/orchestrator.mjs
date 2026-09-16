@@ -219,7 +219,7 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 		}
 
 		process.stdout.write(`Starting Tier 2 ${sessionConfiguration.developmentProfile}${provider ? ` with ${provider.selection.provider.name}/${provider.selection.model}` : ""}\n`);
-		process.stdout.write(`Open the private Tier 2 browser URL: ${sessionConfiguration.browserOrigin}/?development-session=${encodeURIComponent(secrets.browserSessionCredential)}\n`);
+		process.stdout.write(`Open the private Tier 2 browser URL: ${sessionConfiguration.browserOrigin}/#development-session=${encodeURIComponent(secrets.browserSessionCredential)}\n`);
 		browserSessionPublished = true;
 		await operations.runDevelopmentProcesses(createApplicationCommands(sessionConfiguration, secrets), sessionConfiguration.repositoryRoot, { signal: shutdown.signal });
 	}
