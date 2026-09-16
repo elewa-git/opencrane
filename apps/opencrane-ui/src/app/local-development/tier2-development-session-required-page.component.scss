@@ -1,0 +1,27 @@
+:host {
+	display: block;
+	min-height: 100%;
+}
+
+.tier2-session-help {
+	&__steps {
+		display: grid;
+		gap: var(--oc-space-3);
+		margin: 0;
+		padding-inline-start: var(--oc-space-6);
+		color: var(--oc-ink-strong);
+		line-height: 1.6;
+	}
+
+	&__privacy {
+		margin: var(--oc-space-5) 0 0;
+		color: var(--oc-ink-muted);
+		font-size: var(--oc-text-sm);
+		line-height: 1.5;
+	}
+}
+
+code {
+	font-family: var(--oc-font-mono);
+	font-size: var(--oc-text-sm);
+}

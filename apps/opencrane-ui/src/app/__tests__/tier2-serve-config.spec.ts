@@ -58,5 +58,28 @@ describe("Tier 2 live-gateway serve configuration", function _Tier2ServeConfigur
 			replace: "apps/opencrane-ui/src/app/http-profile.provider.ts",
 			with: "apps/opencrane-ui/src/app/http-profile.provider.tier2.ts",
 		});
+		expect(tier2Build.fileReplacements).toContainEqual({
+			replace: "apps/opencrane-ui/src/app/app.routes.ts",
+			with: "apps/opencrane-ui/src/app/app.routes.tier2.ts",
+		});
+		for (const configuration of ["production", "development", "development-live"])
+		{
+			const replacements = (project as unknown as {
+				targets: {
+					build: {
+						configurations: Record<string, {
+							fileReplacements?: Array<{
+								replace: string;
+								with: string;
+							}>;
+						}>;
+					};
+				};
+			}).targets.build.configurations[configuration]?.fileReplacements ?? [];
+			expect(replacements).not.toContainEqual({
+				replace: "apps/opencrane-ui/src/app/app.routes.ts",
+				with: "apps/opencrane-ui/src/app/app.routes.tier2.ts",
+			});
+		}
 	});
 });

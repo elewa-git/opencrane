@@ -171,6 +171,10 @@
 						{
 							"replace": "apps/opencrane-ui/src/app/http-profile.provider.ts",
 							"with": "apps/opencrane-ui/src/app/http-profile.provider.tier2.ts"
+						},
+						{
+							"replace": "apps/opencrane-ui/src/app/app.routes.ts",
+							"with": "apps/opencrane-ui/src/app/app.routes.tier2.ts"
 						}
 					]
 				}
