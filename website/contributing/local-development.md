@@ -116,20 +116,27 @@ Start the core application profile:
 npm run dev:tier2
 ```
 
+The launcher prints the browser address without the session credential:
+
+```text
+Tier 2 browser: http://local-development.localhost:4200/
+Select "Open current Tier 2 session" when the page loads.
+```
+
 The coordinator binds the browser to `http://local-development.localhost:4200`, proxies only
-`/api/v1` to the loopback server and seeds one fixed development identity. It prints a private URL
-with a new browser-session credential on every launch. Open that exact URL: the Tier 2 build removes
-the credential fragment from the address bar, retains it in that browser tab, and sends it only to
-same-origin product API routes. If you first open the plain Tier 2 address in a fresh tab, select
-**Open current Tier 2 session**. That same-origin browser action redirects the current tab through
-the development-only handoff to the private URL; it does not expose the credential as page text or a
-general API response. An independently opened fresh tab still needs this handoff because the
-credential is kept in browser session storage rather than durable shared storage. A same-origin tab
-created with an opener can inherit a copy of that storage. An old tab cannot authenticate a later launch.
-On a workstation, the browser
-uses `local-development.localhost`; in Codespaces, it uses the one private HTTPS port-forwarding
-host described below. The server does not mount the
-production Kubernetes workload listener or accept a non-loopback PostgreSQL server.
+`/api/v1` to the loopback server and seeds one fixed development identity. It prints the safe Tier 2
+browser address without its per-launch credential. Open that address and select **Open current Tier
+2 session**. That same-origin browser action redirects the current tab through the development-only
+handoff, and the Tier 2 build removes the credential fragment from the address bar, retains it in
+that browser tab and sends it only to same-origin product API routes. The launcher never writes the
+credential or its private fragment URL to terminal output, page text or a general API response.
+
+An independently opened fresh tab still needs the button because the credential is kept in browser
+session storage rather than durable shared storage. A same-origin tab created with an opener can
+inherit a copy of that storage. An old tab cannot authenticate a later launch. On a workstation, the
+browser uses `local-development.localhost`; in Codespaces, it uses the one private HTTPS
+port-forwarding host described below. The server does not mount the production Kubernetes workload
+listener or accept a non-loopback PostgreSQL server.
 
 Use an Agent profile when the change needs one current Conversation Computer:
 
@@ -159,11 +166,11 @@ forwards only browser port 4200. Check the Architecture line in `docker info` re
 or `x86_64`, then run the same core or Agent command above without an emulation flag.
 
 Keep the forwarded 4200 port **private** in the Codespaces Ports view. The launcher derives one
-HTTPS browser URL from the Codespace's forwarding variables and prints a fresh per-launch credential
-in it. Open that exact URL after GitHub authenticates access to the private port. The UI accepts
-only that Codespace hostname, and the server rejects other forwarded hosts or state-changing
-origins. Do not make the port public to work around a browser or proxy error; neither the backend
-nor the database/model ports should be forwarded.
+HTTPS browser address from the Codespace's forwarding variables and prints it without the
+per-launch credential. Open that address after GitHub authenticates access to the private port, then
+select **Open current Tier 2 session**. The UI accepts only that Codespace hostname, and the server
+rejects other forwarded hosts or state-changing origins. Do not make the port public to work around
+a browser or proxy error; neither the backend nor the database/model ports should be forwarded.
 
 On an ARM64 workstation, opt in to Docker's AMD64 emulation instead:
 

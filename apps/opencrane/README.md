@@ -139,7 +139,9 @@ its resources to the lifecycle owner.
   membership to the seed's silo and OIDC issuer with a five-minute evidence lifetime. A
   development-only browser handoff accepts only a user-activated, same-origin top-level navigation
   through the exact Angular proxy and redirects it to the current credential fragment without
-  serializing that credential into a response body. The shared
+  serializing that credential into a response body. The launcher prints only the safe browser
+  address; the frontend button initiates this handoff without writing the credential-bearing URL to
+  terminal output. The shared
   production membership reader still requires an explicit deployment mode and has no fallback.
   Tier 2 has no ArtifactStore service, scanner or mounted artifact keys, so it omits conversation-file
   byte routes and the unused upload gateway. The read-only personal asset metadata catalogue remains;
