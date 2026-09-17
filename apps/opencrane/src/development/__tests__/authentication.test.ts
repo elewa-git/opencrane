@@ -259,6 +259,13 @@ describe("Tier 2 development authentication", function _Suite(): void
 	it("admits the Codespaces loopback Origin rewrite only with matching external browser evidence", async function _CodespacesOriginRewrite(): Promise<void>
 	{
 		const browserOrigin = "https://careful-crane-123-4200.app.github.dev";
+		const transport: DevelopmentAuthenticationTransport = {
+			browserHost: "careful-crane-123-4200.app.github.dev",
+			browserScheme: "https",
+			directHost: "local-development.localhost:8080",
+			proxyTargets: new Set(["127.0.0.1:8080", "localhost:8080"]),
+			scheme: "http",
+		};
 		const proxyHeaders = {
 			"Host": "127.0.0.1:8080",
 			"Origin": "https://localhost:4200",
@@ -267,16 +274,30 @@ describe("Tier 2 development authentication", function _Suite(): void
 			"X-Forwarded-Host": "careful-crane-123-4200.app.github.dev",
 			"X-OpenCrane-Development-Session": _BROWSER_CREDENTIAL,
 		};
-		const accepted = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set(proxyHeaders);
-		const missingReferer = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set(proxyHeaders).unset("Referer");
-		const wrongReferer = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set(proxyHeaders).set("Referer", "https://attacker.example/");
-		const malformedReferer = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set(proxyHeaders).set("Referer", "not-a-url");
-		const crossSite = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set(proxyHeaders).set("Sec-Fetch-Site", "cross-site");
-		const missingFetchMetadata = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set(proxyHeaders).unset("Sec-Fetch-Site");
-		const wrongRewrite = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set(proxyHeaders).set("Origin", "http://localhost:4200");
+		const accepted = await request(_App(_Admission(), transport)).post("/api/v1/protected").set(proxyHeaders);
+		const missingReferer = await request(_App(_Admission(), transport)).post("/api/v1/protected").set(proxyHeaders).unset("Referer");
+		const wrongReferer = await request(_App(_Admission(), transport)).post("/api/v1/protected").set(proxyHeaders).set("Referer", "https://attacker.example/");
+		const malformedReferer = await request(_App(_Admission(), transport)).post("/api/v1/protected").set(proxyHeaders).set("Referer", "not-a-url");
+		const crossSite = await request(_App(_Admission(), transport)).post("/api/v1/protected").set(proxyHeaders).set("Sec-Fetch-Site", "cross-site");
+		const missingFetchMetadata = await request(_App(_Admission(), transport)).post("/api/v1/protected").set(proxyHeaders).unset("Sec-Fetch-Site");
+		const wrongRewrite = await request(_App(_Admission(), transport)).post("/api/v1/protected").set(proxyHeaders).set("Origin", "http://localhost:4200");
 		const deniedAdmission = _Admission();
-		const wrongInternalHost = await request(_App(deniedAdmission, browserOrigin)).post("/api/v1/protected").set(proxyHeaders).set("Host", "127.0.0.1:9090");
-		const wrongCredential = await request(_App(deniedAdmission, browserOrigin)).post("/api/v1/protected").set(proxyHeaders).set("X-OpenCrane-Development-Session", "b".repeat(43));
+		const wrongInternalHost = await request(_App(deniedAdmission, transport)).post("/api/v1/protected").set(proxyHeaders).set("Host", "127.0.0.1:9090");
+		const wrongCredential = await request(_App(deniedAdmission, transport)).post("/api/v1/protected").set(proxyHeaders).set("X-OpenCrane-Development-Session", "b".repeat(43));
+		const tier3Host = "opencrane.local.opencrane.test";
+		const tier3Transport: DevelopmentAuthenticationTransport = {
+			browserHost: tier3Host,
+			directHost: tier3Host,
+			proxyTargets: new Set([tier3Host]),
+			scheme: "https",
+		};
+		const tier3Headers = {
+			...proxyHeaders,
+			"Host": tier3Host,
+			"Referer": `https://${tier3Host}/onboarding`,
+			"X-Forwarded-Host": tier3Host,
+		};
+		const tier3Rewrite = await request(_App(_Admission(), tier3Transport)).post("/api/v1/protected").set(tier3Headers);
 
 		expect(accepted.status).toBe(204);
 		expect(missingReferer.status).toBe(403);
@@ -289,6 +310,7 @@ describe("Tier 2 development authentication", function _Suite(): void
 		expect(wrongInternalHost.body.code).toBe("DEVELOPMENT_HOST_MISMATCH");
 		expect(wrongCredential.status).toBe(401);
 		expect(wrongCredential.body.code).toBe("DEVELOPMENT_SESSION_REQUIRED");
+		expect(tier3Rewrite.status).toBe(403);
 		expect(deniedAdmission.admit).not.toHaveBeenCalled();
 	});
 

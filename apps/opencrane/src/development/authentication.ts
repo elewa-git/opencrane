@@ -96,12 +96,14 @@ function _ReportedOrigin(value: string | undefined): string | null | undefined
  * Accepts the Codespaces loopback `Origin` only on a forwarded HTTPS browser request whose
  * `Referer` matches the expected external origin and whose `Sec-Fetch-Site` reports `same-origin`.
  */
-function _HasExpectedCodespacesOriginRewrite(request: Request, origin: string, expected: string): boolean
+function _HasExpectedCodespacesOriginRewrite(request: Request, origin: string, expected: string, transport: DevelopmentAuthenticationTransport): boolean
 {
 	const referer = request.get("referer");
 
 	return (
 		typeof request.headers["x-forwarded-host"] === "string"
+		&& transport.browserScheme === "https"
+		&& transport.scheme === "http"
 		&& expected.startsWith("https://")
 		&& _MatchesExpectedOrigin(origin, _CODESPACES_REWRITTEN_ORIGIN)
 		&& referer !== undefined
@@ -132,7 +134,7 @@ function _HasExpectedOrigin(request: Request, transport: DevelopmentAuthenticati
 		if (_MatchesExpectedOrigin(origin, expected))
 			return true;
 
-		return _HasExpectedCodespacesOriginRewrite(request, origin, expected);
+		return _HasExpectedCodespacesOriginRewrite(request, origin, expected, transport);
 	}
 	const referer = request.get("referer");
 
