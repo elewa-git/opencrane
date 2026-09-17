@@ -50,7 +50,8 @@ input remain unchanged until the final answer.
 Each reservation consumes its gateway request across competing callers and restarts. The server
 saves the encrypted answer and complete event intent before appending conversation history; recovery
 finishes that same answer. An unsaved response reports pending until its fixed deadline, then
-unavailable without another paid dispatch. The run remains pending for future recovery controls.
+unavailable without another paid dispatch. Once that deadline passes, the server revokes the attempt
+key, records a terminal runtime failure and releases the active turn so a later human message can run.
 This bounds OpenCrane's admitted requests; LiteLLM and provider-internal retries have not been
 qualified as exactly-once execution. The continuation implementation in PR #830 awaits CI and live
 qualification; it does not complete the first permitted retrieval journey.
@@ -166,7 +167,8 @@ membership expiry, current permission and active lease. It saves the smaller of 
 and run completion-token ceilings, and a dispatch deadline no later than 25 seconds or the remaining
 authority. Credential issuance and the HTTP exchange share that deadline; the process's private request
 allows 30 seconds. An unavailable response keeps the reservation instead of issuing a replacement
-allowance or key on bootstrap. Grant revocation closes new model dispatch, output append and
+allowance or key on bootstrap; terminal cleanup then retains that reservation as proof that the
+request must not be retried. Grant revocation closes new model dispatch, output append and
 participant reads; it does not prove cancellation of a request already accepted by the provider.
 
 Attempt-key issuance uses the configured silo authority independently of the realization's runtime identity.
@@ -176,9 +178,13 @@ provider cleanup both fail, the custodied row remains decryptable for a later cl
 Before appending assistant history, the turn store saves the complete prepared event: its author,
 timestamp, position, metadata and encrypted payload reference. This intent contains no answer text
 or credential. Concurrent preparation returns the stored winner, including its original timestamp.
-After a restart, the server recovers that exact answer for the current process, completes the fenced run,
-revokes its model key and settles the active-turn pointer before another turn starts. Saved-output
-recovery runs before recompiling current history, which may already contain the accepted answer.
+After a restart, the server recovers that exact answer, completes the fenced run, revokes its model
+key and settles the active-turn pointer before another turn starts. Lease-loss cleanup claims the
+next private protocol position; if a concurrent model step advances first, cleanup reloads that winner
+and repeats until either unavailable or output is durable. A saved answer wins unchanged and can be
+appended by server-owned recovery without renewing the lost process lease; otherwise cleanup records
+unavailable before it fails the run. Saved-output recovery runs before recompiling current history,
+which may already contain the accepted answer.
 Reusing an output identifier with different text is refused by the encrypted payload owner. The
 private manual-output route is removed; output admission requires the winning server model reservation.
 
@@ -190,8 +196,10 @@ requested audience through a current visibility policy, rejects an attestation f
 and enforces byte and rate limits during preparation. Recovery reads only the frozen next position
 and requires the complete stored event to match; an event identifier alone cannot prove acceptance.
 An empty position still requires current visibility and the original lease/run/input fence before
-append. A matching answer can finish bookkeeping without recompiling input that its own append
-already advanced. The turn coordinator verifies the current process and lease before either path.
+the turn may elect an output. After that durable election, lifecycle recovery may append only the
+exact saved event when its process lease has already ended. A matching answer can finish bookkeeping
+without recompiling input that its own append already advanced. The ordinary request path verifies
+the current process and lease before preparing or electing output.
 The writer cannot select another stream or append a second distinct entry. A different event,
 unavailable history, or a replaced lease leaves the turn unresolved.
 
@@ -327,8 +335,10 @@ shared group-child journey and its durable recovery worker. The public routes ar
   participant message admission without a relational transcript fallback.
 - Its optional public `GET /me/conversations/:conversationId/events` route streams authorized history
   pages over same-origin server-sent events (SSE). Each page rechecks current Read permission and the participant's
-  `visibleFromPosition`; private payloads are resolved only after those checks. `Last-Event-ID`
-  resumes after an immutable stream revision, including cursor progress over hidden entries.
+  `visibleFromPosition`; private payloads are resolved only after those checks. The origin check uses
+  the request protocol and the first host supplied by the trusted proxy hop, falling back to the direct
+  `Host` header. Cross-origin fetch metadata, origins and referrers remain denied before history is read.
+  `Last-Event-ID` resumes after an immutable stream revision, including cursor progress over hidden entries.
   Disconnect closes both catch-up reads and the wakeup subscription. The existing full-history
   response keeps its finite full-scan behavior; this event transport does not make that API paged.
 - Event connections last at most 60 seconds, close after 30 seconds without new history, and refresh

@@ -144,10 +144,12 @@ export interface FrozenConversationComputerTurn extends ConversationComputerTurn
 	readonly continuationReservation: ConversationComputerContinuationReservation | null;
 	/** Consumes the first model allowance across retries and process restarts. */
 	readonly modelReservation: ConversationComputerModelReservation | null;
+	/** True when deadline or lease-loss cleanup won the next durable protocol position before output. */
+	readonly unavailable: boolean;
 }
 
 /** Stores a frozen turn with flat lease coordinates and a string stream revision. */
-export type StoredFrozenConversationComputerTurn = Omit<FrozenConversationComputerTurn, "lease" | "binding" | "outputSourceCommandId" | "outputReceipt" | "toolSelection" | "continuationReservation" | "modelReservation"> & {
+export type StoredFrozenConversationComputerTurn = Omit<FrozenConversationComputerTurn, "lease" | "binding" | "outputSourceCommandId" | "outputReceipt" | "toolSelection" | "continuationReservation" | "modelReservation" | "unavailable"> & {
 	readonly generation: number;
 	readonly leaseId: string;
 	readonly realization: FrozenConversationComputerTurn["lease"]["realization"];
@@ -240,13 +242,15 @@ export interface ConversationComputerTurnStore
 	loadActive(command: ConversationComputerLeaseCoordinates): Promise<FrozenConversationComputerTurn | null>;
 	/** Appends the output receipt, or recognizes the same receipt on an uncertain retry. */
 	markOutput(bootstrapId: string, receipt: ConversationComputerTurnOutputReceipt): Promise<ConversationComputerOutputDecision>;
+	/** Claims the next protocol position for unavailable, following concurrent progress to a terminal winner. */
+	markUnavailable(bootstrapId: string): Promise<FrozenConversationComputerTurn>;
 	/** Reserves a proposal against the same turn revision as model dispatch, before database admission. */
 	selectTool(bootstrapId: string, selection: ConversationComputerToolSelection): Promise<void>;
 	/** Reserve the final request after exact result custody; only the live winner may send. */
 	reserveContinuation(bootstrapId: string, reservation: ConversationComputerContinuationReservation): Promise<boolean>;
 	/** Return true only when this call stored and read back its fresh model fence; false never permits dispatch. */
 	reserveModel(bootstrapId: string, reservation: ConversationComputerModelReservation): Promise<boolean>;
-	/** Releases the lease's active-turn pointer after run completion and credential revocation. */
+	/** Releases the lease's active-turn pointer after run completion or terminal failure and credential revocation. */
 	settle(turn: FrozenConversationComputerTurn): Promise<void>;
 }
 
@@ -365,6 +369,8 @@ export interface ConversationComputerRunLifecycle
 	start(command: ConversationComputerRunLifecycleCommand): Promise<void>;
 	/** Records success after the assistant output and its receipt are durable. */
 	complete(command: ConversationComputerRunLifecycleCommand): Promise<void>;
+	/** Records terminal runtime failure once a reserved answer can no longer arrive. */
+	fail(command: ConversationComputerRunLifecycleCommand): Promise<void>;
 }
 
 /** Mints and revokes raw provider-gateway keys behind encrypted retry custody. */

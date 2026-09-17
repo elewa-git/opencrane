@@ -65,7 +65,7 @@ async function _savedTurn(reserve: boolean)
 			digest: _DIGEST,
 		},
 		latestPendingEntryId: "input-1", modelAlias: "model-1", maximumBudgetUsd: 1, credentialLifetimeSeconds: 60,
-		modelReservation: null, toolSelection: null, continuationReservation: null, outputReceipt: null, outputSourceCommandId: null,
+		modelReservation: null, toolSelection: null, continuationReservation: null, outputReceipt: null, outputSourceCommandId: null, unavailable: false,
 	};
 	await store.createOrRead(frozen);
 	const first = { ordinal: 1 as const, tools: ConversationModelToolModes.Select, compiledInputDigest: _DIGEST, maxCompletionTokens: 100, authorityExpiresAtEpochMs: _NOW.getTime() + 60_000, dispatchDeadlineEpochMs: _NOW.getTime() + 25_000 };

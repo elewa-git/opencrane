@@ -113,6 +113,7 @@ function _Harness(
   const authorization = _ConversationAuthorizationFixture();
   const transaction = {
     ...authorization,
+	agentRun: { findUnique: vi.fn().mockResolvedValue(null) },
     conversationChildRequest: { findUnique: vi.fn().mockResolvedValue(null) },
     conversation: {
       update: vi.fn().mockResolvedValue({ id: "conversation-1" }),
@@ -296,6 +297,13 @@ describe("PrismaConversationComputerTurnUnitOfWork", function _PrismaConversatio
         orderedMessageIds: ["31c1f1dc-0010-4f13-9c2f-d3841ffd6651"],
       },
     });
+  });
+
+  it("does not readmit a human entry whose earlier run ended", async function _SkipsTerminalEntry() {
+    const harness = _Harness();
+    harness.transaction.agentRun.findUnique.mockResolvedValue({ state: "Failed" });
+    await expect(harness.authority.compile(_COMMAND)).resolves.toBeNull();
+    expect(harness.admission.admit).not.toHaveBeenCalled();
   });
 
   it("fails closed when the application-owned admission port rejects the run", async function _AdmissionDenied() {

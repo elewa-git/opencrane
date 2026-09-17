@@ -1,6 +1,6 @@
 import { PrismaGroupChildAccessRepository } from "./prisma-group-child-access-repository";
 import { createHash } from "node:crypto";
-import { AgentRevisionState, AgentServiceState, ConversationLifecycle, OrgMemberStatus, Prisma, type PrismaClient } from "@prisma/client";
+import { AgentRevisionState, AgentRunState, AgentServiceState, ConversationLifecycle, OrgMemberStatus, Prisma, type PrismaClient } from "@prisma/client";
 import { ProductAuthorizationActions } from "@opencrane/models/authorization";
 import { ConversationAuthorKinds, ConversationEntryKinds, MessageStates, type MessageEntry } from "@opencrane/contracts";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
@@ -64,6 +64,9 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 			return { principal, service: conversation.service, revision };
 		})();
 		const runId = _Uuid("turn", pending.id);
+		const terminal = await this.prisma.agentRun.findUnique({ where: { siloId_requestIdempotencyKey: { siloId, requestIdempotencyKey: pending.id } }, select: { state: true } });
+		if (terminal?.state === AgentRunState.Completed || terminal?.state === AgentRunState.Failed)
+			return null;
 		const admissionCommand: ConversationComputerRunAdmissionCommand = { runId, computer: command.computer, agent: { agentServiceId: loaded.service.id, agentRevisionId: loaded.revision.id, profileRevisionId: command.profileRevisionId }, lease: command.lease, requesterPrincipalId: loaded.principal.id, requesterIssuer: loaded.principal.issuer, requesterSubjectId: loaded.principal.subject, requesterAuthenticatedAt: pendingAuthor.authenticatedAt, requestIdempotencyKey: pending.id, messageInput: { mode: "pre_persisted_history" as const, messageId: pending.id, historyRevision: expectedRevision.toString(), orderedMessageIds: messages.map(message => message.id) } };
 		const admitted = await this.runAdmission.admit(admissionCommand);
 		const compiledInput = admitted.compiledInput;

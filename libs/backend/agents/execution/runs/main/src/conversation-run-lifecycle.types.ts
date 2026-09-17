@@ -41,6 +41,8 @@ export interface ConversationRunLifecycleRepository
 	 * @throws When the attempt, lease fence, or current state does not match the transition.
 	 */
 	transition(command: ConversationRunLifecycleCommand, from: string, to: string, terminal: boolean): Promise<void>;
+	/** Mark the exact accepted or running attempt as a terminal runtime failure. */
+	fail(command: ConversationRunLifecycleCommand): Promise<void>;
 }
 
 /**
@@ -64,4 +66,10 @@ export interface ConversationRunLifecycleAuthority
 	 * @throws When the admitted attempt is absent, no longer Running, or bound to another lease.
 	 */
 	complete(command: ConversationRunLifecycleCommand): Promise<void>;
+	/**
+	 * Record that an accepted or running attempt can no longer produce an answer.
+	 * @param command - Fence copied from the admitted execution subject.
+	 * @throws When the admitted attempt is absent, already completed, or bound to another lease.
+	 */
+	fail(command: ConversationRunLifecycleCommand): Promise<void>;
 }

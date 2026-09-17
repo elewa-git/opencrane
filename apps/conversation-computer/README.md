@@ -38,9 +38,10 @@ original call and token budgets, tool selection, result continuation and convers
 receives none of those inputs or credentials and has no direct tool-proposal or output route.
 
 Pending work polls bootstrap at the normal two-second cadence. A `response_unavailable` or
-`authority_ended` model outcome keeps readiness degraded while the process polls for recovery; it
-does not resubmit that bootstrap's model step. Bootstrap also preserves `response_unavailable` after
-a process restart. Private HTTP requests allow 30 seconds, covering the server's 25-second model
+`authority_ended` model outcome keeps readiness degraded for that poll; it does not resubmit that
+bootstrap's model step. The server terminalizes and releases an unavailable turn after revoking its
+attempt key, so the next poll can become idle or admit a later human message. Private HTTP requests
+allow 30 seconds, covering the server's 25-second model
 dispatch deadline. The server may use one permitted tool result for a second, text-only request;
 the worker neither chooses that request nor acquires a fresh model allowance. This continuation is
 implemented in PR #830 and awaits CI and live qualification. Visible tool progress,

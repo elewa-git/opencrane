@@ -168,7 +168,7 @@ function _CreateDevelopmentConversationComputer(config: DevelopmentConfig, prism
 	});
 
 	return new DevelopmentConversationComputerRuntime(
-		function _StartLifecycle() { return _StartDevelopmentConversationComputerLifecycle(prisma, history, owner.realizer, config.identity.siloId, profile); },
+		function _StartLifecycle() { return _StartDevelopmentConversationComputerLifecycle(prisma, history, owner.realizer, credentials, config.identity.siloId, profile); },
 		function _StartActivations() { return _StartConversationComputerActivationConsumer(prisma, history, config.identity.siloId, profile, owner.realizer); },
 		supervisor,
 	);

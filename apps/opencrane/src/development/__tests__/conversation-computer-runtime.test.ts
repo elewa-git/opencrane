@@ -1,8 +1,10 @@
 import { EventEmitter } from "node:events";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 
 import { DevelopmentConversationComputerRuntime } from "../conversation-computer-runtime";
+import { _ResolveDevelopmentConversationComputerTurn } from "../conversation-computer-lifecycle";
 import { _StartDevelopmentServer } from "../lifecycle";
 
 /** Creates one idempotent worker handle around a controlled stop function. */
@@ -141,6 +143,71 @@ describe("Tier 2 conversation-computer startup order", function _Suite(): void
 		expect(activationStop).toHaveBeenCalledOnce();
 		expect(lifecycleStop).toHaveBeenCalledOnce();
 		expect(listenerStop).toHaveBeenCalledOnce();
+	});
+
+	it("preserves each worker receiver while stopping the runtime", async function _PreservesWorkerReceivers(): Promise<void>
+	{
+		class _Worker
+		{
+			public stopped = false;
+
+			public async stop(): Promise<void>
+			{
+				this.stopped = true;
+			}
+		}
+
+		const lifecycle = new _Worker();
+		const activations = new _Worker();
+		const listener = { start: vi.fn().mockResolvedValue(_Handle()), stop: vi.fn().mockResolvedValue(undefined) };
+		const runtime = new DevelopmentConversationComputerRuntime(
+			async function _Lifecycle() { return lifecycle; },
+			async function _Activations() { return activations; },
+			listener as never,
+		);
+		const handle = await runtime.start();
+
+		await handle.stop();
+		expect(activations.stopped).toBe(true);
+		expect(lifecycle.stopped).toBe(true);
+		expect(listener.stop).toHaveBeenCalledOnce();
+	});
+
+	it("completes the durable output that wins while lease-loss cleanup is deciding", async function _RecoversConcurrentOutput(): Promise<void>
+	{
+		const turn = {
+			bootstrapId: "bootstrap-1",
+			siloId: "silo-1",
+			computerId: "computer-1",
+			compile: { runId: "run-1", attempt: 1 },
+			lease: { leaseId: "lease-1", leaseGeneration: 1 },
+			modelReservation: null,
+			continuationReservation: null,
+			toolSelection: null,
+			outputReceipt: null,
+		} as FrozenConversationComputerTurn;
+		let outputWins = function _MissingOutputWinner(_winner: FrozenConversationComputerTurn): void
+		{
+			throw new Error("Lease-loss cleanup did not reach its durable decision");
+		};
+		const decision = new Promise<FrozenConversationComputerTurn>(function _Decision(resolve): void { outputWins = resolve; });
+		const store = {
+			markUnavailable: vi.fn().mockReturnValue(decision),
+			recoverOutput: vi.fn().mockResolvedValue(undefined),
+			settle: vi.fn().mockResolvedValue(undefined),
+		};
+		const runs = { complete: vi.fn().mockResolvedValue(undefined), fail: vi.fn().mockResolvedValue(undefined) };
+		const credentials = { revoke: vi.fn().mockResolvedValue(undefined) };
+		const resolving = _ResolveDevelopmentConversationComputerTurn(turn, store, runs, credentials);
+		await vi.waitFor(function _CleanupEntered(): void { expect(store.markUnavailable).toHaveBeenCalledOnce(); });
+		const winner = { ...turn, outputReceipt: { event: { id: "answer-1" } } } as FrozenConversationComputerTurn;
+		outputWins(winner);
+		await resolving;
+		expect(store.recoverOutput).toHaveBeenCalledWith(winner);
+		expect(runs.complete).toHaveBeenCalledOnce();
+		expect(runs.fail).not.toHaveBeenCalled();
+		expect(runs.complete.mock.invocationCallOrder[0]).toBeLessThan(credentials.revoke.mock.invocationCallOrder[0]!);
+		expect(credentials.revoke.mock.invocationCallOrder[0]).toBeLessThan(store.settle.mock.invocationCallOrder[0]!);
 	});
 
 	it("serializes provider reconciliation and drains it before resource cleanup", async function _DrainsProviderPass(): Promise<void>

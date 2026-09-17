@@ -60,6 +60,24 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		expect(f.flags.payloadWrites).toBe(1);
 	});
 
+	it("recovers a durable answer after its process lease is lost", async function _LeaseLossRecovery()
+	{
+		const f = await _OutputRecoveryHarness();
+		f.history.afterAppend = async function _LoseDecisionResponse(command)
+		{
+			if (command.events[0].type.endsWith("turn-output.v2"))
+				throw new Error("decision response lost");
+		};
+		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("decision response lost");
+		const winner = (await f.store.load(f.output.bootstrapId))!;
+		f.history.afterAppend = async function _Restored() {};
+		f.flags.mayAppend = false;
+		f.current.lease.expiresAt = "2000-01-01T00:00:00.000Z";
+		await f.store.recoverOutput(winner);
+		expect(f.history.streams.get(f.stream)!.slice(2)).toHaveLength(1);
+		expect(f.history.streams.get(f.stream)![2].data).toEqual(winner.outputReceipt?.event.data);
+	});
+
 	it("uses the elected timestamp when two identical outputs prepare concurrently", async function _ConcurrentPreparation()
 	{
 		const f = await _OutputRecoveryHarness();

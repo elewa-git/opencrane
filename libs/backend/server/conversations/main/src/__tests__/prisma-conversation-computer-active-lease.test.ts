@@ -1,6 +1,6 @@
-import type { Prisma } from "@prisma/client";
+import { AgentRunState, AgentRunTerminalReason, type Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
-import { ConversationComputerRealizationKinds } from "@opencrane/contracts";
+import { ConversationComputerRealizationKinds, ExecutionSubjectMembershipKinds } from "@opencrane/contracts";
 
 import { PrismaConversationComputerActivationProjectionRepository } from "../db/prisma-conversation-computer-activation-repository";
 import { PrismaConversationComputerLifecycleProjectionRepository } from "../db/prisma-conversation-computer-lifecycle-projection-repository";
@@ -27,6 +27,25 @@ const _LEASE = {
 } as const;
 /** The same lease as the flat `ConversationComputerActiveLease` row Prisma returns. */
 const _ROW = { ..._LEASE.computer, leaseId: "lease-2", leaseGeneration: 2, expiresAt: new Date(_LEASE.lease.expiresAt) };
+
+/** Build the complete admitted execution fence whose durable turn was not yet created. */
+function _ExecutionSubject()
+{
+	const membership = { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "principal-1", siloId: "silo-1", revision: 7, assertionId: "membership-1", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision-1", trustedUntil: "2099-09-01T00:00:00.000Z" } as const;
+	return {
+		schemaVersion: 1,
+		siloId: "silo-1",
+		agentIdentityId: "identity-1",
+		principalId: "principal-1",
+		identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: "silo-1", headRevision: "4", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-decision-1", verifiedAt: "2026-09-01T00:00:00.000Z" },
+		membership,
+		capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-decision-1", decidedAt: "2026-09-01T00:00:00.000Z" },
+		runScope: { siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1" },
+		computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-2", leaseGeneration: 2 },
+		requester: { membership, siloId: "silo-1", requesterPrincipalId: "principal-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-09-01T00:00:00.000Z" },
+		admission: { authorizingPrincipalId: "principal-1", decisionEvidenceId: "admission-decision-1", admittedAt: "2026-09-01T00:00:00.000Z" },
+	};
+}
 
 /** Build a transaction-shaped projection repository around controlled delegate operations. */
 function _Repository(existing: Readonly<Record<string, unknown>>)
@@ -164,5 +183,27 @@ describe("PrismaConversationComputerLifecycleProjectionRepository", function _Li
 		const repository = new PrismaConversationComputerLifecycleProjectionRepository(transaction);
 		await expect(repository.clearActiveLease({ computer: _LEASE.computer, lease: { leaseId: "lease-2", leaseGeneration: 2 } })).resolves.toBe(false);
 		expect(deleteMany).not.toHaveBeenCalled();
+	});
+
+	it("fails the admitted run before clearing a lease recovered after a pre-turn restart", async function _RecoversAdmissionBeforeTurn()
+	{
+		const findMany = vi.fn().mockResolvedValue([{ id: "run-1", attempt: 1, state: AgentRunState.Accepted, executionSubject: _ExecutionSubject() }]);
+		const failRun = vi.fn().mockResolvedValue({ count: 1 });
+		const fenceLease = vi.fn().mockResolvedValue({ count: 1 });
+		const deleteLease = vi.fn().mockResolvedValue({ count: 1 });
+		const transaction = {
+			agentRun: { findMany, updateMany: failRun },
+			conversationComputerActiveLease: { updateMany: fenceLease, deleteMany: deleteLease },
+			approvalRequest: { count: vi.fn().mockResolvedValue(0) },
+			conversationComputerAttemptCredential: { count: vi.fn().mockResolvedValue(0) },
+		} as unknown as Prisma.TransactionClient;
+		const repository = new PrismaConversationComputerLifecycleProjectionRepository(transaction);
+		await expect(repository.failUnfrozenRunAndClearActiveLease({ computer: _LEASE.computer, lease: { leaseId: "lease-2", leaseGeneration: 2 } })).resolves.toBe(true);
+		expect(failRun).toHaveBeenCalledWith({
+			where: { id: "run-1", siloId: "silo-1", attempt: 1, state: AgentRunState.Accepted },
+			data: { state: AgentRunState.Failed, terminalReason: AgentRunTerminalReason.RuntimeFailure, finishedAt: expect.any(Date) },
+		});
+		expect(failRun.mock.invocationCallOrder[0]).toBeLessThan(fenceLease.mock.invocationCallOrder[0]!);
+		expect(fenceLease.mock.invocationCallOrder[0]).toBeLessThan(deleteLease.mock.invocationCallOrder[0]!);
 	});
 });
