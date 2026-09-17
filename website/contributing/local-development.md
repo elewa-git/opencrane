@@ -94,12 +94,18 @@ container runtime is ready with `docker info` before starting Tier 2.
 The coordinator pins the same KurrentDB operand used by the current develop-smoke profile. Local
 LiteLLM resolves the deployment-owned repository and reviewed tag to an immutable multi-platform
 digest, so a later vendor tag update cannot change an existing Tier 2 branch silently. CI rejects
-drift between those deployment-owned coordinates and Tier 2.
+drift between those deployment-owned coordinates and Tier 2. A local Agent profile also creates a
+separate `litellm` database owned by a non-privileged `litellm` role with its own persistent credential
+inside the worktree-owned PostgreSQL service. Startup waits until LiteLLM can read its model catalogue
+and its database-backed virtual-key store, because each Agent turn uses one budget- and lifetime-bound
+key.
 
 The current release-bound PostgreSQL image and pinned KurrentDB image need an AMD64 Docker daemon.
-The pinned LiteLLM image is multi-platform and is not forced through AMD64 emulation. On an ARM64
-Docker daemon the launcher stops before acquiring containers and explains the two choices below;
-changing the database image would change the current release operand, not just this local workflow.
+The pinned LiteLLM tag publishes both architectures, but its ARM64 variant lacks the Prisma schema
+engine needed to initialize the virtual-key store. On an ARM64 Docker daemon, `--emulate-amd64`
+therefore runs LiteLLM as well as PostgreSQL and KurrentDB through AMD64 emulation. Without that
+explicit option, the launcher stops before acquiring containers and explains the two choices below;
+changing an operand image would change the current release input, not just this local workflow.
 
 The PostgreSQL image starts as an unprivileged user. Before starting it, the coordinator checks that
 the named data volume belongs to this repository worktree and target baseline. A short, network-disabled
@@ -183,11 +189,11 @@ npm run dev:tier2:agent:simulated-llm -- --emulate-amd64
 On Apple Silicon this needs Docker Desktop with AMD64 emulation available; an ARM Linux Docker
 Engine needs compatible QEMU/binfmt support. Emulation can make image pulls, builds and startup
 much slower, and some builds or containers can fail. This is a best-effort local option, not the
-qualified path for deployment or Codespaces. `--emulate-amd64` affects only the pinned PostgreSQL
-and KurrentDB containers and the KurrentDB TLS provisioner; it does not change the release manifest
-or the LiteLLM image. The short PostgreSQL volume helper uses the same pinned image and therefore
-also runs under emulation. Prefer an AMD64 Codespace when emulation is unreliable. Do not use `--reset`
-for an architecture mismatch: it deletes local database data but cannot change image support.
+qualified path for deployment or Codespaces. `--emulate-amd64` affects the pinned PostgreSQL,
+KurrentDB and local LiteLLM containers plus the short-lived PostgreSQL permission and KurrentDB TLS
+helpers. It changes only Docker's selected platform; the release manifest and pinned immutable image
+digests remain unchanged. Prefer an AMD64 Codespace when emulation is unreliable. Do not use
+`--reset` for an architecture mismatch: it deletes local database data but cannot change image support.
 
 Local provider keys are owner-only regular files named `keys/.openai-key`,
 `keys/.anthropic-key`, `keys/.gemini-key`, `keys/.mistral-key`, `keys/.deepseek-key` or

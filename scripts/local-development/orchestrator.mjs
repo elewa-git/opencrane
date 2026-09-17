@@ -4,7 +4,7 @@ import { prepareLocalLiteLLMConfiguration } from "../../apps/_infra/litellm/loca
 import { createModelCredentialPlan, readOwnerOnlyCredentialFile } from "../../apps/_infra/litellm/local-development/provider-selection.mjs";
 import { runLocalCommand } from "./command-runner.mjs";
 import { createApplicationCommands, createKurrentCommand, createKurrentTlsVolumeCommand, createLiteLLMCommand, createPostgresCommand, createPostgresVolumeProvisionerCommand } from "./commands.mjs";
-import { applyTargetBaseline, bootstrapKurrent, waitForPostgres } from "./database.mjs";
+import { applyTargetBaseline, bootstrapKurrent, ensureLiteLLMDatabase, waitForPostgres } from "./database.mjs";
 import { ensureOwnedNetwork, ensureOwnedVolume, removeOwnedDockerResource, resetOwnedPersistentState } from "./docker-resources.mjs";
 import { runDevelopmentProcesses } from "./process-supervisor.mjs";
 import { LOCAL_DEVELOPMENT_ALTERNATIVES } from "./profiles.mjs";
@@ -72,7 +72,7 @@ async function _validateInputs(configuration)
 	const nativeArm64 = validateDockerArchitecture(docker.stdout, configuration.emulateAmd64);
 
 	if (nativeArm64)
-		process.stdout.write("Tier 2 is emulating AMD64 PostgreSQL and KurrentDB on an ARM Docker daemon; startup can be slow or fail.\n");
+		process.stdout.write("Tier 2 is emulating its AMD64 service images on an ARM Docker daemon; startup can be slow or fail.\n");
 
 	const requiredPaths = [
 		configuration.baselinePath,
@@ -121,6 +121,7 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 		applyTargetBaseline,
 		bootstrapKurrent,
 		createLocalDevelopmentSecrets,
+		ensureLiteLLMDatabase,
 		ensureOwnedNetwork,
 		ensureOwnedVolume,
 		prepareModelCredentials,
@@ -212,6 +213,7 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 
 		if (provider)
 		{
+			await operations.ensureLiteLLMDatabase(sessionConfiguration, secrets);
 			await operations.removeOwnedDockerResource("container", sessionConfiguration.liteLLMContainerName, sessionConfiguration);
 			ledger.acquire("LiteLLM container", async function _removeLiteLLM() { await operations.removeOwnedDockerResource("container", sessionConfiguration.liteLLMContainerName, sessionConfiguration); });
 			await operations.runSpecification(createLiteLLMCommand(sessionConfiguration, secrets, provider), sessionConfiguration);

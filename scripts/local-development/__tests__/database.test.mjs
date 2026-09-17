@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { applyTargetBaseline, waitForPostgres } from "../database.mjs";
+import { applyTargetBaseline, ensureLiteLLMDatabase, waitForPostgres } from "../database.mjs";
 
 const configuration = { postgresContainerName: "postgres", emulateAmd64: true };
 const baselinePath = fileURLToPath(new URL("../../../apps/opencrane/prisma/bootstrap/target-baseline.sql", import.meta.url));
@@ -76,6 +76,41 @@ test("an existing application database is not recreated before baseline reuse", 
 
 	assert.equal(commands.some((argumentsList) => argumentsList.includes("CREATE DATABASE opencrane;")), false);
 	assert.equal(commands.at(-1).includes("--dbname"), true);
+});
+
+test("local LiteLLM gets a separate persistent database without changing the product baseline", async function _LiteLLMDatabase()
+{
+	const commands = [];
+	async function _Docker(_command, argumentsList, options)
+	{
+		commands.push({ argumentsList, input: options?.input });
+
+		return { stdout: "" };
+	}
+
+	const secrets = { liteLLMDatabasePassword: "database-secret" };
+	await ensureLiteLLMDatabase(configuration, secrets, { runCommand: _Docker });
+	assert.equal(commands.length, 3);
+	assert.match(commands[0].input, /CREATE ROLE litellm LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS/u);
+	assert.match(commands[0].input, /ALTER ROLE litellm LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS/u);
+	assert.equal(commands[0].input.includes(secrets.liteLLMDatabasePassword), true);
+	assert.equal(commands[0].argumentsList.join(" ").includes(secrets.liteLLMDatabasePassword), false);
+	assert.equal(commands[1].argumentsList.includes("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = 'litellm';"), true);
+	assert.equal(commands[2].argumentsList.includes("CREATE DATABASE litellm OWNER litellm;"), true);
+	assert.equal(commands.some((entry) => entry.argumentsList.includes("CREATE DATABASE opencrane;")), false);
+});
+
+test("an existing LiteLLM database with another owner requires an explicit store reset", async function _LiteLLMOwnerMismatch()
+{
+	async function _Docker(_command, argumentsList)
+	{
+		const ownerQuery = argumentsList.includes("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = 'litellm';");
+
+		return { stdout: ownerQuery ? "opencrane\n" : "" };
+	}
+
+	const secrets = { liteLLMDatabasePassword: "database-secret" };
+	await assert.rejects(ensureLiteLLMDatabase(configuration, secrets, { runCommand: _Docker }), /rerun with --reset/u);
 });
 
 test("PostgreSQL early exit reports its code and logs before session cleanup", async function _EarlyExit()
