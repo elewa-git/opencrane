@@ -12,6 +12,9 @@ import type { DevelopmentIdentity } from "./config.types";
 
 const _TIER2_TRANSPORT: DevelopmentAuthenticationTransport = Object.freeze({ browserHost: "local-development.localhost:4200", directHost: "local-development.localhost:8080", proxyTargets: new Set(["127.0.0.1:8080", "localhost:8080"]), scheme: "http" });
 
+/** Origin observed after Codespaces forwards the external Tier 2 browser request to its loopback target. */
+const _CODESPACES_REWRITTEN_ORIGIN = "https://localhost:4200";
+
 /** Request methods that cannot change application state. */
 const _SAFE_METHODS = new Set([
 	"GET",
@@ -90,9 +93,30 @@ function _ReportedOrigin(value: string | undefined): string | null | undefined
 }
 
 /**
- * Accepts safe methods without origin evidence; for state-changing requests, trusts `Origin` before `Referer`.
- * When both URL headers are absent, a request that already passed the proxy-host and private-session checks may use
- * `Sec-Fetch-Site: same-origin`; a present but invalid URL header fails closed.
+ * Accepts the Codespaces loopback `Origin` only on a forwarded HTTPS browser request whose
+ * `Referer` matches the expected external origin and whose `Sec-Fetch-Site` reports `same-origin`.
+ */
+function _HasExpectedCodespacesOriginRewrite(request: Request, origin: string, expected: string): boolean
+{
+	const referer = request.get("referer");
+
+	return (
+		typeof request.headers["x-forwarded-host"] === "string"
+		&& expected.startsWith("https://")
+		&& _MatchesExpectedOrigin(origin, _CODESPACES_REWRITTEN_ORIGIN)
+		&& referer !== undefined
+		&& _MatchesExpectedOrigin(referer, expected)
+		&& request.get("sec-fetch-site") === "same-origin"
+	);
+}
+
+/**
+ * Accepts safe methods without origin evidence and checks `Origin` before `Referer` for state changes.
+ * A Codespaces loopback `Origin` must also satisfy {@link _HasExpectedCodespacesOriginRewrite}.
+ * If both URL headers are absent, a proxied request may use `Sec-Fetch-Site: same-origin`.
+ * Both exceptions rely on the caller first verifying the exact external `X-Forwarded-Host`,
+ * internal loopback host, and private per-launch credential; every other present but invalid
+ * URL header fails closed.
  */
 function _HasExpectedOrigin(request: Request, transport: DevelopmentAuthenticationTransport): boolean
 {
@@ -105,7 +129,10 @@ function _HasExpectedOrigin(request: Request, transport: DevelopmentAuthenticati
 
 	if (origin !== undefined)
 	{
-		return _MatchesExpectedOrigin(origin, expected);
+		if (_MatchesExpectedOrigin(origin, expected))
+			return true;
+
+		return _HasExpectedCodespacesOriginRewrite(request, origin, expected);
 	}
 	const referer = request.get("referer");
 
