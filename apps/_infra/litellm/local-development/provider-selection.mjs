@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const _DEFAULT_CATALOG_PATH = fileURLToPath(new URL("../../../../libs/backend/server/gateways/model-routing/main/byok-provider-catalog.json", import.meta.url));
+const _CODESPACES_PROVIDER_KEY_ENVIRONMENT_VARIABLE = "OPENCRANE_TIER2_PROVIDER_API_KEY";
 const _PROVIDER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const _MODEL_PATTERN = /^[a-z0-9][a-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._:/-]*$/;
 
@@ -281,6 +282,29 @@ export function resolveLocalProviderSelection(options)
 }
 
 /**
+ * Selects one explicit reviewed provider for the generic Codespaces credential.
+ *
+ * Called by: the Tier 2 coordinator when its validated configuration includes a Codespaces name.
+ * @param {{ provider?: string, model?: string }} options - Explicit provider and optional model.
+ * @returns {{ provider: { name: string, litellmProvider: string, defaultModel: string, models: string[] }, model: string }} Reviewed selection without a host credential path.
+ */
+export function resolveCodespacesProviderSelection(options)
+{
+	if (!options.provider)
+	{
+		throw new Error("Codespaces local-llm requires --provider because OPENCRANE_TIER2_PROVIDER_API_KEY does not identify its provider");
+	}
+
+	const providers = readLocalProviderCatalog();
+	const selectedProvider = _findRequestedProvider(providers, options.provider, options.model);
+
+	return {
+		provider: selectedProvider,
+		model: options.model ?? selectedProvider.defaultModel
+	};
+}
+
+/**
  * Reads a selected model credential after regular-file, symlink, permission, and emptiness checks.
  *
  * Called by: the Tier 2 coordinator after it resolves a credential plan.
@@ -301,17 +325,49 @@ export function readOwnerOnlyCredentialFile(credentialPath)
 }
 
 /**
- * Keeps local, remote, and simulated model alternatives on disjoint credential paths.
+ * Removes the Codespaces provider credential from the worker environment and returns its value.
  *
- * Called by: the Tier 2 coordinator before it reads secrets or starts a model transport.
- * @param {{ alternative: string, repositoryRoot: string, provider?: string, model?: string, remoteLiteLLMMasterKeyFile?: string }} options - Parsed alternative.
- * @returns {{ kind: "local", selection: ReturnType<typeof resolveLocalProviderSelection> } | { kind: "remote", remoteMasterKeyPath: string } | { kind: "simulated" }} Credential paths without values.
+ * The coordinator calls this before validation so later children cannot inherit the ambient
+ * variable; it supplies the returned value explicitly only when Docker starts local LiteLLM.
+ *
+ * Called by: the Tier 2 coordinator after it selects an explicit Codespaces provider.
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} environment - Mutable worker environment.
+ * @returns {string} Non-empty provider credential with surrounding whitespace removed.
+ */
+export function takeCodespacesProviderCredential(environment)
+{
+	const credential = environment[_CODESPACES_PROVIDER_KEY_ENVIRONMENT_VARIABLE]?.trim() ?? "";
+	delete environment[_CODESPACES_PROVIDER_KEY_ENVIRONMENT_VARIABLE];
+
+	if (!credential)
+	{
+		throw new Error(`Codespaces local-llm requires the ${_CODESPACES_PROVIDER_KEY_ENVIRONMENT_VARIABLE} development-environment secret`);
+	}
+
+	return credential;
+}
+
+/**
+ * Selects the credential source reserved for the requested model alternative.
+ *
+ * Called by: the Tier 2 coordinator before it reads a credential or starts a model transport.
+ * @param {{ alternative: string, repositoryRoot: string, codespaceName?: string, provider?: string, model?: string, remoteLiteLLMMasterKeyFile?: string }} options - Parsed alternative and optional Codespaces marker.
+ * @returns {{ kind: "local", credentialSource: "codespaces-environment" | "owner-only-file", selection: ReturnType<typeof resolveLocalProviderSelection> | ReturnType<typeof resolveCodespacesProviderSelection> } | { kind: "remote", remoteMasterKeyPath: string } | { kind: "simulated" }} Selected credential source without its value.
  */
 export function createModelCredentialPlan(options)
 {
 	if (options.alternative === "local-llm")
 	{
-		return { kind: "local", selection: resolveLocalProviderSelection(options) };
+		const codespaces = Boolean(options.codespaceName);
+		const selection = codespaces
+			? resolveCodespacesProviderSelection(options)
+			: resolveLocalProviderSelection(options);
+
+		return {
+			kind: "local",
+			credentialSource: codespaces ? "codespaces-environment" : "owner-only-file",
+			selection
+		};
 	}
 
 	if (options.alternative === "simulated-llm")

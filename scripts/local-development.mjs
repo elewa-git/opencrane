@@ -22,9 +22,12 @@ Profiles:
   agent          Core plus the current local Conversation Computer supervisor
 
 Agent alternatives:
-  local-llm      Loopback LiteLLM using the first sorted reviewed hidden key and its default model
+  local-llm      Loopback LiteLLM using a Codespaces secret or reviewed hidden workstation key
   remote-llm     Explicit remote HTTPS LiteLLM endpoint and private admin-key file
   simulated-llm  Deterministic model transport without provider credentials
+
+Codespaces:
+  OPENCRANE_TIER2_PROVIDER_API_KEY supplies local-llm and requires an explicit --provider
 
 State:
   --reset        Recreate the paired PostgreSQL and KurrentDB fresh-install state

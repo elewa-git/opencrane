@@ -123,8 +123,10 @@ test("local LiteLLM receives its isolated database URL without putting credentia
 	const specification = createLiteLLMCommand(configuration, secrets, provider);
 
 	assert.equal(specification.arguments.includes("DATABASE_URL"), true);
+	assert.equal(specification.arguments.join(" ").includes(provider.providerKey), false);
 	assert.equal(specification.arguments.join(" ").includes(secrets.postgresPassword), false);
 	assert.equal(specification.arguments.join(" ").includes(secrets.liteLLMDatabasePassword), false);
+	assert.equal(specification.environment.OPENCRANE_LOCAL_PROVIDER_KEY, provider.providerKey);
 	assert.equal(specification.environment.DATABASE_URL, "postgresql://litellm:litellm-database-secret@postgres:5432/litellm");
 	assert.equal(specification.environment.DATABASE_URL.includes(secrets.postgresPassword), false);
 });
@@ -163,6 +165,11 @@ test("Codespaces UI and server share one exact HTTPS forwarded browser origin", 
 
 test("child processes receive explicit settings without ambient credentials", function _FilteredEnvironment()
 {
-	const environment = createLocalChildEnvironment({ PATH: "/bin", AWS_SECRET_ACCESS_KEY: "ambient-secret" }, { DATABASE_URL: "local" });
+	const parentEnvironment = {
+		PATH: "/bin",
+		AWS_SECRET_ACCESS_KEY: "ambient-secret",
+		OPENCRANE_TIER2_PROVIDER_API_KEY: "codespaces-secret"
+	};
+	const environment = createLocalChildEnvironment(parentEnvironment, { DATABASE_URL: "local" });
 	assert.deepEqual(environment, { PATH: "/bin", DATABASE_URL: "local" });
 });

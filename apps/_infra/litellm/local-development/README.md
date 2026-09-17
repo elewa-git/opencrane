@@ -11,12 +11,14 @@ upstream model.
 
 The catalogue remains owned by the model-routing package through its public
 `libs/backend/server/gateways/model-routing/main/byok-provider-catalog.json` artifact; this package
-does not copy it or reach into private source. Provider keys live outside this package under
-`keys/.<provider>-key`. A key must be a non-symbolic regular file readable only by its owner. With no
-explicit choice, the first recognized key filename
-in lexical order chooses its provider and that provider's reviewed default model. Use `--provider`
-and `--model` to make the choice explicit; an unreviewed provider, model, or cross-provider pairing
-is refused.
+does not copy it or reach into private source. On a workstation, provider keys live outside this
+package under `keys/.<provider>-key`. A key must be a non-symbolic regular file readable only by its
+owner. With no explicit choice, the first recognized key filename in lexical order chooses its
+provider and that provider's reviewed default model. In Codespaces, the coordinator instead takes
+`OPENCRANE_TIER2_PROVIDER_API_KEY` from the worker environment and requires `--provider` because the
+generic secret name does not identify its provider. It removes the variable before running validation
+or application child processes. Use `--model` to override the selected provider's reviewed default;
+an unreviewed provider, model, or cross-provider pairing is refused.
 
 The coordinator writes one session-owned YAML beside its other disposable secrets. It contains only
 the `auto` alias, selected model, and `os.environ/OPENCRANE_LOCAL_PROVIDER_KEY` reference. The
@@ -28,7 +30,8 @@ role with its own persistent credential in Tier 2's owned PostgreSQL service. Li
 database for the per-run virtual keys issued by the current Agent path;
 the launch waits for authenticated key storage as well as model discovery before starting OpenCrane.
 Credential bytes are never written into generated YAML or Docker arguments, and normal or failed
-shutdown removes the generated file with the session directory.
+shutdown removes the generated file with the session directory. The Codespaces devcontainer
+recommends the environment secret by name but never stores its value in tracked configuration.
 
 ## Boundary
 

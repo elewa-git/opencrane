@@ -1,7 +1,7 @@
 import fs from "node:fs";
 
 import { prepareLocalLiteLLMConfiguration } from "../../apps/_infra/litellm/local-development/config-generation.mjs";
-import { createModelCredentialPlan, readOwnerOnlyCredentialFile } from "../../apps/_infra/litellm/local-development/provider-selection.mjs";
+import { createModelCredentialPlan, readOwnerOnlyCredentialFile, takeCodespacesProviderCredential } from "../../apps/_infra/litellm/local-development/provider-selection.mjs";
 import { runLocalCommand } from "./command-runner.mjs";
 import { createApplicationCommands, createKurrentCommand, createKurrentTlsVolumeCommand, createLiteLLMCommand, createPostgresCommand, createPostgresVolumeProvisionerCommand } from "./commands.mjs";
 import { applyTargetBaseline, bootstrapKurrent, ensureLiteLLMDatabase, waitForPostgres } from "./database.mjs";
@@ -89,8 +89,13 @@ async function _validateInputs(configuration)
 	}
 }
 
-/** Resolves the selected model credential path before any local resource is acquired. */
-export async function prepareModelCredentials(configuration)
+/**
+ * Reads the selected model credential before Tier 2 acquires local resources.
+ *
+ * Codespaces consumes the worker environment secret, while workstation local-llm and remote-llm
+ * continue to read their selected owner-only files.
+ */
+export async function prepareModelCredentials(configuration, environment = process.env)
 {
 	const plan = createModelCredentialPlan(configuration);
 
@@ -104,6 +109,11 @@ export async function prepareModelCredentials(configuration)
 		return { ...plan, remoteMasterKey: readOwnerOnlyCredentialFile(plan.remoteMasterKeyPath) };
 	}
 
+	if (plan.credentialSource === "codespaces-environment")
+	{
+		return { ...plan, providerKey: takeCodespacesProviderCredential(environment) };
+	}
+
 	return { ...plan, providerKey: readOwnerOnlyCredentialFile(plan.selection.providerKeyPath) };
 }
 
@@ -113,6 +123,8 @@ export async function prepareModelCredentials(configuration)
  * Cleanup is registered before acquisitions that can create a Docker resource and then reject, so
  * a failed startup still removes partial state. A cleanup failure is reported alongside the startup
  * failure instead of replacing it.
+ * Model credentials resolve first because validation starts child commands, and the Codespaces
+ * provider secret must leave the worker environment before those commands run.
  */
 export async function runLocalDevelopmentSession(configuration, operationOverrides = {})
 {
@@ -172,10 +184,10 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 		}
 
 		ledger.acquire("session lock", async function _releaseSessionLock() { sessionLock.release(); });
-		await operations.validateInputs(sessionConfiguration);
 		const modelCredentials = sessionConfiguration.profile === "core"
 			? undefined
 			: await operations.prepareModelCredentials(sessionConfiguration);
+		await operations.validateInputs(sessionConfiguration);
 
 		if (sessionConfiguration.reset)
 		{
