@@ -46,9 +46,15 @@ function _ExpectedOrigin(request: Request, transport: DevelopmentAuthenticationT
 {
 	if (typeof request.headers["x-forwarded-host"] === "string")
 	{
-		return `${transport.browserScheme ?? transport.scheme}://${transport.browserHost}`;
+		return _BrowserOrigin(transport);
 	}
 	return `${transport.scheme}://${transport.directHost}`;
+}
+
+/** Resolve the configured browser origin without consulting request-controlled headers. */
+function _BrowserOrigin(transport: DevelopmentAuthenticationTransport): string
+{
+	return `${transport.browserScheme ?? transport.scheme}://${transport.browserHost}`;
 }
 
 /** Returns whether an absolute URL has the expected normalized origin; malformed values do not match. */
@@ -61,6 +67,25 @@ function _MatchesExpectedOrigin(value: string, expected: string): boolean
 	catch
 	{
 		return false;
+	}
+}
+
+/**
+ * Reduces a received URL to its origin so mismatch logs omit path and query data.
+ * Missing values remain `undefined`, while malformed values become `null`.
+ */
+function _ReportedOrigin(value: string | undefined): string | null | undefined
+{
+	if (value === undefined)
+		return;
+
+	try
+	{
+		return new URL(value).origin;
+	}
+	catch
+	{
+		return null;
 	}
 }
 
@@ -123,7 +148,7 @@ function _HasExpectedHandoffNavigation(request: Request, browserOrigin: string):
 }
 
 /** Checks the configured host before forwarding a handoff or attaching the fixed development session. */
-function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionCredential: string, transport: DevelopmentAuthenticationTransport): RequestHandler
+function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionCredential: string, transport: DevelopmentAuthenticationTransport, logger: Logger): RequestHandler
 {
 	return function _DevelopmentSession(request, response, next): void
 	{
@@ -135,7 +160,7 @@ function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionC
 
 		if (request.path === _DEVELOPMENT_SESSION_HANDOFF_PATH)
 		{
-			const browserOrigin = `${transport.browserScheme ?? transport.scheme}://${transport.browserHost}`;
+			const browserOrigin = _BrowserOrigin(transport);
 
 			if (!_HasExpectedHandoffNavigation(request, browserOrigin))
 			{
@@ -160,6 +185,17 @@ function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionC
 		}
 		if (!_HasExpectedOrigin(request, transport))
 		{
+			const browserOrigin = _BrowserOrigin(transport);
+			logger.warn({
+				browserOrigin,
+				forwardedHost: request.headers["x-forwarded-host"],
+				host: request.get("host"),
+				method: request.method,
+				origin: _ReportedOrigin(request.get("origin")),
+				path: request.path,
+				refererOrigin: _ReportedOrigin(request.get("referer")),
+				secFetchSite: request.get("sec-fetch-site"),
+			}, "Development state change origin did not match the configured browser");
 			response.status(403).json({ code: "DEVELOPMENT_ORIGIN_MISMATCH", error: "Development state changes require the dedicated local origin." });
 			return;
 		}
@@ -288,6 +324,6 @@ export function _CreateDevelopmentAuthentication(identity: DevelopmentIdentity, 
 	return {
 		authMiddleware: _CreateAdmissionMiddleware(identity, admission, logger),
 		router: _CreateAuthRouter(identity, capabilities, browserSessionCredential, transport),
-		sessionMiddleware: [_CreateSessionMiddleware(identity, browserSessionCredential, transport)],
+		sessionMiddleware: [_CreateSessionMiddleware(identity, browserSessionCredential, transport, logger)],
 	};
 }
