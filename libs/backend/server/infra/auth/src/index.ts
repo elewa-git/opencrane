@@ -31,7 +31,7 @@ export type { AuthenticatedPrincipalAdmission, AuthenticatedPrincipalAdmissionIn
 export { ___LoadOidcAuthConfig } from "./oidc-config";
 export type { OidcAuthConfig } from "./oidc-config.types";
 export { _RequestHost } from "./request-host";
-export { _ResolveRequestPrincipal } from "./request-principal";
+export { _BindRequestPrincipalSilo, _ResolveRequestPrincipal } from "./request-principal";
 export type { RequestPrincipal } from "./request-principal.types";
 export { _CreateMountedPublicKeySource } from "./mounted-public-key";
 export type { MountedPublicKeySource } from "./mounted-public-key.types";

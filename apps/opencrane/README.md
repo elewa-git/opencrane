@@ -127,8 +127,11 @@ its resources to the lifecycle owner.
   loopback-only host-process realizer replaces the production Agent Sandbox boundary. The core
   profile omits Conversation Computer startup; Agent profiles select local LiteLLM, a remote
   LiteLLM gateway, or the deterministic simulated transport. A private per-launch browser credential,
-  exact local or private Codespaces host pair and origin check protect the fixed development Principal; every protected request
-  still re-reads the durable Principal projection. This entrypoint does not mount the Kubernetes-only
+  exact local or private Codespaces host pair and origin check protect the fixed development Principal.
+  After that check, the boundary binds the seed's `local-development` silo for shared product
+  identity resolution because a Codespaces hostname identifies the machine and port, not a product
+  silo; browser-origin checks still see the original external host. Every protected request still
+  re-reads the durable Principal projection. This entrypoint does not mount the Kubernetes-only
   internal listener, MCP workload routes, review commands, or durable workspace checkpointing.
   Before composing those product routes, the validated development process pins standalone
   membership to the seed's silo and OIDC issuer with a five-minute evidence lifetime. A
