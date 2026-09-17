@@ -55,7 +55,24 @@ function _ExpectedOrigin(request: Request, browserOrigin: string): string
 	return `http://${_EXPECTED_DIRECT_HOST}`;
 }
 
-/** Refuse state-changing requests from pages outside the exact local development origin. */
+/** Returns whether an absolute URL has the expected normalized origin; malformed values do not match. */
+function _MatchesExpectedOrigin(value: string, expected: string): boolean
+{
+	try
+	{
+		return new URL(value).origin === expected;
+	}
+	catch
+	{
+		return false;
+	}
+}
+
+/**
+ * Accepts safe methods without origin evidence; for state-changing requests, trusts `Origin` before `Referer`.
+ * When both URL headers are absent, a request that already passed the proxy-host and private-session checks may use
+ * `Sec-Fetch-Site: same-origin`; a present but invalid URL header fails closed.
+ */
 function _HasExpectedOrigin(request: Request, browserOrigin: string): boolean
 {
 	if (_SAFE_METHODS.has(request.method))
@@ -65,25 +82,18 @@ function _HasExpectedOrigin(request: Request, browserOrigin: string): boolean
 	const expected = _ExpectedOrigin(request, browserOrigin);
 	const origin = request.get("origin");
 
-	if (origin)
+	if (origin !== undefined)
 	{
-		return origin === expected;
+		return _MatchesExpectedOrigin(origin, expected);
 	}
 	const referer = request.get("referer");
 
-	if (!referer)
+	if (referer !== undefined)
 	{
-		return false;
+		return _MatchesExpectedOrigin(referer, expected);
 	}
 
-	try
-	{
-		return new URL(referer).origin === expected;
-	}
-	catch
-	{
-		return false;
-	}
+	return typeof request.headers["x-forwarded-host"] === "string" && request.get("sec-fetch-site") === "same-origin";
 }
 
 /** Checks whether the configured Tier 2 browser origin started a user-activated top-level navigation. */
