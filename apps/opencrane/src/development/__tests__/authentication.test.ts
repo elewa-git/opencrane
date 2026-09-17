@@ -26,10 +26,10 @@ function _Admission(): AuthenticatedPrincipalAdmission
 }
 
 /** Build the development middleware in listener order. */
-function _App(admission: AuthenticatedPrincipalAdmission = _Admission(), browserOrigin?: string)
+function _App(admission: AuthenticatedPrincipalAdmission = _Admission(), browserOrigin?: string, logger: Logger = { warn: vi.fn() } as unknown as Logger)
 {
 	const capabilities: AuthenticatedPrincipalCapabilityReader = { canAdministerOrganization: vi.fn().mockResolvedValue(true) };
-	const authentication = _CreateDevelopmentAuthentication(_DEVELOPMENT_IDENTITY, capabilities, admission, _BROWSER_CREDENTIAL, { warn: vi.fn() } as unknown as Logger, browserOrigin);
+	const authentication = _CreateDevelopmentAuthentication(_DEVELOPMENT_IDENTITY, capabilities, admission, _BROWSER_CREDENTIAL, logger, browserOrigin);
 	const app = express();
 	app.use(...authentication.sessionMiddleware);
 	app.use("/api/v1/auth", authentication.router);
@@ -217,6 +217,26 @@ describe("Tier 2 development authentication", function _Suite(): void
 		expect(missingMetadata.status).toBe(403);
 		expect(wrongReferer.status).toBe(403);
 		expect(opaqueOrigin.status).toBe(403);
+	});
+
+	it("logs safe proxy evidence when a Codespaces state change has another origin", async function _LogsOriginMismatch(): Promise<void>
+	{
+		const browserOrigin = "https://careful-crane-123-4200.app.github.dev";
+		const warn = vi.fn();
+		const logger = { warn } as unknown as Logger;
+		const response = await request(_App(_Admission(), browserOrigin, logger)).post("/api/v1/protected?secret=not-logged").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Origin", "https://attacker.example/private?secret=not-logged").set("Referer", "https://attacker.example/review?secret=not-logged").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+
+		expect(response.status).toBe(403);
+		expect(warn).toHaveBeenCalledWith({
+			browserOrigin,
+			forwardedHost: "careful-crane-123-4200.app.github.dev",
+			host: "127.0.0.1:8080",
+			method: "POST",
+			origin: "https://attacker.example",
+			path: "/api/v1/protected",
+			refererOrigin: "https://attacker.example",
+			secFetchSite: "same-origin",
+		}, "Tier 2 state change origin did not match the development browser");
 	});
 
 	it("fails closed when the durable Principal is absent", async function _RejectsAbsentPrincipal(): Promise<void>

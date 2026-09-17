@@ -69,6 +69,25 @@ function _MatchesExpectedOrigin(value: string, expected: string): boolean
 }
 
 /**
+ * Reduces a received URL to its origin so mismatch logs omit path and query data.
+ * Missing values remain `undefined`, while malformed values become `null`.
+ */
+function _ReportedOrigin(value: string | undefined): string | null | undefined
+{
+	if (value === undefined)
+		return;
+
+	try
+	{
+		return new URL(value).origin;
+	}
+	catch
+	{
+		return null;
+	}
+}
+
+/**
  * Accepts safe methods without origin evidence; for state-changing requests, trusts `Origin` before `Referer`.
  * When both URL headers are absent, a request that already passed the proxy-host and private-session checks may use
  * `Sec-Fetch-Site: same-origin`; a present but invalid URL header fails closed.
@@ -127,7 +146,7 @@ function _HasExpectedHandoffNavigation(request: Request, browserOrigin: string):
 }
 
 /** Checks the configured host before forwarding a handoff or attaching the fixed development session. */
-function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionCredential: string, browserOrigin: string): RequestHandler
+function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionCredential: string, browserOrigin: string, logger: Logger): RequestHandler
 {
 	const browserHost = new URL(browserOrigin).host;
 
@@ -171,6 +190,16 @@ function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionC
 
 		if (!_HasExpectedOrigin(request, browserOrigin))
 		{
+			logger.warn({
+				browserOrigin,
+				forwardedHost: request.headers["x-forwarded-host"],
+				host: request.get("host"),
+				method: request.method,
+				origin: _ReportedOrigin(request.get("origin")),
+				path: request.path,
+				refererOrigin: _ReportedOrigin(request.get("referer")),
+				secFetchSite: request.get("sec-fetch-site"),
+			}, "Tier 2 state change origin did not match the development browser");
 			response.status(403).json({
 				code: "DEVELOPMENT_ORIGIN_MISMATCH",
 				error: "Tier 2 state changes require the dedicated local development origin.",
@@ -301,6 +330,6 @@ export function _CreateDevelopmentAuthentication(identity: DevelopmentIdentity, 
 	return {
 		authMiddleware: _CreateAdmissionMiddleware(identity, admission, logger),
 		router: _CreateAuthRouter(identity, capabilities, browserSessionCredential, browserOrigin),
-		sessionMiddleware: [_CreateSessionMiddleware(identity, browserSessionCredential, browserOrigin)],
+		sessionMiddleware: [_CreateSessionMiddleware(identity, browserSessionCredential, browserOrigin, logger)],
 	};
 }
