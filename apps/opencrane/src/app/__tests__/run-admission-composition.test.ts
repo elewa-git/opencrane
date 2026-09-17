@@ -244,8 +244,8 @@ function _StandaloneComputerFixture()
 		toolProposals: { admit: vi.fn() },
 		siloId: "silo-1", endpoint: "http://gateway.test", credentials: { issueOnce, reuseExact: vi.fn(), revoke: vi.fn() },
 		reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, outputPayloads: { store: vi.fn() }, writers: { create: vi.fn() },
-		runLifecycle: { start: vi.fn(), complete: vi.fn() },
-		store: { reserveModel: vi.fn(), selectTool: vi.fn(), reserveContinuation: vi.fn(), loadActive: async function _Active() { return stored; }, createOrRead: async function _Freeze(turn) { stored = turn; return turn; }, load: async function _Load() { return stored; }, markOutput: vi.fn(), settle: vi.fn() },
+		runLifecycle: { start: vi.fn(), complete: vi.fn(), fail: vi.fn() },
+		store: { reserveModel: vi.fn(), selectTool: vi.fn(), reserveContinuation: vi.fn(), loadActive: async function _Active() { return stored; }, createOrRead: async function _Freeze(turn) { stored = turn; return turn; }, load: async function _Load() { return stored; }, markOutput: vi.fn(), markUnavailable: vi.fn(), settle: vi.fn() },
 		candidates: {
 			admit: vi.fn(), assertCurrent: resolveCandidate,
 			resolve: resolveCandidate

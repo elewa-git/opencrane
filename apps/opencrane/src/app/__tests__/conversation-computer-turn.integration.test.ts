@@ -153,7 +153,7 @@ describe("conversation computer turn integration", function _Suite() {
       logger: { warn: vi.fn() }, model: { request: vi.fn().mockResolvedValue({ kind: "text", text: "assistant answer" }) },
       toolProposals: { admit: vi.fn() },
 		siloId: "testv5",
-		runLifecycle: { start: vi.fn(), complete: vi.fn() },
+		runLifecycle: { start: vi.fn(), complete: vi.fn(), fail: vi.fn() },
       candidates: {
         resolve: vi.fn().mockResolvedValue(candidate),
         assertCurrent: vi.fn().mockResolvedValue(candidate),
@@ -198,6 +198,12 @@ describe("conversation computer turn integration", function _Suite() {
 			};
 
 			return { outcome: "accepted" as const, receipt };
+		}),
+		markUnavailable: vi.fn(async function _MarkUnavailable()
+		{
+			frozen = { ...frozen!, unavailable: true };
+
+			return frozen;
 		}),
         loadActive: vi.fn().mockResolvedValue(null),
         settle: vi.fn().mockResolvedValue(undefined),

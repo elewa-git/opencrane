@@ -20,11 +20,11 @@ async function _CreateOpenSslOutputs(_command, argumentsList)
 }
 
 /** Supply only the paths and profile inputs needed by secret construction. */
-function _Configuration(persistentSecretsDirectory)
+function _Configuration(persistentSecretsDirectory, alternative = "simulated-llm")
 {
 	return {
 		abortSignal: new AbortController().signal,
-		alternative: "simulated-llm",
+		alternative,
 		persistentSecretsDirectory,
 	};
 }
@@ -61,6 +61,47 @@ test("session secrets use the current conversation keyring contract", async func
 		});
 		const reusedKeyring = JSON.parse(fs.readFileSync(secrets.conversationKeyringPath, "utf8"));
 		assert.equal(reusedKeyring.keys["tier2-persistent"], firstKey);
+	}
+	finally
+	{
+		if (secrets)
+		{
+			removeLocalDevelopmentSecrets(secrets);
+		}
+		fs.rmSync(root, { force: true, recursive: true });
+	}
+});
+
+test("local LiteLLM keeps a database credential distinct from the product database owner", async function _LiteLLMDatabaseCredential()
+{
+	const root = fs.mkdtempSync(path.join(os.tmpdir(), "opencrane-tier2-litellm-secret-test-"));
+	const persistent = path.join(root, "persistent");
+	let secrets;
+	function _Bytes(size)
+	{
+		return Buffer.alloc(size, 9);
+	}
+
+	function _DifferentBytes(size)
+	{
+		return Buffer.alloc(size, 10);
+	}
+
+	try
+	{
+		secrets = await createLocalDevelopmentSecrets(_Configuration(persistent, "local-llm"), {
+			randomBytes: _Bytes,
+			runCommand: _CreateOpenSslOutputs,
+		});
+		const firstLiteLLMPassword = secrets.liteLLMDatabasePassword;
+		assert.notEqual(firstLiteLLMPassword, secrets.postgresPassword);
+		assert.equal(fs.statSync(path.join(persistent, "litellm-database-password")).mode & 0o077, 0);
+		removeLocalDevelopmentSecrets(secrets);
+		secrets = await createLocalDevelopmentSecrets(_Configuration(persistent, "local-llm"), {
+			randomBytes: _DifferentBytes,
+			runCommand: _CreateOpenSslOutputs,
+		});
+		assert.equal(secrets.liteLLMDatabasePassword, firstLiteLLMPassword);
 	}
 	finally
 	{

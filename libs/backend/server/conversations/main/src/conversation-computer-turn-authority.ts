@@ -43,12 +43,20 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 			await this._FinishOutput(active, command.process);
 			return null;
 		}
+		if (active?.unavailable)
+		{
+			await this._FailUnavailable(active, command.process);
+			return { bootstrapId: active.bootstrapId, outcome: "response_unavailable" };
+		}
 		if (active?.modelReservation !== null && active !== null)
 		{
 			await this._AdmitOutputProcess(active, command.process);
 			if (active.continuationReservation === null && (active.toolSelection !== null || await this.dependencies.modelCustody.loadDeclaration(active) !== null))
 				return { bootstrapId: active.bootstrapId, outcome: "ready" };
-			return { bootstrapId: active.bootstrapId, outcome: _ConversationModelReservationStatus(active.continuationReservation ?? active.modelReservation).outcome as "pending" | "response_unavailable" };
+			const status = _ConversationModelReservationStatus(active.continuationReservation ?? active.modelReservation);
+			if (status.outcome === ConversationComputerModelStepOutcomes.ResponseUnavailable && await this._FailUnavailable(active, command.process) === ConversationComputerModelStepOutcomes.Completed)
+				return null;
+			return { bootstrapId: active.bootstrapId, outcome: status.outcome as "pending" | "response_unavailable" };
 		}
 		const candidate = await this.dependencies.candidates.resolve(command);
 		if (candidate === null)
@@ -77,20 +85,51 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 			await this._FinishOutput(turn, command.process);
 			return { outcome: ConversationComputerModelStepOutcomes.Completed };
 		}
+		if (turn.unavailable)
+			return { outcome: await this._FailUnavailable(turn, command.process) };
 		try
 		{
-			return await _AdvanceConversationComputerModel(turn, command.process, this.dependencies, this.appendOutput.bind(this));
+			const result = await _AdvanceConversationComputerModel(turn, command.process, this.dependencies, this.appendOutput.bind(this));
+			return result.outcome === ConversationComputerModelStepOutcomes.ResponseUnavailable ? { outcome: await this._FailUnavailable(turn, command.process) } : result;
 		}
 		catch (error)
 		{
 			this.dependencies.logger.warn({ operation: "conversation.computer.model_step", err: _ConversationFailureDiagnostic(error) }, "Conversation model step has no completed answer receipt");
 			const saved = await this.dependencies.store.load(turn.bootstrapId);
 			if (saved?.continuationReservation !== null && saved !== null)
-				return _ConversationModelReservationStatus(saved.continuationReservation);
+				return await this._UnavailableOrPending(saved, saved.continuationReservation, command.process);
 			if (saved?.toolSelection !== null && saved !== null)
 				return { outcome: ConversationComputerModelStepOutcomes.Pending };
-			return saved?.modelReservation !== null && saved !== null ? _ConversationModelReservationStatus(saved.modelReservation) : { outcome: ConversationComputerModelStepOutcomes.AuthorityEnded };
+			return saved?.modelReservation !== null && saved !== null ? await this._UnavailableOrPending(saved, saved.modelReservation, command.process) : { outcome: ConversationComputerModelStepOutcomes.AuthorityEnded };
 		}
+	}
+
+	/** Terminalize an expired reservation only after key cleanup makes another turn safe to admit. */
+	private async _UnavailableOrPending(turn: FrozenConversationComputerTurn, reservation: NonNullable<FrozenConversationComputerTurn["modelReservation"] | FrozenConversationComputerTurn["continuationReservation"]>, process: ConversationComputerBootstrapCommand["process"]): Promise<ConversationComputerModelStepResult>
+	{
+		if (turn.unavailable)
+			return { outcome: await this._FailUnavailable(turn, process) };
+		const status = _ConversationModelReservationStatus(reservation);
+		if (status.outcome === ConversationComputerModelStepOutcomes.ResponseUnavailable)
+			return { outcome: await this._FailUnavailable(turn, process) };
+		return status;
+	}
+
+	/** Let output and expiry compete durably, then finish the exact winning terminal decision. */
+	private async _FailUnavailable(turn: FrozenConversationComputerTurn, process: ConversationComputerBootstrapCommand["process"]): Promise<ConversationComputerModelStepResult["outcome"]>
+	{
+		const winner = await this.dependencies.store.markUnavailable(turn.bootstrapId);
+		if (winner.outputReceipt !== null)
+		{
+			await this._FinishOutput(winner, process);
+			return ConversationComputerModelStepOutcomes.Completed;
+		}
+		if (!winner.unavailable)
+			throw new Error("Conversation computer unavailable decision has no durable winner");
+		await this.dependencies.credentials.revoke(winner.bootstrapId);
+		await this.dependencies.runLifecycle.fail(_RunLifecycleCommand(winner));
+		await this.dependencies.store.settle(winner);
+		return ConversationComputerModelStepOutcomes.ResponseUnavailable;
 	}
 
 	/** Save the winning server model response; the realized process has no output-submission route. */
@@ -240,6 +279,7 @@ function _Freeze(candidate: ConversationComputerTurnCandidate, command: Conversa
 		toolSelection: null,
 		continuationReservation: null,
 		modelReservation: null,
+		unavailable: false,
 	};
 }
 

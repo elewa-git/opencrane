@@ -1,7 +1,7 @@
 import type { Request } from "express";
 import { describe, expect, it } from "vitest";
 
-import { _ResolveRequestPrincipal } from "../request-principal";
+import { _BindRequestPrincipalSilo, _ResolveRequestPrincipal } from "../request-principal";
 import type { AuthUser } from "../session.types";
 
 /** Builds the minimum request surface consumed by the principal resolver. */
@@ -41,6 +41,31 @@ describe("_ResolveRequestPrincipal", function _suite()
       siloId: "acme",
 	  verifiedAuthenticationAt: null,
     });
+  });
+
+  it("uses a matching silo bound by a non-host authentication boundary", function _test()
+  {
+	const incoming = _request({
+		sub: "user-1",
+		siloId: "acme",
+	}, "careful-crane-123-4200.app.github.dev");
+	_BindRequestPrincipalSilo(incoming, "acme");
+
+	expect(_ResolveRequestPrincipal(incoming)?.siloId).toBe("acme");
+	expect(incoming.get("host")).toBe("careful-crane-123-4200.app.github.dev");
+  });
+
+  it("refuses to bind a silo that does not match the session and admitted Principal", function _test()
+  {
+	const incoming = _request({
+		sub: "user-1",
+		siloId: "acme",
+	}, "careful-crane-123-4200.app.github.dev");
+
+	expect(function _BindMismatch(): void
+	{
+		_BindRequestPrincipalSilo(incoming, "other");
+	}).toThrow("request silo binding requires matching session and admitted Principal silos");
   });
 
   it("fails closed without an authenticated user, stable identity, or silo", function _test()

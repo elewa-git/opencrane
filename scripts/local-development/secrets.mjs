@@ -146,9 +146,11 @@ export async function createLocalDevelopmentSecrets(configuration, operations = 
 		const certificate = await _createKurrentCertificate(configuration, directory, runCommand);
 		const browserSessionCredential = randomBytes(32).toString("base64url");
 		const browserSessionCredentialPath = _writeSecret(directory, "browser-session-credential", browserSessionCredential);
+		let liteLLMDatabasePassword;
 		let liteLLMMasterKey;
 		if (configuration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM)
 		{
+			liteLLMDatabasePassword = _persistentSecret(path.join(configuration.persistentSecretsDirectory, "litellm-database-password"), "litellm-", randomBytes);
 			liteLLMMasterKey = `sk-local-${randomBytes(32).toString("base64url")}`;
 		}
 
@@ -175,6 +177,7 @@ export async function createLocalDevelopmentSecrets(configuration, operations = 
 			kurrentHistoryPasswordPath: _writeSecret(directory, "kurrent-history-password", kurrentHistoryPassword),
 			invitationSigningKeyPath: _writeSecret(directory, "invitation-signing.key", randomBytes(32).toString("base64url")),
 			conversationKeyringPath,
+			liteLLMDatabasePassword,
 			liteLLMMasterKey,
 			liteLLMMasterAuthorizationHeaderPath: liteLLMMasterKey ? _writeSecret(directory, "litellm-master-authorization-header", `Authorization: Bearer ${liteLLMMasterKey}`) : undefined,
 			...certificate

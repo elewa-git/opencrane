@@ -159,7 +159,7 @@ export async function _OutputRecoveryHarness(reserveOutput = true, overrides: Pa
 		if (flags.runState === "failed")
 			throw new Error("run is already failed");
 		flags.runState = "completed";
-	}) };
+	}), fail: vi.fn(async function _Fail() { flags.runState = "failed"; }) };
 	function _Restart()
 	{
 		const store = new KurrentConversationComputerTurnStore(history);

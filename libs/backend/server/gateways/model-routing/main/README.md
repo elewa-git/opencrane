@@ -92,8 +92,12 @@ derived from their governed Global resource, so a late first POST cannot create 
   absolute `notAfter` bound, leaves ten seconds for the mint request and checks the provider's
   returned expiry before handoff. Missing, expired or excessive expiry triggers alias cleanup.
   The key has a one-time budget and never resets its spending allowance within the attempt.
-- `_RevokeAttemptLiteLlmKeyByAlias` — reconcile an uncertain mint from its durable attempt alias when
-  encrypted custody could not retain the raw key.
+- `_RevokeAttemptLiteLlmKey` and `_RevokeAttemptLiteLlmKeyByAlias` — revoke an attempt key from its
+  retained raw value, or reconcile an uncertain mint from its durable attempt alias when encrypted
+  custody could not retain that value. Both operations are idempotent: only HTTP 404 with the pinned
+  LiteLLM `No keys found` marker, including its exact `ProxyException` string envelope, proves the
+  cleanup goal is already satisfied. A generic route-level 404 or any other failure remains
+  uncertain and is retried from durable state.
 - `__RequestConversationModel` — send one chat-completions exchange using the shared
   `ConversationModelRequest` and return a `ConversationModelResponse`. Server composition supplies
   the endpoint, attempt key and model alias; the alias must match `CompiledRunInput`. Completion

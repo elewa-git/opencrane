@@ -3,7 +3,7 @@ import type { Logger } from "pino";
 import request, { type Test } from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import type { AuthenticatedPrincipalAdmission } from "@opencrane/backend/server/infra/auth";
+import { _RequestHost, _ResolveRequestPrincipal, type AuthenticatedPrincipalAdmission } from "@opencrane/backend/server/infra/auth";
 import type { AuthenticatedPrincipalCapabilityReader } from "@opencrane/backend/server/iam/identity";
 
 import { _CreateDevelopmentAuthentication } from "../authentication";
@@ -37,7 +37,12 @@ function _App(admission: AuthenticatedPrincipalAdmission = _Admission(), transpo
 	app.use(authentication.authMiddleware);
 	app.get("/api/v1/protected", function _Protected(incoming, response): void
 	{
-		response.json({ principalId: incoming.authenticatedPrincipal?.principalId });
+		const principal = _ResolveRequestPrincipal(incoming);
+		response.json({
+			principalId: incoming.authenticatedPrincipal?.principalId,
+			requestHost: _RequestHost(incoming),
+			siloId: principal?.siloId,
+		});
 	});
 	app.post("/api/v1/protected", function _Mutating(_incoming, response): void
 	{
@@ -71,6 +76,20 @@ describe("Tier 2 development authentication", function _Suite(): void
 		const response = await request(_App()).get("/api/v1/protected").set("Host", "local-development.localhost:8080").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
 		expect(response.status).toBe(200);
 		expect(response.body.principalId).toBe("local-development-principal");
+		expect(response.body.siloId).toBe("local-development");
+	});
+
+	it("presents the fixed development silo to product resolvers after Codespaces admission", async function _ResolvesCodespacesSilo(): Promise<void>
+	{
+		const browserOrigin = "https://careful-crane-123-4200.app.github.dev";
+		const response = await request(_App(_Admission(), browserOrigin)).get("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+
+		expect(response.status).toBe(200);
+		expect(response.body).toEqual({
+			principalId: "local-development-principal",
+			requestHost: "careful-crane-123-4200.app.github.dev",
+			siloId: "local-development",
+		});
 	});
 
 	it("refuses an unexpected host before Principal admission", async function _RejectsHost(): Promise<void>

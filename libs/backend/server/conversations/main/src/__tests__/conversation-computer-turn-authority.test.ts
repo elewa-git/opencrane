@@ -117,6 +117,7 @@ function _Harness() {
     runLifecycle: {
       start: vi.fn().mockResolvedValue(undefined),
       complete: vi.fn().mockResolvedValue(undefined),
+	  fail: vi.fn().mockResolvedValue(undefined),
     },
     store: {
       reserveContinuation: vi.fn(),
@@ -150,6 +151,10 @@ function _Harness() {
         stored = { ...stored!, outputSourceCommandId: receipt.event.id, outputReceipt: receipt };
         return { outcome: "accepted" as const, receipt };
       }),
+	  markUnavailable: vi.fn(async function _MarkUnavailable() {
+		stored = { ...stored!, unavailable: true };
+		return stored;
+	  }),
       settle: vi.fn(async function _Settle() { active = false; }),
     },
     writers: { create: vi.fn((turn: FrozenConversationComputerTurn) => ({ append, prepare: async function _Prepare(command: BoundConversationWriterAppend) { return _PrepareBoundDraft(turn.binding, command); } })) },

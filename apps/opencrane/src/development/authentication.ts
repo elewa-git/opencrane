@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { Router, type Request, type RequestHandler, type Response } from "express";
 import type { Logger } from "pino";
 
-import type { AuthenticatedPrincipalAdmission } from "@opencrane/backend/server/infra/auth";
+import { _BindRequestPrincipalSilo, type AuthenticatedPrincipalAdmission } from "@opencrane/backend/server/infra/auth";
 import type { AuthenticatedPrincipalCapabilityReader } from "@opencrane/backend/server/iam/identity";
 
 import type { PublicAuthenticationComposition } from "../app/public-app.types";
@@ -200,6 +200,7 @@ function _CreateAdmissionMiddleware(identity: DevelopmentIdentity, admission: Au
 				return;
 			}
 			request.authenticatedPrincipal = principal;
+			_BindRequestPrincipalSilo(request, identity.siloId);
 			next();
 		}
 		catch (err)

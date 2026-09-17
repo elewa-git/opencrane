@@ -33,6 +33,8 @@ export class DevelopmentConversationComputerRuntime implements DevelopmentConver
 		const activationWorker = activations;
 		const listener = this.privateListener;
 		let stopped = false;
+		function _StopLifecycle(): Promise<void> { return lifecycleWorker.stop(); }
+		function _StopActivations(): Promise<void> { return activationWorker.stop(); }
 
 		/** Stop every runtime worker once, in the reverse order of startup authority. */
 		async function _Stop(): Promise<void>
@@ -43,7 +45,7 @@ export class DevelopmentConversationComputerRuntime implements DevelopmentConver
 			}
 			stopped = true;
 			await _RunDevelopmentCleanup([
-				[activationWorker.stop, lifecycleWorker.stop],
+				[_StopActivations, _StopLifecycle],
 				[listener.stop.bind(listener)],
 			], "Tier 2 conversation-computer runtime cleanup failed");
 		}

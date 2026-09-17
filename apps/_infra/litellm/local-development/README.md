@@ -21,8 +21,14 @@ is refused.
 The coordinator writes one session-owned YAML beside its other disposable secrets. It contains only
 the `auto` alias, selected model, and `os.environ/OPENCRANE_LOCAL_PROVIDER_KEY` reference. The
 coordinator supplies that one provider key and a separate disposable LiteLLM master key to the
-loopback-bound container. Credential bytes are never written into generated YAML, and normal or
-failed shutdown removes the file with the session directory.
+loopback-bound container. On ARM Docker daemons, `--emulate-amd64` also runs LiteLLM through AMD64
+emulation because the pinned ARM64 variant lacks the Prisma schema engine required to initialize its
+key store. The coordinator also creates an isolated `litellm` database and non-privileged database
+role with its own persistent credential in Tier 2's owned PostgreSQL service. LiteLLM needs that
+database for the per-run virtual keys issued by the current Agent path;
+the launch waits for authenticated key storage as well as model discovery before starting OpenCrane.
+Credential bytes are never written into generated YAML or Docker arguments, and normal or failed
+shutdown removes the generated file with the session directory.
 
 ## Boundary
 

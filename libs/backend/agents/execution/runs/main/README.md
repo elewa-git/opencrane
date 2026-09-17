@@ -52,7 +52,9 @@ does not grant permission to use a run.
 
 - `PrismaConversationRunLifecycleUnitOfWork` — idempotently advances an exact lease-fenced
   conversation attempt from accepted to running after durable bootstrap, and from running to
-  completed only after durable assistant output. Worker restart uncertainty converges on the same state.
+  completed only after durable assistant output. It also moves accepted or running attempts to
+  failed after the turn's durable unavailable decision wins. Worker restart uncertainty converges
+  on the same terminal state without replacing a successful completion.
 
 - `PrismaRunAdmissionUnitOfWork` saves a new run and its first lease-bound input snapshot together.
 - `PrismaSelfRunStatusUnitOfWork` and `_CreatePrismaSelfRunStatusRouter` expose owner-filtered status

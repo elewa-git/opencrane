@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createApplicationCommands, createKurrentCommand, createKurrentTlsVolumeCommand, createPostgresCommand, createPostgresVolumeProvisionerCommand } from "../commands.mjs";
+import { createApplicationCommands, createKurrentCommand, createKurrentTlsVolumeCommand, createLiteLLMCommand, createPostgresCommand, createPostgresVolumeProvisionerCommand } from "../commands.mjs";
 import { createLocalChildEnvironment } from "../command-runner.mjs";
 
 const configuration = {
@@ -16,6 +16,9 @@ const configuration = {
 	kurrentVolumeName: "kurrent-volume",
 	kurrentTlsProvisionerContainerName: "kurrent-tls-provisioner",
 	kurrentTlsVolumeName: "kurrent-tls-volume",
+	liteLLMContainerName: "litellm",
+	liteLLMImage: "litellm@sha256:test",
+	liteLLMPort: 4_000,
 	networkName: "network",
 	postgresContainerName: "postgres",
 	postgresImage: "postgres@sha256:test",
@@ -36,6 +39,8 @@ const secrets = {
 	kurrentHistoryPasswordPath: "/tmp/history-password",
 	kurrentHistoryUsernamePath: "/tmp/history-username",
 	kurrentOpsPassword: "ops-secret",
+	liteLLMDatabasePassword: "litellm-database-secret",
+	liteLLMMasterKey: "litellm-secret",
 	postgresPassword: "postgres-secret",
 	privateKeyPath: "/tmp/key"
 };
@@ -59,15 +64,27 @@ test("container commands keep database credentials out of process arguments", fu
 	assert.equal(provision.arguments.some((argument) => argument.includes("source=/tmp/session,target=/source,readonly")), true);
 });
 
-test("opt-in emulation targets only AMD64-pinned database and TLS provisioner images", function _Amd64Emulation()
+test("opt-in emulation targets every service image that needs AMD64 runtime support", function _Amd64Emulation()
 {
 	const emulated = { ...configuration, emulateAmd64: true };
 	const postgres = createPostgresCommand(emulated, secrets);
 	const kurrent = createKurrentCommand(emulated, secrets);
 	const provisioner = createKurrentTlsVolumeCommand(emulated, { ...secrets, directory: "/tmp/session" });
 	const postgresProvisioner = createPostgresVolumeProvisionerCommand(emulated);
+	const provider = {
+		generatedConfigPath: "/tmp/litellm.yaml",
+		providerKey: "provider-secret",
+		providerKeyEnvironmentVariable: "OPENCRANE_LOCAL_PROVIDER_KEY"
+	};
+	const liteLLM = createLiteLLMCommand(emulated, secrets, provider);
 
-	for (const specification of [postgres, kurrent, provisioner, postgresProvisioner])
+	for (const specification of [
+		postgres,
+		kurrent,
+		provisioner,
+		postgresProvisioner,
+		liteLLM
+	])
 	{
 		assert.deepEqual(specification.arguments.slice(0, 3), ["run", "--platform", "linux/amd64"]);
 	}
@@ -94,6 +111,22 @@ test("PostgreSQL volume helper changes only the owned mount root while the serve
 	assert.equal(postgres.arguments.includes("/var/run/postgresql:uid=26,gid=26,mode=0700,size=16m"), true);
 	assert.equal(postgres.arguments.filter((argument) => argument === "--tmpfs").length, 1);
 	assert.deepEqual(helper.environment, {});
+});
+
+test("local LiteLLM receives its isolated database URL without putting credentials in Docker arguments", function _LiteLLMDatabase()
+{
+	const provider = {
+		generatedConfigPath: "/tmp/litellm.yaml",
+		providerKey: "provider-secret",
+		providerKeyEnvironmentVariable: "OPENCRANE_LOCAL_PROVIDER_KEY"
+	};
+	const specification = createLiteLLMCommand(configuration, secrets, provider);
+
+	assert.equal(specification.arguments.includes("DATABASE_URL"), true);
+	assert.equal(specification.arguments.join(" ").includes(secrets.postgresPassword), false);
+	assert.equal(specification.arguments.join(" ").includes(secrets.liteLLMDatabasePassword), false);
+	assert.equal(specification.environment.DATABASE_URL, "postgresql://litellm:litellm-database-secret@postgres:5432/litellm");
+	assert.equal(specification.environment.DATABASE_URL.includes(secrets.postgresPassword), false);
 });
 
 test("application plans start only the current server and Tier 2 UI", function _CurrentProcesses()

@@ -117,16 +117,16 @@ export async function waitForPostgres(configuration, operations = {})
 	throw new Error(`Tier 2 PostgreSQL did not become ready within ${seconds} seconds. Last startup logs:\n${logs}`);
 }
 
-/** Completes a missing application database in an owned cluster without replacing its existing data. */
-async function _ensureOpencraneDatabase(runCommand, configuration)
+/** Completes one missing database in the owned cluster without replacing its existing data. */
+async function _ensureDatabase(runCommand, configuration, databaseName)
 {
-	const inventoryArguments = _postgresArguments(configuration, "postgres", "--tuples-only", "--no-align", "--command", "SELECT 1 FROM pg_database WHERE datname = 'opencrane';");
+	const inventoryArguments = _postgresArguments(configuration, "postgres", "--tuples-only", "--no-align", "--command", `SELECT 1 FROM pg_database WHERE datname = '${databaseName}';`);
 	const databaseCheck = await runCommand("docker", inventoryArguments, { signal: configuration.abortSignal });
 	const databaseExists = databaseCheck.stdout.trim();
 
 	if (!databaseExists)
 	{
-		const createArguments = _postgresArguments(configuration, "postgres", "--command", "CREATE DATABASE opencrane;");
+		const createArguments = _postgresArguments(configuration, "postgres", "--command", `CREATE DATABASE ${databaseName};`);
 		await runCommand("docker", createArguments, { signal: configuration.abortSignal });
 	}
 	else if (databaseExists !== "1")
@@ -135,11 +135,49 @@ async function _ensureOpencraneDatabase(runCommand, configuration)
 	}
 }
 
+/** Provides the isolated database required by LiteLLM virtual-key management. */
+export async function ensureLiteLLMDatabase(configuration, secrets, operations = {})
+{
+	const runCommand = operations.runCommand ?? runLocalCommand;
+	const escapedPassword = secrets.liteLLMDatabasePassword.replaceAll("'", "''");
+	const roleSql = [
+		"DO $$",
+		"BEGIN",
+		"  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'litellm') THEN",
+		`    CREATE ROLE litellm LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS PASSWORD '${escapedPassword}';`,
+		"  ELSE",
+		`    ALTER ROLE litellm LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS PASSWORD '${escapedPassword}';`,
+		"  END IF;",
+		"END",
+		"$$;",
+		""
+	].join("\n");
+	await runCommand("docker", _postgresArguments(configuration, "postgres"), {
+		input: roleSql,
+		signal: configuration.abortSignal
+	});
+
+	const ownerSql = "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = 'litellm';";
+	const ownerArguments = _postgresArguments(configuration, "postgres", "--tuples-only", "--no-align", "--command", ownerSql);
+	const ownerResult = await runCommand("docker", ownerArguments, { signal: configuration.abortSignal });
+	const owner = ownerResult.stdout.trim();
+
+	if (!owner)
+	{
+		const createArguments = _postgresArguments(configuration, "postgres", "--command", "CREATE DATABASE litellm OWNER litellm;");
+		await runCommand("docker", createArguments, { signal: configuration.abortSignal });
+	}
+	else if (owner !== "litellm")
+	{
+		throw new Error("The Tier 2 LiteLLM database is owned by an unexpected role; rerun with --reset");
+	}
+}
+
 /** Applies only the reviewed target baseline to an empty database, then replays the local seed. */
 export async function applyTargetBaseline(configuration, operations = {})
 {
 	const runCommand = operations.runCommand ?? runLocalCommand;
-	await _ensureOpencraneDatabase(runCommand, configuration);
+	await _ensureDatabase(runCommand, configuration, "opencrane");
 
 	async function _query(sql)
 	{
