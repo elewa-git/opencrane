@@ -14,6 +14,11 @@
     "memory": "8gb",
     "storage": "16gb"
   },
+  "secrets": {
+    "OPENCRANE_TIER2_PROVIDER_API_KEY": {
+      "description": "Optional personal model-provider API key for the Tier 2 local-llm profile; select its provider explicitly when starting Tier 2."
+    }
+  },
   "forwardPorts": [4200],
   "portsAttributes": {
     "4200": {

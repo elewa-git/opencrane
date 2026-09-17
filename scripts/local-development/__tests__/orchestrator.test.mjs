@@ -44,6 +44,36 @@ test("the production credential path enforces remote administrator-key separatio
 	fs.writeFileSync(remoteKeyPath, "remote-administrator\n", { mode: 0o600 });
 	try
 	{
+		const localEnvironment = { OPENCRANE_TIER2_PROVIDER_API_KEY: "codespaces-value-must-not-win" };
+		const localConfiguration = {
+			alternative: "local-llm",
+			provider: "openai",
+			repositoryRoot,
+		};
+		const local = await prepareModelCredentials(localConfiguration, localEnvironment);
+		assert.equal(local.kind, "local");
+		assert.equal(local.credentialSource, "owner-only-file");
+		assert.equal(local.providerKey, "local-provider");
+		assert.equal(localEnvironment.OPENCRANE_TIER2_PROVIDER_API_KEY, "codespaces-value-must-not-win");
+
+		const codespacesEnvironment = { OPENCRANE_TIER2_PROVIDER_API_KEY: "  codespaces-provider  " };
+		const codespacesConfiguration = {
+			alternative: "local-llm",
+			codespaceName: "careful-crane-123",
+			provider: "openai",
+			repositoryRoot,
+		};
+		const codespaces = await prepareModelCredentials(codespacesConfiguration, codespacesEnvironment);
+		assert.equal(codespaces.kind, "local");
+		assert.equal(codespaces.credentialSource, "codespaces-environment");
+		assert.equal(codespaces.providerKey, "codespaces-provider");
+		assert.equal("OPENCRANE_TIER2_PROVIDER_API_KEY" in codespacesEnvironment, false);
+
+		const emptyCodespacesEnvironment = { OPENCRANE_TIER2_PROVIDER_API_KEY: "  " };
+		await assert.rejects(prepareModelCredentials(codespacesConfiguration, emptyCodespacesEnvironment), /requires the OPENCRANE_TIER2_PROVIDER_API_KEY/u);
+		assert.equal("OPENCRANE_TIER2_PROVIDER_API_KEY" in emptyCodespacesEnvironment, false);
+		await assert.rejects(prepareModelCredentials(codespacesConfiguration, {}), /requires the OPENCRANE_TIER2_PROVIDER_API_KEY/u);
+
 		const remote = await prepareModelCredentials({
 			alternative: "remote-llm",
 			remoteLiteLLMMasterKeyFile: remoteKeyPath,
@@ -134,6 +164,7 @@ test("a normal run prints only the safe browser URL and removes reverse-owned re
 
 	async function _Credentials()
 	{
+		events.push("credentials");
 		return { kind: "simulated" };
 	}
 
@@ -154,7 +185,10 @@ test("a normal run prints only the safe browser URL and removes reverse-owned re
 		events.push(`start:${specification.arguments[3]}`);
 	}
 
-	async function _Validate() {}
+	async function _Validate()
+	{
+		events.push("validate");
+	}
 
 	async function _Wait() {}
 
@@ -184,6 +218,7 @@ test("a normal run prints only the safe browser URL and removes reverse-owned re
 
 	assert.equal(events.includes("remove:volume:postgres-volume"), false);
 	assert.equal(events.includes("remove:volume:kurrent-volume"), false);
+	assert.equal(events.indexOf("credentials") < events.indexOf("validate"), true);
 	assert.equal(events.indexOf("remove:container:postgres") < events.indexOf("start:postgres-volume-provisioner"), true);
 	assert.equal(events.indexOf("start:postgres-volume-provisioner") < events.indexOf("start:postgres"), true);
 	assert.deepEqual(events.slice(-7), [

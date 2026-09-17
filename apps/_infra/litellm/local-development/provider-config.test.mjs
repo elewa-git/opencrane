@@ -104,6 +104,51 @@ test("credentials must be owner-only regular files", function _CredentialBoundar
 	}
 });
 
+test("Codespaces selects an explicit reviewed provider without a checkout key file", function _CodespacesSelection()
+{
+	const repositoryRoot = _TemporaryRepository();
+	try
+	{
+		const codespacesOptions = {
+			alternative: "local-llm",
+			codespaceName: "careful-crane-123",
+			provider: "openai",
+			model: "openai/gpt-5.4",
+			repositoryRoot,
+		};
+		const plan = createModelCredentialPlan(codespacesOptions);
+		assert.equal(plan.kind, "local");
+		assert.equal(plan.credentialSource, "codespaces-environment");
+		assert.equal(plan.selection.provider.name, "openai");
+		assert.equal(plan.selection.model, "openai/gpt-5.4");
+		assert.equal(plan.selection.providerKeyPath, undefined);
+		assert.throws(function _MissingProvider()
+		{
+			const missingProviderOptions = {
+				alternative: "local-llm",
+				codespaceName: "careful-crane-123",
+				repositoryRoot,
+			};
+			createModelCredentialPlan(missingProviderOptions);
+		}, /requires --provider/u);
+		assert.throws(function _ProviderMismatch()
+		{
+			const mismatchedProviderOptions = {
+				alternative: "local-llm",
+				codespaceName: "careful-crane-123",
+				provider: "anthropic",
+				model: "openai/gpt-5.4",
+				repositoryRoot,
+			};
+			createModelCredentialPlan(mismatchedProviderOptions);
+		}, /does not belong/u);
+	}
+	finally
+	{
+		fs.rmSync(repositoryRoot, { recursive: true, force: true });
+	}
+});
+
 test("generated configuration contains only the selected alias and environment reference", function _SecretFreeConfiguration()
 {
 	const repositoryRoot = _TemporaryRepository();
