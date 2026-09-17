@@ -82,7 +82,14 @@ describe("Tier 2 development authentication", function _Suite(): void
 	it("presents the fixed development silo to product resolvers after Codespaces admission", async function _ResolvesCodespacesSilo(): Promise<void>
 	{
 		const browserOrigin = "https://careful-crane-123-4200.app.github.dev";
-		const response = await request(_App(_Admission(), browserOrigin)).get("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const transport: DevelopmentAuthenticationTransport = {
+			browserHost: "careful-crane-123-4200.app.github.dev",
+			browserScheme: "https",
+			directHost: "local-development.localhost:8080",
+			proxyTargets: new Set(["127.0.0.1:8080", "localhost:8080"]),
+			scheme: "http",
+		};
+		const response = await request(_App(_Admission(), transport)).get("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
 
 		expect(response.status).toBe(200);
 		expect(response.body).toEqual({
