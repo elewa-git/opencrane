@@ -228,6 +228,34 @@ describe("Tier 2 development authentication", function _Suite(): void
 		expect(wrongScheme.status).toBe(403);
 	});
 
+	it("admits same-origin Codespaces fetches when the private proxy omits URL headers", async function _CodespacesFetchMetadata(): Promise<void>
+	{
+		const transport: DevelopmentAuthenticationTransport = {
+			browserHost: "careful-crane-123-4200.app.github.dev",
+			browserScheme: "https",
+			directHost: "local-development.localhost:8080",
+			proxyTargets: new Set(["127.0.0.1:8080", "localhost:8080"]),
+			scheme: "http",
+		};
+		const accepted = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const crossSite = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Sec-Fetch-Site", "cross-site").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const directHost = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "local-development.localhost:8080").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const emptyOrigin = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Origin", "").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const emptyReferer = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Referer", "").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const missingMetadata = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const wrongReferer = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Referer", "https://attacker.example/").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const opaqueOrigin = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Origin", "null").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+
+		expect(accepted.status).toBe(204);
+		expect(crossSite.status).toBe(403);
+		expect(directHost.status).toBe(403);
+		expect(emptyOrigin.status).toBe(403);
+		expect(emptyReferer.status).toBe(403);
+		expect(missingMetadata.status).toBe(403);
+		expect(wrongReferer.status).toBe(403);
+		expect(opaqueOrigin.status).toBe(403);
+	});
+
 	it("fails closed when the durable Principal is absent", async function _RejectsAbsentPrincipal(): Promise<void>
 	{
 		const admission: AuthenticatedPrincipalAdmission = { admit: vi.fn().mockResolvedValue(null) };
