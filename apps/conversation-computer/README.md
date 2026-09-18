@@ -39,13 +39,14 @@ receives none of those inputs or credentials and has no direct tool-proposal or 
 
 Pending work polls bootstrap at the normal two-second cadence. A `response_unavailable` or
 `authority_ended` model outcome keeps readiness degraded for that poll; it does not resubmit that
-bootstrap's model step. The server terminalizes and releases an unavailable turn after revoking its
-attempt key, so the next poll can become idle or admit a later human message. Private HTTP requests
-allow 30 seconds, covering the server's 25-second model
-dispatch deadline. The server may use one permitted tool result for a second, text-only request;
-the worker neither chooses that request nor acquires a fresh model allowance. This continuation is
-implemented in PR #830 and awaits CI and live qualification. Visible tool progress,
-approvals and recovery controls remain separate product work.
+bootstrap's model step. The server marks an unavailable turn terminal and releases it after revoking
+its attempt key, so the next poll can become idle or admit a later human message. Routine private
+HTTP requests use a 70-second socket timeout. A model-step call uses 360 seconds so the server owns
+the full at-most-300-second attempt authority and a 60-second finish margin instead of losing the
+private route while admitted work may still complete. The server may use one permitted tool result
+for a second, text-only request; the worker neither chooses that request nor acquires a fresh model
+allowance. This continuation is implemented in PR #830 and awaits CI and live qualification.
+Visible tool progress, approvals and recovery controls remain separate product work.
 
 ## Public surface
 

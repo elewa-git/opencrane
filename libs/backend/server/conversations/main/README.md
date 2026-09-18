@@ -164,12 +164,14 @@ listener supplies request correlation and logging before these early handlers ru
 
 Before model dispatch, the server rechecks the original run deadline, execution and requester
 membership expiry, current permission and active lease. It saves the smaller of the frozen response
-and run completion-token ceilings, and a dispatch deadline no later than 25 seconds or the remaining
-authority. Credential issuance and the HTTP exchange share that deadline; the process's private request
-allows 30 seconds. An unavailable response keeps the reservation instead of issuing a replacement
-allowance or key on bootstrap; terminal cleanup then retains that reservation as proof that the
-request must not be retried. Grant revocation closes new model dispatch, output append and
-participant reads; it does not prove cancellation of a request already accepted by the provider.
+and run completion-token ceilings, and a dispatch deadline no later than 60 seconds or the remaining
+authority. Credential issuance and the HTTP exchange share that deadline. The process's model-step
+request uses a 360-second socket timeout, covering the at-most-300-second attempt authority and a
+60-second finish margin; routine private requests use 70 seconds. An unavailable response keeps the
+reservation instead of issuing a replacement allowance or key on bootstrap; terminal cleanup then
+retains that reservation as proof that the request must not be retried. Grant revocation closes new
+model dispatch, output append and participant reads; it does not prove cancellation of a request
+already accepted by the provider.
 
 Attempt-key issuance uses the configured silo authority independently of the realization's runtime identity.
 It commits encrypted custody before a separate ready-state promotion. If promotion and immediate
@@ -403,7 +405,7 @@ at revision 3; its final-answer intent is revision 4, or revision 2 for a direct
 `ConversationComputerAttemptCredential` holds the first key's encrypted custody and actual expiry.
 `issueOnce` may recover that key but cannot replace expired or uncertain issuance. `reuseExact`
 requires the saved digest and expiry and never creates or renews a key. The original attempt window,
-with the existing 300-second ceiling, is separate from each request's at-most-25-second deadline.
+with the existing 300-second ceiling, is separate from each request's at-most-60-second deadline.
 Successful revocation clears secrets and retains a non-secret spent-attempt marker without resetting
 any budget.
 

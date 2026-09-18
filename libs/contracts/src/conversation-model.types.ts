@@ -1,6 +1,13 @@
 import type { CompiledRunInput } from "./compiled-run-input.types";
 
 /**
+ * Caps one model exchange while the caller's shorter run, lease and credential deadlines still win.
+ * The conversation owner uses this value when it reserves paid work, and the model adapter applies
+ * the same cap while it sends and reads the response.
+ */
+export const CONVERSATION_MODEL_REQUEST_TIMEOUT_MILLISECONDS = 60_000;
+
+/**
  * Selects whether an admitted model request may propose a tool. The conversation owner and model
  * adapter share these closed in-process values; unknown modes fail before dispatch. A mode grants
  * no tool authority and cannot replace the caller's saved budget and permission checks.

@@ -52,7 +52,7 @@ export interface ConversationComputerModelReservation
 	readonly maxCompletionTokens: number;
 	/** Preserves the original run and lease limit observed before reservation. */
 	readonly authorityExpiresAtEpochMs: number;
-	/** Ends this request within 25 seconds and never extends during retry. */
+	/** Stores an absolute request deadline, at most 60 seconds from reservation and never extended by recovery. */
 	readonly dispatchDeadlineEpochMs: number;
 }
 

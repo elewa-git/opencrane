@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, ConversationComputerRealizationKinds, ConversationModelResponseKinds, ConversationModelToolModes, ___ConversationModelContinuationSchema, ___ConversationToolProposalSchema, type ConversationModelToolCall } from "@opencrane/contracts";
+import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, CONVERSATION_MODEL_REQUEST_TIMEOUT_MILLISECONDS, ConversationComputerRealizationKinds, ConversationModelResponseKinds, ConversationModelToolModes, ___ConversationModelContinuationSchema, ___ConversationToolProposalSchema, type ConversationModelToolCall } from "@opencrane/contracts";
 import { ___CanonicalizeJson, ___DigestCanonicalJson, ___ParseAndValidateJson, type JsonValue } from "@opencrane/util";
 
 import { _ConversationModelRequestDigest } from "./conversation-computer-model-reservation";
@@ -143,7 +143,7 @@ function _FirstReservation(turn: FrozenConversationComputerTurn, candidate: Conv
 	const maySelect = input.budget.maxModelTurns >= 2 && total >= 2 && Number.isSafeInteger(total) && (input.budget.maxToolInvocations === null || Number.isSafeInteger(input.budget.maxToolInvocations) && input.budget.maxToolInvocations >= 1) && input.tools.some(tool => !tool.requiresApproval);
 	const tools = maySelect ? ConversationModelToolModes.Select : ConversationModelToolModes.None;
 	const maxCompletionTokens = maySelect ? Math.min(...limits, Math.floor(total / 2)) : Math.min(...limits);
-	const facts = { ordinal: 1 as const, tools, compiledInputDigest: turn.compile.digest, maxCompletionTokens, authorityExpiresAtEpochMs, dispatchDeadlineEpochMs: Math.min(authorityExpiresAtEpochMs, Date.now() + 25_000) };
+	const facts = { ordinal: 1 as const, tools, compiledInputDigest: turn.compile.digest, maxCompletionTokens, authorityExpiresAtEpochMs, dispatchDeadlineEpochMs: Math.min(authorityExpiresAtEpochMs, Date.now() + CONVERSATION_MODEL_REQUEST_TIMEOUT_MILLISECONDS) };
 	return { invocationFence: randomUUID(), ...facts, requestDigest: _ConversationModelRequestDigest(turn, facts) };
 }
 
@@ -160,7 +160,7 @@ function _SecondReservation(turn: FrozenConversationComputerTurn, candidate: Con
 	const authorityExpiresAtEpochMs = Math.min(first.authorityExpiresAtEpochMs, budget.wallClockDeadlineEpochMs ?? first.authorityExpiresAtEpochMs, Date.parse(candidate.credentialExpiresAt), Date.parse(declaration.credentialExpiresAt), resultNotAfter);
 	if (!Number.isSafeInteger(maxCompletionTokens) || maxCompletionTokens < 1 || !Number.isSafeInteger(authorityExpiresAtEpochMs) || authorityExpiresAtEpochMs <= Date.now())
 		throw new Error("Conversation continuation has no original allowance remaining");
-	const facts = { ordinal: 2 as const, tools: ConversationModelToolModes.None, compiledInputDigest: turn.compile.digest, maxCompletionTokens, authorityExpiresAtEpochMs, dispatchDeadlineEpochMs: Math.min(authorityExpiresAtEpochMs, Date.now() + 25_000), continuation, proposalId: turn.toolSelection.proposalId, resultDigest };
+	const facts = { ordinal: 2 as const, tools: ConversationModelToolModes.None, compiledInputDigest: turn.compile.digest, maxCompletionTokens, authorityExpiresAtEpochMs, dispatchDeadlineEpochMs: Math.min(authorityExpiresAtEpochMs, Date.now() + CONVERSATION_MODEL_REQUEST_TIMEOUT_MILLISECONDS), continuation, proposalId: turn.toolSelection.proposalId, resultDigest };
 	return { invocationFence: randomUUID(), ...facts, requestDigest: _ConversationModelRequestDigest(turn, facts) };
 }
 
