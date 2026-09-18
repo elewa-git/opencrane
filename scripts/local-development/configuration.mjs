@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { LOCAL_DEVELOPMENT_ALTERNATIVES } from "./profiles.mjs";
+import { persistWorkstationProviderDefault, readWorkstationProviderDefault, TIER2_DEFAULT_PROVIDER_ENVIRONMENT_VARIABLE } from "./workstation-provider-default.mjs";
 
 /** Hashes an absolute path into the short value stored on Docker ownership labels. */
 function _identity(value)
@@ -69,8 +70,35 @@ function _browserOrigin(environment)
 	return `https://${name}-4200.${domain}`;
 }
 
+/**
+ * Resolves CLI and exported defaults, loading or persisting the ignored file only for workstation
+ * `local-llm`. A resolved workstation preference is written only to the worker environment;
+ * Codespaces never reads or writes the file.
+ */
+function _defaultProvider(parsed, repositoryRoot, environment, codespaceName, operations)
+{
+	const environmentDefault = environment[TIER2_DEFAULT_PROVIDER_ENVIRONMENT_VARIABLE]?.trim() || undefined;
+
+	if (parsed.alternative !== LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM || codespaceName)
+		return parsed.defaultProvider ?? environmentDefault;
+
+	const persistDefault = operations.persistWorkstationProviderDefault ?? persistWorkstationProviderDefault;
+	const readDefault = operations.readWorkstationProviderDefault ?? readWorkstationProviderDefault;
+	let defaultProvider = environmentDefault;
+
+	if (parsed.defaultProvider)
+		defaultProvider = persistDefault(repositoryRoot, parsed.defaultProvider);
+	else if (!defaultProvider && !parsed.provider && !parsed.model)
+		defaultProvider = readDefault(repositoryRoot);
+
+	if (defaultProvider)
+		environment[TIER2_DEFAULT_PROVIDER_ENVIRONMENT_VARIABLE] = defaultProvider;
+
+	return defaultProvider;
+}
+
 /** Resolves current release inputs and worktree-specific Docker resource names. */
-export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, environment = process.env)
+export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, environment = process.env, operations = {})
 {
 	const realRoot = fs.realpathSync(repositoryRoot);
 	const manifestPath = path.join(realRoot, "releases/0.11.0.json");
@@ -91,7 +119,8 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 	const kurrentPort = _port(environment, "OPENCRANE_LOCAL_KURRENTDB_PORT", "21139");
 	const liteLLMPort = _port(environment, "OPENCRANE_LOCAL_LITELLM_PORT", "4000");
 	const browserOrigin = _browserOrigin(environment);
-	const environmentDefaultProvider = environment.OPENCRANE_TIER2_DEFAULT_PROVIDER?.trim() || undefined;
+	const codespaceName = environment.CODESPACES === "true" ? environment.CODESPACE_NAME : undefined;
+	const defaultProvider = _defaultProvider(parsed, realRoot, environment, codespaceName, operations);
 	const occupiedPorts = [
 		postgresPort,
 		kurrentPort,
@@ -112,7 +141,7 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 
 	return {
 		...parsed,
-		defaultProvider: parsed.defaultProvider ?? environmentDefaultProvider,
+		defaultProvider,
 		repositoryRoot: realRoot,
 		repositoryIdentity,
 		worktreeIdentity,
@@ -129,7 +158,7 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 		kurrentPort,
 		liteLLMPort,
 		browserOrigin,
-		codespaceName: environment.CODESPACES === "true" ? environment.CODESPACE_NAME : undefined,
+		codespaceName,
 		codespacesForwardingDomain: environment.CODESPACES === "true" ? environment.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN : undefined,
 		publicPort: 8_080,
 		internalPort: 8_081,
