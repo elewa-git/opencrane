@@ -58,10 +58,13 @@ failure diagnostics. The container excludes loopback addresses from uppercase an
 proxy settings so its Prisma client reaches the embedded query engine directly while external model
 traffic can still use a configured proxy. If LiteLLM exits with either known form of its specific
 embedded Prisma query-engine connection failure in Codespaces, the launcher restarts the same
-container at most twice within that budget. Other exits are not restarted. An early exit or timeout
-reports the latest container state and, when Docker returns it before the deadline, a bounded
-startup-log tail after removing the provider key, LiteLLM master key and database password. It
-never prints the container environment.
+container. Uvicorn can report that application startup failed while the image's process still keeps
+the container running, so the launcher checks current-start logs every two seconds and restarts that
+state only when it has the same Prisma evidence and the explicit application-failure marker. Both
+paths share a limit of two restarts within the startup budget. Other exits are not restarted. An
+early exit or timeout reports the latest container state and, when Docker returns it before the
+deadline, a bounded startup-log tail after removing the provider key, LiteLLM master key and
+database password. It never prints the container environment.
 
 The pinned image includes its OpenAI tokenizer cache. Tier 2 points
 `CUSTOM_TIKTOKEN_CACHE_DIR` at that bundled read-only directory so Codespaces startup does not

@@ -23,6 +23,11 @@ function _RawPrismaEngineConnectionFailure()
 	].join("\n");
 }
 
+function _RunningPrismaApplicationFailure()
+{
+	return `${_RawPrismaEngineConnectionFailure()}\nERROR: Application startup failed. Exiting.`;
+}
+
 test("local LiteLLM readiness proves authenticated model access and key storage before continuing", async function _Waits()
 {
 	const calls = [];
@@ -204,6 +209,104 @@ test("Codespaces restarts LiteLLM when its embedded Prisma query engine misses s
 	});
 	assert.equal(restarts, 1);
 	assert.equal(delays, 1);
+});
+
+test("Codespaces restarts a failed LiteLLM application whose container wrapper remains running", async function _CodespacesRunningPrismaRecovery()
+{
+	let logChecks = 0;
+	let nowMilliseconds = 0;
+	let restarts = 0;
+	const configuration = {
+		abortSignal: new AbortController().signal,
+		codespaceName: "careful-crane-123",
+		liteLLMContainerName: "tier2-litellm",
+		liteLLMPort: 4_000,
+	};
+	const secrets = { liteLLMMasterAuthorizationHeaderPath: "/private/session/litellm-header" };
+	async function _Delay(milliseconds)
+	{
+		nowMilliseconds += milliseconds;
+	}
+
+	async function _Run(command, argumentsList)
+	{
+		if (command === "curl")
+			return { status: restarts > 0 ? 0 : 22 };
+
+		if (argumentsList[0] === "container")
+			return { status: 0, stdout: `${JSON.stringify(_RunningState())}\n` };
+
+		if (argumentsList[0] === "logs")
+		{
+			logChecks += 1;
+			const stdout = logChecks === 1
+				? _RawPrismaEngineConnectionFailure()
+				: _RunningPrismaApplicationFailure();
+
+			return { status: 0, stdout, stderr: "" };
+		}
+
+		assert.deepEqual(argumentsList, ["restart", "--time", "1", "tier2-litellm"]);
+		restarts += 1;
+
+		return { status: 0 };
+	}
+
+	await waitForLocalLiteLLM(configuration, secrets, {}, {
+		delay: _Delay,
+		now: function _Now() { return nowMilliseconds; },
+		runCommand: _Run,
+	});
+	assert.equal(logChecks, 2);
+	assert.equal(restarts, 1);
+	assert.equal(nowMilliseconds >= 4_000, true);
+});
+
+test("Codespaces limits running-wrapper Prisma recovery to two restarts", async function _CodespacesRunningPrismaRecoveryLimit()
+{
+	let logChecks = 0;
+	let nowMilliseconds = 0;
+	let restarts = 0;
+	const configuration = {
+		abortSignal: new AbortController().signal,
+		codespaceName: "careful-crane-123",
+		liteLLMContainerName: "tier2-litellm",
+		liteLLMPort: 4_000,
+	};
+	const secrets = { liteLLMMasterAuthorizationHeaderPath: "/private/session/litellm-header" };
+	async function _Delay(milliseconds)
+	{
+		nowMilliseconds += milliseconds;
+	}
+
+	async function _Run(command, argumentsList)
+	{
+		if (command === "curl")
+			return { status: 22 };
+
+		if (argumentsList[0] === "container")
+			return { status: 0, stdout: `${JSON.stringify(_RunningState())}\n` };
+
+		if (argumentsList[0] === "logs")
+		{
+			logChecks += 1;
+
+			return { status: 0, stdout: _RunningPrismaApplicationFailure(), stderr: "" };
+		}
+
+		assert.deepEqual(argumentsList, ["restart", "--time", "1", "tier2-litellm"]);
+		restarts += 1;
+
+		return { status: 0 };
+	}
+
+	await assert.rejects(waitForLocalLiteLLM(configuration, secrets, {}, {
+		delay: _Delay,
+		now: function _Now() { return nowMilliseconds; },
+		runCommand: _Run,
+	}), /application startup failed while Docker still reported the container running after 2 automatic restarts \(status=running exit=0\)/u);
+	assert.equal(logChecks, 3);
+	assert.equal(restarts, 2);
 });
 
 test("Codespaces limits Prisma query-engine recovery to two restarts", async function _CodespacesPrismaRecoveryLimit()
