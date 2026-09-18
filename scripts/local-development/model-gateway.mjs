@@ -9,6 +9,15 @@ const _CODESPACES_PRISMA_ENGINE_RESTART_LIMIT = 2;
  * @see https://github.com/BerriAI/litellm/issues/11766 for the matching upstream traceback.
  */
 const _PRISMA_ENGINE_CONNECTION_FAILURE = "EngineConnectionError: Could not connect to the query engine";
+/**
+ * Matches the lower-level Prisma health-check traceback emitted without its connection wrapper.
+ * @see https://github.com/BerriAI/litellm/issues/4552 for the same internal HTTP request path.
+ */
+const _PRISMA_ENGINE_HTTP_CONNECTION_FAILURE_MARKERS = [
+	"in _setup_prisma_client",
+	"/prisma/engine/http.py",
+	"httpx.ConnectError: All connection attempts failed"
+];
 /** Leaves time inside the startup budget to collect Docker state and logs after readiness probing stops. */
 const _STARTUP_DIAGNOSTIC_RESERVE_MILLISECONDS = 2_000;
 /** Sets how often the launcher checks LiteLLM readiness. */
@@ -143,12 +152,25 @@ function _startupFailure(state, prefix, logs)
 	return new Error(`${prefix} (status=${state.Status} exit=${state.ExitCode}${reason}). Last redacted startup logs:\n${logs}`);
 }
 
+/** Recognises either observed traceback shape for the embedded Prisma query-engine failure. */
+function _hasPrismaEngineConnectionFailure(logs)
+{
+	if (logs.includes(_PRISMA_ENGINE_CONNECTION_FAILURE))
+		return true;
+
+	const hasRawHealthCheckTrace = _PRISMA_ENGINE_HTTP_CONNECTION_FAILURE_MARKERS.every(
+		(marker) => logs.includes(marker)
+	);
+
+	return hasRawHealthCheckTrace;
+}
+
 /** Allows recovery only for the known Codespaces Prisma query-engine connection failure. */
 function _isRetryablePrismaEngineConnectionFailure(configuration, state, logs)
 {
 	return Boolean(configuration.codespaceName)
 		&& state.ExitCode === 3
-		&& logs.includes(_PRISMA_ENGINE_CONNECTION_FAILURE);
+		&& _hasPrismaEngineConnectionFailure(logs);
 }
 
 /** Starts the same stopped LiteLLM container and reports whether Docker accepted the request. */
@@ -171,10 +193,10 @@ async function _restartLiteLLM(runCommand, configuration, deadline, now)
  *
  * Codespaces receives a 120-second budget and workstations receive 30 seconds. Readiness probing
  * stops two seconds before the monotonic startup deadline so Docker state and current-start logs can
- * be collected. Only in Codespaces, exit code 3 with the linked Prisma connection marker restarts
- * the same container, at most twice; other terminal states fail without a restart. Startup failures
- * include the latest Docker state and, when Docker returns it within that budget, logs from the
- * current container start. The caller must pass the same provider used to start LiteLLM so its key
+ * be collected. Only in Codespaces, exit code 3 with either recognised Prisma connection traceback
+ * restarts the same container, at most twice; other terminal states fail without a restart.
+ * Startup failures include the latest Docker state and, when Docker returns it within that budget,
+ * logs from the current container start. The caller must pass the same provider used to start LiteLLM so its key
  * joins the generated master key and database password in the values removed from those diagnostics.
  *
  * @param configuration - Names the session container and readiness port, identifies Codespaces, and supplies the session abort signal.

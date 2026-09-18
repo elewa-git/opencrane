@@ -14,6 +14,15 @@ function _RunningState()
 	};
 }
 
+function _RawPrismaEngineConnectionFailure()
+{
+	return [
+		"File /usr/lib/python3.13/site-packages/litellm/proxy/proxy_server.py, line 5512, in _setup_prisma_client",
+		"File /usr/lib/python3.13/site-packages/prisma/engine/http.py, line 119, in request",
+		"httpx.ConnectError: All connection attempts failed"
+	].join("\n");
+}
+
 test("local LiteLLM readiness proves authenticated model access and key storage before continuing", async function _Waits()
 {
 	const calls = [];
@@ -238,7 +247,7 @@ test("Codespaces limits Prisma query-engine recovery to two restarts", async fun
 		{
 			return {
 				status: 0,
-				stdout: "prisma.engine.errors.EngineConnectionError: Could not connect to the query engine\n",
+				stdout: `${_RawPrismaEngineConnectionFailure()}\n`,
 				stderr: ""
 			};
 		}
@@ -250,7 +259,7 @@ test("Codespaces limits Prisma query-engine recovery to two restarts", async fun
 	await assert.rejects(waitForLocalLiteLLM(configuration, secrets, {}, {
 		delay: _Delay,
 		runCommand: _Run,
-	}), /after 2 automatic restarts \(status=exited exit=3\).+EngineConnectionError/su);
+	}), /after 2 automatic restarts \(status=exited exit=3\).+httpx\.ConnectError/su);
 	assert.equal(requests, 3);
 	assert.equal(restarts, 2);
 	assert.equal(delays, 2);
@@ -288,8 +297,8 @@ test("Codespaces classifies Prisma recovery from only the current container star
 		{
 			const currentStart = argumentsList[2];
 			const stdout = currentStart.includes("00.000000000Z")
-				? "prisma.engine.errors.EngineConnectionError: Could not connect to the query engine\n"
-				: "A different exit-3 failure occurred\n";
+				? `${_RawPrismaEngineConnectionFailure()}\n`
+				: "httpx.ConnectError: All connection attempts failed\n";
 
 			return { status: 0, stdout, stderr: "" };
 		}
@@ -301,7 +310,7 @@ test("Codespaces classifies Prisma recovery from only the current container star
 	await assert.rejects(waitForLocalLiteLLM(configuration, secrets, {}, {
 		delay: async function _Delay() {},
 		runCommand: _Run,
-	}), /status=exited exit=3\).+A different exit-3 failure occurred/su);
+	}), /status=exited exit=3\).+httpx\.ConnectError/su);
 	assert.equal(restarts, 1);
 });
 

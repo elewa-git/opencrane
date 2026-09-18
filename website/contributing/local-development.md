@@ -234,11 +234,14 @@ cross-provider model selection all stop before Docker resources are acquired.
 
 Codespaces gives LiteLLM a 120-second startup budget; a workstation keeps a 30-second budget. The
 launcher reserves the final two seconds for failure diagnostics. In Codespaces, LiteLLM can exit
-when its embedded Prisma query engine cannot accept database requests. The launcher recognises
-that specific exit and restarts the same container at most twice within the startup budget. Other
-exits are not restarted. An early exit or timeout includes the latest Docker state and, when Docker
-returns it before the deadline, a bounded startup-log tail. Provider, master-key and
-database-password values are removed, and the container environment is never printed. Check the
+when its embedded Prisma query engine cannot accept database requests. The container excludes
+loopback addresses from uppercase and lowercase HTTP proxy settings, so that internal request does
+not leave the container while external provider requests may still use a configured proxy. The
+launcher recognises both observed traceback forms for that specific exit and restarts the same
+container at most twice within the startup budget. Other exits are not restarted. An early exit or
+timeout includes the latest Docker state and, when Docker returns it before the deadline, a bounded
+startup-log tail. Provider, master-key and database-password values are removed, and the container
+environment is never printed. Check the
 Architecture line in `docker info` reports `amd64` or `x86_64`, then run the core, simulated-Agent
 or credential-backed Agent command without an emulation flag.
 

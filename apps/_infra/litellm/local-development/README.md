@@ -54,11 +54,14 @@ shutdown removes the generated file with the session directory. The Codespaces d
 recommends every supported environment-secret name and the optional default-provider setting but
 never stores their values in tracked configuration. Codespaces gets a 120-second LiteLLM startup
 budget; a workstation keeps a 30-second budget. The launcher reserves the final two seconds for
-failure diagnostics. If LiteLLM exits with its specific embedded Prisma query-engine connection
-failure in Codespaces, the launcher restarts the same container at most twice within that budget.
-Other exits are not restarted. An early exit or timeout reports the latest container state and,
-when Docker returns it before the deadline, a bounded startup-log tail after removing the provider
-key, LiteLLM master key and database password. It never prints the container environment.
+failure diagnostics. The container excludes loopback addresses from uppercase and lowercase HTTP
+proxy settings so its Prisma client reaches the embedded query engine directly while external model
+traffic can still use a configured proxy. If LiteLLM exits with either known form of its specific
+embedded Prisma query-engine connection failure in Codespaces, the launcher restarts the same
+container at most twice within that budget. Other exits are not restarted. An early exit or timeout
+reports the latest container state and, when Docker returns it before the deadline, a bounded
+startup-log tail after removing the provider key, LiteLLM master key and database password. It
+never prints the container environment.
 
 The pinned image includes its OpenAI tokenizer cache. Tier 2 points
 `CUSTOM_TIKTOKEN_CACHE_DIR` at that bundled read-only directory so Codespaces startup does not
