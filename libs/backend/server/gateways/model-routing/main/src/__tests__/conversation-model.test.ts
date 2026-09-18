@@ -8,7 +8,7 @@ import { ConversationModelError, ConversationModelFailureCodes } from "../core/c
 
 const _telemetry = vi.hoisted(function _captureTelemetry()
 {
-	return { fields: [] as unknown[], errors: [] as unknown[], suppressed: 0 };
+	return { fields: [] as unknown[], errors: [] as unknown[], warnings: [] as unknown[][], suppressed: 0 };
 });
 
 vi.mock("@opencrane/backend/observability", function _observabilityContract()
@@ -22,6 +22,16 @@ vi.mock("@opencrane/backend/observability", function _observabilityContract()
 		},
 		___DoWithoutTrace(work: () => unknown)
 			{ _telemetry.suppressed++; return work(); },
+	};
+});
+
+vi.mock("../log", function _modelRoutingLog()
+{
+	return {
+		_log:
+		{
+			warn: function _warn(...args: unknown[]) { _telemetry.warnings.push(args); }
+		}
 	};
 });
 
@@ -61,6 +71,7 @@ beforeEach(function _setup()
 	vi.setSystemTime(_NOW);
 	_telemetry.fields.length = 0;
 	_telemetry.errors.length = 0;
+	_telemetry.warnings.length = 0;
 	_telemetry.suppressed = 0;
 });
 
@@ -121,6 +132,7 @@ describe("one conversation model text exchange", function _transportSuite()
 		vi.stubGlobal("fetch", fetchMock);
 		await expect(__RequestConversationModel(_request(overrides))).rejects.toMatchObject({ code: ConversationModelFailureCodes.InvalidRequest });
 		expect(fetchMock).not.toHaveBeenCalled();
+		expect(_telemetry.warnings).toEqual([[{ failureCode: ConversationModelFailureCodes.InvalidRequest }, "conversation model request failed"]]);
 	});
 
 	it.each(["no-ceiling", "zero-ceiling", "no-turns", "tool-message", "bad-unicode"])("rejects frozen input %s without a request", async function _frozenValidation(kind)
@@ -234,6 +246,7 @@ describe("one conversation model text exchange", function _transportSuite()
 		await expect(__RequestConversationModel(_request())).rejects.toMatchObject({ code: ConversationModelFailureCodes.HttpRejected });
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		expect(fetchMock.mock.calls[0]?.[1].redirect).toBe("error");
+		expect(_telemetry.warnings).toEqual([[{ failureCode: ConversationModelFailureCodes.HttpRejected }, "conversation model request failed"]]);
 	});
 
 	it("removes the original transport exception before tracing and does not retry a lost response", async function _privateFailure()
@@ -250,6 +263,9 @@ describe("one conversation model text exchange", function _transportSuite()
 		expect(_telemetry.fields).toEqual([{}]);
 		expect(_telemetry.suppressed).toBe(1);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(_telemetry.warnings).toEqual([[{ failureCode: ConversationModelFailureCodes.TransportFailed }, "conversation model request failed"]]);
+		expect(JSON.stringify(_telemetry.warnings)).not.toContain(secret);
+		expect(JSON.stringify(_telemetry.warnings)).not.toContain("litellm.release.svc.cluster.local");
 	});
 
 	it.each(["declared", "streamed"])("rejects a %s oversize body and cancels it", async function _responseSize(kind)
@@ -297,6 +313,7 @@ describe("one conversation model text exchange", function _transportSuite()
 		vi.stubGlobal("fetch", fetchMock);
 		await expect(__RequestConversationModel(_request())).rejects.toMatchObject({ code: ConversationModelFailureCodes.UnsupportedResponse });
 		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(_telemetry.warnings).toEqual([[{ failureCode: ConversationModelFailureCodes.UnsupportedResponse }, "conversation model request failed"]]);
 	});
 
 	it("accepts the existing answer byte ceiling without changing text", async function _textBoundary()
