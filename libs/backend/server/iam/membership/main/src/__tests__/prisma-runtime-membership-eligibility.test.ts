@@ -86,7 +86,7 @@ function _StandaloneAuthority()
 	const subject = { ...original, membership, requester: { ...original.requester, membership } };
 	const row = { id: "local-1", clusterTenant: "silo-1", subject: "oidc-1", status: "Active", updatedAt: new Date(1_000) };
 	const transaction = { principal: { findFirst: vi.fn().mockResolvedValue({ id: "user-1", siloId: "silo-1", issuer: "https://issuer.test", subject: "oidc-1", provenance: "External" }) }, orgMembership: { findUnique: vi.fn().mockResolvedValue(row) } };
-	const authority = new PrismaRuntimeMembershipEligibilityAuthority(transaction as never, { mode: FleetMembershipDeploymentModes.Standalone, siloId: "silo-1", trustedOidcIssuer: "https://issuer.test", maximumStalenessMs: 5_000 });
+	const authority = new PrismaRuntimeMembershipEligibilityAuthority(transaction as never, { mode: FleetMembershipDeploymentModes.Standalone, siloId: "silo-1", trustedIdentityIssuer: "https://issuer.test", maximumStalenessMs: 5_000 });
 	return { subject, row, transaction, authority };
 }
 

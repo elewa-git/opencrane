@@ -18,6 +18,7 @@ import { _CreateKubernetesClients } from "./app/kubernetes-clients";
 import { _StartProcessLifecycle } from "./app/lifecycle";
 import { _log } from "./app/log";
 import { _CreatePublicApp, _CreatePublicAuthentication } from "./app/public-app";
+import { _CreateK3dDevelopmentAuthentication } from "./app/k3d-development-authentication";
 import { _ProcessShutdownSignal } from "./app/process-shutdown";
 import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.factory";
 import { ___CreatePrismaClient } from "./infra/db/db";
@@ -53,7 +54,9 @@ async function _Main(): Promise<void>
 	const conversationComputerWorkers = { stop: async function _StopComputerWorkers(): Promise<void> { await Promise.all([conversationComputerActivations.stop(), conversationComputerLifecycle.worker.stop()]); } };
 
 	// 4. Build separate HTTP listeners; only the internal app receives workload-only routes.
-	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
+	const authentication = config.k3dDevelopmentAuthentication === null
+		? _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission)
+		: await _CreateK3dDevelopmentAuthentication(prisma, config.k3dDevelopmentAuthentication, _log);
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
 	const publicApp = _CreatePublicApp(prisma, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile, undefined, true, agentSandboxReleaseProfile.namespace);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);

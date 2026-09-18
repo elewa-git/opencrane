@@ -165,5 +165,6 @@ export function _SetDevelopmentMembershipEnvironment(config: DevelopmentConfig, 
 	environment.OPENCRANE_MEMBERSHIP_MODE = FleetMembershipDeploymentModes.Standalone;
 	environment.OPENCRANE_SILO_ID = config.identity.siloId;
 	environment.OIDC_ISSUER_URL = config.identity.issuer;
+	environment.OPENCRANE_MEMBERSHIP_TRUSTED_IDENTITY_ISSUER = config.identity.issuer;
 	environment.OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS = "300000";
 }

@@ -1,0 +1,28 @@
+{
+  "name": "OpenCrane Tier 3",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:4.1.0": {
+      "version": "28.5.1",
+      "moby": true
+    }
+  },
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "16gb",
+    "storage": "32gb"
+  },
+  "forwardPorts": [4200],
+  "portsAttributes": {
+    "4200": {
+      "label": "OpenCrane Tier 3",
+      "onAutoForward": "notify",
+      "protocol": "http",
+      "requireLocalPort": true
+    }
+  },
+  "postCreateCommand": "npm ci && .devcontainer/verify-tools.sh",
+  "remoteUser": "node"
+}

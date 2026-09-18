@@ -5,5 +5,10 @@ export * from "./auth/oidc.service";
 export * from "./authenticated-principals/prisma-authenticated-principal-directory-unit-of-work";
 export * from "./authenticated-principals/prisma-authenticated-principal-admission-unit-of-work";
 export * from "./authenticated-principals/prisma-authenticated-principal-capability-unit-of-work";
-export type { StandaloneFirstUserAdmissionAuditPort, StandaloneFirstUserAdmissionConfig } from "./standalone-first-user/standalone-first-user-admission.types";
+export * from "./development-identity-admission";
+export type * from "./development-identity-admission.types";
+export type {
+	StandaloneFirstUserAdmissionAuditPort,
+	StandaloneFirstUserAdmissionConfig,
+} from "./standalone-first-user/standalone-first-user-admission.types";
 export * from "./agent-identities";

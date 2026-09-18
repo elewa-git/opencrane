@@ -503,6 +503,14 @@ clustertenantManager:
   firstUser:
     email: ""
     clusterTenant: ""
+  # -- Local k3d authentication is disabled in every ordinary release. The Tier 3 coordinator
+  # supplies an existing per-launch Secret and an exact .test host without placing proof material
+  # in Helm values.
+  developmentAuthentication:
+    mode: ""
+    publicHost: ""
+    existingSecret: ""
+    credentialKey: credential
   # -- Explicit membership issuer model. A standalone silo has no Fleet prerequisite and starts
   # without a verification-key mount. It deliberately denies run admission until a local issuer
   # produces signed revisions; it never treats an unsigned OIDC session as membership.

@@ -30,12 +30,14 @@ for contract in \
   post-deploy-health-contract.sh \
   qualified-release-image-contract.sh \
   control-plane-image-policy-contract.sh \
+  develop-smoke-image-storage-contract.sh \
   agent-sandbox-contract.sh \
   cluster-tenant-crd-policy-contract.sh \
   kurrentdb-bootstrap-secrets-contract.sh \
   kurrentdb-bootstrap-retry-contract.sh \
   kurrentdb-replay-contract.sh \
   kurrentdb-restore-contract.sh \
+  k3d-development-auth-contract.sh \
   silo-deploy-profile-contract.sh \
   silo-teardown-contract.sh \
   skill-authoring-contract.sh; do

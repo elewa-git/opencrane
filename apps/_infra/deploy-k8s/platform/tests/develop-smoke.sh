@@ -25,23 +25,32 @@ SMOKE_AFFECTED_PROJECTS="${SMOKE_AFFECTED_PROJECTS-all}"
 SMOKE_BASE_SHA="${SMOKE_BASE_SHA:-}"
 SMOKE_REGISTRY="${SMOKE_REGISTRY:-ghcr.io/elewa-git}"
 SMOKE_STORAGE_MODE="${SMOKE_STORAGE_MODE:-full}"
+SMOKE_HOST_PROFILE="${SMOKE_HOST_PROFILE:-recommended}"
+SMOKE_INGRESS_PORT="${SMOKE_INGRESS_PORT:-8443}"
+SMOKE_RESOURCE_OWNER="${SMOKE_RESOURCE_OWNER:-develop-smoke-$$}"
+SMOKE_IMAGE_TAG="${SMOKE_RESOURCE_OWNER}-$$"
+OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL="${OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL:-}"
 SMOKE_LOCAL_REGISTRY_NAME="${CLUSTER_NAME}-registry"
 SMOKE_LOCAL_REGISTRY_ADDRESS=""
+SMOKE_CLUSTER_CREATED=0
+SMOKE_REGISTRY_CREATED=0
+SMOKE_REGISTRY_CONTAINER_ID=""
 KEY_DIR=""
 CSI_DIR=""
 IMAGE_PREPARATION_PID=""
 CERT_MANAGER_INSTALL_PID=""
 SMOKE_IMAGES=(
-  opencrane/opencrane-server:develop-smoke
-  opencrane/opencrane-ui:develop-smoke
-  opencrane/memory-gateway:develop-smoke
-  opencrane/artifact-service:develop-smoke
-  opencrane/cognee:develop-smoke
+  "opencrane/opencrane-server:${SMOKE_IMAGE_TAG}"
+  "opencrane/opencrane-ui:${SMOKE_IMAGE_TAG}"
+  "opencrane/memory-gateway:${SMOKE_IMAGE_TAG}"
+  "opencrane/artifact-service:${SMOKE_IMAGE_TAG}"
+  "opencrane/cognee:${SMOKE_IMAGE_TAG}"
 )
 
-# Every image this script builds carries this label so teardown can prune exactly the run's
-# images (current tags + layers orphaned by earlier runs) without touching anything else.
-SMOKE_IMAGE_LABEL="opencrane.develop-smoke=true"
+# Each run gets its own tag and build label so parallel worktrees cannot replace one another's
+# candidate image or prune a still-live smoke image from another invocation.
+SMOKE_IMAGE_LABEL="opencrane.develop-smoke.run=${SMOKE_IMAGE_TAG}"
+SMOKE_OWNER_IMAGE_LABEL="opencrane.develop-smoke.owner=${SMOKE_RESOURCE_OWNER}"
 
 POSTGRES_CREDENTIALS_SECRET="develop-smoke-opencrane-postgres"
 LITELLM_POSTGRES_CREDENTIALS_SECRET="develop-smoke-litellm-postgres"
@@ -68,6 +77,8 @@ _retry()
   done
 }
 
+source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-image-storage.sh"
+
 _diagnostics()
 {
   echo "[develop-smoke] ===== failure diagnostics ====="
@@ -89,36 +100,143 @@ _diagnostics()
   echo "[develop-smoke] ===== end diagnostics ====="
 }
 
-# Remove everything the run left in the Docker daemon: the cluster, any node containers a
-# killed earlier run stranded, their named + anonymous volumes, and the label-scoped images.
-# Without this, repeated smoke runs accumulate multi-GB writable layers and dangling image
-# layers until the Docker VM disk fills.
+# Refuse to replace a same-named resource unless its server label and registry network still match
+# this invocation. The coordinator performs an earlier check, but the smoke repeats it next to the
+# destructive command so a changed Docker object is not treated as the one that was reviewed.
+_assert_owned_resource_set()
+{
+  local cluster_container="k3d-${CLUSTER_NAME}-server-0"
+  local registry_container="k3d-${SMOKE_LOCAL_REGISTRY_NAME}"
+  local current_owner=""
+  local registry_networks=""
+  local registry_id=""
+  local cluster_exists=0
+  local cluster_candidates=""
+  local image_volume="k3d-${CLUSTER_NAME}-images"
+  local candidate=""
+  local candidate_name=""
+  local candidate_owner=""
+  local candidate_cluster=""
+  local candidate_networks=""
+  local image_volumes=""
+  local labelled_volumes=""
+  local server_volumes=""
+  if docker inspect "$cluster_container" >/dev/null 2>&1; then
+    cluster_exists=1
+    current_owner="$(docker inspect --format '{{ index .Config.Labels "opencrane.tier3.owner" }}' "$cluster_container")"
+    if [[ "$current_owner" != "$SMOKE_RESOURCE_OWNER" ]]; then
+      echo "[develop-smoke] Refusing resource replacement: '$cluster_container' is owned by '${current_owner:-unknown}'." >&2
+      return 1
+    fi
+  fi
+  cluster_candidates="$(docker ps -aq --filter "label=k3d.cluster=${CLUSTER_NAME}")" || return 1
+  image_volumes="$(docker volume ls -q)" || return 1
+  labelled_volumes="$(docker volume ls -q --filter "label=k3d.cluster=${CLUSTER_NAME}")" || return 1
+
+  if [[ "$cluster_exists" == "0" ]] \
+    && { [[ -n "$cluster_candidates" ]] || [[ $'\n'"$image_volumes"$'\n' == *$'\n'"$image_volume"$'\n'* ]] || [[ -n "$labelled_volumes" ]]; }; then
+    echo "[develop-smoke] Refusing replacement: '$CLUSTER_NAME' has unproved orphan nodes or image storage." >&2
+    return 1
+  fi
+  for candidate in $cluster_candidates; do
+    candidate_name="$(docker inspect --format '{{.Name}}' "$candidate")" || return 1
+    candidate_owner="$(docker inspect --format '{{ index .Config.Labels "opencrane.tier3.owner" }}' "$candidate")" || return 1
+    candidate_networks="$(docker inspect --format '{{json .NetworkSettings.Networks}}' "$candidate")" || return 1
+    if [[ "$candidate_owner" != "$SMOKE_RESOURCE_OWNER" ]] \
+      || [[ "$candidate_networks" != *"\"k3d-${CLUSTER_NAME}\""* ]] \
+      || { [[ "$candidate_name" != "/k3d-${CLUSTER_NAME}-serverlb" ]] \
+        && ! [[ "$candidate_name" =~ ^/k3d-${CLUSTER_NAME}-(server|agent)-[0-9]+$ ]]; }; then
+      echo "[develop-smoke] Refusing unproved k3d cluster member '$candidate_name'." >&2
+      return 1
+    fi
+  done
+  cluster_candidates="$(docker ps -aq --filter "name=^k3d-${CLUSTER_NAME}-")" || return 1
+  for candidate in $cluster_candidates; do
+    candidate_name="$(docker inspect --format '{{.Name}}' "$candidate")" || return 1
+    if [[ "$candidate_name" == "/k3d-${CLUSTER_NAME}-serverlb" ]] \
+      || [[ "$candidate_name" =~ ^/k3d-${CLUSTER_NAME}-(server|agent)-[0-9]+$ ]]; then
+      candidate_cluster="$(docker inspect --format '{{ index .Config.Labels "k3d.cluster" }}' "$candidate")" || return 1
+      candidate_owner="$(docker inspect --format '{{ index .Config.Labels "opencrane.tier3.owner" }}' "$candidate")" || return 1
+      if [[ "$cluster_exists" == "0" || "$candidate_cluster" != "$CLUSTER_NAME" || "$candidate_owner" != "$SMOKE_RESOURCE_OWNER" ]]; then
+        echo "[develop-smoke] Refusing unproved same-name k3d node '$candidate_name'." >&2
+        return 1
+      fi
+    fi
+  done
+  while IFS= read -r candidate; do
+    [[ -z "$candidate" ]] && continue
+    if [[ "$cluster_exists" == "0" || "$candidate" != "$image_volume" ]]; then
+      echo "[develop-smoke] Refusing unproved k3d volume '$candidate'." >&2
+      return 1
+    fi
+  done <<< "$labelled_volumes"
+  if [[ "$cluster_exists" == "1" && $'\n'"$image_volumes"$'\n' == *$'\n'"$image_volume"$'\n'* ]]; then
+    if [[ $'\n'"$labelled_volumes"$'\n' != *$'\n'"$image_volume"$'\n'* ]]; then
+      echo "[develop-smoke] Refusing image volume without the k3d cluster label." >&2
+      return 1
+    fi
+    server_volumes="$(docker inspect --format '{{json .Mounts}}' "$cluster_container" | jq -r '.[] | select(.Type == "volume") | .Name')" || return 1
+    if [[ $'\n'"$server_volumes"$'\n' != *$'\n'"$image_volume"$'\n'* ]]; then
+      echo "[develop-smoke] Refusing image volume not mounted by the owner-labelled server." >&2
+      return 1
+    fi
+  fi
+  if docker inspect "$registry_container" >/dev/null 2>&1; then
+    if [[ "$cluster_exists" == "0" && "$SMOKE_REGISTRY_CREATED" != "1" ]]; then
+      echo "[develop-smoke] Refusing registry replacement without its owner-labelled cluster." >&2
+      return 1
+    fi
+    if [[ "$SMOKE_REGISTRY_CREATED" == "1" ]]; then
+      registry_id="$(docker inspect --format '{{.Id}}' "$registry_container")" || return 1
+      if [[ "$registry_id" != "$SMOKE_REGISTRY_CONTAINER_ID" ]]; then
+        echo "[develop-smoke] Refusing registry replacement after its Docker identity changed." >&2
+        return 1
+      fi
+    fi
+    registry_networks="$(docker inspect --format '{{json .NetworkSettings.Networks}}' "$registry_container")"
+    if [[ "$cluster_exists" == "1" && "$registry_networks" != *"\"k3d-${CLUSTER_NAME}\""* ]]; then
+      echo "[develop-smoke] Refusing registry replacement outside the owner-labelled cluster network." >&2
+      return 1
+    fi
+  fi
+}
+
+# Delete the exact owner-labelled cluster and its associated registry. K3d removes its own node
+# containers; direct prefix-based Docker removals would also catch another developer's resources.
+# The image volume has one exact k3d name and each run's candidate images have a private label.
+_prune_owned_smoke_images()
+{
+  local references reference repository tag suffix
+  references="$(docker image ls --format '{{.Repository}}:{{.Tag}}')" || return 1
+  while IFS= read -r reference; do
+    [[ -z "$reference" ]] && continue
+    repository="${reference%:*}"
+    tag="${reference##*:}"
+    [[ "$tag" == "${SMOKE_RESOURCE_OWNER}-"* ]] || continue
+    suffix="${tag#"${SMOKE_RESOURCE_OWNER}-"}"
+    [[ "$suffix" =~ ^[0-9]+$ ]] || continue
+    case "$repository" in
+      opencrane/opencrane-server|opencrane/opencrane-ui|opencrane/memory-gateway|opencrane/artifact-service|opencrane/cognee|opencrane/kurrentdb-bootstrap|opencrane/conversation-computer|127.0.0.1:*/opencrane-kurrentdb-bootstrap|127.0.0.1:*/opencrane-conversation-computer)
+        docker image rm --no-prune "$reference" >/dev/null || return 1
+        ;;
+    esac
+  done <<< "$references"
+  docker image prune --all --force --filter "label=${SMOKE_OWNER_IMAGE_LABEL}" >/dev/null || return 1
+}
+
 _teardown_cluster_storage()
 {
-  local containers volumes volume
-  containers="$(docker ps -aq --filter "name=^k3d-${CLUSTER_NAME}-" 2>/dev/null || true)"
-  volumes=""
-  if [[ -n "$containers" ]]; then
-    # shellcheck disable=SC2086
-    volumes="$(docker inspect --format \
-      '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}{{"\n"}}{{end}}{{end}}' \
-      $containers 2>/dev/null || true)"
+  _assert_owned_resource_set || return 1
+  if docker inspect "k3d-${SMOKE_LOCAL_REGISTRY_NAME}" >/dev/null 2>&1; then
+    _assert_owned_resource_set || return 1
+    k3d registry delete "$SMOKE_LOCAL_REGISTRY_NAME" || return 1
   fi
-  k3d cluster delete "$CLUSTER_NAME" >/dev/null 2>&1 || true
-  k3d registry delete "$SMOKE_LOCAL_REGISTRY_NAME" >/dev/null 2>&1 || true
-  if [[ -n "$containers" ]]; then
-    # shellcheck disable=SC2086
-    docker rm -f -v $containers >/dev/null 2>&1 || true
+  if docker inspect "k3d-${CLUSTER_NAME}-server-0" >/dev/null 2>&1; then
+    _assert_owned_resource_set || return 1
+    k3d cluster delete "$CLUSTER_NAME" || return 1
   fi
-  while IFS= read -r volume; do
-    [[ -z "$volume" ]] && continue
-    docker volume rm "$volume" >/dev/null 2>&1 || true
-  done <<< "$volumes"
-  while IFS= read -r volume; do
-    [[ -z "$volume" ]] && continue
-    docker volume rm "$volume" >/dev/null 2>&1 || true
-  done < <(docker volume ls -q --filter "name=k3d-${CLUSTER_NAME}" 2>/dev/null || true)
-  docker image prune --all --force --filter "label=${SMOKE_IMAGE_LABEL}" >/dev/null 2>&1 || true
+  _assert_owned_resource_set || return 1
+  _prune_owned_smoke_images || return 1
 }
 
 _cleanup()
@@ -141,10 +259,13 @@ _cleanup()
   if [[ -n "$CSI_DIR" ]]; then
     rm -rf -- "$CSI_DIR"
   fi
-  if [[ "$KEEP_CLUSTER" == "1" ]]; then
+  if [[ "$KEEP_CLUSTER" == "1" && "$SMOKE_CLUSTER_CREATED" == "1" ]]; then
     echo "[develop-smoke] KEEP_CLUSTER=1; leaving '$CLUSTER_NAME' running"
   else
-    _teardown_cluster_storage
+    if ! _teardown_cluster_storage; then
+      echo "[develop-smoke] Cleanup could not prove or remove this run's resources; unproved objects were left in place." >&2
+      [[ "$exit_code" -ne 0 ]] || exit_code=1
+    fi
   fi
   return "$exit_code"
 }
@@ -168,7 +289,7 @@ _build_image()
   fi
   echo "[develop-smoke] Building $image"
   _retry 3 docker buildx build --load --file "$ROOT_DIR/$dockerfile" --tag "$image" \
-    --label "$SMOKE_IMAGE_LABEL" "${cache_arguments[@]}" "$ROOT_DIR"
+    --label "$SMOKE_IMAGE_LABEL" --label "$SMOKE_OWNER_IMAGE_LABEL" "${cache_arguments[@]}" "$ROOT_DIR"
 }
 
 _project_is_affected()
@@ -211,13 +332,13 @@ _prepare_image()
 
 # Each entry is project|local image|remote image|dockerfile for _prepare_image.
 SMOKE_IMAGE_SPECS=(
-  "opencrane|opencrane/opencrane-server:develop-smoke|opencrane-server|apps/opencrane/deploy/Dockerfile"
-  "opencrane-ui|opencrane/opencrane-ui:develop-smoke|opencrane-ui|apps/opencrane-ui/deploy/Dockerfile"
-  "memory-gateway|opencrane/memory-gateway:develop-smoke|opencrane-memory-gateway|apps/memory-gateway/deploy/Dockerfile"
-  "artifact-service|opencrane/artifact-service:develop-smoke|opencrane-artifact-service|apps/artifact-service/deploy/Dockerfile"
-  "cognee|opencrane/cognee:develop-smoke|opencrane-cognee|apps/_infra/cognee/deploy/Dockerfile"
-  "kurrentdb|opencrane/kurrentdb-bootstrap:develop-smoke|opencrane-kurrentdb-bootstrap|apps/_infra/kurrentdb/deploy/Dockerfile"
-  "conversation-computer|opencrane/conversation-computer:develop-smoke|opencrane-conversation-computer|apps/conversation-computer/deploy/Dockerfile"
+  "opencrane|opencrane/opencrane-server:${SMOKE_IMAGE_TAG}|opencrane-server|apps/opencrane/deploy/Dockerfile"
+  "opencrane-ui|opencrane/opencrane-ui:${SMOKE_IMAGE_TAG}|opencrane-ui|apps/opencrane-ui/deploy/Dockerfile"
+  "memory-gateway|opencrane/memory-gateway:${SMOKE_IMAGE_TAG}|opencrane-memory-gateway|apps/memory-gateway/deploy/Dockerfile"
+  "artifact-service|opencrane/artifact-service:${SMOKE_IMAGE_TAG}|opencrane-artifact-service|apps/artifact-service/deploy/Dockerfile"
+  "cognee|opencrane/cognee:${SMOKE_IMAGE_TAG}|opencrane-cognee|apps/_infra/cognee/deploy/Dockerfile"
+  "kurrentdb|opencrane/kurrentdb-bootstrap:${SMOKE_IMAGE_TAG}|opencrane-kurrentdb-bootstrap|apps/_infra/kurrentdb/deploy/Dockerfile"
+  "conversation-computer|opencrane/conversation-computer:${SMOKE_IMAGE_TAG}|opencrane-conversation-computer|apps/conversation-computer/deploy/Dockerfile"
 )
 
 _prepare_images()
@@ -251,14 +372,15 @@ _prepare_images()
 _publish_smoke_image()
 {
   local image="$1" repository="$2" digest
-  local target="${SMOKE_LOCAL_REGISTRY_ADDRESS}/${repository}:develop-smoke"
+  local target="${SMOKE_LOCAL_REGISTRY_ADDRESS}/${repository}:${SMOKE_IMAGE_TAG}"
   docker tag "$image" "$target" || return 1
   _retry 3 docker push "$target" >&2 || return 1
   digest="$(curl --fail --silent --show-error \
     --header 'Accept: application/vnd.docker.distribution.manifest.v2+json' \
-    "http://${SMOKE_LOCAL_REGISTRY_ADDRESS}/v2/${repository}/manifests/develop-smoke" \
+    "http://${SMOKE_LOCAL_REGISTRY_ADDRESS}/v2/${repository}/manifests/${SMOKE_IMAGE_TAG}" \
     | openssl dgst -sha256 -r | awk '{print $1}')" || return 1
   [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || return 1
+  _release_published_smoke_image "$image" "$target" || return 1
   printf 'sha256:%s\n' "$digest"
 }
 
@@ -429,11 +551,11 @@ EOF
 # intentionally empty. Reporting it as disabled rather than unavailable is tracked separately.
 _assert_ingress_health()
 {
-  local health_url="https://${CONTROL_PLANE_HOST}:8443/healthz"
+  local health_url="https://${CONTROL_PLANE_HOST}:${SMOKE_INGRESS_PORT}/healthz"
   local deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
   local response=""
   until response="$(curl --connect-timeout 2 --max-time 5 --fail --silent --show-error --insecure \
-    --resolve "${CONTROL_PLANE_HOST}:8443:127.0.0.1" "$health_url" 2>/dev/null)" \
+    --resolve "${CONTROL_PLANE_HOST}:${SMOKE_INGRESS_PORT}:127.0.0.1" "$health_url" 2>/dev/null)" \
     && jq -e '
       .ready == true
       and (.services | keys == ["api", "database", "files", "memory", "models"])
@@ -516,6 +638,35 @@ NODE
     --release-version "$(jq -r '.version' "$ROOT_DIR/package.json")" --kurrentdb-replay-parked
 }
 
+# The Tier 3 down command reuses these read-only ownership checks and the same image cleanup.
+# Neither mode starts a smoke cluster or executes the ordinary deploy path.
+if ! [[ "$CLUSTER_NAME" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+  echo "[develop-smoke] CLUSTER_NAME must be a lowercase k3d-safe cluster name." >&2
+  exit 1
+fi
+if ! [[ "$SMOKE_IMAGE_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]] || (( ${#SMOKE_IMAGE_TAG} > 128 )); then
+  echo "[develop-smoke] SMOKE_RESOURCE_OWNER cannot form a safe per-run Docker image tag." >&2
+  exit 1
+fi
+case "${1:-}" in
+  --assert-owned-resources)
+    _assert_owned_resource_set
+    exit 0
+    ;;
+  --prune-owned-images)
+    _assert_owned_resource_set
+    if docker inspect "k3d-${CLUSTER_NAME}-server-0" >/dev/null 2>&1 \
+      || docker inspect "k3d-${SMOKE_LOCAL_REGISTRY_NAME}" >/dev/null 2>&1; then
+      echo "[develop-smoke] Refusing image cleanup while the owner cluster or registry is retained." >&2
+      exit 1
+    fi
+    _prune_owned_smoke_images
+    exit 0
+    ;;
+  "") ;;
+  *) echo "[develop-smoke] Unknown internal mode '$1'." >&2; exit 2 ;;
+esac
+
 trap _cleanup EXIT
 # Bash skips the EXIT trap on untrapped fatal signals — an interrupted run would strand the
 # k3d node containers and their multi-GB writable layers. Route the signals through exit.
@@ -523,28 +674,58 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-for command in curl docker git helm jq k3d kubectl openssl; do _require_command "$command"; done
+for command in awk curl docker git helm jq k3d kubectl npm openssl; do _require_command "$command"; done
 docker info >/dev/null 2>&1 || { echo "[develop-smoke] Docker daemon is not reachable." >&2; exit 1; }
 if [[ "$SMOKE_STORAGE_MODE" != "fast" && "$SMOKE_STORAGE_MODE" != "full" ]]; then
   echo "[develop-smoke] SMOKE_STORAGE_MODE must be 'fast' or 'full', got '$SMOKE_STORAGE_MODE'." >&2
   exit 1
 fi
+if [[ "$SMOKE_HOST_PROFILE" != "minimum" && "$SMOKE_HOST_PROFILE" != "recommended" ]]; then
+  echo "[develop-smoke] SMOKE_HOST_PROFILE must be 'minimum' or 'recommended', got '$SMOKE_HOST_PROFILE'." >&2
+  exit 1
+fi
+if ! [[ "$SMOKE_INGRESS_PORT" =~ ^[0-9]+$ ]] || (( SMOKE_INGRESS_PORT < 1024 || SMOKE_INGRESS_PORT > 65535 )); then
+  echo "[develop-smoke] SMOKE_INGRESS_PORT must be a user port from 1024 through 65535." >&2
+  exit 1
+fi
+if [[ -n "$OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL" ]] && ! [[ "$OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL" =~ ^[A-Za-z0-9_-]{43}$ ]]; then
+  echo "[develop-smoke] OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL must contain one 32-byte base64url proof." >&2
+  exit 1
+fi
+
+echo "[develop-smoke] Creating disposable k3d cluster '$CLUSTER_NAME'"
+_assert_owned_resource_set
+if docker inspect "k3d-${CLUSTER_NAME}-server-0" >/dev/null 2>&1; then
+  _assert_owned_resource_set
+  if docker inspect "k3d-${SMOKE_LOCAL_REGISTRY_NAME}" >/dev/null 2>&1; then
+    k3d registry delete "$SMOKE_LOCAL_REGISTRY_NAME"
+  fi
+  _assert_owned_resource_set
+  k3d cluster delete "$CLUSTER_NAME"
+elif docker inspect "k3d-${SMOKE_LOCAL_REGISTRY_NAME}" >/dev/null 2>&1; then
+  _assert_owned_resource_set
+  k3d registry delete "$SMOKE_LOCAL_REGISTRY_NAME"
+fi
+_assert_owned_resource_set
+_prune_owned_smoke_images
+_prepare_smoke_host_storage
 
 # Image preparation is the longest independent lane. Start it before k3d so cluster creation and
 # external-controller readiness consume the same wall-clock time without serialising all builds
-# against the runner's small Docker daemon.
+# against the runner's small Docker daemon. Prior owner images are gone before this lane starts.
 _prepare_images &
 IMAGE_PREPARATION_PID=$!
 
-echo "[develop-smoke] Creating disposable k3d cluster '$CLUSTER_NAME'"
-k3d cluster delete "$CLUSTER_NAME" >/dev/null 2>&1 || true
-k3d registry delete "$SMOKE_LOCAL_REGISTRY_NAME" >/dev/null 2>&1 || true
 k3d registry create "$SMOKE_LOCAL_REGISTRY_NAME" --port 127.0.0.1:0 --no-help
+SMOKE_REGISTRY_CONTAINER_ID="$(docker inspect --format '{{.Id}}' "k3d-${SMOKE_LOCAL_REGISTRY_NAME}")"
+SMOKE_REGISTRY_CREATED=1
 registry_port="$(docker inspect --format '{{(index (index .NetworkSettings.Ports "5000/tcp") 0).HostPort}}' "k3d-${SMOKE_LOCAL_REGISTRY_NAME}")"
 [[ "$registry_port" =~ ^[0-9]+$ ]] || { echo "[develop-smoke] Registry has no loopback host port" >&2; exit 1; }
 SMOKE_LOCAL_REGISTRY_ADDRESS="127.0.0.1:${registry_port}"
-k3d cluster create "$CLUSTER_NAME" --image "$K3S_IMAGE" --port "8443:443@loadbalancer" \
-  --registry-use "k3d-${SMOKE_LOCAL_REGISTRY_NAME}:5000" --wait
+cluster_create_arguments=(cluster create "$CLUSTER_NAME" --image "$K3S_IMAGE" --port "${SMOKE_INGRESS_PORT}:443@loadbalancer" --registry-use "k3d-${SMOKE_LOCAL_REGISTRY_NAME}:5000" --wait)
+cluster_create_arguments+=(--runtime-label "opencrane.tier3.owner=${SMOKE_RESOURCE_OWNER}@all")
+k3d "${cluster_create_arguments[@]}"
+SMOKE_CLUSTER_CREATED=1
 
 echo "[develop-smoke] Installing external cluster prerequisites"
 if [[ "$SMOKE_STORAGE_MODE" == "full" ]]; then
@@ -587,10 +768,10 @@ if ! wait "$IMAGE_PREPARATION_PID"; then
   exit 1
 fi
 IMAGE_PREPARATION_PID=""
-echo "[develop-smoke] Importing the tag-based service images in one k3d transfer"
-_retry 3 k3d image import "${SMOKE_IMAGES[@]}" --cluster "$CLUSTER_NAME" --mode direct
-bootstrap_digest="$(_publish_smoke_image opencrane/kurrentdb-bootstrap:develop-smoke opencrane-kurrentdb-bootstrap)"
-computer_digest="$(_publish_smoke_image opencrane/conversation-computer:develop-smoke opencrane-conversation-computer)"
+echo "[develop-smoke] Importing the tag-based service images"
+_import_smoke_images
+bootstrap_digest="$(_publish_smoke_image "opencrane/kurrentdb-bootstrap:${SMOKE_IMAGE_TAG}" opencrane-kurrentdb-bootstrap)"
+computer_digest="$(_publish_smoke_image "opencrane/conversation-computer:${SMOKE_IMAGE_TAG}" opencrane-conversation-computer)"
 registry_repository="k3d-${SMOKE_LOCAL_REGISTRY_NAME}:5000"
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
@@ -609,6 +790,26 @@ kubectl create secret generic opencrane-fleet-membership-verification \
   --namespace "$NAMESPACE" \
   --from-file=public-key.pem="$KEY_DIR/public-key.pem" \
   --dry-run=client -o yaml | kubectl apply -f -
+
+DEVELOPMENT_AUTH_HELM_ARGS=(--set-string "clustertenantManager.developmentAuthentication.mode=")
+if [[ -n "$OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL" ]]; then
+  development_credential_file="$KEY_DIR/development-session"
+  printf '%s' "$OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL" >"$development_credential_file"
+  chmod 600 "$development_credential_file"
+  kubectl create secret generic "${RELEASE_NAME}-development-session" \
+    --namespace "$NAMESPACE" \
+    --from-file=credential="$development_credential_file" \
+    --dry-run=client -o yaml | kubectl apply -f -
+  DEVELOPMENT_AUTH_HELM_ARGS=(
+    --set-string "clustertenantManager.developmentAuthentication.mode=k3d"
+    --set-string "clustertenantManager.developmentAuthentication.publicHost=${CONTROL_PLANE_HOST}"
+    --set-string "clustertenantManager.developmentAuthentication.existingSecret=${RELEASE_NAME}-development-session"
+    --set-string "clustertenantManager.oidc.issuerUrl="
+    --set-string "clustertenantManager.oidc.clientId="
+    --set-string "clustertenantManager.oidc.redirectUri="
+    --set-string "clustertenantManager.oidc.existingSecret="
+  )
+fi
 
 echo "[develop-smoke] Installing the current silo through its app-owned deploy entrypoint"
 export OIDC_ISSUER_URL="https://issuer.opencrane.test"
@@ -629,8 +830,8 @@ export TIMEOUT_SECONDS
   --namespace "$NAMESPACE" \
   --release "$RELEASE_NAME" \
   --release-version "$(jq -r '.version' "$ROOT_DIR/package.json")" \
-  --image-tag develop-smoke \
-  --cognee-tag develop-smoke \
+  --image-tag "$SMOKE_IMAGE_TAG" \
+  --cognee-tag "$SMOKE_IMAGE_TAG" \
   --storage-class "$SMOKE_STORAGE_CLASS" \
   --postgres-credentials-secret "$POSTGRES_CREDENTIALS_SECRET" \
   --litellm-postgres-credentials-secret "$LITELLM_POSTGRES_CREDENTIALS_SECRET" \
@@ -647,6 +848,7 @@ export TIMEOUT_SECONDS
   --set-string "agentSandbox.serviceAccountName=${RELEASE_NAME}-agent-sandbox" \
   --set-string "agentSandbox.profiles[0].image.repository=${registry_repository}/opencrane-conversation-computer" \
   --set-string "agentSandbox.profiles[0].image.digest=${computer_digest}" \
+  "${DEVELOPMENT_AUTH_HELM_ARGS[@]}" \
   --set "certManager.mode=selfSigned" \
   --set "certManager.issuerName=opencrane-develop-smoke-issuer"
 

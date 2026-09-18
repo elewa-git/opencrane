@@ -7,13 +7,10 @@ import { _BindRequestPrincipalSilo, type AuthenticatedPrincipalAdmission } from 
 import type { AuthenticatedPrincipalCapabilityReader } from "@opencrane/backend/server/iam/identity";
 
 import type { PublicAuthenticationComposition } from "../app/public-app.types";
+import type { DevelopmentAuthenticationTransport } from "./authentication.types";
 import type { DevelopmentIdentity } from "./config.types";
 
-/** Direct API hostname allowed for focused diagnostics. */
-const _EXPECTED_DIRECT_HOST = "local-development.localhost:8080";
-
-/** Loopback proxy targets allowed to carry the dedicated browser host. */
-const _EXPECTED_PROXY_TARGETS = new Set(["127.0.0.1:8080", "localhost:8080"]);
+const _TIER2_TRANSPORT: DevelopmentAuthenticationTransport = Object.freeze({ browserHost: "local-development.localhost:4200", directHost: "local-development.localhost:8080", proxyTargets: new Set(["127.0.0.1:8080", "localhost:8080"]), scheme: "http" });
 
 /** Origin observed after Codespaces forwards the external Tier 2 browser request to its loopback target. */
 const _CODESPACES_REWRITTEN_ORIGIN = "https://localhost:4200";
@@ -25,7 +22,7 @@ const _SAFE_METHODS = new Set([
 	"OPTIONS",
 ]);
 
-/** Carries the per-launch credential set only by the dedicated Tier 2 browser. */
+/** Carries the per-launch credential set only by the dedicated Tier 2 browser or Tier 3 proxy. */
 const _DEVELOPMENT_SESSION_HEADER = "x-opencrane-development-session";
 
 /** Development-only route that converts a verified browser click into the private landing URL. */
@@ -35,27 +32,32 @@ const _DEVELOPMENT_SESSION_HANDOFF_PATH = "/api/v1/auth/development-session";
 const _AUTHORIZATION_LIFETIME_MILLISECONDS = 5 * 60 * 1_000;
 
 /** Return true only for the direct development host or its exact Angular proxy pair. */
-function _HasExpectedHost(request: Request, browserHost: string): boolean
+function _HasExpectedHost(request: Request, transport: DevelopmentAuthenticationTransport): boolean
 {
 	const host = request.get("host")?.trim().toLowerCase() ?? "";
 	const forwardedHost = request.headers["x-forwarded-host"];
 
 	if (typeof forwardedHost === "string")
 	{
-		return forwardedHost.trim().toLowerCase() === browserHost && _EXPECTED_PROXY_TARGETS.has(host);
+		return forwardedHost.trim().toLowerCase() === transport.browserHost && transport.proxyTargets.has(host);
 	}
-
-	return host === _EXPECTED_DIRECT_HOST;
+	return host === transport.directHost;
 }
 
 /** Resolve the browser origin after the host pair has already been checked. */
-function _ExpectedOrigin(request: Request, browserOrigin: string): string
+function _ExpectedOrigin(request: Request, transport: DevelopmentAuthenticationTransport): string
 {
 	if (typeof request.headers["x-forwarded-host"] === "string")
 	{
-		return browserOrigin;
+		return _BrowserOrigin(transport);
 	}
-	return `http://${_EXPECTED_DIRECT_HOST}`;
+	return `${transport.scheme}://${transport.directHost}`;
+}
+
+/** Resolve the configured browser origin without consulting request-controlled headers. */
+function _BrowserOrigin(transport: DevelopmentAuthenticationTransport): string
+{
+	return `${transport.browserScheme ?? transport.scheme}://${transport.browserHost}`;
 }
 
 /** Returns whether an absolute URL has the expected normalized origin; malformed values do not match. */
@@ -94,12 +96,14 @@ function _ReportedOrigin(value: string | undefined): string | null | undefined
  * Accepts the Codespaces loopback `Origin` only on a forwarded HTTPS browser request whose
  * `Referer` matches the expected external origin and whose `Sec-Fetch-Site` reports `same-origin`.
  */
-function _HasExpectedCodespacesOriginRewrite(request: Request, origin: string, expected: string): boolean
+function _HasExpectedCodespacesOriginRewrite(request: Request, origin: string, expected: string, transport: DevelopmentAuthenticationTransport): boolean
 {
 	const referer = request.get("referer");
 
 	return (
 		typeof request.headers["x-forwarded-host"] === "string"
+		&& transport.browserScheme === "https"
+		&& transport.scheme === "http"
 		&& expected.startsWith("https://")
 		&& _MatchesExpectedOrigin(origin, _CODESPACES_REWRITTEN_ORIGIN)
 		&& referer !== undefined
@@ -116,13 +120,13 @@ function _HasExpectedCodespacesOriginRewrite(request: Request, origin: string, e
  * internal loopback host, and private per-launch credential; every other present but invalid
  * URL header fails closed.
  */
-function _HasExpectedOrigin(request: Request, browserOrigin: string): boolean
+function _HasExpectedOrigin(request: Request, transport: DevelopmentAuthenticationTransport): boolean
 {
 	if (_SAFE_METHODS.has(request.method))
 	{
 		return true;
 	}
-	const expected = _ExpectedOrigin(request, browserOrigin);
+	const expected = _ExpectedOrigin(request, transport);
 	const origin = request.get("origin");
 
 	if (origin !== undefined)
@@ -130,7 +134,7 @@ function _HasExpectedOrigin(request: Request, browserOrigin: string): boolean
 		if (_MatchesExpectedOrigin(origin, expected))
 			return true;
 
-		return _HasExpectedCodespacesOriginRewrite(request, origin, expected);
+		return _HasExpectedCodespacesOriginRewrite(request, origin, expected, transport);
 	}
 	const referer = request.get("referer");
 
@@ -173,23 +177,20 @@ function _HasExpectedHandoffNavigation(request: Request, browserOrigin: string):
 }
 
 /** Checks the configured host before forwarding a handoff or attaching the fixed development session. */
-function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionCredential: string, browserOrigin: string, logger: Logger): RequestHandler
+function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionCredential: string, transport: DevelopmentAuthenticationTransport, logger: Logger): RequestHandler
 {
-	const browserHost = new URL(browserOrigin).host;
-
 	return function _DevelopmentSession(request, response, next): void
 	{
-		if (!_HasExpectedHost(request, browserHost))
+		if (!_HasExpectedHost(request, transport))
 		{
-			response.status(403).json({
-				code: "DEVELOPMENT_HOST_MISMATCH",
-				error: "Tier 2 requests require the dedicated local development host.",
-			});
+			response.status(403).json({ code: "DEVELOPMENT_HOST_MISMATCH", error: "Development requests require the dedicated local host." });
 			return;
 		}
 
 		if (request.path === _DEVELOPMENT_SESSION_HANDOFF_PATH)
 		{
+			const browserOrigin = _BrowserOrigin(transport);
+
 			if (!_HasExpectedHandoffNavigation(request, browserOrigin))
 			{
 				response.status(403).json({
@@ -208,15 +209,12 @@ function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionC
 		const supplied = Buffer.from(suppliedCredential, "utf8");
 		if (supplied.byteLength !== expected.byteLength || !timingSafeEqual(supplied, expected))
 		{
-			response.status(401).json({
-				code: "DEVELOPMENT_SESSION_REQUIRED",
-				error: "Tier 2 requests require the private per-launch browser session.",
-			});
+			response.status(401).json({ code: "DEVELOPMENT_SESSION_REQUIRED", error: "Development requests require the private per-launch browser session." });
 			return;
 		}
-
-		if (!_HasExpectedOrigin(request, browserOrigin))
+		if (!_HasExpectedOrigin(request, transport))
 		{
+			const browserOrigin = _BrowserOrigin(transport);
 			logger.warn({
 				browserOrigin,
 				forwardedHost: request.headers["x-forwarded-host"],
@@ -226,11 +224,8 @@ function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionC
 				path: request.path,
 				refererOrigin: _ReportedOrigin(request.get("referer")),
 				secFetchSite: request.get("sec-fetch-site"),
-			}, "Tier 2 state change origin did not match the development browser");
-			response.status(403).json({
-				code: "DEVELOPMENT_ORIGIN_MISMATCH",
-				error: "Tier 2 state changes require the dedicated local development origin.",
-			});
+			}, "Development state change origin did not match the configured browser");
+			response.status(403).json({ code: "DEVELOPMENT_ORIGIN_MISMATCH", error: "Development state changes require the dedicated local origin." });
 			return;
 		}
 		const now = new Date();
@@ -285,20 +280,17 @@ function _CreateAdmissionMiddleware(identity: DevelopmentIdentity, admission: Au
 		}
 		catch (err)
 		{
-			logger.warn({
-				err,
-				siloId: identity.siloId,
-				subject: identity.subjectId,
-			}, "Tier 2 Principal admission is unavailable");
+			logger.warn({ err, siloId: identity.siloId, subject: identity.subjectId }, "Development Principal admission is unavailable");
 			response.status(503).json({ error: "identity_projection_unavailable" });
 		}
 	};
 }
 
 /** Build the development session endpoint used by the live frontend. */
-function _CreateAuthRouter(identity: DevelopmentIdentity, capabilities: AuthenticatedPrincipalCapabilityReader, browserSessionCredential: string, browserOrigin: string): Router
+function _CreateAuthRouter(identity: DevelopmentIdentity, capabilities: AuthenticatedPrincipalCapabilityReader, browserSessionCredential: string, transport: DevelopmentAuthenticationTransport): Router
 {
 	const router = Router();
+	const browserOrigin = `${transport.browserScheme ?? transport.scheme}://${transport.browserHost}`;
 	/** Redirect a verified same-origin click without serializing the credential into a response body. */
 	function _CompleteDevelopmentSessionHandoff(_request: Request, response: Response): void
 	{
@@ -350,13 +342,17 @@ function _CreateAuthRouter(identity: DevelopmentIdentity, capabilities: Authenti
 /**
  * Compose a development-only browser identity over production Principal admission.
  *
- * Called by: the Tier 2 development entrypoint for its loopback-only public listener.
+ * The caller supplies the accepted direct/proxy hosts and scheme; state-changing requests from any
+ * other origin fail before the fixed session is attached. Protected routes then re-read the durable
+ * Principal and current membership-managed capability instead of trusting the browser credential.
+ * Called by: the Tier 2 entrypoint and the explicitly selected Tier 3 k3d composition.
+ * @returns Session, authentication, and `/api/v1/auth` middleware for the public application.
  */
-export function _CreateDevelopmentAuthentication(identity: DevelopmentIdentity, capabilities: AuthenticatedPrincipalCapabilityReader, admission: AuthenticatedPrincipalAdmission, browserSessionCredential: string, logger: Logger, browserOrigin = "http://local-development.localhost:4200"): PublicAuthenticationComposition
+export function _CreateDevelopmentAuthentication(identity: DevelopmentIdentity, capabilities: AuthenticatedPrincipalCapabilityReader, admission: AuthenticatedPrincipalAdmission, browserSessionCredential: string, logger: Logger, transport: DevelopmentAuthenticationTransport = _TIER2_TRANSPORT): PublicAuthenticationComposition
 {
 	return {
 		authMiddleware: _CreateAdmissionMiddleware(identity, admission, logger),
-		router: _CreateAuthRouter(identity, capabilities, browserSessionCredential, browserOrigin),
-		sessionMiddleware: [_CreateSessionMiddleware(identity, browserSessionCredential, browserOrigin, logger)],
+		router: _CreateAuthRouter(identity, capabilities, browserSessionCredential, transport),
+		sessionMiddleware: [_CreateSessionMiddleware(identity, browserSessionCredential, transport, logger)],
 	};
 }

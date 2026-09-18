@@ -12,7 +12,7 @@ function _Fixture()
 	const principal = { id: "human-1", siloId: "silo-1", issuer: "https://issuer.example", subject: "oidc-1", provenance: PrincipalProvenance.External };
 	const membership = { id: "local-membership-1", clusterTenant: "silo-1", subject: "oidc-1", status: OrgMemberStatus.Active, updatedAt: new Date(1_000) };
 	const transaction = { principal: { findFirst: vi.fn().mockResolvedValue(principal) }, orgMembership: { findUnique: vi.fn().mockResolvedValue(membership) }, verifiedFleetMembershipRevision: { findFirst: vi.fn() } };
-	const config = { mode: FleetMembershipDeploymentModes.Standalone, siloId: "silo-1", trustedOidcIssuer: "https://issuer.example", maximumStalenessMs: 5_000 } as const;
+	const config = { mode: FleetMembershipDeploymentModes.Standalone, siloId: "silo-1", trustedIdentityIssuer: "https://issuer.example", maximumStalenessMs: 5_000 } as const;
 	return { principal, membership, transaction, config, repository: new PrismaHumanMembershipEvidenceRepository(transaction as never, config) };
 }
 
