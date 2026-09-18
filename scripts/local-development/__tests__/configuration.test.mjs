@@ -46,7 +46,19 @@ test("Codespaces uses only its exact private port 4200 browser origin", function
 	assert.equal(configuration.browserOrigin, "https://careful-crane-123-4200.app.github.dev");
 	assert.equal(configuration.codespaceName, "careful-crane-123");
 	assert.equal(configuration.defaultProvider, "openai");
-	const overridden = createLocalDevelopmentConfiguration({ profile: "core", defaultProvider: "anthropic" }, repositoryRoot, environment);
+	function _UnexpectedPersistence()
+	{
+		throw new Error("Codespaces must not use the workstation preference file");
+	}
+	const operations = {
+		persistWorkstationProviderDefault: _UnexpectedPersistence,
+		readWorkstationProviderDefault: _UnexpectedPersistence,
+	};
+	const overridden = createLocalDevelopmentConfiguration({
+		profile: "agent",
+		alternative: "local-llm",
+		defaultProvider: "anthropic",
+	}, repositoryRoot, environment, operations);
 	assert.equal(overridden.defaultProvider, "anthropic");
 
 	const invalidEnvironment = { ...environment, CODESPACE_NAME: "bad.example.com" };
@@ -54,4 +66,73 @@ test("Codespaces uses only its exact private port 4200 browser origin", function
 	{
 		createLocalDevelopmentConfiguration({ profile: "core" }, repositoryRoot, invalidEnvironment);
 	}, /valid CODESPACE_NAME/u);
+});
+
+test("workstations persist a CLI default and load it into later worker environments", function _WorkstationDefault()
+{
+	const repositoryRoot = path.resolve(import.meta.dirname, "../../..");
+	const firstEnvironment = {};
+	let persistedProvider;
+	function _PersistDefault(_repositoryRoot, provider)
+	{
+		persistedProvider = provider;
+		return provider;
+	}
+	function _ReadDefault()
+	{
+		return "openai";
+	}
+	const operations = {
+		persistWorkstationProviderDefault: _PersistDefault,
+		readWorkstationProviderDefault: _ReadDefault,
+	};
+	const selected = createLocalDevelopmentConfiguration({
+		profile: "agent",
+		alternative: "local-llm",
+		defaultProvider: "anthropic",
+	}, repositoryRoot, firstEnvironment, operations);
+
+	assert.equal(persistedProvider, "anthropic");
+	assert.equal(selected.defaultProvider, "anthropic");
+	assert.equal(firstEnvironment.OPENCRANE_TIER2_DEFAULT_PROVIDER, "anthropic");
+
+	const laterEnvironment = {};
+	const later = createLocalDevelopmentConfiguration({
+		profile: "agent",
+		alternative: "local-llm",
+	}, repositoryRoot, laterEnvironment, operations);
+	assert.equal(later.defaultProvider, "openai");
+	assert.equal(laterEnvironment.OPENCRANE_TIER2_DEFAULT_PROVIDER, "openai");
+
+	const exportedEnvironment = { OPENCRANE_TIER2_DEFAULT_PROVIDER: "gemini" };
+	const exported = createLocalDevelopmentConfiguration({
+		profile: "agent",
+		alternative: "local-llm",
+	}, repositoryRoot, exportedEnvironment, operations);
+	assert.equal(exported.defaultProvider, "gemini");
+});
+
+test("an explicit workstation provider or model does not read a stored fallback", function _ExplicitSelection()
+{
+	const repositoryRoot = path.resolve(import.meta.dirname, "../../..");
+	function _UnexpectedRead()
+	{
+		throw new Error("Explicit selection must not read the stored fallback");
+	}
+	const operations = { readWorkstationProviderDefault: _UnexpectedRead };
+	const provider = createLocalDevelopmentConfiguration({
+		profile: "agent",
+		alternative: "local-llm",
+		provider: "openai",
+	}, repositoryRoot, {}, operations);
+	assert.equal(provider.provider, "openai");
+	assert.equal(provider.defaultProvider, undefined);
+
+	const model = createLocalDevelopmentConfiguration({
+		profile: "agent",
+		alternative: "local-llm",
+		model: "openai/gpt-5.5",
+	}, repositoryRoot, {}, operations);
+	assert.equal(model.model, "openai/gpt-5.5");
+	assert.equal(model.defaultProvider, undefined);
 });

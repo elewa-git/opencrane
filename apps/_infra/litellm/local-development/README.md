@@ -15,8 +15,11 @@ does not copy it or reach into private source. On a workstation, provider keys l
 package under `keys/.<provider>-key`. A key must be a non-symbolic regular file readable only by its
 owner. When neither an explicit provider/model nor a configured default selects a provider, the
 first recognized key filename in lexical order chooses its provider and that provider's reviewed
-default model. `--default-provider <name>` or `OPENCRANE_TIER2_DEFAULT_PROVIDER` chooses a
-configured fallback without making every command use `--provider`.
+default model. On a workstation, `--default-provider <name>` validates the matching key file's path
+and permissions and writes `OPENCRANE_TIER2_DEFAULT_PROVIDER=<name>` to the ignored, owner-only
+`keys/.tier2-default-provider.env` file. Later workstation `local-llm` launches load that preference
+automatically. An explicitly exported `OPENCRANE_TIER2_DEFAULT_PROVIDER` overrides the file without
+rewriting it. The launcher updates only its worker environment; it cannot modify the parent shell.
 
 The reviewed providers are `anthropic`, `deepseek`, `gemini`, `glm`, `mistral` and `openai`.
 Workstation key filenames use these lowercase names. OpenCrane converts the selected provider to
@@ -25,7 +28,9 @@ its uppercase, space-free Codespaces credential prefix.
 Codespaces reads uppercase provider-specific variables such as `OPENAI_TIER2_PROVIDER_API_KEY` and
 `ANTHROPIC_TIER2_PROVIDER_API_KEY`; it never reads workstation key files. An explicit provider or
 model wins, followed by the configured default and then the first recognized variable in lexical
-order. An explicit or default provider must have its matching secret. The coordinator removes all
+order. Add `OPENCRANE_TIER2_DEFAULT_PROVIDER` manually as a Codespaces secret when that preference
+must survive a restart; `--default-provider` cannot update an account-owned Codespaces secret. An
+explicit or default provider must have its matching secret. The coordinator removes all
 matching credential variables before running validation or application child processes. Use
 `--model` to override the selected provider's reviewed default; an unreviewed provider, model,
 credential variable or cross-provider pairing is refused. The retired generic

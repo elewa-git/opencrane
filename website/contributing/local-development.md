@@ -153,7 +153,7 @@ npm run dev:tier2:agent
 # Selects one provider and optional reviewed model explicitly.
 npm run dev:tier2:agent:local-llm -- --provider openai --model openai/gpt-5.5
 
-# Uses openai as the fallback without making it an explicit provider selection.
+# Persists openai as this workstation's fallback for later plain launches.
 npm run dev:tier2:agent:local-llm -- --default-provider openai
 
 # Uses an existing HTTPS LiteLLM gateway and an owner-only administrator-key file.
@@ -210,11 +210,12 @@ An explicit provider selects its matching secret:
 npm run dev:tier2:agent:local-llm -- --provider openai --model openai/gpt-5.5
 ```
 
-When neither `--provider` nor `--model` selects a provider, the launcher checks
+When neither `--provider` nor `--model` selects a provider, Codespaces checks
 `--default-provider` first, then `OPENCRANE_TIER2_DEFAULT_PROVIDER`, then the alphabetically first
-configured provider secret. GitHub Codespaces has no repository-controlled per-user value for that
-preference, so add it manually as another personal Codespaces secret with a lowercase value such as
-`openai`. You can then use the plain command:
+configured provider secret. `--default-provider` selects only that Codespaces launch because the
+launcher cannot create or update an account-owned Codespaces secret. To retain the preference, add
+`OPENCRANE_TIER2_DEFAULT_PROVIDER` manually as another personal Codespaces secret with a lowercase
+value such as `openai`. You can then use the plain command:
 
 ```bash
 npm run dev:tier2:agent:local-llm
@@ -261,8 +262,11 @@ Outside Codespaces, local provider keys are owner-only regular files named `keys
 `keys/.anthropic-key`, `keys/.gemini-key`, `keys/.mistral-key`, `keys/.deepseek-key` or
 `keys/.glm-key`. They must not be symbolic links. The local LiteLLM configuration contains an
 environment-variable reference, never the key value. `--default-provider openai` chooses
-`keys/.openai-key` for one command. To retain the preference in a trusted local shell configuration,
-set `OPENCRANE_TIER2_DEFAULT_PROVIDER=openai`; an explicit `--provider` or `--model` still wins.
+`keys/.openai-key`, updates the current worker's `OPENCRANE_TIER2_DEFAULT_PROVIDER` value and writes
+the same assignment to the ignored, owner-only `keys/.tier2-default-provider.env` file. Later plain
+launches load it automatically, including after `--reset`. An explicitly exported
+`OPENCRANE_TIER2_DEFAULT_PROVIDER` overrides the stored preference without rewriting it. An explicit
+`--provider` or `--model` still wins. The launcher does not modify the parent shell.
 Codespaces does not read these checkout files and instead uses the uppercase provider-specific
 variables listed above. Remote mode accepts only an HTTPS origin and an explicit owner-only
 administrator-key file; it refuses a local provider-key path.

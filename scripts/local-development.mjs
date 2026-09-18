@@ -31,8 +31,9 @@ Codespaces:
 
 Provider selection:
   --provider / --model                Select an explicit reviewed provider/model first
-  --default-provider                  Select the command's fallback provider
-  OPENCRANE_TIER2_DEFAULT_PROVIDER    Select the environment's lowercase fallback provider
+  --default-provider                  Persist on a workstation; select this launch's fallback
+  OPENCRANE_TIER2_DEFAULT_PROVIDER    Override the stored fallback with a lowercase value
+                                      Add manually in Codespaces
   No selection                        Use the first configured credential in lexical order
 
 State:
