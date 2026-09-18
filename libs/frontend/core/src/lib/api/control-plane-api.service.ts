@@ -1,7 +1,7 @@
 import { Injectable, inject } from "@angular/core";
 
 import type { paths } from "@opencrane/contracts";
-import { CONTROL_PLANE_BASE_URL, CONTROL_PLANE_REQUEST_HEADERS } from "./api-client.types";
+import { CONTROL_PLANE_BASE_URL, CONTROL_PLANE_REQUEST_HEADERS, CONTROL_PLANE_UNAUTHORIZED_RESPONSE_HANDLER } from "./api-client.types";
 import { OpenCraneApiClientBase } from "./api-client.base";
 
 /**
@@ -24,6 +24,10 @@ export class ControlPlaneApiService extends OpenCraneApiClientBase<paths>
 {
 	public constructor()
 	{
-		super(inject(CONTROL_PLANE_BASE_URL, { optional: true }) ?? "", inject(CONTROL_PLANE_REQUEST_HEADERS, { optional: true }) ?? {});
+		super(
+			inject(CONTROL_PLANE_BASE_URL, { optional: true }) ?? "",
+			inject(CONTROL_PLANE_REQUEST_HEADERS, { optional: true }) ?? {},
+			inject(CONTROL_PLANE_UNAUTHORIZED_RESPONSE_HANDLER, { optional: true }) ?? undefined
+		);
 	}
 }

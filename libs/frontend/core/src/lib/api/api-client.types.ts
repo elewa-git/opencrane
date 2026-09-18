@@ -18,6 +18,17 @@ export const CONTROL_PLANE_BASE_URL: InjectionToken<string> = new InjectionToken
  */
 export const CONTROL_PLANE_REQUEST_HEADERS: InjectionToken<Readonly<Record<string, string>>> = new InjectionToken<Readonly<Record<string, string>>>("OPENCRANE_CONTROL_PLANE_REQUEST_HEADERS");
 
+/** Handles a Control Plane 401 when an application profile owns a narrower authentication boundary. */
+export type ControlPlaneUnauthorizedResponseHandler = (response: Response) => boolean | Promise<boolean>;
+
+/**
+ * Lets an application profile claim a specific Control Plane 401 before the shared OIDC redirect.
+ *
+ * Live builds leave this token unset. A profile must return `true` only after it has recognized and
+ * handled its own closed response contract; returning `false` preserves the ordinary OIDC flow.
+ */
+export const CONTROL_PLANE_UNAUTHORIZED_RESPONSE_HANDLER: InjectionToken<ControlPlaneUnauthorizedResponseHandler> = new InjectionToken<ControlPlaneUnauthorizedResponseHandler>("OPENCRANE_CONTROL_PLANE_UNAUTHORIZED_RESPONSE_HANDLER");
+
 /**
  * Injection token carrying the base URL of the OpenCrane **Fleet Manager** API
  * (fleet/platform surface: `/cluster-tenants`, `/billing-accounts`, `/platform/dns`).

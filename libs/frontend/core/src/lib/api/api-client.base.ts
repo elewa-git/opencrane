@@ -1,6 +1,7 @@
 import createClient, { Client, Middleware } from "openapi-fetch";
 
 import { _CreateOpenCraneApiError } from "./api-error";
+import type { ControlPlaneUnauthorizedResponseHandler } from "./api-client.types";
 
 /**
  * Shared base for the frontend's typed OpenCrane clients.
@@ -26,8 +27,13 @@ export abstract class OpenCraneApiClientBase<TPaths extends object>
 	/**
 	 * @param _origin - Origin of this surface's API; empty string means same-origin.
 	 * @param _requestHeaders - Application-level headers applied to every request from this client.
+	 * @param _unauthorizedResponseHandler - Optional profile-owned handler for a narrower 401 contract.
 	 */
-	protected constructor(protected readonly _origin: string, private readonly _requestHeaders: Readonly<Record<string, string>> = {})
+	protected constructor(
+		protected readonly _origin: string,
+		private readonly _requestHeaders: Readonly<Record<string, string>> = {},
+		private readonly _unauthorizedResponseHandler?: ControlPlaneUnauthorizedResponseHandler
+	)
 	{
 		this._baseUrl = `${this._origin}/api/v1`;
 		this.client = createClient<TPaths>({
@@ -63,7 +69,7 @@ export abstract class OpenCraneApiClientBase<TPaths extends object>
 			init.body = JSON.stringify(options.body);
 		}
 		const response = await fetch(`${this._baseUrl}${path}${search}`, init);
-		this._redirectIfUnauthorized(response);
+		await this._handleUnauthorized(response);
 		if (!response.ok)
 		{
 			throw await _CreateOpenCraneApiError(response, method, path);
@@ -142,10 +148,28 @@ export abstract class OpenCraneApiClientBase<TPaths extends object>
 		return serialised ? `?${serialised}` : "";
 	}
 
-	/** Redirect to this surface's OIDC login flow on a 401 (shared by the client middleware and {@link request}). */
-	private _redirectIfUnauthorized(response: Response): void
+	/** Lets a profile claim its own exact 401 contract before starting the ordinary OIDC flow. */
+	private async _handleUnauthorized(response: Response): Promise<void>
 	{
-		if (response.status === 401 && typeof window !== "undefined")
+		if (response.status !== 401)
+			return;
+
+		if (this._unauthorizedResponseHandler)
+		{
+			try
+			{
+				const handled = await this._unauthorizedResponseHandler(response);
+
+				if (handled)
+					return;
+			}
+			catch
+			{
+				// A profile handler cannot suppress the shared authentication recovery path.
+			}
+		}
+
+		if (typeof window !== "undefined")
 		{
 			window.location.assign(this.signInUrl(window.location.pathname + window.location.search));
 		}
@@ -158,11 +182,11 @@ export abstract class OpenCraneApiClientBase<TPaths extends object>
 	 */
 	private _buildAuthMiddleware(): Middleware
 	{
-		const redirectIfUnauthorized = this._redirectIfUnauthorized.bind(this);
+		const handleUnauthorized = this._handleUnauthorized.bind(this);
 		return {
-			onResponse: function _onResponse({ response }): Response
+			onResponse: async function _onResponse({ response }): Promise<Response>
 			{
-				redirectIfUnauthorized(response);
+				await handleUnauthorized(response);
 				return response;
 			}
 		};

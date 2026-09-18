@@ -30,6 +30,16 @@ describe("Tier 2 browser entry routes", function _Tier2BrowserEntryRoutes()
 		expect(routes[0]?.path).toBe("**");
 		expect(routes[0]?.loadComponent).toBeTypeOf("function");
 		expect(routes[0]?.canActivate).toBeUndefined();
+		expect(routes[0]?.data).toEqual({ guidanceState: "missing" });
+	});
+
+	it("retains replaced-launch guidance when an obsolete tab reloads", async function _ReplacedSession()
+	{
+		window.sessionStorage.setItem("opencrane.tier2.development-session-guidance", "replaced");
+
+		const routes = await _routes();
+
+		expect(routes[0]?.data).toEqual({ guidanceState: "replaced" });
 	});
 
 	it("restores the unchanged live routes after this tab consumes a private URL", async function _AdmittedSession()
