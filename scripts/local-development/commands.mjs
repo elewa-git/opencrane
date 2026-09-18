@@ -1,6 +1,9 @@
 import { createDockerLabelArguments } from "./docker-resources.mjs";
 import { LOCAL_DEVELOPMENT_ALTERNATIVES } from "./profiles.mjs";
 
+/** Points LiteLLM at the `cl100k_base` cache in the pinned image so startup does not download it. */
+const _LITELLM_BUNDLED_TIKTOKEN_CACHE_DIRECTORY = "/usr/lib/python3.13/site-packages/litellm/litellm_core_utils/tokenizers";
+
 /** Builds the PostgreSQL container labeled for this checkout and target baseline. */
 export function createPostgresCommand(configuration, secrets)
 {
@@ -108,13 +111,15 @@ export function createLiteLLMCommand(configuration, secrets, provider)
 			"--env", provider.providerKeyEnvironmentVariable,
 			"--env", "LITELLM_MASTER_KEY",
 			"--env", "DATABASE_URL",
+			"--env", "CUSTOM_TIKTOKEN_CACHE_DIR",
 			configuration.liteLLMImage,
 			"--config", "/app/config.yaml", "--port", "4000"
 		],
 		environment: {
 			[provider.providerKeyEnvironmentVariable]: provider.providerKey,
 			LITELLM_MASTER_KEY: secrets.liteLLMMasterKey,
-			DATABASE_URL: `postgresql://litellm:${encodeURIComponent(secrets.liteLLMDatabasePassword)}@${configuration.postgresContainerName}:5432/litellm`
+			DATABASE_URL: `postgresql://litellm:${encodeURIComponent(secrets.liteLLMDatabasePassword)}@${configuration.postgresContainerName}:5432/litellm`,
+			CUSTOM_TIKTOKEN_CACHE_DIR: _LITELLM_BUNDLED_TIKTOKEN_CACHE_DIRECTORY
 		}
 	};
 }

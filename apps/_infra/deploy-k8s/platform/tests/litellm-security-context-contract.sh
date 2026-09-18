@@ -36,6 +36,8 @@ grep -Fq '        runAsUser: 65534' <<<"$litellm_manifest"
 grep -Fq '        runAsGroup: 65534' <<<"$litellm_manifest"
 grep -Fq '        fsGroup: 65534' <<<"$litellm_manifest"
 grep -Fq '          image: "ghcr.io/berriai/litellm-non_root:main-v1.81.9-stable"' <<<"$litellm_manifest"
+grep -Fq '            - name: CUSTOM_TIKTOKEN_CACHE_DIR' <<<"$litellm_manifest"
+grep -Fq '              value: "/usr/lib/python3.13/site-packages/litellm/litellm_core_utils/tokenizers"' <<<"$litellm_manifest"
 if grep -Fq 'runAsUser: 10001' <<<"$litellm_manifest"; then
   printf 'LiteLLM overrides the image-owned non-root identity.\n' >&2
   exit 1
