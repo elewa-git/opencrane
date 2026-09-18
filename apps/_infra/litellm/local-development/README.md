@@ -18,6 +18,10 @@ first recognized key filename in lexical order chooses its provider and that pro
 default model. `--default-provider <name>` or `OPENCRANE_TIER2_DEFAULT_PROVIDER` chooses a
 configured fallback without making every command use `--provider`.
 
+The reviewed providers are `anthropic`, `deepseek`, `gemini`, `glm`, `mistral` and `openai`.
+Workstation key filenames use these lowercase names. OpenCrane converts the selected provider to
+its uppercase, space-free Codespaces credential prefix.
+
 Codespaces reads uppercase provider-specific variables such as `OPENAI_TIER2_PROVIDER_API_KEY` and
 `ANTHROPIC_TIER2_PROVIDER_API_KEY`; it never reads workstation key files. An explicit provider or
 model wins, followed by the configured default and then the first recognized variable in lexical

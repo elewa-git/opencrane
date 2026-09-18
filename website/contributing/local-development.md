@@ -171,9 +171,19 @@ Use an AMD64 Codespace with at least 2 cores and 8 GB of memory for Tier 2. When
 Codespace, choose the `OpenCrane Tier 2` configuration at
 `.devcontainer/tier2/devcontainer.json`. That
 configuration installs Docker-in-Docker and the Tier 2 command-line tools, runs `npm ci`, and
-forwards only browser port 4200. For real model calls through the local LiteLLM profile, create one
-or more personal Codespaces development secrets from this list and grant them access only to this
-repository:
+forwards only browser port 4200.
+
+The reviewed providers are:
+
+- `anthropic`
+- `deepseek`
+- `gemini`
+- `glm`
+- `mistral`
+- `openai`
+
+For real model calls through the local LiteLLM profile, create one or more personal Codespaces
+development secrets from these names and grant them access only to this repository:
 
 ```text
 ANTHROPIC_TIER2_PROVIDER_API_KEY
