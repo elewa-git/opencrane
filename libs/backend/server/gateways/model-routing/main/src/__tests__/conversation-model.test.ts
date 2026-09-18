@@ -56,7 +56,7 @@ function _request(overrides: Partial<ConversationModelRequest> = {}): Conversati
 /** Builds the upstream text envelope, including nullable optional fields emitted by compatible proxies. */
 function _answer(text = "  Saved answer.\n"): unknown
 {
-	return { choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: text, tool_calls: null, refusal: null } }], usage: { completion_tokens: 10 } };
+	return { choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: text, tool_calls: null, refusal: null, provider_specific_fields: null } }], usage: { completion_tokens: 10 } };
 }
 
 /** Gives the fetch double a real streaming Response without opening a socket. */
@@ -289,6 +289,7 @@ describe("one conversation model text exchange", function _transportSuite()
 		{ choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: "ok", tool_calls: [] } }] },
 		{ choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: "ok", function_call: { name: "tool" } } }] },
 		{ choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: "ok", refusal: "refused" } }] },
+		{ choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: "ok", provider_specific_fields: { private: "metadata" } } }] },
 		{ choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: [{ type: "text", text: "ok" }] } }] },
 		_answer(" "), _answer("\ud800"), _answer("é".repeat(32_769)),
 	])("rejects malformed or unsupported answer %# without retry", async function _responseShape(body)

@@ -131,7 +131,7 @@ export function _ValidateConversationModelResponse(candidate: unknown, offeredTo
 	if (!_isRecord(choice) || choice["index"] !== 0 || !_isRecord(choice["message"]))
 		throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);
 	const message = choice["message"];
-	const supportedFields = ["role", "content", "tool_calls", "function_call", "refusal", "audio", "reasoning_content"];
+	const supportedFields = ["role", "content", "tool_calls", "function_call", "refusal", "audio", "reasoning_content", "provider_specific_fields"];
 	if (message["role"] !== "assistant" || Object.keys(message).some(key => !supportedFields.includes(key)) || supportedFields.slice(3).some(key => message[key] != null))
 		throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);
 	if (choice["finish_reason"] === "stop" && message["tool_calls"] == null)
