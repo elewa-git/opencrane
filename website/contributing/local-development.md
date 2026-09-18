@@ -232,12 +232,15 @@ Generated configuration and Docker arguments contain only the internal environme
 reference. A missing or empty matching secret, unreviewed provider, variable or model, and a
 cross-provider model selection all stop before Docker resources are acquired.
 
-Codespaces allows up to 120 seconds for LiteLLM model routing and key storage to become ready; a
-workstation keeps the 30-second readiness window. The launcher stops waiting if LiteLLM exits. An
-early exit or timeout includes the Docker state and a bounded, redacted startup-log tail; provider,
-master-key and database-password values are removed, and the container environment is never
-printed. Check the Architecture line in `docker info` reports `amd64` or `x86_64`, then run the
-core, simulated-Agent or credential-backed Agent command without an emulation flag.
+Codespaces gives LiteLLM a 120-second startup budget; a workstation keeps a 30-second budget. The
+launcher reserves the final two seconds for failure diagnostics. In Codespaces, LiteLLM can exit
+when its embedded Prisma query engine cannot accept database requests. The launcher recognises
+that specific exit and restarts the same container at most twice within the startup budget. Other
+exits are not restarted. An early exit or timeout includes the latest Docker state and, when Docker
+returns it before the deadline, a bounded startup-log tail. Provider, master-key and
+database-password values are removed, and the container environment is never printed. Check the
+Architecture line in `docker info` reports `amd64` or `x86_64`, then run the core, simulated-Agent
+or credential-backed Agent command without an emulation flag.
 
 The pinned LiteLLM image carries the OpenAI tokenizer cache used during startup. The launcher points
 LiteLLM at that bundled cache, so Codespaces does not need to resolve or contact
