@@ -153,7 +153,7 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 		sessionLockPath: path.join(repositoryGitDirectory, "opencrane-local-development", `${worktreeIdentity}.lock`),
 		postgresImage: manifest.database.operandImage,
 		kurrentImage: "docker.kurrent.io/kurrent-latest/kurrentdb@sha256:e5c9d59716174a4a47f9d54d6ce45aaaca48114b7ee668135aeb9f16934d74c8",
-		liteLLMImage: "ghcr.io/berriai/litellm-non_root:main-v1.81.0-stable@sha256:39718a9cc9138c99ec812bcde24896411cf54502967a36b19897c539b796fdc7",
+		liteLLMImage: "ghcr.io/berriai/litellm-non_root:main-v1.81.9-stable@sha256:868fc4bf07e06f53681c838728edc81b9ecf871a741f807132bac1be5468f8a3",
 		postgresPort,
 		kurrentPort,
 		liteLLMPort,

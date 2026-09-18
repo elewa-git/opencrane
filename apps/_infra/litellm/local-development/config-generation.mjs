@@ -52,7 +52,10 @@ export function prepareLocalLiteLLMConfiguration(options)
 	fs.writeFileSync(generatedConfigPath, _createSecretFreeConfiguration(selection.model), {
 		encoding: "utf8",
 		flag: "wx",
-		mode: 0o600
+		// The container reads this host-owned bind mount as its non-root image user. World
+		// readability exposes no credential because the YAML contains only model metadata and an
+		// environment-variable name.
+		mode: 0o644
 	});
 
 	return {

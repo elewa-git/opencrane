@@ -204,6 +204,7 @@ test("generated configuration contains only the selected alias and environment r
 		assert.match(content, /model: "openai\/gpt-5\.4"/);
 		assert.match(content, /api_key: os\.environ\/OPENCRANE_LOCAL_PROVIDER_KEY/);
 		assert.doesNotMatch(content, /never-write-this-secret/);
+		assert.equal(fs.statSync(prepared.generatedConfigPath).mode & 0o777, 0o644);
 	}
 	finally
 	{
