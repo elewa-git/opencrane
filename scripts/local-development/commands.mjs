@@ -3,6 +3,8 @@ import { LOCAL_DEVELOPMENT_ALTERNATIVES } from "./profiles.mjs";
 
 /** Points LiteLLM at the `cl100k_base` cache in the pinned image so startup does not download it. */
 const _LITELLM_BUNDLED_TIKTOKEN_CACHE_DIRECTORY = "/usr/lib/python3.13/site-packages/litellm/litellm_core_utils/tokenizers";
+/** Sets both conventional proxy-exclusion names so LiteLLM keeps Prisma loopback traffic local. */
+const _LITELLM_LOOPBACK_NO_PROXY = "127.0.0.1,localhost,::1";
 
 /** Builds the PostgreSQL container labeled for this checkout and target baseline. */
 export function createPostgresCommand(configuration, secrets)
@@ -112,6 +114,8 @@ export function createLiteLLMCommand(configuration, secrets, provider)
 			"--env", "LITELLM_MASTER_KEY",
 			"--env", "DATABASE_URL",
 			"--env", "CUSTOM_TIKTOKEN_CACHE_DIR",
+			"--env", "NO_PROXY",
+			"--env", "no_proxy",
 			configuration.liteLLMImage,
 			"--config", "/app/config.yaml", "--port", "4000"
 		],
@@ -119,7 +123,9 @@ export function createLiteLLMCommand(configuration, secrets, provider)
 			[provider.providerKeyEnvironmentVariable]: provider.providerKey,
 			LITELLM_MASTER_KEY: secrets.liteLLMMasterKey,
 			DATABASE_URL: `postgresql://litellm:${encodeURIComponent(secrets.liteLLMDatabasePassword)}@${configuration.postgresContainerName}:5432/litellm`,
-			CUSTOM_TIKTOKEN_CACHE_DIR: _LITELLM_BUNDLED_TIKTOKEN_CACHE_DIRECTORY
+			CUSTOM_TIKTOKEN_CACHE_DIR: _LITELLM_BUNDLED_TIKTOKEN_CACHE_DIRECTORY,
+			NO_PROXY: _LITELLM_LOOPBACK_NO_PROXY,
+			no_proxy: _LITELLM_LOOPBACK_NO_PROXY
 		}
 	};
 }

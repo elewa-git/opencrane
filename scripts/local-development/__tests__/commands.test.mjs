@@ -124,6 +124,8 @@ test("local LiteLLM receives its isolated database URL without putting credentia
 
 	assert.equal(specification.arguments.includes("DATABASE_URL"), true);
 	assert.equal(specification.arguments.includes("CUSTOM_TIKTOKEN_CACHE_DIR"), true);
+	assert.equal(specification.arguments.includes("NO_PROXY"), true);
+	assert.equal(specification.arguments.includes("no_proxy"), true);
 	assert.equal(specification.arguments.join(" ").includes(provider.providerKey), false);
 	assert.equal(specification.arguments.join(" ").includes(secrets.postgresPassword), false);
 	assert.equal(specification.arguments.join(" ").includes(secrets.liteLLMDatabasePassword), false);
@@ -131,6 +133,8 @@ test("local LiteLLM receives its isolated database URL without putting credentia
 	assert.equal(specification.environment.DATABASE_URL, "postgresql://litellm:litellm-database-secret@postgres:5432/litellm");
 	assert.equal(specification.environment.DATABASE_URL.includes(secrets.postgresPassword), false);
 	assert.equal(specification.environment.CUSTOM_TIKTOKEN_CACHE_DIR, "/usr/lib/python3.13/site-packages/litellm/litellm_core_utils/tokenizers");
+	assert.equal(specification.environment.NO_PROXY, "127.0.0.1,localhost,::1");
+	assert.equal(specification.environment.no_proxy, "127.0.0.1,localhost,::1");
 });
 
 test("application plans start only the current server and Tier 2 UI", function _CurrentProcesses()
