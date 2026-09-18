@@ -43,9 +43,12 @@ declared model-routing dependency tracks the public provider catalogue in the Nx
 
 ## Runtime & config
 
-- **Pinned image:** `ghcr.io/berriai/litellm-non_root:main-v1.81.0-stable` (the `non_root` wolfi-free
-  build — the plain wolfi image crashes Prisma). Cluster deployment owns this reviewed tag; Tier 2
-  pins the tag's multi-platform digest in its coordinator.
+- **Pinned image:** `ghcr.io/berriai/litellm-non_root:main-v1.81.9-stable` (the `non_root` wolfi-free
+  build — the plain wolfi image crashes Prisma). This version includes the
+  [upstream correction](https://github.com/BerriAI/litellm/pull/20000) that makes Prisma's generated
+  files writable by the image's `nobody` runtime user. The cluster deployment sets `runAsUser` and
+  `runAsGroup` to that account's numeric uid/gid, `65534`, and owns this version tag; Tier 2 pins the
+  tag's multi-platform digest in its coordinator.
 - `litellm.enabled` / `opencrane.litellmShared` — render an in-cluster workload, or use a shared endpoint.
 - `litellm.masterKey` / `litellm.existingSecret` (+ `secretKey`) — the LiteLLM master key.
 - `litellm.databaseUrl` / `litellm.existingDatabaseSecret` (+ `databaseSecretKey`) — Postgres connection

@@ -729,10 +729,10 @@ litellm:
     #    (wolfi ships OpenSSL 3 only; the runtime-fetched debian-openssl-1.1.x query
     #    engine can't load libssl.so.1.1). Confirmed fix per BerriAI/litellm#11864.
     repository: ghcr.io/berriai/litellm-non_root
-    # -- Pinned to the audited stable tag (matches the k3d overlays) for
-    #    supply-chain integrity + reproducible deploys. Do NOT use a rolling
-    #    `main-latest` tag in production — bump deliberately after re-auditing.
-    tag: main-v1.81.0-stable
+    # -- Keeps cluster deployments on a named stable release. OCI tags are mutable,
+    #    so this controls deliberate upgrades but does not provide digest pinning.
+    #    Do NOT use a rolling `main-latest` tag in production.
+    tag: main-v1.81.9-stable
     pullPolicy: IfNotPresent
   service:
     port: 4000
@@ -762,9 +762,11 @@ litellm:
   podAnnotations: {}
   podSecurityContext:
     runAsNonRoot: true
-    runAsUser: 10001
-    runAsGroup: 10001
-    fsGroup: 10001
+    # -- The non_root image generates Prisma files as nobody during its build. Run the Pod as the
+    #    same uid/gid so startup can update the generated client after database migrations.
+    runAsUser: 65534
+    runAsGroup: 65534
+    fsGroup: 65534
     seccompProfile:
       type: RuntimeDefault
   securityContext:

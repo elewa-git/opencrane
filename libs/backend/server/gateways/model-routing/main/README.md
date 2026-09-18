@@ -131,9 +131,9 @@ call and completion budget, keeps one nonrenewed attempt key, admits the propose
 rechecks authority before using its result. Adapter tests alone do not qualify the public tool
 flow or a live provider.
 
-The pinned LiteLLM v1.81.0-stable implementation creates `expires` from a UTC clock and serializes
+The pinned LiteLLM v1.81.9-stable implementation creates `expires` from a UTC clock and serializes
 it as an ISO timestamp. The adapter checks that evidence instead of storing a locally guessed
-expiry. Source: [key management](https://github.com/BerriAI/litellm/blob/v1.81.0-stable/litellm/proxy/management_endpoints/key_management_endpoints.py).
+expiry. Source: [key management](https://github.com/BerriAI/litellm/blob/v1.81.9-stable/litellm/proxy/management_endpoints/key_management_endpoints.py).
 Already issued keys still have a bounded validity window. The transport adapter does not repeat
 PostgreSQL admission; the conversation owner must perform that check before reserving dispatch.
 

@@ -25,6 +25,7 @@ for contract in \
   server-key-permissions-contract.sh \
   server-rbac-contract.sh \
   server-network-policy-contract.sh \
+  litellm-security-context-contract.sh \
   platform-network-policy-contract.sh \
   post-deploy-health-contract.sh \
   qualified-release-image-contract.sh \
