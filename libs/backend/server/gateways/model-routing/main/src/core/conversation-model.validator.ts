@@ -1,4 +1,4 @@
-import { ___ConversationModelContinuationSchema, ___ConversationModelResponseSchema, ConversationModelResponseKinds, ConversationModelToolModes, type CompiledToolDefinition, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
+import { CONVERSATION_MODEL_REQUEST_TIMEOUT_MILLISECONDS, ___ConversationModelContinuationSchema, ___ConversationModelResponseSchema, ConversationModelResponseKinds, ConversationModelToolModes, type CompiledToolDefinition, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
 import { ___CanonicalizeJson, ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { ConversationModelError, ConversationModelFailureCodes, type PreparedConversationModelRequest } from "./conversation-model.types";
@@ -104,7 +104,7 @@ export function _PrepareConversationModelRequest(input: ConversationModelRequest
 		if (Buffer.byteLength(body) > _CONVERSATION_MODEL_MAX_BYTES)
 			throw new ConversationModelError(ConversationModelFailureCodes.RequestTooLarge);
 		url.pathname = "/v1/chat/completions";
-		const deadlineEpochMs = Math.min(input.notAfterEpochMs, compiled.budget.wallClockDeadlineEpochMs ?? input.notAfterEpochMs, Date.now() + 25_000);
+		const deadlineEpochMs = Math.min(input.notAfterEpochMs, compiled.budget.wallClockDeadlineEpochMs ?? input.notAfterEpochMs, Date.now() + CONVERSATION_MODEL_REQUEST_TIMEOUT_MILLISECONDS);
 		if (deadlineEpochMs <= Date.now())
 			throw new ConversationModelError(ConversationModelFailureCodes.DeadlineExceeded);
 		return { url, authorization: `Bearer ${input.key}`, body, deadlineEpochMs, offeredToolNames: input.tools === ConversationModelToolModes.Select ? offered.map(tool => tool.name) : [] };

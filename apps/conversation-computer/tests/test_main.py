@@ -133,7 +133,7 @@ class ConfigurationTests(unittest.TestCase):
         open_url.return_value = response
         result = _bootstrap({"computerId": "computer-1", "generation": "1", "leaseId": "lease-1", "internalEndpoint": "http://server", "tokenPath": "/token"})
         self.assertEqual(result, {"outcome": "idle"})
-        self.assertEqual(open_url.call_args.kwargs, {"timeout": 30})
+        self.assertEqual(open_url.call_args.kwargs, {"timeout": 70})
 
     @patch("src.main._read_token", return_value="projected-token")
     @patch("src.main._json_request")
@@ -145,7 +145,7 @@ class ConfigurationTests(unittest.TestCase):
                 exchange.reset_mock()
                 exchange.return_value = {"outcome": outcome}
                 self.assertEqual(_execute_turn(config, {"bootstrapId": "bootstrap-1", "outcome": "ready"}), outcome)
-                exchange.assert_called_once_with("http://server:8081/api/internal/conversation-computer/model-step", "projected-token", {"bootstrapId": "bootstrap-1"})
+                exchange.assert_called_once_with("http://server:8081/api/internal/conversation-computer/model-step", "projected-token", {"bootstrapId": "bootstrap-1"}, timeout_seconds=360)
 
     @patch("src.main._read_token", return_value="projected-token")
     @patch("src.main._json_request")

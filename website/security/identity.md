@@ -60,7 +60,7 @@ The server model-step path also keeps the LiteLLM attempt key and compiled promp
 conversation Pod. The Pod receives status, and the server owns tool selection and answer admission.
 The continuation implementation reuses the first key only when its saved digest, expiry and current
 authority still match. It cannot replace expired, missing or uncertain custody; cleanup retains a
-non-secret spent marker. Each model request remains within 25 seconds and the current key/authority
+non-secret spent marker. Each model request remains within 60 seconds and the current key/authority
 window. The text checkpoint has passed full CI, while the continuation implementation in PR #830
 awaits CI and live qualification. Neither replacement has been deployed on testv5. See [development status](/guide/status).
 

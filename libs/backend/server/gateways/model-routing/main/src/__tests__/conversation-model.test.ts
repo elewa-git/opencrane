@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ConversationModelResponseKinds, ConversationModelToolModes, type ConversationModelRequest, type ConversationModelToolCall, type CompiledToolDefinition } from "@opencrane/contracts";
+import { CONVERSATION_MODEL_REQUEST_TIMEOUT_MILLISECONDS, ConversationModelResponseKinds, ConversationModelToolModes, type ConversationModelRequest, type ConversationModelToolCall, type CompiledToolDefinition } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __RequestConversationModel } from "../core/conversation-model";
@@ -188,7 +188,7 @@ describe("one conversation model text exchange", function _transportSuite()
 		const request = { ...input, notAfterEpochMs: bound === "reserved" ? _NOW + 10 : input.notAfterEpochMs,
 			compiledInput: { ...input.compiledInput, budget: { ...input.compiledInput.budget, wallClockDeadlineEpochMs: bound === "compiled" ? _NOW + 10 : _NOW + 100_000 } } };
 		const outcome = expect(__RequestConversationModel(request)).rejects.toMatchObject({ code: ConversationModelFailureCodes.DeadlineExceeded });
-		await vi.advanceTimersByTimeAsync(bound === "transport-cap" ? 25_000 : 10);
+		await vi.advanceTimersByTimeAsync(bound === "transport-cap" ? CONVERSATION_MODEL_REQUEST_TIMEOUT_MILLISECONDS : 10);
 		await outcome;
 		expect(seenSignal?.aborted).toBe(true);
 		expect(fetchMock).toHaveBeenCalledTimes(1);

@@ -21,6 +21,8 @@ _DEFAULT_REVIEW_CREDENTIAL_PATH: Final = "/var/run/opencrane/review/credential"
 _AGENT_SANDBOX_REALIZATION: Final = "agent_sandbox"
 _HOST_DEVELOPMENT_REALIZATION: Final = "host_development_process"
 _MAX_RESPONSE_BYTES: Final = 4 * 1024 * 1024
+_PRIVATE_API_TIMEOUT_SECONDS: Final = 70
+_MODEL_STEP_TIMEOUT_SECONDS: Final = 360
 _BOOTSTRAP_OUTCOMES: Final = frozenset({"ready", "pending", "response_unavailable"})
 _MODEL_STEP_OUTCOMES: Final = frozenset({"completed", "pending", "response_unavailable", "authority_ended"})
 _DEGRADED_OUTCOMES: Final = frozenset({"response_unavailable", "authority_ended"})
@@ -74,13 +76,32 @@ def _read_token(path: str) -> str:
     return token
 
 
-def _json_request(url: str, token: str, payload: dict[str, Any] | None = None, empty_outcome: str | None = None) -> dict[str, Any]:
-    """Perform one bounded authenticated JSON exchange with the private control-plane listener."""
+def _json_request(url: str, token: str, payload: dict[str, Any] | None = None, empty_outcome: str | None = None, timeout_seconds: int = _PRIVATE_API_TIMEOUT_SECONDS) -> dict[str, Any]:
+    """Perform one authenticated JSON exchange with a caller-selected socket timeout.
+
+    Routine private routes use the 70-second default. The model-step caller supplies its longer
+    client wait explicitly; this timeout does not enlarge any deadline enforced by the server.
+
+    Args:
+        url: Private control-plane URL selected from trusted process configuration.
+        token: Bearer credential read immediately before the request.
+        payload: JSON object to send, or None for a GET request.
+        empty_outcome: Outcome returned when the private route responds without a body.
+        timeout_seconds: Socket timeout passed to ``urllib.request.urlopen``.
+
+    Returns:
+        The decoded JSON object, or the configured empty-response outcome.
+
+    Raises:
+        RuntimeError: If the response exceeds the byte limit or is not a JSON object.
+        urllib.error.URLError: If the listener cannot be reached within the socket timeout.
+        json.JSONDecodeError: If a non-empty response is not valid JSON.
+    """
     body = None if payload is None else json.dumps(payload, separators=(",", ":")).encode("utf-8")
     request = urllib.request.Request(url, data=body, method="GET" if body is None else "POST")
     request.add_header("Authorization", f"Bearer {token}")
     request.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(request, timeout=30) as response:
+    with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
         raw = response.read(_MAX_RESPONSE_BYTES + 1)
     if len(raw) > _MAX_RESPONSE_BYTES:
         raise RuntimeError("private API response exceeds the computer byte limit")
@@ -146,12 +167,26 @@ def _bootstrap_id(bootstrap: dict[str, Any]) -> str:
 
 
 def _execute_turn(config: dict[str, str], bootstrap: dict[str, Any]) -> str:
-    """Ask the server to advance or recover the conversation's reserved work."""
+    """Ask the server to advance or recover the conversation's reserved work.
+
+    Its 360-second client wait covers the server's 300-second attempt authority plus response
+    completion time; it grants no additional server authority and permits no paid retry.
+
+    Args:
+        config: Trusted private endpoint and bearer-file configuration.
+        bootstrap: Ready status containing the server's saved turn identifier.
+
+    Returns:
+        The server's closed model-step outcome.
+
+    Raises:
+        RuntimeError: If bootstrap is not ready or the response is outside the closed outcome set.
+    """
     if bootstrap.get("outcome") != "ready":
         raise RuntimeError("model step requires a ready bootstrap")
     payload = {"bootstrapId": _bootstrap_id(bootstrap)}
     token = _read_token(config["tokenPath"])
-    result = _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/model-step", token, payload)
+    result = _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/model-step", token, payload, timeout_seconds=_MODEL_STEP_TIMEOUT_SECONDS)
     outcome = result.get("outcome")
     if set(result) != {"outcome"} or not isinstance(outcome, str) or outcome not in _MODEL_STEP_OUTCOMES:
         raise RuntimeError("model step returned an invalid outcome")

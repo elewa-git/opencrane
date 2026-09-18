@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ConversationModelResponseKinds, ConversationModelToolModes } from "@opencrane/contracts";
+import { CONVERSATION_MODEL_REQUEST_TIMEOUT_MILLISECONDS, ConversationModelResponseKinds, ConversationModelToolModes } from "@opencrane/contracts";
 
 import { _ToolContinuationHarness } from "./conversation-tool-continuation.fixture";
 
@@ -157,7 +157,7 @@ describe("one governed tool and its model continuation", function _Continuation(
 			f.model.request.mockResolvedValueOnce({ kind: ConversationModelResponseKinds.Tool, call: f.call }).mockRejectedValueOnce(new Error("paid response lost"));
 		expect(await f.authority.modelStep(f.step)).toEqual({ outcome: "pending" });
 		expect((await f.store.load(f.step.bootstrapId))?.continuationReservation).not.toBeNull();
-		now += 30_000;
+		now += CONVERSATION_MODEL_REQUEST_TIMEOUT_MILLISECONDS + 1;
 		expect(await f.restart().modelStep(f.step)).toEqual({ outcome: "response_unavailable" });
 		expect(f.model.request).toHaveBeenCalledTimes(boundary === "response" ? 2 : 1);
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();

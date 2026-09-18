@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { CONVERSATION_MODEL_REQUEST_TIMEOUT_MILLISECONDS } from "@opencrane/contracts";
+
 import { _OutputRecoveryHarness } from "./conversation-output-recovery.fixture";
 
 /** Pause exactly the winning gateway request so another process can observe its reservation. */
@@ -22,6 +24,8 @@ describe("one server-owned model request across process restarts", function _Sui
 
 	it("returns no key or prompt from bootstrap and persists a single reserved answer", async function _Answer()
 	{
+		const now = Date.now();
+		vi.spyOn(Date, "now").mockReturnValue(now);
 		const f = await _OutputRecoveryHarness(false);
 		expect(await f.restart().bootstrap(f.command)).toEqual({ bootstrapId: f.output.bootstrapId, outcome: "ready" });
 		expect(f.credentials.issueOnce).not.toHaveBeenCalled();
@@ -30,6 +34,7 @@ describe("one server-owned model request across process restarts", function _Sui
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		const turn = (await f.store.load(f.output.bootstrapId))!;
 		expect(turn.modelReservation).toMatchObject({ ordinal: 1, maxCompletionTokens: 100, compiledInputDigest: turn.compile.digest });
+		expect(turn.modelReservation!.dispatchDeadlineEpochMs).toBe(now + CONVERSATION_MODEL_REQUEST_TIMEOUT_MILLISECONDS);
 		expect(turn.outputReceipt?.event.id).toBe(turn.modelReservation?.invocationFence);
 		expect(f.history.streams.get(`conversation-computer-turn-${turn.bootstrapId}`)).toHaveLength(3);
 		expect(JSON.stringify(f.history.streams.get(`conversation-computer-turn-${turn.bootstrapId}`)!.map(event => event.data))).not.toMatch(/test-only-key|A private chosen answer|instructions/);

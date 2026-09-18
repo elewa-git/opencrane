@@ -105,7 +105,7 @@ derived from their governed Global resource, so a late first POST cannot create 
   the endpoint, attempt key and model alias; the alias must match `CompiledRunInput`. Completion
   tokens are capped by the smallest reservation, frozen route and frozen run ceiling; at least
   one frozen completion ceiling must exist. The request aborts by the earliest supplied deadline,
-  compiled run deadline or 25 seconds, including time spent reading the body.
+  compiled run deadline or 60 seconds, including time spent reading the body.
 
 The first request can offer the frozen tools that need no approval. Names must be unique and legal,
 with parameters matching their saved schema digests. The model may return text or propose exactly
