@@ -49,8 +49,10 @@ Credential bytes are never written into generated YAML or Docker arguments, and 
 shutdown removes the generated file with the session directory. The Codespaces devcontainer
 recommends every supported environment-secret name and the optional default-provider setting but
 never stores their values in tracked configuration. Codespaces gets a 120-second LiteLLM readiness
-window; a workstation keeps the 30-second window. A timeout reports the container's status and exit
-code without printing its environment.
+window; a workstation keeps the 30-second window. The launcher stops waiting as soon as the
+container exits. An early exit or timeout reports the container state and a bounded startup-log tail
+after removing the provider key, LiteLLM master key and database password; it never prints the
+container environment.
 
 ## Boundary
 

@@ -231,7 +231,7 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 			await operations.removeOwnedDockerResource("container", sessionConfiguration.liteLLMContainerName, sessionConfiguration);
 			ledger.acquire("LiteLLM container", async function _removeLiteLLM() { await operations.removeOwnedDockerResource("container", sessionConfiguration.liteLLMContainerName, sessionConfiguration); });
 			await operations.runSpecification(createLiteLLMCommand(sessionConfiguration, secrets, provider), sessionConfiguration);
-			await operations.waitForLocalLiteLLM(sessionConfiguration, secrets);
+			await operations.waitForLocalLiteLLM(sessionConfiguration, secrets, provider);
 		}
 
 		const browserUrl = new URL("/", sessionConfiguration.browserOrigin).toString();

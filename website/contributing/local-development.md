@@ -229,10 +229,11 @@ reference. A missing or empty matching secret, unreviewed provider, variable or 
 cross-provider model selection all stop before Docker resources are acquired.
 
 Codespaces allows up to 120 seconds for LiteLLM model routing and key storage to become ready; a
-workstation keeps the 30-second readiness window. If readiness still fails, the error includes the
-safe Docker container status and exit code without printing its environment. Check the Architecture
-line in `docker info` reports `amd64` or `x86_64`, then run the core, simulated-Agent or
-credential-backed Agent command without an emulation flag.
+workstation keeps the 30-second readiness window. The launcher stops waiting if LiteLLM exits. An
+early exit or timeout includes the Docker state and a bounded, redacted startup-log tail; provider,
+master-key and database-password values are removed, and the container environment is never
+printed. Check the Architecture line in `docker info` reports `amd64` or `x86_64`, then run the
+core, simulated-Agent or credential-backed Agent command without an emulation flag.
 
 Keep the forwarded 4200 port **private** in the Codespaces Ports view. The launcher derives one
 HTTPS browser address from the Codespace's forwarding variables and prints it without the
