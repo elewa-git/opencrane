@@ -4,6 +4,10 @@ import { runLocalCommand } from "./command-runner.mjs";
 const _TERMINAL_CONTAINER_STATUSES = new Set(["dead", "exited"]);
 /** Limits recovery when LiteLLM starts before its embedded Prisma query engine can accept requests. */
 const _CODESPACES_PRISMA_ENGINE_RESTART_LIMIT = 2;
+/** Limits Docker-log reads while a Codespaces container still reports itself as running. */
+const _RUNNING_CONTAINER_LOG_POLL_MILLISECONDS = 2_000;
+/** Proves Uvicorn has stopped LiteLLM startup even when the container wrapper remains alive. */
+const _LITELLM_APPLICATION_STARTUP_FAILURE = "Application startup failed. Exiting.";
 /**
  * Matches LiteLLM's reported failure when its local Prisma query-engine process is unavailable.
  * @see https://github.com/BerriAI/litellm/issues/11766 for the matching upstream traceback.
@@ -168,18 +172,39 @@ function _hasPrismaEngineConnectionFailure(logs)
 /** Allows recovery only for the known Codespaces Prisma query-engine connection failure. */
 function _isRetryablePrismaEngineConnectionFailure(configuration, state, logs)
 {
-	return Boolean(configuration.codespaceName)
-		&& state.ExitCode === 3
-		&& _hasPrismaEngineConnectionFailure(logs);
+	if (!configuration.codespaceName || !_hasPrismaEngineConnectionFailure(logs))
+		return false;
+
+	const terminalFailure = !state.Running
+		&& _TERMINAL_CONTAINER_STATUSES.has(state.Status)
+		&& state.ExitCode === 3;
+	const failedApplication = state.Running
+		&& state.Status === "running"
+		&& state.ExitCode === 0
+		&& logs.includes(_LITELLM_APPLICATION_STARTUP_FAILURE);
+
+	return terminalFailure || failedApplication;
 }
 
-/** Starts the same stopped LiteLLM container and reports whether Docker accepted the request. */
-async function _restartLiteLLM(runCommand, configuration, deadline, now)
+/** Restarts LiteLLM from either a stopped container or a failed application with a live wrapper. */
+async function _restartLiteLLM(runCommand, configuration, state, deadline, now)
 {
-	const result = await runCommand("docker", [
+	let argumentsList = [
 		"start",
 		configuration.liteLLMContainerName
-	], {
+	];
+
+	if (state.Running)
+	{
+		argumentsList = [
+			"restart",
+			"--time",
+			"1",
+			configuration.liteLLMContainerName
+		];
+	}
+
+	const result = await runCommand("docker", argumentsList, {
 		acceptFailure: true,
 		shutdownGraceMilliseconds: _READINESS_COMMAND_SHUTDOWN_GRACE_MILLISECONDS,
 		signal: _commandSignal(configuration, deadline, now)
@@ -193,18 +218,22 @@ async function _restartLiteLLM(runCommand, configuration, deadline, now)
  *
  * Codespaces receives a 120-second budget and workstations receive 30 seconds. Readiness probing
  * stops two seconds before the monotonic startup deadline so Docker state and current-start logs can
- * be collected. Only in Codespaces, exit code 3 with either recognised Prisma connection traceback
- * restarts the same container, at most twice; other terminal states fail without a restart.
+ * be collected. Codespaces also reads current-start logs every two seconds while Docker reports the
+ * container as running, because Uvicorn can declare application startup failure before the wrapper
+ * exits. Only a dead or exited container with code 3, or that exact running-wrapper failure, can
+ * restart the same container; both paths also require a recognised Prisma connection traceback.
+ * Recovery remains limited to two restarts, and other terminal states fail without a restart.
  * Startup failures include the latest Docker state and, when Docker returns it within that budget,
- * logs from the current container start. The caller must pass the same provider used to start LiteLLM so its key
- * joins the generated master key and database password in the values removed from those diagnostics.
+ * logs from the current container start. The caller must pass the same provider used to start
+ * LiteLLM so its key joins the generated master key and database password in the values removed
+ * from those diagnostics.
  *
  * @param configuration - Names the session container and readiness port, identifies Codespaces, and supplies the session abort signal.
  * @param secrets - Supplies the readiness header and generated secrets that diagnostics must remove.
  * @param provider - Supplies the provider key that diagnostics must remove.
  * @param operations - Overrides command execution and delay behavior for tests.
  * @returns A promise that resolves after both readiness requests succeed.
- * @throws When Docker state cannot be read, a terminal container failure is not recoverable or exhausts its retries, or the startup budget expires.
+ * @throws When Docker state cannot be read, a recognised startup failure cannot be restarted or exhausts its retries, or the startup budget expires.
  */
 export async function waitForLocalLiteLLM(configuration, secrets, provider, operations = {})
 {
@@ -213,8 +242,10 @@ export async function waitForLocalLiteLLM(configuration, secrets, provider, oper
 	const now = operations.now ?? function _Now() { return performance.now(); };
 	const paths = ["/v1/models", "/key/list"];
 	const timeoutMilliseconds = configuration.codespaceName ? 120_000 : 30_000;
-	const deadline = now() + timeoutMilliseconds;
+	const startedAt = now();
+	const deadline = startedAt + timeoutMilliseconds;
 	const probeDeadline = deadline - _STARTUP_DIAGNOSTIC_RESERVE_MILLISECONDS;
+	let nextRunningContainerLogPollAt = startedAt + _RUNNING_CONTAINER_LOG_POLL_MILLISECONDS;
 	let prismaEngineRestarts = 0;
 	let lastState;
 	let readinessDeadlineReached = false;
@@ -296,9 +327,16 @@ export async function waitForLocalLiteLLM(configuration, secrets, provider, oper
 
 		lastState = state;
 
-		if (!state.Running && _TERMINAL_CONTAINER_STATUSES.has(state.Status))
+		const terminalState = !state.Running && _TERMINAL_CONTAINER_STATUSES.has(state.Status);
+		const inspectRunningStartup = Boolean(configuration.codespaceName)
+			&& state.Running
+			&& now() >= nextRunningContainerLogPollAt;
+
+		if (terminalState || inspectRunningStartup)
 		{
 			let logs;
+			if (inspectRunningStartup)
+				nextRunningContainerLogPollAt = now() + _RUNNING_CONTAINER_LOG_POLL_MILLISECONDS;
 
 			try
 			{
@@ -324,7 +362,7 @@ export async function waitForLocalLiteLLM(configuration, secrets, provider, oper
 
 				try
 				{
-					restarted = await _restartLiteLLM(runCommand, configuration, probeDeadline, now);
+					restarted = await _restartLiteLLM(runCommand, configuration, state, probeDeadline, now);
 				}
 				catch (error)
 				{
@@ -344,6 +382,7 @@ export async function waitForLocalLiteLLM(configuration, secrets, provider, oper
 				}
 
 				prismaEngineRestarts += 1;
+				nextRunningContainerLogPollAt = now() + _RUNNING_CONTAINER_LOG_POLL_MILLISECONDS;
 				const delayMilliseconds = Math.min(
 					_READINESS_POLL_MILLISECONDS,
 					_remainingMilliseconds(probeDeadline, now)
@@ -352,11 +391,16 @@ export async function waitForLocalLiteLLM(configuration, secrets, provider, oper
 				continue;
 			}
 
-			let prefix = "Tier 2 LiteLLM exited before model routing and key storage became ready";
-			if (retryablePrismaFailure)
-				prefix += ` after ${prismaEngineRestarts} automatic restarts`;
+			if (terminalState || retryablePrismaFailure)
+			{
+				let prefix = terminalState
+					? "Tier 2 LiteLLM exited before model routing and key storage became ready"
+					: "Tier 2 LiteLLM application startup failed while Docker still reported the container running";
+				if (retryablePrismaFailure)
+					prefix += ` after ${prismaEngineRestarts} automatic restarts`;
 
-			throw _startupFailure(state, prefix, logs);
+				throw _startupFailure(state, prefix, logs);
+			}
 		}
 
 		const delayMilliseconds = Math.min(
