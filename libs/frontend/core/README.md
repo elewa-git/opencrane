@@ -31,6 +31,9 @@ a feature never calls `fetch` directly and never guesses a request or response s
 - `ControlPlaneApiService` — the typed HTTP client and its `CONTROL_PLANE_BASE_URL` injection token.
   `CONTROL_PLANE_REQUEST_HEADERS` lets an application build add headers to both generated and
   transitional requests; Tier 2 uses it for its private per-launch browser credential.
+  `CONTROL_PLANE_UNAUTHORIZED_RESPONSE_HANDLER` lets an application profile claim one narrower,
+  closed `401` contract before the shared OIDC redirect. Leaving it unset, returning `false`, or
+  throwing preserves ordinary sign-in recovery.
 - `OpenCraneApiError` — the browser-safe failed-request model. It preserves the public status/code
   and bounded validation issues so forms can bind `issue.path` to controls, while discarding
   server-only detail and arbitrary response bodies.

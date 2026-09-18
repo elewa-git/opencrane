@@ -14,6 +14,13 @@ async function _credential(): Promise<string | null>
 	return module.OPENCRANE_TIER2_DEVELOPMENT_SESSION_CREDENTIAL;
 }
 
+/** Loads the complete Tier 2 browser-session coordinator after a fresh evaluation. */
+async function _sessionModule()
+{
+	vi.resetModules();
+	return import("../local-development/tier2-development-session");
+}
+
 beforeEach(function _ResetBrowserState()
 {
 	window.sessionStorage.clear();
@@ -51,5 +58,32 @@ describe("Tier 2 browser development session", function _Tier2DevelopmentSession
 		expect(window.location.hash).toBe("");
 		expect(window.sessionStorage.getItem("opencrane.tier2.development-session")).toBeNull();
 		expect(window.localStorage.getItem("opencrane.tier2.development-session")).toBe(_CREDENTIAL);
+	});
+
+	it("records a replaced launch without retaining the obsolete credential and replaces once", async function _ReplaceObsoleteSession()
+	{
+		window.sessionStorage.setItem("opencrane.tier2.development-session", _CREDENTIAL);
+		window.history.replaceState({}, "", "/chats/conversation-1?panel=activity");
+		const module = await _sessionModule();
+		const replaceDocument = vi.fn();
+
+		module._ReplaceTier2DevelopmentSession(replaceDocument);
+		module._ReplaceTier2DevelopmentSession(replaceDocument);
+
+		expect(window.sessionStorage.getItem("opencrane.tier2.development-session")).toBeNull();
+		expect(window.sessionStorage.getItem("opencrane.tier2.development-session-guidance")).toBe("replaced");
+		expect(replaceDocument).toHaveBeenCalledOnce();
+		expect(replaceDocument).toHaveBeenCalledWith("/chats/conversation-1?panel=activity");
+	});
+
+	it("clears replaced guidance when a valid private URL is consumed", async function _NewLaunchWins()
+	{
+		window.sessionStorage.setItem("opencrane.tier2.development-session-guidance", "replaced");
+		window.history.replaceState({}, "", `/#development-session=${_CREDENTIAL}`);
+		const module = await _sessionModule();
+
+		expect(module.OPENCRANE_TIER2_DEVELOPMENT_SESSION_CREDENTIAL).toBe(_CREDENTIAL);
+		expect(module.OPENCRANE_TIER2_DEVELOPMENT_SESSION_GUIDANCE_STATE).toBe("missing");
+		expect(window.sessionStorage.getItem("opencrane.tier2.development-session-guidance")).toBeNull();
 	});
 });

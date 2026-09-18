@@ -1,7 +1,7 @@
 import { Injector, runInInjectionContext } from "@angular/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CONTROL_PLANE_BASE_URL, CONTROL_PLANE_REQUEST_HEADERS, FLEET_MANAGER_BASE_URL } from "../api-client.types";
+import { CONTROL_PLANE_BASE_URL, CONTROL_PLANE_REQUEST_HEADERS, CONTROL_PLANE_UNAUTHORIZED_RESPONSE_HANDLER, FLEET_MANAGER_BASE_URL } from "../api-client.types";
 import { ControlPlaneApiService } from "../control-plane-api.service";
 import { FleetManagerApiService } from "../fleet-manager-api.service";
 
@@ -93,6 +93,26 @@ describe("ControlPlaneApiService.signInUrl", function _ControlPlaneApiServiceSui
 		{
 			expect(request.headers.get("X-OpenCrane-Development-Session")).toBe(credential);
 		}
+	});
+
+	it("applies the injected unauthorized handler to typed SSE responses", async function _UnauthorizedHandler(): Promise<void>
+	{
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: "DEVELOPMENT_SESSION_REQUIRED" }), { status: 401 })));
+		const handler = vi.fn().mockResolvedValue(true);
+		const injector = Injector.create({ providers: [
+			{ provide: CONTROL_PLANE_BASE_URL, useValue: _ORIGIN },
+			{ provide: CONTROL_PLANE_UNAUTHORIZED_RESPONSE_HANDLER, useValue: handler },
+			ControlPlaneApiService,
+		] });
+		const service = runInInjectionContext(injector, function _Resolve(): ControlPlaneApiService { return injector.get(ControlPlaneApiService); });
+
+		await service.client.GET("/me/conversations/{conversationId}/events", {
+			params: { path: { conversationId: "conversation-1" }, query: { afterPosition: "0" } },
+			headers: { Accept: "text/event-stream" },
+			parseAs: "stream",
+		});
+
+		expect(handler).toHaveBeenCalledOnce();
 	});
 });
 
