@@ -52,11 +52,13 @@ the launch waits for authenticated key storage as well as model discovery before
 Credential bytes are never written into generated YAML or Docker arguments, and normal or failed
 shutdown removes the generated file with the session directory. The Codespaces devcontainer
 recommends every supported environment-secret name and the optional default-provider setting but
-never stores their values in tracked configuration. Codespaces gets a 120-second LiteLLM readiness
-window; a workstation keeps the 30-second window. The launcher stops waiting as soon as the
-container exits. An early exit or timeout reports the container state and a bounded startup-log tail
-after removing the provider key, LiteLLM master key and database password; it never prints the
-container environment.
+never stores their values in tracked configuration. Codespaces gets a 120-second LiteLLM startup
+budget; a workstation keeps a 30-second budget. The launcher reserves the final two seconds for
+failure diagnostics. If LiteLLM exits with its specific embedded Prisma query-engine connection
+failure in Codespaces, the launcher restarts the same container at most twice within that budget.
+Other exits are not restarted. An early exit or timeout reports the latest container state and,
+when Docker returns it before the deadline, a bounded startup-log tail after removing the provider
+key, LiteLLM master key and database password. It never prints the container environment.
 
 The pinned image includes its OpenAI tokenizer cache. Tier 2 points
 `CUSTOM_TIKTOKEN_CACHE_DIR` at that bundled read-only directory so Codespaces startup does not
