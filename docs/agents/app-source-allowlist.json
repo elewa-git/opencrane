@@ -105,6 +105,7 @@
     { "path": "apps/opencrane-ui/src/app/login/login-page.component.ts", "owner": "apps/opencrane-ui", "classification": "browser-entry-view" },
 	{ "path": "apps/opencrane-ui/src/app/login/login-return-to.ts", "owner": "apps/opencrane-ui", "classification": "browser-entry-guard" },
 	{ "path": "apps/opencrane-ui/src/app/local-development/tier2-development-session-required-page.component.ts", "owner": "apps/opencrane-ui", "classification": "browser-entry-view" },
+	{ "path": "apps/opencrane-ui/src/app/local-development/tier2-development-session.types.ts", "owner": "apps/opencrane-ui", "classification": "browser-entry-guard" },
 	{ "path": "apps/opencrane-ui/src/app/local-development/tier2-development-session.ts", "owner": "apps/opencrane-ui", "classification": "browser-entry-guard" },
     { "path": "apps/opencrane-ui/src/app/local-development-profile.ts", "owner": "apps/opencrane-ui", "classification": "browser-config" },
     { "path": "apps/opencrane-ui/src/app/operator-access.guard.ts", "owner": "apps/opencrane-ui", "classification": "browser-entry-guard" },
