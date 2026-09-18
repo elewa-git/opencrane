@@ -25,6 +25,10 @@ The reviewed providers are `anthropic`, `deepseek`, `gemini`, `glm`, `mistral` a
 Workstation key filenames use these lowercase names. OpenCrane converts the selected provider to
 its uppercase, space-free Codespaces credential prefix.
 
+Mistral uses `mistral-medium-latest` by default because Studio subscription tiers may expose Medium
+and Small while rejecting Large. An entitled workspace can still select Large explicitly with
+`--model mistral/mistral-large-latest`.
+
 Codespaces reads uppercase provider-specific variables such as `OPENAI_TIER2_PROVIDER_API_KEY` and
 `ANTHROPIC_TIER2_PROVIDER_API_KEY`; it never reads workstation key files. An explicit provider or
 model wins, followed by the configured default and then the first recognized variable in lexical
@@ -53,6 +57,10 @@ window; a workstation keeps the 30-second window. The launcher stops waiting as 
 container exits. An early exit or timeout reports the container state and a bounded startup-log tail
 after removing the provider key, LiteLLM master key and database password; it never prints the
 container environment.
+
+The pinned image includes its OpenAI tokenizer cache. Tier 2 points
+`CUSTOM_TIKTOKEN_CACHE_DIR` at that bundled read-only directory so Codespaces startup does not
+require DNS or outbound access to the Azure Blob Storage copy of `cl100k_base.tiktoken`.
 
 ## Boundary
 

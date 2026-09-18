@@ -221,6 +221,10 @@ value such as `openai`. You can then use the plain command:
 npm run dev:tier2:agent:local-llm
 ```
 
+Mistral defaults to `mistral-medium-latest` because Studio subscription tiers may expose Medium and
+Small while rejecting Large. A workspace entitled to Large can select it explicitly with
+`--model mistral/mistral-large-latest`.
+
 The coordinator removes every matching provider credential from its worker environment before
 validation starts child commands. It supplies only the selected value to the Docker invocation that
 starts loopback LiteLLM; validation and application children do not inherit the provider secrets.
@@ -234,6 +238,10 @@ early exit or timeout includes the Docker state and a bounded, redacted startup-
 master-key and database-password values are removed, and the container environment is never
 printed. Check the Architecture line in `docker info` reports `amd64` or `x86_64`, then run the
 core, simulated-Agent or credential-backed Agent command without an emulation flag.
+
+The pinned LiteLLM image carries the OpenAI tokenizer cache used during startup. The launcher points
+LiteLLM at that bundled cache, so Codespaces does not need to resolve or contact
+`openaipublic.blob.core.windows.net` before the proxy can become ready.
 
 Keep the forwarded 4200 port **private** in the Codespaces Ports view. The launcher derives one
 HTTPS browser address from the Codespace's forwarding variables and prints it without the
