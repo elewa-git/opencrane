@@ -2,7 +2,7 @@ import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import type { ConversationChildRequest } from "@prisma/client";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 import { HistoryExpectedRevisions } from "@opencrane/backend/server/infra/history-store";
-import type { MessageEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates, type MessageEntry } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { ConversationHistoryAuthority } from "../conversation-history-authority";
 import { GroupChildHistory } from "../group-child-history";
@@ -11,7 +11,7 @@ import { GroupChildConflictError } from "../group-child.errors";
 const _ID = "31c1f1dc-0010-4f13-9c2f-d3841ffd6651";
 const _MESSAGE = "41c1f1dc-0010-4f13-9c2f-d3841ffd6651";
 const _REQUEST = { id: _ID, siloId: "silo", childConversationId: "child", parentConversationId: "parent", parentMessageId: _MESSAGE, parentMessagePosition: 3n, computerId: "computer", agentServiceId: "company", agentIdentityId: "managed-company", requestedByPrincipalId: "principal", requesterSubjectId: "subject", profileRevisionId: `sha256:${"a".repeat(64)}`, createdAt: new Date("2026-09-07T00:00:00Z") } as ConversationChildRequest;
-const _SOURCE: MessageEntry = { schemaVersion: 1, id: _MESSAGE, conversationId: "parent", position: "3", author: { kind: "human", principalId: "principal", participantId: "subject", issuer: "https://issuer.test", authenticatedAt: "2026-09-07T00:00:00.000Z", name: "Human", avatarArtifactRevisionId: null }, provenance: "human-authored", visibility: { audience: "conversation" }, runId: null, causationId: _MESSAGE, correlationId: _MESSAGE, idempotencyKey: _MESSAGE, occurredAt: "2026-09-07T00:00:00.000Z", attestation: null, kind: "message", state: "completed", blocks: [{ id: "source-block", kind: "text", payloadRef: "original", ciphertextDigest: `sha256:${"b".repeat(64)}` }], replyToEntryId: null, addressedAgentIdentityId: null, activation: "none" };
+const _SOURCE: MessageEntry = { schemaVersion: 1, id: _MESSAGE, conversationId: "parent", position: "3", author: { kind: ConversationAuthorKinds.Human, principalId: "principal", participantId: "subject", issuer: "https://issuer.test", authenticatedAt: "2026-09-07T00:00:00.000Z", name: "Human", avatarArtifactRevisionId: null }, provenance: "human-authored", visibility: { audience: "conversation" }, runId: null, causationId: _MESSAGE, correlationId: _MESSAGE, idempotencyKey: _MESSAGE, occurredAt: "2026-09-07T00:00:00.000Z", attestation: null, kind: ConversationEntryKinds.Message, state: MessageStates.Completed, blocks: [{ id: "source-block", kind: ConversationMessageContentBlockKinds.Text, payloadRef: "original", ciphertextDigest: `sha256:${"b".repeat(64)}` }], replyToEntryId: null, addressedAgentIdentityId: null, activation: "none" };
 const _PAYLOAD = { coordinates: { siloId: "silo", conversationId: "child", payloadRef: "copied", authorSubject: "subject" }, idempotencyKey: _ID, keyId: "key", nonce: new Uint8Array(12), authTag: new Uint8Array(16), ciphertext: new Uint8Array([1]), ciphertextDigest: `sha256:${"c".repeat(64)}` };
 
 /** Applies each checked batch atomically and preserves exact revisions for the real history validators. */

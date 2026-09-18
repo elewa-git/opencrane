@@ -1,3 +1,5 @@
+import type { ConversationComputerRealization } from "./conversation-computer.types";
+
 /**
  * Groups the coordinates that every conversation-computer command carries into three named bundles.
  *
@@ -12,9 +14,9 @@
  * - `agentIdentityId` and `profileRevisionId`: both are fixed when the computer is created and the
  *   history validator rejects any snapshot that changes either of them.
  *
- * The bundles live in memory only. Persisted and wire shapes keep their flat fields and their own
- * names (`generation` on Kurrent events and Pod labels, `computerScope` with `leaseId` and
- * `leaseGeneration` inside the stored execution subject), and each boundary maps between the two.
+ * The bundles live in memory only. Persisted and wire shapes keep their own names (`generation` and
+ * `realization` on Kurrent events, and `computerScope` with `leaseId` and `leaseGeneration` inside
+ * the stored execution subject), and each boundary maps between the two.
  * @see ExecutionSubjectComputerScope in `@opencrane/models/agents` for the persisted shape that PostgreSQL triggers read.
  * @see ConversationComputer and ComputerLease for the durable snapshots these coordinates are copied from.
  */
@@ -35,21 +37,21 @@ export interface ComputerScope
 /** Names one realization of a computer: the lease and the generation that fences it. */
 export interface LeaseScope
 {
-	/** Identifies one sandbox realization of the computer; a new id is minted for every generation and it fences a Pod to the realization it was admitted with. It is a public label, never a secret. */
+	/** Identifies one realization of the computer; a new id is minted for every generation and fences the process to its admitted realization. It is a public coordinate, never a secret. */
 	readonly leaseId: string;
-	/** Counts realizations of the computer and grows by one on every new claim; every durable write compares it so a replaced or stale Pod cannot act as the current computer. */
+	/** Counts realizations of the computer and grows by one on every new claim; every durable write compares it so a replaced or stale process cannot act as the current computer. */
 	readonly leaseGeneration: number;
 }
 
-/** Adds the Agent Sandbox claim to a lease so Pod-binding checks can name the exact claim. */
-export interface ClaimedLeaseScope extends LeaseScope
+/** Adds the persisted realization to a lease so process-binding checks can select its adapter. */
+export interface RealizedLeaseScope extends LeaseScope
 {
-	/** Names the SandboxClaim that realizes the lease, derived as `<computerId>-g<generation>`; it is fixed when the lease is claimed and fences Pod-binding checks to that claim. */
-	readonly sandboxClaimId: string;
+	/** Describes the physical process whose identity must match this lease. */
+	readonly realization: ConversationComputerRealization;
 }
 
 /** Adds the expiry to a lease so projections can refuse work after the lease stops admitting it. */
-export interface ActiveLeaseScope extends LeaseScope
+export interface ActiveLeaseScope extends RealizedLeaseScope
 {
 	/** Records the ISO instant the lease stops admitting work; renewal moves it later, and it fences approvals and credential issuance to a live lease. */
 	readonly expiresAt: string;

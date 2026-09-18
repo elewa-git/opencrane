@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConversationChildRequestState, ConversationMode } from "@prisma/client";
+import { ConversationMessageContentBlockKinds } from "@opencrane/contracts";
 import { PrismaGroupChildLifecycleUnitOfWork } from "../prisma-group-child-lifecycle";
 import { GroupChildConflictError } from "../group-child.errors";
 import { AesGcmConversationPrivatePayloadCipher } from "../conversation-private-payload-cipher";
@@ -50,7 +51,7 @@ function _Fixture()
 	const cipher = new AesGcmConversationPrivatePayloadCipher("key", { key: Buffer.alloc(32, 7).toString("base64url") });
 	const agents = { resolve: vi.fn(async () => ({ agentServiceId: "company", agentRevisionId: "revision", agentIdentityId: "managed-company", principalId: "company-principal", name: "Company assistant", workloadProfile: "standard", profileRevisionId: "profile" })) };
 	const workflows = { spawn: vi.fn(async () => ({ taskId: "task", taskName: "task", idempotencyKey: "key" })) };
-	const participantHistory = { read: vi.fn(async () => state.sourceVisible ? { entries: [{ id: _SOURCE, position: "5", kind: "message", state: "completed", blocks: [{ kind: "text", payloadRef: "source" }], author: { kind: "human", principalId: state.sourceAuthor, participantId: "subject" }, visibility: { audience: state.sourceAudience } }], payloads: { source: "Visible group request" }, nextPosition: "5", computer: null } : null) };
+	const participantHistory = { read: vi.fn(async () => state.sourceVisible ? { entries: [{ id: _SOURCE, position: "5", kind: "message", state: "completed", blocks: [{ kind: ConversationMessageContentBlockKinds.Text, payloadRef: "source" }], author: { kind: "human", principalId: state.sourceAuthor, participantId: "subject" }, visibility: { audience: state.sourceAudience } }], payloads: { source: "Visible group request" }, nextPosition: "5", computer: null } : null) };
 	const logger = { warn: vi.fn() };
 	const lifecycle = new PrismaGroupChildLifecycleUnitOfWork(prisma as never, histories as never, cipher, agents, workflows, participantHistory as never, logger);
 	return { lifecycle, state, transaction, histories, workflows, participantHistory, agents, logger };

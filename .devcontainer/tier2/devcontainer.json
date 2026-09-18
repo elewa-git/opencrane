@@ -1,0 +1,50 @@
+{
+  "name": "OpenCrane Tier 2",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:4.1.0": {
+      "version": "28.5.1",
+      "moby": true
+    }
+  },
+  "hostRequirements": {
+    "cpus": 2,
+    "memory": "8gb",
+    "storage": "16gb"
+  },
+  "secrets": {
+    "ANTHROPIC_TIER2_PROVIDER_API_KEY": {
+      "description": "Optional personal Anthropic API key for the Tier 2 local-llm profile."
+    },
+    "DEEPSEEK_TIER2_PROVIDER_API_KEY": {
+      "description": "Optional personal DeepSeek API key for the Tier 2 local-llm profile."
+    },
+    "GEMINI_TIER2_PROVIDER_API_KEY": {
+      "description": "Optional personal Gemini API key for the Tier 2 local-llm profile."
+    },
+    "GLM_TIER2_PROVIDER_API_KEY": {
+      "description": "Optional personal GLM API key for the Tier 2 local-llm profile."
+    },
+    "MISTRAL_TIER2_PROVIDER_API_KEY": {
+      "description": "Optional personal Mistral API key for the Tier 2 local-llm profile."
+    },
+    "OPENAI_TIER2_PROVIDER_API_KEY": {
+      "description": "Optional personal OpenAI API key for the Tier 2 local-llm profile."
+    },
+    "OPENCRANE_TIER2_DEFAULT_PROVIDER": {
+      "description": "Optional lowercase default provider name for Tier 2, such as openai or anthropic."
+    }
+  },
+  "forwardPorts": [4200],
+  "portsAttributes": {
+    "4200": {
+      "label": "OpenCrane Tier 2 private browser",
+      "onAutoForward": "notify",
+      "protocol": "http"
+    }
+  },
+  "postCreateCommand": "npm ci",
+  "remoteUser": "node"
+}

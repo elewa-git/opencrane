@@ -54,8 +54,10 @@ typed everywhere. Invariant: **fail-closed** — anything missing, malformed, or
   current-revision saves, logout markers and bounded expiry cleanup.
 - Session helpers + `AuthUser`; `_ResolveIdentityClaims`; `_ResolveOwnedOrgSummaries`,
   `OwnedOrgSummaryFacts`, `OwnedOrgSummaryRepository`, and `PrismaOwnedOrgSummaryRepository`.
-- `_ResolveRequestPrincipal`, `RequestPrincipal` — expose the admitted local Principal and
-  independently rechecked host silo without importing any backend-domain caller type.
+- `_ResolveRequestPrincipal`, `_BindRequestPrincipalSilo`, `RequestPrincipal` — expose the admitted
+  local Principal and independently rechecked host silo without importing any backend-domain caller
+  type. A verified application boundary may bind the already-admitted session silo when its external
+  proxy hostname does not encode an OpenCrane silo; the binding rejects identity mismatches.
 - `_CreateMountedPublicKeySource`, `MountedPublicKeySource` — fail-closed access to an absolute
   projected public-key file, reloaded on each use so Secret rotation takes effect without restart.
 - `per-org-client`, `request-silo`, `_RequestHost` — per-organisation clients and host/silo resolution.

@@ -1,0 +1,50 @@
+@switch (guidanceState()) {
+	@case (guidanceStates.Missing) {
+		<wo-journey-shell
+			title="Join the current Tier 2 session"
+			description="This tab has not joined the current local-development session."
+			[layout]="layout"
+		>
+			<p-message journey-status severity="info" [closable]="false">
+				Continue through the current launcher before using the local application.
+			</p-message>
+			<p class="tier2-session-help__privacy">
+				The private browser session changes on every launch. Do not share the redirected URL.
+			</p>
+			<a pButton journey-actions class="tier2-session-help__action" href="/api/v1/auth/development-session">Open current Tier 2 session</a>
+		</wo-journey-shell>
+	}
+	@case (guidanceStates.Replaced) {
+		<wo-journey-shell
+			title="This tab belongs to an earlier Tier 2 session"
+			description="Tier 2 restarted, so this tab can no longer use its previous private browser session."
+			[layout]="layout"
+		>
+			<p-message journey-status severity="warn" [closable]="false">
+				Open the current launch in a new tab. You can close this tab when you are ready.
+			</p-message>
+			<p class="tier2-session-help__privacy">
+				The new tab receives a private browser session for the current launch.
+			</p>
+			<a
+				pButton
+				journey-actions
+				class="tier2-session-help__action"
+				href="/api/v1/auth/development-session"
+				target="_blank"
+				rel="noopener"
+			>Open current Tier 2 session in a new tab</a>
+		</wo-journey-shell>
+	}
+	@default {
+		<wo-journey-shell
+			title="Tier 2 session state is unavailable"
+			description="This tab cannot determine which local-development session it belongs to."
+			[layout]="layout"
+		>
+			<p-message journey-status severity="error" [closable]="false">
+				Close this tab and return to the current Tier 2 launcher.
+			</p-message>
+		</wo-journey-shell>
+	}
+}

@@ -74,7 +74,7 @@ else
   openssl req -x509 -newkey rsa:3072 -nodes -days 825 -sha256 \
     -subj "/CN=${RELEASE} KurrentDB CA" \
     -keyout "$secret_directory/ca.key" -out "$secret_directory/ca.crt" >/dev/null 2>&1
-  openssl req -newkey rsa:3072 -nodes -sha256 -subj "/CN=${service_dns}" \
+  openssl req -newkey rsa:3072 -nodes -sha256 -subj "/CN=${service_name}" \
     -keyout "$secret_directory/tls.key" -out "$secret_directory/tls.csr" >/dev/null 2>&1
   printf 'subjectAltName=DNS:%s,DNS:%s,DNS:%s,DNS:%s\nextendedKeyUsage=serverAuth\n' \
     "$service_name" "$service_namespace_dns" "$service_dns" "$service_fqdn" >"$secret_directory/extensions.cnf"

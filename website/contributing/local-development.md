@@ -81,25 +81,283 @@ Nx and Angular caches make normal development faster. Clear them only for the op
 above, not whenever a branch changes and not as a substitute for reading the first server error.
 :::
 
-## Later tiers
+## Tier 2 — local application work
 
-Tier 2 and Tier 3 are being rebuilt as incremental successors to the closed historical proposals.
-Until their successor pull requests land, do not treat the old branches as supported setup paths.
+Tier 2 runs the current server and live-gateway browser application on a workstation or an AMD64
+Codespace. It uses
+Docker for a clean-baseline PostgreSQL database and TLS KurrentDB; Agent profiles can also run a
+loopback LiteLLM container. Install the repository dependencies and make sure `docker`, `openssl`,
+`curl` and `jq` are available before starting it. On macOS or Windows, install and start Docker
+Desktop. On Linux, use a compatible Docker Engine with a working Docker CLI and socket. Verify the
+container runtime is ready with `docker info` before starting Tier 2.
 
-| Tier | Intended boundary | Status |
+The coordinator pins the same KurrentDB operand used by the current develop-smoke profile. Local
+LiteLLM resolves the deployment-owned repository and reviewed tag to an immutable multi-platform
+digest, so a later vendor tag update cannot change an existing Tier 2 branch silently. CI rejects
+drift between those deployment-owned coordinates and Tier 2. A local Agent profile also creates a
+separate `litellm` database owned by a non-privileged `litellm` role with its own persistent credential
+inside the worktree-owned PostgreSQL service. Startup waits until LiteLLM can read its model catalogue
+and its database-backed virtual-key store, because each Agent turn uses one budget- and lifetime-bound
+key.
+
+The current release-bound PostgreSQL image and pinned KurrentDB image need an AMD64 Docker daemon.
+The pinned LiteLLM tag publishes both architectures, but its ARM64 variant lacks the Prisma schema
+engine needed to initialize the virtual-key store. On an ARM64 Docker daemon, `--emulate-amd64`
+therefore runs LiteLLM as well as PostgreSQL and KurrentDB through AMD64 emulation. Without that
+explicit option, the launcher stops before acquiring containers and explains the two choices below;
+changing an operand image would change the current release input, not just this local workflow.
+
+The PostgreSQL image starts as an unprivileged user. Before starting it, the coordinator checks that
+the named data volume belongs to this repository worktree and target baseline. A short, network-disabled
+helper from the same pinned image then gives **only the volume's top directory** to that user and
+restricts its permissions. The database still runs unprivileged; the helper does not rewrite stored
+files or clear data. If Docker refuses that ownership change, startup fails and preserves the volume.
+The process gets a separate, temporary socket directory owned by the image's UID 26; it does not
+store database data there. Do not use `--reset` for a volume-permission error: it deletes data
+without fixing the Docker host.
+
+Start the core application profile:
+
+```bash
+npm run dev:tier2
+```
+
+The launcher prints the browser address without the session credential:
+
+```text
+Tier 2 browser: http://local-development.localhost:4200/
+Select "Open current Tier 2 session" when the page loads.
+```
+
+The coordinator binds the browser to `http://local-development.localhost:4200`, proxies only
+`/api/v1` to the loopback server and seeds one fixed development identity. It prints the safe Tier 2
+browser address without its per-launch credential. Open that address and select **Open current Tier
+2 session**. That same-origin browser action redirects the current tab through the development-only
+handoff, and the Tier 2 build removes the credential fragment from the address bar, retains it in
+that browser tab and sends it only to same-origin product API routes. The launcher never writes the
+credential or its private fragment URL to terminal output, page text or a general API response.
+
+An independently opened fresh tab still needs the button because the credential is kept in browser
+session storage rather than durable shared storage. A same-origin tab created with an opener can
+inherit a copy of that storage. An old tab cannot authenticate a later launch. On a workstation, the
+browser uses `local-development.localhost`; in Codespaces, it uses the one private HTTPS
+port-forwarding host described below. The server does not mount the production Kubernetes workload
+listener or accept a non-loopback PostgreSQL server.
+
+Use an Agent profile when the change needs one current Conversation Computer:
+
+```bash
+# On a workstation, uses the configured default or the first recognized keys/.<provider>-key file.
+npm run dev:tier2:agent
+
+# Selects one provider and optional reviewed model explicitly.
+npm run dev:tier2:agent:local-llm -- --provider openai --model openai/gpt-5.5
+
+# Persists openai as this workstation's fallback for later plain launches.
+npm run dev:tier2:agent:local-llm -- --default-provider openai
+
+# Uses an existing HTTPS LiteLLM gateway and an owner-only administrator-key file.
+npm run dev:tier2:agent:remote-llm -- \
+  --remote-litellm-endpoint https://litellm.example.com \
+  --remote-litellm-master-key-file /absolute/path/to/admin-key
+
+# Uses the deterministic model transport and reads no provider credential.
+npm run dev:tier2:agent:simulated-llm
+```
+
+### Run Tier 2 in Codespaces or on ARM
+
+Use an AMD64 Codespace with at least 2 cores and 8 GB of memory for Tier 2. When creating the
+Codespace, choose the `OpenCrane Tier 2` configuration at
+`.devcontainer/tier2/devcontainer.json`. That
+configuration installs Docker-in-Docker and the Tier 2 command-line tools, runs `npm ci`, and
+forwards only browser port 4200.
+
+The reviewed providers are:
+
+- `anthropic`
+- `deepseek`
+- `gemini`
+- `glm`
+- `mistral`
+- `openai`
+
+For real model calls through the local LiteLLM profile, create one or more personal Codespaces
+development secrets from these names and grant them access only to this repository:
+
+```text
+ANTHROPIC_TIER2_PROVIDER_API_KEY
+DEEPSEEK_TIER2_PROVIDER_API_KEY
+GEMINI_TIER2_PROVIDER_API_KEY
+GLM_TIER2_PROVIDER_API_KEY
+MISTRAL_TIER2_PROVIDER_API_KEY
+OPENAI_TIER2_PROVIDER_API_KEY
+```
+
+The provider part is uppercase with no spaces. Stop and restart an existing Codespace after adding
+or changing a secret. The tracked devcontainer configuration recommends these names but never
+contains their values.
+
+::: warning Rename the earlier generic secret
+`OPENCRANE_TIER2_PROVIDER_API_KEY` is no longer accepted because its name cannot prove which
+provider owns its value. Replace it with the matching uppercase provider-specific secret before
+restarting the Codespace.
+:::
+
+An explicit provider selects its matching secret:
+
+```bash
+npm run dev:tier2:agent:local-llm -- --provider openai --model openai/gpt-5.5
+```
+
+When neither `--provider` nor `--model` selects a provider, Codespaces checks
+`--default-provider` first, then `OPENCRANE_TIER2_DEFAULT_PROVIDER`, then the alphabetically first
+configured provider secret. `--default-provider` selects only that Codespaces launch because the
+launcher cannot create or update an account-owned Codespaces secret. To retain the preference, add
+`OPENCRANE_TIER2_DEFAULT_PROVIDER` manually as another personal Codespaces secret with a lowercase
+value such as `openai`. You can then use the plain command:
+
+```bash
+npm run dev:tier2:agent:local-llm
+```
+
+Mistral defaults to `mistral-medium-latest` because Studio subscription tiers may expose Medium and
+Small while rejecting Large. A workspace entitled to Large can select it explicitly with
+`--model mistral/mistral-large-latest`.
+
+The coordinator removes every matching provider credential from its worker environment before
+validation starts child commands. It supplies only the selected value to the Docker invocation that
+starts loopback LiteLLM; validation and application children do not inherit the provider secrets.
+Generated configuration and Docker arguments contain only the internal environment-variable
+reference. A missing or empty matching secret, unreviewed provider, variable or model, and a
+cross-provider model selection all stop before Docker resources are acquired.
+
+Codespaces gives LiteLLM a 120-second startup budget; a workstation keeps a 30-second budget. The
+launcher reserves the final two seconds for failure diagnostics. In Codespaces, LiteLLM can exit
+when its embedded Prisma query engine cannot accept database requests. The container excludes
+loopback addresses from uppercase and lowercase HTTP proxy settings, so that internal request does
+not leave the container while external provider requests may still use a configured proxy. The
+launcher recognises both observed traceback forms for that failure and restarts the same
+container. Uvicorn can report application startup failure while the image's process keeps Docker's
+container state running. The launcher therefore checks current-start logs every two seconds and
+restarts that state only when it contains both the Prisma evidence and the explicit application
+failure marker. Both recovery paths share a limit of two restarts within the startup budget. Other
+exits are not restarted. An early exit or timeout includes the latest Docker state and, when Docker
+returns it before the deadline, a bounded startup-log tail. Provider, master-key and
+database-password values are removed, and the container
+environment is never printed. Check the
+Architecture line in `docker info` reports `amd64` or `x86_64`, then run the core, simulated-Agent
+or credential-backed Agent command without an emulation flag.
+
+The pinned LiteLLM image carries the OpenAI tokenizer cache used during startup. The launcher points
+LiteLLM at that bundled cache, so Codespaces does not need to resolve or contact
+`openaipublic.blob.core.windows.net` before the proxy can become ready.
+
+Keep the forwarded 4200 port **private** in the Codespaces Ports view. The launcher derives one
+HTTPS browser address from the Codespace's forwarding variables and prints it without the
+per-launch credential. Open that address after GitHub authenticates access to the private port, then
+select **Open current Tier 2 session**. The UI accepts only that Codespace hostname, and the server
+rejects other forwarded hosts or state-changing origins. Do not make the port public to work around
+a browser or proxy error; neither the backend nor the database/model ports should be forwarded.
+
+On an ARM64 workstation, opt in to Docker's AMD64 emulation instead:
+
+```bash
+npm run dev:tier2 -- --emulate-amd64
+# Or keep the selected Agent alternative:
+npm run dev:tier2:agent:simulated-llm -- --emulate-amd64
+```
+
+On Apple Silicon this needs Docker Desktop with AMD64 emulation available; an ARM Linux Docker
+Engine needs compatible QEMU/binfmt support. Emulation can make image pulls, builds and startup
+much slower, and some builds or containers can fail. This is a best-effort local option, not the
+qualified path for deployment or Codespaces. `--emulate-amd64` affects the pinned PostgreSQL,
+KurrentDB and local LiteLLM containers plus the short-lived PostgreSQL permission and KurrentDB TLS
+helpers. It changes only Docker's selected platform; the release manifest and pinned immutable image
+digests remain unchanged. Prefer an AMD64 Codespace when emulation is unreliable. Do not use
+`--reset` for an architecture mismatch: it deletes local database data but cannot change image support.
+
+Outside Codespaces, local provider keys are owner-only regular files named `keys/.openai-key`,
+`keys/.anthropic-key`, `keys/.gemini-key`, `keys/.mistral-key`, `keys/.deepseek-key` or
+`keys/.glm-key`. They must not be symbolic links. The local LiteLLM configuration contains an
+environment-variable reference, never the key value. `--default-provider openai` chooses
+`keys/.openai-key`, updates the current worker's `OPENCRANE_TIER2_DEFAULT_PROVIDER` value and writes
+the same assignment to the ignored, owner-only `keys/.tier2-default-provider.env` file. Later plain
+launches load it automatically, including after `--reset`. An explicitly exported
+`OPENCRANE_TIER2_DEFAULT_PROVIDER` overrides the stored preference without rewriting it. An explicit
+`--provider` or `--model` still wins. The launcher does not modify the parent shell.
+Codespaces does not read these checkout files and instead uses the uppercase provider-specific
+variables listed above. Remote mode accepts only an HTTPS origin and an explicit owner-only
+administrator-key file; it refuses a local provider-key path.
+
+The workstation-hosted Conversation Computer is a development realization, not an Agent Sandbox.
+It binds only to loopback, is fenced to the current lease and does not advertise Kubernetes,
+gVisor, browser/CDP, review-command or durable workspace-checkpoint capabilities. Use Tier 3 to
+prove those deployment boundaries.
+
+::: info Conversation files need the full silo
+Tier 2 does not start the private ArtifactStore service or file scanner, and it does not mount the
+keys used to authorise file bytes. Conversation-file upload, download and listing routes are
+unavailable in Tier 2; the personal asset metadata catalogue remains available. Use Tier 3 to test
+file storage and scanning against the current deployment rather than supplying a made-up local
+ArtifactStore URL or keys. Tier 2's live OpenAPI document omits these file routes; the production
+document and generated client still describe the full silo.
+:::
+
+### Stop or reset Tier 2
+
+Interrupting, terminating or suspending the command stops the processes and removes only the
+PostgreSQL, KurrentDB and optional LiteLLM containers, Docker network, KurrentDB TLS volume, browser
+credential and other session secrets owned by that repository worktree. The paired PostgreSQL and
+KurrentDB data volumes remain for the next launch. Their database credentials and conversation
+payload keyring remain owner-only on disk so the retained data stays readable. Failed startup uses
+the same cleanup path.
+
+After the command reports that Tier 2 has stopped, close the browser tab or tabs opened for that
+launch before restarting it. The launcher cannot close browser windows on your behalf. Closing the
+tabs ends their page sessions, so they cannot reuse the previous launch's browser credential after
+the next command creates a new one.
+
+Only one Tier 2 command can own a repository worktree at a time. If another core or Agent command is
+already running, a second invocation prints a warning and exits before it inspects, removes or starts
+any Docker resource. Continue using the existing terminal, or stop it and wait for its cleanup and
+browser-tab reminder before starting another profile.
+
+Codespaces VM stop or suspension may not deliver a shutdown signal to the launcher. The platform
+may preserve or reclaim its Docker-in-Docker state; on the next run the launcher removes stale
+containers owned by the same worktree. Do not rely on a Codespace suspension as a guaranteed
+resource-cleanup event.
+
+The repository uses the 0.11 fresh-install baseline. If the launcher reports that the persistent
+database uses a different target baseline, recreate both persistent stores together:
+
+```bash
+npm run dev:tier2 -- --reset
+# Or retain the selected Agent profile:
+npm run dev:tier2:agent -- --reset
+```
+
+`--reset` permanently removes that worktree's local PostgreSQL and KurrentDB data plus the credentials
+and conversation keyring paired with those stores. It then creates new credentials, reapplies the
+reviewed target baseline and development seed, and starts the selected profile. It is not an upgrade
+or migration. The launcher refuses to reset similarly named resources owned by another repository
+or worktree.
+
+Do not restore the retired release-transition command, warm runtime, channel proxy or Obot paths
+from git history. Also do not clear Angular or Nx caches as part of a database reset. Use the cache
+recovery steps above only when the optimiser reports `504 (Outdated Optimize Dep)` or the matching
+dynamic-import failure.
+
+## Tier 3 — k3d and Codespaces
+
+Tier 3 is being rebuilt as the child of Tier 2. Until its successor pull request lands, do not treat
+the closed historical branch as a supported setup path.
+
+| Profile | Intended boundary | Status |
 | --- | --- | --- |
-| Tier 2 core | `npm run dev:tier2` — current server, browser application, PostgreSQL clean baseline and KurrentDB | 🔶 Rebuild planned |
-| Tier 2 agent | `npm run dev:tier2:agent` — core plus one current local Conversation Computer | 🔶 Rebuild planned |
-| Tier 2 agent alternatives | `npm run dev:tier2:agent:local-llm`, `:remote-llm` or `:simulated-llm` | 🔶 Rebuild planned |
 | Tier 3 infra | `npm run dev:tier3` or `npm run dev:tier3:infra` — current silo and prerequisites in disposable k3d, including Codespaces browser routing | 🔶 Rebuild planned |
 | Tier 3 agent | `npm run dev:tier3:agent` — infra plus one governed provider setup and one Agent Sandbox conversation turn | 🔶 Rebuild planned |
 
-The repository is on the 0.11 fresh-install baseline. A future Tier 2 `--reset` command will recreate
-its paired PostgreSQL and KurrentDB data; it will not migrate an older local database. Do not restore
-the retired release-transition command, warm runtime, channel proxy or Obot paths from git history.
-
-Tier 2 will clean only the processes, PostgreSQL/KurrentDB/LiteLLM containers, network and temporary
-secrets owned by that launch when it is aborted, stopped, suspended or fails. Tier 3 retains the
-historical minimum target of 4 cores, 16 GB memory and 32 GB storage, with 8 cores, 32 GB memory and
-64 GB storage recommended. A minimum-host run must report a storage shortfall instead of deleting
-unrelated dependency caches, clusters or other developer state.
+Tier 3 retains the historical minimum target of 4 cores, 16 GB memory and 32 GB storage, with 8
+cores, 32 GB memory and 64 GB storage recommended. A minimum-host run must report a storage
+shortfall instead of deleting unrelated dependency caches, clusters or other developer state.

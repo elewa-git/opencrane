@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { _IssueAttemptLiteLlmKey, _RevokeAttemptLiteLlmKeyByAlias } from "../core/attempt-litellm-key";
+import { _IssueAttemptLiteLlmKey, _RevokeAttemptLiteLlmKey, _RevokeAttemptLiteLlmKeyByAlias } from "../core/attempt-litellm-key";
 
 /** Preserve and restore the LiteLLM env the issuer reads. */
 const _NOW = Date.parse("2026-09-07T12:00:00.000Z");
@@ -126,6 +126,38 @@ describe("_IssueAttemptLiteLlmKey", function _describeIssuer()
 		await _RevokeAttemptLiteLlmKeyByAlias({ keyAlias: "attempt-run1-1" });
 		expect(JSON.parse(String(_captured.init?.body))).toEqual({ key_aliases: ["attempt-run1-1"] });
 		expect(_captured.url).toBe("http://litellm.svc/key/delete");
+	});
+
+	it.each([
+		{ label: "raw key", revoke: function _RevokeRaw(): Promise<void> { return _RevokeAttemptLiteLlmKey({ keyAlias: "attempt-run1-1", key: "sk-attempt-xyz" }); } },
+		{ label: "key alias", revoke: function _RevokeAlias(): Promise<void> { return _RevokeAttemptLiteLlmKeyByAlias({ keyAlias: "attempt-run1-1" }); } },
+	])("accepts an already absent $label as an idempotent revocation", async function _AcceptsAbsent({ label, revoke })
+	{
+		const body = label === "raw key"
+			? { detail: { error: "No keys found" } }
+			: { error: { message: "{'error': 'No keys found'}", type: "internal_server_error", code: "404" } };
+		vi.stubGlobal("fetch", _fetchMock({ ok: false, status: 404, body }));
+
+		await expect(revoke()).resolves.toBeUndefined();
+	});
+
+	it.each([
+		{ status: 404, body: { detail: "Not Found" } },
+		{ status: 404, body: { error: { message: "A different key error" } } },
+		{ status: 404, body: { error: { message: "404: {'error': 'No keys found'}" } } },
+		{ status: 500, body: { error: { message: { error: "No keys found" } } } },
+	])("keeps an uncertain revocation failure fatal for status $status and body $body", async function _RejectsUncertain({ status, body })
+	{
+		vi.stubGlobal("fetch", _fetchMock({ ok: false, status, body }));
+
+		await expect(_RevokeAttemptLiteLlmKeyByAlias({ keyAlias: "attempt-run1-1" })).rejects.toThrow(`returned status ${status}`);
+	});
+
+	it("keeps a malformed 404 response fatal", async function _RejectsMalformedAbsence()
+	{
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{", { status: 404 })));
+
+		await expect(_RevokeAttemptLiteLlmKeyByAlias({ keyAlias: "attempt-run1-1" })).rejects.toThrow("returned status 404");
 	});
 
 	it("identifies invalid JSON before it can become an attempt key", async function _RejectsInvalidJson()

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { HistoryAppend, HistoryReadRequest, HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
+import { ConversationAuthorKinds, ConversationEntryKinds } from "@opencrane/contracts";
 
 import { BoundConversationWriter } from "../bound-conversation-writer";
 import type { BoundConversationWriterBinding } from "../bound-conversation-writer.types";
@@ -10,7 +11,7 @@ const _BINDING: BoundConversationWriterBinding = { siloId: "silo-1", conversatio
 /** Supply only the computer's permitted draft fields. */
 function _Draft()
 {
-	return { sourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", entry: { kind: "a2ui" as const, surfaceId: "surface-1", a2uiSchemaVersion: "0.8", operation: "remove" as const, payloadRef: null, payloadDigest: null, visibility: { audience: "conversation" as const }, causationId: "source-1", correlationId: "request-1" } };
+	return { sourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", entry: { kind: ConversationEntryKinds.A2UI as const, surfaceId: "surface-1", a2uiSchemaVersion: "0.8", operation: "remove" as const, payloadRef: null, payloadDigest: null, visibility: { audience: "conversation" as const }, causationId: "source-1", correlationId: "request-1" } };
 }
 
 /** Share bounded history between independent writer instances, retaining actual stored wire fields. */
@@ -45,7 +46,7 @@ describe("BoundConversationWriter durable intent", function _Suite()
 		const f = _Writer();
 		const intent = await f.writer.prepare(_Draft());
 		expect(f.append).not.toHaveBeenCalled();
-		expect(intent).toMatchObject({ streamName: "conversation-conversation-1", expectedRevision: "7", event: { id: _Draft().sourceCommandId, metadata: { computerId: "computer-1", leaseGeneration: "4" }, data: { entry: { position: "8", occurredAt: "2026-09-08T22:00:00.000Z", author: { kind: "agent", agentIdentityId: "identity-1" } } } } });
+		expect(intent).toMatchObject({ streamName: "conversation-conversation-1", expectedRevision: "7", event: { id: _Draft().sourceCommandId, metadata: { computerId: "computer-1", leaseGeneration: "4" }, data: { entry: { position: "8", occurredAt: "2026-09-08T22:00:00.000Z", author: { kind: ConversationAuthorKinds.Agent, agentIdentityId: "identity-1" } } } } });
 		expect(await f.writer.append(intent)).toEqual(intent.event.data.entry);
 		expect(f.append).toHaveBeenCalledWith({ streamName: intent.streamName, expectedRevision: 7n, events: [intent.event] });
 		expect(f.readStream).toHaveBeenCalledTimes(2);

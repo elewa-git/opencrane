@@ -2,8 +2,8 @@ import { Router } from "@angular/router";
 import { type Decorator, type Meta, moduleMetadata, type StoryObj } from "@storybook/angular";
 import { expect, userEvent, within } from "storybook/test";
 
-import type { MessageEntry } from "@opencrane/contracts";
-import { ConversationModes, ConversationLifecycles } from "@opencrane/models/conversations";
+import { ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageContentBlockKinds, type AgentConversationAuthor, type MessageEntry, type TextMessageContentBlock } from "@opencrane/contracts";
+import { ConversationModes, ConversationLifecycles, MessageStates } from "@opencrane/models/conversations";
 import { PLATFORM_BRIDGE } from "@opencrane/platform";
 import { CONVERSATION_ASSETS_GATEWAY } from "@opencrane/state/conversation/assets";
 import { __CreateConversationHistoryProjection, ConversationEventStreamStatuses, type ConversationEventStream, type ConversationHistoryProjection, type StreamConversationEventsCommand } from "@opencrane/state/conversation/stream";
@@ -23,8 +23,45 @@ const _OVERFLOW_CONTENT = `${_LONG_CONTENT}\n\n${"The transcript owns overflow w
 /** Authorized conversation selected by the routed shell story. */
 const _DETAIL: ConversationWorkspaceDetail = { id: "conversation-1", mode: ConversationModes.AgentSession, lifecycle: ConversationLifecycles.Open, agentServiceId: "agent-1", participantRefs: ["self"], archivedAt: null, readThroughPosition: "0", updatedAt: "2026-09-05T19:30:00.000Z", visibleFromPosition: "0", parent: null, accessEndedPosition: null };
 
+/** Names the agent that authored the rendered transcript entry. */
+const _AUTHOR: AgentConversationAuthor = {
+	kind: ConversationAuthorKinds.Agent,
+	agentIdentityId: "agent-identity-1",
+	agentServiceId: "agent-1",
+	name: "The Commander",
+	avatarArtifactRevisionId: null
+};
+
+/** References the private text payload displayed by the story. */
+const _CONTENT_BLOCK: TextMessageContentBlock = {
+	id: "block-1",
+	kind: ConversationMessageContentBlockKinds.Text,
+	payloadRef: "payload-1",
+	ciphertextDigest: "sha256:story"
+};
+
 /** Immutable assistant entry whose private payload supplies the long transcript. */
-const _ENTRY: MessageEntry = { schemaVersion: 1, id: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", conversationId: _DETAIL.id, position: "1", author: { kind: "agent", agentIdentityId: "agent-identity-1", agentServiceId: "agent-1", name: "The Commander", avatarArtifactRevisionId: null }, provenance: "agent-authored", visibility: { audience: "conversation" }, runId: "run-1", causationId: "run-1", correlationId: "conversation-1", idempotencyKey: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", occurredAt: "2026-09-05T19:30:00.000Z", attestation: null, kind: "message", state: "completed", blocks: [{ id: "block-1", kind: "text", payloadRef: "payload-1", ciphertextDigest: "sha256:story" }], replyToEntryId: null, addressedAgentIdentityId: null, activation: "none" };
+const _ENTRY: MessageEntry = {
+	schemaVersion: 1,
+	id: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292",
+	conversationId: _DETAIL.id,
+	position: "1",
+	author: _AUTHOR,
+	provenance: "agent-authored",
+	visibility: { audience: "conversation" },
+	runId: "run-1",
+	causationId: "run-1",
+	correlationId: "conversation-1",
+	idempotencyKey: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292",
+	occurredAt: "2026-09-05T19:30:00.000Z",
+	attestation: null,
+	kind: ConversationEntryKinds.Message,
+	state: MessageStates.Completed,
+	blocks: [_CONTENT_BLOCK],
+	replyToEntryId: null,
+	addressedAgentIdentityId: null,
+	activation: "none"
+};
 
 /** Current immutable-history projection rendered by every responsive shell contract. */
 const _HISTORY: ConversationHistoryProjection = { ...__CreateConversationHistoryProjection(), entries: [_ENTRY], payloads: { "payload-1": _LONG_CONTENT }, nextPosition: "2" };
@@ -109,15 +146,100 @@ export const PersonalActivityAnswer: Story = { decorators: [_Providers(_HISTORY)
 /** Covers keyboard answer navigation after the narrow workspace overlay closes. */
 export const PersonalActivityAnswerNarrow: Story = { ...PersonalActivityAnswer, tags: ["visual-test", "visual-test-narrow"] };
 
-/** Makes the already-shared child audience visible independently of the human's later result share. */
-export const SharedCompanyChild: Story = { decorators: [_Providers({ ..._HISTORY, entries: [{ ..._ENTRY, author: { kind: "agent", agentIdentityId: "managed-company", agentServiceId: "company", name: "Company assistant", avatarArtifactRevisionId: null } }], payloads: { "payload-1": "Proposal A costs less. Proposal B gives us an earlier delivery date. Confirm both dates before choosing." } }, {
+/** Names the managed assistant shown in the shared child conversation. */
+const _COMPANY_AUTHOR: AgentConversationAuthor = {
+	kind: ConversationAuthorKinds.Agent,
+	agentIdentityId: "managed-company",
+	agentServiceId: "company",
+	name: "Company assistant",
+	avatarArtifactRevisionId: null
+};
+
+/** History shown in the shared child without changing the conversation writer. */
+const _COMPANY_HISTORY: ConversationHistoryProjection = {
+	..._HISTORY,
+	entries: [{ ..._ENTRY, author: _COMPANY_AUTHOR }],
+	payloads: { "payload-1": "Proposal A costs less. Proposal B gives us an earlier delivery date. Confirm both dates before choosing." }
+};
+
+/** First peer represented in the shared child directory. */
+const _PEER_AMINA = {
+	participantRef: "peer-1",
+	isSelf: false,
+	label: "Amina"
+};
+
+/** Second peer represented in the shared child directory. */
+const _PEER_KAMAU = {
+	participantRef: "peer-2",
+	isSelf: false,
+	label: "Kamau"
+};
+
+/** Supplies the three participants and managed assistant for the child story. */
+async function _CompanyDirectory(): Promise<ConversationCreationDirectory>
+{
+	const companyAssistants = [{ agentServiceId: "company", displayName: "Company assistant" }];
+	const participants = [..._DIRECTORY.participants, _PEER_AMINA, _PEER_KAMAU];
+	const directory = {
+		..._DIRECTORY,
+		companyAssistants,
+		participants
+	};
+
+	return directory;
+}
+
+/** Lists the shared child without granting any new membership authority. */
+async function _CompanyList(): Promise<ConversationWorkspaceDetail[]>
+{
+	const detail = {
+		..._DETAIL,
+		agentServiceId: "company",
+		participantRefs: ["self", "peer-1", "peer-2"]
+	};
+
+	return [detail];
+}
+
+/** Opens the shared child with its group-navigation parent. */
+async function _CompanyOpen(): Promise<ConversationWorkspaceDetail>
+{
+	const parent = {
+		requestId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651",
+		parentConversationId: "group-1",
+		parentMessageId: "41c1f1dc-0010-4f13-9c2f-d3841ffd6651",
+		parentMessagePosition: "2"
+	};
+	const detail = {
+		..._DETAIL,
+		agentServiceId: "company",
+		participantRefs: ["self", "peer-1", "peer-2"],
+		parent
+	};
+
+	return detail;
+}
+
+/** Keeps the shared-child story on test-owned directory and history ports. */
+const _COMPANY_WORKSPACE_GATEWAY: ConversationWorkspaceGateway = {
 	..._WORKSPACE_GATEWAY,
-	directory: async function _Directory() { return { ..._DIRECTORY, companyAssistants: [{ agentServiceId: "company", displayName: "Company assistant" }], participants: [..._DIRECTORY.participants, { participantRef: "peer-1", isSelf: false, label: "Amina" }, { participantRef: "peer-2", isSelf: false, label: "Kamau" }] }; },
-	list: async function _List() { return [{ ..._DETAIL, agentServiceId: "company", participantRefs: ["self", "peer-1", "peer-2"] }]; },
-	open: async function _Open() { return { ..._DETAIL, agentServiceId: "company", participantRefs: ["self", "peer-1", "peer-2"], parent: { requestId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", parentConversationId: "group-1", parentMessageId: "41c1f1dc-0010-4f13-9c2f-d3841ffd6651", parentMessagePosition: "2" } }; }
-})], parameters: { docs: { description: { story: "The child header states that three people share this assistant chat. Back to group is navigation; result sharing later posts selected text. The fixture owns no membership or history authority." } } }, play: async function _SharedAudience({ canvasElement })
+	directory: _CompanyDirectory,
+	list: _CompanyList,
+	open: _CompanyOpen
+};
+
+/** Verifies that the shared child audience and group navigation are visible. */
+const _SHARED_AUDIENCE_PLAY: NonNullable<Story["play"]> = async function _SharedAudience({ canvasElement })
 {
 	const canvas = within(canvasElement);
 	expect(await canvas.findByText("Shared assistant chat · 3 participants")).toBeVisible();
 	expect(canvas.getByRole("button", { name: "Back to group" })).toBeVisible();
-} };
+};
+
+/** Makes the already-shared child audience visible independently of the human's later result share. */
+export const SharedCompanyChild: Story = {
+	decorators: [_Providers(_COMPANY_HISTORY, _COMPANY_WORKSPACE_GATEWAY)],
+	parameters: { docs: { description: { story: "The child header states that three people share this assistant chat. Back to group is navigation; result sharing later posts selected text. The fixture owns no membership or history authority." } } },
+	play: _SHARED_AUDIENCE_PLAY
+};

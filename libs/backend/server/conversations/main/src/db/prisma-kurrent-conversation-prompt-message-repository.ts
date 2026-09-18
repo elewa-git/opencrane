@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
-import type { CompiledMessage, ConversationAuthor, MessageEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates, type CompiledMessage, type ConversationAuthor, type MessageEntry } from "@opencrane/contracts";
 import type { ConversationPromptMessageRead, ConversationPromptMessageSource } from "@opencrane/backend/agents/execution/inputs";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
@@ -25,12 +25,12 @@ export class PrismaKurrentConversationPromptMessageRepository implements Convers
 		const history = await reader.read({ siloId: this._siloId, conversationId: this._conversationId });
 		if ((history.entries.at(-1)?.position ?? "0") !== this._historyRevision)
 			throw new Error("Conversation prompt history revision changed after admission");
-		const messages = new Map(history.entries.filter(function _CompletedMessage(entry): entry is MessageEntry { return entry.kind === "message" && entry.state === "completed"; }).map(message => [message.id, message]));
+		const messages = new Map(history.entries.filter(function _CompletedMessage(entry): entry is MessageEntry { return entry.kind === ConversationEntryKinds.Message && entry.state === MessageStates.Completed; }).map(message => [message.id, message]));
 		const selected = messageIds.map(messageId => messages.get(messageId));
 		if (selected.some(message => message === undefined))
 			throw new Error("Conversation prompt message is absent from canonical history");
 		const exactMessages = selected as readonly MessageEntry[];
-		const blocks = exactMessages.flatMap(message => message.blocks.filter(function _TextBlock(block) { return block.kind === "text"; }).map(block => ({ block, message })));
+		const blocks = exactMessages.flatMap(message => message.blocks.filter(function _TextBlock(block) { return block.kind === ConversationMessageContentBlockKinds.Text; }).map(block => ({ block, message })));
 		const payloadRefs = blocks.map(value => value.block.payloadRef);
 		if (new Set(payloadRefs).size !== payloadRefs.length)
 			throw new Error("Conversation prompt history repeats a private payload reference");
@@ -47,7 +47,7 @@ export class PrismaKurrentConversationPromptMessageRepository implements Convers
 		const authorSubject = _AuthorSubject(message.author);
 		const content = message.blocks.flatMap(block =>
 		{
-			if (block.kind !== "text")
+			if (block.kind !== ConversationMessageContentBlockKinds.Text)
 				return [];
 			const payload = payloads.get(block.payloadRef);
 			if (payload === undefined || payload.siloId !== this._siloId || payload.conversationId !== this._conversationId || payload.authorSubject !== authorSubject || payload.ciphertextDigest !== block.ciphertextDigest)
@@ -62,11 +62,11 @@ export class PrismaKurrentConversationPromptMessageRepository implements Convers
 /** Resolve the immutable author coordinate authenticated into a private payload. */
 function _AuthorSubject(author: ConversationAuthor): string
 {
-	if (author.kind === "human")
+	if (author.kind === ConversationAuthorKinds.Human)
 		return author.participantId;
-	if (author.kind === "agent")
+	if (author.kind === ConversationAuthorKinds.Agent)
 		return author.agentIdentityId;
-	if (author.kind === "service")
+	if (author.kind === ConversationAuthorKinds.Service)
 		return author.serviceId;
 	return author.systemId;
 }
@@ -74,9 +74,9 @@ function _AuthorSubject(author: ConversationAuthor): string
 /** Map conversation authors onto the closed model-message roles. */
 function _Role(author: ConversationAuthor): CompiledMessage["role"]
 {
-	if (author.kind === "human")
+	if (author.kind === ConversationAuthorKinds.Human)
 		return "user";
-	if (author.kind === "agent")
+	if (author.kind === ConversationAuthorKinds.Agent)
 		return "assistant";
 	return "system";
 }

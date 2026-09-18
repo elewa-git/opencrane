@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { CONVERSATION_MODEL_REQUEST_TIMEOUT_MILLISECONDS } from "@opencrane/contracts";
+
 import { _OutputRecoveryHarness } from "./conversation-output-recovery.fixture";
 
 /** Pause exactly the winning gateway request so another process can observe its reservation. */
@@ -13,7 +15,7 @@ function _Gate()
 /** The private transport accepts only these request coordinates and supplies the reviewed workload. */
 function _Command(f: Awaited<ReturnType<typeof _OutputRecoveryHarness>>)
 {
-	return { bootstrapId: f.output.bootstrapId, workload: f.command.workload };
+	return { bootstrapId: f.output.bootstrapId, process: f.command.process };
 }
 
 describe("one server-owned model request across process restarts", function _Suite()
@@ -22,6 +24,8 @@ describe("one server-owned model request across process restarts", function _Sui
 
 	it("returns no key or prompt from bootstrap and persists a single reserved answer", async function _Answer()
 	{
+		const now = Date.now();
+		vi.spyOn(Date, "now").mockReturnValue(now);
 		const f = await _OutputRecoveryHarness(false);
 		expect(await f.restart().bootstrap(f.command)).toEqual({ bootstrapId: f.output.bootstrapId, outcome: "ready" });
 		expect(f.credentials.issueOnce).not.toHaveBeenCalled();
@@ -30,6 +34,7 @@ describe("one server-owned model request across process restarts", function _Sui
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		const turn = (await f.store.load(f.output.bootstrapId))!;
 		expect(turn.modelReservation).toMatchObject({ ordinal: 1, maxCompletionTokens: 100, compiledInputDigest: turn.compile.digest });
+		expect(turn.modelReservation!.dispatchDeadlineEpochMs).toBe(now + CONVERSATION_MODEL_REQUEST_TIMEOUT_MILLISECONDS);
 		expect(turn.outputReceipt?.event.id).toBe(turn.modelReservation?.invocationFence);
 		expect(f.history.streams.get(`conversation-computer-turn-${turn.bootstrapId}`)).toHaveLength(3);
 		expect(JSON.stringify(f.history.streams.get(`conversation-computer-turn-${turn.bootstrapId}`)!.map(event => event.data))).not.toMatch(/test-only-key|A private chosen answer|instructions/);
@@ -84,8 +89,68 @@ describe("one server-owned model request across process restarts", function _Sui
 			expect(await f.restart().modelStep(_Command(f))).toEqual({ outcome: "response_unavailable" });
 		expect(f.model.request).toHaveBeenCalledOnce();
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
+		expect(f.credentials.revoke).toHaveBeenCalledWith(f.output.bootstrapId);
+		expect(f.runLifecycle.fail).toHaveBeenCalled();
 		expect(f.outputPayloads.store).not.toHaveBeenCalled();
-		expect(await f.store.loadActive({ siloId: "silo-1", ...f.command })).not.toBeNull();
+		expect(await f.store.loadActive({ siloId: "silo-1", ...f.command })).toBeNull();
+	});
+
+	it("delivers the durable output winner when deadline cleanup was already waiting to fail the run", async function _OutputWinsDeadlineRace()
+	{
+		const f = await _OutputRecoveryHarness(false);
+		f.model.request.mockRejectedValueOnce(new Error("sanitized transport failure"));
+		expect(await f.authority.modelStep(_Command(f))).toEqual({ outcome: "pending" });
+		const reservation = (await f.store.load(f.output.bootstrapId))!.modelReservation!;
+		const cleanupEntered = _Gate();
+		const continueCleanup = _Gate();
+		f.history.beforeAppend = async function _HoldUnavailable(command)
+		{
+			if (command.events[0]?.type.endsWith("turn-unavailable.v1"))
+			{
+				cleanupEntered.release();
+				await continueCleanup.promise;
+			}
+		};
+		vi.spyOn(Date, "now").mockReturnValue(reservation.dispatchDeadlineEpochMs + 1);
+		const cleanup = f.restart().modelStep(_Command(f));
+		await cleanupEntered.promise;
+		vi.spyOn(Date, "now").mockReturnValue(reservation.dispatchDeadlineEpochMs - 1);
+		await expect(f.authority.appendOutput({
+			...f.output,
+			modelInvocationFence: reservation.invocationFence,
+			sourceCommandId: reservation.invocationFence,
+			modelNotAfterEpochMs: reservation.dispatchDeadlineEpochMs,
+		})).resolves.toBe("accepted");
+		continueCleanup.release();
+		await expect(cleanup).resolves.toEqual({ outcome: "completed" });
+		expect(f.runLifecycle.complete).toHaveBeenCalled();
+		expect(f.runLifecycle.fail).not.toHaveBeenCalled();
+		expect((await f.store.load(f.output.bootstrapId))!.outputReceipt).not.toBeNull();
+		expect(f.history.streams.get(f.stream)!.slice(2)).toHaveLength(1);
+	});
+
+	it("follows a model reservation and output that win after lifecycle cleanup loaded an unreserved turn", async function _ReservationWinsLifecycleRace()
+	{
+		const f = await _OutputRecoveryHarness(false);
+		const cleanupEntered = _Gate();
+		const continueCleanup = _Gate();
+		f.history.beforeAppend = async function _HoldInitialCleanup(command)
+		{
+			if (command.events[0]?.type.endsWith("turn-unavailable.v1"))
+			{
+				cleanupEntered.release();
+				await continueCleanup.promise;
+			}
+		};
+		const cleanup = f.store.markUnavailable(f.output.bootstrapId);
+		await cleanupEntered.promise;
+		await expect(f.authority.modelStep(_Command(f))).resolves.toEqual({ outcome: "completed" });
+		continueCleanup.release();
+		const winner = await cleanup;
+		expect(winner.outputReceipt).not.toBeNull();
+		expect(winner.unavailable).toBe(false);
+		expect(f.runLifecycle.complete).toHaveBeenCalled();
+		expect(f.runLifecycle.fail).not.toHaveBeenCalled();
 	});
 
 	it("finishes a saved answer before recompiling an already advanced conversation head", async function _SavedAnswer()
@@ -191,7 +256,7 @@ describe("one server-owned model request across process restarts", function _Sui
 	it("requires current Pod admission even for an already reserved request", async function _WrongPod()
 	{
 		const f = await _OutputRecoveryHarness();
-		await expect(f.restart().modelStep({ ..._Command(f), workload: { ...f.command.workload, podUid: "other-pod" } })).rejects.toThrow("lease-bound");
+		await expect(f.restart().modelStep({ ..._Command(f), process: { ...f.command.process, workload: { ...f.command.process.workload, podUid: "other-pod" } } })).rejects.toThrow("not bound to the active realization");
 		expect(f.model.request).not.toHaveBeenCalled();
 		expect(f.credentials.issueOnce).not.toHaveBeenCalled();
 	});

@@ -1,5 +1,6 @@
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { HistoryExpectedRevisions } from "@opencrane/backend/server/infra/history-store";
+import { ConversationAuthorKinds, ConversationEntryKinds } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import { ConversationHistoryAuthority } from "../conversation-history-authority";
@@ -20,7 +21,7 @@ function _Command(overrides: Partial<ConversationHistoryAppendCommand> = {}): Co
 			id: _EVENT_ID,
 			conversationId: "conversation-1",
 			position: "8",
-			author: { kind: "agent", agentIdentityId: "identity-1", agentServiceId: "service-1", name: "Archive", avatarArtifactRevisionId: null },
+			author: { kind: ConversationAuthorKinds.Agent, agentIdentityId: "identity-1", agentServiceId: "service-1", name: "Archive", avatarArtifactRevisionId: null },
 			provenance: "agent-authored",
 			visibility: { audience: "conversation" },
 			runId: "run-1",
@@ -29,7 +30,7 @@ function _Command(overrides: Partial<ConversationHistoryAppendCommand> = {}): Co
 			idempotencyKey: _EVENT_ID,
 			occurredAt: "2026-09-01T00:00:00.000Z",
 			attestation: null,
-			kind: "a2ui",
+			kind: ConversationEntryKinds.A2UI,
 			surfaceId: "surface-1",
 			a2uiSchemaVersion: "0.8",
 			operation: "remove",

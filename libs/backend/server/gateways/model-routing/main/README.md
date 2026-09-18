@@ -43,9 +43,14 @@ caller's transaction, then resolves the selected public name to exactly one tena
 definition. Missing, foreign-only, or ambiguous definitions fail closed. The
 off-policy-evaluation (OPE) and savings helpers are likewise pure estimators used to decide, in
 shadow mode, whether a cheaper candidate model would hold quality before it ever routes live
-traffic. The BYOK (bring-your-own-key) model catalogue (`_BYOK_PROVIDER_CATALOG`) is data, tuned as providers ship models.
+traffic. The BYOK (bring-your-own-key) model catalogue (`_BYOK_PROVIDER_CATALOG`) is loaded from the
+package-root `byok-provider-catalog.json` public machine-readable authority. Production routing and
+local development both consume that artifact; neither keeps a private copy. Tune that one file as
+providers ship models. Mistral defaults to `mistral-medium-latest` because Studio workspaces may
+allow Medium while rejecting `mistral-large-latest` with `tier_not_allowed`. Large remains
+catalogued for workspaces whose subscription permits it.
 
-Model registration reads LiteLLM inventory before creating anything. The pinned 1.81.0 proxy's
+Model registration reads LiteLLM inventory before creating anything. The pinned 1.81.9 proxy's
 `/v2/model/info` route returns an empty catalogue on a fresh installation, allowing its first model
 to be registered. Failed requests and malformed inventory remain errors. A durable provider command
 supplies a deterministic deployment identifier; the inventory entry must match that identifier plus
@@ -81,21 +86,26 @@ derived from their governed Global resource, so a late first POST cannot create 
   `_UpsertLiteLlmCredential`, `_DeleteLiteLlmCredential`, and `_EnsureProviderEmbeddingModels` —
   fixed-coordinate custody and LiteLLM adapters used only after a durable provider command commits.
 - `_EstimateSavings`, `_ReplayEstimate`, `_DoublyRobustEstimate`, `_OpeEstimateWithCi` — the pure
-  shadow-router estimators. `_BYOK_PROVIDER_CATALOG` — the per-provider default model catalogue.
+  shadow-router estimators. `_BYOK_PROVIDER_CATALOG` — the typed per-provider default model
+  catalogue loaded from the package's public `byok-provider-catalog.json` artifact.
 - `_IssueAttemptLiteLlmKey` — mint one short-lived, alias- and budget-bound LiteLLM virtual key for a
   single agent-run attempt (fails hard; the master key never leaves the control plane), with its
   request/result shapes `AttemptLiteLlmKeyRequest` and `AttemptLiteLlmKey`. Issuance requires an
   absolute `notAfter` bound, leaves ten seconds for the mint request and checks the provider's
   returned expiry before handoff. Missing, expired or excessive expiry triggers alias cleanup.
   The key has a one-time budget and never resets its spending allowance within the attempt.
-- `_RevokeAttemptLiteLlmKeyByAlias` — reconcile an uncertain mint from its durable attempt alias when
-  encrypted custody could not retain the raw key.
+- `_RevokeAttemptLiteLlmKey` and `_RevokeAttemptLiteLlmKeyByAlias` — revoke an attempt key from its
+  retained raw value, or reconcile an uncertain mint from its durable attempt alias when encrypted
+  custody could not retain that value. Both operations are idempotent: only HTTP 404 with the pinned
+  LiteLLM `No keys found` marker, including its exact `ProxyException` string envelope, proves the
+  cleanup goal is already satisfied. A generic route-level 404 or any other failure remains
+  uncertain and is retried from durable state.
 - `__RequestConversationModel` — send one chat-completions exchange using the shared
   `ConversationModelRequest` and return a `ConversationModelResponse`. Server composition supplies
   the endpoint, attempt key and model alias; the alias must match `CompiledRunInput`. Completion
   tokens are capped by the smallest reservation, frozen route and frozen run ceiling; at least
   one frozen completion ceiling must exist. The request aborts by the earliest supplied deadline,
-  compiled run deadline or 25 seconds, including time spent reading the body.
+  compiled run deadline or 60 seconds, including time spent reading the body.
 
 The first request can offer the frozen tools that need no approval. Names must be unique and legal,
 with parameters matching their saved schema digests. The model may return text or propose exactly
@@ -123,9 +133,9 @@ call and completion budget, keeps one nonrenewed attempt key, admits the propose
 rechecks authority before using its result. Adapter tests alone do not qualify the public tool
 flow or a live provider.
 
-The pinned LiteLLM v1.81.0-stable implementation creates `expires` from a UTC clock and serializes
+The pinned LiteLLM v1.81.9-stable implementation creates `expires` from a UTC clock and serializes
 it as an ISO timestamp. The adapter checks that evidence instead of storing a locally guessed
-expiry. Source: [key management](https://github.com/BerriAI/litellm/blob/v1.81.0-stable/litellm/proxy/management_endpoints/key_management_endpoints.py).
+expiry. Source: [key management](https://github.com/BerriAI/litellm/blob/v1.81.9-stable/litellm/proxy/management_endpoints/key_management_endpoints.py).
 Already issued keys still have a bounded validity window. The transport adapter does not repeat
 PostgreSQL admission; the conversation owner must perform that check before reserving dispatch.
 

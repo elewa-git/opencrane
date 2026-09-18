@@ -7,6 +7,7 @@ export type { CompanyAssistantProvisioningAuthority, CompanyAssistantProvisionin
 export { __EnsureCompanyAssistantIdentity } from "./company-assistant-identity";
 export type { CompanyAssistantProvisioningCommand, CompanyAssistantProvisioningPolicy, CompanyAssistantProvisioningResult } from "./company-assistant-provisioning.types";
 export { PrismaManagedExecutionEvidenceRepository } from "./db/prisma-managed-execution-evidence-repository";
+export { ExecutionEvidenceOutcomes } from "./execution-evidence.types";
 export { ManagedExecutionEvidenceAuthority } from "./managed-execution-evidence";
 export { ManagedExecutionEvidenceDenialReasons } from "./managed-execution-evidence.types";
 export type { ManagedExecutionEvidence, ManagedExecutionEvidenceCommand, ManagedExecutionEvidenceAuthorityPort, ManagedExecutionEvidenceResult } from "./managed-execution-evidence.types";

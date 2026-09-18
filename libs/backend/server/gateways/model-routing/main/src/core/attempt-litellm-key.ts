@@ -16,6 +16,12 @@ const _ATTEMPT_KEY_ALIAS = /^attempt-[a-z0-9][a-z0-9-]{0,62}$/;
 /** Hard ceiling on the minted key lifetime so a mis-supplied lease cannot outlive an attempt. */
 const _MAX_EXPIRY_SECONDS = 86_400;
 
+/** LiteLLM's stable error marker when `/key/delete` resolves no requested key or alias. */
+const _NO_KEYS_FOUND = "No keys found";
+
+/** Pinned LiteLLM `ProxyException` string form after it receives the no-key error dictionary. */
+const _NO_KEYS_FOUND_PROXY_MESSAGE = "{'error': 'No keys found'}";
+
 /**
  * Mint one short-lived, alias- and budget-bound LiteLLM virtual key for a single run attempt.
  *
@@ -76,12 +82,7 @@ export async function _RevokeAttemptLiteLlmKey(input: AttemptLiteLlmKeyRevocatio
 			body: JSON.stringify({ keys: [input.key] }),
 			signal: AbortSignal.timeout(_LITELLM_HTTP_TIMEOUT_MS),
 		});
-		if (!response.ok)
-		{
-			_log.warn({ keyAlias: input.keyAlias, status: response.status }, "litellm attempt key revocation failed");
-			throw new Error(`litellm attempt key revocation returned status ${response.status}`);
-		}
-		_log.info({ keyAlias: input.keyAlias }, "litellm attempt key revoked");
+		await _AssertAttemptKeyRevoked(response, input.keyAlias);
 	});
 }
 
@@ -97,9 +98,64 @@ export async function _RevokeAttemptLiteLlmKeyByAlias(input: AttemptLiteLlmKeyAl
 	await ___DoWithTrace("litellm.key.revoke_by_alias", { keyAlias: input.keyAlias }, async function _RevokeByAlias(): Promise<void>
 	{
 		const response = await fetch(`${endpoint}/key/delete`, { method: "POST", headers: { "content-type": "application/json", Authorization: `Bearer ${masterKey}` }, body: JSON.stringify({ key_aliases: [input.keyAlias] }), signal: AbortSignal.timeout(_LITELLM_HTTP_TIMEOUT_MS) });
-		if (!response.ok)
-			throw new Error(`litellm attempt key alias revocation returned status ${response.status}`);
+		await _AssertAttemptKeyRevoked(response, input.keyAlias);
 	});
+}
+
+/**
+ * Accept a completed deletion or LiteLLM's exact no-key result because both prove the attempt key
+ * is absent. Other failures remain uncertain and must retain durable cleanup state for a retry.
+ */
+async function _AssertAttemptKeyRevoked(response: Response, keyAlias: string): Promise<void>
+{
+	if (response.ok)
+	{
+		_log.info({ keyAlias }, "litellm attempt key revoked");
+		return;
+	}
+
+	if (response.status === 404 && _IsNoKeysFoundResponse(await response.text()))
+	{
+		_log.info({ keyAlias }, "litellm attempt key was already absent");
+		return;
+	}
+
+	_log.warn({ keyAlias, status: response.status }, "litellm attempt key revocation failed");
+	throw new Error(`litellm attempt key revocation returned status ${response.status}`);
+}
+
+/** Recognize only the documented nested LiteLLM error marker, never a generic route-level 404. */
+function _IsNoKeysFoundResponse(body: string): boolean
+{
+	let value: unknown;
+	try
+	{
+		value = JSON.parse(body);
+	}
+	catch
+	{
+		return false;
+	}
+
+	return _ContainsNoKeysFound(value, 0);
+}
+
+/** Follow LiteLLM's `detail`, `error`, and `message` wrappers to the bounded terminal marker. */
+function _ContainsNoKeysFound(value: unknown, depth: number): boolean
+{
+	if (value === _NO_KEYS_FOUND || value === _NO_KEYS_FOUND_PROXY_MESSAGE)
+		return true;
+	if (depth >= 4 || typeof value !== "object" || value === null || Array.isArray(value))
+		return false;
+
+	const record = value as Record<string, unknown>;
+	const nextDepth = depth + 1;
+
+	return (
+		_ContainsNoKeysFound(record.detail, nextDepth)
+		|| _ContainsNoKeysFound(record.error, nextDepth)
+		|| _ContainsNoKeysFound(record.message, nextDepth)
+	);
 }
 
 /** Perform the live `/key/generate` mint, binding the single model, budget, and expiry to the key. */

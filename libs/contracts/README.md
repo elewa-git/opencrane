@@ -77,6 +77,11 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   recognisable capability names and categorical availability, never internal topology or errors.
 - `ConversationHistoryResponse`, `ConversationEntry`, and the conversation-computer contracts — the
   immutable history and generation-fenced computer vocabulary shared by server and browser.
+- `ConversationComputerRealizationKinds`, `ConversationComputerRealization`, and
+  `RealizedLeaseScope` — the persisted discriminant between a production Agent Sandbox and a Tier 2
+  host-development process. Both carry non-secret process coordinates; authentication and product
+  authority remain server-owned. Host coordinates do not claim that the workstation enforces the
+  production profile's Kubernetes confinement, resources or checkpoint support.
 - `ConversationToolProposal`, `___ConversationToolProposalSchema` and
   `ConversationToolProposalReceipt` — the private workload request for one frozen tool revision
   and bounded JSON arguments. It accepts no caller-selected identity or approval. A receipt
@@ -89,25 +94,28 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 - `AG_UI_TOOL_FAILURE_EVENT` / `AgUiToolFailureEnvelope` — display-safe failed-tool marker carrying
   only the public call id and an optional server-selected technical classification, never provider
   text, raw arguments, credentials, or retry authority.
-- `ConversationEntry`, its human/agent/service/system authors, encrypted message payload references,
-  explicit log variants, and A2UI mutations — the canonical participant-visible event contract for
-  a `conversation-{id}` history stream. `___ConversationEntrySchema` validates storage and
+- `ConversationEntry` and `ConversationMessageContentBlockKinds` — the canonical participant-visible
+  event contract for a `conversation-{id}` history stream, including human/agent/service/system authors,
+  encrypted message payload references, explicit log variants, and A2UI mutations.
+  `___ConversationEntrySchema` validates storage and
   receipt-transformer records; `___ConversationComputerEntrySchema` is stricter and refuses a
   computer-provided service attestation. Receipt verification and the bound writer's computer/stream
   checks remain context-specific boundaries outside these structural parsers. Both carry opaque
   payload and artifact coordinates, never plaintext bodies, storage credentials, or general
-  event-store access.
+  event-store access. The content-block enum owns the event's text, artifact and mention wire values;
+  the older transcript enum also admits tool blocks and is not interchangeable with this event shape.
 - Hand-written DTOs/enums: hierarchical `Group` with nullable `parentId`, `ClusterTenant*`,
   `Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
   model-routing types, memory-gateway constants, `ThirdPartySource*`,
   `RunInputSnapshot`/`RunInputSnapshotMcpTool`, `ExecutionSubject`,
   `TenantModelSet`, and domain-topology host builders.
-- `ConversationModelRequest`, `ConversationModelResponse`, `ConversationModelToolCall` and
-  `ConversationModelContinuation` — shared server-only model transport contracts. Adjacent strict
-  schemas preserve the original assistant call and validate the combined saved call/result bound.
-  Tool modes distinguish a first selection from text-only continuation. These types grant no tool
-  permission; endpoint and credential fields stay in server memory and must never become workload
-  or browser payloads.
+- `ConversationModelRequest`, `ConversationModelResponse`, `ConversationModelToolCall`,
+  `ConversationModelContinuation` and `CONVERSATION_MODEL_REQUEST_TIMEOUT_MILLISECONDS` — shared
+  server-only model transport contracts and the 60-second request ceiling used by both reservation
+  and dispatch. Adjacent strict schemas preserve the original assistant call and validate the
+  combined saved call/result bound. Tool modes distinguish a first selection from text-only
+  continuation. These types grant no tool permission; endpoint and credential fields stay in server
+  memory and must never become workload or browser payloads.
 - `PROMPT_COMPILER_VERSION` — the immutable compiler-version pin every executable agent revision
   must name before it can admit a run.
 - `AgentConfigPatchKinds` — the durable `persona_refresh` and `model_alias` vocabulary shared by

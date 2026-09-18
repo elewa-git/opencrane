@@ -1,6 +1,6 @@
 import { AvatarTones } from "@opencrane/elements/ui";
 import { ConversationMessageTones, type ConversationMessagePresentation, type ConversationRichTextPresentation } from "@opencrane/elements/conversation";
-import type { ConversationEntry, MessageEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates, type ConversationEntry, type MessageEntry } from "@opencrane/contracts";
 import { toSanitizedMarkdownHtml, toStreamingMarkdownHtml } from "@opencrane/state/conversation/render";
 import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, MessageRoles, type ConversationCreationDirectory, type ConversationOnboardingHistory, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
@@ -174,23 +174,24 @@ export function _ConversationOnboardingDialogueEntries(history: ConversationOnbo
 /** Map immutable Kurrent history messages with server-resolved private payload text. */
 export function _ConversationEntryViews(entries: readonly ConversationEntry[], payloads: Readonly<Record<string, string>>): readonly ConversationMessageView[]
 {
-	return entries.filter(function _Message(entry): entry is MessageEntry { return entry.kind === "message"; }).map(function _Entry(entry): ConversationMessageView
+	return entries.filter(function _Message(entry): entry is MessageEntry { return entry.kind === ConversationEntryKinds.Message; }).map(function _Entry(entry): ConversationMessageView
 	{
 		const text = entry.blocks.map(function _Block(block): string
 		{
-			if (block.kind === "text")
-				return payloads[block.payloadRef] ?? "[Message text unavailable]";
-			if (block.kind === "artifact")
-				return `[${block.name}]`;
-			return `[@${block.name}]`;
+			switch (block.kind)
+			{
+				case ConversationMessageContentBlockKinds.Text: return payloads[block.payloadRef] ?? "[Message text unavailable]";
+				case ConversationMessageContentBlockKinds.Artifact: return `[${block.name}]`;
+				case ConversationMessageContentBlockKinds.Mention: return `[@${block.name}]`;
+			}
 		}).join("\n\n");
 		const authorName = entry.author.name;
 		const authorInitials = _Initials(authorName);
 		const authorPresentation = _EntryAuthorPresentation(entry.author.kind);
 		const tone = authorPresentation.tone;
 		const avatarTone = authorPresentation.avatarTone;
-		const presentation: ConversationMessagePresentation = { id: entry.id, authorName, authorInitials, avatarTone, timestampLabel: _TimeLabel(entry.occurredAt), body: "", tone, accessibleStatus: entry.state === "completed" ? undefined : entry.state };
-		const html = entry.state === "streaming" ? toStreamingMarkdownHtml(text) : toSanitizedMarkdownHtml(text);
+		const presentation: ConversationMessagePresentation = { id: entry.id, authorName, authorInitials, avatarTone, timestampLabel: _TimeLabel(entry.occurredAt), body: "", tone, accessibleStatus: entry.state === MessageStates.Completed ? undefined : entry.state };
+		const html = entry.state === MessageStates.Streaming ? toStreamingMarkdownHtml(text) : toSanitizedMarkdownHtml(text);
 		return { message: presentation, richText: { messageId: entry.id, html, label: `${authorName} message` } };
 	});
 }
@@ -200,10 +201,10 @@ function _EntryAuthorPresentation(kind: ConversationEntry["author"]["kind"]): { 
 {
 	switch (kind)
 	{
-		case "human": return { avatarTone: AvatarTones.Blue, tone: ConversationMessageTones.Participant };
-		case "agent": return { avatarTone: AvatarTones.Brand, tone: ConversationMessageTones.Agent };
-		case "service":
-		case "system": return { avatarTone: AvatarTones.Neutral, tone: ConversationMessageTones.System };
+		case ConversationAuthorKinds.Human: return { avatarTone: AvatarTones.Blue, tone: ConversationMessageTones.Participant };
+		case ConversationAuthorKinds.Agent: return { avatarTone: AvatarTones.Brand, tone: ConversationMessageTones.Agent };
+		case ConversationAuthorKinds.Service:
+		case ConversationAuthorKinds.System: return { avatarTone: AvatarTones.Neutral, tone: ConversationMessageTones.System };
 	}
 }
 

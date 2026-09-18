@@ -228,7 +228,7 @@
       "id": "litellm",
       "podClass": "Deployment/litellm",
       "renderedPodClass": "Deployment/opencrane-litellm",
-      "image": "ghcr.io/berriai/litellm-non_root:main-v1.81.0-stable",
+      "image": "ghcr.io/berriai/litellm-non_root:main-v1.81.9-stable",
       "owner": "apps/_infra/litellm",
       "source": { "type": "file", "path": "apps/_infra/litellm/helm/templates/_deployment.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.litellm.deployment\"" }

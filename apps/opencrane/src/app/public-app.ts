@@ -11,12 +11,13 @@ import { _CheckHealth, _ErrorHandler, _RateLimit, _TransportSecurity, type Publi
 import { _log } from "./log";
 import { _ReadOrganizationMembershipConfig } from "./config";
 import { _CreateOrganizationMembersComposition } from "./organization-members-composition";
+import type { OrganizationMembersComposition } from "./organization-members-composition.types";
 import type { PublicAuthenticationComposition } from "./public-app.types";
-import type { AgentSandboxReleaseProfileConfig } from "./config.types";
+import type { ConversationComputerReleaseProfileConfig } from "./config.types";
 import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
 import { _RegisterRoutes } from "./routes";
 import { _CreateHttpRequestLogger } from "./telemetry";
-import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
+import type { PublicMcpRuntimeComposition } from "./mcp-runtime-composition.types";
 import type { ProviderEffectCommandExecutor } from "@opencrane/backend/server/gateways/providers";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
@@ -35,7 +36,12 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
 	const authService = ___CreateOidcAuthService(_log, prisma, customApi, standaloneFirstUserAdmission, _CreateStandaloneFirstUserAudit(standaloneFirstUserAdmission));
 	const admission = new PrismaAuthenticatedPrincipalAdmissionUnitOfWork(prisma, _log);
 	const sessions = new PrismaOidcSessionUnitOfWork(prisma);
-	return { authService, sessionMiddleware: authService.createSessionMiddleware(sessions), authMiddleware: ___AuthMiddleware(admission) };
+
+	return {
+		router: ___AuthRouter(authService),
+		sessionMiddleware: authService.createSessionMiddleware(sessions),
+		authMiddleware: ___AuthMiddleware(admission),
+	};
 }
 
 /**
@@ -46,11 +52,12 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
  * @param prisma - The main product database client.
  * @param authentication - One browser-session composition shared with the internal resolver.
  * @param artifactScannerEnabled - Whether newly quarantined conversation files can be consumed.
+ * @param artifactStorageAvailable - Whether this process has ArtifactStore and its mounted keys.
  * @param health - Cached public service report reader with no topology or error details.
  * @param mcpWorkflows - Shared transaction and worker authority for saved MCP jobs.
  * @returns The public Express listener before the lifecycle starts it.
  */
-export function _CreatePublicApp(prisma: PrismaClient, authentication: PublicAuthenticationComposition, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition, providerEffects: ProviderEffectCommandExecutor, historyStore?: HistoryStore, conversationPrivatePayloadKeyringPath?: string, agentSandboxReleaseProfile?: AgentSandboxReleaseProfileConfig): Express
+export function _CreatePublicApp(prisma: PrismaClient, authentication: PublicAuthenticationComposition, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition, mcpRuntime: PublicMcpRuntimeComposition | null, providerEffects: ProviderEffectCommandExecutor, historyStore?: HistoryStore, conversationPrivatePayloadKeyringPath?: string, releaseProfile?: ConversationComputerReleaseProfileConfig, suppliedOrganizationMembers?: OrganizationMembersComposition, artifactStorageAvailable = true, sandboxReviewNamespace?: string): Express
 {
 	const app = express();
 
@@ -70,14 +77,16 @@ export function _CreatePublicApp(prisma: PrismaClient, authentication: PublicAut
 
 	// 4. Mount session establishment before the product-authentication boundary.
 	app.use(...authentication.sessionMiddleware);
-	app.use("/api/v1/auth", ___AuthRouter(authentication.authService));
+	app.use("/api/v1/auth", authentication.router);
 	app.use(authentication.authMiddleware);
-	const organizationMembers = _CreateOrganizationMembersComposition(prisma, _ReadOrganizationMembershipConfig());
+	const organizationMembers = suppliedOrganizationMembers ?? _CreateOrganizationMembersComposition(prisma, _ReadOrganizationMembershipConfig());
+
 	if (organizationMembers.productAccess !== null)
 		app.use(organizationMembers.productAccess);
 
 	// 5. Mount authenticated product routes, then terminate failures through one structured handler.
-	_RegisterRoutes(app, prisma, artifactScannerEnabled, organizationMembers.router, mcpWorkflows, mcpRuntime, providerEffects, historyStore, conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
+	_RegisterRoutes(app, prisma, artifactScannerEnabled, organizationMembers.router, mcpWorkflows, mcpRuntime, providerEffects, historyStore, conversationPrivatePayloadKeyringPath, releaseProfile, artifactStorageAvailable, sandboxReviewNamespace);
 	app.use(_ErrorHandler(_log));
+
 	return app;
 }

@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import type { GroupChildRequest } from "./group-child.types";
-import { ConversationComputerStates, type ConversationComputer, type MessageEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationComputerStates, ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates, type ConversationComputer, type MessageEntry } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import { _DeterministicUuid } from "./agent-session-identifiers";
@@ -53,11 +53,46 @@ export class GroupChildHistory
 	/** Commits the initial request and activation together; a retry observes the original first entry. */
 	public async activate(request: GroupChildRequest, source: MessageEntry, payload: StoredConversationPrivatePayload): Promise<void>
 	{
-		if (payload.coordinates.siloId !== request.siloId || payload.coordinates.conversationId !== request.childConversationId || payload.coordinates.authorSubject !== request.requesterSubjectId || source.author.kind !== "human" || source.author.principalId !== request.requestedByPrincipalId || source.author.participantId !== request.requesterSubjectId || source.visibility.audience !== "conversation" || source.id !== request.parentMessageId || source.position !== request.parentMessagePosition.toString())
+		if (
+			payload.coordinates.siloId !== request.siloId
+			|| payload.coordinates.conversationId !== request.childConversationId
+			|| payload.coordinates.authorSubject !== request.requesterSubjectId
+			|| source.author.kind !== ConversationAuthorKinds.Human
+			|| source.author.principalId !== request.requestedByPrincipalId
+			|| source.author.participantId !== request.requesterSubjectId
+			|| source.visibility.audience !== "conversation"
+			|| source.id !== request.parentMessageId
+			|| source.position !== request.parentMessagePosition.toString()
+		)
 			throw new GroupChildConflictError();
 		const id = _DeterministicUuid("group-child-input", request.id);
 		const history = await this.reader.read({ siloId: request.siloId, conversationId: request.childConversationId, fromRevision: 1n, maxCount: 1, maximumBytes: 131_072, signal: AbortSignal.timeout(10_000) });
-		const entry: MessageEntry = { schemaVersion: 1, id, conversationId: request.childConversationId, position: "1", author: source.author, provenance: "human-authored", visibility: { audience: "conversation" }, runId: null, causationId: request.parentMessageId, correlationId: request.id, idempotencyKey: id, occurredAt: request.createdAt.toISOString(), attestation: null, kind: "message", state: "completed", blocks: [{ id: _DeterministicUuid("group-child-input-block", request.id), kind: "text", payloadRef: payload.coordinates.payloadRef, ciphertextDigest: payload.ciphertextDigest }], replyToEntryId: null, addressedAgentIdentityId: request.agentIdentityId, activation: "start" };
+		const entry: MessageEntry = {
+			schemaVersion: 1,
+			id,
+			conversationId: request.childConversationId,
+			position: "1",
+			author: source.author,
+			provenance: "human-authored",
+			visibility: { audience: "conversation" },
+			runId: null,
+			causationId: request.parentMessageId,
+			correlationId: request.id,
+			idempotencyKey: id,
+			occurredAt: request.createdAt.toISOString(),
+			attestation: null,
+			kind: ConversationEntryKinds.Message,
+			state: MessageStates.Completed,
+			blocks: [{
+				id: _DeterministicUuid("group-child-input-block", request.id),
+				kind: ConversationMessageContentBlockKinds.Text,
+				payloadRef: payload.coordinates.payloadRef,
+				ciphertextDigest: payload.ciphertextDigest,
+			}],
+			replyToEntryId: null,
+			addressedAgentIdentityId: request.agentIdentityId,
+			activation: "start",
+		};
 		if (history.entries.length !== 0)
 		{
 			if (!isDeepStrictEqual(history.entries[0], entry))

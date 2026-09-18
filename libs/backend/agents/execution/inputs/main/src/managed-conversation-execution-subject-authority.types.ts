@@ -1,13 +1,13 @@
 import type { ManagedExecutionEvidenceAuthorityPort } from "@opencrane/backend/server/agents/agent-services";
 import type { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
 
-import type { PersonalConversationExecutionSubjectCoordinates, ActiveConversationComputerLeaseReader } from "./personal-conversation-execution-subject-authority.types";
+import type { ConversationExecutionSubjectCoordinates, ActiveConversationComputerLeaseReader } from "./conversation-execution-subject-admission.types";
 import type { ExecutionSubjectAuthority } from "./session-assembly.types";
 
 /** Joins checked company identity history, human requester evidence and the current computer lease. */
 export interface ManagedConversationExecutionSubjectDependencies
 {
-	readonly coordinates: PersonalConversationExecutionSubjectCoordinates;
+	readonly coordinates: ConversationExecutionSubjectCoordinates;
 	readonly identityHistory: Pick<AgentIdentityHistory, "loadActive">;
 	readonly computerHistory: ActiveConversationComputerLeaseReader;
 	readonly executionEvidence: (transaction: Parameters<ExecutionSubjectAuthority["load"]>[2]) => ManagedExecutionEvidenceAuthorityPort;

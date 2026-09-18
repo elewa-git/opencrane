@@ -102,6 +102,8 @@ spec:
               value: "/tmp/litellm/migrations"
             - name: LITELLM_NON_ROOT
               value: "true"
+            - name: CUSTOM_TIKTOKEN_CACHE_DIR
+              value: "/usr/lib/python3.13/site-packages/litellm/litellm_core_utils/tokenizers"
             - name: PRISMA_BINARY_CACHE_DIR
               value: "/tmp/prisma-engines"
             - name: XDG_CACHE_HOME
