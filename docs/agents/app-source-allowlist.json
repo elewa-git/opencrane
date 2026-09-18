@@ -157,6 +157,7 @@
 
     { "path": "apps/skill-authoring/src/authoring_worker.py", "owner": "apps/skill-authoring", "classification": "process-entrypoint" },
     { "path": "apps/conversation-computer/src/main.py", "owner": "apps/conversation-computer", "classification": "process-entrypoint" },
+    { "path": "apps/_infra/litellm/local-development/codespaces-provider-credentials.mjs", "owner": "apps/_infra/litellm", "classification": "app-config" },
     { "path": "apps/_infra/litellm/local-development/config-generation.mjs", "owner": "apps/_infra/litellm", "classification": "app-config" },
     { "path": "apps/_infra/litellm/local-development/provider-selection.mjs", "owner": "apps/_infra/litellm", "classification": "app-config" }
   ],
