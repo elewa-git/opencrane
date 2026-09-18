@@ -66,6 +66,7 @@ export function parseLocalDevelopmentArguments(argumentsList)
 		profile: undefined,
 		alternative: undefined,
 		provider: undefined,
+		defaultProvider: undefined,
 		model: undefined,
 		remoteLiteLLMEndpoint: undefined,
 		remoteLiteLLMMasterKeyFile: undefined,
@@ -92,6 +93,11 @@ export function parseLocalDevelopmentArguments(argumentsList)
 
 			case "--provider":
 				parsed.provider = _readValue(argumentsList, index, argument);
+				index += 1;
+				break;
+
+			case "--default-provider":
+				parsed.defaultProvider = _readValue(argumentsList, index, argument);
 				index += 1;
 				break;
 
@@ -142,6 +148,7 @@ export function parseLocalDevelopmentArguments(argumentsList)
 		if (
 			parsed.alternative
 			|| parsed.provider
+			|| parsed.defaultProvider
 			|| parsed.model
 			|| parsed.remoteLiteLLMEndpoint
 			|| parsed.remoteLiteLLMMasterKeyFile
@@ -170,7 +177,7 @@ export function parseLocalDevelopmentArguments(argumentsList)
 		return parsed;
 	}
 
-	if (parsed.provider || parsed.model)
+	if (parsed.provider || parsed.defaultProvider || parsed.model)
 	{
 		throw new Error("Local provider options apply only to local-llm");
 	}

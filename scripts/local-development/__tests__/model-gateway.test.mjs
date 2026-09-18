@@ -38,3 +38,44 @@ test("local LiteLLM readiness proves authenticated model access and key storage 
 	assert.equal(commands[1].argumentsList.at(-1), "http://127.0.0.1:4000/key/list");
 	assert.equal(commands[3].argumentsList.at(-1), "http://127.0.0.1:4000/key/list");
 });
+
+test("Codespaces allows slow LiteLLM startup and reports the safe container state", async function _CodespacesTimeout()
+{
+	let delays = 0;
+	let requests = 0;
+	const configuration = {
+		abortSignal: new AbortController().signal,
+		codespaceName: "careful-crane-123",
+		liteLLMContainerName: "tier2-litellm",
+		liteLLMPort: 4_000,
+	};
+	const secrets = { liteLLMMasterAuthorizationHeaderPath: "/private/session/litellm-header" };
+	async function _Delay()
+	{
+		delays += 1;
+	}
+
+	async function _Run(command, argumentsList)
+	{
+		if (command === "docker")
+		{
+			assert.deepEqual(argumentsList, [
+				"inspect",
+				"--format",
+				"status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}",
+				"tier2-litellm",
+			]);
+			return { status: 0, stdout: "status=exited exit=1 error=\n" };
+		}
+
+		requests += 1;
+		return { status: 22 };
+	}
+
+	await assert.rejects(waitForLocalLiteLLM(configuration, secrets, {
+		delay: _Delay,
+		runCommand: _Run,
+	}), /within 120 seconds \(status=exited exit=1 error=\)/u);
+	assert.equal(requests, 480);
+	assert.equal(delays, 480);
+});

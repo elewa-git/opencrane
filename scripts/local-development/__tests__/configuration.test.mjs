@@ -39,11 +39,15 @@ test("Codespaces uses only its exact private port 4200 browser origin", function
 	const environment = {
 		CODESPACES: "true",
 		CODESPACE_NAME: "careful-crane-123",
-		GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "app.github.dev"
+		GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "app.github.dev",
+		OPENCRANE_TIER2_DEFAULT_PROVIDER: " openai ",
 	};
 	const configuration = createLocalDevelopmentConfiguration({ profile: "core" }, repositoryRoot, environment);
 	assert.equal(configuration.browserOrigin, "https://careful-crane-123-4200.app.github.dev");
 	assert.equal(configuration.codespaceName, "careful-crane-123");
+	assert.equal(configuration.defaultProvider, "openai");
+	const overridden = createLocalDevelopmentConfiguration({ profile: "core", defaultProvider: "anthropic" }, repositoryRoot, environment);
+	assert.equal(overridden.defaultProvider, "anthropic");
 
 	const invalidEnvironment = { ...environment, CODESPACE_NAME: "bad.example.com" };
 	assert.throws(function _InvalidOrigin()

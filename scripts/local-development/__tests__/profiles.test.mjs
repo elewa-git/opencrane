@@ -51,12 +51,15 @@ test("agent defaults to local LiteLLM and accepts its provider coordinates", fun
 		"local-llm",
 		"--provider",
 		"openai",
+		"--default-provider",
+		"anthropic",
 		"--model",
 		"gpt-5.5",
 	]);
 
 	assert.equal(defaults.alternative, LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM);
 	assert.equal(selected.provider, "openai");
+	assert.equal(selected.defaultProvider, "anthropic");
 	assert.equal(selected.model, "gpt-5.5");
 });
 
@@ -147,6 +150,14 @@ test("model alternatives reject options owned by another alternative", function 
 			"--alternative",
 			"remote-llm",
 			"--provider",
+			"openai",
+		],
+		[
+			"--profile",
+			"agent",
+			"--alternative",
+			"simulated-llm",
+			"--default-provider",
 			"openai",
 		],
 		[

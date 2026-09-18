@@ -69,6 +69,8 @@ test("selection is deterministic and enforces provider ownership", function _Sel
 		_WriteKey(repositoryRoot, "openai");
 		_WriteKey(repositoryRoot, "anthropic");
 		assert.equal(resolveLocalProviderSelection({ repositoryRoot }).provider.name, "anthropic");
+		assert.equal(resolveLocalProviderSelection({ repositoryRoot, defaultProvider: "openai" }).provider.name, "openai");
+		assert.equal(resolveLocalProviderSelection({ repositoryRoot, provider: "anthropic", defaultProvider: "openai" }).provider.name, "anthropic");
 		assert.equal(resolveLocalProviderSelection({ repositoryRoot, provider: "openai" }).model, "openai/gpt-5.5");
 		assert.equal(resolveLocalProviderSelection({ repositoryRoot, model: "openai/gpt-5.4" }).provider.name, "openai");
 		assert.throws(function _Mismatch()
@@ -104,11 +106,15 @@ test("credentials must be owner-only regular files", function _CredentialBoundar
 	}
 });
 
-test("Codespaces selects an explicit reviewed provider without a checkout key file", function _CodespacesSelection()
+test("Codespaces selects explicit, default, or alphabetically first provider credentials", function _CodespacesSelection()
 {
 	const repositoryRoot = _TemporaryRepository();
 	try
 	{
+		const environment = {
+			OPENAI_TIER2_PROVIDER_API_KEY: "openai-secret",
+			ANTHROPIC_TIER2_PROVIDER_API_KEY: "anthropic-secret",
+		};
 		const codespacesOptions = {
 			alternative: "local-llm",
 			codespaceName: "careful-crane-123",
@@ -116,21 +122,27 @@ test("Codespaces selects an explicit reviewed provider without a checkout key fi
 			model: "openai/gpt-5.4",
 			repositoryRoot,
 		};
-		const plan = createModelCredentialPlan(codespacesOptions);
+		const plan = createModelCredentialPlan(codespacesOptions, environment);
 		assert.equal(plan.kind, "local");
 		assert.equal(plan.credentialSource, "codespaces-environment");
 		assert.equal(plan.selection.provider.name, "openai");
 		assert.equal(plan.selection.model, "openai/gpt-5.4");
+		assert.equal(plan.selection.providerKeyEnvironmentVariable, "OPENAI_TIER2_PROVIDER_API_KEY");
 		assert.equal(plan.selection.providerKeyPath, undefined);
-		assert.throws(function _MissingProvider()
-		{
-			const missingProviderOptions = {
-				alternative: "local-llm",
-				codespaceName: "careful-crane-123",
-				repositoryRoot,
-			};
-			createModelCredentialPlan(missingProviderOptions);
-		}, /requires --provider/u);
+
+		const automatic = createModelCredentialPlan({
+			alternative: "local-llm",
+			codespaceName: "careful-crane-123",
+			repositoryRoot,
+		}, environment);
+		assert.equal(automatic.selection.provider.name, "anthropic");
+		const defaulted = createModelCredentialPlan({
+			alternative: "local-llm",
+			codespaceName: "careful-crane-123",
+			defaultProvider: "openai",
+			repositoryRoot,
+		}, environment);
+		assert.equal(defaulted.selection.provider.name, "openai");
 		assert.throws(function _ProviderMismatch()
 		{
 			const mismatchedProviderOptions = {
@@ -140,8 +152,33 @@ test("Codespaces selects an explicit reviewed provider without a checkout key fi
 				model: "openai/gpt-5.4",
 				repositoryRoot,
 			};
-			createModelCredentialPlan(mismatchedProviderOptions);
+			createModelCredentialPlan(mismatchedProviderOptions, environment);
 		}, /does not belong/u);
+		assert.throws(function _MissingSelectedCredential()
+		{
+			createModelCredentialPlan({
+				alternative: "local-llm",
+				codespaceName: "careful-crane-123",
+				provider: "gemini",
+				repositoryRoot,
+			}, environment);
+		}, /GEMINI_TIER2_PROVIDER_API_KEY/u);
+		assert.throws(function _UnreviewedCredential()
+		{
+			createModelCredentialPlan({
+				alternative: "local-llm",
+				codespaceName: "careful-crane-123",
+				repositoryRoot,
+			}, { UNREVIEWED_TIER2_PROVIDER_API_KEY: "secret" });
+		}, /unreviewed providers/u);
+		assert.throws(function _RetiredGenericCredential()
+		{
+			createModelCredentialPlan({
+				alternative: "local-llm",
+				codespaceName: "careful-crane-123",
+				repositoryRoot,
+			}, { OPENCRANE_TIER2_PROVIDER_API_KEY: "secret" });
+		}, /OPENCRANE_TIER2_PROVIDER_API_KEY/u);
 	}
 	finally
 	{

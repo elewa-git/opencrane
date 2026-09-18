@@ -12,7 +12,7 @@ const _HELP = `OpenCrane Tier 2 local development
 Usage:
   npm run dev:tier2 [-- --reset]
   npm run dev:tier2:agent [-- --reset]
-  npm run dev:tier2:agent:local-llm
+  npm run dev:tier2:agent:local-llm [-- --provider openai --model openai/gpt-5.5]
   npm run dev:tier2:agent:remote-llm -- --remote-litellm-endpoint https://… --remote-litellm-master-key-file /absolute/path
   npm run dev:tier2:agent:simulated-llm
   npm run dev:tier2 -- --emulate-amd64
@@ -27,7 +27,13 @@ Agent alternatives:
   simulated-llm  Deterministic model transport without provider credentials
 
 Codespaces:
-  OPENCRANE_TIER2_PROVIDER_API_KEY supplies local-llm and requires an explicit --provider
+  <PROVIDER>_TIER2_PROVIDER_API_KEY supplies an uppercase provider-specific credential
+
+Provider selection:
+  --provider / --model                Select an explicit reviewed provider/model first
+  --default-provider                  Select the command's fallback provider
+  OPENCRANE_TIER2_DEFAULT_PROVIDER    Select the environment's lowercase fallback provider
+  No selection                        Use the first configured credential in lexical order
 
 State:
   --reset        Recreate the paired PostgreSQL and KurrentDB fresh-install state

@@ -168,7 +168,8 @@ test("child processes receive explicit settings without ambient credentials", fu
 	const parentEnvironment = {
 		PATH: "/bin",
 		AWS_SECRET_ACCESS_KEY: "ambient-secret",
-		OPENCRANE_TIER2_PROVIDER_API_KEY: "codespaces-secret"
+		OPENAI_TIER2_PROVIDER_API_KEY: "codespaces-secret",
+		OPENCRANE_TIER2_DEFAULT_PROVIDER: "openai",
 	};
 	const environment = createLocalChildEnvironment(parentEnvironment, { DATABASE_URL: "local" });
 	assert.deepEqual(environment, { PATH: "/bin", DATABASE_URL: "local" });

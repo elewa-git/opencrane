@@ -1,7 +1,8 @@
 import fs from "node:fs";
 
+import { takeCodespacesProviderCredential } from "../../apps/_infra/litellm/local-development/codespaces-provider-credentials.mjs";
 import { prepareLocalLiteLLMConfiguration } from "../../apps/_infra/litellm/local-development/config-generation.mjs";
-import { createModelCredentialPlan, readOwnerOnlyCredentialFile, takeCodespacesProviderCredential } from "../../apps/_infra/litellm/local-development/provider-selection.mjs";
+import { createModelCredentialPlan, readOwnerOnlyCredentialFile } from "../../apps/_infra/litellm/local-development/provider-selection.mjs";
 import { runLocalCommand } from "./command-runner.mjs";
 import { createApplicationCommands, createKurrentCommand, createKurrentTlsVolumeCommand, createLiteLLMCommand, createPostgresCommand, createPostgresVolumeProvisionerCommand } from "./commands.mjs";
 import { applyTargetBaseline, bootstrapKurrent, ensureLiteLLMDatabase, waitForPostgres } from "./database.mjs";
@@ -97,7 +98,7 @@ async function _validateInputs(configuration)
  */
 export async function prepareModelCredentials(configuration, environment = process.env)
 {
-	const plan = createModelCredentialPlan(configuration);
+	const plan = createModelCredentialPlan(configuration, environment);
 
 	if (plan.kind === "simulated")
 	{
@@ -111,7 +112,8 @@ export async function prepareModelCredentials(configuration, environment = proce
 
 	if (plan.credentialSource === "codespaces-environment")
 	{
-		return { ...plan, providerKey: takeCodespacesProviderCredential(environment) };
+		const providerKey = takeCodespacesProviderCredential(environment, plan.selection.providerKeyEnvironmentVariable);
+		return { ...plan, providerKey };
 	}
 
 	return { ...plan, providerKey: readOwnerOnlyCredentialFile(plan.selection.providerKeyPath) };
