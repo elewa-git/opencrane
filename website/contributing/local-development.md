@@ -147,11 +147,14 @@ listener or accept a non-loopback PostgreSQL server.
 Use an Agent profile when the change needs one current Conversation Computer:
 
 ```bash
-# On a workstation, uses local LiteLLM and the first recognized keys/.<provider>-key file.
+# On a workstation, uses the configured default or the first recognized keys/.<provider>-key file.
 npm run dev:tier2:agent
 
-# On a workstation both selectors are optional; Codespaces requires --provider.
+# Selects one provider and optional reviewed model explicitly.
 npm run dev:tier2:agent:local-llm -- --provider openai --model openai/gpt-5.5
+
+# Uses openai as the fallback without making it an explicit provider selection.
+npm run dev:tier2:agent:local-llm -- --default-provider openai
 
 # Uses an existing HTTPS LiteLLM gateway and an owner-only administrator-key file.
 npm run dev:tier2:agent:remote-llm -- \
@@ -168,26 +171,57 @@ Use an AMD64 Codespace with at least 2 cores and 8 GB of memory for Tier 2. When
 Codespace, choose the `OpenCrane Tier 2` configuration at
 `.devcontainer/tier2/devcontainer.json`. That
 configuration installs Docker-in-Docker and the Tier 2 command-line tools, runs `npm ci`, and
-forwards only browser port 4200. For real model calls through the local LiteLLM profile, create the
-personal Codespaces development secret `OPENCRANE_TIER2_PROVIDER_API_KEY` and grant it access only
-to this repository. Stop and restart an existing Codespace after adding or changing the secret. The
-tracked devcontainer configuration recommends the secret by name; it never contains the value.
+forwards only browser port 4200. For real model calls through the local LiteLLM profile, create one
+or more personal Codespaces development secrets from this list and grant them access only to this
+repository:
 
-Because the generic secret does not identify a provider, start the local LiteLLM profile with an
-explicit reviewed provider:
+```text
+ANTHROPIC_TIER2_PROVIDER_API_KEY
+DEEPSEEK_TIER2_PROVIDER_API_KEY
+GEMINI_TIER2_PROVIDER_API_KEY
+GLM_TIER2_PROVIDER_API_KEY
+MISTRAL_TIER2_PROVIDER_API_KEY
+OPENAI_TIER2_PROVIDER_API_KEY
+```
+
+The provider part is uppercase with no spaces. Stop and restart an existing Codespace after adding
+or changing a secret. The tracked devcontainer configuration recommends these names but never
+contains their values.
+
+::: warning Rename the earlier generic secret
+`OPENCRANE_TIER2_PROVIDER_API_KEY` is no longer accepted because its name cannot prove which
+provider owns its value. Replace it with the matching uppercase provider-specific secret before
+restarting the Codespace.
+:::
+
+An explicit provider selects its matching secret:
 
 ```bash
 npm run dev:tier2:agent:local-llm -- --provider openai --model openai/gpt-5.5
 ```
 
-The coordinator removes the secret from its worker environment before validation starts child
-commands. It then supplies the value explicitly to the Docker invocation that starts the loopback
-LiteLLM container; validation and application children do not inherit it. Generated configuration
-and Docker arguments contain only the environment-variable reference. A missing or empty secret,
-omitted provider, unreviewed provider or model, and cross-provider model selection all stop before
-Docker resources are acquired. Check the Architecture line in `docker info` reports `amd64` or
-`x86_64`, then run the core, simulated-Agent or credential-backed Agent command without an
-emulation flag.
+When neither `--provider` nor `--model` selects a provider, the launcher checks
+`--default-provider` first, then `OPENCRANE_TIER2_DEFAULT_PROVIDER`, then the alphabetically first
+configured provider secret. GitHub Codespaces has no repository-controlled per-user value for that
+preference, so add it manually as another personal Codespaces secret with a lowercase value such as
+`openai`. You can then use the plain command:
+
+```bash
+npm run dev:tier2:agent:local-llm
+```
+
+The coordinator removes every matching provider credential from its worker environment before
+validation starts child commands. It supplies only the selected value to the Docker invocation that
+starts loopback LiteLLM; validation and application children do not inherit the provider secrets.
+Generated configuration and Docker arguments contain only the internal environment-variable
+reference. A missing or empty matching secret, unreviewed provider, variable or model, and a
+cross-provider model selection all stop before Docker resources are acquired.
+
+Codespaces allows up to 120 seconds for LiteLLM model routing and key storage to become ready; a
+workstation keeps the 30-second readiness window. If readiness still fails, the error includes the
+safe Docker container status and exit code without printing its environment. Check the Architecture
+line in `docker info` reports `amd64` or `x86_64`, then run the core, simulated-Agent or
+credential-backed Agent command without an emulation flag.
 
 Keep the forwarded 4200 port **private** in the Codespaces Ports view. The launcher derives one
 HTTPS browser address from the Codespace's forwarding variables and prints it without the
@@ -216,10 +250,12 @@ digests remain unchanged. Prefer an AMD64 Codespace when emulation is unreliable
 Outside Codespaces, local provider keys are owner-only regular files named `keys/.openai-key`,
 `keys/.anthropic-key`, `keys/.gemini-key`, `keys/.mistral-key`, `keys/.deepseek-key` or
 `keys/.glm-key`. They must not be symbolic links. The local LiteLLM configuration contains an
-environment-variable reference, never the key value. Codespaces does not read these checkout files
-for `local-llm`; it requires `OPENCRANE_TIER2_PROVIDER_API_KEY` and an explicit `--provider` instead.
-Remote mode accepts only an HTTPS origin and an explicit owner-only administrator-key file; it
-refuses a local provider-key path.
+environment-variable reference, never the key value. `--default-provider openai` chooses
+`keys/.openai-key` for one command. To retain the preference in a trusted local shell configuration,
+set `OPENCRANE_TIER2_DEFAULT_PROVIDER=openai`; an explicit `--provider` or `--model` still wins.
+Codespaces does not read these checkout files and instead uses the uppercase provider-specific
+variables listed above. Remote mode accepts only an HTTPS origin and an explicit owner-only
+administrator-key file; it refuses a local provider-key path.
 
 The workstation-hosted Conversation Computer is a development realization, not an Agent Sandbox.
 It binds only to loopback, is fenced to the current lease and does not advertise Kubernetes,

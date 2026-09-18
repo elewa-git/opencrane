@@ -44,7 +44,7 @@ test("the production credential path enforces remote administrator-key separatio
 	fs.writeFileSync(remoteKeyPath, "remote-administrator\n", { mode: 0o600 });
 	try
 	{
-		const localEnvironment = { OPENCRANE_TIER2_PROVIDER_API_KEY: "codespaces-value-must-not-win" };
+		const localEnvironment = { OPENAI_TIER2_PROVIDER_API_KEY: "codespaces-value-must-not-win" };
 		const localConfiguration = {
 			alternative: "local-llm",
 			provider: "openai",
@@ -54,25 +54,31 @@ test("the production credential path enforces remote administrator-key separatio
 		assert.equal(local.kind, "local");
 		assert.equal(local.credentialSource, "owner-only-file");
 		assert.equal(local.providerKey, "local-provider");
-		assert.equal(localEnvironment.OPENCRANE_TIER2_PROVIDER_API_KEY, "codespaces-value-must-not-win");
+		assert.equal(localEnvironment.OPENAI_TIER2_PROVIDER_API_KEY, "codespaces-value-must-not-win");
 
-		const codespacesEnvironment = { OPENCRANE_TIER2_PROVIDER_API_KEY: "  codespaces-provider  " };
+		const codespacesEnvironment = {
+			OPENAI_TIER2_PROVIDER_API_KEY: "  codespaces-provider  ",
+			ANTHROPIC_TIER2_PROVIDER_API_KEY: "unused-provider",
+			OPENCRANE_TIER2_DEFAULT_PROVIDER: "openai",
+		};
 		const codespacesConfiguration = {
 			alternative: "local-llm",
 			codespaceName: "careful-crane-123",
-			provider: "openai",
+			defaultProvider: "openai",
 			repositoryRoot,
 		};
 		const codespaces = await prepareModelCredentials(codespacesConfiguration, codespacesEnvironment);
 		assert.equal(codespaces.kind, "local");
 		assert.equal(codespaces.credentialSource, "codespaces-environment");
 		assert.equal(codespaces.providerKey, "codespaces-provider");
-		assert.equal("OPENCRANE_TIER2_PROVIDER_API_KEY" in codespacesEnvironment, false);
+		assert.equal(codespaces.selection.provider.name, "openai");
+		assert.equal("OPENAI_TIER2_PROVIDER_API_KEY" in codespacesEnvironment, false);
+		assert.equal("ANTHROPIC_TIER2_PROVIDER_API_KEY" in codespacesEnvironment, false);
+		assert.equal(codespacesEnvironment.OPENCRANE_TIER2_DEFAULT_PROVIDER, "openai");
 
-		const emptyCodespacesEnvironment = { OPENCRANE_TIER2_PROVIDER_API_KEY: "  " };
-		await assert.rejects(prepareModelCredentials(codespacesConfiguration, emptyCodespacesEnvironment), /requires the OPENCRANE_TIER2_PROVIDER_API_KEY/u);
-		assert.equal("OPENCRANE_TIER2_PROVIDER_API_KEY" in emptyCodespacesEnvironment, false);
-		await assert.rejects(prepareModelCredentials(codespacesConfiguration, {}), /requires the OPENCRANE_TIER2_PROVIDER_API_KEY/u);
+		const emptyCodespacesEnvironment = { OPENAI_TIER2_PROVIDER_API_KEY: "  " };
+		await assert.rejects(prepareModelCredentials(codespacesConfiguration, emptyCodespacesEnvironment), /requires the OPENAI_TIER2_PROVIDER_API_KEY/u);
+		await assert.rejects(prepareModelCredentials(codespacesConfiguration, {}), /requires the OPENAI_TIER2_PROVIDER_API_KEY/u);
 
 		const remote = await prepareModelCredentials({
 			alternative: "remote-llm",

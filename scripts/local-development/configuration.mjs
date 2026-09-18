@@ -91,6 +91,7 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 	const kurrentPort = _port(environment, "OPENCRANE_LOCAL_KURRENTDB_PORT", "21139");
 	const liteLLMPort = _port(environment, "OPENCRANE_LOCAL_LITELLM_PORT", "4000");
 	const browserOrigin = _browserOrigin(environment);
+	const environmentDefaultProvider = environment.OPENCRANE_TIER2_DEFAULT_PROVIDER?.trim() || undefined;
 	const occupiedPorts = [
 		postgresPort,
 		kurrentPort,
@@ -111,6 +112,7 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 
 	return {
 		...parsed,
+		defaultProvider: parsed.defaultProvider ?? environmentDefaultProvider,
 		repositoryRoot: realRoot,
 		repositoryIdentity,
 		worktreeIdentity,

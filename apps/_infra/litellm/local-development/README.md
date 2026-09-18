@@ -13,12 +13,19 @@ The catalogue remains owned by the model-routing package through its public
 `libs/backend/server/gateways/model-routing/main/byok-provider-catalog.json` artifact; this package
 does not copy it or reach into private source. On a workstation, provider keys live outside this
 package under `keys/.<provider>-key`. A key must be a non-symbolic regular file readable only by its
-owner. With no explicit choice, the first recognized key filename in lexical order chooses its
-provider and that provider's reviewed default model. In Codespaces, the coordinator instead takes
-`OPENCRANE_TIER2_PROVIDER_API_KEY` from the worker environment and requires `--provider` because the
-generic secret name does not identify its provider. It removes the variable before running validation
-or application child processes. Use `--model` to override the selected provider's reviewed default;
-an unreviewed provider, model, or cross-provider pairing is refused.
+owner. When neither an explicit provider/model nor a configured default selects a provider, the
+first recognized key filename in lexical order chooses its provider and that provider's reviewed
+default model. `--default-provider <name>` or `OPENCRANE_TIER2_DEFAULT_PROVIDER` chooses a
+configured fallback without making every command use `--provider`.
+
+Codespaces reads uppercase provider-specific variables such as `OPENAI_TIER2_PROVIDER_API_KEY` and
+`ANTHROPIC_TIER2_PROVIDER_API_KEY`; it never reads workstation key files. An explicit provider or
+model wins, followed by the configured default and then the first recognized variable in lexical
+order. An explicit or default provider must have its matching secret. The coordinator removes all
+matching credential variables before running validation or application child processes. Use
+`--model` to override the selected provider's reviewed default; an unreviewed provider, model,
+credential variable or cross-provider pairing is refused. The retired generic
+`OPENCRANE_TIER2_PROVIDER_API_KEY` is therefore rejected rather than guessed.
 
 The coordinator writes one session-owned YAML beside its other disposable secrets. It contains only
 the `auto` alias, selected model, and `os.environ/OPENCRANE_LOCAL_PROVIDER_KEY` reference. The
@@ -31,7 +38,10 @@ database for the per-run virtual keys issued by the current Agent path;
 the launch waits for authenticated key storage as well as model discovery before starting OpenCrane.
 Credential bytes are never written into generated YAML or Docker arguments, and normal or failed
 shutdown removes the generated file with the session directory. The Codespaces devcontainer
-recommends the environment secret by name but never stores its value in tracked configuration.
+recommends every supported environment-secret name and the optional default-provider setting but
+never stores their values in tracked configuration. Codespaces gets a 120-second LiteLLM readiness
+window; a workstation keeps the 30-second window. A timeout reports the container's status and exit
+code without printing its environment.
 
 ## Boundary
 
