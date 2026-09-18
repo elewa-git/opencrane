@@ -58,6 +58,7 @@ test("selection consumes the model-routing public catalogue without divergence",
 		"openai",
 	]);
 	assert.equal(providers.find((provider) => provider.name === "openai")?.defaultModel, "openai/gpt-5.5");
+	assert.equal(providers.find((provider) => provider.name === "mistral")?.defaultModel, "mistral/mistral-medium-latest");
 	assert.equal(providers.find((provider) => provider.name === "glm")?.litellmProvider, "zai");
 });
 
