@@ -49,6 +49,11 @@ declared model-routing dependency tracks the public provider catalogue in the Nx
   files writable by the image's `nobody` runtime user. The cluster deployment sets `runAsUser` and
   `runAsGroup` to that account's numeric uid/gid, `65534`, and owns this version tag; Tier 2 pins the
   tag's multi-platform digest in its coordinator.
+- **Offline tokenizer startup:** the image bundles the OpenAI `cl100k_base` tokenizer cache, but its
+  [non-root fallback](https://github.com/BerriAI/litellm/blob/v1.81.9-stable/litellm/litellm_core_utils/default_encoding.py)
+  otherwise selects an empty writable directory and downloads the same data at startup. The cluster
+  and Tier 2 set `CUSTOM_TIKTOKEN_CACHE_DIR` to the bundled read-only cache so startup does not
+  depend on `openaipublic.blob.core.windows.net`.
 - `litellm.enabled` / `opencrane.litellmShared` — render an in-cluster workload, or use a shared endpoint.
 - `litellm.masterKey` / `litellm.existingSecret` (+ `secretKey`) — the LiteLLM master key.
 - `litellm.databaseUrl` / `litellm.existingDatabaseSecret` (+ `databaseSecretKey`) — Postgres connection

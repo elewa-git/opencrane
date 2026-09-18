@@ -29,7 +29,7 @@
   },
   "mistral": {
     "litellmProvider": "mistral",
-    "defaultClass": "flagship",
+    "defaultClass": "balanced",
     "models": [
       { "className": "flagship", "slug": "mistral/mistral-large-latest" },
       { "className": "balanced", "slug": "mistral/mistral-medium-latest" },
