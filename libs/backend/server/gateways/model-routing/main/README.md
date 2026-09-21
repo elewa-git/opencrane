@@ -123,8 +123,10 @@ The adapter accepts HTTP(S) origins without paths, credentials, queries or fragm
 one `POST /v1/chat/completions` with redirects disabled. Serialized request and response bodies are
 limited to 1 MiB each; a completed answer is limited to 65,536 UTF-8 bytes. It rejects parallel tool
 calls, refusals, partial answers and unsupported output formats. `ConversationModelError` carries
-a fixed category without the provider body or original exception. Request fields never enter its
-operation span, and automatic child tracing is suppressed around the HTTP call.
+a fixed category and, for an HTTP rejection, the numeric response status. The provider body, URL,
+headers and original exception are discarded. The same bounded fields identify the failure in the
+structured warning without exposing a prompt or credential. Request fields never enter its operation
+span, and automatic child tracing is suppressed around the HTTP call.
 
 This adapter has no durable retry state. Its caller must reserve dispatch before calling, retain
 the accepted response before acknowledging it, and treat a lost response as uncertain: a failure

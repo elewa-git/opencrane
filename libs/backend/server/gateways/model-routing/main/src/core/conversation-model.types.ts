@@ -27,13 +27,16 @@ export class ConversationModelError extends Error
 {
 	/** Allows the caller to record the category without storing remote content. */
 	readonly code: ConversationModelFailureCodes;
+	/** Retains only the response status when LiteLLM rejected the request. */
+	readonly httpStatus?: number;
 
-	/** Builds an error whose message and stack contain no caller-supplied text. */
-	constructor(code: ConversationModelFailureCodes)
+	/** Builds an error whose message and stack contain no caller- or provider-supplied text. */
+	constructor(code: ConversationModelFailureCodes, httpStatus?: number)
 	{
 		super(`Conversation model request failed: ${code}`);
 		this.name = "ConversationModelError";
 		this.code = code;
+		this.httpStatus = httpStatus;
 	}
 }
 

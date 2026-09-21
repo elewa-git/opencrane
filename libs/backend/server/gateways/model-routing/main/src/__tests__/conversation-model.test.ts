@@ -239,14 +239,25 @@ describe("one conversation model text exchange", function _transportSuite()
 		expect(body).not.toContain("Changed after dispatch.");
 	});
 
-	it.each([302, 401, 429, 500])("refuses HTTP %s without following or retrying", async function _httpFailure(status)
+	it.each([302, 400, 401, 403, 404, 429, 500, 502, 503])("refuses HTTP %s without following or retrying", async function _httpFailure(status)
 	{
 		const fetchMock = vi.fn().mockResolvedValue(new Response("secret remote error", { status, headers: { location: "https://other.example" } }));
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModel(_request())).rejects.toMatchObject({ code: ConversationModelFailureCodes.HttpRejected });
+		const failure = await __RequestConversationModel(_request()).catch(function _capture(error: unknown) { return error; });
+		expect(failure).toBeInstanceOf(ConversationModelError);
+		expect(failure).toMatchObject({ code: ConversationModelFailureCodes.HttpRejected, httpStatus: status });
+		expect(failure).not.toHaveProperty("cause");
+		expect(String(failure)).not.toContain("secret remote error");
+		expect(String(failure)).not.toContain("other.example");
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		expect(fetchMock.mock.calls[0]?.[1].redirect).toBe("error");
-		expect(_telemetry.warnings).toEqual([[{ failureCode: ConversationModelFailureCodes.HttpRejected }, "conversation model request failed"]]);
+		expect(_telemetry.errors).toEqual([failure]);
+		expect(_telemetry.warnings).toEqual([[{
+			failureCode: ConversationModelFailureCodes.HttpRejected,
+			httpStatus: status,
+		}, "conversation model request failed"]]);
+		expect(JSON.stringify(_telemetry.warnings)).not.toContain("secret remote error");
+		expect(JSON.stringify(_telemetry.warnings)).not.toContain("other.example");
 	});
 
 	it("removes the original transport exception before tracing and does not retry a lost response", async function _privateFailure()
