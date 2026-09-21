@@ -314,9 +314,9 @@ test("overlaps image preparation and keeps both direct k3d import strategies", f
 	const smoke = _DevelopSmoke();
 	const imageStorage = _DevelopSmokeImageStorage();
 	assert.match(smoke, /_prepare_images &[\s\S]*?IMAGE_PREPARATION_PID=\$!/u);
-	assert.match(smoke, /if ! wait "\$IMAGE_PREPARATION_PID"/u);
+	assert.match(smoke, /if wait "\$IMAGE_PREPARATION_PID"; then[\s\S]*?else[\s\S]*?_capture_failure "\$status" "\$LINENO"/u);
 	assert.match(smoke, /cert-manager jetstack\/cert-manager[\s\S]*?&[\s\S]*?CERT_MANAGER_INSTALL_PID=\$![\s\S]*?cnpg cnpg\/cloudnative-pg/u);
-	assert.match(smoke, /if ! wait "\$CERT_MANAGER_INSTALL_PID"/u);
+	assert.match(smoke, /if wait "\$CERT_MANAGER_INSTALL_PID"; then[\s\S]*?else[\s\S]*?_capture_failure "\$status" "\$LINENO"/u);
 	assert.match(smoke, /docker buildx build --load/u);
 	assert.match(smoke, /--cache-from "type=registry,ref=\$\{SMOKE_BUILD_CACHE\}:\$\{project\}"/u);
 	assert.match(smoke, /--cache-to "type=registry,ref=\$\{SMOKE_BUILD_CACHE_EXPORT\}:\$\{project\},mode=max"/u);
