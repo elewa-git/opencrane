@@ -224,10 +224,6 @@ value such as `openai`. You can then use the plain command:
 npm run dev:tier2:agent:local-llm
 ```
 
-Mistral defaults to `mistral-medium-latest` because Studio subscription tiers may expose Medium and
-Small while rejecting Large. A workspace entitled to Large can select it explicitly with
-`--model mistral/mistral-large-latest`.
-
 The coordinator removes every matching provider credential from its worker environment before
 validation starts child commands. It supplies only the selected value to the Docker invocation that
 starts loopback LiteLLM; validation and application children do not inherit the provider secrets.

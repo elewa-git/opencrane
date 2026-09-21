@@ -46,9 +46,7 @@ shadow mode, whether a cheaper candidate model would hold quality before it ever
 traffic. The BYOK (bring-your-own-key) model catalogue (`_BYOK_PROVIDER_CATALOG`) is loaded from the
 package-root `byok-provider-catalog.json` public machine-readable authority. Production routing and
 local development both consume that artifact; neither keeps a private copy. Tune that one file as
-providers ship models. Mistral defaults to `mistral-medium-latest` because Studio workspaces may
-allow Medium while rejecting `mistral-large-latest` with `tier_not_allowed`. Large remains
-catalogued for workspaces whose subscription permits it.
+providers ship models.
 
 Model registration reads LiteLLM inventory before creating anything. The pinned 1.81.9 proxy's
 `/v2/model/info` route returns an empty catalogue on a fresh installation, allowing its first model

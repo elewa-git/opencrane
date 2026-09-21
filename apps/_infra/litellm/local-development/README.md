@@ -25,10 +25,6 @@ The reviewed providers are `anthropic`, `deepseek`, `gemini`, `glm`, `mistral` a
 Workstation key filenames use these lowercase names. OpenCrane converts the selected provider to
 its uppercase, space-free Codespaces credential prefix.
 
-Mistral uses `mistral-medium-latest` by default because Studio subscription tiers may expose Medium
-and Small while rejecting Large. An entitled workspace can still select Large explicitly with
-`--model mistral/mistral-large-latest`.
-
 Codespaces reads uppercase provider-specific variables such as `OPENAI_TIER2_PROVIDER_API_KEY` and
 `ANTHROPIC_TIER2_PROVIDER_API_KEY`; it never reads workstation key files. An explicit provider or
 model wins, followed by the configured default and then the first recognized variable in lexical
