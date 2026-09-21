@@ -8,7 +8,7 @@ const _UPSTREAM_TIMEOUT_MILLISECONDS = 15_000;
 /**
  * Creates the loopback proxy with the live ingress certificate and required upstream Host.
  * It admits only coordinator-selected browser authorities before attaching the Agent credential,
- * rejects foreign origins for state changes, and discards browser-supplied forwarding claims.
+ * rejects foreign origins for state changes, and discards forwarding claims before proxying.
  * @returns An unbound HTTP server; the coordinator chooses its loopback port.
  * @throws When the configured upstream is not HTTPS or has no certificate.
  */
@@ -88,10 +88,7 @@ export function tier3BrowserOrigins(port, environment)
  */
 export function isAllowedTier3BrowserRequest(request, allowedBrowserOrigins)
 {
-	const host = request.headers.host;
-
-	if (typeof host !== "string") return false;
-	const expected = allowedBrowserOrigins.find(function _Matches(origin) { return new URL(origin).host === host; });
+	const expected = _BrowserOriginForRequest(request, allowedBrowserOrigins);
 
 	if (!expected) return false;
 	const origin = request.headers.origin;
@@ -111,6 +108,83 @@ export function isAllowedTier3BrowserRequest(request, allowedBrowserOrigins)
 
 	try { return new URL(referer).origin === expected; }
 	catch { return false; }
+}
+
+/**
+ * Selects one coordinator-owned origin from the direct authority or the exact Codespaces forwarding
+ * authority. GitHub may retain an explicit default HTTPS port or replace Host with the loopback
+ * listener, so neither representation can be compared as an unnormalised string.
+ */
+function _BrowserOriginForRequest(request, allowedBrowserOrigins)
+{
+	const host = request.headers.host;
+
+	if (typeof host !== "string")
+		return;
+	const directOrigin = _OriginForAuthority(host, allowedBrowserOrigins) ?? _LoopbackOriginForAuthority(host, allowedBrowserOrigins);
+
+	if (!directOrigin)
+		return;
+	if (new URL(directOrigin).hostname !== "127.0.0.1")
+		return directOrigin;
+	const forwardedOrigin = _ForwardedOrigin(request, allowedBrowserOrigins);
+
+	return forwardedOrigin ?? directOrigin;
+}
+
+/** Returns the allowed origin whose normalised authority matches the supplied Host value. */
+function _OriginForAuthority(authority, allowedBrowserOrigins)
+{
+	const origin = allowedBrowserOrigins.find(function _Matches(candidate) { return _AuthorityMatches(candidate, authority); });
+
+	return origin;
+}
+
+/** Accepts GitHub's internal localhost authority only as an alias for the coordinator's loopback listener. */
+function _LoopbackOriginForAuthority(authority, allowedBrowserOrigins)
+{
+	const loopbackOrigin = allowedBrowserOrigins.find(function _Loopback(origin) { return new URL(origin).hostname === "127.0.0.1"; });
+
+	if (!loopbackOrigin)
+		return;
+	const expected = new URL(loopbackOrigin);
+	const alias = `${expected.protocol}//localhost${expected.port ? `:${expected.port}` : ""}`;
+	const matches = _AuthorityMatches(alias, authority);
+
+	return matches ? loopbackOrigin : undefined;
+}
+
+/** Uses forwarding claims only when they select one exact origin already frozen by the coordinator. */
+function _ForwardedOrigin(request, allowedBrowserOrigins)
+{
+	const forwardedHost = request.headers["x-forwarded-host"];
+	const forwardedProtocol = request.headers["x-forwarded-proto"];
+
+	if (typeof forwardedHost !== "string" || typeof forwardedProtocol !== "string")
+		return;
+	const origin = _OriginForAuthority(forwardedHost, allowedBrowserOrigins);
+
+	if (!origin || new URL(origin).protocol !== `${forwardedProtocol}:`)
+		return;
+
+	return origin;
+}
+
+/** Compares an HTTP authority after URL parsing has removed a default port and normalised its host. */
+function _AuthorityMatches(origin, authority)
+{
+	if (typeof authority !== "string" || /[\s/@?#]/u.test(authority))
+		return false;
+	const expected = new URL(origin);
+	let candidate;
+
+	try { candidate = new URL(`${expected.protocol}//${authority}`); }
+	catch
+	{
+		return false;
+	}
+
+	return candidate.origin === expected.origin && candidate.pathname === "/" && !candidate.search && !candidate.hash;
 }
 
 /**

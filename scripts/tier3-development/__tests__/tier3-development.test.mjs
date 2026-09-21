@@ -317,28 +317,36 @@ test("selects exact browser authorities from the coordinator, not request header
 
 test("rejects foreign Host even for safe reads before the proxy attaches credentials", function _BrowserHost()
 {
-	const allowed = ["http://127.0.0.1:4200"];
+	const allowed = ["http://127.0.0.1:4200", "https://example-codespace-4200.app.github.dev"];
 	const localRead = { method: "GET", headers: { host: "127.0.0.1:4200" } };
+	const codespacesRead = { method: "GET", headers: { host: "example-codespace-4200.app.github.dev:443" } };
+	const forwardedRead = { method: "GET", headers: { host: "localhost:4200", "x-forwarded-host": "example-codespace-4200.app.github.dev", "x-forwarded-proto": "https" } };
 	const foreignRead = { method: "GET", headers: { host: "foreign.example", origin: "http://foreign.example" } };
 	const foreignUpgrade = { method: "GET", headers: { host: "foreign.example", origin: "http://foreign.example", upgrade: "websocket" } };
 	assert.equal(isAllowedTier3BrowserRequest(localRead, allowed), true);
+	assert.equal(isAllowedTier3BrowserRequest(codespacesRead, allowed), true);
+	assert.equal(isAllowedTier3BrowserRequest(forwardedRead, allowed), true);
 	assert.equal(isAllowedTier3BrowserRequest(foreignRead, allowed), false);
 	assert.equal(isAllowedTier3BrowserRequest(foreignUpgrade, allowed), false);
 	assert.equal(isAllowedTier3BrowserRequest({ method: "GET", headers: { host: "127.0.0.1:4200", origin: "http://foreign.example" } }, allowed), false);
 });
 
-test("requires the mutation origin to match the selected Host without trusting forwarding claims", function _BrowserMutation()
+test("requires the mutation origin to match a coordinator-selected direct or forwarded authority", function _BrowserMutation()
 {
 	const allowed = ["http://127.0.0.1:4200", "https://example-codespace-4200.app.github.dev"];
 	const local = { method: "POST", headers: { host: "127.0.0.1:4200", origin: "http://127.0.0.1:4200" } };
 	const forwarded = {
 		method: "POST",
 		headers: {
-			host: "example-codespace-4200.app.github.dev",
+			host: "localhost:4200",
 			origin: "https://example-codespace-4200.app.github.dev",
-			"x-forwarded-proto": "http",
+			"x-forwarded-host": "example-codespace-4200.app.github.dev",
+			"x-forwarded-proto": "https",
 		},
 	};
+	const defaultHttpsPort = { method: "POST", headers: { host: "example-codespace-4200.app.github.dev:443", origin: "https://example-codespace-4200.app.github.dev" } };
+	const foreignForward = { method: "POST", headers: { host: "localhost:4200", origin: "https://example-codespace-4200.app.github.dev", "x-forwarded-host": "foreign.example", "x-forwarded-proto": "https" } };
+	const wrongForwardedProtocol = { method: "POST", headers: { host: "localhost:4200", origin: "https://example-codespace-4200.app.github.dev", "x-forwarded-host": "example-codespace-4200.app.github.dev", "x-forwarded-proto": "http" } };
 	const forgedProtocol = { method: "POST", headers: { host: "127.0.0.1:4200", origin: "https://127.0.0.1:4200", "x-forwarded-proto": "https" } };
 	const mismatchedHost = { method: "POST", headers: { host: "127.0.0.1:4200", origin: "https://example-codespace-4200.app.github.dev" } };
 	const localReferer = { method: "POST", headers: { host: "127.0.0.1:4200", referer: "http://127.0.0.1:4200/onboarding" } };
@@ -347,7 +355,10 @@ test("requires the mutation origin to match the selected Host without trusting f
 	const otherUpgrade = { method: "GET", headers: { host: "127.0.0.1:4200", origin: "http://127.0.0.1:4200", upgrade: "h2c" } };
 	assert.equal(isAllowedTier3BrowserRequest(local, allowed), true);
 	assert.equal(isAllowedTier3BrowserRequest(forwarded, allowed), true);
+	assert.equal(isAllowedTier3BrowserRequest(defaultHttpsPort, allowed), true);
 	assert.equal(isAllowedTier3BrowserRequest(localReferer, allowed), true);
+	assert.equal(isAllowedTier3BrowserRequest(foreignForward, allowed), false);
+	assert.equal(isAllowedTier3BrowserRequest(wrongForwardedProtocol, allowed), false);
 	assert.equal(isAllowedTier3BrowserRequest(forgedProtocol, allowed), false);
 	assert.equal(isAllowedTier3BrowserRequest(mismatchedHost, allowed), false);
 	assert.equal(isAllowedTier3BrowserRequest(missingUpgradeOrigin, allowed), false);
