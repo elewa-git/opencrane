@@ -98,7 +98,10 @@ drift between those deployment-owned coordinates and Tier 2. A local Agent profi
 separate `litellm` database owned by a non-privileged `litellm` role with its own persistent credential
 inside the worktree-owned PostgreSQL service. Startup waits until LiteLLM can read its model catalogue
 and its database-backed virtual-key store, because each Agent turn uses one budget- and lifetime-bound
-key.
+key. In Codespaces, LiteLLM shares PostgreSQL's container network namespace and connects over
+`127.0.0.1:5432`; PostgreSQL owns both loopback-only host port mappings. This avoids Docker bridge DNS
+and inter-container routing failures without forwarding the database or model port. Workstation
+launches retain separate containers on the worktree-owned bridge network.
 
 The current release-bound PostgreSQL image and pinned KurrentDB image need an AMD64 Docker daemon.
 The pinned LiteLLM tag publishes both architectures, but its ARM64 variant lacks the Prisma schema
@@ -248,6 +251,12 @@ database-password values are removed, and the container
 environment is never printed. Check the
 Architecture line in `docker info` reports `amd64` or `x86_64`, then run the core, simulated-Agent
 or credential-backed Agent command without an emulation flag.
+
+If the diagnostic tail contains Prisma `P1001` with an
+`opencrane-tier2-postgres-…:5432` address, LiteLLM could not reach its database. A later Prisma
+query-engine `httpx.ConnectError` is a consequence of that failed database startup; changing the
+provider key or model will not repair it. Confirm the branch contains the Codespaces shared-loopback
+topology described above, then relaunch Tier 2.
 
 The pinned LiteLLM image carries the OpenAI tokenizer cache used during startup. The launcher points
 LiteLLM at that bundled cache, so Codespaces does not need to resolve or contact

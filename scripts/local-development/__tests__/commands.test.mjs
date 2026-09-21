@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { createApplicationCommands, createKurrentCommand, createKurrentTlsVolumeCommand, createLiteLLMCommand, createPostgresCommand, createPostgresVolumeProvisionerCommand } from "../commands.mjs";
 import { createLocalChildEnvironment } from "../command-runner.mjs";
+import { LOCAL_DEVELOPMENT_ALTERNATIVES } from "../profiles.mjs";
 
 const configuration = {
 	alternative: undefined,
@@ -115,13 +116,16 @@ test("PostgreSQL volume helper changes only the owned mount root while the serve
 
 test("local LiteLLM receives its isolated database URL without putting credentials in Docker arguments", function _LiteLLMDatabase()
 {
+	const localConfiguration = { ...configuration, alternative: LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM };
 	const provider = {
 		generatedConfigPath: "/tmp/litellm.yaml",
 		providerKey: "provider-secret",
 		providerKeyEnvironmentVariable: "OPENCRANE_LOCAL_PROVIDER_KEY"
 	};
-	const specification = createLiteLLMCommand(configuration, secrets, provider);
+	const postgres = createPostgresCommand(localConfiguration, secrets);
+	const specification = createLiteLLMCommand(localConfiguration, secrets, provider);
 
+	assert.equal(postgres.arguments.includes("127.0.0.1:4000:4000"), false);
 	assert.equal(specification.arguments.includes("DATABASE_URL"), true);
 	assert.equal(specification.arguments.includes("CUSTOM_TIKTOKEN_CACHE_DIR"), true);
 	assert.equal(specification.arguments.includes("NO_PROXY"), true);
@@ -135,6 +139,29 @@ test("local LiteLLM receives its isolated database URL without putting credentia
 	assert.equal(specification.environment.CUSTOM_TIKTOKEN_CACHE_DIR, "/usr/lib/python3.13/site-packages/litellm/litellm_core_utils/tokenizers");
 	assert.equal(specification.environment.NO_PROXY, "127.0.0.1,localhost,::1");
 	assert.equal(specification.environment.no_proxy, "127.0.0.1,localhost,::1");
+});
+
+test("Codespaces LiteLLM shares PostgreSQL loopback while its host port stays private", function _CodespacesLiteLLMNetwork()
+{
+	const codespace = {
+		...configuration,
+		alternative: LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM,
+		codespaceName: "careful-crane-123"
+	};
+	const provider = {
+		generatedConfigPath: "/tmp/litellm.yaml",
+		providerKey: "provider-secret",
+		providerKeyEnvironmentVariable: "OPENCRANE_LOCAL_PROVIDER_KEY"
+	};
+	const postgres = createPostgresCommand(codespace, secrets);
+	const liteLLM = createLiteLLMCommand(codespace, secrets, provider);
+
+	assert.equal(postgres.arguments.includes("127.0.0.1:54329:5432"), true);
+	assert.equal(postgres.arguments.includes("127.0.0.1:4000:4000"), true);
+	assert.equal(liteLLM.arguments.includes("container:postgres"), true);
+	assert.equal(liteLLM.arguments.includes("network"), false);
+	assert.equal(liteLLM.arguments.includes("127.0.0.1:4000:4000"), false);
+	assert.equal(liteLLM.environment.DATABASE_URL, "postgresql://litellm:litellm-database-secret@127.0.0.1:5432/litellm");
 });
 
 test("application plans start only the current server and Tier 2 UI", function _CurrentProcesses()
