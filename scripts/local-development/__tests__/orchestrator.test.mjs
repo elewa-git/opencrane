@@ -224,8 +224,8 @@ test("a normal run prints only the safe browser URL and removes reverse-owned re
 
 	assert.equal(events.includes("remove:volume:postgres-volume"), false);
 	assert.equal(events.includes("remove:volume:kurrent-volume"), false);
+	assert.equal(events.includes("remove:container:litellm"), true);
 	assert.equal(events.indexOf("credentials") < events.indexOf("validate"), true);
-	assert.equal(events.indexOf("remove:container:litellm") < events.indexOf("remove:container:postgres"), true);
 	assert.equal(events.indexOf("remove:container:postgres") < events.indexOf("start:postgres-volume-provisioner"), true);
 	assert.equal(events.indexOf("start:postgres-volume-provisioner") < events.indexOf("start:postgres"), true);
 	assert.deepEqual(events.slice(-7), [
@@ -247,90 +247,6 @@ test("a normal run prints only the safe browser URL and removes reverse-owned re
 	assert.equal(terminalOutput, expectedOutput);
 	assert.doesNotMatch(terminalOutput, /credential-that-must-not-be-printed/u);
 	assert.doesNotMatch(terminalOutput, /development-session=/u);
-});
-
-test("a local-LLM relaunch removes stale LiteLLM before starting PostgreSQL", async function _StaleLiteLLMOrder()
-{
-	const events = [];
-	const sessionDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "opencrane-tier2-stale-litellm-"));
-	const processHost = new EventEmitter();
-	processHost.platform = "darwin";
-	function _Kill() {}
-
-	processHost.kill = _Kill;
-	const configuration = {
-		alternative: "local-llm",
-		baselineDigest: "baseline",
-		developmentProfile: "agent-local",
-		kurrentVolumeName: "kurrent-volume",
-		liteLLMContainerName: "litellm",
-		networkName: "network",
-		postgresContainerName: "postgres",
-		postgresImage: "postgres@sha256:test",
-		postgresPort: 54_329,
-		postgresVolumeName: "postgres-volume",
-		postgresVolumeProvisionerContainerName: "postgres-volume-provisioner",
-		repositoryIdentity: "repository",
-		repositoryRoot: "/repo",
-		reset: false,
-		sessionLockPath: _SessionLockPath(),
-		worktreeIdentity: "worktree"
-	};
-	async function _Secrets()
-	{
-		return {
-			directory: sessionDirectory,
-			postgresPassword: "postgres-secret"
-		};
-	}
-
-	async function _Credentials()
-	{
-		return {
-			kind: "local",
-			providerKey: "provider-secret",
-			selection: {
-				model: "openai/gpt-5.5",
-				provider: { name: "openai" }
-			}
-		};
-	}
-
-	async function _Remove(kind, name)
-	{
-		events.push(`remove:${kind}:${name}`);
-	}
-
-	async function _Start(specification)
-	{
-		const name = specification.arguments[3];
-		events.push(`start:${name}`);
-
-		if (name === configuration.postgresContainerName)
-			throw new Error("stop after PostgreSQL startup order proof");
-	}
-
-	function _RemoveSecrets()
-	{
-		fs.rmSync(sessionDirectory, { force: true, recursive: true });
-	}
-
-	async function _Noop() {}
-
-	const operations = {
-		createLocalDevelopmentSecrets: _Secrets,
-		ensureOwnedNetwork: _Noop,
-		ensureOwnedVolume: _Noop,
-		prepareModelCredentials: _Credentials,
-		processHost,
-		removeLocalDevelopmentSecrets: _RemoveSecrets,
-		removeOwnedDockerResource: _Remove,
-		runSpecification: _Start,
-		validateInputs: _Noop
-	};
-
-	await assert.rejects(runLocalDevelopmentSession(configuration, operations), /startup order proof/u);
-	assert.equal(events.indexOf("remove:container:litellm") < events.indexOf("start:postgres"), true);
 });
 
 test("a second command warns without touching the active session", async function _ConcurrentSession()

@@ -206,8 +206,8 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 		await operations.ensureOwnedNetwork(sessionConfiguration, { signal: shutdown.signal });
 		await operations.ensureOwnedVolume(sessionConfiguration.kurrentVolumeName, sessionConfiguration, { signal: shutdown.signal });
 		await operations.ensureOwnedVolume(sessionConfiguration.postgresVolumeName, sessionConfiguration, { signal: shutdown.signal });
-		// Remove LiteLLM first because an interrupted run from the earlier topology can leave it owning
-		// host port 4000, which the replacement Codespaces PostgreSQL container must bind.
+		// Remove an owned LiteLLM container left by an interrupted earlier session, including when
+		// the replacement profile does not use a model gateway.
 		await operations.removeOwnedDockerResource("container", sessionConfiguration.liteLLMContainerName, sessionConfiguration);
 		await operations.removeOwnedDockerResource("container", sessionConfiguration.postgresContainerName, sessionConfiguration);
 		await operations.removeOwnedDockerResource("container", sessionConfiguration.postgresVolumeProvisionerContainerName, sessionConfiguration);
