@@ -43,11 +43,15 @@ credential variable or cross-provider pairing is refused. The retired generic
 The coordinator writes one session-owned YAML beside its other disposable secrets. It contains only
 the `auto` alias, selected model, and `os.environ/OPENCRANE_LOCAL_PROVIDER_KEY` reference. The
 coordinator supplies that one provider key and a separate disposable LiteLLM master key to the
-loopback-bound container. On ARM Docker daemons, `--emulate-amd64` also runs LiteLLM through AMD64
-emulation because the pinned ARM64 variant lacks the Prisma schema engine required to initialize its
-key store. The coordinator also creates an isolated `litellm` database and non-privileged database
-role with its own persistent credential in Tier 2's owned PostgreSQL service. LiteLLM needs that
-database for the per-run virtual keys issued by the current Agent path;
+loopback-bound container. In Codespaces, LiteLLM shares the PostgreSQL container's network namespace
+and reaches that database at `127.0.0.1:5432`. PostgreSQL owns both loopback-only host port mappings
+in that composition, so the model gateway remains private while avoiding Codespaces Docker bridge
+DNS and inter-container routing failures. Workstation launches retain separate containers on the
+worktree-owned bridge network. On ARM Docker daemons, `--emulate-amd64` also runs LiteLLM through
+AMD64 emulation because the pinned ARM64 variant lacks the Prisma schema engine required to
+initialize its key store. The coordinator also creates an isolated `litellm` database and
+non-privileged database role with its own persistent credential in Tier 2's owned PostgreSQL service.
+LiteLLM needs that database for the per-run virtual keys issued by the current Agent path;
 the launch waits for authenticated key storage as well as model discovery before starting OpenCrane.
 Credential bytes are never written into generated YAML or Docker arguments, and normal or failed
 shutdown removes the generated file with the session directory. The Codespaces devcontainer
@@ -65,6 +69,11 @@ paths share a limit of two restarts within the startup budget. Other exits are n
 early exit or timeout reports the latest container state and, when Docker returns it before the
 deadline, a bounded startup-log tail after removing the provider key, LiteLLM master key and
 database password. It never prints the container environment.
+
+A LiteLLM startup log containing Prisma `P1001` and the worktree PostgreSQL container name means the
+model gateway could not reach its database. The later Prisma query-engine `httpx.ConnectError` is a
+secondary startup failure, not a provider-key or model error. Codespaces launches prevent that path
+by using the shared loopback namespace described above.
 
 The pinned image includes its OpenAI tokenizer cache. Tier 2 points
 `CUSTOM_TIKTOKEN_CACHE_DIR` at that bundled read-only directory so Codespaces startup does not

@@ -6,9 +6,29 @@ const _LITELLM_BUNDLED_TIKTOKEN_CACHE_DIRECTORY = "/usr/lib/python3.13/site-pack
 /** Sets both conventional proxy-exclusion names so LiteLLM keeps Prisma loopback traffic local. */
 const _LITELLM_LOOPBACK_NO_PROXY = "127.0.0.1,localhost,::1";
 
-/** Builds the PostgreSQL container labeled for this checkout and target baseline. */
+/**
+ * Returns whether LiteLLM must share PostgreSQL's network namespace.
+ *
+ * Codespaces uses this path because LiteLLM could not reach PostgreSQL through the Docker bridge hostname.
+ */
+function _usesCodespacesLiteLLMNetworkNamespace(configuration)
+{
+	return Boolean(configuration.codespaceName)
+		&& configuration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM;
+}
+
+/**
+ * Builds the PostgreSQL container for this checkout and target baseline.
+ *
+ * A Codespaces local-LLM run also publishes LiteLLM's port here because PostgreSQL owns the shared
+ * network namespace. Both ports bind to host loopback.
+ */
 export function createPostgresCommand(configuration, secrets)
 {
+	const liteLLMPortArguments = _usesCodespacesLiteLLMNetworkNamespace(configuration)
+		? ["--publish", `127.0.0.1:${configuration.liteLLMPort}:4000`]
+		: [];
+
 	return {
 		command: "docker",
 		arguments: [
@@ -16,6 +36,7 @@ export function createPostgresCommand(configuration, secrets)
 			...createDockerLabelArguments(configuration),
 			"--network", configuration.networkName,
 			"--publish", `127.0.0.1:${configuration.postgresPort}:5432`,
+			...liteLLMPortArguments,
 			"--mount", `type=volume,source=${configuration.postgresVolumeName},target=/var/lib/postgresql/data`,
 			"--tmpfs", "/var/run/postgresql:uid=26,gid=26,mode=0700,size=16m",
 			"--env", "POSTGRES_USER", "--env", "POSTGRES_PASSWORD", "--env", "POSTGRES_DB",
@@ -99,16 +120,26 @@ export function createKurrentTlsVolumeCommand(configuration, secrets)
 	};
 }
 
-/** Builds the optional local LiteLLM container from the reviewed generated configuration. */
+/**
+ * Builds local LiteLLM from the reviewed generated configuration.
+ *
+ * Codespaces joins PostgreSQL's network namespace and uses its loopback database address; workstation
+ * runs keep LiteLLM on the worktree bridge and address PostgreSQL by container name.
+ */
 export function createLiteLLMCommand(configuration, secrets, provider)
 {
+	const sharesPostgresNetwork = _usesCodespacesLiteLLMNetworkNamespace(configuration);
+	const networkArguments = sharesPostgresNetwork
+		? ["--network", `container:${configuration.postgresContainerName}`]
+		: ["--network", configuration.networkName, "--publish", `127.0.0.1:${configuration.liteLLMPort}:4000`];
+	const databaseHost = sharesPostgresNetwork ? "127.0.0.1" : configuration.postgresContainerName;
+
 	return {
 		command: "docker",
 		arguments: [
 			"run", ...(configuration.emulateAmd64 ? ["--platform", "linux/amd64"] : []), "--detach", "--name", configuration.liteLLMContainerName,
 			...createDockerLabelArguments(configuration),
-			"--network", configuration.networkName,
-			"--publish", `127.0.0.1:${configuration.liteLLMPort}:4000`,
+			...networkArguments,
 			"--mount", `type=bind,source=${provider.generatedConfigPath},target=/app/config.yaml,readonly`,
 			"--env", provider.providerKeyEnvironmentVariable,
 			"--env", "LITELLM_MASTER_KEY",
@@ -122,7 +153,7 @@ export function createLiteLLMCommand(configuration, secrets, provider)
 		environment: {
 			[provider.providerKeyEnvironmentVariable]: provider.providerKey,
 			LITELLM_MASTER_KEY: secrets.liteLLMMasterKey,
-			DATABASE_URL: `postgresql://litellm:${encodeURIComponent(secrets.liteLLMDatabasePassword)}@${configuration.postgresContainerName}:5432/litellm`,
+			DATABASE_URL: `postgresql://litellm:${encodeURIComponent(secrets.liteLLMDatabasePassword)}@${databaseHost}:5432/litellm`,
 			CUSTOM_TIKTOKEN_CACHE_DIR: _LITELLM_BUNDLED_TIKTOKEN_CACHE_DIRECTORY,
 			NO_PROXY: _LITELLM_LOOPBACK_NO_PROXY,
 			no_proxy: _LITELLM_LOOPBACK_NO_PROXY

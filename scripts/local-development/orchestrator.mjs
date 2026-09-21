@@ -206,6 +206,9 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 		await operations.ensureOwnedNetwork(sessionConfiguration, { signal: shutdown.signal });
 		await operations.ensureOwnedVolume(sessionConfiguration.kurrentVolumeName, sessionConfiguration, { signal: shutdown.signal });
 		await operations.ensureOwnedVolume(sessionConfiguration.postgresVolumeName, sessionConfiguration, { signal: shutdown.signal });
+		// Remove LiteLLM first because an interrupted run from the earlier topology can leave it owning
+		// host port 4000, which the replacement Codespaces PostgreSQL container must bind.
+		await operations.removeOwnedDockerResource("container", sessionConfiguration.liteLLMContainerName, sessionConfiguration);
 		await operations.removeOwnedDockerResource("container", sessionConfiguration.postgresContainerName, sessionConfiguration);
 		await operations.removeOwnedDockerResource("container", sessionConfiguration.postgresVolumeProvisionerContainerName, sessionConfiguration);
 		ledger.acquire("PostgreSQL volume provisioner", async function _RemovePostgresProvisioner() { await operations.removeOwnedDockerResource("container", sessionConfiguration.postgresVolumeProvisionerContainerName, sessionConfiguration); });
@@ -228,7 +231,6 @@ export async function runLocalDevelopmentSession(configuration, operationOverrid
 		if (provider)
 		{
 			await operations.ensureLiteLLMDatabase(sessionConfiguration, secrets);
-			await operations.removeOwnedDockerResource("container", sessionConfiguration.liteLLMContainerName, sessionConfiguration);
 			ledger.acquire("LiteLLM container", async function _removeLiteLLM() { await operations.removeOwnedDockerResource("container", sessionConfiguration.liteLLMContainerName, sessionConfiguration); });
 			await operations.runSpecification(createLiteLLMCommand(sessionConfiguration, secrets, provider), sessionConfiguration);
 			await operations.waitForLocalLiteLLM(sessionConfiguration, secrets, provider);
