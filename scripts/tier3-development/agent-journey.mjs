@@ -1,5 +1,3 @@
-import { lstat, readFile } from "node:fs/promises";
-import { isAbsolute } from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { createTier3AgentRequest } from "./agent-journey-client.mjs";
@@ -16,14 +14,13 @@ import { waitForTier3AgentAnswer } from "./agent-journey-response.mjs";
  */
 export async function runTier3AgentJourney(input, operations = {})
 {
-	const providerKey = await (operations.readProviderKey ?? readTier3ProviderKey)(input.options.providerKeyFile);
 	const request = createTier3AgentRequest(input.origin, input.credential, operations.fetch ?? fetch, operations.requestTimeoutMilliseconds);
 	const sleep = operations.sleep ?? _Sleep;
 	const now = operations.now ?? Date.now;
 	const uuid = operations.uuid ?? randomUUID;
 	const write = operations.write ?? function _Write(message) { process.stdout.write(message); };
-	write(`Tier 3 agent is configuring ${input.options.provider} through the current BYOK authority.\n`);
-	await configureTier3Provider(request, input.options.provider, providerKey, sleep, now);
+	write(`Tier 3 agent is configuring ${input.provider} through the current BYOK authority.\n`);
+	await configureTier3Provider(request, input.provider, input.providerKey, sleep, now);
 	await request("GET", "/api/v1/me/onboarding");
 	await completeTier3Persona(request);
 	await completeTier3BootstrapChat(request, uuid);
@@ -37,23 +34,6 @@ export async function runTier3AgentJourney(input, operations = {})
 	const answer = await waitForTier3AgentAnswer(request, conversationId, accepted.body.position, messageId, sleep, now);
 	write(`Tier 3 agent proved a provider-backed response through Agent Sandbox (${answer.length} characters).\n`);
 	return { conversationId, responseLength: answer.length };
-}
-
-/**
- * Reads a provider key from an absolute, owner-only regular file and rejects a symbolic-link key
- * path. This check keeps the Agent profile from accepting a broadly readable credential.
- * @returns The trimmed, non-empty provider key.
- * @throws When the path or file permissions do not meet the credential contract.
- */
-export async function readTier3ProviderKey(path)
-{
-	if (!isAbsolute(path)) throw new Error("Tier 3 provider key file must use an absolute path.");
-	const metadata = await lstat(path);
-	if (!metadata.isFile() || metadata.isSymbolicLink()) throw new Error("Tier 3 provider key must be an ordinary file, not a link.");
-	if ((metadata.mode & 0o077) !== 0) throw new Error("Tier 3 provider key file must be owner-only; run chmod 600 on it.");
-	const key = (await readFile(path, "utf8")).trim();
-	if (!key) throw new Error("Tier 3 provider key file is empty.");
-	return key;
 }
 
 function _Sleep(milliseconds) { return new Promise(function _Wait(resolve) { setTimeout(resolve, milliseconds); }); }

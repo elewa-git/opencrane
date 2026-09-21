@@ -215,10 +215,16 @@ npm run dev:tier2:agent:local-llm -- --provider openai --model openai/gpt-5.5
 
 When neither `--provider` nor `--model` selects a provider, Codespaces checks
 `--default-provider` first, then `OPENCRANE_TIER2_DEFAULT_PROVIDER`, then the alphabetically first
-configured provider secret. `--default-provider` selects only that Codespaces launch because the
-launcher cannot create or update an account-owned Codespaces secret. To retain the preference, add
-`OPENCRANE_TIER2_DEFAULT_PROVIDER` manually as another personal Codespaces secret with a lowercase
-value such as `openai`. You can then use the plain command:
+configured provider secret. `--default-provider` sets the custom environment variable for the
+current coordinator. The launcher cannot modify its parent shell or a GitHub account setting. To
+retain this nonsecret preference, add a lowercase value to the Codespace's `~/.bashrc` or personal
+dotfiles:
+
+```bash
+export OPENCRANE_TIER2_DEFAULT_PROVIDER=openai
+```
+
+You can then use the plain command:
 
 ```bash
 npm run dev:tier2:agent:local-llm
@@ -400,8 +406,8 @@ SMOKE_HOST_PROFILE=recommended npm run dev:tier3:infra -- --storage-mode full
 development or CI host. `--smoke-only` completes the cluster qualification and returns without
 keeping the browser proxy open.
 
-For the Agent profile, place one supported provider key in an owner-only ordinary file. The file
-must use an absolute path and must not be a symbolic link:
+For the Agent profile on a workstation, place one supported provider key in an owner-only ordinary
+file. The file must use an absolute path and must not be a symbolic link:
 
 ```bash
 chmod 600 /absolute/path/to/openai-key
@@ -416,6 +422,32 @@ does not put it into Helm values or print it. The proof completes the current pe
 guided onboarding, creates the published personal Agent, submits one message and waits for the
 correlated provider-backed response from a current Agent Sandbox run. A deterministic or simulated
 model response is not accepted as Tier 3 Agent proof.
+
+In Codespaces, configure one or more provider-specific development secrets:
+
+```text
+ANTHROPIC_TIER3_PROVIDER_API_KEY
+DEEPSEEK_TIER3_PROVIDER_API_KEY
+GEMINI_TIER3_PROVIDER_API_KEY
+GLM_TIER3_PROVIDER_API_KEY
+MISTRAL_TIER3_PROVIDER_API_KEY
+OPENAI_TIER3_PROVIDER_API_KEY
+```
+
+Run `npm run dev:tier3:agent` to use the alphabetically first configured provider. An explicit
+`--provider` wins. Otherwise `--default-provider`, then a manually exported
+`OPENCRANE_TIER3_DEFAULT_PROVIDER`, selects the matching secret. The flag sets the custom
+environment variable for the current coordinator. To retain the nonsecret preference for later
+Codespaces launches, export it from `~/.bashrc` or personal dotfiles:
+
+```bash
+export OPENCRANE_TIER3_DEFAULT_PROVIDER=openai
+```
+
+The coordinator consumes only the selected key in memory and removes every matching Tier 3
+provider-secret variable before it measures capacity or starts smoke, Docker, Helm or application
+child processes. Codespaces refuses `--provider-key-file`; workstations retain the owner-only file
+contract.
 
 After infrastructure qualification, the command prints a loopback browser URL. In GitHub
 Codespaces, keep the forwarded port **private**. The proxy pins the certificate named by the live

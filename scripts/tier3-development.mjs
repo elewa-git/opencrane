@@ -9,6 +9,7 @@ import { runTier3AgentJourney } from "./tier3-development/agent-journey.mjs";
 import { classifyTier3Capacity, formatTier3Capacity, measureTier3Capacity } from "./tier3-development/host-capacity.mjs";
 import { readTier3IngressCertificate } from "./tier3-development/ingress-certificate.mjs";
 import { parseTier3Options, TIER3_HELP } from "./tier3-development/options.mjs";
+import { prepareTier3ProviderCredentials } from "./tier3-development/provider-credentials.mjs";
 import { assertTier3ResourceReplacement, inspectTier3Resources, tier3ResourceIdentity } from "./tier3-development/resource-ownership.mjs";
 
 const _REPOSITORY_ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -25,6 +26,7 @@ export async function runTier3Development(options, operations = {})
 {
 	const write = operations.write ?? function _Write(message) { process.stdout.write(message); };
 	const environment = operations.environment ?? process.env;
+	const providerCredentials = await (operations.prepareProviderCredentials ?? prepareTier3ProviderCredentials)(options, environment);
 	const allowedBrowserOrigins = options.smokeOnly ? null : tier3BrowserOrigins(options.proxyPort, environment);
 	const capacity = classifyTier3Capacity(await (operations.measureCapacity ?? measureTier3Capacity)());
 	write(`${formatTier3Capacity(capacity)}\n`);
@@ -53,7 +55,16 @@ export async function runTier3Development(options, operations = {})
 	write("Keep the Codespaces forwarded port private. The owned k3d cluster remains available for diagnosis.\n");
 	try
 	{
-		if (options.profile === "agent") await (operations.runAgentJourney ?? runTier3AgentJourney)({ credential: developmentCredential, options, origin: `http://127.0.0.1:${options.proxyPort}` });
+		if (options.profile === "agent")
+		{
+			const agentJourneyInput = {
+				credential: developmentCredential,
+				origin: `http://127.0.0.1:${options.proxyPort}`,
+				...providerCredentials
+			};
+			await (operations.runAgentJourney ?? runTier3AgentJourney)(agentJourneyInput);
+		}
+
 		await (operations.waitForShutdown ?? _WaitForShutdown)(server);
 	}
 	catch (error)

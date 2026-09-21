@@ -60,6 +60,7 @@ test("Codespaces uses only its exact private port 4200 browser origin", function
 		defaultProvider: "anthropic",
 	}, repositoryRoot, environment, operations);
 	assert.equal(overridden.defaultProvider, "anthropic");
+	assert.equal(environment.OPENCRANE_TIER2_DEFAULT_PROVIDER, "anthropic");
 
 	const invalidEnvironment = { ...environment, CODESPACE_NAME: "bad.example.com" };
 	assert.throws(function _InvalidOrigin()

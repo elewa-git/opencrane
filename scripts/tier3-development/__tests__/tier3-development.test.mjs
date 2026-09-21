@@ -70,9 +70,11 @@ test("parses the separate infra and agent contracts", function _Options()
 {
 	assert.equal(parseTier3Options(["--profile", "infra"]).storageMode, "fast");
 	assert.equal(parseTier3Options(["--profile", "agent", "--provider", "OpenAI", "--provider-key-file", "/tmp/key"]).provider, "openai");
+	assert.equal(parseTier3Options(["--profile", "agent", "--default-provider", "Anthropic"]).defaultProvider, "anthropic");
 	assert.throws(function _Credentials() { parseTier3Options(["--profile", "infra", "--provider", "openai"]); }, /refuses provider credentials/u);
-	assert.throws(function _Missing() { parseTier3Options(["--profile", "agent"]); }, /requires --provider/u);
+	assert.doesNotThrow(function _CodespacesDiscovery() { parseTier3Options(["--profile", "agent"]); });
 	assert.throws(function _Unsupported() { parseTier3Options(["--profile", "agent", "--provider", "unsupported", "--provider-key-file", "/tmp/key"]); }, /provider must be one of/u);
+	assert.throws(function _UnsupportedDefault() { parseTier3Options(["--profile", "agent", "--default-provider", "unsupported"]); }, /default provider must be one of/u);
 });
 
 test("reports exact minimum and recommended host shortfalls", function _Capacity()
@@ -429,12 +431,50 @@ test("closes the browser proxy when the agent qualification fails", async functi
 		inspectResources: async function _Inspect() { return { existingOwner: null }; },
 		listenProxy: async function _Listen() { order.push("listen"); },
 		measureCapacity: async function _Capacity() { return { cpu: 8, memoryGiB: 32, storageAvailableGiB: 80, storageGiB: 100 }; },
+		prepareProviderCredentials: async function _Credentials() { return { provider: "openai", providerKey: "provider-key" }; },
 		readCertificate: async function _Certificate() { return "certificate"; },
 		runAgentJourney: async function _Journey() { order.push("journey"); throw new Error("qualification failed"); },
 		runSmoke: async function _Smoke() {},
 		write: function _Write() {},
 	}), /qualification failed/u);
 	assert.deepEqual(order, ["listen", "journey", "close"]);
+});
+
+test("removes every Codespaces provider key before Tier 3 child work", async function _CodespacesCredentialBoundary()
+{
+	const providerKey = "selected-provider-key";
+	const environment = {
+		CODESPACES: "true",
+		CODESPACE_NAME: "example-codespace",
+		GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "app.github.dev",
+		ANTHROPIC_TIER3_PROVIDER_API_KEY: "unused-provider-key",
+		OPENAI_TIER3_PROVIDER_API_KEY: providerKey,
+	};
+	let journeyInput;
+	await runTier3Development(parseTier3Options(["--profile", "agent", "--provider", "openai"]), {
+		createProxy: function _Proxy() { return {}; },
+		environment,
+		inspectResources: async function _Inspect() { return { existingOwner: null }; },
+		listenProxy: async function _Listen() {},
+		measureCapacity: async function _Capacity()
+		{
+			assert.equal("OPENAI_TIER3_PROVIDER_API_KEY" in environment, false);
+			assert.equal("ANTHROPIC_TIER3_PROVIDER_API_KEY" in environment, false);
+			return { cpu: 8, memoryGiB: 32, storageAvailableGiB: 80, storageGiB: 100 };
+		},
+		readCertificate: async function _Certificate() { return "certificate"; },
+		runAgentJourney: async function _Journey(input) { journeyInput = input; },
+		runSmoke: async function _Smoke(smokeEnvironment)
+		{
+			assert.equal("OPENAI_TIER3_PROVIDER_API_KEY" in smokeEnvironment, false);
+			assert.equal("ANTHROPIC_TIER3_PROVIDER_API_KEY" in smokeEnvironment, false);
+			assert.doesNotMatch(JSON.stringify(smokeEnvironment), /provider-key/u);
+		},
+		waitForShutdown: async function _Shutdown() {},
+		write: function _Write() {},
+	});
+	assert.equal(journeyInput.provider, "openai");
+	assert.equal(journeyInput.providerKey, providerKey);
 });
 
 test("keeps the shared smoke defaults compatible with CI", async function _SmokeContract()
@@ -459,6 +499,16 @@ test("keeps the shared smoke defaults compatible with CI", async function _Smoke
 	assert.match(source, /docker image prune --all --force --filter "label=\$\{SMOKE_OWNER_IMAGE_LABEL\}"/u);
 	assert.match(source, /if \[\[ "\$KEEP_CLUSTER" == "1" && "\$SMOKE_CLUSTER_CREATED" == "1" \]\]; then/u);
 	assert.match(source, /SMOKE_CLUSTER_CREATED=1/u);
+	assert.match(source, /set -Eeuo pipefail/u);
+	assert.match(source, /trap '_capture_failure "\$\?" "\$LINENO"' ERR/u);
+	assert.match(source, /FAILURE: phase='\$\{SMOKE_FAILURE_PHASE:-unknown\}' line='\$\{SMOKE_FAILURE_LINE:-unknown\}' status='\$\{SMOKE_FAILURE_STATUS:-\$exit_code\}'/u);
+	assert.match(source, /_start_phase "verify database authority isolation"/u);
+	assert.match(source, /_start_phase "verify KurrentDB secure probe contract"/u);
+	assert.match(source, /_start_phase "verify Agent Sandbox runtime resources"/u);
+	assert.match(source, /_start_phase "verify public ingress health"/u);
+	assert.equal((source.match(/_capture_failure "\$status" "\$LINENO"/gu) ?? []).length, 2);
+	assert.match(source, /_start_phase "wait for cert-manager installation"/u);
+	assert.match(source, /_start_phase "prepare candidate images"/u);
 });
 
 test("smoke ownership mode fails closed on orphans, foreign nodes, volumes, and Docker errors", function _SmokeOwnershipBehavior()
@@ -481,6 +531,8 @@ test("smoke ownership mode fails closed on orphans, foreign nodes, volumes, and 
 test("pins the Tier 3 devcontainer tools for amd64 and arm64", async function _DevcontainerContract()
 {
 	const source = await readFile(new URL("../../../.devcontainer/Dockerfile", import.meta.url), "utf8");
+	const tier3 = JSON.parse(await readFile(new URL("../../../.devcontainer/devcontainer.json", import.meta.url), "utf8"));
+	const tier2 = JSON.parse(await readFile(new URL("../../../.devcontainer/tier2/devcontainer.json", import.meta.url), "utf8"));
 	assert.match(source, /ARG TARGETARCH/u);
 	assert.match(source, /amd64\) HELM_SHA256="\$\{HELM_SHA256_AMD64\}"; K3D_SHA256="\$\{K3D_SHA256_AMD64\}"; KUBECTL_SHA256="\$\{KUBECTL_SHA256_AMD64\}"/u);
 	assert.match(source, /arm64\) HELM_SHA256="\$\{HELM_SHA256_ARM64\}"; K3D_SHA256="\$\{K3D_SHA256_ARM64\}"; KUBECTL_SHA256="\$\{KUBECTL_SHA256_ARM64\}"/u);
@@ -489,4 +541,14 @@ test("pins the Tier 3 devcontainer tools for amd64 and arm64", async function _D
 	assert.match(source, /k3d-linux-\$\{TARGETARCH\}/u);
 	assert.match(source, /bin\/linux\/\$\{TARGETARCH\}\/kubectl/u);
 	assert.equal((source.match(/sha256sum --check -/gu) ?? []).length, 3);
+	assert.deepEqual(Object.keys(tier3.secrets).sort(), [
+		"ANTHROPIC_TIER3_PROVIDER_API_KEY",
+		"DEEPSEEK_TIER3_PROVIDER_API_KEY",
+		"GEMINI_TIER3_PROVIDER_API_KEY",
+		"GLM_TIER3_PROVIDER_API_KEY",
+		"MISTRAL_TIER3_PROVIDER_API_KEY",
+		"OPENAI_TIER3_PROVIDER_API_KEY",
+	]);
+	assert.equal("OPENCRANE_TIER3_DEFAULT_PROVIDER" in tier3.secrets, false);
+	assert.equal("OPENCRANE_TIER2_DEFAULT_PROVIDER" in tier2.secrets, false);
 });

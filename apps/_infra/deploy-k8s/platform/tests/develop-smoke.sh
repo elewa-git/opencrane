@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 # Blocking current-silo smoke for develop. This deliberately stays smaller than the retired
 # backup/recovery qualification: it proves Nx-affected app images plus digest-validated baseline
@@ -35,6 +35,10 @@ SMOKE_LOCAL_REGISTRY_ADDRESS=""
 SMOKE_CLUSTER_CREATED=0
 SMOKE_REGISTRY_CREATED=0
 SMOKE_REGISTRY_CONTAINER_ID=""
+SMOKE_CURRENT_PHASE="initialization"
+SMOKE_FAILURE_LINE=""
+SMOKE_FAILURE_PHASE=""
+SMOKE_FAILURE_STATUS=""
 KEY_DIR=""
 CSI_DIR=""
 IMAGE_PREPARATION_PID=""
@@ -75,6 +79,30 @@ _retry()
     sleep "$((attempt * 5))"
     attempt=$((attempt + 1))
   done
+}
+
+# Capture only a stable phase and source line. Raw commands can contain generated credentials and
+# therefore must not be copied into diagnostics.
+_capture_failure()
+{
+  local status="$1"
+  local line="$2"
+  if [[ -z "$SMOKE_FAILURE_STATUS" ]]; then
+    SMOKE_FAILURE_STATUS="$status"
+    SMOKE_FAILURE_LINE="$line"
+    SMOKE_FAILURE_PHASE="$SMOKE_CURRENT_PHASE"
+  fi
+}
+
+_start_phase()
+{
+  SMOKE_CURRENT_PHASE="$1"
+  echo "[develop-smoke] START: $SMOKE_CURRENT_PHASE"
+}
+
+_pass_phase()
+{
+  echo "[develop-smoke] PASS: $1"
 }
 
 source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-image-storage.sh"
@@ -266,6 +294,9 @@ _cleanup()
       echo "[develop-smoke] Cleanup could not prove or remove this run's resources; unproved objects were left in place." >&2
       [[ "$exit_code" -ne 0 ]] || exit_code=1
     fi
+  fi
+  if [[ "$exit_code" -ne 0 ]]; then
+    echo "[develop-smoke] FAILURE: phase='${SMOKE_FAILURE_PHASE:-unknown}' line='${SMOKE_FAILURE_LINE:-unknown}' status='${SMOKE_FAILURE_STATUS:-$exit_code}'" >&2
   fi
   return "$exit_code"
 }
@@ -484,9 +515,11 @@ _wait_for_job()
   local deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
   while [[ $(date +%s) -lt "$deadline" ]]; do
     if [[ "$(kubectl get job "$job_name" -n "$NAMESPACE" -o jsonpath='{.status.succeeded}' 2>/dev/null || true)" == "1" ]]; then
+      echo "[develop-smoke] PASS: job/$job_name completed"
       return 0
     fi
     if [[ "$(kubectl get job "$job_name" -n "$NAMESPACE" -o jsonpath='{.status.failed}' 2>/dev/null || true)" == "1" ]]; then
+      echo "[develop-smoke] FAIL: job/$job_name failed" >&2
       kubectl logs "job/$job_name" -n "$NAMESPACE" --all-containers 2>/dev/null || true
       return 1
     fi
@@ -576,9 +609,11 @@ _assert_ingress_health()
 # explicitly, then exercise the real TLS and anonymous-read boundary from the admitted server Pod.
 _assert_current_history_and_sandbox()
 {
+  _start_phase "qualify KurrentDB readiness"
   kubectl rollout status "statefulset/${RELEASE_NAME}-kurrentdb" \
     -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
   _wait_for_job "${RELEASE_NAME}-kurrentdb-bootstrap"
+  _start_phase "verify KurrentDB secure probe contract"
   kubectl get "statefulset/${RELEASE_NAME}-kurrentdb" -n "$NAMESPACE" -o json | jq -e '
     .spec.template.spec.containers[] | select(.name == "kurrentdb")
     | ([.env[] | select(.name == "KURRENTDB_INSECURE"
@@ -589,15 +624,20 @@ _assert_current_history_and_sandbox()
         | all(.httpGet.path == "/health/live" and .httpGet.scheme == "HTTPS"
           and ((.httpGet.httpHeaders // []) | length == 0)))
   ' >/dev/null
+  _start_phase "qualify Agent Sandbox controller"
   kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-system \
     --timeout="${TIMEOUT_SECONDS}s"
+  _start_phase "verify Agent Sandbox runtime resources"
   kubectl get runtimeclass opencrane-smoke-runc -o json | jq -e '.handler == "runc"' >/dev/null
   kubectl get "sandboxtemplate/${RELEASE_NAME}-developer-template" -n "$NAMESPACE" -o json \
     | jq -e '.spec.podTemplate.spec.runtimeClassName == "opencrane-smoke-runc"' >/dev/null
   kubectl get sandboxwarmpool/developer-pool -n "$NAMESPACE" -o json \
     | jq -e '.spec.replicas == 0' >/dev/null
+  _start_phase "qualify Agent Sandbox admission"
   bash "$ROOT_DIR/apps/_infra/agent-sandbox/tests/claim-admission-smoke.sh" "k3d-${CLUSTER_NAME}" "$NAMESPACE" "$RELEASE_NAME"
+  _start_phase "qualify Agent Sandbox lifecycle"
   bash "$ROOT_DIR/apps/_infra/agent-sandbox/tests/claim-lifecycle-smoke.sh" "k3d-${CLUSTER_NAME}" "$NAMESPACE" "$RELEASE_NAME" "$TIMEOUT_SECONDS"
+  _start_phase "verify KurrentDB service identity"
   kubectl exec -i "deployment/${RELEASE_NAME}-opencrane-server" -n "$NAMESPACE" -- node --input-type=module - "$CLUSTER_TENANT" <<'NODE'
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -632,6 +672,7 @@ assert.equal(await status("/streams/opencrane-silo/0", true), 200, "The service 
 const activationStream = encodeURIComponent(`computer-activations-${process.argv[2]}`);
 assert.ok([401, 403].includes(await status(`/subscriptions/${activationStream}/conversation-computer-activation/replayParked`, true, "POST")), "The application service identity must not replay parked activations");
 NODE
+  _start_phase "qualify KurrentDB parked-activation replay"
   OPENCRANE_CHART_DIR="$ROOT_DIR/apps/_infra/deploy-k8s" \
     bash "$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh" \
     --cluster-tenant "$CLUSTER_TENANT" --namespace "$NAMESPACE" --release "$RELEASE_NAME" \
@@ -668,6 +709,7 @@ case "${1:-}" in
 esac
 
 trap _cleanup EXIT
+trap '_capture_failure "$?" "$LINENO"' ERR
 # Bash skips the EXIT trap on untrapped fatal signals — an interrupted run would strand the
 # k3d node containers and their multi-GB writable layers. Route the signals through exit.
 trap 'exit 129' HUP
@@ -727,7 +769,7 @@ cluster_create_arguments+=(--runtime-label "opencrane.tier3.owner=${SMOKE_RESOUR
 k3d "${cluster_create_arguments[@]}"
 SMOKE_CLUSTER_CREATED=1
 
-echo "[develop-smoke] Installing external cluster prerequisites"
+_start_phase "install external cluster prerequisites"
 if [[ "$SMOKE_STORAGE_MODE" == "full" ]]; then
   _install_expandable_test_storage
   SMOKE_STORAGE_CLASS="csi-hostpath-sc"
@@ -745,12 +787,17 @@ CERT_MANAGER_INSTALL_PID=$!
 helm upgrade --install cnpg cnpg/cloudnative-pg \
   --namespace cnpg-system --create-namespace --version "$CNPG_CHART_VERSION" \
   --wait --timeout "${TIMEOUT_SECONDS}s" --set-string monitoring.podMonitor.enabled=false
-if ! wait "$CERT_MANAGER_INSTALL_PID"; then
+_start_phase "wait for cert-manager installation"
+if wait "$CERT_MANAGER_INSTALL_PID"; then
+  CERT_MANAGER_INSTALL_PID=""
+else
+  status=$?
+  _capture_failure "$status" "$LINENO"
   CERT_MANAGER_INSTALL_PID=""
   echo "[develop-smoke] cert-manager installation failed" >&2
-  exit 1
+  exit "$status"
 fi
-CERT_MANAGER_INSTALL_PID=""
+_pass_phase "cert-manager installation completed"
 
 "$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh" --provision-agent-sandbox-controller --context "k3d-${CLUSTER_NAME}"
 # This class truthfully names k3d's native runtime. Only a separate gVisor install can qualify isolation.
@@ -762,12 +809,17 @@ metadata:
 handler: runc
 EOF
 
-if ! wait "$IMAGE_PREPARATION_PID"; then
+_start_phase "prepare candidate images"
+if wait "$IMAGE_PREPARATION_PID"; then
+  IMAGE_PREPARATION_PID=""
+else
+  status=$?
+  _capture_failure "$status" "$LINENO"
   IMAGE_PREPARATION_PID=""
   echo "[develop-smoke] Image preparation failed" >&2
-  exit 1
+  exit "$status"
 fi
-IMAGE_PREPARATION_PID=""
+_pass_phase "candidate image preparation completed"
 echo "[develop-smoke] Importing the tag-based service images"
 _import_smoke_images
 bootstrap_digest="$(_publish_smoke_image "opencrane/kurrentdb-bootstrap:${SMOKE_IMAGE_TAG}" opencrane-kurrentdb-bootstrap)"
@@ -811,7 +863,7 @@ if [[ -n "$OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL" ]]; then
   )
 fi
 
-echo "[develop-smoke] Installing the current silo through its app-owned deploy entrypoint"
+_start_phase "install current silo through its app-owned deploy entrypoint"
 export OIDC_ISSUER_URL="https://issuer.opencrane.test"
 export OIDC_CLIENT_ID="develop-smoke"
 export OPENCRANE_OIDC_CLIENT_SECRET="$(_random_secret)"
@@ -852,14 +904,21 @@ export TIMEOUT_SECONDS
   --set "certManager.mode=selfSigned" \
   --set "certManager.issuerName=opencrane-develop-smoke-issuer"
 
-echo "[develop-smoke] Waiting for every enabled workload and certificate"
+_pass_phase "current silo installation completed"
+_start_phase "wait for every enabled workload and certificate"
 kubectl wait --for=condition=available deployment --all -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
 kubectl wait --for=condition=available deployment --all -n "$ARTIFACT_NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
 kubectl wait --for=condition=Ready "certificate/${RELEASE_NAME}-clustertenant-tls" \
   -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
 
+_pass_phase "every enabled workload and certificate is ready"
+_start_phase "verify database authority isolation"
 _assert_database_isolation
+_pass_phase "database authority isolation verified"
 _assert_current_history_and_sandbox
+_pass_phase "current history and Agent Sandbox contracts verified"
+_start_phase "verify public ingress health"
 _assert_ingress_health
+_pass_phase "public ingress health verified"
 
 echo "[develop-smoke] PASS: current service readiness, database isolation, authenticated KurrentDB TLS, anonymous health/read boundaries, Agent Sandbox claim reconciliation and cleanup with its runc profile, TLS ingress, and $SMOKE_STORAGE_MODE storage qualification"

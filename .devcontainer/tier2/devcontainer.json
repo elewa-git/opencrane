@@ -32,9 +32,6 @@
     },
     "OPENAI_TIER2_PROVIDER_API_KEY": {
       "description": "Optional personal OpenAI API key for the Tier 2 local-llm profile."
-    },
-    "OPENCRANE_TIER2_DEFAULT_PROVIDER": {
-      "description": "Optional lowercase default provider name for Tier 2, such as openai or anthropic."
     }
   },
   "forwardPorts": [4200],
