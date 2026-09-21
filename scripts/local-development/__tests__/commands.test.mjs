@@ -122,10 +122,13 @@ test("local LiteLLM receives its isolated database URL without putting credentia
 		providerKey: "provider-secret",
 		providerKeyEnvironmentVariable: "OPENCRANE_LOCAL_PROVIDER_KEY"
 	};
-	const postgres = createPostgresCommand(localConfiguration, secrets);
 	const specification = createLiteLLMCommand(localConfiguration, secrets, provider);
+	const networkIndex = specification.arguments.indexOf("--network");
+	const publishIndex = specification.arguments.indexOf("--publish");
 
-	assert.equal(postgres.arguments.includes("127.0.0.1:4000:4000"), false);
+	assert.equal(specification.arguments[networkIndex + 1], "network");
+	assert.equal(specification.arguments[publishIndex + 1], "127.0.0.1:4000:4000");
+	assert.deepEqual(specification.arguments.slice(-4), ["--config", "/app/config.yaml", "--port", "4000"]);
 	assert.equal(specification.arguments.includes("DATABASE_URL"), true);
 	assert.equal(specification.arguments.includes("CUSTOM_TIKTOKEN_CACHE_DIR"), true);
 	assert.equal(specification.arguments.includes("NO_PROXY"), true);
@@ -141,7 +144,7 @@ test("local LiteLLM receives its isolated database URL without putting credentia
 	assert.equal(specification.environment.no_proxy, "127.0.0.1,localhost,::1");
 });
 
-test("Codespaces LiteLLM shares PostgreSQL loopback while its host port stays private", function _CodespacesLiteLLMNetwork()
+test("Codespaces LiteLLM uses host DNS while binding its selected port to loopback", function _CodespacesLiteLLMNetwork()
 {
 	const codespace = {
 		...configuration,
@@ -155,13 +158,18 @@ test("Codespaces LiteLLM shares PostgreSQL loopback while its host port stays pr
 	};
 	const postgres = createPostgresCommand(codespace, secrets);
 	const liteLLM = createLiteLLMCommand(codespace, secrets, provider);
+	const networkIndex = liteLLM.arguments.indexOf("--network");
+	const publishIndexes = postgres.arguments.flatMap(function _PublishIndexes(argument, index)
+	{
+		return argument === "--publish" ? [index] : [];
+	});
 
-	assert.equal(postgres.arguments.includes("127.0.0.1:54329:5432"), true);
-	assert.equal(postgres.arguments.includes("127.0.0.1:4000:4000"), true);
-	assert.equal(liteLLM.arguments.includes("container:postgres"), true);
-	assert.equal(liteLLM.arguments.includes("network"), false);
-	assert.equal(liteLLM.arguments.includes("127.0.0.1:4000:4000"), false);
-	assert.equal(liteLLM.environment.DATABASE_URL, "postgresql://litellm:litellm-database-secret@127.0.0.1:5432/litellm");
+	assert.deepEqual(publishIndexes, [postgres.arguments.indexOf("--publish")]);
+	assert.equal(postgres.arguments[publishIndexes[0] + 1], "127.0.0.1:54329:5432");
+	assert.equal(liteLLM.arguments[networkIndex + 1], "host");
+	assert.equal(liteLLM.arguments.includes("--publish"), false);
+	assert.deepEqual(liteLLM.arguments.slice(-6), ["--config", "/app/config.yaml", "--host", "127.0.0.1", "--port", "4000"]);
+	assert.equal(liteLLM.environment.DATABASE_URL, "postgresql://litellm:litellm-database-secret@127.0.0.1:54329/litellm");
 });
 
 test("application plans start only the current server and Tier 2 UI", function _CurrentProcesses()

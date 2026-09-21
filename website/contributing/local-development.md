@@ -98,9 +98,9 @@ drift between those deployment-owned coordinates and Tier 2. A local Agent profi
 separate `litellm` database owned by a non-privileged `litellm` role with its own persistent credential
 inside the worktree-owned PostgreSQL service. Startup waits until LiteLLM can read its model catalogue
 and its database-backed virtual-key store, because each Agent turn uses one budget- and lifetime-bound
-key. In Codespaces, LiteLLM shares PostgreSQL's container network namespace and connects over
-`127.0.0.1:5432`; PostgreSQL owns both loopback-only host port mappings. This avoids Docker bridge DNS
-and inter-container routing failures without forwarding the database or model port. Workstation
+key. In Codespaces, LiteLLM uses Docker's host network, binds only to `127.0.0.1`, and connects to
+PostgreSQL through its loopback-only published port. This keeps the database and model gateway
+private while LiteLLM uses the Codespace resolver for external provider lookups. Workstation
 launches retain separate containers on the worktree-owned bridge network.
 
 The current release-bound PostgreSQL image and pinned KurrentDB image need an AMD64 Docker daemon.
@@ -237,11 +237,10 @@ cross-provider model selection all stop before Docker resources are acquired.
 
 Codespaces gives LiteLLM a 120-second startup budget; a workstation keeps a 30-second budget. The
 launcher reserves the final two seconds for failure diagnostics. In Codespaces, LiteLLM can exit
-when its embedded Prisma query engine cannot accept database requests. The container excludes
-loopback addresses from uppercase and lowercase HTTP proxy settings, so that internal request does
-not leave the container while external provider requests may still use a configured proxy. The
-launcher recognises both observed traceback forms for that failure and restarts the same
-container. Uvicorn can report application startup failure while the image's process keeps Docker's
+when its embedded Prisma query engine cannot accept database requests. The container adds
+loopback addresses to uppercase and lowercase proxy-exclusion settings so database traffic stays
+on the Codespace. The launcher recognises both observed traceback forms for that failure and
+restarts the same container. Uvicorn can report application startup failure while the image's process keeps Docker's
 container state running. The launcher therefore checks current-start logs every two seconds and
 restarts that state only when it contains both the Prisma evidence and the explicit application
 failure marker. Both recovery paths share a limit of two restarts within the startup budget. Other
@@ -251,12 +250,6 @@ database-password values are removed, and the container
 environment is never printed. Check the
 Architecture line in `docker info` reports `amd64` or `x86_64`, then run the core, simulated-Agent
 or credential-backed Agent command without an emulation flag.
-
-If the diagnostic tail contains Prisma `P1001` with an
-`opencrane-tier2-postgres-…:5432` address, LiteLLM could not reach its database. A later Prisma
-query-engine `httpx.ConnectError` is a consequence of that failed database startup; changing the
-provider key or model will not repair it. Confirm the branch contains the Codespaces shared-loopback
-topology described above, then relaunch Tier 2.
 
 The pinned LiteLLM image carries the OpenAI tokenizer cache used during startup. The launcher points
 LiteLLM at that bundled cache, so Codespaces does not need to resolve or contact
