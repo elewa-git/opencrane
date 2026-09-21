@@ -78,7 +78,7 @@ async function _exchange(prepared: PreparedConversationModelRequest, signal: Abo
 	if (!response.ok || response.redirected)
 	{
 		_discardBody(response);
-		throw new ConversationModelError(ConversationModelFailureCodes.HttpRejected);
+		throw new ConversationModelError(ConversationModelFailureCodes.HttpRejected, response.status);
 	}
 	if (response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() !== "application/json")
 	{
@@ -143,7 +143,10 @@ export async function __RequestConversationModel(input: ConversationModelRequest
 			else
 				failure = new ConversationModelError(ConversationModelFailureCodes.TransportFailed);
 
-			_log.warn({ failureCode: failure.code }, "conversation model request failed");
+			const failureFields = failure.httpStatus === undefined
+				? { failureCode: failure.code }
+				: { failureCode: failure.code, httpStatus: failure.httpStatus };
+			_log.warn(failureFields, "conversation model request failed");
 			throw failure;
 		}
 		finally
