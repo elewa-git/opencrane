@@ -85,6 +85,36 @@ describe("company assistant tool assignment persistence", function _Suite()
 		expect(f.transaction.agentRevision.update).toHaveBeenCalledExactlyOnceWith({ where: { id_siloId: { id: result.activeRevisionId, siloId: _CALLER.siloId } }, data: { state: AgentRevisionState.Published, publishedAt: _NOW } });
 	});
 
+	it.each([
+		{ maxTurns: 2, maxTokens: 32_000, maxCostUsdMicros: null, maxToolInvocations: 1, maxDurationMs: 120_000, maxLoopIterations: 1 },
+		{ maxTurns: 9, maxTokens: 32_000, maxCostUsdMicros: null, maxToolInvocations: 8, maxDurationMs: 120_000, maxLoopIterations: 8 },
+	])("preserves every saved budget field across successive tool edits: %j", async function _PreservesFrozenBudget(budget)
+	{
+		const f = _Fixture();
+		const source = { ...f.source, budget: Object.freeze({ ...budget }) };
+		const original = structuredClone(source);
+		f.transaction.agentService.findFirst.mockResolvedValue({ ...f.service, activeRevision: source });
+
+		const first = await f.repository.setTools(_CALLER, _COMMAND, _NOW);
+		const firstDraft = f.transaction.agentRevision.create.mock.calls[0][0].data;
+		expect(firstDraft.budget).toEqual(budget);
+		expect(source).toEqual(original);
+		const successor = { ...source, id: first.activeRevisionId, revision: 2, budget: firstDraft.budget, mcpToolAssignments: first.toolRevisionIds.map(toolRevisionId => ({ toolRevisionId })) };
+		const savedSuccessor = structuredClone(successor);
+		f.transaction.agentService.findFirst.mockResolvedValue({ ...f.service, activeRevisionId: successor.id, activeRevision: successor });
+		f.transaction.mcpToolRevision.findMany.mockResolvedValue([{ id: "tool-retained" }]);
+
+		const second = await f.repository.setTools(_CALLER, { expectedActiveRevisionId: first.activeRevisionId, toolRevisionIds: ["tool-retained"] }, _NOW);
+
+		expect(second.activeRevisionId).not.toBe(first.activeRevisionId);
+		expect(f.transaction.agentRevision.create).toHaveBeenCalledTimes(2);
+		expect(f.transaction.agentRevision.create.mock.calls.map(call => call[0].data.budget)).toEqual([budget, budget]);
+		expect(f.transaction.agentRevision.create.mock.calls[1][0].data).toMatchObject({ revision: 3, parentRevision: { connect: { id_siloId: { id: successor.id, siloId: _CALLER.siloId } } }, promptPolicyVersion: source.promptPolicyVersion });
+		expect(source).toEqual(original);
+		expect(successor).toEqual(savedSuccessor);
+		expect(f.transaction.agentRevision.update.mock.calls.map(call => Object.keys(call[0].data))).toEqual([["state", "publishedAt"], ["state", "publishedAt"]]);
+	});
+
 	it("validates exact same-silo ready tool revisions on active published servers before any revision write", async function _RequiresPublishedTools()
 	{
 		const f = _Fixture();

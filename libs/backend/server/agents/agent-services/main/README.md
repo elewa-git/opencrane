@@ -48,11 +48,10 @@ A service with any prior use or a still-configured old profile remains unavailab
 The product's initial revision policy supplies budgets
 and prompt policy, while the deployment selects which computer can run it.
 The personal policy permits 64 model calls, eight tool calls and eight distinct saved tool-result
-cycles within its token and one-hour limits. The company policy retains its current two-model-call,
-one-tool-call and one-cycle shape. Both store a null revision cost cap, so this source-only policy
-change does not invent a dollar amount; the separately configured spend cap still applies.
-The current conversation runtime remains stricter at one tool result until its ordered-step
-protocol lands.
+cycles within its token and one-hour limits. New company assistants permit nine model calls, eight
+tool calls and eight saved tool-result cycles. Both use the ordered conversation protocol, which
+reserves a model call and part of the remaining completion-token allowance for the final answer.
+Both store a null revision cost cap; the separately configured spend cap still applies.
 
 The package also owns personal execution evidence. Admission proves that the personal service is
 active, its requested revision is still published and active, current deployment-selected human membership proves the
@@ -75,9 +74,11 @@ the requesting Principal ID. Runtime Pod identity belongs to later workload deci
 
 The first company revision has no persona, skills, tools, memory or knowledge-boundary assignments.
 An administrator can then assign exact MCP (Model Context Protocol) tool revisions. New company
-assistants permit at most two model requests and one saved tool-result cycle under one 32,000-token,
-two-minute run budget.
-Tool edits preserve the saved budget. Admission still rejects persona, skill and boundary
+assistants share one 32,000-completion-token, two-minute run budget across up to eight tool steps and a final
+model answer. Waiting for tools or approval uses that same time allowance; current permissions,
+credentials and computer leases may stop work sooner. These ceilings do not guarantee that every
+eight-step request fits or finishes. Setup retries leave existing assistants unchanged, and tool
+edits preserve their saved budgets instead of applying the new defaults. Admission still rejects persona, skill and boundary
 assignments until those capabilities have a supported company policy.
 
 New revision writes and any edit that copies executable revision content parse the complete budget

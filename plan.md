@@ -80,12 +80,33 @@ rendered correctness and component reuse pass review, while human visual accepta
 source checkpoint does not finish T2, qualify a deployed journey or authorize an external write.
 
 The older #891 screenshot artifact expired on 20 September. Fresh local macOS Tools and Computer
-Review/context candidates are being captured from unchanged component source; they are not a
+Review/context candidates were captured from unchanged component source; they are not a
 replacement for exact-head Linux CI evidence or human baseline approval. First-use private-memory
 creation remains pending a separately requested source-only permission decision.
 
-After the remote repair, complete the approved requester-only company path through the existing IAM,
-elicitation and conversation owners. Keep the remaining memory, interaction, files, delegation,
+New company assistants now receive nine model calls, eight tool invocations and eight saved-result
+cycles, replacing the remaining one-tool creation default. The aggregate 32,000 completion-token
+allowance, two-minute deadline and null revision cost cap are unchanged; the existing server spend
+cap still applies. Existing assistants and immutable revisions are not rewritten. Setup retries
+leave their choices unchanged, and successive tool edits copy their saved budget.
+
+The initial-budget regression failed against the old default and passes after this correction.
+Five new controlled-provider tests use the actual company limits and 4,096-token route cap with the
+real turn store and encrypted model custody. Later tool arguments are derived from saved result
+contents. Eight calls feed a final answer, restart before model calls five and nine does not repeat
+prior calls, a ninth tool response is refused, and expiry of the original deadline prevents further
+model dispatch. Final model-token reservations are 4,096 for each of the first six calls, then 3,712,
+1,856 and 1,856. This proves a positive final-answer reservation, not enough time or answer quality
+for every business request. Provider execution, database and history-service transports remain test
+doubles in these cases; they do not qualify real Odoo reasoning or a deployed company assistant.
+Validation passes 167 agent-service and 742 conversation tests. Unit tests and type checks pass
+across all nine affected backend projects; the server build, full dependency-boundary lint,
+style/Prisma ownership, module-growth and release-coherence checks pass. The build's API generator
+required permission to open its local IPC socket; no source or build configuration workaround was
+needed. Independent integrated review passes with no findings. This source-only slice remains local
+and does not close the live multi-step acceptance gate.
+
+Keep the remaining memory, interaction, files, delegation,
 schedules, administration and recovery journeys in scope; source completion never closes their live
 acceptance gates. First-dataset memory authorization, governance-reader policy, visual acceptance
 and testv6 identity/bootstrap still need their separately scoped decisions or approvals.
@@ -370,6 +391,11 @@ boundaries pass. Final independent review and architecture post-review pass with
 findings. The source is published in #892 at `c737beca00f9b9fdb156ab6d438a7a583f8fc523`;
 provider backoff and live qualification remain.
 
+The 22 September continuation removes the separate one-tool default from newly provisioned company
+assistants while retaining their existing aggregate token, time and spend limits. Its focused
+content-dependent eight-tool/restart proofs are recorded above; existing company revisions remain
+unchanged and live business qualification stays open.
+
 The one-tool result and text-only continuation was an earlier delivery slice. The complete
 MVP must support a repeated model → MCP call → persisted result → model cycle within one run.
 Absurd continues to select the next saved step and own waiting and recovery. The server owns model
@@ -446,8 +472,9 @@ and administration remain subsequent MVP requirements. The pending remote-MCP SQ
 and scoped Zitadel callback approvals are unchanged; they do not prevent independent source work.
 
 The first slice keeps the current authored model-call, completion-token and duration limits and
-adds explicit tool and cycle limits. Personal revisions allow eight tool-result cycles; company
-revisions retain one. A cycle means one distinct saved tool result that may feed a later model
+adds explicit tool and cycle limits. That slice allowed eight personal tool-result cycles and one
+company cycle; the 22 September follow-up permits eight cycles for newly created company assistants.
+A cycle means one distinct saved tool result that may feed a later model
 step, not an Absurd delivery attempt, sleep or retry. The ordered-step wave above now removes
 the earlier one-tool runtime ceiling. An explicit null revision spend cap means the existing
 frozen server spend cap applies; no new dollar default or unbounded spending mode is introduced.
@@ -1760,8 +1787,9 @@ Architecture preflight passes for the existing agent-services, revision and exec
 An administrator reads and replaces the assistant's exact tool selection through the API. One
 transaction publishes an immutable successor revision and its service-owned grants, with current
 Administer/Assign checks and a comparison against the expected active revision. Tool edits preserve
-the saved model budget. New company assistants receive the two-call limit needed for one tool result
-and one final answer. Dispatch continues to use the company identity; a person's private permissions
+the saved model budget. The initial two-call default supported one tool result and a final answer;
+the 22 September follow-up changes new company assistants to eight tool steps and a final answer.
+Dispatch continues to use the company identity; a person's private permissions
 or credentials cannot substitute for it.
 
 Source work can proceed independently of live setup. Credential activation is absent from the current
