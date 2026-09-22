@@ -96,13 +96,14 @@ describe("__CompileRunInput", function _describeCompiler()
 		expect(compiled.tools.map(function _Name(t): string { return t.modelName; })).toEqual(["model_alpha", "model_zulu"]);
 	});
 
-	it("does not offer approval-gated tools to a managed assistant", async function _HidesCompanyApprovals()
+	it("offers the saved approval-gated tools to a managed assistant without dropping the approval requirement", async function _CompanyApprovals()
 	{
 		const subject = _executionSubject();
 		const managed = { ...subject, principalId: "company-principal", identity: { ...subject.identity, principalId: "company-principal" }, membership: { kind: ExecutionSubjectMembershipKinds.Managed, principalId: "company-principal", siloId: subject.siloId, agentServiceId: "svc-1", agentRevisionId: "rev-1", agentRevisionDigest: "sha256:revision", decisionEvidenceId: "sha256:decision", trustedUntil: "2099-01-01T00:00:00.000Z" } } as const;
 		const compiled = await __CompileRunInput(_snapshot({ executionSubject: managed }), 1, _repositories());
 
-		expect(compiled.tools.map(function _Name(t): string { return t.name; })).toEqual(["zulu.source"]);
+		expect(compiled.tools.map(function _Name(t): string { return t.name; })).toEqual(["zulu.source", "alpha.source"]);
+		expect(compiled.tools.find(tool => tool.modelName === "model_zulu")?.requiresApproval).toBe(true);
 	});
 
 	it("passes exact immutable MCP tool revisions to the tool-definition port", async function _PassesMcpToolRevisions()

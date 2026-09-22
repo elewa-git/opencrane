@@ -120,6 +120,11 @@ current Use on the conversation. No personal persona, memory or tool assignment 
 company revision. An explicit no-personal-memory policy returns an empty preference list without
 opening the personal-memory repository.
 
+The compiler includes selected approval-gated tools for company assistants as well as personal
+assistants, keeping the approval requirement on each definition. This is an offer to propose work,
+not permission to dispatch it: IAM binds the approval to the original human requester and rechecks
+current authority before the company assistant can use its own connection.
+
 The server repeats this authority check while its durable turn workflow selects and advances saved
 progress, including retries that recover an existing run snapshot. Current service state, revision,
 identity, current human membership and required grants must still admit each effect. The frozen
@@ -174,10 +179,6 @@ persona instructions, MCP tool revisions, artifact revisions, skill revisions, a
 It receives canonical conversation messages through `VerifiedConversationPromptMessageRepository`,
 so it has no relational transcript path. Missing rows, changed schemas, foreign model coordinates,
 inactive parents, and unsupported generated-output capabilities fail compilation closed.
-
-Approval-gated definitions remain available to personal model selection as declarative proposals.
-Managed company runs remove them from the compiled offer until an entitled human resolver and
-connection authority are bound; the compiler never turns a tool definition into permission to run it.
 
 ## Boundary
 

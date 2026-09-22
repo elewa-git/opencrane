@@ -33,6 +33,27 @@ MCP type checks, package boundaries, baseline regeneration and release binding p
 disposable local PostgreSQL proofs, not authenticated Odoo or deployed-candidate acceptance.
 No cluster, identity-provider, credential, visual-baseline, release or merge change has run.
 
+The remote repair is committed locally as `b402f728f8869fb9d1029133f3e1f07919778286`; publication
+is separately requested, with no push or new PR yet. Live stack integrity passes after that commit.
+
+Requester-only company approval source is implemented above that checkpoint. Approval and
+invocation rows keep the assistant's execution principal. Opening and deciding an approval resolve
+the original human from the matching frozen run/invocation requester, then require a unique external
+identity, current organization membership, active conversation participation and the linked
+elicitation. Existing per-action Read/Decide grants remain temporary; no role-wide access or provider
+credential borrowing is added. Pending detail, reconnect and Activity reads now check the exact
+approval Read grant; resolved history retains its conversation-read policy.
+
+The source checks pass 283 IAM, 155 execution-input, 737 conversation and 59 elicitation tests, plus
+their type checks and the shared boundary/style checks. All nine approval PostgreSQL cases pass:
+personal and company approve/restart with one continuation, hidden-value denial, expiry, wrong
+requester refusal, revoked Decide, and revoked Read across detail, reconnect and Activity. The full
+application database target passes 91 tests and four authority scripts on the disposable final
+baseline. Independent integrated review and architecture post-review pass for the backend source;
+the managed-assistant SQL test delta also passes independent review. No provider was called.
+Connection-owner disclosure in the approval UI and the actual approved external write remain
+separate acceptance work; this backend slice does not finish T2 or authorize a provider write.
+
 After the remote repair, complete the approved requester-only company path through the existing IAM,
 elicitation and conversation owners. Keep the remaining memory, interaction, files, delegation,
 schedules, administration and recovery journeys in scope; source completion never closes their live

@@ -1,7 +1,6 @@
 import { PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION } from "@opencrane/contracts";
 import { ___ParseRunBudgetPolicy, type CompiledRunInput, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _IsModelToolNameValid } from "./mcp-model-tool-name";
@@ -90,10 +89,7 @@ async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, rep
 	// 2. Look up every record the compiled input needs.
 	const personaInstructions = await repositories.loadPersonaInstructions(snapshot.personaRevisionId);
 	const messages = await repositories.loadMessages(snapshot.messageIds);
-	const resolvedTools = _orderTools(await repositories.loadToolDefinitions(snapshot.mcpTools));
-	const tools = snapshot.executionSubject.membership.kind === ExecutionSubjectMembershipKinds.Managed
-		? resolvedTools.filter(tool => !tool.requiresApproval)
-		: resolvedTools;
+	const tools = _orderTools(await repositories.loadToolDefinitions(snapshot.mcpTools));
 	const artifactSummaries = await repositories.loadArtifactSummaries([...snapshot.artifactRevisionIds].sort());
 	const skillSummaries = await repositories.loadSkillSummaries([...snapshot.skillRevisionIds].sort());
 	const model = await repositories.resolveModelRoute(snapshot.siloId, snapshot.modelRoute);

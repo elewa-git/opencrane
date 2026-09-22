@@ -219,12 +219,15 @@ after it, within the original attempt authority and credential expiry. Each late
 the earlier authority ceiling and any shorter accepted result deadline. The server rechecks current
 authority after loading private history and immediately before the next model request.
 
-Approval-gated personal proposals preserve the frozen arguments, schema and run allowance in the
+Approval-gated personal and company proposals preserve the frozen arguments, schema and run allowance in the
 existing invocation slot, then pause the run in `WaitingForInput` through deferred IAM approval.
-Only the exact current run owner may answer its elicitation. Approval marks the invocation ready and
+Only the original human requester saved on the run and invocation may answer its elicitation;
+the company assistant remains the execution owner and uses its own permitted connection.
+Approval marks the invocation ready and
 wakes the saved Absurd turn task; denial, expiry or stale authority produces no MCP dispatch and
-wakes the same continuation to record the terminal outcome. Managed company approval tools remain
-unavailable at model selection and proposal preparation until an entitled human resolver is bound.
+wakes the same continuation to record the terminal outcome. Missing, ambiguous or no-longer-active
+requesters cannot open or decide an approval. The proposal and dispatch paths both recheck current
+execution permission; human approval cannot replace that check.
 
 Before waiting, the Absurd turn checkpoints a participant-subset approval log. Its fixed summary and
 action reveal no tool target, arguments, schema, purpose payload or credential. A revision-zero

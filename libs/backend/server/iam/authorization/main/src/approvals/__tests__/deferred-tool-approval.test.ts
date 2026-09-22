@@ -1,5 +1,5 @@
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
-import { AgentRunState, ApprovalRequestState, ExternalActionRecoveryMode, OrgMemberStatus, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState } from "@prisma/client";
+import { AgentRunState, ApprovalRequestState, ElicitationBodyKind, ElicitationPurpose, ExternalActionRecoveryMode, OrgMemberStatus, PrincipalProvenance, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const _managedGrantMocks = vi.hoisted(function _ManagedGrantMocks()
@@ -61,7 +61,28 @@ function _transaction(row: unknown, updatedCount: number, invocationRow: unknown
 	const runUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
 	const membershipFindFirst = vi.fn().mockResolvedValue({ id: "membership-1", status: OrgMemberStatus.Active });
 	const deliveryCreate = vi.fn().mockResolvedValue({ id: "delivery-1" });
-	return { transaction: { approvalRequest: { findUnique, updateMany, count: vi.fn().mockResolvedValue(pendingCount) }, elicitationRequest: { count: vi.fn().mockResolvedValue(0) }, toolInvocation: { findUnique: invocationFindUnique, updateMany: invocationUpdateMany }, toolResultDelivery: { create: deliveryCreate }, principal: { findFirst: vi.fn(async function _Principal(query) { return query.where.subject === "user-1" ? { id: "principal-1" } : null; }) }, orgMembership: { findFirst: membershipFindFirst }, agentRun: { findUnique: vi.fn().mockResolvedValue({ ...RUN, state: AgentRunState.WaitingForInput }), updateMany: runUpdateMany } } as unknown as Prisma.TransactionClient, updateMany, invocationUpdateMany, runUpdateMany, membershipFindFirst, deliveryCreate };
+	return { transaction: { approvalRequest: { findUnique, updateMany, count: vi.fn().mockResolvedValue(pendingCount) }, elicitationRequest: { count: vi.fn().mockResolvedValue(0), findUnique: vi.fn().mockResolvedValue(_elicitation(row as Record<string, unknown>)) }, toolInvocation: { findUnique: invocationFindUnique, updateMany: invocationUpdateMany }, toolResultDelivery: { create: deliveryCreate }, ..._requesterDelegates(), orgMembership: { findFirst: membershipFindFirst }, agentRun: { findUnique: vi.fn().mockResolvedValue({ ...RUN, state: AgentRunState.WaitingForInput }), updateMany: runUpdateMany } } as unknown as Prisma.TransactionClient, updateMany, invocationUpdateMany, runUpdateMany, membershipFindFirst, deliveryCreate };
+}
+
+/** Current requester identity, organisation membership and active conversation participation. */
+function _requesterDelegates()
+{
+	return {
+		principal: {
+			findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1", provenance: PrincipalProvenance.External }),
+			findMany: vi.fn(async function _Principals(query) { return query.where.subject === "user-1" ? [{ id: "principal-1" }] : []; }),
+			count: vi.fn().mockResolvedValue(1),
+		},
+		orgMembership: { findFirst: vi.fn().mockResolvedValue({ id: "membership-1" }) },
+		conversationParticipant: { findUnique: vi.fn().mockResolvedValue({ accessEndedPosition: null }) },
+	};
+}
+
+/** Immutable participant request paired with the given protected approval. */
+function _elicitation(approval: Record<string, unknown>)
+{
+	const purposePayload = { approvalRequestId: approval.id as string };
+	return { id: approval.elicitationRequestId, siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 2, assignedParticipantId: "user-1", requestKey: approval.actionDigest, purpose: ElicitationPurpose.ToolApproval, bodyKind: ElicitationBodyKind.Approval, requiresStepUp: true, expiresAt: approval.expiresAt, purposePayload, purposePayloadDigest: __DigestCanonicalJson(purposePayload) };
 }
 
 /** A pending deferred-tool approval bound to a tool invocation row. */
@@ -69,7 +90,7 @@ function _pending(): unknown
 {
 	const schema = { type: "object", additionalProperties: false, required: ["query"], properties: { query: { type: "string" } } };
 	const projection = __ProjectDeferredToolApproval(schema, { query: "original" });
-	return { id: "approval-1", elicitationRequestId: null, runId: "run-1", attempt: 2, siloId: "silo-1", principalId: "principal-1", toolInvocationRowId: "tool-1", resourceId: "integration:search:query", argumentsDigest: __DigestCanonicalJson({ query: "original" }), reviewedToolArguments: { query: "original" }, reviewedToolSchema: schema, reviewedToolSchemaDigest: __DigestCanonicalJson(schema), safeProposedArguments: projection.proposedArguments, responseSchema: projection.responseSchema, state: ApprovalRequestState.Pending, expiresAt: new Date("2026-07-22T09:00:00.000Z") };
+	return { id: "approval-1", elicitationRequestId: "approval-1", actionDigest: "invocation-1", runId: "run-1", attempt: 2, siloId: "silo-1", principalId: "principal-1", toolInvocationRowId: "tool-1", resourceId: "integration:search:query", argumentsDigest: __DigestCanonicalJson({ query: "original" }), reviewedToolArguments: { query: "original" }, reviewedToolSchema: schema, reviewedToolSchemaDigest: __DigestCanonicalJson(schema), safeProposedArguments: projection.proposedArguments, responseSchema: projection.responseSchema, state: ApprovalRequestState.Pending, expiresAt: new Date("2026-07-22T09:00:00.000Z") };
 }
 
 const NOW = new Date("2026-07-21T09:00:00.000Z");
@@ -286,6 +307,164 @@ function _deferCommand(): Parameters<typeof __DeferToolRequest>[1]
 	return { interruptId: "approval-existing", runId: "run-1", attempt: 2, toolInvocationRowId: "tool-1", toolRevisionId: "integration:search:query", toolName: "records.search", toolDescription: "Search the saved records", externalSystemName: "Records", reviewedArguments: { query: "original" }, argumentsDigest: __DigestCanonicalJson({ query: "original" }), reviewedParametersSchema: schema, reviewedParametersSchemaDigest: __DigestCanonicalJson(schema), safeProposedArguments: { query: "original" }, responseSchema: { type: "object" }, actionDigest: "invocation-1", effectivePolicyDigest: "sha256:cap", approverPolicyRevision: "integration-tools-require-approval", now: NOW, expiresAt: new Date("2026-07-22T09:00:00.000Z") };
 }
 
+/** Approval already saved by an identical opening command. */
+function _existingApproval()
+{
+	return { ..._pending() as Record<string, unknown>, id: "approval-existing", elicitationRequestId: "approval-existing", actionDigest: _deferCommand().actionDigest, reviewedToolSchemaDigest: _deferCommand().reviewedParametersSchemaDigest, expiresAt: ACTIVE_LEASE.expiresAt };
+}
+
+/** A company assistant executes as its own principal while the human remains the requester. */
+function _managedSubject()
+{
+	return { ...EXECUTION_SUBJECT, principalId: "company-principal", identity: { ...EXECUTION_SUBJECT.identity, principalId: "company-principal" }, membership: { kind: ExecutionSubjectMembershipKinds.Managed, principalId: "company-principal", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", agentRevisionDigest: `sha256:${"9".repeat(64)}`, decisionEvidenceId: "managed-evidence", trustedUntil: EXECUTION_SUBJECT.membership.trustedUntil } };
+}
+
+/** Transaction for deciding a managed approval with the original human requester. */
+function _managedDecision(overrides: Readonly<Record<string, unknown>> = {})
+{
+	const subject = _managedSubject();
+	const context = _transaction({ ..._pending() as object, principalId: subject.principalId, ...overrides }, 1, _invocation({ principalId: subject.principalId, authorizationExecutionSubject: subject }));
+	vi.mocked(context.transaction.agentRun.findUnique).mockResolvedValue({ ...RUN, state: AgentRunState.WaitingForInput, principalId: subject.principalId, executionSubject: subject } as never);
+	return context;
+}
+
+/** Transaction for opening a company approval without dispatching any external call. */
+function _managedOpening(existing = false)
+{
+	const subject = _managedSubject();
+	const approval = { ..._existingApproval(), principalId: subject.principalId };
+	return {
+		agentRun: { findUnique: vi.fn().mockResolvedValue({ ...RUN, principalId: subject.principalId, executionSubject: subject }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+		conversationComputerActiveLease: _ActiveLeaseDelegate(ACTIVE_LEASE),
+		elicitationRequest: { create: vi.fn().mockResolvedValue({ id: "approval-existing" }), findUnique: vi.fn().mockResolvedValue(_elicitation(approval)) },
+		approvalRequest: { create: vi.fn().mockResolvedValue({ id: "approval-existing" }), findFirst: vi.fn().mockResolvedValue(existing ? approval : null), count: vi.fn().mockResolvedValue(0) },
+		toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation({ principalId: subject.principalId, authorizationExecutionSubject: subject })) },
+		..._requesterDelegates(),
+	};
+}
+
+describe("requester-only company tool approvals", function _RequesterOnly()
+{
+	beforeEach(function _ResetManagedGrants() { _managedGrantMocks.reconcile.mockClear(); });
+
+	it("keeps company execution ownership and assigns only the original human", async function _OpenForRequester()
+	{
+		const transaction = _managedOpening();
+		await expect(__DeferToolRequest(transaction as never, _deferCommand())).resolves.toEqual({ outcome: "deferred", approvalRequestId: "approval-existing" });
+		expect(transaction.approvalRequest.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ principalId: "company-principal" }) }));
+		expect(transaction.elicitationRequest.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ assignedParticipantId: "user-1" }) }));
+		expect(transaction.principal.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id_siloId: { id: "principal-1", siloId: "silo-1" } } }));
+		const grants = _managedGrantMocks.reconcile.mock.calls[0]?.[1].grants;
+		expect(grants).toHaveLength(2);
+		expect(grants.every(function _Human(grant: any): boolean { return grant.subject.principalId === "principal-1" && grant.resource.id === "approval-existing"; })).toBe(true);
+	});
+
+	it.each([DeferredToolDecisionKinds.Approved, DeferredToolDecisionKinds.Denied])("accepts the requester's %s and revokes temporary grants", async function _Decide(decision)
+	{
+		const context = _managedDecision();
+		const argumentsValue = decision === DeferredToolDecisionKinds.Approved ? { query: "edited" } : undefined;
+		await expect(__DecideDeferredToolRequest(context.transaction, { approvalRequestId: "approval-1", siloId: "silo-1", reviewerSubjectId: "user-1", decision, arguments: argumentsValue, decidedBy: "user-1", now: NOW })).resolves.toMatchObject({ outcome: decision });
+		expect(_managedGrantMocks.reconcile).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ grants: [] }));
+	});
+
+	it.each(["company-service", "unrelated-admin", "other-participant", "connection-owner"])("refuses %s even if they have a principal", async function _WrongRequester(reviewerSubjectId)
+	{
+		const context = _managedDecision();
+		vi.mocked(context.transaction.principal.findMany).mockResolvedValue([{ id: reviewerSubjectId }] as never);
+		await expect(__DecideDeferredToolRequest(context.transaction, { approvalRequestId: "approval-1", siloId: "silo-1", reviewerSubjectId, decision: DeferredToolDecisionKinds.Denied, decidedBy: reviewerSubjectId, now: NOW })).resolves.toEqual({ outcome: "conflict" });
+		expect(context.updateMany).not.toHaveBeenCalled();
+	});
+
+	it.each(["no membership", "ended participation", "ambiguous subject", "missing requester", "service identity"])("does not open an approval with %s", async function _OpeningIneligible(reason)
+	{
+		const transaction = _managedOpening();
+		if (reason === "no membership")
+			transaction.orgMembership.findFirst.mockResolvedValue(null);
+		if (reason === "ended participation")
+			transaction.conversationParticipant.findUnique.mockResolvedValue({ accessEndedPosition: 4n });
+		if (reason === "ambiguous subject")
+			transaction.principal.count.mockResolvedValue(2);
+		if (reason === "missing requester")
+			transaction.principal.findUnique.mockResolvedValue(null);
+		if (reason === "service identity")
+			transaction.principal.findUnique.mockResolvedValue({ id: "principal-1", subject: "user-1", provenance: PrincipalProvenance.Internal });
+		await expect(__DeferToolRequest(transaction as never, _deferCommand())).resolves.toEqual({ outcome: "unavailable" });
+		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
+		expect(transaction.approvalRequest.create).not.toHaveBeenCalled();
+	});
+
+	it.each(["no membership", "ended participation", "ambiguous subject", "stale requester", "different elicitation", "different execution owner", "unlinked approval"])("refuses denial with %s", async function _DecisionIneligible(reason)
+	{
+		const context = _managedDecision();
+		if (reason === "no membership")
+			context.membershipFindFirst.mockResolvedValue(null);
+		if (reason === "ended participation")
+			vi.mocked(context.transaction.conversationParticipant.findUnique).mockResolvedValue({ accessEndedPosition: 4n } as never);
+		if (reason === "ambiguous subject")
+			vi.mocked(context.transaction.principal.findMany).mockResolvedValue([{ id: "principal-1" }, { id: "duplicate" }] as never);
+		if (reason === "stale requester")
+			vi.mocked(context.transaction.toolInvocation.findUnique).mockResolvedValue(_invocation() as never);
+		if (reason === "different elicitation")
+			vi.mocked(context.transaction.elicitationRequest.findUnique).mockResolvedValue({ ..._elicitation(_pending() as Record<string, unknown>), assignedParticipantId: "other-participant" } as never);
+		if (reason === "different execution owner")
+			vi.mocked(context.transaction.approvalRequest.findUnique).mockResolvedValue(_pending() as never);
+		if (reason === "unlinked approval")
+			vi.mocked(context.transaction.approvalRequest.findUnique).mockResolvedValue({ ..._pending() as object, principalId: "company-principal", elicitationRequestId: null } as never);
+		await expect(__DecideDeferredToolRequest(context.transaction, { approvalRequestId: "approval-1", siloId: "silo-1", reviewerSubjectId: "user-1", decision: DeferredToolDecisionKinds.Denied, decidedBy: "user-1", now: NOW })).resolves.toEqual({ outcome: "conflict" });
+		expect(context.updateMany).not.toHaveBeenCalled();
+	});
+
+	it("replays the same company approval without replacing its request or execution owner", async function _OpeningReplay()
+	{
+		const transaction = _managedOpening(true);
+		await expect(__DeferToolRequest(transaction as never, _deferCommand())).resolves.toEqual({ outcome: "already_deferred", approvalRequestId: "approval-existing" });
+		expect(transaction.elicitationRequest.create).not.toHaveBeenCalled();
+		expect(transaction.approvalRequest.create).not.toHaveBeenCalled();
+	});
+
+	it("replays a saved company decision only for the original requester", async function _DecisionReplay()
+	{
+		const argumentsValue = { query: "edited" };
+		const context = _managedDecision({ state: ApprovalRequestState.Approved, finalArgumentsDigest: __DigestCanonicalJson(argumentsValue) });
+		const command = { approvalRequestId: "approval-1", siloId: "silo-1", reviewerSubjectId: "user-1", decision: DeferredToolDecisionKinds.Approved, arguments: argumentsValue, decidedBy: "user-1", now: NOW };
+		await expect(__DecideDeferredToolRequest(context.transaction, command)).resolves.toMatchObject({ outcome: "already_decided" });
+		await expect(__DecideDeferredToolRequest(context.transaction, { ...command, reviewerSubjectId: "unrelated-admin", decidedBy: "unrelated-admin" })).resolves.toEqual({ outcome: "conflict" });
+		expect(context.updateMany).not.toHaveBeenCalled();
+		expect(_managedGrantMocks.reconcile).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		{ siloId: "other-silo" }, { conversationId: "other-conversation" }, { runId: "other-run" }, { attempt: 8 },
+		{ requestKey: "other-action" }, { purpose: ElicitationPurpose.RuntimeInput }, { bodyKind: ElicitationBodyKind.FreeText },
+		{ purposePayload: { approvalRequestId: "other-approval" } }, { purposePayloadDigest: "sha256:changed" },
+		{ requiresStepUp: false }, { expiresAt: new Date("2026-07-23T09:00:00.000Z") },
+	])("refuses a changed immutable elicitation binding %j", async function _ChangedBinding(patch)
+	{
+		const context = _managedDecision();
+		vi.mocked(context.transaction.elicitationRequest.findUnique).mockResolvedValue({ ..._elicitation(_pending() as Record<string, unknown>), ...patch } as never);
+		await expect(__DecideDeferredToolRequest(context.transaction, { approvalRequestId: "approval-1", siloId: "silo-1", reviewerSubjectId: "user-1", decision: DeferredToolDecisionKinds.Denied, decidedBy: "user-1", now: NOW })).resolves.toEqual({ outcome: "conflict" });
+		expect(context.updateMany).not.toHaveBeenCalled();
+	});
+
+	it("refuses opening replay after the linked assignee changes", async function _OpeningReplayChanged()
+	{
+		const transaction = _managedOpening(true);
+		transaction.elicitationRequest.findUnique.mockResolvedValue({ ..._elicitation(_existingApproval()), assignedParticipantId: "other-participant" });
+		await expect(__DeferToolRequest(transaction as never, _deferCommand())).rejects.toThrow("deferred approval action digest collision");
+		expect(_managedGrantMocks.reconcile).not.toHaveBeenCalled();
+	});
+
+	it("rechecks requester membership before expiring after a lost decision race", async function _RaceExpiry()
+	{
+		const context = _managedDecision();
+		context.updateMany.mockResolvedValue({ count: 0 });
+		context.membershipFindFirst.mockResolvedValueOnce({ id: "membership-1" }).mockResolvedValue(null);
+		await expect(__DecideDeferredToolRequest(context.transaction, { approvalRequestId: "approval-1", siloId: "silo-1", reviewerSubjectId: "user-1", decision: DeferredToolDecisionKinds.Denied, decidedBy: "user-1", now: NOW })).resolves.toEqual({ outcome: "conflict" });
+		expect(context.updateMany).toHaveBeenCalledTimes(1);
+		expect(context.invocationUpdateMany).not.toHaveBeenCalled();
+	});
+});
+
 describe("defer tool request authority", function _deferSuite()
 {
 	beforeEach(function _ResetManagedGrants() { _managedGrantMocks.reconcile.mockClear(); });
@@ -299,7 +478,7 @@ describe("defer tool request authority", function _deferSuite()
 			conversationComputerActiveLease: _ActiveLeaseDelegate(ACTIVE_LEASE),
 			elicitationRequest: { create: vi.fn().mockResolvedValue({ id: "approval-existing" }) },
 			approvalRequest: { create, findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0) },
-			principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },
+			..._requesterDelegates(),
 			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
 		} as unknown as Prisma.TransactionClient;
 
@@ -336,7 +515,7 @@ describe("defer tool request authority", function _deferSuite()
 			conversationComputerActiveLease: _ActiveLeaseDelegate(ACTIVE_LEASE),
 			elicitationRequest: { create: elicitationCreate },
 			approvalRequest: { create: vi.fn().mockResolvedValue({ id: "approval-9" }), findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0) },
-			principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },
+			..._requesterDelegates(),
 			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation({ arguments: command.reviewedArguments, argumentsDigest: command.argumentsDigest })) },
 		} as unknown as Prisma.TransactionClient;
 
@@ -353,9 +532,9 @@ describe("defer tool request authority", function _deferSuite()
 		const transaction = {
 			agentRun: { findUnique: vi.fn().mockResolvedValue(RUN) },
 			conversationComputerActiveLease: _ActiveLeaseDelegate(ACTIVE_LEASE),
-			elicitationRequest: { create: elicitationCreate },
-			approvalRequest: { create: vi.fn(), findFirst: vi.fn().mockResolvedValue({ id: "approval-existing", elicitationRequestId: "approval-existing", argumentsDigest: _deferCommand().argumentsDigest, reviewedToolSchemaDigest: _deferCommand().reviewedParametersSchemaDigest, state: ApprovalRequestState.Pending }), count: vi.fn() },
-			principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },
+			elicitationRequest: { create: elicitationCreate, findUnique: vi.fn().mockResolvedValue(_elicitation(_existingApproval())) },
+			approvalRequest: { create: vi.fn(), findFirst: vi.fn().mockResolvedValue(_existingApproval()), count: vi.fn() },
+			..._requesterDelegates(),
 			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
 		} as unknown as Prisma.TransactionClient;
 
@@ -373,7 +552,7 @@ describe("defer tool request authority", function _deferSuite()
 			conversationComputerActiveLease: _ActiveLeaseDelegate(ACTIVE_LEASE),
 			elicitationRequest: { create: vi.fn().mockResolvedValue({ id: "approval-existing" }) },
 			approvalRequest: { create, findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0) },
-			principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },
+			..._requesterDelegates(),
 			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation({ authorizationExecutionSubject: subject })) },
 		} as unknown as Prisma.TransactionClient;
 		const result = await __DeferToolRequest(transaction, _deferCommand());
@@ -399,7 +578,7 @@ describe("defer tool request authority", function _deferSuite()
 			conversationComputerActiveLease: _ActiveLeaseDelegate(ACTIVE_LEASE),
 			elicitationRequest: { create: vi.fn().mockResolvedValue({ id: "approval-existing" }) },
 			approvalRequest: { create, findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(1) },
-			principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },
+			..._requesterDelegates(),
 			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
 		} as unknown as Prisma.TransactionClient;
 
@@ -413,7 +592,7 @@ describe("defer tool request authority", function _deferSuite()
 			agentRun: { findUnique: vi.fn().mockResolvedValue({ ...RUN, state: AgentRunState.Failed }) },
 			conversationComputerActiveLease: _ActiveLeaseDelegate(ACTIVE_LEASE),
 			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
-			principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },
+			..._requesterDelegates(),
 			approvalRequest: { create: vi.fn(), findFirst: vi.fn() },
 		} as unknown as Prisma.TransactionClient;
 
@@ -430,7 +609,7 @@ describe("defer tool request authority", function _deferSuite()
 			agentRun: { findUnique: vi.fn().mockResolvedValue(RUN) },
 			conversationComputerActiveLease: _ActiveLeaseDelegate(ACTIVE_LEASE),
 			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation({ authorizationExecutionSubject: staleSubject })) },
-			principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },
+			..._requesterDelegates(),
 			approvalRequest: { create },
 		} as unknown as Prisma.TransactionClient;
 
@@ -446,7 +625,7 @@ describe("defer tool request authority", function _deferSuite()
 			conversationComputerActiveLease: _ActiveLeaseDelegate(null),
 			elicitationRequest: { create: vi.fn().mockResolvedValue({ id: "approval-existing" }) },
 			approvalRequest: { create, findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0) },
-			principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },
+			..._requesterDelegates(),
 			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
 		} as unknown as Prisma.TransactionClient;
 
@@ -461,7 +640,7 @@ describe("defer tool request authority", function _deferSuite()
 			conversationComputerActiveLease: _ActiveLeaseDelegate({ ...ACTIVE_LEASE, leaseId: "lease-3", leaseGeneration: 3 }),
 			elicitationRequest: { create: vi.fn().mockResolvedValue({ id: "approval-existing" }) },
 			approvalRequest: { create: vi.fn().mockRejectedValue(_LeaseFenceRejection()), findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0) },
-			principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },
+			..._requesterDelegates(),
 			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
 		} as unknown as Prisma.TransactionClient;
 
@@ -497,8 +676,9 @@ describe("defer tool request authority", function _deferSuite()
 		const transaction = {
 			agentRun: { findUnique: vi.fn().mockResolvedValue(RUN) },
 			conversationComputerActiveLease: _ActiveLeaseDelegate(ACTIVE_LEASE),
-			approvalRequest: { create: vi.fn(), findFirst: vi.fn().mockResolvedValue({ id: "approval-existing", elicitationRequestId: "approval-existing", argumentsDigest: _deferCommand().argumentsDigest, reviewedToolSchemaDigest: _deferCommand().reviewedParametersSchemaDigest }) },
-			principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },
+			approvalRequest: { create: vi.fn(), findFirst: vi.fn().mockResolvedValue(_existingApproval()) },
+			elicitationRequest: { findUnique: vi.fn().mockResolvedValue(_elicitation(_existingApproval())) },
+			..._requesterDelegates(),
 			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
 		} as unknown as Prisma.TransactionClient;
 
@@ -512,7 +692,7 @@ describe("defer tool request authority", function _deferSuite()
 			agentRun: { findUnique: vi.fn().mockResolvedValue(RUN), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
 			conversationComputerActiveLease: _ActiveLeaseDelegate(ACTIVE_LEASE),
 			approvalRequest: { create, findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0) },
-			principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },
+			..._requesterDelegates(),
 			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
 		} as unknown as Prisma.TransactionClient;
 

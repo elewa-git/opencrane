@@ -7,6 +7,8 @@ export interface ElicitationProductAuthorization
 	canReadConversation(siloId: string, subjectId: string, conversationId: string, now: Date): Promise<boolean>;
 	/** Filters conversation ids through the Principal's current Conversation/Read grants. */
 	filterReadableConversationIds(siloId: string, subjectId: string, conversationIds: readonly string[], now: Date): Promise<ReadonlySet<string>>;
+	/** Returns elicitation ids whose linked tool approval has a current ApprovalRequest/Read grant. */
+	filterReadableApprovalElicitationIds(siloId: string, subjectId: string, requestIds: readonly string[], now: Date): Promise<ReadonlySet<string>>;
 	/** Admits Conversation/Use and optional exact ApprovalRequest/Decide before a response write. */
 	admitResponse(siloId: string, subjectId: string, conversationId: string, approvalRequestId: string | null, response: JsonValue, now: Date): Promise<boolean>;
 }

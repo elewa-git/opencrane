@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ConversationToolProposalOutcomes } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
@@ -20,6 +20,17 @@ const _invocation = vi.hoisted(function _Invocation()
 const _admitUntil = vi.hoisted(function _AdmitUntil()
 {
 	return vi.fn().mockResolvedValue(4_000_000_000_000);
+});
+
+const _openApproval = vi.hoisted(function _OpenApproval()
+{
+	return vi.fn().mockResolvedValue(true);
+});
+
+vi.mock("@opencrane/backend/server/iam/authorization", async function _ApprovalAuthority(importOriginal)
+{
+	const original = await importOriginal<typeof import("@opencrane/backend/server/iam/authorization")>();
+	return { ...original, __OpenDeferredToolApprovalInTransaction: _openApproval };
 });
 
 vi.mock("../prisma-conversation-tool-proposal-run-reader", function _RunReader()
@@ -52,6 +63,50 @@ async function _ApprovalExpiry(): Promise<void> {}
 
 describe("conversation approval proposal replay", function _Suite()
 {
+	beforeEach(function _Reset()
+	{
+		_invocation.state = "ready";
+		_run.subject.membership.kind = "fleet";
+		_run.subject.principalId = "user-1";
+		_admitUntil.mockReset().mockResolvedValue(4_000_000_000_000);
+		_openApproval.mockReset().mockResolvedValue(true);
+	});
+	afterEach(function _RestoreClock() { vi.useRealTimers(); });
+
+	it("opens a company proposal for the requester without admitting runtime work", async function _CompanyApproval()
+	{
+		_run.subject.membership.kind = "managed";
+		_run.subject.principalId = "company-principal";
+		_invocation.state = "awaiting_approval";
+		const f = _Fixture();
+		const runtimeAdmission = vi.fn();
+		const repository = new PrismaConversationToolProposalRepository({} as never, {} as never, runtimeAdmission, _ApprovalExpiry);
+
+		await expect(repository.admit(f.turn, f.candidate, f.proposal, { audience: "conversation", namespace: "computers", serviceAccountName: "computer", workloadKind: "pod", workloadUid: "pod-1", podUid: "pod-1" })).resolves.toEqual({ proposalId: "public-invocation-1", outcome: ConversationToolProposalOutcomes.Existing });
+		expect(_admitUntil).toHaveBeenCalledOnce();
+		expect(_openApproval).toHaveBeenCalledWith({}, expect.objectContaining({ invocationId: "invocation-row-1", runId: "run-1", toolRevisionId: "tool-1", arguments: { recordId: "record-1" } }));
+		expect(runtimeAdmission).not.toHaveBeenCalled();
+	});
+
+	it.each(["current permissions", "requester assignment"])("refuses a company proposal after losing %s", async function _CompanyDenial(reason)
+	{
+		_run.subject.membership.kind = "managed";
+		_run.subject.principalId = "company-principal";
+		_invocation.state = "awaiting_approval";
+		if (reason === "current permissions")
+			_admitUntil.mockResolvedValue(null);
+		else
+			_openApproval.mockResolvedValue(false);
+		const f = _Fixture();
+		const runtimeAdmission = vi.fn();
+		const repository = new PrismaConversationToolProposalRepository({} as never, {} as never, runtimeAdmission, _ApprovalExpiry);
+
+		await expect(repository.admit(f.turn, f.candidate, f.proposal, { audience: "conversation", namespace: "computers", serviceAccountName: "computer", workloadKind: "pod", workloadUid: "pod-1", podUid: "pod-1" })).rejects.toThrow();
+		expect(runtimeAdmission).not.toHaveBeenCalled();
+		if (reason === "current permissions")
+			 expect(_openApproval).not.toHaveBeenCalled();
+	});
+
 	it("admits the existing Ready invocation so the saved result can be read", async function _ReadyReplay()
 	{
 		vi.useFakeTimers();
