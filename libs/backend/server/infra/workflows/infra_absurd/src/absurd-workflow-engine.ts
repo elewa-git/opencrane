@@ -291,11 +291,12 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	/** Calls the fixed, parameterized Absurd procedure on the caller's existing transaction. */
 	private async spawnWithTransaction<TInput>(transactionClient: unknown, task: IWorkflowTaskSpawn<TInput>, declaration: IWorkflowTaskDeclaration): Promise<IWorkflowTaskReceipt>
 	{
+		const isRolledBackConflict = this.requireRollbackClassifier();
 		const taskName = _RequiredString("task.taskName", task.taskName);
 		const idempotencyKey = _RequiredString("task.idempotencyKey", task.idempotencyKey);
 		const retry = _AbsurdRetryPolicy(declaration.retryPolicy);
 		const cmd = { taskName, idempotencyKey, input: _EnvelopeForTask(idempotencyKey, task.input), ...retry };
-		const taskAdmission = new WorkflowTaskAdmission(this.queueForTask(taskName));
+		const taskAdmission = new WorkflowTaskAdmission(this.queueForTask(taskName), isRolledBackConflict);
 		const receipt = await taskAdmission.admit(transactionClient, cmd);
 		return { taskId: receipt.taskId, taskName, idempotencyKey };
 	}
@@ -323,10 +324,19 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	/** Delivers a task event through the same transaction that persisted its product outcome. */
 	async emitEventInTransaction<TPayload>(transaction: IWorkflowTransaction, task: IWorkflowTaskReceipt, event: IWorkflowTaskEvent<TPayload>): Promise<IWorkflowTaskEventReceipt>
 	{
+		const isRolledBackConflict = this.requireRollbackClassifier();
 		const eventName = _RequiredString("event.eventName", event.eventName);
-		const admission = new WorkflowTaskEventAdmission(this.queueForTask(task.taskName));
+		const admission = new WorkflowTaskEventAdmission(this.queueForTask(task.taskName), isRolledBackConflict);
 		await admission.emit(transaction.client, _AbsurdTaskEventName(task.taskId, eventName), event.payload);
 		return { task, eventName };
+	}
+
+	/** Refuses transactional work before SQL when the process has not supplied its database rollback checker. */
+	private requireRollbackClassifier(): (error: unknown) => boolean
+	{
+		if (typeof this.options.isRolledBackConflict !== "function")
+			throw new WorkflowError("Transactional workflows require isRolledBackConflict.");
+		return this.options.isRolledBackConflict;
 	}
 
 	/** Cancels an incomplete task through the reviewed queue that owns its task definition. */

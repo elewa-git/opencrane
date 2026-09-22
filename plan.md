@@ -2,6 +2,60 @@
 
 ## MVP continuation — 2026-09-22
 
+### Published rollback correction — database CI passes; controller repair locally verified
+
+The reviewed correction is published as `e48886ce7427affb89e2801b32327e84c3c78067` on draft #899.
+[Run 35770853615](https://github.com/elewa-git/opencrane/actions/runs/35770853615) confirms that
+source SHA and now passes database authority and KurrentDB. The full run is still in progress at
+this inspection. Agent-controller image job `106892268141` has failed: its image builds, but Node
+cannot import `@prisma/client` when starting `/app/dist/apps/agent-controller/index.js`.
+That job checked out merge SHA `fe0e06de459ba78f081208b2113adb112cafc1fb`.
+
+The new transaction adapters import the shared Prisma classifier through Absurd's existing static
+imports. The controller bundles workspace libraries but leaves third-party packages external, and
+its runtime dependency installation has no Prisma package. Its fixed import-list check did not
+catch the new dependency. This is a source-induced deployable-image failure, not a network error,
+and passing local transaction tests did not prove controller startup. Architecture preflight passes
+a bounded correction through the existing engine options: the server supplies the unchanged genuine
+Prisma rollback classifier, while worker-only controller composition omits it. Both transactional
+paths must require the classifier before executing SQL. The adapters preserve errors; the caller's
+existing unit-of-work policy still decides whether and how many times to retry. No new dependency,
+package, alias, SQL or permission is needed. The source correction now removes Prisma from the
+controller import closure. A regression bundles the actual controller entrypoint without writing
+files, rejects Prisma inputs/imports and undeclared runtime dependencies, and failed before the
+repair. The actual server-composition test also failed before the classifier binding was supplied.
+Both are now green. Production server composition, separate SQL qualification and all six actual
+SQL fixture factories supply the unchanged classifier; worker-only compositions do not need it.
+
+Local checks pass: controller build and six tests, 14 server-composition tests, 54 workflow tests
+(one opt-in SQL qualification case skipped), 13 shared-transaction tests, ten existing real
+PostgreSQL memory-admission tests, five type targets, full dependency-boundary lint and 26 source-pin
+enforcement tests. Prisma boundaries pass against the repair base and actual PR base. Module growth
+has no errors; the engine's 473-to-483-line growth requires review of its existing orchestration
+responsibility. The new validation method checks process composition before SQL-adapter delegation;
+it does not acquire retry, classification or persistence ownership. Architecture post-review and
+independent integrated review pass with no findings. Repository context doctor could not open its local
+context database; this does not establish a source defect and no unrelated repair was attempted.
+Remote controller-image startup must still pass on the next published source revision.
+No replacement image publication or deployment has been authorized.
+
+The multi-step acceptance audit also identified an uncovered local case: successful continuation
+tests use a different tool revision for each ordinal. A new controlled-port test covers
+discovery followed by two pages from the same inventory tool revision, distinct call identities,
+saved-result-derived arguments and totals, and restart after the first page. The focused run passes
+57 tests across four continuation/recovery files, including the new three-record, 31-unit example.
+The scripted model stops on the saved page's null next cursor while tool selection remains allowed:
+four of six model calls, 400 of 600 completion tokens and three of five tool/cycle allowances are
+used. The original deadline and allowance survive restart. Type checking, style and independent
+review pass. The real turn-store code uses in-memory history and mocked SQL custody here; restart
+recreates the authority/store, not a process or database. This qualifies pagination identity and
+recovery plumbing only. Real Odoo discovery, inventory reconciliation,
+a separately authorized test write and authenticated user-journey acceptance remain open.
+
+The current 18-PR stack still passes at snapshot
+`4aa8e88dfbc81e8abf3c2f795248278411f6647a08c2d6d7f513df247cf47c16`; no predecessor was absorbed
+or closed. The source approvals and outstanding product/live-system decisions are unchanged.
+
 ### Repaired candidate — history proof passed; SQL rollback handling and visuals open
 
 The reviewed repair is published as `a3de26943f0233edc384aba35e31d506bdeade68` on draft #899.
@@ -2478,13 +2532,15 @@ their own completion track; they are not silently bundled into the first tool PR
 | R2 — visible personal activity | ✅ COMPLETE in [#829](https://github.com/elewa-git/opencrane/pull/829). UI `6692b2e59` and server `e50cdcc5b` are installed on testv5. Linux CI and publication pass. Two employees see their completed work, open its saved answer by keyboard, refresh without starting work, and recover activity after reload. Narrow-screen focus and cross-employee API isolation pass. See [completed work](plan-done.md) and the [deploy ledger](docs/agents/deploy-ledger.md). |
 | R1 — reliable login | IMPLEMENTED, CI GREEN at `44fd8f328` — encrypted PostgreSQL sessions, fixed deadlines, revision-checked saves and logout markers. All 52 auth tests and [CI](https://github.com/elewa-git/opencrane/actions/runs/34274625541) pass, including all seven SQL targets on fresh PostgreSQL and six real-client session proofs. Fresh-install live qualification remains pending; testv5 retains the earlier database baseline. |
 | A1 — membership revocation and closed-work proof | IMPLEMENTED, IN REVIEW — standalone administrators can remove another non-Owner member through Settings. The server suspends the existing membership, protects Owner/self removal and rechecks current authority on retries. Workspace access loss clears retained private content and rejects delayed results. Focused unit checks and all 123 browser checks pass; five real PostgreSQL cases join the CI gate. The real-account removal and closed-work journey remains to qualify live. Fleet removal remains unsupported. |
-| T1 — first permitted tool retrieval | IN PROGRESS — the server's one-tool continuation is implemented and now progresses through Absurd in #849. Company tool assignment is the first active follow-up. Connection activation, a real integration and participant result evidence remain required. |
-| T2 | IN PROGRESS: personal approval and durable resume pass local integration; company approval and real external-action qualification remain. |
+| T1 — first permitted tool retrieval | IN PROGRESS — repeated tool continuation, remote database authority and the larger new-company-assistant budget are implemented in the current #899 stack. Controlled dependent-call/restart tests and database authority checks pass; real integration use and participant result evidence remain required. |
+| T2 | IN PROGRESS: personal and requester-only company approval/resume are implemented with PostgreSQL proof. Real requester accounts, provider execution and recovery/cancellation acceptance remain. |
 | U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
 | M1 | IN PROGRESS: persistence, transaction-bound Absurd admission and catalog completion pass CI in #876–#878. The reviewed candidate shared-file repair passes all 31 image-qualification cases in #881. Authenticated composition, gateway/client integration and product memory journeys remain. The separate production-provider qualification still fails. |
-| U2 | The structured-result producer and A2UI replay pass source review and controlled checks at `73f0ad486`; real-service recovery, visual approval and live proof remain. Runtime-question source is separately PAUSED pending explicit approval. |
+| U2 | Structured-result production/replay passes source review, controlled checks and real-Kurrent paired-output recovery. Visual approval and authenticated live proof remain. Runtime-question source is separately PAUSED pending explicit approval. |
 | F1 | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV capture, scanning and answer-link recovery are implemented in #879 and pass four real-store cases in #880. The pending SQL guard and complete hosted execution/download qualification remain. |
-| D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |
+| D1, S1 | REQUIRED FOR MVP; source activation remains paused for the recorded delegation and private-scheduling decisions. Characterization tests do not establish either journey. |
+| A2 | PARTIAL: protected audit/usage read screens and their controlled tests are implemented. Governance-reader policy, actual usage collection/pricing/attribution and real-account administration acceptance remain open. |
+| T3 | PLANNED, with separate acceptance for its journey. |
 | Q1 — operational acceptance | CONTINUOUS — source checks and CI do not replace fresh-install or real-account acceptance. |
 
 The 10 September priority order supersedes the earlier overnight sequencing and morning handoff.

@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { PersonalMemoryOperationAdmissionOutcomes, PersonalMemoryOperationKinds, PrismaPersonalMemoryOperationRepository, type AdmitPersonalMemoryOperationCommand } from "@opencrane/backend/agents/personal/memory";
 import { PERSONAL_MEMORY_OPERATION_TASK, _CreatePersonalMemoryOperationTask } from "@opencrane/backend/server/conversations";
-import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
+import { ___IsRolledBackConflict, ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import { _CreateAbsurdWorkflowEngine } from "@opencrane/backend/server/infra/workflows/infra_absurd";
 
 /** Uses the disposable baseline database without connecting to a memory provider. */
@@ -21,7 +21,7 @@ let _QueueOwner: Absurd;
 /** Creates a process-local engine facade with the production memory task declaration. */
 function _Engine()
 {
-	const engine = _CreateAbsurdWorkflowEngine({ databaseUrl: process.env.DATABASE_URL!, databasePool: _Pool, databasePoolSize: 2, queueAuthority: { queueForTask: function _QueueForTask() { return _Queue; } } });
+	const engine = _CreateAbsurdWorkflowEngine({ isRolledBackConflict: ___IsRolledBackConflict, databaseUrl: process.env.DATABASE_URL!, databasePool: _Pool, databasePoolSize: 2, queueAuthority: { queueForTask: function _QueueForTask() { return _Queue; } } });
 	engine.declare(PERSONAL_MEMORY_OPERATION_TASK);
 	return engine;
 }

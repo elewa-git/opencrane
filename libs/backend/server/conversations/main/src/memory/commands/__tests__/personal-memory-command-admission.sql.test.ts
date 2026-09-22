@@ -5,6 +5,7 @@ import { MemoryFactState, OrgMemberStatus, Prisma, PrismaClient } from "@prisma/
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { ___IsRolledBackConflict } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import { PersonalMemoryOperationKinds, PrismaPersonalMemoryOperationRepository } from "@opencrane/backend/agents/personal/memory";
 import type { IWorkflowEngine, IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { _CreateAbsurdWorkflowEngine } from "@opencrane/backend/server/infra/workflows/infra_absurd";
@@ -42,7 +43,7 @@ enum _DenialKind
 /** Creates a real Absurd engine with the production memory task declaration. */
 function _Engine(): ReturnType<typeof _CreateAbsurdWorkflowEngine>
 {
-	const engine = _CreateAbsurdWorkflowEngine({ databaseUrl: process.env.DATABASE_URL!, databasePool: _Pool, databasePoolSize: 2, queueAuthority: { queueForTask: function _QueueForTask() { return _Queue; } } });
+	const engine = _CreateAbsurdWorkflowEngine({ isRolledBackConflict: ___IsRolledBackConflict, databaseUrl: process.env.DATABASE_URL!, databasePool: _Pool, databasePoolSize: 2, queueAuthority: { queueForTask: function _QueueForTask() { return _Queue; } } });
 	engine.declare(PERSONAL_MEMORY_OPERATION_TASK);
 	return engine;
 }

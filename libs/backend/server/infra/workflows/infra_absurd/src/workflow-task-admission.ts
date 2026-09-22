@@ -1,7 +1,5 @@
 import type { Prisma } from "@prisma/client";
 
-import { ___IsRolledBackConflict } from "@opencrane/backend/server/infra/prisma-unit-of-work";
-
 import { AbsurdWorkflowError } from "./absurd-workflow-error";
 import type { IWorkflowTaskAdmission, IWorkflowTaskAdmissionReceipt, IWorkflowTaskAdmissionRequest } from "./workflow-task-admission.types";
 import { _RequireWorkflowTransactionClient } from "./workflow-transaction-client";
@@ -76,15 +74,19 @@ export class WorkflowTaskAdmission implements IWorkflowTaskAdmission
 {
 	/** Stores the reviewed queue selected by workflow composition for this task type. */
 	private readonly queueName: string;
+	/** Uses the caller's database-aware checker without importing an ORM into worker processes. */
+	private readonly isRolledBackConflict: (error: unknown) => boolean;
 
 	/**
 	 * Creates task admission for one queue that bootstrap already created.
 	 *
 	 * @param queueName Queue selected by the same authority used by the workflow engine.
+	 * @param isRolledBackConflict Checker supplied by the transaction-owning process.
 	 */
-	constructor(queueName: string)
+	constructor(queueName: string, isRolledBackConflict: (error: unknown) => boolean)
 	{
 		this.queueName = _RequiredString("queueName", queueName);
+		this.isRolledBackConflict = isRolledBackConflict;
 	}
 
 	/**
@@ -140,7 +142,7 @@ export class WorkflowTaskAdmission implements IWorkflowTaskAdmission
 		}
 		catch (cause)
 		{
-			if (___IsRolledBackConflict(cause))
+			if (this.isRolledBackConflict(cause))
 				throw cause;
 			if (cause instanceof Error && (cause.message.includes("must return exactly one") || cause.message.includes("returned an invalid")))
 			{

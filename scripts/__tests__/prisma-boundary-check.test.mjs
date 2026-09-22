@@ -293,10 +293,10 @@ test("accepts the previous pinned event procedure only as an exact historical de
 		assert.throws(function _ChangedHistory() { validatePolicy({ ...historical, rawProcedureCalls: [{ ...previous, ...change }] }, true); }, /invalid raw procedure call/u);
 });
 
-test("accepts pre-rollback source pins only in exact historical declarations", function _previousRollbackPins()
+test("accepts earlier rollback source pins only in exact historical declarations", function _previousRollbackPins()
 {
 	const policy = _LivePolicy();
-	for (const [adapter, sourceSha256] of [["WorkflowTaskAdmission", "eaaec9a78dc51cae458385b93640e85888a3032da656632022f3e6e892833acf"], ["WorkflowTaskEventAdmission", "12e9a4db34f7ff277e535cd260a9bd3f7765026293ece5768499b56e99b7293e"]])
+	for (const [adapter, sourceSha256] of [["WorkflowTaskAdmission", "eaaec9a78dc51cae458385b93640e85888a3032da656632022f3e6e892833acf"], ["WorkflowTaskEventAdmission", "12e9a4db34f7ff277e535cd260a9bd3f7765026293ece5768499b56e99b7293e"], ["WorkflowTaskAdmission", "eabc0843f3e395ec2bc2a03838d8806857537e933a92b21a4f4d0546179e6309"], ["WorkflowTaskEventAdmission", "ec1ec85d8e6fbf15c4afa55ef5bcf282e2667e45b70749a222f94ba8f869b24f"]])
 	{
 		const current = policy.rawProcedureCalls.find(procedure => procedure.adapter === adapter);
 		const previous = { ...current, sourceSha256 };

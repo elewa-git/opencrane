@@ -7,6 +7,7 @@ import { _CreateArtifactCatalogueRepository, _CreatePublishedArtifactReader } fr
 import { _CreateMcpEraProbeAdapter, _CreateOciImageArtifactResolver, __CreateOciImageLayoutImporter, __CreateOciImageLayoutVerifier, __CreateOciImageValidationWorkflow, __CreateMcpEraProbeWorkflow, McpConnectionTaskNames, McpEraProbeTaskNames, McpTaskTaskNames, OciImageValidationTaskNames, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
 import { __CreateHttpsMcpRemoteClient } from "@opencrane/backend/server/infra/mcp-remote-client";
 import { _CreateOciRegistryAuthorizationReader, __CreateOciRegistryClient } from "@opencrane/backend/server/infra/oci-registry";
+import { ___IsRolledBackConflict } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import { _CreateAbsurdWorkflowEngine } from "@opencrane/backend/server/infra/workflows/infra_absurd";
 import { __CreateWorkflowGuard, __CreateWorkflowTaskQueueAuthority } from "@opencrane/backend/server/infra/workflows/guard";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
@@ -71,7 +72,7 @@ export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: Open
 		{ taskName: ArtifactPreprocessTaskDeclaration.taskName, queue: "artifact-preprocessing" },
 	]);
 	const checkpointOperationLeaseSeconds = _ServerCheckpointOperationLeaseSeconds(config, memoryGatewayTimeoutMilliseconds);
-	const runtime = _CreateAbsurdWorkflowEngine({ checkpointOperationLeaseSeconds, databasePoolSize: config.databasePoolSize, databaseUrl: config.databaseUrl, log: _log, pollIntervalMs: config.pollIntervalMilliseconds, queueAuthority, workerConcurrency: config.workerConcurrency });
+	const runtime = _CreateAbsurdWorkflowEngine({ checkpointOperationLeaseSeconds, databasePoolSize: config.databasePoolSize, databaseUrl: config.databaseUrl, isRolledBackConflict: ___IsRolledBackConflict, log: _log, pollIntervalMs: config.pollIntervalMilliseconds, queueAuthority, workerConcurrency: config.workerConcurrency });
 	const execution = __CreateWorkflowGuard({ execution: runtime, log: _log, queueAuthority, siloId: config.siloId });
 	__DeclareSkillAuthoringValidation(execution);
 	__DeclareArtifactPreprocessTask(execution);

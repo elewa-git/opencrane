@@ -1,7 +1,5 @@
 import type { Prisma } from "@prisma/client";
 
-import { ___IsRolledBackConflict } from "@opencrane/backend/server/infra/prisma-unit-of-work";
-
 import { AbsurdWorkflowError } from "./absurd-workflow-error";
 import type { IWorkflowTaskEventAdmission } from "./workflow-task-event-admission.types";
 import { _RequireWorkflowTransactionClient } from "./workflow-transaction-client";
@@ -29,11 +27,14 @@ export class WorkflowTaskEventAdmission implements IWorkflowTaskEventAdmission
 {
 	/** Queue selected by the same reviewed authority used by task admission and workers. */
 	private readonly queueName: string;
+	/** Uses the caller's database-aware checker without importing an ORM into worker processes. */
+	private readonly isRolledBackConflict: (error: unknown) => boolean;
 
 	/** Binds transactional event delivery to one reviewed Absurd queue. */
-	constructor(queueName: string)
+	constructor(queueName: string, isRolledBackConflict: (error: unknown) => boolean)
 	{
 		this.queueName = _RequiredString("queueName", queueName);
+		this.isRolledBackConflict = isRolledBackConflict;
 	}
 
 	/**
@@ -65,7 +66,7 @@ export class WorkflowTaskEventAdmission implements IWorkflowTaskEventAdmission
 		}
 		catch (cause)
 		{
-			if (___IsRolledBackConflict(cause))
+			if (this.isRolledBackConflict(cause))
 				throw cause;
 			throw new AbsurdWorkflowError("emit task event", cause);
 		}

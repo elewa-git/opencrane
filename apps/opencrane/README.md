@@ -58,6 +58,8 @@ an uncached workflow effect, the Absurd adapter verifies and renews its claim be
 configured memory, remote-tool or registry call, with a minute for completion evidence. Memory
 pre-reads finish before the mutation checkpoint renews its lease. Catalog permission checks and
 writes share one product transaction.
+Workflow composition supplies the shared Prisma rollback checker, preserving genuine rollback
+errors for whole-transaction retry without loading Prisma in the separate controller worker.
 
 The route registry is deliberately a catalogue rather than a second application layer:
 

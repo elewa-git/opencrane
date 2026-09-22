@@ -5,6 +5,7 @@ import pg from "pg";
 import { ArtifactKind, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { ___IsRolledBackConflict } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import { _RegisterConversationGeneratedFileWorkflow } from "@opencrane/backend/server/conversation-assets";
 import { McpCompanionCommandKinds } from "@opencrane/backend/server/gateways/mcp";
 import { AesGcmConversationPrivatePayloadCipher } from "@opencrane/backend/server/conversations/history";
@@ -31,7 +32,7 @@ let _QueueOwner: Absurd;
 /** Create a new workflow facade and register the production task declaration and handler. */
 function _Engine()
 {
-	const engine = _CreateAbsurdWorkflowEngine({ databaseUrl: process.env.DATABASE_URL!, databasePool: _Pool, databasePoolSize: 2, queueAuthority: { queueForTask: function _QueueForTask() { return _Queue; } } });
+	const engine = _CreateAbsurdWorkflowEngine({ isRolledBackConflict: ___IsRolledBackConflict, databaseUrl: process.env.DATABASE_URL!, databasePool: _Pool, databasePoolSize: 2, queueAuthority: { queueForTask: function _QueueForTask() { return _Queue; } } });
 	_RegisterConversationGeneratedFileWorkflow(engine, {
 		persistence: {
 			async loadCurrent() { throw new Error("Capture SQL proof never starts a generated-file worker"); },

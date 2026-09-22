@@ -3,6 +3,7 @@ import { expect, it, vi } from "vitest";
 
 import { PERSONAL_MEMORY_OPERATION_TASK, type SelfConversationHistoryAuthority } from "@opencrane/backend/server/conversations";
 import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
+import { ___IsRolledBackConflict } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import { _CreateAbsurdWorkflowEngine } from "@opencrane/backend/server/infra/workflows/infra_absurd";
 import type { IWorkflowEngine, IWorkflowTaskContext, IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
 
@@ -53,6 +54,7 @@ it("keeps personal memory on the existing control-plane engine and registers its
 		const register = vi.spyOn(composition.execution, "register");
 		_CreatePersonalMemoryOperationWorkflowComposition(prisma, history, composition.execution, { siloId: "silo-one", gateway: new __UnavailableMemoryGatewayClient() });
 		const options = vi.mocked(_CreateAbsurdWorkflowEngine).mock.calls.at(-1)![0];
+		expect(options).toHaveProperty("isRolledBackConflict", ___IsRolledBackConflict);
 		expect(options.queueAuthority.queueForTask(PERSONAL_MEMORY_OPERATION_TASK.taskName)).toBe("control-plane");
 		expect(options.checkpointOperationLeaseSeconds).toBe(360);
 		expect(register).toHaveBeenCalledTimes(1);
