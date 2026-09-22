@@ -6,6 +6,10 @@
 		<div><dt>Data used</dt><dd>{{ body().dataUse }}</dd></div>
 		@if (formattedArguments(); as arguments) { <div class="elicitation-control__arguments"><dt>Proposed details</dt><dd><pre>{{ arguments }}</pre></dd></div> }
 		@if (body().externalSystem; as externalSystem) { <div><dt>External system</dt><dd>{{ externalSystem }}</dd></div> }
+		@if (body().executionConnection; as connection) {
+			<div><dt>Connection owner</dt><dd>{{ connection.owner }}</dd></div>
+			<div><dt>Credential use</dt><dd>{{ connection.credentialUse }}</dd></div>
+		}
 		<div><dt>What happens</dt><dd>{{ body().consequence }}</dd></div>
 		@if (body().cost; as cost) { <div><dt>Cost</dt><dd>{{ cost }}</dd></div> }
 	</dl>

@@ -43,6 +43,10 @@ The package owns request, response-attempt, result-delivery, and one-use memory-
 Tool approval keeps its own audit row, and runtime, browser, and A2UI payloads cannot select the
 respondent, dataset, or protected action.
 
+Tool-approval projections retain IAM's saved connection-owner and credential-use disclosure.
+The public schema requires this disclosure for tool approvals, while other input purposes omit it.
+It exposes the owner's display name, never credentials or connection custody coordinates.
+
 For a personal approval, the assigned participant answers the server-issued request. IAM changes
 the invocation to ready or failed inside that response transaction, and an injected wake port emits
 the existing saved-turn event only after the final pending input is gone. The wake port belongs to

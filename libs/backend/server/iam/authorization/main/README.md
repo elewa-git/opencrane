@@ -132,7 +132,13 @@ retry loop, or network call.
 
 Tool approval saves the display-safe argument projection with the participant request. The body
 also freezes the admitted tool name, its provider-authored description, and the operator-authored
-server name before the participant decides. If the schema marks any proposed value as sensitive,
+server name before the participant decides. It also freezes the selected installation owner's safe
+display name, whether that owner is a person or company assistant, and the immutable connection's
+credential requirement. IAM resolves that evidence through the run revision's exact tool assignment:
+OCI revisions must be credentialless and have no remote coordinates, while remote revisions must
+match the complete saved connection generation and endpoint digest. Missing, cross-silo, wrong-owner,
+or unsafe evidence refuses the approval before the run is paused. A replay uses the saved body and
+digest instead of re-reading a renamed profile. If the schema marks any proposed value as sensitive,
 the body contains no arguments and IAM accepts denial only.
 
 For personal and company assistants, only the original human requester saved identically on the

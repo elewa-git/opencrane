@@ -65,4 +65,8 @@ export interface ApprovalElicitationBinding
 	readonly purposePayload: unknown;
 	/** Digest of that immutable purpose payload. */
 	readonly purposePayloadDigest: string;
+	/** Untrusted saved participant-facing body, including its execution-owner disclosure. */
+	readonly body: unknown;
+	/** Digest of the immutable participant-facing body. */
+	readonly bodyDigest: string;
 }

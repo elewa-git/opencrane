@@ -51,8 +51,38 @@ requester refusal, revoked Decide, and revoked Read across detail, reconnect and
 application database target passes 91 tests and four authority scripts on the disposable final
 baseline. Independent integrated review and architecture post-review pass for the backend source;
 the managed-assistant SQL test delta also passes independent review. No provider was called.
-Connection-owner disclosure in the approval UI and the actual approved external write remain
-separate acceptance work; this backend slice does not finish T2 or authorize a provider write.
+This backend slice is committed locally as `a78d05f607db1d56c2fac533119ae1580bb1d29a`; live
+stack integrity still passes, and no push has run.
+
+Connection-owner disclosure source is implemented through the existing approval body and card.
+The IAM transaction resolves the selected execution owner's assignment, installation and immutable
+remote connection before pausing the run. It freezes only the owner kind, display name and
+credential requirement with the approval digest; the human requester is not treated as the company
+connection owner. Hosted tools disclose credentialless execution. Replay preserves the saved
+disclosure, and malformed or missing disclosure prevents affirmative decisions.
+
+Validation passes 298 IAM, 187 contract, 70 elicitation API, 16 feature, 42 state and nine element
+tests. All 93 application SQL tests and four authority scripts pass on the disposable baseline,
+including eleven approval cases. The two new RemoteHttp cases prove real database disclosure,
+requester-only decisions and one continuation request through the transaction-bound workflow port;
+they do not prove a committed real Absurd event or execute a provider. Existing OCI handoff tests
+remain intact. Generated client/API documentation, server and production UI builds, package type
+checks, full dependency-boundary lint, style/Prisma checks and release coherence pass. The production
+UI build succeeds with two workers outside the sandbox after two silent sandbox exits; no build
+configuration was changed.
+
+All 209 browser interaction/accessibility checks pass after correcting the stories' output bindings
+and controlled draft feedback, with their event assertions preserved. Fifteen approval visual
+comparisons have six unchanged states, two intended disclosure-row changes and seven new states
+without baselines. Candidate screenshots are captured separately; no visual baseline is accepted
+or updated. Source architecture and independent review cover the implemented responsibilities;
+rendered correctness and component reuse pass review, while human visual acceptance stays open. This local
+source checkpoint does not finish T2, qualify a deployed journey or authorize an external write.
+
+The older #891 screenshot artifact expired on 20 September. Fresh local macOS Tools and Computer
+Review/context candidates are being captured from unchanged component source; they are not a
+replacement for exact-head Linux CI evidence or human baseline approval. First-use private-memory
+creation remains pending a separately requested source-only permission decision.
 
 After the remote repair, complete the approved requester-only company path through the existing IAM,
 elicitation and conversation owners. Keep the remaining memory, interaction, files, delegation,

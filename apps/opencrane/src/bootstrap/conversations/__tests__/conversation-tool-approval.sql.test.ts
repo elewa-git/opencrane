@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 
-import { AgentRunState, AgentServiceKind, OrgRole, PrincipalProvenance, ToolInvocationState, ToolResultDeliveryState, PrismaClient } from "@prisma/client";
+import { AgentRunState, AgentServiceKind, McpExecutionTransport, OrgRole, PrincipalProvenance, ToolInvocationState, ToolResultDeliveryState, PrismaClient } from "@prisma/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { PrismaElicitationRepository, PrismaElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
-import { ConversationModelToolModes, ElicitationBodyKinds, CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
+import { ConversationModelToolModes, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, McpCredentialRequirement, CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import { __FakeWorkflowEngine } from "@opencrane/backend/server/infra/workflows/testing";
 import { ConversationGeneratedFileResultStates, ConversationApprovalNotificationOutcomes, PrismaConversationComputerTurnWorkflowEventRepository, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, _RegisterConversationComputerTurnWorkflow, CONVERSATION_COMPUTER_TURN_TASK } from "@opencrane/backend/server/conversations";
 import { PrismaManagedAuthorizationGrantRepository, ToolInvocationEventTypes } from "@opencrane/backend/server/iam/authorization";
@@ -106,6 +106,11 @@ describe("requester approval through the conversation workflow on PostgreSQL", f
 			externalSystem: f.serverName,
 			consequence: `This invokes the external tool once. Its saved description says: ${f.tool.description}`,
 			proposedArguments: f.proposal.arguments,
+			executionConnection: {
+				ownerKind: agentKind === AgentServiceKind.Managed ? ElicitationConnectionOwnerKinds.CompanyAssistant : ElicitationConnectionOwnerKinds.Personal,
+				ownerLabel: f.executionOwnerLabel,
+				credentialRequirement: McpCredentialRequirement.Credentialless,
+			},
 		};
 		expect(approvalRequest.body).toEqual(disclosure);
 		expect(approvalRequest.bodyDigest).toBe(___DigestCanonicalJson(disclosure));
@@ -160,6 +165,51 @@ describe("requester approval through the conversation workflow on PostgreSQL", f
 		await expect(resultReader!.consume(_ResultTurn(f, invocationAfter.toolInvocationId, invocationAfter.requestFingerprint, (await _First.toolResultDelivery.findUniqueOrThrow({ where: { toolInvocationId: invocationAfter.id } })).payloadDigest) as never, _WORKLOAD)).resolves.toMatchObject({ outcome: "available" });
 		expect(await _First.toolResultDelivery.count({ where: { toolInvocationId: invocationAfter.id, state: ToolResultDeliveryState.Consumed } })).toBe(1);
 		expect((await _First.runInputSnapshot.findFirstOrThrow({ where: { runId: f.runId } })).budgetPolicy).toMatchObject({ maxToolInvocations: 1 });
+	});
+
+	it.each([AgentServiceKind.Personal, AgentServiceKind.Managed])("%s RemoteHttp approval saves its execution owner and one continuation without calling the provider", async function _RemoteApproval(agentKind)
+	{
+		const f = await _SeedConversationToolProposalSqlFixture({ agentKind, approvalRequired: true, transport: McpExecutionTransport.RemoteHttp });
+		const runtime = _ToolHandoffSqlRuntime(_First, f);
+		_Runtimes.add(runtime);
+		const owner = new PrismaConversationToolProposalUnitOfWork(_First, f.dependencies, runtime.admission, async function _ApprovalExpiry(transaction, command) { await new PrismaElicitationRepository(transaction as never).expireDue(command); });
+		const workflows = new __FakeWorkflowEngine();
+		workflows.declare(CONVERSATION_COMPUTER_TURN_TASK);
+		const task = await workflows.spawn({ client: {} }, { taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: randomUUID(), input: {} });
+		const persistedTask = { ...task, taskId: randomUUID() };
+		await _First.agentRun.update({ where: { id: f.runId }, data: { workflowTaskId: persistedTask.taskId, workflowTaskName: persistedTask.taskName, workflowTaskKey: persistedTask.idempotencyKey } });
+		await owner.admit(f.turn, f.candidate, f.proposal, _WORKLOAD);
+		const approval = await _First.approvalRequest.findFirstOrThrow({ where: { runId: f.runId } });
+		const request = await _First.elicitationRequest.findUniqueOrThrow({ where: { id: approval.elicitationRequestId! } });
+		const invocation = await _First.toolInvocation.findFirstOrThrow({ where: { runId: f.runId } });
+		const expectedOwnerKind = agentKind === AgentServiceKind.Managed ? ElicitationConnectionOwnerKinds.CompanyAssistant : ElicitationConnectionOwnerKinds.Personal;
+		expect(request.body).toMatchObject({ executionConnection: { ownerKind: expectedOwnerKind, ownerLabel: f.executionOwnerLabel, credentialRequirement: McpCredentialRequirement.Credentialless } });
+		expect(request.bodyDigest).toBe(___DigestCanonicalJson(request.body as never));
+		expect(approval).toMatchObject({ principalId: f.principalId, state: "Pending" });
+		expect(request.assignedParticipantId).toBe(f.requesterPrincipalId);
+		expect(invocation.state).toBe(ToolInvocationState.AwaitingApproval);
+		const connection = await _First.mcpConnection.findFirstOrThrow({ where: { siloId: f.siloId } });
+		expect(connection).toMatchObject({ ownerPrincipalId: f.principalId, actorPrincipalId: f.requesterPrincipalId });
+		if (agentKind === AgentServiceKind.Managed)
+			expect(f.principalId).not.toBe(f.requesterPrincipalId);
+		const grants = await _First.authorizationGrant.findMany({ where: { siloId: f.siloId, resourceKind: ProductAuthorizationResourceKinds.ApprovalRequest, resourceId: approval.id, revokedAt: null } });
+		expect(grants).toHaveLength(2);
+		expect(grants.every(function _RequesterGrant(grant) { return grant.subjectPrincipalId === f.requesterPrincipalId && grant.boundaryPrincipalId === f.requesterPrincipalId; })).toBe(true);
+
+		const emitted: string[] = [];
+		const taskAliases = new Map([[persistedTask.taskId, task]]);
+		const eventPort = _EventPort(workflows, emitted, taskAliases);
+		const elicitation = new PrismaElicitationUnitOfWork(_First, function _WakeFactory(transaction) { return new PrismaConversationComputerTurnWorkflowEventRepository(transaction as never, eventPort); });
+		const response = { kind: ElicitationBodyKinds.Approval, approved: true } as const;
+		const command = { siloId: f.siloId, conversationId: f.turn.binding.conversationId, requestId: request.id, subjectId: f.requesterPrincipalId, verifiedStepUpAt: new Date(), submission: { idempotencyKey: `approve-remote-${f.runId}`, response }, now: new Date() };
+		await expect(elicitation.respond(command)).resolves.toMatchObject({ outcome: "accepted", projection: { idempotent: false } });
+		await expect(elicitation.respond({ ...command, now: new Date() })).resolves.toMatchObject({ outcome: "accepted", projection: { idempotent: true } });
+		expect(await _First.toolInvocation.findUniqueOrThrow({ where: { id: invocation.id } })).toMatchObject({ state: ToolInvocationState.Ready });
+		expect(await _First.approvalRequest.findUniqueOrThrow({ where: { id: approval.id } })).toMatchObject({ state: "Approved", decidedBy: f.requesterPrincipalId });
+		expect(await _First.authorizationGrant.count({ where: { siloId: f.siloId, resourceKind: ProductAuthorizationResourceKinds.ApprovalRequest, resourceId: approval.id, revokedAt: null } })).toBe(0);
+		expect(await _First.elicitationResponseAttempt.count({ where: { requestId: request.id } })).toBe(1);
+		expect(await _First.mcpRuntimeExecution.count({ where: { siloId: f.siloId } })).toBe(0);
+		expect(emitted).toEqual([`tool-approval:${invocation.toolInvocationId}`]);
 	});
 
 	it.each([AgentServiceKind.Personal, AgentServiceKind.Managed])("%s unanswered approval expires into one terminal result without dispatch", async function _ExpiredJourney(agentKind)

@@ -48,6 +48,12 @@ with HTTP 202 while current work and credential cleanup finish; removed rows are
 installation lists, and reinstall cannot proceed while removal is pending.
 Neither catalogue visibility nor an installation grants permission to execute a tool.
 
+Tool approvals disclose the selected installation's owner and credential requirement through
+`ElicitationExecutionConnection`. The server saves this display-safe evidence with the approval;
+the browser validates it with `___ElicitationExecutionConnectionSchema` and never substitutes the
+approver's identity. Credentialless tools explicitly require no credential. The disclosure carries
+no account identifiers, credential coordinates or secrets, and grants no execution permission.
+
 The private run input contract carries a complete `RunBudgetPolicy`: total model calls, generated
 tokens, tool invocations, tool-result cycles, an optional extra revision spend cap and the original
 absolute deadline. Its validator rejects missing, unknown or malformed limits. A null revision

@@ -1,5 +1,5 @@
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
-import { AgentRunState, ExternalActionRecoveryMode, PrincipalProvenance, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState } from "@prisma/client";
+import { AgentRunState, ExternalActionRecoveryMode, McpCredentialRequirement, McpExecutionTransport, PrincipalProvenance, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../../grants/persistence/prisma-managed-authorization-grant-repository", function _MockManagedGrants()
@@ -55,6 +55,8 @@ function _LiveTransaction()
 		principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1", provenance: PrincipalProvenance.External }), count: vi.fn().mockResolvedValue(1) },
 		orgMembership: { findFirst: vi.fn().mockResolvedValue({ id: "membership-1" }) },
 		conversationParticipant: { findUnique: vi.fn().mockResolvedValue({ accessEndedPosition: null }) },
+		agentRevisionMcpToolAssignment: { findUnique: vi.fn().mockResolvedValue({ agentServiceId: "service-1", siloId: "silo-1", toolRevision: { siloId: "silo-1", serverRevision: { siloId: "silo-1", mcpServerId: "server-1", transport: McpExecutionTransport.OciImage, connectionId: null, connectionGeneration: null, connectionOwnerPrincipalId: null, endpointDigest: null, server: { credentialRequirement: McpCredentialRequirement.Credentialless }, connection: null } } }) },
+		mcpServerInstall: { findUnique: vi.fn().mockResolvedValue({ id: "install-1", mcpServerId: "server-1", principalId: "principal-1", principal: { siloId: "silo-1", provenance: PrincipalProvenance.External, displayName: "Personal owner" } }) },
 		toolInvocation: { findUnique: vi.fn(async function _invocation() { return _Invocation(); }), updateMany: vi.fn() },
 		toolResultDelivery: { create: vi.fn(async function _delivery() { return { id: "delivery-1" }; }) },
 	};

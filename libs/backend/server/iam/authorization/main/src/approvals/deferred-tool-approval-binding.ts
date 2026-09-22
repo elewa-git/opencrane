@@ -1,8 +1,25 @@
-import { ___ExecutionSubjectSchema, type ExecutionSubject } from "@opencrane/models/agents";
+import { ___ExecutionSubjectSchema, ExecutionSubjectMembershipKinds, type ExecutionSubject } from "@opencrane/models/agents";
+import { ___ElicitationExecutionConnectionSchema, ElicitationBodyKinds, ElicitationConnectionOwnerKinds } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 import { __DigestCanonicalJson } from "../authority/canonical-json-digest";
 import type { ToolInvocationRecord } from "../tool-invocations/tool-invocation.types";
 import type { ApprovalElicitationBinding, ApprovalRequestBinding, ApprovalRunBinding } from "./deferred-tool-approval-binding.types";
+
+/** Validate the persisted approval body fields that make its connection-owner disclosure trustworthy. */
+function _HasValidApprovalDisclosure(request: ApprovalElicitationBinding, run: ApprovalRunBinding): boolean
+{
+	if (request.body === null || typeof request.body !== "object" || Array.isArray(request.body))
+		return false;
+	const body = request.body as Readonly<Record<string, unknown>>;
+	const subject = ___ExecutionSubjectSchema.safeParse(run.executionSubject);
+	if (!subject.success)
+		return false;
+	const expectedOwnerKind = subject.data.membership.kind === ExecutionSubjectMembershipKinds.Managed ? ElicitationConnectionOwnerKinds.CompanyAssistant : ElicitationConnectionOwnerKinds.Personal;
+	return body.kind === ElicitationBodyKinds.Approval
+		&& ___ElicitationExecutionConnectionSchema.safeParse(body.executionConnection).success
+		&& (body.executionConnection as Readonly<Record<string, unknown>>).ownerKind === expectedOwnerKind
+		&& request.bodyDigest === __DigestCanonicalJson(request.body as JsonValue);
+}
 
 /**
  * Return the frozen execution subject only when the run and invocation describe the same work.
@@ -38,6 +55,7 @@ export function _MatchesApprovalElicitation(approval: ApprovalRequestBinding, re
 		&& request.assignedParticipantId === subjectId && request.requestKey === approval.actionDigest
 		&& request.requiresStepUp
 		&& request.expiresAt.getTime() === approval.expiresAt.getTime()
+		&& _HasValidApprovalDisclosure(request, run)
 		&& request.purposePayloadDigest === __DigestCanonicalJson(payload)
 		&& __DigestCanonicalJson(request.purposePayload as JsonValue) === __DigestCanonicalJson(payload);
 }

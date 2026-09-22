@@ -1,5 +1,5 @@
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
-import { AgentRunState, ApprovalRequestState, ElicitationBodyKind, ElicitationPurpose, ExternalActionRecoveryMode, OrgMemberStatus, PrincipalProvenance, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState } from "@prisma/client";
+import { AgentRunState, AgentServiceKind, ApprovalRequestState, ElicitationBodyKind, ElicitationPurpose, ExternalActionRecoveryMode, McpCredentialRequirement, McpExecutionTransport, OrgMemberStatus, PrincipalProvenance, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const _managedGrantMocks = vi.hoisted(function _ManagedGrantMocks()
@@ -65,8 +65,11 @@ function _transaction(row: unknown, updatedCount: number, invocationRow: unknown
 }
 
 /** Current requester identity, organisation membership and active conversation participation. */
-function _requesterDelegates()
+function _requesterDelegates(managed = false)
 {
+	const installPrincipalId = managed ? "company-principal" : "principal-1";
+	const installPrincipalProvenance = managed ? PrincipalProvenance.Internal : PrincipalProvenance.External;
+	const installPrincipalDisplayName = managed ? null : "Personal owner";
 	return {
 		principal: {
 			findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1", provenance: PrincipalProvenance.External }),
@@ -75,6 +78,37 @@ function _requesterDelegates()
 		},
 		orgMembership: { findFirst: vi.fn().mockResolvedValue({ id: "membership-1" }) },
 		conversationParticipant: { findUnique: vi.fn().mockResolvedValue({ accessEndedPosition: null }) },
+		agentRevisionMcpToolAssignment: { findUnique: vi.fn().mockResolvedValue(_toolAssignment()) },
+		mcpServerInstall: { findUnique: vi.fn().mockResolvedValue({ id: "install-1", mcpServerId: "server-1", principalId: installPrincipalId, principal: { siloId: "silo-1", provenance: installPrincipalProvenance, displayName: installPrincipalDisplayName } }) },
+		agentService: { findUnique: vi.fn().mockResolvedValue(managed ? { kind: AgentServiceKind.Managed, name: "Company assistant", principalId: "company-principal", principal: { provenance: PrincipalProvenance.Internal }, revisions: [{ id: "rev-1" }] } : null) },
+	};
+}
+
+/** Exact assigned OCI tool used by approval-opening tests unless a test replaces it. */
+function _toolAssignment(overrides: Readonly<Record<string, unknown>> = {})
+{
+	return {
+		agentServiceId: "svc-1",
+		siloId: "silo-1",
+		toolRevision: { siloId: "silo-1", serverRevision: { siloId: "silo-1", mcpServerId: "server-1", transport: McpExecutionTransport.OciImage, connectionId: null, connectionGeneration: null, connectionOwnerPrincipalId: null, endpointDigest: null, server: { credentialRequirement: McpCredentialRequirement.Credentialless }, connection: null, ...overrides } },
+	};
+}
+
+/** Frozen participant-facing approval body with a valid execution-owner disclosure. */
+function _approvalBody(managed = false)
+{
+	const ownerKind = managed ? "company_assistant" : "personal";
+	const ownerLabel = managed ? "Company assistant" : "Personal owner";
+	return {
+		kind: "approval",
+		prompt: "Allow this agent to invoke the reviewed tool?",
+		action: "Invoke tool",
+		target: "records.search",
+		dataUse: "The proposed arguments shown in this request will be sent to the tool.",
+		externalSystem: "Records",
+		consequence: "This invokes the external tool once. Its saved description says: Search the saved records",
+		proposedArguments: { query: "original" },
+		executionConnection: { ownerKind, ownerLabel, credentialRequirement: "credentialless" },
 	};
 }
 
@@ -82,7 +116,8 @@ function _requesterDelegates()
 function _elicitation(approval: Record<string, unknown>)
 {
 	const purposePayload = { approvalRequestId: approval.id as string };
-	return { id: approval.elicitationRequestId, siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 2, assignedParticipantId: "user-1", requestKey: approval.actionDigest, purpose: ElicitationPurpose.ToolApproval, bodyKind: ElicitationBodyKind.Approval, requiresStepUp: true, expiresAt: approval.expiresAt, purposePayload, purposePayloadDigest: __DigestCanonicalJson(purposePayload) };
+	const body = _approvalBody(approval.principalId === "company-principal");
+	return { id: approval.elicitationRequestId, siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 2, assignedParticipantId: "user-1", requestKey: approval.actionDigest, purpose: ElicitationPurpose.ToolApproval, bodyKind: ElicitationBodyKind.Approval, requiresStepUp: true, expiresAt: approval.expiresAt, purposePayload, purposePayloadDigest: __DigestCanonicalJson(purposePayload), body, bodyDigest: __DigestCanonicalJson(body) };
 }
 
 /** A pending deferred-tool approval bound to a tool invocation row. */
@@ -339,8 +374,29 @@ function _managedOpening(existing = false)
 		elicitationRequest: { create: vi.fn().mockResolvedValue({ id: "approval-existing" }), findUnique: vi.fn().mockResolvedValue(_elicitation(approval)) },
 		approvalRequest: { create: vi.fn().mockResolvedValue({ id: "approval-existing" }), findFirst: vi.fn().mockResolvedValue(existing ? approval : null), count: vi.fn().mockResolvedValue(0) },
 		toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation({ principalId: subject.principalId, authorizationExecutionSubject: subject })) },
+		..._requesterDelegates(true),
+	};
+}
+
+/** Transaction for opening a personal approval against the selected installation evidence. */
+function _personalOpening()
+{
+	return {
+		agentRun: { findUnique: vi.fn().mockResolvedValue(RUN), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+		conversationComputerActiveLease: _ActiveLeaseDelegate(ACTIVE_LEASE),
+		elicitationRequest: { create: vi.fn().mockResolvedValue({ id: "approval-existing" }), findUnique: vi.fn() },
+		approvalRequest: { create: vi.fn().mockResolvedValue({ id: "approval-existing" }), findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0) },
+		toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
 		..._requesterDelegates(),
 	};
+}
+
+/** Exact remote revision and connection selected by the run assignment. */
+function _remoteToolAssignment(credentialRequirement: McpCredentialRequirement, managed = false, overrides: Readonly<Record<string, unknown>> = {})
+{
+	const ownerPrincipalId = managed ? "company-principal" : "principal-1";
+	const connection = { id: "connection-1", siloId: "silo-1", mcpServerInstallId: "install-1", mcpServerId: "server-1", ownerPrincipalId, agentServiceId: managed ? "svc-1" : null, generation: 4, endpointDigest: "sha256:endpoint", credentialRequirement, ...overrides };
+	return _toolAssignment({ transport: McpExecutionTransport.RemoteHttp, connectionId: "connection-1", connectionGeneration: 4, connectionOwnerPrincipalId: ownerPrincipalId, endpointDigest: "sha256:endpoint", server: { credentialRequirement: McpCredentialRequirement.SharedCredential }, connection });
 }
 
 describe("requester-only company tool approvals", function _RequesterOnly()
@@ -353,6 +409,7 @@ describe("requester-only company tool approvals", function _RequesterOnly()
 		await expect(__DeferToolRequest(transaction as never, _deferCommand())).resolves.toEqual({ outcome: "deferred", approvalRequestId: "approval-existing" });
 		expect(transaction.approvalRequest.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ principalId: "company-principal" }) }));
 		expect(transaction.elicitationRequest.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ assignedParticipantId: "user-1" }) }));
+		expect(transaction.elicitationRequest.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ body: expect.objectContaining({ executionConnection: { ownerKind: "company_assistant", ownerLabel: "Company assistant", credentialRequirement: "credentialless" } }) }) }));
 		expect(transaction.principal.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id_siloId: { id: "principal-1", siloId: "silo-1" } } }));
 		const grants = _managedGrantMocks.reconcile.mock.calls[0]?.[1].grants;
 		expect(grants).toHaveLength(2);
@@ -417,9 +474,31 @@ describe("requester-only company tool approvals", function _RequesterOnly()
 	it("replays the same company approval without replacing its request or execution owner", async function _OpeningReplay()
 	{
 		const transaction = _managedOpening(true);
+		transaction.mcpServerInstall.findUnique.mockResolvedValue({ id: "install-1", mcpServerId: "server-1", principalId: "company-principal", principal: { siloId: "silo-1", provenance: PrincipalProvenance.Internal, displayName: "Renamed profile" } });
 		await expect(__DeferToolRequest(transaction as never, _deferCommand())).resolves.toEqual({ outcome: "already_deferred", approvalRequestId: "approval-existing" });
 		expect(transaction.elicitationRequest.create).not.toHaveBeenCalled();
 		expect(transaction.approvalRequest.create).not.toHaveBeenCalled();
+		expect(transaction.mcpServerInstall.findUnique).not.toHaveBeenCalled();
+	});
+
+	it("refuses replay when the saved connection-owner disclosure is malformed", async function _MalformedOpeningReplay()
+	{
+		const transaction = _managedOpening(true);
+		const body = { ..._approvalBody(true), executionConnection: { ownerKind: "company_assistant", ownerLabel: "Hidden\u202Eowner", credentialRequirement: "credentialless" } };
+		transaction.elicitationRequest.findUnique.mockResolvedValue({ ..._elicitation(_existingApproval()), body, bodyDigest: __DigestCanonicalJson(body) });
+
+		await expect(__DeferToolRequest(transaction as never, _deferCommand())).rejects.toThrow("deferred approval action digest collision");
+		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
+		expect(transaction.mcpServerInstall.findUnique).not.toHaveBeenCalled();
+	});
+
+	it("refuses a decision when the saved connection disclosure digest no longer matches", async function _MalformedDecisionDisclosure()
+	{
+		const context = _managedDecision();
+		vi.mocked(context.transaction.elicitationRequest.findUnique).mockResolvedValue({ ..._elicitation({ ..._pending() as object, principalId: "company-principal" } as Record<string, unknown>), bodyDigest: "sha256:changed" } as never);
+
+		await expect(__DecideDeferredToolRequest(context.transaction, { approvalRequestId: "approval-1", siloId: "silo-1", reviewerSubjectId: "user-1", decision: DeferredToolDecisionKinds.Denied, decidedBy: "user-1", now: NOW })).resolves.toEqual({ outcome: "conflict" });
+		expect(context.updateMany).not.toHaveBeenCalled();
 	});
 
 	it("replays a saved company decision only for the original requester", async function _DecisionReplay()
@@ -488,20 +567,67 @@ describe("defer tool request authority", function _deferSuite()
 		expect(pause).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 2, state: AgentRunState.Running }, data: { state: AgentRunState.WaitingForInput } });
 		expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ApprovalRequestState.Pending, toolInvocationRowId: "tool-1", resourceKind: "tool", resourceId: "integration:search:query", expiresAt: ACTIVE_LEASE.expiresAt }) }));
 		const elicitationCreate = transaction.elicitationRequest.create as unknown as ReturnType<typeof vi.fn>;
-		const expectedBody = {
-			kind: "approval",
-			prompt: "Allow this agent to invoke the reviewed tool?",
-			action: "Invoke tool",
-			target: "records.search",
-			dataUse: "The proposed arguments shown in this request will be sent to the tool.",
-			externalSystem: "Records",
-			consequence: "This invokes the external tool once. Its saved description says: Search the saved records",
-			proposedArguments: { query: "original" },
-		};
+		const expectedBody = _approvalBody();
 		expect(elicitationCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ body: expectedBody, bodyDigest: __DigestCanonicalJson(expectedBody) }) });
 		expect(transaction.conversationComputerActiveLease.findUnique).toHaveBeenCalledTimes(1);
 		expect(transaction.conversationComputerActiveLease.findUnique).toHaveBeenCalledWith({ where: { computerId: "computer-1" }, select: { expiresAt: true } });
 		expect(_managedGrantMocks.reconcile).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ siloId: "silo-1", managerId: "deferred-tool-approval-assignee", resource: { kind: "approval-request", id: "approval-9" }, grants: [expect.objectContaining({ capability: expect.objectContaining({ capabilityId: "approval-request:read" }), createdByPrincipalId: "principal-1" }), expect.objectContaining({ capability: expect.objectContaining({ capabilityId: "approval-request:decide" }), createdByPrincipalId: "principal-1" })] }));
+	});
+
+	it.each([
+		[McpCredentialRequirement.Credentialless, "credentialless"],
+		[McpCredentialRequirement.PrincipalCredential, "principal-credential"],
+		[McpCredentialRequirement.SharedCredential, "shared-credential"],
+	])("freezes a personal remote connection with %s custody from the immutable connection", async function _RemoteCredential(credentialRequirement, expected)
+	{
+		const transaction = _personalOpening();
+		transaction.agentRevisionMcpToolAssignment.findUnique.mockResolvedValue(_remoteToolAssignment(credentialRequirement));
+
+		await expect(__DeferToolRequest(transaction as never, _deferCommand())).resolves.toMatchObject({ outcome: "deferred" });
+		expect(transaction.mcpServerInstall.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { mcpServerId_principalId: { mcpServerId: "server-1", principalId: "principal-1" } } }));
+		expect(transaction.elicitationRequest.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ body: expect.objectContaining({ executionConnection: { ownerKind: "personal", ownerLabel: "Personal owner", credentialRequirement: expected } }) }) }));
+	});
+
+	it("freezes a managed remote connection owned by the assistant rather than its requester", async function _ManagedRemoteOwner()
+	{
+		const transaction = _managedOpening();
+		transaction.agentRevisionMcpToolAssignment.findUnique.mockResolvedValue(_remoteToolAssignment(McpCredentialRequirement.PrincipalCredential, true));
+
+		await expect(__DeferToolRequest(transaction as never, _deferCommand())).resolves.toMatchObject({ outcome: "deferred" });
+		expect(transaction.mcpServerInstall.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { mcpServerId_principalId: { mcpServerId: "server-1", principalId: "company-principal" } } }));
+		expect(transaction.elicitationRequest.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ assignedParticipantId: "user-1", body: expect.objectContaining({ executionConnection: { ownerKind: "company_assistant", ownerLabel: "Company assistant", credentialRequirement: "principal-credential" } }) }) }));
+	});
+
+	it.each([
+		["missing assignment", function _MissingAssignment(transaction: ReturnType<typeof _personalOpening>) { transaction.agentRevisionMcpToolAssignment.findUnique.mockResolvedValue(null); }],
+		["assignment in another silo", function _WrongAssignmentSilo(transaction: ReturnType<typeof _personalOpening>) { transaction.agentRevisionMcpToolAssignment.findUnique.mockResolvedValue({ ..._toolAssignment(), siloId: "other-silo" }); }],
+		["install owned by another principal", function _WrongInstallOwner(transaction: ReturnType<typeof _personalOpening>) { transaction.mcpServerInstall.findUnique.mockResolvedValue({ id: "install-1", mcpServerId: "server-1", principalId: "requester-decoy", principal: { siloId: "silo-1", provenance: PrincipalProvenance.External, displayName: "Requester decoy" } }); }],
+		["unsafe owner label", function _UnsafeOwnerLabel(transaction: ReturnType<typeof _personalOpening>) { transaction.mcpServerInstall.findUnique.mockResolvedValue({ id: "install-1", mcpServerId: "server-1", principalId: "principal-1", principal: { siloId: "silo-1", provenance: PrincipalProvenance.External, displayName: "Hidden\u202Eowner" } }); }],
+		["credential-requiring OCI server", function _CredentialedOci(transaction: ReturnType<typeof _personalOpening>) { transaction.agentRevisionMcpToolAssignment.findUnique.mockResolvedValue(_toolAssignment({ server: { credentialRequirement: McpCredentialRequirement.PrincipalCredential } })); }],
+		["remote connection with changed generation", function _WrongGeneration(transaction: ReturnType<typeof _personalOpening>) { transaction.agentRevisionMcpToolAssignment.findUnique.mockResolvedValue(_remoteToolAssignment(McpCredentialRequirement.Credentialless, false, { generation: 5 })); }],
+	])("fails closed before pausing for %s", async function _InvalidConnectionEvidence(_label, mutate)
+	{
+		const transaction = _personalOpening();
+		mutate(transaction);
+
+		await expect(__DeferToolRequest(transaction as never, _deferCommand())).resolves.toEqual({ outcome: "unavailable" });
+		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
+		expect(transaction.elicitationRequest.create).not.toHaveBeenCalled();
+		expect(transaction.approvalRequest.create).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		["service principal", { principalId: "requester-decoy" }],
+		["service revision", { revisions: [] }],
+		["unsafe service label", { name: "Company\u061Cassistant" }],
+	])("fails closed before pausing when the managed %s mismatches", async function _InvalidManagedEvidence(_label, servicePatch)
+	{
+		const transaction = _managedOpening();
+		transaction.agentService.findUnique.mockResolvedValue({ kind: AgentServiceKind.Managed, name: "Company assistant", principalId: "company-principal", principal: { provenance: PrincipalProvenance.Internal }, revisions: [{ id: "rev-1" }], ...servicePatch });
+
+		await expect(__DeferToolRequest(transaction as never, _deferCommand())).resolves.toEqual({ outcome: "unavailable" });
+		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
+		expect(transaction.approvalRequest.create).not.toHaveBeenCalled();
 	});
 
 	it("freezes denial-only disclosure without storing a secret value", async function _SecretDisclosure()

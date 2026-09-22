@@ -72,6 +72,8 @@ export async function _SeedConversationToolProposalSqlFixture(options: _FixtureO
 	const agentIdentityId = `identity-${conversationId}`;
 	const agentServiceId = id("service");
 	const principalId = managed ? `${agentServiceId}-principal` : requesterPrincipalId;
+	const executionOwnerLabel = managed ? "SQL company assistant" : "SQL personal owner";
+	const requesterLabel = managed ? "SQL human requester" : executionOwnerLabel;
 	const agentRevisionId = id("revision");
 	const personaRevisionId = managed ? null : id("persona");
 	const modelId = id("model");
@@ -108,12 +110,13 @@ export async function _SeedConversationToolProposalSqlFixture(options: _FixtureO
 		await setup.query("BEGIN");
 		await setup.query("SELECT pg_temp.seed_silo_model($1, $2)", [siloId, modelId]);
 		await setup.query("SELECT pg_temp.seed_external_user($1, $2)", [siloId, requesterPrincipalId]);
+		await setup.query("UPDATE principals SET display_name=$2, updated_at=$3 WHERE id=$1", [requesterPrincipalId, requesterLabel, now]);
 		// This column has no time zone; an explicit UTC string keeps it aligned with the saved subject.
 		await setup.query("INSERT INTO org_memberships (id, cluster_tenant, subject, role, status, updated_at) VALUES ($1, $2, $3, 'member', 'active', $4)", [requesterMembership.membershipId, siloId, requesterPrincipalId, now.toISOString()]);
 		if (managed)
 		{
 			await setup.query("SELECT pg_temp.seed_service_principal($1, $2)", [siloId, agentServiceId]);
-			await setup.query("INSERT INTO agent_services (id, silo_id, kind, name, workload_profile, principal_id, updated_at) VALUES ($1, $2, 'managed', 'SQL company assistant', 'managed-agent', $3, $4)", [agentServiceId, siloId, principalId, now]);
+			await setup.query("INSERT INTO agent_services (id, silo_id, kind, name, workload_profile, principal_id, updated_at) VALUES ($1, $2, 'managed', $3, 'managed-agent', $4, $5)", [agentServiceId, siloId, executionOwnerLabel, principalId, now]);
 		}
 		else
 		{
@@ -129,7 +132,7 @@ export async function _SeedConversationToolProposalSqlFixture(options: _FixtureO
 			const discoveryDigest = ___DigestCanonicalJson({ toolName, toolDescription, schema });
 			await setup.query("INSERT INTO mcp_servers (id, silo_id, name, endpoint, transport, status, approval_status, credential_requirement, requires_approval, updated_at) VALUES ($1, $2, $3, $4, 'streamable-http', 'active', 'published', 'credentialless', $5, $6)", [id("server"), siloId, serverName, endpoint, options.approvalRequired === true, now]);
 			await setup.query("INSERT INTO mcp_server_installs (id, mcp_server_id, principal_id, connection_status, updated_at) VALUES ($1, $2, $3, 'activating', $4)", [id("server-install"), id("server"), principalId, now]);
-			await setup.query("INSERT INTO mcp_connections (id, silo_id, mcp_server_install_id, mcp_server_id, owner_principal_id, actor_principal_id, generation, credential_requirement, credential_kind, endpoint_digest, state, request_key_digest, command_digest, authorization_decision_digest, task_id, task_name, task_key, updated_at) VALUES ($1, $2, $3, $4, $5, $5, 1, 'credentialless', 'none', $6, 'activating', $7, $8, $9, $10, 'mcp-connection.activate/v1', $11, $12)", [id("connection"), siloId, id("server-install"), id("server"), principalId, endpointDigest, ___DigestCanonicalJson(id("connection-request")), ___DigestCanonicalJson(id("connection-command")), ___DigestCanonicalJson(id("connection-admission")), id("activation-task"), id("activation-task-key"), now]);
+			await setup.query("INSERT INTO mcp_connections (id, silo_id, mcp_server_install_id, mcp_server_id, owner_principal_id, actor_principal_id, agent_service_id, generation, credential_requirement, credential_kind, endpoint_digest, state, request_key_digest, command_digest, authorization_decision_digest, task_id, task_name, task_key, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, 'credentialless', 'none', $8, 'activating', $9, $10, $11, $12, 'mcp-connection.activate/v1', $13, $14)", [id("connection"), siloId, id("server-install"), id("server"), principalId, requesterPrincipalId, managed ? agentServiceId : null, endpointDigest, ___DigestCanonicalJson(id("connection-request")), ___DigestCanonicalJson(id("connection-command")), ___DigestCanonicalJson(id("connection-admission")), id("activation-task"), id("activation-task-key"), now]);
 			await setup.query("INSERT INTO mcp_server_revisions (id, silo_id, mcp_server_id, revision, transport, connection_id, connection_generation, connection_owner_principal_id, endpoint_digest, discovery_evidence_digest, discovery_digest, updated_at) VALUES ($1, $2, $3, 1, 'remote-http', $4, 1, $5, $6, $7, $8, $9)", [id("server-revision"), siloId, id("server"), id("connection"), principalId, endpointDigest, ___DigestCanonicalJson(id("discovery-evidence")), discoveryDigest, now]);
 		}
 		else
@@ -217,7 +220,7 @@ export async function _SeedConversationToolProposalSqlFixture(options: _FixtureO
 	const candidate: ConversationComputerTurnCandidate = { ...turn, compiledInput, credentialExpiresAt: trustedUntil };
 	const argumentsValue: ConversationToolProposal["arguments"] = options.tool?.arguments ?? (options.secretArguments === true ? { token: "sql-secret-never-visible" } : { query: "dedicated record" });
 	const proposal: ConversationToolProposal = { bootstrapId: turn.bootstrapId, toolRevisionId: tool.toolRevisionId, arguments: argumentsValue };
-	return { siloId, runId, principalId, requesterPrincipalId, subject, frozenTurn, turn, candidate, dependencies, leaseExpiresAt, tool, serverName, proposal, recompile, toolGrantId: id(`grant-${ProductAuthorizationResourceKinds.McpToolRevision}`) };
+	return { siloId, runId, principalId, requesterPrincipalId, executionOwnerLabel, subject, frozenTurn, turn, candidate, dependencies, leaseExpiresAt, tool, serverName, proposal, recompile, toolGrantId: id(`grant-${ProductAuthorizationResourceKinds.McpToolRevision}`) };
 }
 
 /** Reuses the approved-persona sequence proved by personal-configuration-authority.sql. */

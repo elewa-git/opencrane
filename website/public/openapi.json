@@ -5560,6 +5560,38 @@
                                   "cost": {
                                     "type": "string"
                                   },
+                                  "executionConnection": {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "required": [
+                                      "ownerKind",
+                                      "ownerLabel",
+                                      "credentialRequirement"
+                                    ],
+                                    "properties": {
+                                      "ownerKind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "personal",
+                                          "company_assistant"
+                                        ]
+                                      },
+                                      "ownerLabel": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 200,
+                                        "pattern": "^(?=.*\\S)[^\\u0000-\\u001F\\u007F-\\u009F\\u061C\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069]+$"
+                                      },
+                                      "credentialRequirement": {
+                                        "type": "string",
+                                        "enum": [
+                                          "credentialless",
+                                          "principal-credential",
+                                          "shared-credential"
+                                        ]
+                                      }
+                                    }
+                                  },
                                   "proposedArguments": {
                                     "oneOf": [
                                       {
@@ -5702,6 +5734,39 @@
                           },
                           "safeReason": {
                             "type": "string"
+                          }
+                        },
+                        "if": {
+                          "properties": {
+                            "purpose": {
+                              "const": "tool_approval"
+                            }
+                          }
+                        },
+                        "then": {
+                          "properties": {
+                            "body": {
+                              "required": [
+                                "executionConnection",
+                                "proposedArguments"
+                              ],
+                              "properties": {
+                                "kind": {
+                                  "const": "approval"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "else": {
+                          "properties": {
+                            "body": {
+                              "not": {
+                                "required": [
+                                  "executionConnection"
+                                ]
+                              }
+                            }
                           }
                         }
                       }
@@ -5872,6 +5937,38 @@
                                   "cost": {
                                     "type": "string"
                                   },
+                                  "executionConnection": {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "required": [
+                                      "ownerKind",
+                                      "ownerLabel",
+                                      "credentialRequirement"
+                                    ],
+                                    "properties": {
+                                      "ownerKind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "personal",
+                                          "company_assistant"
+                                        ]
+                                      },
+                                      "ownerLabel": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 200,
+                                        "pattern": "^(?=.*\\S)[^\\u0000-\\u001F\\u007F-\\u009F\\u061C\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069]+$"
+                                      },
+                                      "credentialRequirement": {
+                                        "type": "string",
+                                        "enum": [
+                                          "credentialless",
+                                          "principal-credential",
+                                          "shared-credential"
+                                        ]
+                                      }
+                                    }
+                                  },
                                   "proposedArguments": {
                                     "oneOf": [
                                       {
@@ -6014,6 +6111,39 @@
                           },
                           "safeReason": {
                             "type": "string"
+                          }
+                        },
+                        "if": {
+                          "properties": {
+                            "purpose": {
+                              "const": "tool_approval"
+                            }
+                          }
+                        },
+                        "then": {
+                          "properties": {
+                            "body": {
+                              "required": [
+                                "executionConnection",
+                                "proposedArguments"
+                              ],
+                              "properties": {
+                                "kind": {
+                                  "const": "approval"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "else": {
+                          "properties": {
+                            "body": {
+                              "not": {
+                                "required": [
+                                  "executionConnection"
+                                ]
+                              }
+                            }
                           }
                         }
                       }
@@ -6190,6 +6320,38 @@
                                 "cost": {
                                   "type": "string"
                                 },
+                                "executionConnection": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "ownerKind",
+                                    "ownerLabel",
+                                    "credentialRequirement"
+                                  ],
+                                  "properties": {
+                                    "ownerKind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "personal",
+                                        "company_assistant"
+                                      ]
+                                    },
+                                    "ownerLabel": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200,
+                                      "pattern": "^(?=.*\\S)[^\\u0000-\\u001F\\u007F-\\u009F\\u061C\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069]+$"
+                                    },
+                                    "credentialRequirement": {
+                                      "type": "string",
+                                      "enum": [
+                                        "credentialless",
+                                        "principal-credential",
+                                        "shared-credential"
+                                      ]
+                                    }
+                                  }
+                                },
                                 "proposedArguments": {
                                   "oneOf": [
                                     {
@@ -6332,6 +6494,39 @@
                         },
                         "safeReason": {
                           "type": "string"
+                        }
+                      },
+                      "if": {
+                        "properties": {
+                          "purpose": {
+                            "const": "tool_approval"
+                          }
+                        }
+                      },
+                      "then": {
+                        "properties": {
+                          "body": {
+                            "required": [
+                              "executionConnection",
+                              "proposedArguments"
+                            ],
+                            "properties": {
+                              "kind": {
+                                "const": "approval"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "else": {
+                        "properties": {
+                          "body": {
+                            "not": {
+                              "required": [
+                                "executionConnection"
+                              ]
+                            }
+                          }
                         }
                       }
                     }

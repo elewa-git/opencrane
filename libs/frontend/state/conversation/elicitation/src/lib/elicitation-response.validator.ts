@@ -1,4 +1,4 @@
-import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, ___ConversationToolArgumentsSchema, type ConversationElicitation, type ElicitationBody, type ElicitationChoice, type ElicitationResponseProjection } from "@opencrane/contracts";
+import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, ___ConversationToolArgumentsSchema, ___ElicitationExecutionConnectionSchema, type ConversationElicitation, type ElicitationBody, type ElicitationChoice, type ElicitationResponseProjection } from "@opencrane/contracts";
 
 /** Parse one untrusted browser-safe request projection. */
 export function __ParseConversationElicitation(value: unknown): ConversationElicitation
@@ -12,6 +12,10 @@ export function __ParseConversationElicitation(value: unknown): ConversationElic
 	if (value["safeReason"] !== undefined && !_BoundedString(value["safeReason"], 200)) throw new TypeError("elicitation reason is invalid");
 	if (purpose === ElicitationPurposes.ToolApproval && body.kind === ElicitationBodyKinds.Approval && body.proposedArguments === undefined)
 		throw new TypeError("tool approval arguments are missing");
+	if (purpose === ElicitationPurposes.ToolApproval && (body.kind !== ElicitationBodyKinds.Approval || body.executionConnection === undefined))
+		throw new TypeError("tool approval connection disclosure is missing");
+	if (purpose !== ElicitationPurposes.ToolApproval && body.kind === ElicitationBodyKinds.Approval && body.executionConnection !== undefined)
+		throw new TypeError("connection disclosure is only supported for tool approvals");
 	const resolvedAt = value["resolvedAt"] === undefined ? {} : { resolvedAt: value["resolvedAt"] as string };
 	const safeReason = value["safeReason"] === undefined ? {} : { safeReason: value["safeReason"] as string };
 	return { version: CONVERSATION_ELICITATION_VERSION, requestId: value["requestId"], conversationId: value["conversationId"], runId: value["runId"], attempt: value["attempt"] as number, assignedParticipantId: value["assignedParticipantId"], purpose: purpose as ElicitationPurposes, state: state as ElicitationRequestStates, body, requiresStepUp: value["requiresStepUp"], requestedAt: value["requestedAt"], expiresAt: value["expiresAt"], ...resolvedAt, ...safeReason };
@@ -28,18 +32,32 @@ export function __ParseElicitationResponseProjection(value: unknown): Elicitatio
 function _Body(value: unknown): ElicitationBody
 {
 	if (!_Record(value) || !_BoundedString(value["prompt"], 4_000)) throw new TypeError("elicitation body is invalid");
+	if (value["kind"] !== ElicitationBodyKinds.Approval && "executionConnection" in value)
+		throw new TypeError("connection disclosure requires an approval body");
 	if (value["kind"] === ElicitationBodyKinds.Approval && _BoundedString(value["action"], 1_000) && _BoundedString(value["target"], 1_000) && _BoundedString(value["dataUse"], 2_000) && _BoundedString(value["consequence"], 2_000))
 	{
 		const externalSystem = _BoundedString(value["externalSystem"], 500) ? { externalSystem: value["externalSystem"] } : {};
 		const cost = _BoundedString(value["cost"], 500) ? { cost: value["cost"] } : {};
 		const proposedArguments = _ProposedArguments(value);
-		return { kind: value["kind"], prompt: value["prompt"], action: value["action"], target: value["target"], dataUse: value["dataUse"], consequence: value["consequence"], ...proposedArguments, ...externalSystem, ...cost };
+		const executionConnection = _ExecutionConnection(value);
+		return { kind: value["kind"], prompt: value["prompt"], action: value["action"], target: value["target"], dataUse: value["dataUse"], consequence: value["consequence"], ...proposedArguments, ...externalSystem, ...cost, ...executionConnection };
 	}
 	const choices = _Choices(value["choices"]);
 	if (value["kind"] === ElicitationBodyKinds.SingleChoice && choices !== null) return { kind: value["kind"], prompt: value["prompt"], choices };
 	if (value["kind"] === ElicitationBodyKinds.MultipleChoice && choices !== null && Number.isSafeInteger(value["minimumSelections"]) && Number.isSafeInteger(value["maximumSelections"]) && (value["minimumSelections"] as number) >= 0 && (value["maximumSelections"] as number) >= (value["minimumSelections"] as number) && (value["maximumSelections"] as number) <= choices.length) return { kind: value["kind"], prompt: value["prompt"], choices, minimumSelections: value["minimumSelections"] as number, maximumSelections: value["maximumSelections"] as number };
 	if (value["kind"] === ElicitationBodyKinds.FreeText && Number.isSafeInteger(value["maximumLength"]) && (value["maximumLength"] as number) > 0 && (value["maximumLength"] as number) <= 20_000 && typeof value["allowEmpty"] === "boolean") return { kind: value["kind"], prompt: value["prompt"], maximumLength: value["maximumLength"] as number, allowEmpty: value["allowEmpty"] };
 	throw new TypeError("elicitation body kind is invalid");
+}
+
+/** Validate supplied connection details without dropping unknown or malformed fields. */
+function _ExecutionConnection(value: Record<string, unknown>): Pick<Extract<ElicitationBody, { readonly kind: ElicitationBodyKinds.Approval }>, "executionConnection"> | Record<string, never>
+{
+	if (!("executionConnection" in value))
+		return {};
+	const parsed = ___ElicitationExecutionConnectionSchema.safeParse(value["executionConnection"]);
+	if (!parsed.success)
+		throw new TypeError("elicitation connection disclosure is invalid");
+	return { executionConnection: parsed.data };
 }
 
 /** Preserve omitted and explicitly hidden proposal arguments while validating every visible object. */
