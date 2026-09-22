@@ -39,8 +39,8 @@ function _Turn(): FrozenConversationComputerTurn
 		protocol: {
 			state: ConversationComputerTurnProtocolStates.OutputRecorded, revision: 5n,
 			accounting: { reservedModelCalls: 2, reservedCompletionTokens: 200, reservedToolInvocations: 1, toolResultCyclesFed: 1 },
-			output: { sourceCommandId: _MESSAGE_ID, receipt: { streamName: "conversation-conversation-1", expectedRevision: "2", event: { id: _MESSAGE_ID, type: "opencrane.conversation-entry.v1", data: { entry }, metadata: { siloId: "silo-1" } } } },
-			cancellation: null, unavailable: null,
+			output: { sourceCommandId: _MESSAGE_ID, receipt: { streamName: "conversation-conversation-1", expectedRevision: "2", event: { id: _MESSAGE_ID, type: "opencrane.conversation-entry.v1", data: { entry }, metadata: { siloId: "silo-1" } }, display: null } },
+			cancellation: null, unavailable: null, modelRetry: null,
 			steps: [{
 				state: ConversationComputerTurnProtocolStates.ResultReady,
 				reservation: { ordinal: 1, invocationFence: "first-fence", tools: ConversationModelToolModes.Select, compiledInputDigest: _DIGEST, historyDigest: _DIGEST, requestDigest: _DIGEST, maxCompletionTokens: 100, authorityExpiresAtEpochMs: Date.now() + 60_000, dispatchDeadlineEpochMs: Date.now() + 30_000 },
@@ -51,7 +51,7 @@ function _Turn(): FrozenConversationComputerTurn
 				reservation: { ordinal: 2, invocationFence: _MESSAGE_ID, tools: ConversationModelToolModes.None, compiledInputDigest: _DIGEST, historyDigest: _DIGEST, requestDigest: _DIGEST, maxCompletionTokens: 100, authorityExpiresAtEpochMs: Date.now() + 60_000, dispatchDeadlineEpochMs: Date.now() + 30_000 },
 			}],
 		},
-	} as FrozenConversationComputerTurn;
+	};
 }
 
 /** Return the relational operation selected by the Artifact block. */

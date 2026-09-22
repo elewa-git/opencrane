@@ -2,6 +2,55 @@
 
 ## MVP continuation — 2026-09-22
 
+### Draft publication — approved candidate published; CI acceptance open
+
+The user approved draft publication and CI. Draft [#899](https://github.com/elewa-git/opencrane/pull/899)
+now publishes the 13 reviewed commits through `cbfb06b27fb952c315ed865c9ff80d324f777808`, directly
+above #898 at `830243b766d9ccb5f4719b511b082e3843b030db`. Earlier statements that these checkpoints
+were unpublished describe their local verification stage. The affected-project job's checkout log
+confirms tested merge SHA `991b5beb62abb128a17a8c16c41446e2767fc6aa`; evidence retains both source
+and tested revisions.
+
+[Validation run 35763299494](https://github.com/elewa-git/opencrane/actions/runs/35763299494) finished with four failed jobs.
+The first topology run rejected the PR description's heading and omitted self reference. A
+description-only correction restores the complete review order; the post-edit live stack check
+passes for all 18 open PRs at snapshot `c0ad7b59d1e6a2835b4942469463cef65ee736dc30f7e767ef2f63ee2907578d`.
+Database authority, Cognee, API generation, stack integrity and five non-LiteLLM image smokes passed.
+The affected-project job found two obsolete asset test fixtures; Kurrent found three obsolete
+single-entry confirmation calls in older text-only tests; LiteLLM's offline harness counted socket
+allocation as a network attempt. Storybook build, interaction and accessibility checks passed, but
+its visual suite had 130 passes, 38 missing baselines and 20 changed images. Seventeen changed Tools
+images have unchanged component source and baselines in this PR's range and require a controlled
+base-versus-head comparison. The 38 new and three feature-related changed images need human review;
+no visual baseline is accepted by this publication approval. Later Kurrent job steps were skipped,
+not passed. These results belong to the original published candidate, not the local repair overlay.
+
+This publication note and the following repair are not part of the approved 13-commit candidate.
+No merge, tag, image publication, deployment or live provider action ran.
+The separately pending product and authority decisions remain unchanged.
+
+### CI harness repair — local checks; remote qualification and visual review open
+
+The immutable repair base is `cbfb06b27fb952c315ed865c9ff80d324f777808`. Test-only changes restore
+explicit empty retry/display fields in two asset fixtures and remove a fixture cast, so the compiler
+checks the full current contract. Three older history tests now split the saved output receipt with
+the production helper and assert exactly one text intent before confirmation. Existing recovery,
+identity and no-restamp assertions remain. Both LiteLLM harnesses now distinguish harmless socket
+allocation from attempted DNS, connection or transmission without clearing recorded violations.
+A standard-library regression exercises each actual hook in a separate process, permits allocation,
+and checks eight denied outbound calls and retained evidence. An independent hook prevents real I/O
+if a denial regresses; hook installation before vendor imports is also checked.
+No production behavior, permission, schema, baseline, dependency or provider setting changes.
+
+Asset type checking and all 161 asset tests pass. The initial sandboxed test run could not open its
+temporary HTTP ports; the unchanged suite passed outside that restriction. Conversation type checks
+and 45 focused output tests pass. LiteLLM lint, 119 Node tests and 12 Python tests pass. Style and
+Prisma boundaries pass; module growth finds no production source change. Corrected real-Kurrent
+and pinned-image proofs still require CI. Independent integrated review passes with no findings;
+it confirms that recovery assertions and outbound-attempt detection remain intact. The live 18-PR
+review chain still passes at snapshot `c0ad7b59d1e6a2835b4942469463cef65ee736dc30f7e767ef2f63ee2907578d`.
+No VM, container, persistent service or dependency installation was started; disk retains 19 GiB free.
+
 ### Paired answer/display history recovery — test source complete; real-service run open
 
 This test-only slice starts from `d33d340c0553bc5879e71fd8c952e07cb97abd75`. Rechecking the

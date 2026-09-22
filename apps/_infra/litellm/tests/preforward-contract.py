@@ -32,9 +32,10 @@ NETWORK_ATTEMPTS = []
 
 
 def deny_network(event, args):
-    """Block network attempts before importing any proxy or provider dependency."""
-    if (event == "socket.__new__" and args[1] in (2, 10)) or event in (
-        "socket.connect", "socket.getaddrinfo", "socket.sendto", "socket.sendmsg",
+    """Reject outbound operations during imports and tests; socket allocation sends nothing."""
+    if event in (
+        "socket.connect", "socket.getaddrinfo", "socket.gethostbyname",
+        "socket.gethostbyaddr", "socket.getnameinfo", "socket.sendto", "socket.sendmsg",
     ):
         NETWORK_ATTEMPTS.append(event)
         raise RuntimeError("Network disabled in the pre-forward contract")

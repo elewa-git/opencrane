@@ -47,10 +47,10 @@ EVIDENCE = []
 
 
 def deny_network(event, args):
-    """Reject network attempts, including attempts made while dependencies import."""
-    creates_network_socket = event == "socket.__new__" and args[1] in (2, 10)
-    if creates_network_socket or event in (
-        "socket.connect", "socket.getaddrinfo", "socket.sendto", "socket.sendmsg",
+    """Reject outbound operations during imports and tests; socket allocation sends nothing."""
+    if event in (
+        "socket.connect", "socket.getaddrinfo", "socket.gethostbyname",
+        "socket.gethostbyaddr", "socket.getnameinfo", "socket.sendto", "socket.sendmsg",
     ):
         NETWORK_ATTEMPTS.append(event)
         raise RuntimeError("Network disabled in the counted-provider contract")

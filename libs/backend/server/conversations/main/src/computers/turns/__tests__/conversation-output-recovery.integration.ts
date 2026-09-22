@@ -185,7 +185,9 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 		expect(restored.protocol.steps[0]?.selection).toEqual(selection);
 		expect(restored.protocol.steps[1]?.reservation).toEqual(winner);
 		expect(restored.protocol.output?.receipt).toEqual(intent);
-		await _Writer(_Connect(), restored).confirm(restored.protocol.output!.receipt);
+		const restoredIntents = _ConversationComputerOutputIntents(restored.protocol.output!.receipt);
+		expect(restoredIntents).toHaveLength(1);
+		await _Writer(_Connect(), restored).confirm(restoredIntents[0]!);
 		expect(await _Outputs(history, intent)).toHaveLength(1);
 	});
 
@@ -202,13 +204,17 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 		const loaded = await new KurrentConversationComputerTurnStore(restarted).load(turn.bootstrapId);
 		expect(loaded?.protocol.output?.receipt).toEqual(prepared);
 		const appendFence = vi.fn().mockResolvedValue(undefined);
-		await expect(_Writer(restarted, loaded!, appendFence).confirm(loaded!.protocol.output!.receipt)).resolves.toEqual(prepared.event.data.entry);
+		const loadedIntents = _ConversationComputerOutputIntents(loaded!.protocol.output!.receipt);
+		expect(loadedIntents).toHaveLength(1);
+		await expect(_Writer(restarted, loaded!, appendFence).confirm(loadedIntents[0]!)).resolves.toEqual(prepared.event.data.entry);
 		expect(appendFence).not.toHaveBeenCalled();
 
 		const restartedAgain = _Connect();
 		const accepted = await new KurrentConversationComputerTurnStore(restartedAgain).load(turn.bootstrapId);
 		const noNewAppend = vi.fn().mockRejectedValue(new Error("the original input head has advanced"));
-		await expect(_Writer(restartedAgain, accepted!, noNewAppend).confirm(accepted!.protocol.output!.receipt)).resolves.toEqual(prepared.event.data.entry);
+		const acceptedIntents = _ConversationComputerOutputIntents(accepted!.protocol.output!.receipt);
+		expect(acceptedIntents).toHaveLength(1);
+		await expect(_Writer(restartedAgain, accepted!, noNewAppend).confirm(acceptedIntents[0]!)).resolves.toEqual(prepared.event.data.entry);
 		expect(noNewAppend).not.toHaveBeenCalled();
 		const outputs = await _Outputs(restartedAgain, prepared);
 		expect(outputs).toHaveLength(1);
