@@ -14,13 +14,13 @@ This one wraps [LiteLLM](https://github.com/BerriAI/litellm), a proxy that gives
 **Why we run it.** All model traffic in a **silo** (one customer's isolated slice) flows through LiteLLM
 so keys stay in-cluster, spend is metered in one place, and the assistants never talk to a provider
 directly. Customers bring their own keys (BYOK) at the ClusterTenant level. This app owns the
-release-local LiteLLM `Deployment`, `Service`, generated `Secret`, and app-owned `NetworkPolicy` as named Helm templates,
+release-local LiteLLM `Deployment`, `ServiceAccount`, `Service`, generated `Secret`, and app-owned `NetworkPolicy` as named Helm templates,
 composed by the silo umbrella chart ([`deploy-k8s`](../deploy-k8s/README.md)).
 
 ## Public surface
 
 `Entrypoint:` the Helm named-template library under `helm/`. The umbrella chart includes the
-deployment, service, Secret, and `opencrane.litellm.networkPolicy` templates. No importable code.
+deployment, service account, service, Secret, and `opencrane.litellm.networkPolicy` templates. No importable code.
 
 ## Boundary
 
@@ -28,6 +28,10 @@ OpenCrane owns *how* LiteLLM is deployed, keyed, and reached; the vendor owns ro
 integration. **Shared mode** (`opencrane.litellmShared`) renders none of the managed resources and
 points the silo at a configured shared endpoint and credentials instead. Secrets are sourced from
 mounted/existing Kubernetes Secrets, never inlined.
+
+The managed proxy has a dedicated release-local service account with no rendered Kubernetes API
+grants. Automatic token mounting is disabled on both the account and Pod; no API token is projected.
+Its model requests still require LiteLLM credentials. The service account is not a model permission.
 
 ## Dependency direction
 
@@ -59,6 +63,11 @@ An app entrypoint (`type:app`, `scope:litellm`); composed by the silo chart, imp
 
 Run `npx nx run litellm:test` for the smoke runner's success and failure contracts, and
 `npx nx run litellm:lint` for its syntax checks. These local targets do not start Docker.
+The silo chart's platform-network contract checks the proxy's identity, absence of API tokens and
+absence of rendered grants in local and multi-instance profiles. App-template tests cover managed,
+shared and disabled modes independently: the full silo still rejects shared LiteLLM while private
+Cognee is installed. Negative tests reject missing identities, token mounts and grants. These
+checks do not audit pre-existing cluster role bindings.
 The existing GitHub Actions image-smoke job runs `npx nx run litellm:image-smoke`: it reads the
 configured image from the silo chart values, resolves its immutable digest, and runs that image's
 actual router against an in-memory provider with network access disabled. It rejects a successful

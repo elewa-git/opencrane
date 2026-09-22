@@ -26,6 +26,8 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      serviceAccountName: {{ include "opencrane.fullname" . }}-litellm
+      automountServiceAccountToken: false
       securityContext:
         {{- toYaml .Values.litellm.podSecurityContext | nindent 8 }}
       containers:

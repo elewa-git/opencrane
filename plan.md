@@ -537,6 +537,18 @@ the original credential, accounting and deadline. First-request rejection must s
 coordinates because no earlier tool declaration exists yet. Lost rejection/claim acknowledgements
 must not permit another paid request.
 
+The next trust-boundary check found that the managed LiteLLM chart inherited the namespace's
+default Kubernetes service account. The source now gives the proxy a release-local account,
+disables API-token automount on both account and Pod, and grants it no Kubernetes API permissions.
+The rendered network boundary and model credentials are unchanged. The new render assertion first
+failed against the old chart's missing account, then passed for local and multi-instance silo
+renders. App-only renders also prove the account and Deployment disappear in shared and disabled
+modes; these tests do not bypass the full silo's existing rejection of shared LiteLLM with private
+Cognee. All 76 LiteLLM tests, syntax checks, Helm lint, workload ownership and release-manifest
+checks pass. Existing cluster grants and deployed workloads were not inspected or changed by this
+source correction. Automatic backoff, a qualified rejection producer and its saved retry consumer
+remain open.
+
 The source loop builds above the completed quality fixes. Provider backoff and live qualification
 remain functional gates alongside memory, delegation, scheduling and administration before the
 goal can close. The singular reservations, fixed Kurrent revisions, singular continuation custody

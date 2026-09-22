@@ -29,6 +29,8 @@
 ---
 {{ include "opencrane.litellm.secret" . }}
 ---
+{{ include "opencrane.litellm.serviceAccount" . }}
+---
 {{ include "opencrane.litellm.deployment" . }}
 ---
 {{ include "opencrane.litellm.service" . }}
