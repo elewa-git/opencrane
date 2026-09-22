@@ -37,6 +37,10 @@ database transaction supplied by the product change and the parameterised `absur
 function. Product repositories may also emit a task event through that transaction with the fixed
 `absurd.emit_event` procedure. Absurd keeps the first payload for one task-scoped event name, so a
 replayed product write cannot replace the event that already woke the task.
+Both transactional procedure adapters preserve recognised database rollback errors unchanged, so
+the product's shared transaction runner can retry the complete operation. This includes Prisma
+P2010 with PostgreSQL SQLSTATE `40001`; other database and input-serialization failures remain
+wrapped. The adapters do not retry a procedure alone or change nontransactional worker behaviour.
 Each declared or registered job also supplies its total attempt limit and retry delay. The adapter
 stores those limits with the Absurd task, including when the task is started inside a product database transaction.
 A retryable error lets Absurd schedule the next attempt. A terminal error is saved as failed before
@@ -53,7 +57,9 @@ against a database with the pinned Absurd SQL installed.
 
 ## Dependency direction
 
-This is a `type:lib`, `layer:infra`, `scope:workflows` package. It may depend only on the workflows contract and external engine/database types; it never imports a domain package or application.
+This is a `type:lib`, `layer:infra`, `scope:workflows` package. It depends on the workflows contract,
+the shared Prisma transaction helper, and external engine/database types; it never imports a domain
+package or application.
 
 ## Data & persistence
 

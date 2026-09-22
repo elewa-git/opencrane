@@ -1,5 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
+import { ___IsRolledBackConflict } from "@opencrane/backend/server/infra/prisma-unit-of-work";
+
 import { AbsurdWorkflowError } from "./absurd-workflow-error";
 import type { IWorkflowTaskEventAdmission } from "./workflow-task-event-admission.types";
 import { _RequireWorkflowTransactionClient } from "./workflow-transaction-client";
@@ -34,7 +36,10 @@ export class WorkflowTaskEventAdmission implements IWorkflowTaskEventAdmission
 		this.queueName = _RequiredString("queueName", queueName);
 	}
 
-	/** Delivers one JSON-compatible event without leaving the caller's transaction. */
+	/**
+	 * Delivers one JSON-compatible event without leaving the caller's transaction.
+	 * Proven database rollbacks remain unchanged for whole-transaction retry; other failures are wrapped.
+	 */
 	async emit(transactionClient: unknown, eventName: string, payload: unknown): Promise<void>
 	{
 		_RequireWorkflowTransactionClient(transactionClient);
@@ -60,6 +65,8 @@ export class WorkflowTaskEventAdmission implements IWorkflowTaskEventAdmission
 		}
 		catch (cause)
 		{
+			if (___IsRolledBackConflict(cause))
+				throw cause;
 			throw new AbsurdWorkflowError("emit task event", cause);
 		}
 	}

@@ -2,6 +2,92 @@
 
 ## MVP continuation — 2026-09-22
 
+### Repaired candidate — history proof passed; SQL rollback handling and visuals open
+
+The reviewed repair is published as `a3de26943f0233edc384aba35e31d506bdeade68` on draft #899.
+[Run 35766901540](https://github.com/elewa-git/opencrane/actions/runs/35766901540) finished with two
+failed jobs: database authority and Storybook visuals. Affected build/test/lint, Cognee, API,
+Kurrent and all six image smokes passed. Completed Kurrent and LiteLLM jobs confirm tested merge SHA
+`029cd320a97740e63e8c6d21a3cc1d881426b31c`, above unchanged base
+`830243b766d9ccb5f4719b511b082e3843b030db`. These completed jobs are not evidence that the whole
+run or MVP passed. This local evidence note is not part of that tested revision.
+
+Kurrent job `106879030318` ran real KurrentDB 26.1.1 and PostgreSQL: 46 tests pass across five
+targets; nine configuration sentinels are skipped. All ten real saved-output recovery cases pass,
+including the five paired answer/display cases and the corrected older text-only cases. The later
+model-name/dispatch test passes, and all four generated-file integration cases pass: exact link
+and restart, lost first-link acknowledgement, completion failure after tool authority ends, and
+substituted Artifact/revoked-authority refusal. The earlier run's skipped steps are not reused as
+evidence. Live Odoo/model-to-browser and fresh-silo acceptance remain separate.
+
+LiteLLM job `106879030358` passes both offline contracts against built image ID
+`sha256:7d0b56b6f8f7567ade17e09a95eb6806ab8ed4b41c0607cc53bc81b82271c26f`: 17 router receipt cases
+and 18 pre-forward receipt cases, each reporting zero network attempts. Only the genuine local
+limiter produces a verified rejection receipt with zero provider calls. This closes the earlier
+built-image/startup proof gap; it does not identify a published registry digest or prove a live
+proxy/provider journey. Saved retries remain disabled by default. Enabling requires separately
+authorized publication and selection of the qualified derived image, managed same-release proxy
+configuration, and the explicit pre-forward contract value. No such setting or live system changed.
+
+The human visual review document inventories all 58 original Linux candidate states, with verified
+links to every actual image and before/diff pairs for all 20 changed states. Source history explains
+17 inherited Tools differences through the earlier PrimeNG migration `c66303d66`; this is not visual
+approval. No frontend source or screenshots changed between the captured `cbfb06b27` and repaired
+`a3de26943`. Human baseline acceptance, requester-only assistant-question source, private scheduling
+defaults and the previously recorded authority/live-environment decisions remain pending.
+
+Live stack integrity still passes for 18 PRs, with review chain #888 → #891 → #892 → #893 → #894 →
+#896 → #897 → #898 → #899 at snapshot
+`117c8733d52dd3a7fe5331929d415999373ad721ce96d89fcf5030b88e0e7b54`.
+
+### Proven PostgreSQL rollback — local regression and review pass; CI open
+
+The repair starts at `a3de26943f0233edc384aba35e31d506bdeade68`. Database job `106879030422`
+exposed an actual concurrency failure in the existing two-principal memory-command test.
+`absurd.spawn_task` raised Prisma `P2010` with PostgreSQL SQLSTATE `40001`; transactional workflow
+admission wrapped it as `AbsurdWorkflowError`, and the shared retry classifier recognized neither
+the wrapped error nor that raw-query serialization shape. The original three-attempt memory
+transaction policy therefore could not retry a proven rollback. The encrypted-output ten-case
+suite and all five workload-profile repair cases passed in that same job.
+
+The correction in the shared Prisma classifier treats genuine `P2010`/`40001` errors as retryable
+only when the caller's existing policy admits `P2034` serialization conflicts. Both transactional
+workflow adapters preserve recognized rollback errors unchanged. Arbitrary raw-query errors,
+message text, wrapped causes, external/provider failures and nontransactional workflow operations
+remain outside this change. No schema, baseline, grant, consent, credential, provider or deployment
+setting changed.
+
+The regression failed before the correction at the raw task-admission error wrapper. Afterward,
+the shared unit-of-work suite passes 13 tests; the workflow adapter suite passes 52 tests with one
+unrelated SQL qualification case skipped. The existing disposable PostgreSQL memory-command suite
+passes all ten cases, including concurrent principals. Its deterministic new case injects a real
+Prisma `P2010`/`40001` error object after an actual raw task insertion; it does not claim PostgreSQL
+raised that injected error. Before the second attempt, an independent client sees no failed task,
+operation or audit and the fact remains Active at revision 1. The retry commits one matching task,
+operation and audit, with the fact ForgetPending at revision 2. Restarted replay adds nothing.
+Together with CI's observed driver error, this establishes the local regression, not new remote CI
+acceptance. No new database, VM, container or persistent service was started.
+
+Adapter source pins are updated without changing their SQL templates. The diff checker recognizes
+exactly the previous two pins only when loading an immutable Git base, and rejects them in current
+policy. All 26 enforcement tests pass, including changed-history and current-policy rejection.
+Style reports zero errors or warnings across the three changed production TypeScript files. Prisma
+boundaries pass against both the repair base (288 files) and actual PR base (395 files); all three
+affected package type checks pass. Module growth checks four production files with no errors or
+review candidates. Independent integrated review passes with no findings: whole-transaction retry,
+error identity and historical-only source-pin recognition retain their intended boundaries.
+Remote CI on the committed correction remains open; the earlier failed run is not reused as a pass.
+
+Storybook repeats the exact reviewed decision set: 247 interaction/accessibility tests pass, and
+visuals have 130 passes plus the same 38 missing and 20 changed references. No new functional
+failure or state ID appeared. The existing review document remains the decision inventory, but
+matching IDs do not establish that screenshots from different runs are byte-identical.
+
+The remaining-work audit also confirms that actual usage collection is not a safe placeholder
+writer: model responses currently omit usage, the reporting repository has no writer, and storage
+requires non-null cost/currency. Attribution for managed runs, trusted pricing and unknown-cost
+semantics need a product/accounting decision. Do not write zero cost as a substitute for unknown.
+
 ### Draft publication — approved candidate published; CI acceptance open
 
 The user approved draft publication and CI. Draft [#899](https://github.com/elewa-git/opencrane/pull/899)

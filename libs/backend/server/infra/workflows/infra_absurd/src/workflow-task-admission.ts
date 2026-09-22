@@ -1,5 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
+import { ___IsRolledBackConflict } from "@opencrane/backend/server/infra/prisma-unit-of-work";
+
 import { AbsurdWorkflowError } from "./absurd-workflow-error";
 import type { IWorkflowTaskAdmission, IWorkflowTaskAdmissionReceipt, IWorkflowTaskAdmissionRequest } from "./workflow-task-admission.types";
 import { _RequireWorkflowTransactionClient } from "./workflow-transaction-client";
@@ -90,8 +92,9 @@ export class WorkflowTaskAdmission implements IWorkflowTaskAdmission
  *
 	 * The method serializes the task input, scopes its idempotency key, and calls the fixed Absurd
 	 * procedure with bound parameters. It rejects malformed results before the workflow engine can
-	 * report success. Callers receive {@link AbsurdWorkflowError} when serialization or database
-	 * work fails, while a malformed vendor response remains a direct error for diagnosis.
+	 * report success. Proven database rollback errors remain unchanged so the caller can retry its
+	 * whole transaction. Other serialization or database failures become {@link AbsurdWorkflowError},
+	 * while a malformed vendor response remains a direct error for diagnosis.
 	 *
 	 * @param transactionClient Opaque transaction supplied by the product write that admits work.
 	 * @param request Task name, domain idempotency key, and JSON-compatible input to submit.
@@ -137,6 +140,8 @@ export class WorkflowTaskAdmission implements IWorkflowTaskAdmission
 		}
 		catch (cause)
 		{
+			if (___IsRolledBackConflict(cause))
+				throw cause;
 			if (cause instanceof Error && (cause.message.includes("must return exactly one") || cause.message.includes("returned an invalid")))
 			{
 				throw cause;

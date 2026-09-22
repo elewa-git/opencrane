@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { Pool } from "pg";
 import { describe, expect, it, vi } from "vitest";
 
@@ -81,6 +81,20 @@ describe("WorkflowTaskAdmission", function _WorkflowTaskAdmissionSuite()
 
 		await expect(new WorkflowTaskAdmission("control-plane").admit(transaction, { taskName: "refresh-token", idempotencyKey: "refresh:1", input: {}, ..._RETRY })).rejects.toBeInstanceOf(AbsurdWorkflowError);
 	});
+
+	it.each(["P2002", "P2034", "P2010"])("preserves the original proven rollback error %s", async function _preservesRollback(code)
+	{
+		const failure = new Prisma.PrismaClientKnownRequestError("rollback", { code, clientVersion: "test", meta: { code: "40001" } });
+		const transaction = { $queryRaw: vi.fn().mockRejectedValue(failure) } as unknown as Prisma.TransactionClient;
+		await expect(new WorkflowTaskAdmission("control-plane").admit(transaction, { taskName: "refresh-token", idempotencyKey: "refresh:1", input: {}, ..._RETRY })).rejects.toBe(failure);
+	});
+
+	it.each(["40P01", "23505", "08006", undefined])("keeps unrecognised raw-query failures wrapped: %s", async function _wrapsUnknown(sqlState)
+	{
+		const failure = new Prisma.PrismaClientKnownRequestError("40001 is not evidence in message text", { code: "P2010", clientVersion: "test", meta: { code: sqlState } });
+		const transaction = { $queryRaw: vi.fn().mockRejectedValue(failure) } as unknown as Prisma.TransactionClient;
+		await expect(new WorkflowTaskAdmission("control-plane").admit(transaction, { taskName: "refresh-token", idempotencyKey: "refresh:1", input: {}, ..._RETRY })).rejects.toMatchObject({ name: "AbsurdWorkflowError", cause: failure });
+	});
 });
 
 describe("WorkflowTaskEventAdmission", function _WorkflowTaskEventAdmissionSuite()
@@ -108,6 +122,20 @@ describe("WorkflowTaskEventAdmission", function _WorkflowTaskEventAdmissionSuite
 
 		const transaction = { $queryRaw: vi.fn().mockRejectedValue(new Error("database unavailable")) } as unknown as Prisma.TransactionClient;
 		await expect(admission.emit(transaction, "completed", {})).rejects.toBeInstanceOf(AbsurdWorkflowError);
+	});
+
+	it.each(["P2002", "P2034", "P2010"])("preserves the original event rollback error %s", async function _preservesEventRollback(code)
+	{
+		const failure = new Prisma.PrismaClientKnownRequestError("rollback", { code, clientVersion: "test", meta: { code: "40001" } });
+		const transaction = { $queryRaw: vi.fn().mockRejectedValue(failure) } as unknown as Prisma.TransactionClient;
+		await expect(new WorkflowTaskEventAdmission("control-plane").emit(transaction, "completed", {})).rejects.toBe(failure);
+	});
+
+	it.each(["40P01", "23505", "08006", undefined])("keeps unrecognised event failures wrapped: %s", async function _wrapsUnknownEvent(sqlState)
+	{
+		const failure = new Prisma.PrismaClientKnownRequestError("40001 is not evidence in message text", { code: "P2010", clientVersion: "test", meta: { code: sqlState } });
+		const transaction = { $queryRaw: vi.fn().mockRejectedValue(failure) } as unknown as Prisma.TransactionClient;
+		await expect(new WorkflowTaskEventAdmission("control-plane").emit(transaction, "completed", {})).rejects.toMatchObject({ name: "AbsurdWorkflowError", cause: failure });
 	});
 });
 

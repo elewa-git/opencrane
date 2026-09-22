@@ -33,6 +33,11 @@ Invariant: a caller never places an effect that can survive database rollback in
 retry only ever repeats a complete idempotent operation whose previous attempt provably wrote
 nothing.
 
+Raw-query serialization failures use Prisma P2010 with PostgreSQL SQLSTATE `40001`. The classifier
+accepts that exact structured error only when the policy permits P2034 serialization retries; it
+never retries other P2010 errors, message-text lookalikes, or wrapped causes. The attempt budget and
+last-error identity remain unchanged.
+
 ## Public surface
 
 - `___CreatePrismaClient` creates the process client with structured warning and error logging.

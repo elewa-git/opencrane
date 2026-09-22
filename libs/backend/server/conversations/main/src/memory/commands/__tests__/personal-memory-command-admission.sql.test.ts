@@ -193,6 +193,59 @@ describe("personal-memory command admission on PostgreSQL and Absurd", function 
 		finally { conflict.mockRestore(); await engine.close(); }
 	});
 
+	it("retries a raw-query serialization rollback without duplicating committed memory admission", async function _rawSpawnRollback()
+	{
+		const fixture = await _PersonalMemoryCommandSqlFixture(_Database);
+		const operationId = randomUUID();
+		const command = _Forget(randomUUID(), fixture);
+		const engine = _Engine();
+		const taskIds: string[] = [];
+		const client = _Database.$extends({ query: { async $queryRaw({ args, query })
+		{
+			if (taskIds.length === 1)
+			{
+				expect(await _QueueOwner.fetchTaskResult(taskIds[0]!)).toBeNull();
+				expect(await _Observer.personalMemoryOperation.findUnique({ where: { id: operationId } })).toBeNull();
+				expect(await _AuditCount(fixture.caller.siloId)).toBe(0);
+				expect(await _Observer.memoryFactCatalog.findUniqueOrThrow({ where: { id: fixture.factId } })).toMatchObject({ state: MemoryFactState.Active, revision: 1 });
+			}
+			const rows = await query(args) as { task_id: string }[];
+			expect(rows).toEqual([expect.objectContaining({ task_id: expect.any(String), created: true })]);
+			taskIds.push(rows[0]!.task_id);
+			if (taskIds.length === 1)
+				throw new Prisma.PrismaClientKnownRequestError("injected serialization failure after real raw task admission", { code: "P2010", clientVersion: Prisma.prismaVersion.client, meta: { code: "40001" } });
+			return rows;
+		} } }) as unknown as PrismaClient;
+		try
+		{
+			await expect(_Authority(client, engine, operationId).admit(fixture.caller, command)).resolves.toMatchObject({ outcome: PersonalMemoryCommandAdmissionOutcomes.Accepted, receipt: { operationId } });
+			expect(taskIds).toHaveLength(2);
+			expect(new Set(taskIds).size).toBe(2);
+			expect(await _QueueOwner.fetchTaskResult(taskIds[0]!)).toBeNull();
+			expect(await _QueueOwner.fetchTaskResult(taskIds[1]!)).not.toBeNull();
+			const operation = await _Observer.personalMemoryOperation.findUniqueOrThrow({ where: { id: operationId } });
+			expect(operation.workflowTaskId).toBe(taskIds[1]);
+			const audits = await _Observer.auditDecision.findMany({ where: { siloId: fixture.caller.siloId } });
+			expect(audits).toHaveLength(1);
+			expect(audits[0]!.argumentsDigest).toBe(operation.commandDigest);
+			const fact = await _Observer.memoryFactCatalog.findUniqueOrThrow({ where: { id: fixture.factId } });
+			expect(fact).toMatchObject({ state: MemoryFactState.ForgetPending, revision: 2 });
+			const restartedClient = new PrismaClient();
+			const restartedEngine = _Engine();
+			const receipts: IWorkflowTaskReceipt[] = [];
+			try
+			{
+				await expect(_Authority(restartedClient, _ObservedEngine(restartedEngine, receipts), operationId).admit(fixture.caller, command)).resolves.toMatchObject({ outcome: PersonalMemoryCommandAdmissionOutcomes.Idempotent, receipt: { operationId } });
+				expect(receipts).toHaveLength(0);
+			}
+			finally { await restartedClient.$disconnect(); await restartedEngine.close(); }
+			expect(await _Observer.personalMemoryOperation.findMany({ where: { siloId: fixture.caller.siloId } })).toEqual([operation]);
+			expect(await _Observer.auditDecision.findMany({ where: { siloId: fixture.caller.siloId } })).toEqual(audits);
+			expect(await _Observer.memoryFactCatalog.findUniqueOrThrow({ where: { id: fixture.factId } })).toEqual(fact);
+		}
+		finally { await engine.close(); }
+	});
+
 	it("a failure after real spawn rolls back the audit, operation, task and Forget hide", async function _Rollback()
 	{
 		const fixture = await _PersonalMemoryCommandSqlFixture(_Database);
