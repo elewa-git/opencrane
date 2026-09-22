@@ -106,6 +106,53 @@ required permission to open its local IPC socket; no source or build configurati
 needed. Independent integrated review passes with no findings. This source-only slice remains local
 and does not close the live multi-step acceptance gate.
 
+### Delegation restart and authority preflight
+
+The current source checkpoint is `f4281ee6c0c8464de3eda6757f71198e424ebd21`. The live stack
+check passes with the same seventeen open PRs and unchanged #898 head. A read-only inventory on
+22 September found no source to port from `/private/tmp/opencrane-bounded-assistant-delegation`:
+zero regular files remain, and its branch is still the old `8b20275` baseline, already ancestral to
+the current candidate. The three old proposal/review directories are also empty. Rebuild against
+the current owners; do not repair the old worktree metadata or treat its directory names as work.
+
+| Existing owner | Required delegation extension |
+| --- | --- |
+| `execution/runs` | Root/parent lineage, shared allowances, reservation receipts and descendant cancellation. |
+| `execution/inputs` | Current target identity, selected readable context and narrower frozen capabilities. |
+| `server/conversations` | Model-owned delegation request, independent child history/activation and one terminal return into the parent's saved result sequence. |
+| `iam/authorization` | Explicit current AgentService/Conversation Delegate decisions; declared actions are not grants. |
+| `infra/workflows` | Reuse transaction-bound Absurd task admission and recovery; no new scheduler or peer messaging service. |
+
+Architecture preflight blocks delegation activation, not reuse of these owners. Current Kurrent
+counters and the model key limit belong to one run. A child cannot receive a fresh copy of that
+allowance. In particular, a database debit cannot shrink a parent key that was already issued with
+the full spending cap. Reserve disjoint parent-local and child/subtree spending allowances before
+issuing credentials, and never reuse the parent's key for a child. Nested reservations must remain
+inside the original root budget and deadline. Uncertain issued allowances cannot be refunded merely
+because a worker restarted. The current model-key port has no shared-provider-budget contract.
+
+Historical source reviews did not authorize the rejected reservation writer, Delegate grants,
+delegation SQL or Prisma-owner registrations. A fresh scoped source request now covers lineage and
+baseline changes, reservation/credential gates, opt-in delegation permissions, cancellation and
+parent return. Proposed limits are two delegation levels, four children across the root task and
+two active children at once; these are awaiting approval, not active product defaults. No automatic
+organisation-wide grant, provider call, live database, deployment or publication is authorized.
+
+Until that approval, work is limited to documenting the current boundary and characterization tests.
+Five new conversation cases cover the null revision cost cap, a lower revision cap, a higher
+revision cap, restart after the server configuration increases, and refusal of a changed frozen cost
+cap. They run the real turn store and encrypted custody against controlled model/provider ports.
+Three new run-cancellation cases keep two run rows in the same conversation: cancellation and its
+replays leave the unrelated run untouched, and neither retargeting the saved Stop nor replacing it
+with a second command is allowed. The IAM cleanup port is observed, not executed against providers.
+All 747 conversation tests and 80 execution-run tests pass, with both package type checks. The first
+restricted full run could not open test HTTP listeners; the unchanged rerun with local-socket
+permission passed. No test or production configuration was relaxed. Style, Prisma ownership,
+module growth and release coherence pass; these are local test/doc checks, not delegation proof.
+The current-head rendered deployment inventory is not requalified by this source preflight. Actual
+parent/child execution, depth-two return, sibling isolation, shared-cost enforcement, revocation,
+restart and cascading cancellation remain required before D1 can be marked complete.
+
 Keep the remaining memory, interaction, files, delegation,
 schedules, administration and recovery journeys in scope; source completion never closes their live
 acceptance gates. First-dataset memory authorization, governance-reader policy, visual acceptance
@@ -177,9 +224,10 @@ incremental publication order below; historical entries remain evidence for thei
 The cumulative candidate starts at #887 (`8b20275b692563b763e7e096262bd9586e2bcd2d`), includes
 remote MCP #886 (`2b3876edd981cb8762fe8b533987fe6f84c4f586`) and the reviewed model-response
 recovery change, and is checked against develop `d4bd0213c38e4fa70cbc3d93535857da9e381a32`.
-Original branches and local source are preserved. The delegation worktree still contains unfinished
-source and unapplied reservation, grant and database proposals; those are not a working feature.
-The consolidation inventory must account for that work before this can be called a complete MVP.
+Original branches were retained. The 22 September inventory found that the old delegation worktree
+and proposal directories no longer contain source files; its branch has no delegation commits.
+Historical reservation, grant and database proposals were not applied. Rebuild delegation from the
+current candidate as described above before this can be called a complete MVP.
 
 ### Delivery checklist
 
@@ -581,9 +629,9 @@ Failure to save that state keeps the workflow pending. Restart accepts the same 
 lease without resuming it or replenishing the original or final-call allowance.
 
 The change reuses the conversation workflow and execution/runs lifecycle. It adds no endpoint,
-scheduler, schema, grant or recovery action. Bounded assistant delegation remains unfinished in
-its separate worktree and will build on this fix; its reservation and grant proposals are not part
-of this patch. Runs (74), conversations (651), the full application SQL target and application tests/type check/build
+scheduler, schema, grant or recovery action. Bounded assistant delegation remained unfinished in
+its separate worktree at that checkpoint; the 22 September inventory now requires rebuilding it.
+Its reservation and grant proposals were not part of this patch. Runs (74), conversations (651), the full application SQL target and application tests/type check/build
 pass locally. Independent source review passes. This fix is included in the cumulative candidate;
 testv6 and live provider qualification remain pending.
 

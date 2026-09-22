@@ -83,9 +83,10 @@ The status projection exposes `cancelling` while durable arbitration or cleanup 
 This package does not choose personas, memory, tools, models, or Kubernetes settings. The input
 assembler supplies the fixed run input. The conversation workflow runs the server-owned model loop and rechecks the Agent Sandbox lease and
 generation before each effect. The saved budget projection supplies explicit model-turn, completion-token,
-tool-invocation, loop-iteration, optional-cost and wall-clock ceilings. The current workflow still exposes
-the one-tool text continuation baseline; repeated progression must consume those frozen counters before
-it is enabled. The Pod does not schedule or call the model loop.
+tool-invocation, loop-iteration, optional-cost and wall-clock ceilings. Repeated model/tool progression
+consumes those frozen counters and retains an allowance for the final answer. The Pod does not
+schedule or call the model loop. These limits belong to one run; there is not yet a shared allowance
+for delegated children, descendant cancellation, or automatic child-result return.
 
 The current text-turn baseline uses approved personal instructions, conversation history and the
 selected model. New runs explicitly freeze memory as unavailable. Dataset provisioning and memory

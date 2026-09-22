@@ -214,6 +214,12 @@ and expiry. Lost paid responses become durable unavailable progress; they cannot
 requests. Absurd selects saved progress and owns waits and recovery. The Pod retains only its
 lease-fenced isolated execution and review interactions.
 
+The attempt credential uses the lower of the frozen server spending limit and the revision's cost
+cap. A null revision cap still uses the server limit; it does not allow unlimited spending. Saved
+result continuations reuse that credential and cannot increase its allowance after restart. This
+is a per-attempt limit, not a shared delegation budget: issuing a separate full-limit child key would
+add spending capacity. Delegation must partition the root allowance before issuing those keys.
+
 The model HTTP deadline limits acceptance of that response. An approval or tool wait may continue
 after it, within the original attempt authority and credential expiry. Each later reservation keeps
 the earlier authority ceiling and any shorter accepted result deadline. The server rechecks current
