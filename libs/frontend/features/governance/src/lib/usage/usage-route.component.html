@@ -1,0 +1,3 @@
+<wo-section-heading title="Usage and budgets" [level]="pageHeading" />
+<wo-token-usage-summary [rows]="usageRows()" [feedback]="store.usage.feedback()" (refreshRequested)="store.refreshUsage()" />
+<wo-budget-summary [globalBudget]="globalBudget()" [overrides]="budgetRows()" [globalFeedback]="store.globalBudget.feedback()" [accountsFeedback]="store.accountBudgets.feedback()" (globalRefreshRequested)="store.refreshGlobalBudget()" (accountRefreshRequested)="store.refreshAccountBudgets()" />

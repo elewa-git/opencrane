@@ -1,0 +1,29 @@
+{
+	"name": "frontend-features-governance",
+	"$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+	"projectType": "library",
+	"sourceRoot": "libs/frontend/features/governance/src",
+	"prefix": "wo",
+	"tags": [
+		"type:lib",
+		"layer:frontend",
+		"scope:governance",
+		"frontend-role:feature"
+	],
+	"targets": {
+		"lint": {
+			"executor": "nx:run-commands",
+			"options": {
+				"command": "tsc -p tsconfig.lint.json",
+				"cwd": "libs/frontend/features/governance"
+			}
+		},
+		"test": {
+			"executor": "nx:run-commands",
+			"options": {
+				"command": "vitest run",
+				"cwd": "libs/frontend/features/governance"
+			}
+		}
+	}
+}

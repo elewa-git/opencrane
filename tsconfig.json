@@ -10,6 +10,9 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "paths": {
+      "@opencrane/state/governance": ["./libs/frontend/state/governance/src/index.ts"],
+      "@opencrane/state/governance/adapter": ["./libs/frontend/state/governance/adapter/src/index.ts"],
+      "@opencrane/features/governance": ["./libs/frontend/features/governance/src/index.ts"],
       "@opencrane/backend/server/utils": [
         "./libs/backend/server/utils/src/index.ts"
       ],

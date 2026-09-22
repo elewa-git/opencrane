@@ -1,0 +1,25 @@
+<section class="budget-summary" aria-label="Global budget">
+	<wo-section-heading title="Global budget" subtitle="Values shown here do not confirm that a spending limit is configured or enforced.">
+		<p-button heading-actions label="Refresh global budget" icon="pi pi-refresh" [text]="true" [disabled]="pending(globalFeedback().state)" (onClick)="requestGlobalRefresh()" />
+	</wo-section-heading>
+	<wo-resource-feedback [loading]="pending(globalFeedback().state)" loadingLabel="Loading global budget…" [error]="readError(globalFeedback())" [retryAvailable]="globalFeedback().state === states.Unavailable || globalFeedback().state === states.RetainedError" (retryRequested)="requestGlobalRefresh()" />
+	@if (showData(globalFeedback().state)) {
+		<dl class="budget-summary__value"><dt>Budget amount</dt><dd>{{ globalBudget() ?? 'Unknown' }}</dd></dl>
+		<p class="budget-summary__note">Your global budget may show USD 0 by default. This view cannot distinguish a default from a deliberately configured zero.</p>
+	}
+</section>
+<section class="budget-summary" aria-label="Account budget overrides">
+	<wo-section-heading title="Account overrides" subtitle="Account-specific budget values available to your current account.">
+		<p-button heading-actions label="Refresh account budgets" icon="pi pi-refresh" [text]="true" [disabled]="pending(accountsFeedback().state)" (onClick)="requestAccountRefresh()" />
+	</wo-section-heading>
+	<wo-resource-feedback [loading]="pending(accountsFeedback().state)" loadingLabel="Loading account budget overrides…" [error]="readError(accountsFeedback())" [retryAvailable]="accountsFeedback().state === states.Unavailable || accountsFeedback().state === states.RetainedError" (retryRequested)="requestAccountRefresh()" />
+	@if (showData(accountsFeedback().state)) {
+		<div class="budget-summary__table" [attr.aria-busy]="pending(accountsFeedback().state)">
+			<p-table [value]="tableRows()" dataKey="id" [pt]="{ tableContainer: { tabindex: '0', role: 'region', 'aria-label': 'Account budget rows' } }">
+				<ng-template #header><tr><th scope="col">Account</th><th scope="col">Budget</th></tr></ng-template>
+				<ng-template #body let-row><tr><td class="wo-mono">{{ row.userId }}</td><td>{{ row.budget ?? 'Unknown' }}</td></tr></ng-template>
+				<ng-template #emptymessage><tr><td colspan="2">No account overrides are available.</td></tr></ng-template>
+			</p-table>
+		</div>
+	}
+</section>

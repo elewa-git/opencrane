@@ -20,6 +20,7 @@ its slot; the shell itself is `workspace`.
 | [`notifications`](./notifications/README.md) | The notification popover. |
 | [`onboarding`](./onboarding/README.md) | One resumable lifecycle shell with interview, resolution, review, and ready states. |
 | [`settings`](./settings/README.md) | Responsive settings shell, member directory, invitation creation, and acceptance. |
+| [`governance`](./governance/README.md) | Read-only audit browsing, recorded usage and independent budget summaries. |
 | [`tools`](./tools/README.md) | Tools and tool-governance routes. |
 | [`workspace`](./workspace/README.md) | The workspace shell. |
 

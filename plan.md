@@ -3,6 +3,42 @@
 ## MVP continuation — 2026-09-22
 
 The active goal remains the complete ten-track MVP, including delegation and scheduled agent work.
+The current source slice adds read-only `/settings/audit` and `/settings/usage` on top of local
+checkpoint `63e163d03f11b234c53ad571ad0d87fc5314866a`. It uses three narrow governance libraries:
+generated read contracts and validators, their HTTP adapter, and a feature that composes separate
+audit, recorded-usage and budget components. The browser app owns the existing Settings shell,
+member children, new reporting children and adapter/reader-identity bindings. No grant, budget edit,
+backend schema, live request or deployment is added. The access-policy decision remains open.
+
+Audit traversal advances through permission-filtered empty pages. New tests caught and fixed a
+cursor surviving a reader change, and pending reads surviving session loss; queries now reset with
+the reader and all sibling reads cancel after a 401. A 403 clears only the denied endpoint, while
+temporary read failures retain explicitly stale values. The usage endpoint has no sampling writer,
+period or freshness evidence in this candidate, so this UI says recorded usage rather than live
+spending. A returned global USD zero still cannot distinguish a default from a configured zero.
+
+Current checks pass 25 contract, 17 adapter, 50 feature/store/mapper and 15 existing Settings tests,
+plus 19 app-composition tests and all four library type checks. The production UI build and
+Storybook build pass. A real Chromium run against the production-configured local app, with all API
+requests intercepted as synthetic responses, passes at 1280 and 390 pixels: audit continuation,
+Settings navigation, independent budget access, usage-denial purge, member default and anonymous
+redirect. It issued GETs only. This is browser integration evidence, not a real-account journey.
+
+The final full Storybook run passes all 242 interaction/accessibility checks in 38 suites. All 33
+governance states render without browser errors or page overflow; 21 are tagged visual contracts
+awaiting human baseline review. The new continuation button contrast, story-output bindings and
+narrow grid sizing are repaired. Narrow fixtures and the routed app now assert that heading and
+limitation text fit the viewport while tables retain their keyboard-reachable horizontal scroll.
+The final production build, app-ownership guard and negative tests pass. Independent source review
+finds no defects; style checks report zero errors/warnings and module growth reports zero candidates
+across 37 production files. The live PR graph passes at snapshot
+`22b08e644b960e17b26fb5d03822f761f6a82ee0e9289b4be19935a221a6851b`.
+Local synthetic screenshots and their evidence limits are collected in
+`/private/tmp/opencrane-governance-evidence.UlNM8e/REVIEW.md`. No shared permission rule or visual
+baseline changed. This source slice remains local and unpublished.
+Human visual review, publication/exact-SHA CI, deployment, actual usage collection and live
+administration acceptance remain open; this is partial A2, not MVP completion.
+
 Continue from reviewed candidate `830243b766d9ccb5f4719b511b082e3843b030db` (#898), with
 `develop` at `d4bd0213c38e4fa70cbc3d93535857da9e381a32`. The live PR graph still places #898
 after #888 → #891 → #892 → #893 → #894 → #896 → #897. Implementation uses the isolated

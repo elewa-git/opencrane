@@ -1,0 +1,10 @@
+/* Each grid child may shrink so explanatory copy wraps outside the scrolling table. */
+:host { display: grid; gap: var(--oc-space-8); min-width: 0; }
+.budget-summary { min-width: 0; }
+.budget-summary__table { overflow-x: auto; }
+.budget-summary__value { display: flex; flex-wrap: wrap; gap: var(--oc-space-3); }
+.budget-summary__value dd { margin: 0; font-weight: var(--oc-font-weight-medium); }
+.budget-summary__note { color: var(--oc-ink-muted); }
+/* Keep budget amounts and labels intact inside the table's keyboard-reachable scroll container. */
+th, td { overflow-wrap: normal; white-space: nowrap; vertical-align: top; }
+td[colspan] { white-space: normal; }
