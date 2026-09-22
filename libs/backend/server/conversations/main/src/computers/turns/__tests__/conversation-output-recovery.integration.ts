@@ -1,7 +1,7 @@
-import { ConversationModelToolModes } from "@opencrane/contracts";
+import { ConversationEntryKinds, ConversationModelToolModes } from "@opencrane/contracts";
 import { _ConversationComputerTurnHistoryDigest, _InitialConversationComputerTurnProtocol } from "../conversation-computer-turn-protocol";
 import { _ConversationModelRequestDigest } from "../conversation-computer-model-reservation";
-import { _ModelReservationFixture, _ReserveConversationOutputFixture } from "./conversation-output-intent.fixture";
+import { _ModelReservationFixture, _PrepareConversationOutputIntent, _PreparePairedConversationOutputIntent, _ReserveConversationOutputFixture } from "./conversation-output-intent.fixture";
 import { randomUUID } from "node:crypto";
 
 import { KurrentDBClient } from "@kurrent/kurrentdb-client";
@@ -13,7 +13,8 @@ import type { BoundConversationWriterIntent } from "@opencrane/backend/server/co
 import { ConversationHistoryAuthority } from "@opencrane/backend/server/conversations/history";
 import { ConversationComputerOutputPositionConflictError, KurrentConversationComputerTurnStore } from "../conversation-computer-turn-store";
 import type { FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
-import { _PrepareConversationOutputIntent } from "./conversation-output-intent.fixture";
+import { ConversationComputerTurnProtocolStates, type ConversationComputerTurnOutputReceipt } from "../conversation-computer-turn-protocol.types";
+import { _ConversationComputerOutputIntents } from "../output/conversation-computer-output-receipt";
 
 /** Require an explicit server URL; ordinary local tests never start a database. */
 const _URL = process.env["KURRENTDB_INTEGRATION_URL"];
@@ -74,6 +75,26 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 		for await (const event of history.readStream({ streamName: intent.streamName, fromRevision: 1n }))
 			events.push(event);
 		return events;
+	}
+
+	/** Read both saved entries through separate real writers whose recovery clocks cannot run. */
+	async function _confirmPair(history: _KurrentHistoryStore, turn: FrozenConversationComputerTurn, receipt: ConversationComputerTurnOutputReceipt)
+	{
+		const intents = _ConversationComputerOutputIntents(receipt);
+		expect(intents).toHaveLength(2);
+		for (const intent of intents)
+		{
+			const binding = { ...turn.binding, expectedRevision: BigInt(intent.expectedRevision) };
+			await expect(_Writer(history, { ...turn, binding }).confirm(intent)).resolves.toEqual(intent.event.data.entry);
+		}
+		const outputs = await _Outputs(history, receipt);
+		expect(outputs).toHaveLength(2);
+		expect(outputs.map(event => event.revision)).toEqual([1n, 2n]);
+		expect(outputs.map(event => event.data["entry"])).toEqual(intents.map(intent => intent.event.data.entry));
+		expect(intents.map(intent => intent.event.data.entry.kind)).toEqual([ConversationEntryKinds.Message, ConversationEntryKinds.A2UI]);
+		for (const [index, intent] of intents.entries())
+			expect(outputs[index]).toMatchObject({ ...intent.event, streamName: intent.streamName });
+		return outputs;
 	}
 
 	/** Hold two independent clients until both decision appends reach the same expected revision. */
@@ -211,5 +232,92 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 		await history.append({ streamName: intent.streamName, expectedRevision: turn.binding.expectedRevision, events: [{ ...intent.event, id: randomUUID() }] });
 		await expect(new KurrentConversationComputerTurnStore(history).markOutput(turn.bootstrapId, intent)).rejects.toBeInstanceOf(ConversationComputerOutputPositionConflictError);
 		expect((await new KurrentConversationComputerTurnStore(_Connect()).load(turn.bootstrapId))?.protocol.output).toBeNull();
+	});
+
+	it("commits adjacent answer and display entries with one decision and retries without restamping", async function _pairedOutputRestart()
+	{
+		const history = _Connect();
+		const turn = await _Freeze(history);
+		const receipt = await _PreparePairedConversationOutputIntent(turn, randomUUID());
+		const store = new KurrentConversationComputerTurnStore(history);
+		await _ReserveConversationOutputFixture(store, turn.bootstrapId, receipt.event.id);
+		await expect(store.markOutput(turn.bootstrapId, receipt)).resolves.toEqual({ outcome: "accepted", receipt });
+		const saved = await _confirmPair(history, turn, receipt);
+
+		const restarted = _Connect();
+		const restartedStore = new KurrentConversationComputerTurnStore(restarted);
+		const loaded = (await restartedStore.load(turn.bootstrapId))!;
+		expect(loaded.protocol).toMatchObject({ state: ConversationComputerTurnProtocolStates.OutputRecorded, revision: 2n, output: { sourceCommandId: receipt.event.id, receipt } });
+		await expect(restartedStore.markOutput(turn.bootstrapId, receipt)).resolves.toEqual({ outcome: "idempotent", receipt });
+		expect(await _confirmPair(restarted, loaded, loaded.protocol.output!.receipt)).toEqual(saved);
+		expect(await new KurrentConversationComputerTurnStore(_Connect()).load(turn.bootstrapId)).toEqual(loaded);
+	});
+
+	it("recovers the complete pair after the real atomic append commits but its acknowledgement is lost", async function _pairedLostAcknowledgement()
+	{
+		const history = _Connect();
+		const turn = await _Freeze(history);
+		const receipt = await _PreparePairedConversationOutputIntent(turn, randomUUID());
+		await _ReserveConversationOutputFixture(new KurrentConversationComputerTurnStore(history), turn.bootstrapId, receipt.event.id);
+		let committed = 0;
+		const interruptedStore = new KurrentConversationComputerTurnStore({
+			readStream: history.readStream.bind(history), append: history.append.bind(history),
+			appendAtomic: async function _loseAfterCommit(command)
+			{
+				expect(command.appends.map(append => append.events.length)).toEqual([1, 2]);
+				await history.appendAtomic(command);
+				committed += 1;
+				throw new Error("paired output acknowledgement lost after server commit");
+			},
+		});
+		await expect(interruptedStore.markOutput(turn.bootstrapId, receipt)).rejects.toThrow("paired output acknowledgement lost after server commit");
+		expect(committed).toBe(1);
+
+		const restarted = _Connect();
+		const store = new KurrentConversationComputerTurnStore(restarted);
+		const loaded = (await store.load(turn.bootstrapId))!;
+		expect(loaded.protocol).toMatchObject({ state: ConversationComputerTurnProtocolStates.OutputRecorded, revision: 2n, output: { sourceCommandId: receipt.event.id, receipt } });
+		const saved = await _confirmPair(restarted, loaded, loaded.protocol.output!.receipt);
+		await expect(store.markOutput(turn.bootstrapId, receipt)).resolves.toEqual({ outcome: "idempotent", receipt });
+		expect(await _confirmPair(_Connect(), loaded, receipt)).toEqual(saved);
+		expect(await new KurrentConversationComputerTurnStore(_Connect()).load(turn.bootstrapId)).toEqual(loaded);
+	});
+
+	it("saves neither half of a stale pair nor its output decision", async function _stalePairedOutput()
+	{
+		const history = _Connect();
+		const turn = await _Freeze(history);
+		const receipt = await _PreparePairedConversationOutputIntent(turn, randomUUID());
+		const store = new KurrentConversationComputerTurnStore(history);
+		const reserved = await _ReserveConversationOutputFixture(store, turn.bootstrapId, receipt.event.id);
+		const interloper = await _PrepareConversationOutputIntent(turn, randomUUID(), "other-answer-payload");
+		await history.append({ streamName: interloper.streamName, expectedRevision: turn.binding.expectedRevision, events: [interloper.event] });
+		const before = await _Outputs(history, receipt);
+		expect(before).toHaveLength(1);
+		await expect(store.markOutput(turn.bootstrapId, receipt)).rejects.toBeInstanceOf(ConversationComputerOutputPositionConflictError);
+		const restarted = _Connect();
+		expect(await _Outputs(restarted, receipt)).toEqual(before);
+		expect(await new KurrentConversationComputerTurnStore(restarted).load(turn.bootstrapId)).toEqual(reserved);
+		expect(reserved.protocol.output).toBeNull();
+	});
+
+	it.each(["changed payload", "removed display"])("rejects a companion retry with %s while preserving the committed pair", async function _changedPairedOutput(change)
+	{
+		const history = _Connect();
+		const turn = await _Freeze(history);
+		const receipt = await _PreparePairedConversationOutputIntent(turn, randomUUID());
+		const store = new KurrentConversationComputerTurnStore(history);
+		await _ReserveConversationOutputFixture(store, turn.bootstrapId, receipt.event.id);
+		await store.markOutput(turn.bootstrapId, receipt);
+		const saved = await _confirmPair(history, turn, receipt);
+		const loaded = (await store.load(turn.bootstrapId))!;
+		const changed = change === "removed display" ? { ...receipt, display: null } : await _PreparePairedConversationOutputIntent(turn, receipt.event.id, "changed-display-payload");
+		const restarted = _Connect();
+		const restartedStore = new KurrentConversationComputerTurnStore(restarted);
+		await expect(restartedStore.markOutput(turn.bootstrapId, changed)).rejects.toThrow("already has a different output");
+		expect(await _confirmPair(restarted, loaded, receipt)).toEqual(saved);
+		expect(await restartedStore.load(turn.bootstrapId)).toEqual(loaded);
+		await expect(restartedStore.markOutput(turn.bootstrapId, receipt)).resolves.toEqual({ outcome: "idempotent", receipt });
+		expect(await _Outputs(_Connect(), receipt)).toEqual(saved);
 	});
 });

@@ -2,6 +2,24 @@
 
 ## MVP continuation — 2026-09-22
 
+### Paired answer/display history recovery — test source complete; real-service run open
+
+This test-only slice starts from `d33d340c0553bc5879e71fd8c952e07cb97abd75`. Rechecking the
+real-service suites found that their saved answers always omitted the optional display. Five new
+Kurrent cases now exercise the complete pair through the production turn store and history writer:
+adjacent Message/Display commit and fresh-client retry, recovery after a real append commits but its
+acknowledgement is lost, stale-position refusal without a partial pair, and refusal of either a
+changed or removed display on retry. Fixtures reuse the production display-identity helper.
+
+The existing uncached `backend-server-conversations:test:integration` target and its GitHub Actions
+job own execution. The local Kurrent URL is unset and no service listens on the usual test port.
+No local service, VM or container was started. Package type checking passes; focused collection
+loads the suite, passes its missing-configuration check and skips all ten real-service cases. Those
+skips do not establish recovery or MVP acceptance. All 66 tests across the five existing consumers
+of the shared fixture pass. Style and Prisma boundaries report no errors; module growth finds no
+production change. Independent review passes with no findings. Production code, schema, permissions,
+provider calls and the pending product decisions remain unchanged.
+
 ### Real PostgreSQL output custody — verification and review passed
 
 This verification slice starts from reviewed producer checkpoint
