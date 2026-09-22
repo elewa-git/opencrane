@@ -1,6 +1,7 @@
 import type { ConversationGeneratedFileOutputLinker } from "./generated-output/conversation-generated-file-output.types";
 import type { ConversationComputerModelCustody, ConversationComputerToolResults } from "./conversation-computer-continuation.types";
 import type { ConversationComputerModelProgress, ConversationComputerModelTransport } from "./conversation-computer-model.types";
+import type { ConversationComputerModelRejection, ConversationComputerModelRetryClaim } from "./conversation-computer-model-retry.types";
 import type { ConversationComputerTurnBudget, ConversationComputerTurnCancellationReceipt, ConversationComputerTurnModelReservation, ConversationComputerTurnOutputReceipt, ConversationComputerTurnProtocolProjection, ConversationComputerTurnToolResult, ConversationComputerTurnToolSelection, ConversationComputerTurnUnavailableReceipt } from "./conversation-computer-turn-protocol.types";
 import type { ConversationToolProposalAdmission } from "../tools/proposal/conversation-tool-proposal.types";
 import type { AgentScope, ClaimedLeaseScope, CompiledRunInput, ComputerScope, LeaseScope } from "@opencrane/contracts";
@@ -253,6 +254,10 @@ export interface ConversationComputerTurnStore
 	recordToolResult(bootstrapId: string, result: ConversationComputerTurnToolResult): Promise<void>;
 	/** Return true only when this call stored and read back its fresh model fence; false never permits dispatch. */
 	reserveModel(bootstrapId: string, reservation: ConversationComputerTurnModelReservation): Promise<boolean>;
+	/** Saves authenticated no-forward evidence, or recovers the same evidence without dispatch authority. */
+	recordModelRejection(bootstrapId: string, rejection: ConversationComputerModelRejection): Promise<void>;
+	/** Returns true only after this call's acknowledged fresh claim and matching current readback. */
+	claimModelRetry(bootstrapId: string, claim: ConversationComputerModelRetryClaim): Promise<boolean>;
 	/** Records one bounded unavailable result without clearing spent reservations. */
 	markResponseUnavailable(bootstrapId: string, receipt: ConversationComputerTurnUnavailableReceipt): Promise<void>;
 	/** Releases the lease's active-turn pointer after run completion and credential revocation. */

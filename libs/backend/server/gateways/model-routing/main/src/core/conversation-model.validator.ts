@@ -1,4 +1,5 @@
-import { ___ConversationModelResponseSchema, ___ConversationModelToolHistorySchema, ConversationModelResponseKinds, ConversationModelToolModes, type CompiledToolDefinition, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
+import { createHash } from "node:crypto";
+import { ___ConversationModelDeliverySchema, ___ConversationModelResponseSchema, ___ConversationModelToolHistorySchema, ConversationModelResponseKinds, ConversationModelToolModes, type CompiledToolDefinition, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
 import { ___CanonicalizeJson, ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { ConversationModelError, ConversationModelFailureCodes, type PreparedConversationModelRequest } from "./conversation-model.types";
@@ -114,11 +115,15 @@ export function _PrepareConversationModelRequest(input: ConversationModelRequest
 		const body = ___CanonicalizeJson(request);
 		if (Buffer.byteLength(body) > _CONVERSATION_MODEL_MAX_BYTES)
 			throw new ConversationModelError(ConversationModelFailureCodes.RequestTooLarge);
+		const delivery = input.delivery === undefined ? undefined : ___ConversationModelDeliverySchema.parse(input.delivery);
+		if (delivery?.expectedRequestBodySha256 !== undefined && delivery.expectedRequestBodySha256 !== createHash("sha256").update(body).digest("hex"))
+			throw new ConversationModelError(ConversationModelFailureCodes.InvalidRequest);
 		url.pathname = "/v1/chat/completions";
-		const deadlineEpochMs = Math.min(input.notAfterEpochMs, compiled.budget.wallClockDeadlineEpochMs, Date.now() + 25_000);
+		const preparedAtEpochMs = Date.now();
+		const deadlineEpochMs = Math.min(input.notAfterEpochMs, compiled.budget.wallClockDeadlineEpochMs, preparedAtEpochMs + 25_000);
 		if (deadlineEpochMs <= Date.now())
 			throw new ConversationModelError(ConversationModelFailureCodes.DeadlineExceeded);
-		return { url, authorization: `Bearer ${input.key}`, body, deadlineEpochMs, offeredToolNames: input.tools === ConversationModelToolModes.Select ? offered.map(tool => tool.modelName) : [] };
+		return { url, authorization: `Bearer ${input.key}`, body, deadlineEpochMs, preparedAtEpochMs, delivery, offeredToolNames: input.tools === ConversationModelToolModes.Select ? offered.map(tool => tool.modelName) : [] };
 	}
 	catch (error)
 	{

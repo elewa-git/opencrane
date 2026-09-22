@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ___CanonicalizeJson, ___ParseAndValidateJson, type JsonValue } from "@opencrane/util";
 
 import { ConversationModelResponseKinds, type ConversationModelResponse, type ConversationModelToolCall, type ConversationModelToolExchange } from "./conversation-model.types";
+import { ___ConversationModelPreForwardReceiptSchema } from "./conversation-model-retry.validator";
 
 /**
  * These schemas turn remote declarations and saved tool history into the shared models.
@@ -91,4 +92,5 @@ function _validText(value: string): boolean
 export const ___ConversationModelResponseSchema: z.ZodType<ConversationModelResponse> = z.discriminatedUnion("kind", [
 	z.object({ kind: z.literal(ConversationModelResponseKinds.Text), text: z.string().max(65_536).refine(_validText) }).strict(),
 	z.object({ kind: z.literal(ConversationModelResponseKinds.Tool), call: ___ConversationModelToolCallSchema }).strict(),
+	z.object({ kind: z.literal(ConversationModelResponseKinds.PreForwardRejected), receipt: ___ConversationModelPreForwardReceiptSchema }).strict(),
 ]);

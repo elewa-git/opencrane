@@ -71,6 +71,15 @@ describe("REDACT_PATHS", function _redactSuite()
     expect(replay["cursor"]).toBe("[Redacted]");
   });
 
+  it("redacts model rejection authenticators at every logged depth", function _modelReceipt()
+  {
+    const { logger, records } = _redactingLogger();
+    logger.info({ res: { headers: { "x-opencrane-preforward-receipt": "receipt-authentication" } }, nested: { Headers: { "X-OpenCrane-Preforward-Receipt": "nested-authentication" } }, outcome: "rejected" }, "model rejection");
+    expect(records[0]?.["res"]).toEqual({ headers: { "x-opencrane-preforward-receipt": "[Redacted]" } });
+    expect(records[0]?.["nested"]).toEqual({ Headers: { "X-OpenCrane-Preforward-Receipt": "[Redacted]" } });
+    expect(records[0]?.["outcome"]).toBe("rejected");
+  });
+
   it("redacts artifact claim fences and write leases at every logged depth", function _artifactAuthority()
   {
     const { logger, records } = _redactingLogger();

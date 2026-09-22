@@ -1,5 +1,6 @@
 import type { BoundConversationWriterIntent } from "@opencrane/backend/server/conversations/history";
 import type { ConversationModelToolModes, RunBudgetPolicy } from "@opencrane/contracts";
+import type { ConversationComputerModelRejection, ConversationComputerModelRetryClaim, ConversationComputerModelRetryProjection } from "./conversation-computer-model-retry.types";
 
 /**
  * Names the complete durable state of one conversation-computer turn.
@@ -15,6 +16,8 @@ export enum ConversationComputerTurnProtocolStates
 	Open = "open",
 	/** One saved model reservation is the only request that may still produce a response. */
 	ModelReserved = "model_reserved",
+	/** The current physical request was rejected before dispatch and awaits a saved retry claim. */
+	ModelRetryWaiting = "model_retry_waiting",
 	/** The current model step selected one saved tool invocation whose result is unresolved. */
 	ToolPending = "tool_pending",
 	/** The current tool result and its private assistant/tool exchange are saved. */
@@ -39,6 +42,10 @@ export enum ConversationComputerTurnProtocolEvents
 {
 	/** Reserves one paid model request and its completion-token allowance. */
 	ModelReserved = "model_reserved",
+	/** Saves authenticated evidence that the current physical request never reached a provider. */
+	ModelRejected = "model_rejected",
+	/** Claims one fresh physical request after the saved limiter reset without another reservation. */
+	ModelRetryClaimed = "model_retry_claimed",
 	/** Reserves one tool-invocation allowance for the current model step. */
 	ToolSelected = "tool_selected",
 	/** Records a private tool exchange without yet debiting a loop cycle. */
@@ -81,8 +88,9 @@ export interface ConversationComputerPrivateModelReference
 /**
  * Consumes one model-call and completion-token reservation before provider dispatch.
  *
- * Recovery may inspect this record but may never dispatch it again. A reservation after a saved
- * result binds the complete ordered private history and consumes exactly one loop cycle.
+ * Observing this record never authorizes another send. A retry requires saved no-forward evidence
+ * and a newly acknowledged claim. A reservation after a saved result binds the complete ordered
+ * private history and consumes exactly one loop cycle.
  *
  * Called by: conversation model progression and the Kurrent turn store.
  */
@@ -197,6 +205,8 @@ export interface ConversationComputerTurnProtocolProjection
 	readonly steps: readonly ConversationComputerTurnStep[];
 	/** Retains replay-derived aggregate consumption without refunding failed effects. */
 	readonly accounting: ConversationComputerTurnAccounting;
+	/** Keeps no-forward evidence and the latest physical claim for the current reservation only. */
+	readonly modelRetry: ConversationComputerModelRetryProjection | null;
 	/** Retains the winning output and its source fence. */
 	readonly output: { readonly sourceCommandId: string; readonly receipt: ConversationComputerTurnOutputReceipt } | null;
 	/** Retains a bounded unavailable terminal decision. */
@@ -208,6 +218,8 @@ export interface ConversationComputerTurnProtocolProjection
 /** Every event accepted by the exhaustive package-internal protocol reducer. */
 export type ConversationComputerTurnProtocolEvent =
 	| { readonly kind: ConversationComputerTurnProtocolEvents.ModelReserved; readonly reservation: ConversationComputerTurnModelReservation }
+	| { readonly kind: ConversationComputerTurnProtocolEvents.ModelRejected; readonly rejection: ConversationComputerModelRejection }
+	| { readonly kind: ConversationComputerTurnProtocolEvents.ModelRetryClaimed; readonly claim: ConversationComputerModelRetryClaim }
 	| { readonly kind: ConversationComputerTurnProtocolEvents.ToolSelected; readonly selection: ConversationComputerTurnToolSelection }
 	| { readonly kind: ConversationComputerTurnProtocolEvents.ToolResultRecorded; readonly result: ConversationComputerTurnToolResult }
 	| { readonly kind: ConversationComputerTurnProtocolEvents.OutputRecorded; readonly ordinal: number; readonly modelInvocationFence: string; readonly sourceCommandId: string; readonly receipt: ConversationComputerTurnOutputReceipt }

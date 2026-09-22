@@ -9,6 +9,7 @@ import type { FrozenConversationComputerTurn } from "../conversation-computer-tu
 import { _ReduceConversationComputerTurnProtocol } from "../conversation-computer-turn-protocol";
 import { ConversationComputerTurnProtocolEvents } from "../conversation-computer-turn-protocol.types";
 import type { ConversationComputerTurnModelReservation, ConversationComputerTurnOutputReceipt, ConversationComputerTurnToolResult, ConversationComputerTurnToolSelection, ConversationComputerTurnUnavailableReceipt } from "../conversation-computer-turn-protocol.types";
+import type { ConversationComputerModelRejection, ConversationComputerModelRetryClaim } from "../conversation-computer-model-retry.types";
 
 const _WORKLOAD = {
   subject: "system:serviceaccount:testv5:conversation-computer",
@@ -111,6 +112,15 @@ function _Harness() {
       complete: vi.fn().mockResolvedValue(undefined),
     },
     store: {
+	  recordModelRejection: vi.fn(async function _Reject(_id: string, rejection: ConversationComputerModelRejection)
+	  {
+		stored = { ...stored!, protocol: _ReduceConversationComputerTurnProtocol(stored!.protocol, { kind: ConversationComputerTurnProtocolEvents.ModelRejected, rejection }, stored!.budget) };
+	  }),
+	  claimModelRetry: vi.fn(async function _Claim(_id: string, claim: ConversationComputerModelRetryClaim)
+	  {
+		stored = { ...stored!, protocol: _ReduceConversationComputerTurnProtocol(stored!.protocol, { kind: ConversationComputerTurnProtocolEvents.ModelRetryClaimed, claim }, stored!.budget) };
+		return true;
+	  }),
       reserveModel: vi.fn(async function _ReserveModel(_id: string, reservation: ConversationComputerTurnModelReservation)
       {
         if (stored === null)

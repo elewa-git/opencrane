@@ -1,4 +1,5 @@
 {{- $skillAuthoring := index .Values "opencrane-skill-authoring" -}}
+{{- $_ := include "opencrane.litellm.preforward" . -}}
 {{ include "opencrane.server.certificate" . }}
 ---
 {{ include "opencrane.server.deployment" . }}

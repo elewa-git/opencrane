@@ -10,6 +10,11 @@
   ],
   "allowedFiles": [
     {
+      "path": "apps/_infra/litellm/deploy/install-bindings.py",
+      "owner": "apps/_infra/litellm",
+      "classification": "build-entrypoint"
+    },
+    {
       "path": "apps/_infra/cognee/deploy/patches/apply-source-patch.py",
       "owner": "apps/_infra/cognee",
       "classification": "build-entrypoint"

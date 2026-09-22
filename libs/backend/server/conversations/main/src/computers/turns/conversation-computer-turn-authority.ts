@@ -1,5 +1,5 @@
 import { _AssertSameConversationGeneratedFile, _ConversationComputerAnswerBlocks, __ReadConversationGeneratedFileOutput } from "./generated-output/conversation-generated-file-output";
-import { _AdvanceConversationComputerModel, _ConversationModelReservationStatus } from "./conversation-computer-model-flow";
+import { _AdvanceConversationComputerModel, _ConversationModelReservationStatus, _ConversationModelRetryStatus } from "./conversation-computer-model-flow";
 import { _ConversationFailureDiagnostic } from "../../messages/conversation-failure-diagnostic";
 import { ConversationComputerModelProgressOutcomes, type ConversationComputerModelProgress } from "./conversation-computer-model.types";
 import { __AssertConversationComputerAnswerAuthority } from "./conversation-computer-answer-authority";
@@ -121,6 +121,8 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 				progress = { outcome: ConversationComputerModelProgressOutcomes.Retry };
 			else if (saved.protocol.state === ConversationComputerTurnProtocolStates.ModelReserved)
 				progress = _ConversationModelReservationStatus(saved.protocol.steps.at(-1)!.reservation);
+			else if (saved.protocol.state === ConversationComputerTurnProtocolStates.ModelRetryWaiting)
+				progress = _ConversationModelRetryStatus(saved);
 			else if (saved.protocol.state === ConversationComputerTurnProtocolStates.ResponseUnavailable)
 				progress = { outcome: ConversationComputerModelProgressOutcomes.ResponseUnavailable };
 			else if (saved.protocol.state === ConversationComputerTurnProtocolStates.Cancelled)
@@ -311,7 +313,7 @@ function _Uuid(domain: string, coordinates: readonly string[]): string
 function _UnavailableReceipt(turn: FrozenConversationComputerTurn): ConversationComputerTurnUnavailableReceipt
 {
 	const step = turn.protocol.steps.at(-1);
-	if (turn.protocol.state === ConversationComputerTurnProtocolStates.ModelReserved && step?.state === ConversationComputerTurnProtocolStates.ModelReserved)
+	if ((turn.protocol.state === ConversationComputerTurnProtocolStates.ModelReserved || turn.protocol.state === ConversationComputerTurnProtocolStates.ModelRetryWaiting) && step?.state === ConversationComputerTurnProtocolStates.ModelReserved)
 		return { ordinal: step.reservation.ordinal, sourceCommandId: step.reservation.invocationFence, reason: ConversationComputerTurnUnavailableReasons.ModelResponseUnavailable };
 	if (turn.protocol.state === ConversationComputerTurnProtocolStates.ToolPending && step?.state === ConversationComputerTurnProtocolStates.ToolPending)
 		return { ordinal: step.reservation.ordinal, sourceCommandId: step.selection.toolInvocationId, reason: ConversationComputerTurnUnavailableReasons.ToolResultUnavailable };

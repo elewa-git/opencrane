@@ -55,7 +55,7 @@ function _ToolTurn(): FrozenConversationComputerTurn
 	const final = { ...first, ordinal: 2, invocationFence: _COMMAND.sourceCommandId, tools: ConversationModelToolModes.None, authorityExpiresAtEpochMs: 4_070_908_500_000, dispatchDeadlineEpochMs: 4_070_908_400_000 };
 	return {
 		..._TURN,
-		protocol: { state: ConversationComputerTurnProtocolStates.ModelReserved, revision: 4n, steps: [{ state: ConversationComputerTurnProtocolStates.ResultReady, reservation: first, selection, result }, { state: ConversationComputerTurnProtocolStates.ModelReserved, reservation: final, selection: null, result: null }], accounting: { reservedModelCalls: 2, reservedCompletionTokens: 200, reservedToolInvocations: 1, toolResultCyclesFed: 1 }, output: null, unavailable: null, cancellation: null },
+		protocol: { state: ConversationComputerTurnProtocolStates.ModelReserved, revision: 4n, steps: [{ state: ConversationComputerTurnProtocolStates.ResultReady, reservation: first, selection, result }, { state: ConversationComputerTurnProtocolStates.ModelReserved, reservation: final, selection: null, result: null }], accounting: { reservedModelCalls: 2, reservedCompletionTokens: 200, reservedToolInvocations: 1, toolResultCyclesFed: 1 }, modelRetry: null, output: null, unavailable: null, cancellation: null },
 	};
 }
 

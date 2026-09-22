@@ -1,6 +1,8 @@
 import { ConversationModelToolModes } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
+import { _ClaimConversationModelRetry, _RejectConversationModel } from "./conversation-computer-model-retry";
+
 import { ConversationComputerTurnProtocolEvents, ConversationComputerTurnProtocolStates, ConversationComputerTurnUnavailableReasons } from "./conversation-computer-turn-protocol.types";
 import type { ConversationComputerTurnBudget, ConversationComputerTurnProtocolEvent, ConversationComputerTurnProtocolProjection, ConversationComputerTurnStep } from "./conversation-computer-turn-protocol.types";
 
@@ -18,7 +20,7 @@ type _ProtocolHandlers = Record<ConversationComputerTurnProtocolEvents, _Protoco
  */
 export function _InitialConversationComputerTurnProtocol(): ConversationComputerTurnProtocolProjection
 {
-	return { state: ConversationComputerTurnProtocolStates.Open, revision: 0n, steps: [], accounting: { reservedModelCalls: 0, reservedCompletionTokens: 0, reservedToolInvocations: 0, toolResultCyclesFed: 0 }, output: null, unavailable: null, cancellation: null };
+	return { state: ConversationComputerTurnProtocolStates.Open, revision: 0n, steps: [], accounting: { reservedModelCalls: 0, reservedCompletionTokens: 0, reservedToolInvocations: 0, toolResultCyclesFed: 0 }, modelRetry: null, output: null, unavailable: null, cancellation: null };
 }
 
 /**
@@ -56,6 +58,8 @@ function _Handlers(overrides: Partial<_ProtocolHandlers>): _ProtocolHandlers
 {
 	return {
 		[ConversationComputerTurnProtocolEvents.ModelReserved]: _Reject,
+		[ConversationComputerTurnProtocolEvents.ModelRejected]: _Reject,
+		[ConversationComputerTurnProtocolEvents.ModelRetryClaimed]: _Reject,
 		[ConversationComputerTurnProtocolEvents.ToolSelected]: _Reject,
 		[ConversationComputerTurnProtocolEvents.ToolResultRecorded]: _Reject,
 		[ConversationComputerTurnProtocolEvents.OutputRecorded]: _Reject,
@@ -73,8 +77,14 @@ const _HANDLERS: Record<ConversationComputerTurnProtocolStates, _ProtocolHandler
 		[ConversationComputerTurnProtocolEvents.Cancelled]: _Cancel,
 	}),
 	[ConversationComputerTurnProtocolStates.ModelReserved]: _Handlers({
+		[ConversationComputerTurnProtocolEvents.ModelRejected]: _RecordModelRejection,
 		[ConversationComputerTurnProtocolEvents.ToolSelected]: _SelectTool,
 		[ConversationComputerTurnProtocolEvents.OutputRecorded]: _RecordOutput,
+		[ConversationComputerTurnProtocolEvents.ResponseUnavailable]: _MarkUnavailable,
+		[ConversationComputerTurnProtocolEvents.Cancelled]: _Cancel,
+	}),
+	[ConversationComputerTurnProtocolStates.ModelRetryWaiting]: _Handlers({
+		[ConversationComputerTurnProtocolEvents.ModelRetryClaimed]: _RecordRetryClaim,
 		[ConversationComputerTurnProtocolEvents.ResponseUnavailable]: _MarkUnavailable,
 		[ConversationComputerTurnProtocolEvents.Cancelled]: _Cancel,
 	}),
@@ -130,7 +140,19 @@ function _ReserveModel(projection: ConversationComputerTurnProtocolProjection, e
 	else if (reservation.tools !== ConversationModelToolModes.None)
 		throw new Error("Conversation computer model reservation has an unknown tool mode");
 	const step: ConversationComputerTurnStep = { state: ConversationComputerTurnProtocolStates.ModelReserved, reservation, selection: null, result: null };
-	return { ...projection, state: ConversationComputerTurnProtocolStates.ModelReserved, revision: projection.revision + 1n, steps: [...projection.steps, step], accounting };
+	return { ...projection, state: ConversationComputerTurnProtocolStates.ModelReserved, revision: projection.revision + 1n, steps: [...projection.steps, step], accounting, modelRetry: null };
+}
+
+/** Delegates physical rejection continuity without changing the reserved logical step. */
+function _RecordModelRejection(projection: ConversationComputerTurnProtocolProjection, event: ConversationComputerTurnProtocolEvent, budget: ConversationComputerTurnBudget): ConversationComputerTurnProtocolProjection
+{
+	return event.kind === ConversationComputerTurnProtocolEvents.ModelRejected ? _RejectConversationModel(projection, event.rejection) : _Reject(projection, event, budget);
+}
+
+/** Delegates the bounded fresh-nonce claim while keeping State × Event admission explicit. */
+function _RecordRetryClaim(projection: ConversationComputerTurnProtocolProjection, event: ConversationComputerTurnProtocolEvent, budget: ConversationComputerTurnBudget): ConversationComputerTurnProtocolProjection
+{
+	return event.kind === ConversationComputerTurnProtocolEvents.ModelRetryClaimed ? _ClaimConversationModelRetry(projection, event.claim) : _Reject(projection, event, budget);
 }
 
 /** Binds one unique encrypted declaration and invocation to its reserved model step. */

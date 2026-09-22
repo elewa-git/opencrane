@@ -214,6 +214,26 @@ and expiry. Lost paid responses become durable unavailable progress; they cannot
 requests. Absurd selects saved progress and owns waits and recovery. The Pod retains only its
 lease-fenced isolated execution and review interactions.
 
+An authenticated pre-provider rejection is the exception to the no-redispatch rule: the transport
+has proved that this physical request did not reach a provider. The turn saves that proof and the
+original credential coordinates before Absurd waits. At most two retry claims may reuse the same
+logical reservation, request bytes, key, accounting and absolute deadline. Each claim uses a fresh
+physical nonce and append identity; only its acknowledged writer may dispatch. An observed claim
+or lost claim acknowledgement cannot grant a send. Current authority and Stop are checked again
+before dispatch. A lost response after a retry remains unavailable, not another retry opportunity.
+
+| Saved model state | Observation or event | Next action |
+| --- | --- | --- |
+| Model reserved | Authenticated pre-provider rejection | Save rejection and credential coordinates; do not debit another logical call. |
+| Retry waiting | Reset is still in the future | Absurd sleeps for this model ordinal and retry ordinal. |
+| Retry waiting | Reset passed; deadline, permission and original key remain valid | Conditionally save one fresh physical claim. Only the acknowledged claimant may send. |
+| Model reserved after claim | Restart or lost claim acknowledgement | Wait for the original deadline; never reacquire the send. |
+| Retry waiting | Two retries exhausted or original deadline reached | Record recovery-required through the existing unavailable path. |
+| Any unfinished model state | Stop or authority ends | Refuse further model admission or dispatch. |
+
+These paths have controlled-port restart and concurrency tests. They are inactive against the
+default, unqualified proxy; real-image and authenticated business-journey acceptance remain separate.
+
 The attempt credential uses the lower of the frozen server spending limit and the revision's cost
 cap. A null revision cap still uses the server limit; it does not allow unlimited spending. Saved
 result continuations reuse that credential and cannot increase its allowance after restart. This

@@ -172,6 +172,10 @@ personal-memory dataset or adopts a fact.
   from requests that must return text; either may carry earlier results. These types grant no tool
   permission; endpoint and credential fields stay in server memory and must never become workload
   or browser payloads.
+- `ConversationModelDelivery`, `ConversationModelPreForwardReceipt` and their adjacent strict
+  schemas — bind a server-only pre-provider rejection to its request and deadline. Structural
+  validation does not authenticate a receipt. The model transport verifies it; the conversation
+  owner then saves it and conditionally claims a retry without renewing budgets or credentials.
 - `PROMPT_COMPILER_VERSION` — the immutable compiler-version pin every executable agent revision
   must name before it can admit a run.
 - `AgentConfigPatchKinds` — the durable `persona_refresh` and `model_alias` vocabulary shared by

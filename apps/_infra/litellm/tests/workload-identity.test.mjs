@@ -83,7 +83,7 @@ test('renders the actual app templates in managed, shared and disabled modes', (
         writeFileSync(join(directory, 'Chart.yaml'), 'apiVersion: v2\nname: opencrane\nversion: 0.0.0\n');
         copyFileSync(join(root, 'apps/_infra/deploy-k8s/values.yaml'), join(directory, 'values.yaml'));
         copyFileSync(join(root, 'apps/_infra/deploy-k8s/platform/templates/_helpers.tpl'), join(directory, 'templates/_helpers.tpl'));
-        for (const template of ['_serviceaccount.tpl', '_deployment.tpl'])
+        for (const template of ['_serviceaccount.tpl', '_deployment.tpl', '_qualification.tpl'])
             copyFileSync(join(root, 'apps/_infra/litellm/helm/templates', template), join(directory, 'templates', template));
         // The full silo rejects shared LiteLLM while private Cognee is installed. This fixture
         // checks the app's own absence contract without removing or bypassing that product guard.

@@ -96,6 +96,9 @@ derived from their governed Global resource, so a late first POST cannot create 
   tokens are capped by the smallest reservation, frozen route and frozen run ceiling; at least
   one frozen completion ceiling must exist. The request aborts by the earliest supplied deadline,
   compiled run deadline or 25 seconds, including time spent reading the body.
+- `__CreateConversationModelTransport` — capture the server's managed-proxy qualification at
+  startup and expose the same single-exchange request port. Only this configured instance may
+  return authenticated pre-provider rejection evidence; the direct request function does not.
 
 A request with tool selection enabled can offer every frozen tool definition, including tools that need owner approval.
 Each definition's `modelName` must be unique and legal, with parameters matching their saved schema
@@ -137,6 +140,21 @@ does not prove that the provider did not charge the request. The caller also res
 call and completion budget, keeps one nonrenewed attempt key, admits the proposed action and
 rechecks authority before using its result. Adapter tests alone do not qualify the public tool
 flow or a live provider.
+
+Pre-provider rejection is disabled unless both `LITELLM_PREFORWARD_CONTRACT` and
+`LITELLM_PREFORWARD_ENDPOINT` identify the supported contract and the same configured managed
+LiteLLM origin. A response cannot enable it. The adapter authenticates a small, strict HTTP 429
+receipt against the attempt key, physical request nonce, logical reservation, actual request bytes
+and original deadline. An ordinary provider 429, forged receipt or changed request remains an error,
+not permission to retry. The conversation owner saves valid evidence and decides whether to claim
+another send; this adapter never waits, repeats a request or renews a credential.
+
+The library's `src/proxy/` Python modules implement the producer inside the owned LiteLLM image.
+They issue proof only for the selected local limiter's rejection before later callbacks or provider
+dispatch. App-owned, hash-checked bindings install the processor, limiter and startup registration.
+The derived image and its real startup sequence still need qualification before enabling this
+contract. Current model registration sets no explicit RPM/TPM rate limit; the positive producer
+test supplies a synthetic local threshold. This is not generic recovery from provider rate limits.
 
 The pinned LiteLLM v1.81.0-stable implementation creates `expires` from a UTC clock and serializes
 it as an ISO timestamp. The adapter checks that evidence instead of storing a locally guessed

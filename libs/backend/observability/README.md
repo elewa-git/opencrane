@@ -31,6 +31,8 @@ Consumed by every app and server domain. Invariant: logs are always structured J
 credential and executable `arguments` fields are recursively redacted at any casing or nesting depth,
 and a correlation id follows the work — so a request can be traced end to end even across async hops
 without exporting query-bearing URLs or executable payloads.
+The private model-proxy receipt authentication header is redacted too, including nested and
+mixed-case fields. Ordinary outcome labels remain available without retaining the proof's MAC.
 
 ## Public surface
 

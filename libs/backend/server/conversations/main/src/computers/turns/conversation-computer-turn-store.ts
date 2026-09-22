@@ -7,7 +7,9 @@ import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { _ConversationComputerEventId } from "../conversation-computer-event-id";
 import { _ConversationComputerActiveTurnStreamName } from "../lifecycle/conversation-computer-activity";
 import { __ReadConversationGeneratedFileOutput } from "./generated-output/conversation-generated-file-output";
-import { _CONVERSATION_MODEL_RESERVED_EVENT, _ConversationModelReservationEvent, _ReadConversationModelReservation } from "./conversation-computer-model-reservation";
+import { _CONVERSATION_MODEL_RESERVED_EVENT, _ReadConversationModelReservation } from "./conversation-computer-model-reservation";
+import { _ClaimPersistedConversationModelRetry, _CONVERSATION_MODEL_REJECTED_EVENT, _CONVERSATION_MODEL_RETRY_CLAIMED_EVENT, _ReadConversationModelRetryEvent, _RecordConversationModelRejection, _ReserveConversationModel } from "./conversation-computer-model-retry-store";
+import type { ConversationComputerModelRejection, ConversationComputerModelRetryClaim } from "./conversation-computer-model-retry.types";
 import { _CONVERSATION_TOOL_SELECTED_EVENT, _ConversationToolSelectionEvent, _ReadConversationToolSelection } from "./conversation-computer-tool-selection";
 import { _CONVERSATION_TOOL_RESULT_RECORDED_EVENT, _ConversationToolResultEvent, _ReadConversationToolResult } from "./conversation-computer-tool-result";
 import { _InitialConversationComputerTurnProtocol, _ReduceConversationComputerTurnProtocol } from "./conversation-computer-turn-protocol";
@@ -81,25 +83,19 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 	/** Reserve one model request; only the process that appended its fresh fence may dispatch. */
 	public async reserveModel(bootstrapId: string, reservation: ConversationComputerTurnModelReservation): Promise<boolean>
 	{
-		const turn = await this.load(bootstrapId);
-		if (turn === null || turn.protocol.state !== ConversationComputerTurnProtocolStates.Open && turn.protocol.state !== ConversationComputerTurnProtocolStates.ResultReady)
-			return false;
-		const event = _ConversationModelReservationEvent(turn, reservation);
-		const recorded = _RecordedCandidate(event, turn.protocol.revision + 1n, turn.bootstrapId);
-		const checked = _ReadConversationModelReservation(recorded, turn);
-		_ApplyProtocol(turn, { kind: ConversationComputerTurnProtocolEvents.ModelReserved, reservation: checked });
-		try
-		{
-			await this.history.append({ streamName: _Stream(bootstrapId), expectedRevision: turn.protocol.revision, events: [event] });
-		}
-		catch (error)
-		{
-			if (!(error instanceof WrongExpectedVersionError))
-				throw error;
-			return false;
-		}
-		const winner = await this.load(bootstrapId);
-		return winner !== null && _Same(winner.protocol.steps.at(-1)?.reservation, reservation);
+		return _ReserveConversationModel({ history: this.history, load: this.load.bind(this) }, bootstrapId, reservation);
+	}
+
+	/** Save or recover no-forward evidence without acquiring dispatch permission. */
+	public async recordModelRejection(bootstrapId: string, rejection: ConversationComputerModelRejection): Promise<void>
+	{
+		return _RecordConversationModelRejection({ history: this.history, load: this.load.bind(this) }, bootstrapId, rejection);
+	}
+
+	/** Allow only this call's acknowledged fresh retry claim to own a physical send. */
+	public async claimModelRetry(bootstrapId: string, claim: ConversationComputerModelRetryClaim): Promise<boolean>
+	{
+		return _ClaimPersistedConversationModelRetry({ history: this.history, load: this.load.bind(this) }, bootstrapId, claim);
 	}
 
 	/** Reserve one per-step tool proposal, or recover the identical saved selection. */
@@ -295,6 +291,8 @@ function _ApplyRecordedEvent(turn: FrozenConversationComputerTurn, event: Histor
 	let protocolEvent: ConversationComputerTurnProtocolEvent;
 	if (event.type === _CONVERSATION_MODEL_RESERVED_EVENT)
 		protocolEvent = { kind: ConversationComputerTurnProtocolEvents.ModelReserved, reservation: _ReadConversationModelReservation(event, turn) };
+	else if (event.type === _CONVERSATION_MODEL_REJECTED_EVENT || event.type === _CONVERSATION_MODEL_RETRY_CLAIMED_EVENT)
+		protocolEvent = _ReadConversationModelRetryEvent(event, turn);
 	else if (event.type === _CONVERSATION_TOOL_SELECTED_EVENT)
 		protocolEvent = { kind: ConversationComputerTurnProtocolEvents.ToolSelected, selection: _ReadConversationToolSelection(event, turn) };
 	else if (event.type === _CONVERSATION_TOOL_RESULT_RECORDED_EVENT)
@@ -368,7 +366,7 @@ function _AssertInitial(turn: FrozenConversationComputerTurn): void
 	if (protocol.state !== ConversationComputerTurnProtocolStates.Open || protocol.revision !== 0n || protocol.steps.length !== 0
 		|| protocol.accounting.reservedModelCalls !== 0 || protocol.accounting.reservedCompletionTokens !== 0
 		|| protocol.accounting.reservedToolInvocations !== 0 || protocol.accounting.toolResultCyclesFed !== 0
-		|| protocol.output !== null || protocol.unavailable !== null || protocol.cancellation !== null)
+		|| protocol.output !== null || protocol.unavailable !== null || protocol.cancellation !== null || protocol.modelRetry !== null)
 		throw new Error("Conversation computer frozen turn must start with an empty protocol");
 }
 

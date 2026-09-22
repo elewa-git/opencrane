@@ -549,6 +549,35 @@ checks pass. Existing cluster grants and deployed workloads were not inspected o
 source correction. Automatic backoff, a qualified rejection producer and its saved retry consumer
 remain open.
 
+The next source slice adds the closed pre-forward receipt contract, managed-origin transport
+verification, and saved rejection/wait/claim transitions in the existing turn protocol. A physical
+retry keeps the same logical reservation, request bytes, credential, accounting and deadline;
+at most two fresh claims are allowed. Claims use a per-append identity so identical requests cannot
+both obtain dispatch through Kurrent's idempotent acknowledgement. Restart, Stop, revocation,
+lost acknowledgements and lost paid responses are covered by controlled-port tests. The new
+consumer/protocol/store/workflow selection passes 76 tests, receipt verification passes 40 (including a
+Python-produced wire vector), and observability passes 32 tests. Conversation type-checking and
+the diff-scoped style/Prisma checks pass. Independent TypeScript review found no issues; shared
+contracts also pass 187 tests, all four changed TypeScript projects type-check, and boundary lint
+passes. Full local regressions pass 782 conversation tests and 237 model-routing tests. The first
+conversation run was blocked from opening local HTTP fixture sockets; the permitted rerun passes
+all 90 files. App tests pass 119 Node contracts plus 10 Python installer contracts, with syntax,
+Helm lint, workload ownership and release-manifest checks green. No VM was used.
+
+The app now contains a digest-pinned derived image and three checked bindings for the owned Python
+producer. The contract is disabled by default. The real-startup harness exposed import-time
+callback ordering that map order alone did not fix; the registration helper now moves the existing
+limiter first, but six callback-preservation assertions still failed in the last local assembly
+run. Reading the pinned callback manager confirmed that it de-duplicates equivalent logger
+instances. The harness now checks its registration keys while preserving the explicit instance/order
+check for earlier callbacks; independent source review accepts the correction, but it has not run
+in the full proxy. No new qualification
+receipt was emitted. Prove that correction and run the exact-image
+GitHub Actions smoke before enabling the contract. Current production model registration does
+not set explicit local RPM/TPM limits; tests supply a synthetic threshold, and ordinary provider
+429s remain uncertain. On 2026-09-22 disk cleanup removed the disposable vendor/proof environments;
+do not recreate a local VM for this gate. Source changes and evidence remain preserved.
+
 The source loop builds above the completed quality fixes. Provider backoff and live qualification
 remain functional gates alongside memory, delegation, scheduling and administration before the
 goal can close. The singular reservations, fixed Kurrent revisions, singular continuation custody

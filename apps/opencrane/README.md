@@ -207,6 +207,7 @@ are:
 | `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
 | `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
+| `LITELLM_PREFORWARD_CONTRACT`, `LITELLM_PREFORWARD_ENDPOINT` | Paired, startup-frozen qualification for the model-routing library's authenticated pre-provider rejection contract; only the qualified managed proxy may supply retry evidence | disabled; exact-image qualification is still pending |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
 | `AGENT_RUN_ADMISSION_*` | Active and queued personal-conversation admission limits | bounded defaults |
 | `OPENCRANE_MEMBERSHIP_*` | Explicit issuer model; `fleet` mounts its verifier, `standalone` reads current local membership using the deployment silo and OIDC issuer | required |

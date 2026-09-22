@@ -281,6 +281,13 @@ spec:
             # LiteLLM remains a target model-routing dependency.
             - name: LITELLM_ENDPOINT
               value: {{ include "opencrane.litellmEndpoint" . | quote }}
+            {{- $litellmPreforward := include "opencrane.litellm.preforward" . | fromJson }}
+            {{- if $litellmPreforward }}
+            - name: LITELLM_PREFORWARD_CONTRACT
+              value: {{ $litellmPreforward.contract | quote }}
+            - name: LITELLM_PREFORWARD_ENDPOINT
+              value: {{ $litellmPreforward.origin | quote }}
+            {{- end }}
             - name: LITELLM_SPEND_PATH_TEMPLATE
               value: {{ .Values.litellm.spendPathTemplate | quote }}
             {{- if .Values.litellm.enabled }}
