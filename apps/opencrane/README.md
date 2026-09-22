@@ -182,6 +182,12 @@ They verify that an operation and its task commit or roll back together, and tha
 restarted callers recover the same receipt. These fixtures run no memory worker or provider call;
 authenticated product memory commands still require their separate integration.
 
+`test:output-payload-sql` exercises encrypted answer/display storage against a disposable
+`DATABASE_URL`, using the real transaction owner and independent Prisma clients. It checks complete
+content identity, exact retry, concurrent writers and rollback of both payload rows and list-order
+timestamps. The same suite runs in `test:sql`, which the database CI job owns. It needs no KurrentDB
+or provider; passing it does not prove paired history publication or a signed-in browser journey.
+
 The uncached `test:generated-file-integration` target uses PostgreSQL and KurrentDB together to
 exercise captured and scanned file results, atomic answer attachments, and recovery of the exact
 asset/message link. The history-store CI job supplies both services. Local runs without both

@@ -294,9 +294,10 @@ optional adjacent A2UI Replace entry uses the same author, run and audience and 
 | Output recorded | Changed retry or missing companion | Refuse completion or replacement; retain the original receipt. |
 
 Controlled-port tests cover paired output, company tool continuations, generated-file recovery,
-concurrent retries, cancellation and permission loss. The custody tests use real encryption with a
-controlled SQL transaction. These do not establish real PostgreSQL/Kurrent paired-output recovery
-or an authenticated assistant-to-browser journey.
+concurrent retries, cancellation and permission loss. The app-owned `test:output-payload-sql` suite
+adds real PostgreSQL custody checks with independent clients, including rollback of both encrypted
+rows and the conversation timestamp. Paired-output recovery against real KurrentDB and an
+authenticated assistant-to-browser journey remain separate qualification steps.
 
 When an original or final model response cannot be recovered, the turn saves `RecoveryRequired`
 through the run lifecycle authority before returning `response_unavailable` to its workflow.

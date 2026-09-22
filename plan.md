@@ -2,6 +2,34 @@
 
 ## MVP continuation — 2026-09-22
 
+### Real PostgreSQL output custody — verification and review passed
+
+This verification slice starts from reviewed producer checkpoint
+`73f0ad4865125e886f718478cef437bec0a65dba`. The existing disposable PostgreSQL 17.11 instance
+is reachable through its local socket; no new VM, container, server, role or database is needed.
+A PostgreSQL-only suite now uses the real encrypted-payload unit of work and independent Prisma
+clients. All ten cases pass: complete manifest/text/display storage, explicit absence, restarted
+exact retry, changed-output refusal, concurrent writers and rollback after a later encryption
+failure. Assertions inspect committed rows and PostgreSQL's full-precision list-order timestamp.
+The schema and trigger protections are unchanged. The uncached `test:output-payload-sql` target
+is also included in the normal `test:sql` suite that the existing database CI job runs.
+
+Read-only catalog comparison confirms both enabled output-protection function bodies match the
+current source: `enforce_conversation_lifecycle` and `reject_conversation_private_payload_mutation`.
+The reused database has no protected baseline-origin marker, so this is not proof of an exact
+fresh installation. The source baseline digest remains
+`a9e8cd6e529c1ca9108e2811f5f08b47657b11e44d76811ddd62a20d17517d1f`.
+App type checking, release coherence, workload/app and agent-domain guards and their negative
+checks pass. Style finds no production TypeScript change; the 288-file Prisma floor passes and
+module growth has no candidates. Independent test-evidence review passes with no findings.
+An invocation without `DATABASE_URL` fails explicitly rather than returning a green skipped suite.
+
+Only isolated synthetic fixture rows were added to the existing disposable database. No schema,
+production permission, live account, provider, VM or service changed. Local execution is not
+exact-SHA CI. Paired Kurrent output and authenticated model/browser/Odoo acceptance remain separate
+gates. The next product steps still await scoped decisions for assistant questions and private
+scheduled routines; no source approval is inferred from the unanswered requests.
+
 ### Production structured results — reviewed source; live qualification open
 
 This U2 slice starts at immutable local base
@@ -38,8 +66,8 @@ fixture, not an authenticated browser session.
 
 Output tests cover complete-pair recovery, concurrent responses, cancellation winning the atomic
 turn revision, permission loss during preparation and changed text/display/presence after payload
-storage. Custody tests use real AES-GCM encryption and a controlled SQL transaction. Real PostgreSQL
-manifest/rollback qualification and paired-output recovery against real KurrentDB remain open; the
+storage. Initial custody tests use real AES-GCM encryption and a controlled SQL transaction; the
+follow-up above adds real PostgreSQL proof. Paired-output recovery against real KurrentDB remains open; the
 existing real-service integration suite was not run or counted as passing. No new service was
 started to fill that gap. Live Odoo/model and signed-in browser acceptance also remain open.
 
@@ -1979,7 +2007,7 @@ remain separate gates.
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry, durable resume and visible decision controls are implemented in draft #857. Company approver/connection binding and real action qualification remain. |
 | 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: durable persistence, Absurd admission and catalog completion pass CI in #876–#878. The reviewed candidate shared-file repair passes all 31 image-qualification cases in #881. The production provider is still unqualified. Authenticated composition, gateway/client wiring and product Remember, recall, Correct and Forget remain unfinished. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass review and CI in draft #862. Requested/running history producers pass source validation and independent review above #885; the existing transcript and status components are reused. Live qualification and other-participant controls remain separate. |
-| 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | Read-only saved-display replay passes source review, 127 workspace tests and five browser fixture checks. A production producer, approved visual baselines and live acceptance remain. Runtime-question source is separately PAUSED pending approval. |
+| 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | The production structured-result producer and replay pass source review at `73f0ad486`; ten real PostgreSQL custody cases pass in the follow-up above. Paired Kurrent recovery, approved visual baselines and live acceptance remain. Runtime-question source is separately PAUSED pending approval. |
 | 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV production, encrypted capture, scanning and answer-link recovery are implemented in #879; all four combined recovery cases pass again in #880. The pending message-link SQL guard and governed hosted execution through authorized download remain to qualify. |
 | 7 | D1 — autonomous delegation | A bounded child works with explicit context and narrower authority, then returns one durable result. | Follow [#845](https://github.com/elewa-git/opencrane/issues/845): root budgets, depth/fan-out, cancellation and result brokering. |
 | 8 | S1 — scheduled work | A reviewed routine fires under current authority with explicit overlap, retry and missed-run policy. | Follow [#848](https://github.com/elewa-git/opencrane/issues/848) through Absurd and existing admission. |
@@ -2301,7 +2329,7 @@ their own completion track; they are not silently bundled into the first tool PR
 | T2 | IN PROGRESS: personal approval and durable resume pass local integration; company approval and real external-action qualification remain. |
 | U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
 | M1 | IN PROGRESS: persistence, transaction-bound Absurd admission and catalog completion pass CI in #876–#878. The reviewed candidate shared-file repair passes all 31 image-qualification cases in #881. Authenticated composition, gateway/client integration and product memory journeys remain. The separate production-provider qualification still fails. |
-| U2 | Read-only A2UI replay passes source review and fixture checks; production producer, visual approval and live proof remain. Runtime-question source is separately PAUSED pending explicit approval. |
+| U2 | The structured-result producer and A2UI replay pass source review and controlled checks at `73f0ad486`; real-service recovery, visual approval and live proof remain. Runtime-question source is separately PAUSED pending explicit approval. |
 | F1 | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV capture, scanning and answer-link recovery are implemented in #879 and pass four real-store cases in #880. The pending SQL guard and complete hosted execution/download qualification remain. |
 | D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |
 | Q1 — operational acceptance | CONTINUOUS — source checks and CI do not replace fresh-install or real-account acceptance. |
