@@ -135,6 +135,15 @@ Credential requirement is separate from the server's single-user, multi-user, or
 presentation. A credentialless OCI server with a Ready image revision installs as `Credentialless`.
 Every remote server installs as `NeedsCredential`, including one that will use a credentialless
 connection, because no remote install becomes usable before its own connection generation is Active.
+The fresh-install database baseline keeps remote calls separate from hosted OCI work. A remote
+execution retains its selected tool, owner, connection generation, endpoint and credential identity;
+it cannot acquire a Kubernetes Job, Pod, companion or cleanup claim. Admission and dispatch require
+that connection to remain Active under an Installed owner. Dispatch pairs the runtime with the
+current `ToolInvocation` claim once, using the database clock and a lease capped by that invocation's
+expiry. The saved fence cannot be reset or claimed again. Completion must match the invocation's
+terminal state and retain a result digest. Success and definite failure must reach the database
+before the saved dispatch lease expires; after expiry, only recovery can settle claimed work.
+Revoking the connection does not prevent settlement within those rules or authorize another call.
 Uninstall moves the retained install from `Installed` to `Removing` while its connection workflow
 revokes current generations and settles work that was already claimed. New discovery, readiness,
 and dispatch checks reject `Removing`. The workflow marks the install `Removed` only after no

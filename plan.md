@@ -1,5 +1,44 @@
 # OpenCrane — Active Plan
 
+## MVP continuation — 2026-09-22
+
+The active goal remains the complete ten-track MVP, including delegation and scheduled agent work.
+Continue from reviewed candidate `830243b766d9ccb5f4719b511b082e3843b030db` (#898), with
+`develop` at `d4bd0213c38e4fa70cbc3d93535857da9e381a32`. The live PR graph still places #898
+after #888 → #891 → #892 → #893 → #894 → #896 → #897. Implementation uses the isolated
+`feat/0.12-mvp-remote-authority` worktree; the older checkout and its unrelated edits are preserved.
+
+The user explicitly approved two source changes on 22 September:
+
+- Repair the remote-MCP database rules, retain hosted-tool safeguards, and update the fresh-install
+  baseline. This supersedes the older pending source approval recorded below. It does not authorize
+  changing a live database or calling a provider.
+- Enable company-assistant approvals for the original requester only, while preserving the
+  assistant's and connection's current explicit permissions. This supersedes the older company
+  approver-policy/source block below. It does not authorize an actual external write.
+
+Remote-MCP architecture preflight passes for separate, fully checked remote and OCI lifecycles.
+New structural regression cases against the unchanged disposable PostgreSQL baseline reproduce
+accepted null discovery digests and a null task connection, alongside the existing OCI-only claim
+failure. The repair now passes all 361 MCP unit tests and 43 fresh-PostgreSQL remote authority
+checks. Independent review reproduced a delayed completion accepted after its dispatch deadline;
+the new regression fails against the first repair and passes after a database-clock completion
+guard. All thirteen database test projects then pass on final baseline
+`a9e8cd6e529c1ca9108e2811f5f08b47657b11e44d76811ddd62a20d17517d1f`, including three new
+run-owned remote cases and the unchanged eighteen-case OCI proposal suite. The run-owned cases
+prove original-run and current-computer lease caps, plus rollback of both claims and audits when
+authority expires between writes. Independent integrated review and architecture post-review pass
+for the scoped remote repair; the additional run-owned test delta also passes independent review.
+MCP type checks, package boundaries, baseline regeneration and release binding pass. These are
+disposable local PostgreSQL proofs, not authenticated Odoo or deployed-candidate acceptance.
+No cluster, identity-provider, credential, visual-baseline, release or merge change has run.
+
+After the remote repair, complete the approved requester-only company path through the existing IAM,
+elicitation and conversation owners. Keep the remaining memory, interaction, files, delegation,
+schedules, administration and recovery journeys in scope; source completion never closes their live
+acceptance gates. First-dataset memory authorization, governance-reader policy, visual acceptance
+and testv6 identity/bootstrap still need their separately scoped decisions or approvals.
+
 ## Personal-memory SQL qualification — source repair validated
 
 This follow-up starts at `8cd036502c5488848e3211850962ce9edcdd63e7` above the reporting

@@ -3519,7 +3519,7 @@ ALTER TABLE "oci_image_validations" ADD CONSTRAINT "oci_image_validations_result
 
 -- A revision belongs to one execution transport. Remote revisions retain the authenticated
 -- connection and both discovery digests; OCI revisions retain only imported-image evidence.
-ALTER TABLE "mcp_server_revisions" ADD CONSTRAINT "mcp_server_revisions_transport_identity_check" CHECK (
+ALTER TABLE "mcp_server_revisions" ADD CONSTRAINT "mcp_server_revisions_transport_identity_check" CHECK ((
     (
         "transport" = 'oci-image'
         AND "oci_image_validation_id" IS NOT NULL
@@ -3542,7 +3542,67 @@ ALTER TABLE "mcp_server_revisions" ADD CONSTRAINT "mcp_server_revisions_transpor
         AND "discovery_evidence_digest" ~ '^sha256:[0-9a-f]{64}$'
         AND "discovery_digest" ~ '^sha256:[0-9a-f]{64}$'
     )
-);
+) IS TRUE);
+
+-- Tasks retain the transport and connection selected at admission, even after that connection is revoked.
+ALTER TABLE "mcp_tasks" ADD CONSTRAINT "mcp_tasks_transport_identity_check" CHECK ((
+    ("transport" = 'oci-image' AND "connection_id" IS NULL AND "connection_generation" IS NULL
+        AND "connection_owner_principal_id" IS NULL AND "endpoint_digest" IS NULL)
+    OR ("transport" = 'remote-http' AND btrim("connection_id") <> '' AND "connection_generation" > 0
+        AND btrim("connection_owner_principal_id") <> '' AND "connection_owner_principal_id" = "principal_id"
+        AND "endpoint_digest" ~ '^sha256:[0-9a-f]{64}$')
+) IS TRUE);
+
+CREATE FUNCTION "enforce_mcp_task_transport_identity"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+            OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id"
+            OR NEW."server_revision_id" IS DISTINCT FROM OLD."server_revision_id"
+            OR NEW."tool_revision_id" IS DISTINCT FROM OLD."tool_revision_id"
+            OR NEW."protocol_version" IS DISTINCT FROM OLD."protocol_version"
+            OR NEW."transport" IS DISTINCT FROM OLD."transport"
+            OR NEW."connection_id" IS DISTINCT FROM OLD."connection_id"
+            OR NEW."connection_generation" IS DISTINCT FROM OLD."connection_generation"
+            OR NEW."connection_owner_principal_id" IS DISTINCT FROM OLD."connection_owner_principal_id"
+            OR NEW."endpoint_digest" IS DISTINCT FROM OLD."endpoint_digest" THEN
+            RAISE EXCEPTION 'McpTask transport and selected tool identity are immutable';
+        END IF;
+    ELSIF NEW."transport" = 'oci-image' THEN
+        PERFORM 1
+        FROM "mcp_server_revisions" revision
+        JOIN "mcp_tool_revisions" tool ON tool."server_revision_id" = revision."id" AND tool."silo_id" = revision."silo_id"
+        WHERE revision."id" = NEW."server_revision_id" AND revision."silo_id" = NEW."silo_id"
+          AND tool."id" = NEW."tool_revision_id" AND revision."transport" = NEW."transport";
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'OCI McpTask requires its selected OCI server and tool revision';
+        END IF;
+    ELSIF NEW."transport" = 'remote-http' THEN
+        PERFORM 1
+        FROM "mcp_server_revisions" revision
+        JOIN "mcp_tool_revisions" tool ON tool."server_revision_id" = revision."id" AND tool."silo_id" = revision."silo_id"
+        JOIN "mcp_connections" connection ON connection."id" = revision."connection_id" AND connection."silo_id" = revision."silo_id"
+        JOIN "mcp_server_installs" install ON install."id" = connection."mcp_server_install_id"
+        JOIN "mcp_servers" server ON server."id" = connection."mcp_server_id" AND server."silo_id" = connection."silo_id"
+        WHERE revision."id" = NEW."server_revision_id" AND revision."silo_id" = NEW."silo_id"
+          AND tool."id" = NEW."tool_revision_id" AND revision."state" = 'ready'
+          AND revision."protocol_version" = NEW."protocol_version" AND revision."transport" = NEW."transport"
+          AND revision."connection_id" = NEW."connection_id" AND revision."connection_generation" = NEW."connection_generation"
+          AND revision."connection_owner_principal_id" = NEW."connection_owner_principal_id" AND revision."endpoint_digest" = NEW."endpoint_digest"
+          AND connection."generation" = NEW."connection_generation" AND connection."owner_principal_id" = NEW."principal_id"
+          AND connection."endpoint_digest" = NEW."endpoint_digest" AND connection."mcp_server_id" = revision."mcp_server_id"
+          AND connection."state" = 'active' AND install."principal_id" = NEW."principal_id"
+          AND install."mcp_server_id" = connection."mcp_server_id" AND install."lifecycle_state" = 'installed'
+          AND server."status" = 'active' AND server."approval_status" = 'published' AND server."transport" = 'streamable-http'
+        FOR UPDATE OF connection, install, server;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'Remote McpTask requires its exact Active connection, installed owner, and selected Ready tool';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "mcp_tasks_transport_identity" BEFORE INSERT OR UPDATE ON "mcp_tasks" FOR EACH ROW EXECUTE FUNCTION "enforce_mcp_task_transport_identity"();
 
 -- Insert after the generated mcp_connections table and indexes, before grants/triggers that reference it.
 ALTER TABLE public.mcp_connections
@@ -3862,7 +3922,8 @@ BEGIN
     RETURN QUERY
     SELECT execution."id", execution."silo_id", execution."profile_name"
       FROM "mcp_runtime_executions" execution
-     WHERE execution."workload_state" = 'pending'
+     WHERE execution."transport" = 'oci-image'
+       AND execution."workload_state" = 'pending'
        AND (execution."claim_expires_at" IS NULL OR execution."claim_expires_at" <= clock_timestamp())
      ORDER BY execution."created_at", execution."id"
      FOR UPDATE OF execution SKIP LOCKED
@@ -3880,7 +3941,8 @@ BEGIN
     RETURN QUERY
     SELECT execution."id", execution."silo_id", execution."profile_name"
       FROM "mcp_runtime_executions" execution
-     WHERE execution."workload_state" IN ('assigned', 'released')
+     WHERE execution."transport" = 'oci-image'
+       AND execution."workload_state" IN ('assigned', 'released')
        AND execution."workload_uid" IS NOT NULL
        AND execution."pod_uid" IS NULL
        AND (execution."release_expires_at" IS NULL OR execution."release_expires_at" <= clock_timestamp())
@@ -3893,7 +3955,7 @@ CREATE VIEW "mcp_runtime_release_claim_candidates" AS SELECT * FROM "select_mcp_
 
 ALTER TABLE "mcp_runtime_executions" ADD CONSTRAINT "mcp_runtime_executions_identity_check" CHECK (
     btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("server_revision_id") <> ''
-    AND btrim("idempotency_key") <> '' AND btrim("execution_reference") <> '' AND btrim("profile_name") <> ''
+    AND btrim("idempotency_key") <> '' AND btrim("execution_reference") <> ''
     AND "delivery_count" >= 0 AND "release_delivery_count" >= 0 AND "cleanup_delivery_count" >= 0
     AND (("claimed_at" IS NULL) = ("claim_expires_at" IS NULL))
     AND (("release_claimed_at" IS NULL) = ("release_expires_at" IS NULL))
@@ -3904,6 +3966,55 @@ ALTER TABLE "mcp_runtime_executions" ADD CONSTRAINT "mcp_runtime_executions_iden
     AND ("terminal_outcome" IS NULL OR btrim("terminal_outcome") <> '')
     AND ("terminal_payload_digest" IS NULL OR "terminal_payload_digest" ~ '^sha256:[0-9a-f]{64}$')
 );
+
+-- Remote calls run in the server, so they must never acquire controller, Pod, companion, or cleanup authority.
+ALTER TABLE "mcp_runtime_executions" ADD CONSTRAINT "mcp_runtime_executions_transport_identity_check" CHECK ((
+    ("transport" = 'oci-image' AND "workload_state" IS NOT NULL AND btrim("profile_name") <> ''
+        AND "connection_id" IS NULL AND "connection_generation" IS NULL AND "connection_owner_principal_id" IS NULL
+        AND "endpoint_digest" IS NULL AND "credential_secret_uid" IS NULL AND "credential_secret_resource_version" IS NULL
+        AND "remote_claim_fence" IS NULL AND "remote_claim_expires_at" IS NULL)
+    OR ("transport" = 'remote-http' AND "kind" = 'invocation' AND btrim("tool_invocation_id") <> ''
+        AND btrim("connection_id") <> '' AND "connection_generation" > 0 AND btrim("connection_owner_principal_id") <> ''
+        AND "endpoint_digest" ~ '^sha256:[0-9a-f]{64}$'
+        AND (("credential_secret_uid" IS NULL AND "credential_secret_resource_version" IS NULL)
+            OR (btrim("credential_secret_uid") <> '' AND btrim("credential_secret_resource_version") <> ''))
+        AND "workload_state" IS NULL AND "profile_name" IS NULL
+        AND "claimed_at" IS NULL AND "claim_expires_at" IS NULL AND "delivery_count" = 0
+        AND "workload_uid" IS NULL AND "assigned_at" IS NULL
+        AND "release_claimed_at" IS NULL AND "release_expires_at" IS NULL AND "release_delivery_count" = 0 AND "released_at" IS NULL
+        AND "pod_uid" IS NULL AND "companion_claim_fence" IS NULL AND "companion_claim_expires_at" IS NULL
+        AND "cleanup_claimed_at" IS NULL AND "cleanup_expires_at" IS NULL AND "cleanup_delivery_count" = 0 AND "cleanup_completed_at" IS NULL
+        AND (("remote_claim_fence" IS NULL AND "remote_claim_expires_at" IS NULL
+                AND "tool_invocation_claim_fence" IS NULL AND "tool_invocation_claim_revision" IS NULL)
+            OR (btrim("remote_claim_fence") <> '' AND "remote_claim_expires_at" IS NOT NULL
+                AND "tool_invocation_claim_fence" > 0 AND "tool_invocation_claim_revision" > 0)))
+) IS TRUE);
+
+-- Recheck current connection authority at admission and dispatch, not when recording a result after revocation.
+CREATE FUNCTION "require_remote_mcp_execution_connection"(execution "mcp_runtime_executions") RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM 1
+    FROM "mcp_server_revisions" revision
+    JOIN "mcp_connections" connection ON connection."id" = revision."connection_id" AND connection."silo_id" = revision."silo_id"
+    JOIN "mcp_server_installs" install ON install."id" = connection."mcp_server_install_id"
+    JOIN "mcp_servers" server ON server."id" = connection."mcp_server_id" AND server."silo_id" = connection."silo_id"
+    WHERE revision."id" = execution."server_revision_id" AND revision."silo_id" = execution."silo_id"
+      AND revision."transport" = 'remote-http' AND revision."state" = 'ready' AND revision."protocol_version" = '2026-07-28'
+      AND revision."connection_id" = execution."connection_id" AND revision."connection_generation" = execution."connection_generation"
+      AND revision."connection_owner_principal_id" = execution."connection_owner_principal_id" AND revision."endpoint_digest" = execution."endpoint_digest"
+      AND connection."generation" = execution."connection_generation" AND connection."owner_principal_id" = execution."connection_owner_principal_id"
+      AND connection."endpoint_digest" = execution."endpoint_digest" AND connection."mcp_server_id" = revision."mcp_server_id"
+      AND connection."credential_secret_uid" IS NOT DISTINCT FROM execution."credential_secret_uid"
+      AND connection."credential_secret_resource_version" IS NOT DISTINCT FROM execution."credential_secret_resource_version"
+      AND connection."state" = 'active' AND install."principal_id" = connection."owner_principal_id"
+      AND install."mcp_server_id" = connection."mcp_server_id" AND install."lifecycle_state" = 'installed'
+      AND server."status" = 'active' AND server."approval_status" = 'published' AND server."transport" = 'streamable-http'
+    FOR UPDATE OF connection, install, server;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Remote McpRuntimeExecution requires its exact Active connection, installed owner, and Ready revision';
+    END IF;
+END;
+$$;
 
 CREATE FUNCTION "enforce_mcp_runtime_execution_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
@@ -3916,7 +4027,101 @@ BEGIN
         RAISE EXCEPTION 'McpRuntimeExecution rows cannot be deleted';
     END IF;
 
+    IF TG_OP = 'UPDATE' AND (
+        NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."server_revision_id" IS DISTINCT FROM OLD."server_revision_id" OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id"
+        OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."idempotency_key" IS DISTINCT FROM OLD."idempotency_key"
+        OR NEW."execution_reference" IS DISTINCT FROM OLD."execution_reference" OR NEW."profile_name" IS DISTINCT FROM OLD."profile_name"
+        OR NEW."transport" IS DISTINCT FROM OLD."transport" OR NEW."connection_id" IS DISTINCT FROM OLD."connection_id"
+        OR NEW."connection_generation" IS DISTINCT FROM OLD."connection_generation"
+        OR NEW."connection_owner_principal_id" IS DISTINCT FROM OLD."connection_owner_principal_id"
+        OR NEW."endpoint_digest" IS DISTINCT FROM OLD."endpoint_digest"
+        OR NEW."credential_secret_uid" IS DISTINCT FROM OLD."credential_secret_uid"
+        OR NEW."credential_secret_resource_version" IS DISTINCT FROM OLD."credential_secret_resource_version"
+        OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN
+        RAISE EXCEPTION 'McpRuntimeExecution source and transport identity is immutable';
+    END IF;
+
+    IF NEW."transport" = 'remote-http' THEN
+        SELECT invocation.* INTO bounded_invocation
+        FROM "tool_invocations" invocation
+        JOIN "mcp_tool_revisions" tool ON tool."id" = invocation."tool_revision_id" AND tool."silo_id" = invocation."silo_id"
+        WHERE invocation."id" = NEW."tool_invocation_id" AND invocation."silo_id" = NEW."silo_id"
+          AND invocation."principal_id" = NEW."connection_owner_principal_id"
+          AND invocation."recovery_mode" = 'manual' AND tool."server_revision_id" = NEW."server_revision_id"
+        FOR UPDATE OF invocation;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'Remote McpRuntimeExecution requires its selected tool and same-owner invocation';
+        END IF;
+
+        IF TG_OP = 'INSERT' THEN
+            PERFORM "require_remote_mcp_execution_connection"(NEW);
+            IF NEW."command_state" <> 'pending' OR NEW."remote_claim_fence" IS NOT NULL OR NEW."remote_claim_expires_at" IS NOT NULL
+                OR NEW."tool_invocation_claim_fence" IS NOT NULL OR NEW."tool_invocation_claim_revision" IS NOT NULL
+                OR NEW."terminal_outcome" IS NOT NULL OR NEW."terminal_payload_digest" IS NOT NULL OR NEW."completed_at" IS NOT NULL
+                OR bounded_invocation."state" <> 'ready' OR bounded_invocation."claim_kind" IS NOT NULL
+                OR bounded_invocation."claim_fence" <> 0 OR bounded_invocation."claim_expires_at" IS NOT NULL THEN
+                RAISE EXCEPTION 'Remote McpRuntimeExecution must begin pending with an unused Ready invocation';
+            END IF;
+            RETURN NEW;
+        END IF;
+
+        IF OLD."command_state" IN ('succeeded', 'failed', 'recovery_required') THEN
+            RAISE EXCEPTION 'terminal Remote McpRuntimeExecution authority is immutable';
+        END IF;
+
+        IF OLD."command_state" = 'pending' AND NEW."command_state" = 'claimed' THEN
+            PERFORM "require_remote_mcp_execution_connection"(NEW);
+            transition_time := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+            requested_lease := NEW."remote_claim_expires_at" - TIMESTAMP '1970-01-01 00:00:00';
+            IF OLD."remote_claim_fence" IS NOT NULL OR OLD."remote_claim_expires_at" IS NOT NULL
+                OR NEW."remote_claim_fence" IS NULL OR btrim(NEW."remote_claim_fence") = ''
+                OR requested_lease IS NULL OR requested_lease < interval '1 second' OR requested_lease > interval '5 minutes'
+                OR bounded_invocation."state" <> 'claimed' OR bounded_invocation."claim_kind" IS DISTINCT FROM 'dispatch'
+                OR bounded_invocation."claim_fence" IS DISTINCT FROM NEW."tool_invocation_claim_fence"
+                OR bounded_invocation."revision" IS DISTINCT FROM NEW."tool_invocation_claim_revision"
+                OR bounded_invocation."claim_expires_at" IS NULL OR bounded_invocation."claim_expires_at" <= transition_time THEN
+                RAISE EXCEPTION 'Remote McpRuntimeExecution claim requires the exact invocation dispatch fence and a bounded lease proposal';
+            END IF;
+            NEW."remote_claim_expires_at" := LEAST(transition_time + requested_lease, bounded_invocation."claim_expires_at");
+        ELSIF NEW."remote_claim_fence" IS DISTINCT FROM OLD."remote_claim_fence"
+            OR NEW."remote_claim_expires_at" IS DISTINCT FROM OLD."remote_claim_expires_at"
+            OR NEW."tool_invocation_claim_fence" IS DISTINCT FROM OLD."tool_invocation_claim_fence"
+            OR NEW."tool_invocation_claim_revision" IS DISTINCT FROM OLD."tool_invocation_claim_revision" THEN
+            RAISE EXCEPTION 'Remote McpRuntimeExecution dispatch fence cannot be reset or replaced';
+        END IF;
+
+        IF NEW."command_state" IN ('succeeded', 'failed', 'recovery_required') THEN
+            transition_time := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+            IF OLD."command_state" = 'claimed' AND NEW."command_state" IN ('succeeded', 'failed')
+                AND (OLD."remote_claim_expires_at" IS NULL OR OLD."remote_claim_expires_at" <= transition_time) THEN
+                RAISE EXCEPTION 'Remote McpRuntimeExecution completion requires its unexpired dispatch lease';
+            END IF;
+            IF NEW."terminal_outcome" IS NULL OR btrim(NEW."terminal_outcome") = ''
+                OR NEW."terminal_payload_digest" IS NULL OR NEW."completed_at" IS NULL
+                OR bounded_invocation."state"::TEXT IS DISTINCT FROM NEW."command_state"::TEXT
+                OR bounded_invocation."claim_kind" IS NOT NULL OR bounded_invocation."claim_expires_at" IS NOT NULL
+                OR (OLD."command_state" = 'pending' AND (NEW."command_state" <> 'failed' OR bounded_invocation."claim_fence" <> 0))
+                OR (OLD."command_state" = 'claimed' AND (
+                    bounded_invocation."claim_fence" IS DISTINCT FROM OLD."tool_invocation_claim_fence"
+                    OR bounded_invocation."revision" IS DISTINCT FROM OLD."tool_invocation_claim_revision" + 1)) THEN
+                RAISE EXCEPTION 'Remote McpRuntimeExecution terminal evidence requires the matching invocation terminal state and saved dispatch fence';
+            END IF;
+            NEW."completed_at" := transition_time;
+        ELSIF NEW."terminal_outcome" IS NOT NULL OR NEW."terminal_payload_digest" IS NOT NULL OR NEW."completed_at" IS NOT NULL
+            OR (NEW."command_state" IS DISTINCT FROM OLD."command_state"
+                AND NOT (OLD."command_state" = 'pending' AND NEW."command_state" = 'claimed')) THEN
+            RAISE EXCEPTION 'invalid Remote McpRuntimeExecution command transition or terminal evidence';
+        END IF;
+        RETURN NEW;
+    END IF;
+
     IF TG_OP = 'INSERT' THEN
+        PERFORM 1 FROM "mcp_server_revisions" revision
+        WHERE revision."id" = NEW."server_revision_id" AND revision."silo_id" = NEW."silo_id" AND revision."transport" = NEW."transport";
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'OCI McpRuntimeExecution requires its selected OCI server revision';
+        END IF;
         IF NEW."workload_state" <> 'pending' OR NEW."command_state" <> 'pending'
             OR NEW."claimed_at" IS NOT NULL OR NEW."claim_expires_at" IS NOT NULL OR NEW."delivery_count" <> 0
             OR NEW."workload_uid" IS NOT NULL OR NEW."assigned_at" IS NOT NULL
@@ -3928,14 +4133,6 @@ BEGIN
             RAISE EXCEPTION 'McpRuntimeExecution must begin pending without delivery, assignment, command, terminal, or cleanup evidence';
         END IF;
         RETURN NEW;
-    END IF;
-
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-        OR NEW."server_revision_id" IS DISTINCT FROM OLD."server_revision_id" OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id"
-        OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."idempotency_key" IS DISTINCT FROM OLD."idempotency_key"
-        OR NEW."execution_reference" IS DISTINCT FROM OLD."execution_reference" OR NEW."profile_name" IS DISTINCT FROM OLD."profile_name"
-        OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'McpRuntimeExecution source identity is immutable';
     END IF;
 
     IF OLD."workload_uid" IS NOT NULL AND NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" THEN

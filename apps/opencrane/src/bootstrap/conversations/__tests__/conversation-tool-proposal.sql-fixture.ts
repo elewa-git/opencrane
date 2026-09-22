@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
-import { PrismaClient } from "@prisma/client";
+import { McpExecutionTransport, PrismaClient } from "@prisma/client";
 import { Client } from "pg";
 
 import { AgentIdentityStates, ConversationModelToolModes, ComputerLeaseStates, ConversationComputerStates, ExecutionSubjectMembershipKinds, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, ___ExecutionSubjectSchema, type ConversationToolProposal, type RunInputSnapshot } from "@opencrane/contracts";
@@ -46,6 +46,8 @@ interface _FixtureOptions
 	readonly secretArguments?: boolean;
 	/** Lifetime of the frozen requester membership evidence. */
 	readonly trustLifetimeMs?: number;
+	/** Select remote connection evidence instead of the default OCI image evidence. */
+	readonly transport?: McpExecutionTransport;
 	/** Exact alternate tool contract for a focused integration journey. */
 	readonly tool?: _ToolFixture;
 }
@@ -105,14 +107,33 @@ export async function _SeedConversationToolProposalSqlFixture(options: _FixtureO
 		await _SeedApprovedPersona(setup, id, siloId, principalId, now);
 		await setup.query("INSERT INTO agent_services (id, silo_id, kind, name, workload_profile, updated_at) VALUES ($1, $2, 'personal', 'SQL assistant', 'personal-default', $3)", [agentServiceId, siloId, now]);
 		await setup.query("INSERT INTO agent_revisions (id, silo_id, agent_service_id, revision, digest, prompt_policy_version, model_definition_id, budget, authored_by, persona_revision_id) VALUES ($1, $2, $3, 1, $4, $5, $6, $7::jsonb, $8, $9)", [agentRevisionId, siloId, agentServiceId, ___DigestCanonicalJson(agentRevisionId), PROMPT_COMPILER_VERSION, modelId, JSON.stringify(budgetPolicy), principalId, id("persona")]);
-		const digest = ___DigestCanonicalJson(id("image"));
-		const image = `registry.example.test/proof/image@${digest}`;
-		await setup.query("INSERT INTO mcp_servers (id, silo_id, name, endpoint, transport, status, approval_status, credential_requirement, requires_approval, updated_at) VALUES ($1, $2, $3, $4, 'oci-image', 'active', 'published', 'credentialless', $5, $6)", [id("server"), siloId, serverName, image, options.approvalRequired === true, now]);
-		await setup.query("INSERT INTO oci_image_validations (id, silo_id, artifact_id, artifact_revision_id, content_address, byte_length, media_type, submission_key_digest, submission_digest, state, index_digest, image_manifest_digest, config_digest, registry_reference, created_by_principal_id, completed_at, updated_at) VALUES ($1, $2, $3, $4, $5, 1, 'application/vnd.oci.image.layout.v1+tar', $5, $5, 'imported', $5, $5, $5, $6, $7, $8, $8)", [id("validation"), siloId, id("artifact"), id("artifact-revision"), digest, image, principalId, now]);
-		await setup.query("INSERT INTO mcp_server_revisions (id, silo_id, mcp_server_id, oci_image_validation_id, revision, registry_reference, updated_at) VALUES ($1, $2, $3, $4, 1, $5, $6)", [id("server-revision"), siloId, id("server"), id("validation"), image, now]);
+		if (options.transport === McpExecutionTransport.RemoteHttp)
+		{
+			const endpoint = "https://mcp.example.test/stream";
+			const endpointDigest = ___DigestCanonicalJson({ endpoint });
+			const discoveryDigest = ___DigestCanonicalJson({ toolName, toolDescription, schema });
+			await setup.query("INSERT INTO mcp_servers (id, silo_id, name, endpoint, transport, status, approval_status, credential_requirement, requires_approval, updated_at) VALUES ($1, $2, $3, $4, 'streamable-http', 'active', 'published', 'credentialless', $5, $6)", [id("server"), siloId, serverName, endpoint, options.approvalRequired === true, now]);
+			await setup.query("INSERT INTO mcp_server_installs (id, mcp_server_id, principal_id, connection_status, updated_at) VALUES ($1, $2, $3, 'activating', $4)", [id("server-install"), id("server"), principalId, now]);
+			await setup.query("INSERT INTO mcp_connections (id, silo_id, mcp_server_install_id, mcp_server_id, owner_principal_id, actor_principal_id, generation, credential_requirement, credential_kind, endpoint_digest, state, request_key_digest, command_digest, authorization_decision_digest, task_id, task_name, task_key, updated_at) VALUES ($1, $2, $3, $4, $5, $5, 1, 'credentialless', 'none', $6, 'activating', $7, $8, $9, $10, 'mcp-connection.activate/v1', $11, $12)", [id("connection"), siloId, id("server-install"), id("server"), principalId, endpointDigest, ___DigestCanonicalJson(id("connection-request")), ___DigestCanonicalJson(id("connection-command")), ___DigestCanonicalJson(id("connection-admission")), id("activation-task"), id("activation-task-key"), now]);
+			await setup.query("INSERT INTO mcp_server_revisions (id, silo_id, mcp_server_id, revision, transport, connection_id, connection_generation, connection_owner_principal_id, endpoint_digest, discovery_evidence_digest, discovery_digest, updated_at) VALUES ($1, $2, $3, 1, 'remote-http', $4, 1, $5, $6, $7, $8, $9)", [id("server-revision"), siloId, id("server"), id("connection"), principalId, endpointDigest, ___DigestCanonicalJson(id("discovery-evidence")), discoveryDigest, now]);
+		}
+		else
+		{
+			const digest = ___DigestCanonicalJson(id("image"));
+			const image = `registry.example.test/proof/image@${digest}`;
+			await setup.query("INSERT INTO mcp_servers (id, silo_id, name, endpoint, transport, status, approval_status, credential_requirement, requires_approval, updated_at) VALUES ($1, $2, $3, $4, 'oci-image', 'active', 'published', 'credentialless', $5, $6)", [id("server"), siloId, serverName, image, options.approvalRequired === true, now]);
+			await setup.query("INSERT INTO oci_image_validations (id, silo_id, artifact_id, artifact_revision_id, content_address, byte_length, media_type, submission_key_digest, submission_digest, state, index_digest, image_manifest_digest, config_digest, registry_reference, created_by_principal_id, completed_at, updated_at) VALUES ($1, $2, $3, $4, $5, 1, 'application/vnd.oci.image.layout.v1+tar', $5, $5, 'imported', $5, $5, $5, $6, $7, $8, $8)", [id("validation"), siloId, id("artifact"), id("artifact-revision"), digest, image, principalId, now]);
+			await setup.query("INSERT INTO mcp_server_revisions (id, silo_id, mcp_server_id, oci_image_validation_id, revision, registry_reference, updated_at) VALUES ($1, $2, $3, $4, 1, $5, $6)", [id("server-revision"), siloId, id("server"), id("validation"), image, now]);
+		}
 		await setup.query("INSERT INTO mcp_tool_revisions (id, silo_id, server_revision_id, name, description, input_schema, input_schema_digest) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)", [toolRevisionId, siloId, id("server-revision"), toolName, toolDescription, JSON.stringify(schema), toolSchemaDigest]);
 		await setup.query("UPDATE mcp_server_revisions SET state='ready', protocol_version='2026-07-28', completed_at=$2 WHERE id=$1", [id("server-revision"), now]);
-		await setup.query("INSERT INTO mcp_server_installs (id, mcp_server_id, principal_id, connection_status, updated_at) VALUES ($1, $2, $3, 'credentialless', $4)", [id("server-install"), id("server"), principalId, now]);
+		if (options.transport === McpExecutionTransport.RemoteHttp)
+		{
+			await setup.query("UPDATE mcp_connections SET state='active', activated_at=$2, completed_at=$2 WHERE id=$1", [id("connection"), now]);
+			await setup.query("UPDATE mcp_server_installs SET connection_status='active', updated_at=$2 WHERE id=$1", [id("server-install"), now]);
+		}
+		else
+			await setup.query("INSERT INTO mcp_server_installs (id, mcp_server_id, principal_id, connection_status, updated_at) VALUES ($1, $2, $3, 'credentialless', $4)", [id("server-install"), id("server"), principalId, now]);
 		await setup.query("INSERT INTO agent_revision_mcp_tool_assignments (agent_revision_id, agent_service_id, tool_revision_id, silo_id) VALUES ($1, $2, $3, $4)", [agentRevisionId, agentServiceId, toolRevisionId, siloId]);
 		await setup.query("UPDATE agent_revisions SET state='published', published_at=$2 WHERE id=$1", [agentRevisionId, now]);
 		await setup.query("UPDATE agent_services SET state='active', active_revision_id=$2 WHERE id=$1", [agentServiceId, agentRevisionId]);
@@ -123,9 +144,10 @@ export async function _SeedConversationToolProposalSqlFixture(options: _FixtureO
 		await setup.query("INSERT INTO run_input_snapshots (id, run_id, attempt, snapshot_version, silo_id, agent_service_id, agent_revision_id, agent_identity_id, principal_id, execution_subject, conversation_id, model_route, mcp_tools, memory_query_policy, budget_policy, prompt_compiler_version, input_digest, created_at, persona_revision_id) VALUES ($1, $2, 1, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11::jsonb, $12::jsonb, '{}'::jsonb, $13::jsonb, $14, $15, $16, $17)", [id("snapshot"), runId, RUN_INPUT_SNAPSHOT_VERSION, siloId, agentServiceId, agentRevisionId, agentIdentityId, principalId, JSON.stringify(subject), conversationId, JSON.stringify(snapshot.modelRoute), JSON.stringify(snapshot.mcpTools), JSON.stringify(budgetPolicy), PROMPT_COMPILER_VERSION, snapshotDigest, now, id("persona")]);
 		await setup.query("SET CONSTRAINTS ALL IMMEDIATE");
 		await setup.query("UPDATE agent_runs SET state='running', started_at=$2 WHERE id=$1", [runId, now]);
-		for (const [kind, resourceId] of [[ProductAuthorizationResourceKinds.AgentService, agentServiceId], [ProductAuthorizationResourceKinds.Conversation, conversationId], [ProductAuthorizationResourceKinds.McpToolRevision, toolRevisionId]] as const)
+		const resources = [[ProductAuthorizationResourceKinds.AgentService, agentServiceId], [ProductAuthorizationResourceKinds.Conversation, conversationId], [ProductAuthorizationResourceKinds.McpToolRevision, toolRevisionId], ...(options.transport === McpExecutionTransport.RemoteHttp ? [[ProductAuthorizationResourceKinds.ProviderConnection, id("connection")] as const] : [])] as const;
+		for (const [kind, resourceId] of resources)
 		{
-			const action = kind === ProductAuthorizationResourceKinds.Conversation ? ProductAuthorizationActions.Use : ProductAuthorizationActions.Invoke;
+			const action = kind === ProductAuthorizationResourceKinds.Conversation || kind === ProductAuthorizationResourceKinds.ProviderConnection ? ProductAuthorizationActions.Use : ProductAuthorizationActions.Invoke;
 			const capability = __ProductAuthorizationCapability(kind, action)!;
 			await setup.query("INSERT INTO authorization_grants (id, silo_id, subject_kind, subject_principal_id, boundary_kind, boundary_principal_id, boundary_coverage, manager_id, catalog_id, catalog_revision, catalog_digest, capability_id, resource_kind, resource_id, effect, priority, created_by) SELECT $1, $2, 'principal', $3, 'personal', $3, 'exact', $4, catalog_id, revision, digest, $5, $6, $7, 'allow', 0, $3 FROM capability_catalog_revisions WHERE catalog_id=$8 AND revision=$9", [id(`grant-${kind}`), siloId, principalId, id("manager"), capability.capabilityId, kind, resourceId, capability.catalog.catalogId, capability.catalog.revision]);
 		}
