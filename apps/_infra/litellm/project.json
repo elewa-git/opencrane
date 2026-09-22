@@ -7,6 +7,29 @@
     "helm-lint": {
       "executor": "nx:run-commands",
       "options": { "command": "helm lint apps/_infra/litellm/helm" }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "dependsOn": [],
+      "inputs": ["default", "{workspaceRoot}/apps/_infra/deploy-k8s/values.yaml"],
+      "options": { "command": "node --test apps/_infra/litellm/tests/image-smoke.test.mjs" }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "dependsOn": [],
+      "options": { "command": "node --check apps/_infra/litellm/tests/image-smoke.mjs && node --check apps/_infra/litellm/tests/image-smoke.test.mjs && python3 -c \"import ast, pathlib; ast.parse(pathlib.Path('apps/_infra/litellm/tests/router-retry-contract.py').read_text())\"" }
+    },
+    "image-smoke": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "inputs": [
+        "default",
+        "{workspaceRoot}/libs/backend/server/gateways/model-routing/main/**/*",
+        "{workspaceRoot}/apps/_infra/deploy-k8s/values.yaml"
+      ],
+      "options": { "command": "node apps/_infra/litellm/tests/image-smoke.mjs" }
     }
   }
 }

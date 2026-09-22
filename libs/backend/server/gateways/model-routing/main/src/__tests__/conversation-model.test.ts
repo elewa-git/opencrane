@@ -82,7 +82,7 @@ describe("one conversation model text exchange", function _transportSuite()
 		const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
 		expect(url.toString()).toBe("http://litellm.release.svc.cluster.local/v1/chat/completions");
 		expect(init).toMatchObject({ method: "POST", redirect: "error", headers: { authorization: "Bearer sk-private-attempt" } });
-		expect(JSON.parse(String(init.body))).toEqual({ model: "admitted-model", max_tokens: 200, n: 1, stream: false, messages: [
+		expect(JSON.parse(String(init.body))).toEqual({ model: "admitted-model", max_tokens: 200, n: 1, stream: false, num_retries: 0, max_retries: 0, disable_fallbacks: true, messages: [
 			{ role: "system", content: "Private instructions." }, { role: "user", content: "Private question." }, { role: "assistant", content: "Earlier answer." },
 		] });
 		expect(String(init.body)).not.toContain("sk-private-attempt");
@@ -245,6 +245,21 @@ describe("one conversation model text exchange", function _transportSuite()
 		expect(fetchMock.mock.calls[0]?.[1].redirect).toBe("error");
 	});
 
+	it("does not treat a rate-limit delay or zero reported cost as permission to retry", async function _unprovenRateLimit()
+	{
+		const body = { error: { type: "rate_limit_error", code: 429, message: "Request was rate limited." }, response_cost: 0 };
+		const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(body), {
+			status: 429, headers: { "content-type": "application/json", "retry-after": "1", rate_limit_type: "requests" },
+		}));
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(__RequestConversationModel(_request())).rejects.toMatchObject({ code: ConversationModelFailureCodes.HttpRejected });
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(vi.getTimerCount()).toBe(0);
+		expect(_telemetry.fields).toEqual([{}]);
+		expect(JSON.stringify(_telemetry.errors)).not.toContain("Request was rate limited.");
+	});
+
 	it("removes the original transport exception before tracing and does not retry a lost response", async function _privateFailure()
 	{
 		const secret = "sk-private-attempt Private question. remote raw body";
@@ -346,6 +361,26 @@ function _toolAnswer(call = _toolCall()): Record<string, unknown>
 
 describe("one selected tool and its paired continuation", function _toolExchange()
 {
+	it.each([
+		[ConversationModelToolModes.None, false], [ConversationModelToolModes.Select, false],
+		[ConversationModelToolModes.Select, true], [ConversationModelToolModes.None, true],
+	] as const)("pins proxy retry controls for %s with saved history %s", async function _proxyRetryControls(tools, hasHistory)
+	{
+		const input = _selection();
+		const extraFields = { num_retries: 4, max_retries: 4, disable_fallbacks: false, fallbacks: ["unadmitted-model"], retry_policy: { RateLimitErrorRetries: 4 } };
+		const request = { ...input, ...extraFields, tools, history: hasHistory ? [{ call: _toolCall(), resultContent: "saved result" }] : [],
+			compiledInput: { ...input.compiledInput, ...extraFields, model: { ...input.compiledInput.model, ...extraFields } },
+		};
+		const fetchMock = vi.fn().mockResolvedValue(_response());
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(__RequestConversationModel(request)).resolves.toMatchObject({ kind: ConversationModelResponseKinds.Text });
+		const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1].body));
+		expect(body).toMatchObject({ model: input.modelAlias, max_tokens: 200, n: 1, stream: false, num_retries: 0, max_retries: 0, disable_fallbacks: true });
+		for (const field of ["fallbacks", "retry_policy"])
+			expect(body).not.toHaveProperty(field);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
 	it.each(["records.lookup", `records.${"long_".repeat(20)}`])("uses the frozen model name for MCP tool %s", async function _wireName(sourceName)
 	{
 		const tool = _tool({ name: sourceName, modelName: "mcp_selected_revision" });

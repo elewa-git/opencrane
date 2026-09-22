@@ -55,6 +55,22 @@ An app entrypoint (`type:app`, `scope:litellm`); composed by the silo chart, imp
   separately designed exact workload and egress identity; a hostname and port alone are not enough
   to widen model-router egress.
 
+## Validation
+
+Run `npx nx run litellm:test` for the smoke runner's success and failure contracts, and
+`npx nx run litellm:lint` for its syntax checks. These local targets do not start Docker.
+The existing GitHub Actions image-smoke job runs `npx nx run litellm:image-smoke`: it reads the
+configured image from the silo chart values, resolves its immutable digest, and runs that image's
+actual router against an in-memory provider with network access disabled. It rejects a successful
+process exit unless the complete expected test receipt is present. Changes to this app, the model
+adapter or its registration code, or the configured image select the smoke through Nx.
+
+The contract counts calls for rate limits, server errors, timeouts and connection loss. It compares
+the vendor defaults with OpenCrane's fixed request controls and exercises fallback suppression.
+It also records how deployment-level and named retry policies override request controls. This is
+router-level evidence, not full HTTP-proxy, live-provider or conversation qualification. Automatic
+rate-limit recovery still needs proof that the particular request never reached a provider.
+
 ## See also
 
 - Parent index: [_infra](../README.md)

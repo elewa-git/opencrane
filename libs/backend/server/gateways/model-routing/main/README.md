@@ -123,6 +123,14 @@ calls, refusals, partial answers and unsupported output formats. `ConversationMo
 a fixed category without the provider body or original exception. Request fields never enter its
 operation span, and automatic child tracing is suppressed around the HTTP call.
 
+Every request fixes LiteLLM's `num_retries` and `max_retries` to zero and `disable_fallbacks` to
+true. These settings apply to initial requests, later tool selections and final answers; input
+fields cannot replace them. They prevent the proxy's default retry and fallback behaviour from
+repeating a request outside the saved conversation steps. The pinned router lets deployment-level
+and named retry policies override request retry counts, so an operator-modified or shared proxy
+still needs its own qualification. The current model registration supplies neither override.
+See the [pinned router implementation](https://github.com/BerriAI/litellm/blob/790a5ce0b323c1eefa70c2df25b2780097aa3f80/litellm/router.py).
+
 This adapter has no durable retry state. Its caller must reserve dispatch before calling, retain
 the accepted response before acknowledging it, and treat a lost response as uncertain: a failure
 does not prove that the provider did not charge the request. The caller also reserves the total
@@ -166,7 +174,9 @@ unverified alias; this package's catalogue is therefore the allowlist source for
 Run `npx nx run backend-server-model-routing:test` and
 `npx nx run backend-server-model-routing:lint`. The conversation transport tests use an in-memory fetch
 double: they prove limits, cancellation, response validation and absence of retries without making
-a paid model request. These checks do not qualify a live provider or the complete conversation flow.
+a paid model request. They also check the serialized proxy retry controls in every request mode;
+they do not prove that the proxy honours them. These checks do not qualify a live provider or the
+complete conversation flow.
 
 ## See also
 

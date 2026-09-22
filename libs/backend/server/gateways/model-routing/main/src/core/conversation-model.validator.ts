@@ -44,7 +44,10 @@ function _offeredTools(tools: readonly CompiledToolDefinition[]): readonly Compi
 /**
  * Serializes the frozen prompt plus the complete ordered saved tool/result history and applies admitted limits.
  * Credential coordinates come from server composition; compiled messages cannot alter transport.
+ * Disables proxy retries and fallbacks so their defaults do not repeat a reserved request. Proxy-level
+ * deployment and retry policies can override these controls and need separate qualification.
  * @throws ConversationModelError before dispatch when inputs, ordered history or bounds are unusable.
+ * @see https://github.com/BerriAI/litellm/blob/790a5ce0b323c1eefa70c2df25b2780097aa3f80/litellm/router.py — the pinned proxy's request and deployment retry precedence.
  */
 export function _PrepareConversationModelRequest(input: ConversationModelRequest): PreparedConversationModelRequest
 {
@@ -96,7 +99,10 @@ export function _PrepareConversationModelRequest(input: ConversationModelRequest
 			messages.push({ role: "tool", tool_call_id: call.id, content: exchange.resultContent });
 		}
 		const maxTokens = Math.min(input.maxCompletionTokens, ...ceilings.filter(_isPositiveInteger));
-		const request: Record<string, JsonValue> = { model: input.modelAlias, messages, max_tokens: maxTokens, n: 1, stream: false };
+		const request: Record<string, JsonValue> = {
+			model: input.modelAlias, messages, max_tokens: maxTokens, n: 1, stream: false,
+			num_retries: 0, max_retries: 0, disable_fallbacks: true,
+		};
 		if (input.tools === ConversationModelToolModes.Select)
 		{
 			if (offered.length === 0)

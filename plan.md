@@ -514,6 +514,29 @@ enter recovery without another call. `Retry-After` supplies a delay, not proof t
 occurred. Automatic effectful backoff needs a trusted adapter contract proving rejection before
 tool admission; that contract is absent from the current generic remote MCP registration.
 
+The pinned LiteLLM model-proxy preflight found a separate hidden-retry gap: one server HTTP request
+can enter the router's default retry loop. The model adapter now sends fixed `num_retries: 0`,
+`max_retries: 0` and `disable_fallbacks: true` for initial, continuing and final requests. These
+settings cannot come from compiled input. Deployment-level and named proxy retry policies can
+override request controls; the current model registration supplies neither, and modified/shared
+proxies remain unqualified. A network-disabled local proof against LiteLLM source commit
+`790a5ce0b323c1eefa70c2df25b2780097aa3f80` and OpenAI SDK 2.9.0 exercises the real router, provider
+adapter and SDK through an in-memory HTTP transport. All 17 cases pass: defaults make three provider
+attempts for 429, 500, timeout and connection loss, while the fixed request controls make one.
+A deployment retry override still produces four attempts; named policies also override some
+request controls. The proof is retained under the existing LiteLLM app, whose affected image-smoke
+target resolves and tests the configured image by digest through the existing GitHub Actions job.
+Local request serialization tests and 27 saved-result/restart cases pass. Exact-image CI execution
+and full HTTP-proxy/live-provider qualification remain pending; local source evidence is not a
+deployed-image claim.
+This correction does not complete backoff. A generic HTTP 429, `Retry-After`, rate-limit description
+or zero reported response cost is not evidence that provider dispatch never began. Safe model
+backoff still needs a qualified pre-forward rejection bound to the physical request, saved through
+the existing turn store before Absurd waits, then consumed by a single dispatch claimant using
+the original credential, accounting and deadline. First-request rejection must save credential
+coordinates because no earlier tool declaration exists yet. Lost rejection/claim acknowledgements
+must not permit another paid request.
+
 The source loop builds above the completed quality fixes. Provider backoff and live qualification
 remain functional gates alongside memory, delegation, scheduling and administration before the
 goal can close. The singular reservations, fixed Kurrent revisions, singular continuation custody
