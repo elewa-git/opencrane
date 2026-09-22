@@ -92,21 +92,61 @@ export function isAllowedTier3BrowserRequest(request, allowedBrowserOrigins)
 
 	if (!expected) return false;
 	const origin = request.headers.origin;
+	const expectedOrigin = _MatchesOrigin(origin, expected);
+	const codespacesOriginRewrite = _HasExpectedCodespacesOriginRewrite(request, origin, expected, allowedBrowserOrigins);
 
-	if (origin !== undefined && origin !== expected) return false;
+	if (origin !== undefined && !expectedOrigin && !codespacesOriginRewrite) return false;
 	const upgrade = request.headers.upgrade;
 
 	if (upgrade !== undefined && (typeof upgrade !== "string" || upgrade.toLowerCase() !== "websocket")) return false;
 	const requiresOrigin = !_SAFE_METHODS.has(request.method ?? "GET") || upgrade !== undefined;
-
-	if (!requiresOrigin) return true;
-	if (upgrade !== undefined) return origin === expected;
-	if (origin === expected) return true;
 	const referer = request.headers.referer;
+
+	if (!requiresOrigin) return referer === undefined || _MatchesOrigin(referer, expected);
+	if (upgrade !== undefined) return expectedOrigin || codespacesOriginRewrite;
+	if (expectedOrigin || codespacesOriginRewrite) return true;
 
 	if (typeof referer !== "string") return false;
 
-	try { return new URL(referer).origin === expected; }
+	return _MatchesOrigin(referer, expected);
+}
+
+/**
+ * Accepts the Codespaces loopback Origin rewrite only after the request selects the frozen external
+ * authority and supplies matching browser-generated Referer and same-origin fetch metadata.
+ */
+function _HasExpectedCodespacesOriginRewrite(request, origin, expected, allowedBrowserOrigins)
+{
+	if (typeof origin !== "string" || request.headers["sec-fetch-site"] !== "same-origin")
+		return false;
+	const external = new URL(expected);
+	const loopback = allowedBrowserOrigins.find(function _Loopback(candidate) { return new URL(candidate).hostname === "127.0.0.1"; });
+
+	if (external.protocol !== "https:" || external.hostname === "127.0.0.1" || !loopback)
+		return false;
+	const loopbackUrl = new URL(loopback);
+	const rewrittenOrigin = `https://localhost${loopbackUrl.port ? `:${loopbackUrl.port}` : ""}`;
+
+	if (!_MatchesOrigin(origin, rewrittenOrigin))
+		return false;
+	const host = request.headers.host;
+	const selectedOrigin = typeof host === "string" ? _OriginForAuthority(host, allowedBrowserOrigins) : undefined;
+	const forwardedOrigin = _ForwardedOrigin(request, allowedBrowserOrigins);
+
+	if (selectedOrigin !== expected && forwardedOrigin !== expected)
+		return false;
+	const referer = request.headers.referer;
+
+	return typeof referer === "string" && _MatchesOrigin(referer, expected);
+}
+
+/** Returns whether a supplied absolute URL normalises to one exact expected origin. */
+function _MatchesOrigin(value, expected)
+{
+	if (typeof value !== "string")
+		return false;
+
+	try { return new URL(value).origin === expected; }
 	catch { return false; }
 }
 
@@ -204,8 +244,8 @@ export async function closeTier3BrowserProxy(server)
 
 /**
  * Builds an ingress request from coordinator-owned trust values after discarding browser-supplied
- * forwarding and development-session claims. State-changing requests keep their browser origin but
- * rewrite it to the HTTPS ingress authority that the server is configured to trust.
+ * forwarding and development-session claims. Every admitted browser URL header is rewritten to the
+ * HTTPS ingress authority that the server is configured to trust.
  * @returns HTTPS request options pinned to the live certificate, Host, and server name.
  */
 export function buildTier3UpstreamRequestOptions(request, upstream, options)
@@ -217,11 +257,8 @@ export function buildTier3UpstreamRequestOptions(request, upstream, options)
 	headers.host = options.upstreamHost;
 	headers["x-forwarded-host"] = options.upstreamHost;
 	headers["x-forwarded-proto"] = "https";
-	if (!_SAFE_METHODS.has(request.method ?? "GET") || request.headers.upgrade?.toLowerCase() === "websocket")
-	{
-		if (typeof request.headers.origin === "string") headers.origin = `https://${options.upstreamHost}`;
-		if (typeof request.headers.referer === "string") headers.referer = `https://${options.upstreamHost}/`;
-	}
+	if (typeof request.headers.origin === "string") headers.origin = `https://${options.upstreamHost}`;
+	if (typeof request.headers.referer === "string") headers.referer = `https://${options.upstreamHost}/`;
 	return { protocol: upstream.protocol, hostname: upstream.hostname, port: upstream.port, method: request.method, path: request.url, headers, servername: options.upstreamHost, ca: options.upstreamCertificate, rejectUnauthorized: true };
 }
 
