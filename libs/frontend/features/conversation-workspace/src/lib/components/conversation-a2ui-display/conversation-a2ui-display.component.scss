@@ -1,0 +1,5 @@
+:host { display: block; min-inline-size: 0; }
+.conversation-a2ui-display { display: grid; min-inline-size: 0; gap: var(--oc-space-3); color: var(--oc-ink-default); }
+.conversation-a2ui-display__header { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--oc-space-2); }
+.conversation-a2ui-display__header span { color: var(--oc-ink-muted); font-size: var(--oc-text-sm); }
+a2ui-surface { min-inline-size: 0; }

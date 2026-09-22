@@ -35,6 +35,9 @@
                 @case (kinds.ToolActivity) {
                   <wo-conversation-status-line [status]="entry.status" />
                 }
+                @case (kinds.A2uiDisplay) {
+                  <wo-conversation-a2ui-display [presentation]="entry.display" />
+                }
               }
             }
           </section>

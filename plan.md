@@ -3,7 +3,32 @@
 ## MVP continuation — 2026-09-22
 
 The active goal remains the complete ten-track MVP, including delegation and scheduled agent work.
-The current source slice adds read-only `/settings/audit` and `/settings/usage` on top of local
+The current source slice adds read-only saved A2UI display replay on top of local checkpoint
+`6118a3dd233775d2b3d0e9fb639f68ea505063e6`. It reuses authorized conversation history and the installed
+SDK, with a strict finite catalogue, literal text, SDK-reference collision protection, bounded graph
+and UTF-8 replay work, and no actions/media/network requests. Replace, Patch, Remove, incomplete
+updates, access/selection clearing and cross-author isolation are covered by focused tests. The
+feature-local display host owns its states and stories; the existing mapper/presenter/transcript
+compose it without granting message or action authority. Independent source review passes after
+repairing UTF-8 accounting, sticky replay exhaustion, invalid-row limits, overflow-notice semantics
+and transcript heading levels. No production assistant A2UI producer is wired, and no runtime-question approval,
+private tool result exposure, permission change, install, VM, live account or deployment is involved.
+This is partial U2 source work, not U2 or MVP acceptance. Delegation remains paused: the user's
+"why limit?" asks for an explanation and is not approval of the proposed configurable defaults.
+
+The complete workspace suite passes 127 tests in 14 files; type checks and the production UI build
+pass. Style checks pass across 15 production files, Prisma boundaries across 303, and module growth
+reports no errors or review candidates. Five real-Chromium story interaction/accessibility checks
+pass. Five synthetic candidate captures also confirm no external requests, action/media elements
+or page overflow at 1280/390 pixels. These are fixture renders, not a live producer/history/reload
+journey. Screenshot comparison fails only because the five new Darwin references do not exist;
+baseline updates were explicitly disabled. Human visual review and Linux qualification remain open.
+The evidence gallery is `/private/tmp/opencrane-a2ui-evidence.5iObTq/REVIEW.md`.
+Live PR ancestry remains green at snapshot
+`78eb529231b682b688534ad072103c28bc4461f780e9a17ab56b322e9f083efc` (17 open PRs).
+This source slice is local and unpublished. Disk remains about 15 GiB free; no VM was recreated.
+
+The earlier reporting slice adds read-only `/settings/audit` and `/settings/usage` on top of local
 checkpoint `63e163d03f11b234c53ad571ad0d87fc5314866a`. It uses three narrow governance libraries:
 generated read contracts and validators, their HTTP adapter, and a feature that composes separate
 audit, recorded-usage and budget components. The browser app owns the existing Settings shell,
@@ -1903,7 +1928,7 @@ remain separate gates.
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry, durable resume and visible decision controls are implemented in draft #857. Company approver/connection binding and real action qualification remain. |
 | 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: durable persistence, Absurd admission and catalog completion pass CI in #876–#878. The reviewed candidate shared-file repair passes all 31 image-qualification cases in #881. The production provider is still unqualified. Authenticated composition, gateway/client wiring and product Remember, recall, Correct and Forget remain unfinished. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass review and CI in draft #862. Requested/running history producers pass source validation and independent review above #885; the existing transcript and status components are reused. Live qualification and other-participant controls remain separate. |
-| 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | PAUSED: runtime-question source work awaits its separate explicit approval; partial implementation is not validated delivery. Structured results and A2UI remain. |
+| 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | Read-only saved-display replay passes source review, 127 workspace tests and five browser fixture checks. A production producer, approved visual baselines and live acceptance remain. Runtime-question source is separately PAUSED pending approval. |
 | 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV production, encrypted capture, scanning and answer-link recovery are implemented in #879; all four combined recovery cases pass again in #880. The pending message-link SQL guard and governed hosted execution through authorized download remain to qualify. |
 | 7 | D1 — autonomous delegation | A bounded child works with explicit context and narrower authority, then returns one durable result. | Follow [#845](https://github.com/elewa-git/opencrane/issues/845): root budgets, depth/fan-out, cancellation and result brokering. |
 | 8 | S1 — scheduled work | A reviewed routine fires under current authority with explicit overlap, retry and missed-run policy. | Follow [#848](https://github.com/elewa-git/opencrane/issues/848) through Absurd and existing admission. |
@@ -2225,7 +2250,7 @@ their own completion track; they are not silently bundled into the first tool PR
 | T2 | IN PROGRESS: personal approval and durable resume pass local integration; company approval and real external-action qualification remain. |
 | U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
 | M1 | IN PROGRESS: persistence, transaction-bound Absurd admission and catalog completion pass CI in #876–#878. The reviewed candidate shared-file repair passes all 31 image-qualification cases in #881. Authenticated composition, gateway/client integration and product memory journeys remain. The separate production-provider qualification still fails. |
-| U2 | PAUSED: partial runtime-question source awaits its separate explicit approval. |
+| U2 | Read-only A2UI replay passes source review and fixture checks; production producer, visual approval and live proof remain. Runtime-question source is separately PAUSED pending explicit approval. |
 | F1 | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV capture, scanning and answer-link recovery are implemented in #879 and pass four real-store cases in #880. The pending SQL guard and complete hosted execution/download qualification remain. |
 | D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |
 | Q1 — operational acceptance | CONTINUOUS — source checks and CI do not replace fresh-install or real-account acceptance. |

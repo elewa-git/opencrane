@@ -6,7 +6,7 @@
 
 This package owns the normal workspace where a participant can open, create, read, and contribute
 to direct, group, and Agent-session conversations. Its thin page composes the approved conversation,
-asset, Activity, elicitation, and A2UI elements. A component-scoped presenter derives browser-safe display
+asset, Activity and elicitation elements, plus its read-only A2UI display component. A component-scoped presenter derives browser-safe display
 models and delegates every command to the existing state stores. Its feature-local route coordinator
 owns index/selection URLs and sign-in recovery through the platform seam.
 The existing creation dialog disables its choices during submission. A failed request keeps the
@@ -70,6 +70,50 @@ Immutable artifact blocks render through the existing asset card only when the c
 asset projection matches artifact id, artifact revision id, and message id. Missing or conflicting
 coordinates produce a non-actionable unavailable card rather than a filename-based join.
 
+### Read-only structured results
+
+`a2ui/` reconstructs saved A2UI entries from the same authorized history and payload response.
+The transcript places each display at its latest entry, keeping different conversations and stamped
+author identities separate even when they choose the same `surfaceId`. Reconstruction starts empty
+on every projection; the existing store's selection/access purge therefore drops all display content.
+No renderer subscribes to events, reads private tool results, or requests additional data.
+
+The history adapter admits `a2uiSchemaVersion: "0.8"` with a JSON **array** of the installed SDK's
+`surfaceUpdate`, `beginRendering`, `dataModelUpdate` and `deleteSurface` messages per payload. This
+array framing is a new display-adapter contract, not proof of compatibility with a running producer.
+No production assistant A2UI writer is wired in this slice. A producer, accessible interactive
+choices/forms and their server-owned action/audit path remain separate MVP work.
+
+| Previous display | Replace | Patch | Remove / final deleteSurface |
+| --- | --- | --- | --- |
+| Absent or removed | Rebuild from empty | Unavailable; requires Replace | No row |
+| Waiting or ready | Discard old content and rebuild | Apply to retained definitions/data | Discard content; no row |
+| Invalid wire data or graph | Rebuild from empty | Remains unavailable | No row |
+
+A valid but incomplete root, child or string binding shows Waiting without the previous tree.
+Unsupported or malformed payloads/graphs show fixed Unavailable copy, never raw error or payload
+text. A binding to a number or object is unavailable until a string update or Replace repairs it.
+The adjacent strict validator refuses unknown fields, action/media/form components, remote/custom
+catalogues, agent styles and template expansion. JSON-shaped `valueString` data is also refused:
+the installed SDK otherwise parses it implicitly and can log malformed content. Use literal Text
+for JSON-looking display text. Root data must be a map, while scalar updates require a named path.
+
+The component catalogue contains escaped literal Text, Row, Column, Card and horizontal Divider.
+All heading hints map to `h2` beneath the page-owned heading; no agent can create another page `h1`.
+SDK ids are internally renamed to prevent its generic string resolver from treating literal text
+as a child reference. Binding values are resolved once before rendering; raw definitions, unused
+data and styles are removed from the public snapshot. Catalogue, theme and SDK infrastructure are
+component-scoped. The host has one presentation input and no outputs or action handlers.
+
+Browser work is limited to 64 KiB and 64 messages per payload; 512 KiB and 512 messages between
+Replace entries; 256 stored/expanded components and 16 layout levels per display; and 4 MiB of
+UTF-8 input per history projection. At most 32 non-removed display rows are retained, including
+invalid ones, plus one fixed overflow notice. Remove frees a display slot; a skipped Patch still
+needs a fresh Replace. The generic OpenCrane overflow notice stays for the remainder of that
+replay, even if a skipped key is subsequently removed or deleted: forgetting one skipped key does
+not prove that all earlier omitted history is now shown. The per-display table above does not
+remove this history-limit notice. These are rendering/resource safeguards, not assistant reasoning limits.
+
 A person can select their own posted group message and choose **Ask company assistant**. The picker
 uses the server's permitted company-assistant directory; an empty directory explains that an
 administrator must provision an assistant and grant access. It never substitutes the personal agent.
@@ -111,6 +155,8 @@ is reset, so reloading cannot reopen a stale modal over the access-change explan
   presentation without owning state or navigation.
 - `ConversationWorkspaceConnectionStatusComponent` places stream recovery status beside a reconnect
   intent. It displays only presenter-provided copy and never opens a history connection itself.
+- `ConversationA2uiDisplayComponent` accepts a feature-local read-only snapshot or Waiting/Unavailable
+  presentation. It never receives private payloads, resolves bindings or emits an action.
 - The feature-local list and create controls render privacy-safe rows and immutable conversation mode
   choices. Each session row is one line: its prefix glyph communicates completed onboarding, Agent,
   direct, group, or closed state while selection changes only the row background. Completed onboarding
@@ -124,9 +170,10 @@ is reset, so reloading cannot reopen a stale modal over the access-change explan
 This feature does not call HTTP, open or persist conversation connections, authorize participants, or decide
 whether a message creates an Agent run. Those rules remain in the backend and typed state ports. Its
 connection bar emits a reconnect intent; the workspace store owns the replacement history connection and preserves
-the draft and accepted live projection. It never treats a display role as identity and never renders
-secrets. A2UI returned by an Agent remains unavailable in this phase because its actions have no
-server-owned capability or audit path.
+the draft and accepted live projection. It never treats a display role as identity or upgrades a
+private tool result into participant-visible data. A2UI actions remain unavailable because their
+server-owned capability and audit path are not wired; the finite read-only subset above creates no
+such authority.
 
 The platform bridge is the sole owner of browser popup, anchor, and object-URL effects. The file
 coordinator prepares that capability before awaiting the existing participant-authorized read and

@@ -7,6 +7,8 @@ import { ConversationAssetDisposition, ConversationAssetProvenance } from "@open
 import { ConversationAssetContentCommandStates } from "@opencrane/state/conversation/assets";
 import { ConversationWorkspaceTranscriptEntryKinds, type ConversationWorkspaceTranscriptEntry } from "../../../presentation/conversation-workspace-presentation.types";
 import { ConversationWorkspaceTranscriptComponent } from "../conversation-workspace-transcript.component";
+import { _ConversationEntryViews } from "../../../conversation-workspace.mapper";
+import { _DisplayEntry, _DisplayMessages, _TextComponent } from "../../../a2ui/__tests__/conversation-a2ui.fixtures";
 
 /** Long public name proves text escaping and wrapping without exposing execution coordinates. */
 const _LONG_TOOL_NAME = `${"Customer records archive ".repeat(6)}<review>`;
@@ -14,6 +16,9 @@ const _LONG_TOOL_DETAIL = `${_LONG_TOOL_NAME}: result received. The assistant ma
 
 /** Participant question reused by the PDF-informed transcript state. */
 const _QUESTION_ENTRY: Extract<ConversationWorkspaceTranscriptEntry, { kind: ConversationWorkspaceTranscriptEntryKinds.Message }> = { kind: ConversationWorkspaceTranscriptEntryKinds.Message, id: "question", message: { id: "question", authorName: "You", authorInitials: "Y", avatarTone: AvatarTones.Blue, timestampLabel: "09:30", body: "", tone: ConversationMessageTones.Participant }, richText: { messageId: "question", html: "<p>Find the current customer status.</p>", label: "Your message" }, requestSource: null, shareSource: null, children: [], attachments: [] };
+
+/** Keeps the synthetic inventory question consistent with its structured result. */
+const _INVENTORY_QUESTION = { ..._QUESTION_ENTRY, richText: { ..._QUESTION_ENTRY.richText, html: "<p>How many inventory units are recorded in Kisumu?</p>" } };
 
 /** Typical message followed by durable tool evidence and the assistant's final answer. */
 const _RESULT_ENTRIES: readonly ConversationWorkspaceTranscriptEntry[] = [
@@ -34,6 +39,15 @@ export default meta;
 type Story = StoryObj<ConversationWorkspaceTranscriptComponent>;
 /** A selected conversation without messages invites the first contribution. */
 export const Empty: Story = { tags: ["visual-test"], args: { entries: [] } };
+
+/** Exercises saved-history replay through the real transcript, without an agent-producer claim. */
+export const SavedStructuredResult: Story = { tags: ["read-only-a2ui", "visual-test", "visual-test-narrow"], parameters: { docs: { description: { story: "Synthetic authorized-history fixture replayed through the transcript. No live assistant producer, action or retry path is claimed." } } }, args: { entries: [_INVENTORY_QUESTION, ..._ConversationEntryViews([_DisplayEntry()], { "payload-1": JSON.stringify(_DisplayMessages([_TextComponent("body", "Kisumu inventory: 42 units <review>")])) })] }, play: async function _ReadOnlyResult({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	expect(canvas.getByText("Kisumu inventory: 42 units <review>", { exact: true })).toBeVisible();
+	expect(canvasElement.querySelector("review")).toBeNull();
+	expect(canvas.queryByRole("button")).not.toBeInTheDocument();
+} };
 
 /** Preserves tool-result evidence separately from the final assistant answer. */
 export const ToolResultAndAnswer: Story = { tags: ["visual-test"], args: { entries: _RESULT_ENTRIES }, play: async function _Evidence({ canvasElement })
