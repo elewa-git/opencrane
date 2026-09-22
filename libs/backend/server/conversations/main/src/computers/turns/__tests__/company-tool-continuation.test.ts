@@ -1,21 +1,24 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ConversationModelResponseKinds, ConversationModelToolModes } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ConversationEntryKinds, ConversationModelResponseKinds, ConversationModelToolModes } from "@opencrane/contracts";
 
 import { ConversationComputerToolResultOutcomes } from "../conversation-computer-continuation.types";
 import { ConversationComputerTurnProtocolStates } from "../conversation-computer-turn-protocol.types";
 import { _ToolContinuationHarness } from "./conversation-tool-continuation.fixture";
+import { _ConversationComputerOutputIntents } from "../output/conversation-computer-output-receipt";
+import { _StructuredInventoryResult } from "../output/__tests__/conversation-structured-output.fixture";
 
 /** Keeps time and injected restart failures isolated between cases. */
 afterEach(function _Restore() { vi.restoreAllMocks(); });
 
 /** Runs the real turn and encrypted-custody owners with the limits published for new company assistants. */
-async function _CompanyHarness()
+async function _CompanyHarness(finalOutput = CompiledFinalOutputModes.Text)
 {
 	const f = await _ToolContinuationHarness(8, 32_000, function _CompanyLimits(candidate)
 	{
 		Object.assign(candidate, { compiledInput: {
 			...candidate.compiledInput,
+			finalOutput,
 			model: { ...candidate.compiledInput.model, maxOutputTokens: 4_096 },
 			budget: { maxCompletionTokens: 32_000, maxModelTurns: 9, maxToolInvocations: 8, maxCostUsdMicros: null, maxLoopIterations: 8, wallClockDeadlineEpochMs: Date.now() + 120_000 },
 		} });
@@ -37,6 +40,17 @@ async function _CompanyHarness()
 		const call = f.calls[input.history.length]!;
 		return { kind: ConversationModelResponseKinds.Tool, call: { ...call, arguments: JSON.stringify({ query }) } };
 	});
+	if (finalOutput === CompiledFinalOutputModes.Conversation)
+	{
+		const request = f.model.request.getMockImplementation()!;
+		f.model.request.mockImplementation(async function _FinalDisplay(input)
+		{
+			const response = await request(input);
+			if (response.kind === ConversationModelResponseKinds.Text)
+				return { ...response, display: _StructuredInventoryResult() };
+			return response;
+		});
+	}
 	return f;
 }
 
@@ -62,24 +76,43 @@ async function _AssertCompleted(f: Awaited<ReturnType<typeof _CompanyHarness>>)
 	expect(f.rows.size).toBe(16);
 	expect(f.outputPayloads.store).toHaveBeenCalledOnce();
 	expect([...f.payloads.values()].map(payload => payload.text)).toEqual(["Reconciled through private-result-8"]);
-	expect(f.history.streams.get(f.stream)).toHaveLength(3);
+	const structured = f.candidate.compiledInput.finalOutput === CompiledFinalOutputModes.Conversation;
+	const receipt = turn.protocol.output!.receipt;
+	const intents = _ConversationComputerOutputIntents(receipt);
+	expect(intents.map(intent => intent.event.data.entry.kind)).toEqual(structured ? [ConversationEntryKinds.Message, ConversationEntryKinds.A2UI] : [ConversationEntryKinds.Message]);
+	expect(f.history.streams.get(f.stream)).toHaveLength(structured ? 4 : 3);
+	expect(f.history.streams.get(f.stream)!.slice(2).map(event => event.data)).toEqual(intents.map(intent => intent.event.data));
+	if (structured)
+	{
+		expect(receipt.display!.event.data.entry.position).toBe((BigInt(receipt.event.data.entry.position) + 1n).toString());
+		const payload = [...f.payloads.values()][0].display!;
+		expect(payload).toContain("42 recorded units");
+		expect(payload).not.toContain("private-result");
+	}
+	const publicHistory = JSON.stringify(f.history.streams.get(f.stream)!.map(event => ({ data: event.data, metadata: event.metadata })));
+	for (const value of ["private-result", "private-query", "Private assistant declaration", "test-only-key", "42 recorded units"])
+		expect(publicHistory).not.toContain(value);
 	expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
+	expect((await f.store.load(f.step))!.protocol.output!.receipt).toEqual(receipt);
 	expect(f.model.request).toHaveBeenCalledTimes(9);
 	expect(f.toolFlags.executions).toBe(8);
 }
 
 describe("company assistant multi-step limits", function _Suite()
 {
-	it("uses each saved result in the next tool arguments and reserves an answer within the original allowance", async function _DependentCalls()
+	it.each([CompiledFinalOutputModes.Text, CompiledFinalOutputModes.Conversation])("uses each saved result in the next tool arguments and reserves a %s answer within the original allowance", async function _DependentCalls(finalOutput)
 	{
-		const f = await _CompanyHarness();
+		const f = await _CompanyHarness(finalOutput);
 		expect(await f.authority.advance(f.step)).toEqual({ outcome: "completed" });
 		await _AssertCompleted(f);
 	});
 
-	it.each([5, 9])("resumes before model call %s without repeating saved calls or renewing the budget", async function _Restart(ordinal)
+	it.each([
+		{ ordinal: 5, finalOutput: CompiledFinalOutputModes.Text }, { ordinal: 9, finalOutput: CompiledFinalOutputModes.Text },
+		{ ordinal: 5, finalOutput: CompiledFinalOutputModes.Conversation }, { ordinal: 9, finalOutput: CompiledFinalOutputModes.Conversation },
+	])("resumes before model call $ordinal with $finalOutput without repeating saved calls or renewing the budget", async function _Restart({ ordinal, finalOutput })
 	{
-		const f = await _CompanyHarness();
+		const f = await _CompanyHarness(finalOutput);
 		let interrupted = false;
 		f.history.beforeAppend = async function _InterruptReservation(command)
 		{

@@ -56,6 +56,14 @@ an explicit no-personal-memory policy: preference and dataset repositories are s
 provisioning and memory recall remain future work; an enabled policy with no valid dataset still
 denies admission.
 
+Compilation derives the required `finalOutput` mode from the saved conversation ID: a conversation
+run receives Conversation mode, while a run without a conversation receives Text mode. Personal and
+company conversations receive the same final-answer instructions, appended after their existing
+persona and resource context. The instructions require a JSON object with ordinary answer text and
+an optional complete static A2UI 0.8 display. Both the mode and instructions are included in the
+compiled digest; the compiler version changes with this contract. Tool declarations keep their
+existing protocol, and non-conversation instructions remain unchanged.
+
 ```
  run request  (runId · silo · service · conversation? · subject · idempotency key)
           │  __AssembleRunInputSnapshot

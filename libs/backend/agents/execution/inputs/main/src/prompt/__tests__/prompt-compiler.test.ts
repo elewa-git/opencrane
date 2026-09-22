@@ -1,11 +1,12 @@
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
-import { PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, type CompiledModelRoute, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, type CompiledModelRoute, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { __AppendCompiledTool, __CompileRunInput } from "../prompt-compiler";
 import type { PromptCompilerRepositories } from "../prompt-compiler.types";
+import { _CONVERSATION_FINAL_OUTPUT_INSTRUCTIONS } from "../conversation-final-output-instructions";
 
 /** Build one schema-bound snapshot tool definition. */
 function _snapshotTool(name: string)
@@ -140,9 +141,33 @@ describe("__CompileRunInput", function _describeCompiler()
 		expect(compiled.instructions).toBe(
 			"You are a careful assistant.\n\n"
 			+ "Artifacts available for this run:\n- artifact art-1\n- artifact art-2\n\n"
-			+ "Skills available for this run:\n- skill skill-1",
+			+ "Skills available for this run:\n- skill skill-1\n\n"
+			+ _CONVERSATION_FINAL_OUTPUT_INSTRUCTIONS,
 		);
 		expect(JSON.stringify(compiled)).not.toContain("fact-1");
+	});
+
+	it("selects the final format from conversation ownership and seals it into the digest", async function _FinalFormat()
+	{
+		const conversation = await __CompileRunInput(_snapshot(), 1, _repositories());
+		const background = await __CompileRunInput(_snapshot({ conversationId: null }), 1, _repositories());
+		expect(conversation.finalOutput).toBe(CompiledFinalOutputModes.Conversation);
+		expect(conversation.instructions).toContain("exactly one JSON object with required text and optional display");
+		expect(conversation.instructions).toContain("surfaceUpdate, then beginRendering");
+		expect(conversation.instructions).toContain("literal text only");
+		expect(background.finalOutput).toBe(CompiledFinalOutputModes.Text);
+		expect(background.instructions).not.toContain("Final conversation answer format:");
+		const { digest, ...payload } = conversation;
+		expect(digest).toBe(___DigestCanonicalJson(payload as unknown as JsonValue));
+		expect(___DigestCanonicalJson({ ...payload, finalOutput: CompiledFinalOutputModes.Text } as unknown as JsonValue)).not.toBe(digest);
+	});
+
+	it("gives a company conversation the same final format without requiring personal instructions", async function _CompanyFinalFormat()
+	{
+		const company = await __CompileRunInput(_snapshot({ personaRevisionId: null }), 1, _repositories());
+		expect(company.finalOutput).toBe(CompiledFinalOutputModes.Conversation);
+		expect(company.instructions).toContain(_CONVERSATION_FINAL_OUTPUT_INSTRUCTIONS);
+		expect(company.instructions).not.toContain("You are a careful assistant.");
 	});
 
 	it("produces byte-identical output for the same snapshot across repeated compilations", async function _deterministic()

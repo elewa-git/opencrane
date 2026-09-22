@@ -1,18 +1,47 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ConversationMessageContentBlockKinds, ConversationModelToolModes, type ArtifactMessageContentBlock } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ConversationEntryKinds, ConversationMessageContentBlockKinds, ConversationModelResponseKinds, ConversationModelToolModes, type ArtifactMessageContentBlock } from "@opencrane/contracts";
 
 import { ConversationGeneratedFileResultStates } from "../../tools/results/conversation-generated-file-result.types";
 import { ConversationComputerToolResultOutcomes } from "../conversation-computer-continuation.types";
 import { _ToolContinuationHarness } from "./conversation-tool-continuation.fixture";
+import { _ConversationComputerOutputIntents } from "../output/conversation-computer-output-receipt";
+import { _StructuredInventoryResult } from "../output/__tests__/conversation-structured-output.fixture";
 
 afterEach(function _RestoreClock() { vi.restoreAllMocks(); });
 
+/** Adds a display to final model text while preserving the existing tool and artifact progression. */
+async function _generatedFileHarness(finalOutput: CompiledFinalOutputModes)
+{
+	const f = await _ToolContinuationHarness(1, 100, function _FinalMode(candidate)
+	{
+		Object.assign(candidate, { compiledInput: { ...candidate.compiledInput, finalOutput } });
+	});
+	const request = f.model.request.getMockImplementation()!;
+	f.model.request.mockImplementation(async function _FinalDisplay(input)
+	{
+		const response = await request(input);
+		if (finalOutput === CompiledFinalOutputModes.Conversation && response.kind === ConversationModelResponseKinds.Text)
+			return { ...response, display: _StructuredInventoryResult() };
+		return response;
+	});
+	const complete = f.runLifecycle.complete.getMockImplementation()!;
+	f.runLifecycle.complete.mockImplementation(async function _CompleteAfterExactHistory()
+	{
+		const receipt = (await f.store.load(f.step))!.protocol.output!.receipt;
+		const intents = _ConversationComputerOutputIntents(receipt);
+		expect(intents.map(intent => intent.event.data.entry.kind)).toEqual(finalOutput === CompiledFinalOutputModes.Conversation ? [ConversationEntryKinds.Message, ConversationEntryKinds.A2UI] : [ConversationEntryKinds.Message]);
+		expect(f.history.streams.get(f.stream)!.slice(2).map(event => event.data)).toEqual(intents.map(intent => intent.event.data));
+		await complete();
+	});
+	return f;
+}
+
 describe("generated file continuation", function _GeneratedFileContinuation()
 {
-	it("recovers one saved answer and attachment after its SQL link fails without another model call", async function _RecoverAttachment()
+	it.each([CompiledFinalOutputModes.Text, CompiledFinalOutputModes.Conversation])("recovers a saved %s answer and attachment after its SQL link fails without another model call", async function _RecoverAttachment(finalOutput)
 	{
-		const f = await _ToolContinuationHarness();
+		const f = await _generatedFileHarness(finalOutput);
 		const read = f.results.read.getMockImplementation()!;
 		const artifact: ArtifactMessageContentBlock = { id: "asset-1", kind: ConversationMessageContentBlockKinds.Artifact, artifactId: "artifact-1", artifactRevisionId: "revision-1", name: "counties.csv", mediaType: "text/csv;charset=utf-8" };
 		f.results.read.mockImplementation(async function _FileResult(turn)
@@ -28,18 +57,21 @@ describe("generated file continuation", function _GeneratedFileContinuation()
 		const saved = (await f.store.load(f.step))!;
 		expect(saved.protocol.output!.receipt!.event.data.entry).toMatchObject({ blocks: [{ kind: "text" }, artifact] });
 		expect(f.flags.runState).toBe("running");
+		expect(f.runLifecycle.complete).not.toHaveBeenCalled();
 		expect(f.model.request).toHaveBeenCalledTimes(2);
 		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
 		expect(f.fileLinks.link).toHaveBeenCalledTimes(2);
 		expect(f.flags.runState).toBe("completed");
 		expect((await f.store.load(f.step))!.protocol.output?.receipt).toEqual(saved.protocol.output!.receipt);
-		expect(f.history.streams.get(f.stream)).toHaveLength(3);
+		expect(f.history.streams.get(f.stream)).toHaveLength(finalOutput === CompiledFinalOutputModes.Conversation ? 4 : 3);
 		expect(f.model.request).toHaveBeenCalledTimes(2);
+		expect(f.toolFlags).toMatchObject({ executions: 1, acknowledgements: 1 });
+		expect(f.flags.payloadWrites).toBe(1);
 	});
 
-	it("settles an already-linked answer after lease expiry without creating another output", async function _LinkedRecoveryAfterExpiry()
+	it.each([CompiledFinalOutputModes.Text, CompiledFinalOutputModes.Conversation])("settles an already-linked %s answer after lease expiry without creating another output", async function _LinkedRecoveryAfterExpiry(finalOutput)
 	{
-		const f = await _ToolContinuationHarness();
+		const f = await _generatedFileHarness(finalOutput);
 		const read = f.results.read.getMockImplementation()!;
 		f.results.read.mockImplementation(async function _FileResult(turn)
 		{
@@ -53,13 +85,16 @@ describe("generated file continuation", function _GeneratedFileContinuation()
 		expect(f.runLifecycle.enterRecoveryRequired).not.toHaveBeenCalled();
 		expect(f.fileLinks.link).toHaveBeenCalledOnce();
 		const saved = (await f.store.load(f.step))!.protocol.output?.receipt;
+		expect(saved!.event.data.entry).toMatchObject({ kind: ConversationEntryKinds.Message, blocks: [{ kind: ConversationMessageContentBlockKinds.Text }, { kind: ConversationMessageContentBlockKinds.Artifact, artifactRevisionId: "revision-1" }] });
 		f.current.lease.expiresAt = "2000-01-01T00:00:00.000Z";
 		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
 		expect(f.fileLinks.link).toHaveBeenCalledTimes(2);
 		expect(f.flags.runState).toBe("completed");
 		expect((await f.store.load(f.step))!.protocol.output?.receipt).toEqual(saved);
-		expect(f.history.streams.get(f.stream)).toHaveLength(3);
+		expect(f.history.streams.get(f.stream)).toHaveLength(finalOutput === CompiledFinalOutputModes.Conversation ? 4 : 3);
 		expect(f.model.request).toHaveBeenCalledTimes(2);
+		expect(f.toolFlags).toMatchObject({ executions: 1, acknowledgements: 1 });
+		expect(f.flags.payloadWrites).toBe(1);
 	});
 
 	it("waits across restart without dispatching again or replenishing the original allowance", async function _WaitAndContinue()

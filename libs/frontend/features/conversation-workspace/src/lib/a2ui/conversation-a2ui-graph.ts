@@ -1,6 +1,5 @@
-import type { ConversationA2uiComponent } from "./conversation-a2ui-message.types";
+import { CONVERSATION_A2UI_COMPONENT_LIMIT, CONVERSATION_A2UI_DEPTH_LIMIT, type ConversationA2uiComponent } from "@opencrane/contracts";
 import type { ConversationA2uiFrame } from "./conversation-a2ui-replay.types";
-import { CONVERSATION_A2UI_COMPONENT_LIMIT, CONVERSATION_A2UI_DEPTH_LIMIT } from "./conversation-a2ui-message.validator";
 
 /** Returns only the static references admitted by the adjacent protocol validator. */
 export function _ConversationA2uiChildren(component: ConversationA2uiComponent): readonly string[]

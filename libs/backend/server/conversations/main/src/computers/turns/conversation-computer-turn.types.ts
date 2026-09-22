@@ -4,7 +4,7 @@ import type { ConversationComputerModelProgress, ConversationComputerModelTransp
 import type { ConversationComputerModelRejection, ConversationComputerModelRetryClaim } from "./conversation-computer-model-retry.types";
 import type { ConversationComputerTurnBudget, ConversationComputerTurnCancellationReceipt, ConversationComputerTurnModelReservation, ConversationComputerTurnOutputReceipt, ConversationComputerTurnProtocolProjection, ConversationComputerTurnToolResult, ConversationComputerTurnToolSelection, ConversationComputerTurnUnavailableReceipt } from "./conversation-computer-turn-protocol.types";
 import type { ConversationToolProposalAdmission } from "../tools/proposal/conversation-tool-proposal.types";
-import type { AgentScope, ClaimedLeaseScope, CompiledRunInput, ComputerScope, LeaseScope } from "@opencrane/contracts";
+import type { AgentScope, ClaimedLeaseScope, CompiledRunInput, ComputerScope, ConversationA2uiDisplay, LeaseScope } from "@opencrane/contracts";
 import type { PersonalConversationExecutionSubjectCoordinates } from "@opencrane/backend/agents/execution/inputs";
 import type { Logger } from "@opencrane/backend/observability";
 import type { RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
@@ -14,6 +14,7 @@ import type { ConversationComputerLeaseCoordinates } from "@opencrane/backend/se
 import type { ConversationComputerReviewCredentialDeriver } from "../review/conversation-computer-review.types";
 import type { ConversationToolResultNotificationPort } from "./tool-result-notifications/conversation-tool-result-notification.types";
 import type { ConversationToolRequestedNotificationPort } from "./tool-progress-notifications/conversation-tool-progress-notification.types";
+import type { ConversationComputerOutputPayload } from "./output/conversation-computer-output.types";
 
 /** Coordinates a sandbox Pod must prove before receiving its review credential. */
 export interface ConversationComputerPodLeaseCommand
@@ -72,6 +73,8 @@ export interface ConversationComputerOutputCommand
 	readonly modelNotAfterEpochMs: number;
 	/** Plain assistant text accepted only into encrypted private payload storage. */
 	readonly text: string;
+	/** Holds one participant-facing display from the same model response, never raw tool result data. */
+	readonly display?: ConversationA2uiDisplay;
 }
 
 /** Product authority shared by the lease-fenced review credential route and durable server workflow. */
@@ -323,7 +326,8 @@ export interface ConversationComputerCredentialIssuer
 /** Persists assistant text as an encrypted payload and returns its non-secret message block reference. */
 export interface ConversationComputerOutputPayloadStore
 {
-	store(turn: FrozenConversationComputerTurn, sourceCommandId: string, text: string): Promise<{ readonly blockId: string; readonly payloadRef: string; readonly ciphertextDigest: string }>;
+	/** Saves the complete output identity and encrypted content together; changed retries are refused. */
+	store(turn: FrozenConversationComputerTurn, sourceCommandId: string, text: string, display?: string | null): Promise<ConversationComputerOutputPayload>;
 }
 
 /** Creates the single-use writer whose binding was frozen with the bootstrap. */

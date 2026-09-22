@@ -1,4 +1,4 @@
-import type { ConversationModelDelivery } from "@opencrane/contracts";
+import type { CompiledFinalOutputModes, ConversationModelDelivery } from "@opencrane/contracts";
 
 /**
  * Classifies transport failures without carrying prompts, credentials or remote error text.
@@ -52,6 +52,8 @@ export interface PreparedConversationModelRequest
 	readonly deadlineEpochMs: number;
 	/** Lists the offered names captured before dispatch; an empty list forbids tool responses. */
 	readonly offeredToolNames: readonly string[];
+	/** Captures the final format before dispatch so caller mutation cannot change response interpretation. */
+	readonly finalOutput: CompiledFinalOutputModes;
 	/** Records preparation time so a receipt cannot name an already-ended rate-limit window. */
 	readonly preparedAtEpochMs: number;
 	/** Captures saved send coordinates before caller-owned objects can change. */

@@ -1,6 +1,7 @@
 import type { TextNode } from "@a2ui/web_core/v0_8";
+import type { ConversationA2uiComponent } from "@opencrane/contracts";
 import { ConversationA2uiDisplayStates } from "../conversation-a2ui-display.types";
-import type { ConversationA2uiComponent, ConversationA2uiMessage } from "../conversation-a2ui-message.types";
+import type { ConversationA2uiMessage } from "../conversation-a2ui-message.types";
 import { _ConversationA2uiDisplays } from "../conversation-a2ui-replay";
 import { _DisplayEntry, _DisplayMessages, _RemoveEntry, _TextComponent } from "./conversation-a2ui.fixtures";
 

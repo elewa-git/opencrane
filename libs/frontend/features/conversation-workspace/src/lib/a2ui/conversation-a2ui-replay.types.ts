@@ -1,7 +1,5 @@
 import type { DataModelUpdate } from "@a2ui/web_core/v0_8";
-import type { A2UIEntry } from "@opencrane/contracts";
-
-import type { ConversationA2uiComponent } from "./conversation-a2ui-message.types";
+import type { A2UIEntry, ConversationA2uiComponent } from "@opencrane/contracts";
 
 /** Mutable reconstruction owned by one synchronous projection, never shared with the renderer. */
 export interface ConversationA2uiFrame

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ConversationModelResponseKinds, ConversationModelToolModes, type ConversationModelRequest, type ConversationModelToolCall, type CompiledToolDefinition } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ConversationModelResponseKinds, ConversationModelToolModes, type ConversationModelRequest, type ConversationModelToolCall, type CompiledToolDefinition } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __RequestConversationModel } from "../core/conversation-model";
@@ -33,6 +33,7 @@ function _request(overrides: Partial<ConversationModelRequest> = {}): Conversati
 	return {
 		compiledInput: {
 			promptCompilerVersion: "test-compiler", runId: "run-1", attempt: 1, instructions: "Private instructions.",
+			finalOutput: CompiledFinalOutputModes.Text,
 			messages: [{ role: "user", content: "Private question." }, { role: "assistant", content: "Earlier answer." }],
 			tools: [], model: { modelAlias: "admitted-model", maxOutputTokens: 400, generatedOutputCapabilities: [] },
 			budget: { maxModelTurns: 1, maxCompletionTokens: 300, maxCostUsdMicros: 1000, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: _NOW + 60_000 },

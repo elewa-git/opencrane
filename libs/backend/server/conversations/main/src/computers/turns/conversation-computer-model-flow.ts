@@ -101,7 +101,7 @@ async function _DispatchReservedModel(turn: FrozenConversationComputerTurn, rese
 	}
 	if (response.kind === ConversationModelResponseKinds.Text)
 	{
-		await appendOutput({ bootstrapId: turn.bootstrapId, sourceCommandId: reservation.invocationFence, modelInvocationFence: reservation.invocationFence, modelNotAfterEpochMs: notAfter, text: response.text });
+		await appendOutput({ bootstrapId: turn.bootstrapId, sourceCommandId: reservation.invocationFence, modelInvocationFence: reservation.invocationFence, modelNotAfterEpochMs: notAfter, text: response.text, ...(response.display === undefined ? {} : { display: response.display }) });
 		return { outcome: ConversationComputerModelProgressOutcomes.Completed };
 	}
 	if (reservation.tools !== ConversationModelToolModes.Select || response.kind !== ConversationModelResponseKinds.Tool)

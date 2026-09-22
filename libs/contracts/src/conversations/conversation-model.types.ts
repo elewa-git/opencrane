@@ -1,5 +1,6 @@
 import type { CompiledRunInput } from "../inputs/compiled-run-input.types";
 import type { ConversationModelDelivery, ConversationModelPreForwardReceipt } from "./conversation-model-retry.types";
+import type { ConversationA2uiDisplay } from "./conversation-a2ui.types";
 
 /**
  * Selects whether an admitted model request may propose a tool. The conversation owner and model
@@ -59,6 +60,8 @@ export type ConversationModelResponse =
 		readonly kind: ConversationModelResponseKinds.Text;
 		/** Preserves the accepted answer exactly, including surrounding whitespace. */
 		readonly text: string;
+		/** Carries an optional complete display decoded only when the frozen output mode permits it. */
+		readonly display?: ConversationA2uiDisplay;
 	}
 	| {
 		/** Requires the caller to retain and admit the proposal before executing it. */

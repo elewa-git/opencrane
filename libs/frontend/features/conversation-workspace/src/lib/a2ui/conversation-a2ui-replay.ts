@@ -1,8 +1,8 @@
-import { ConversationA2UIOperations, ConversationAuthorKinds, ConversationEntryKinds, type A2UIEntry, type ConversationEntry } from "@opencrane/contracts";
+import { CONVERSATION_A2UI_PAYLOAD_BYTES, ConversationA2UIOperations, ConversationAuthorKinds, ConversationEntryKinds, type A2UIEntry, type ConversationEntry } from "@opencrane/contracts";
 
 import { ConversationA2uiDisplayStates, type ConversationA2uiDisplayPresentation } from "./conversation-a2ui-display.types";
 import { _ConversationA2uiGraphComplete } from "./conversation-a2ui-graph";
-import { CONVERSATION_A2UI_PAYLOAD_BYTES, _ParseConversationA2uiMessages } from "./conversation-a2ui-message.validator";
+import { _ParseConversationA2uiMessages } from "./conversation-a2ui-message.validator";
 import type { ConversationA2uiFrame, ConversationA2uiReplay } from "./conversation-a2ui-replay.types";
 import { _ConversationA2uiSnapshot } from "./conversation-a2ui-snapshot";
 

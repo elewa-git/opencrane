@@ -1,4 +1,5 @@
-import { CONVERSATION_A2UI_CATALOGUE, _ParseConversationA2uiMessages } from "../conversation-a2ui-message.validator";
+import { CONVERSATION_A2UI_CATALOGUE } from "@opencrane/contracts";
+import { _ParseConversationA2uiMessages } from "../conversation-a2ui-message.validator";
 import { _DisplayMessages, _TextComponent } from "./conversation-a2ui.fixtures";
 
 describe("Read-only A2UI payload boundary", function _DisplayPayload()

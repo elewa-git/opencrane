@@ -100,7 +100,7 @@ async function _exchange(prepared: PreparedConversationModelRequest, signal: Abo
 	let result: ConversationModelResponse;
 	try
 	{
-		result = ___ParseAndValidateJson(text, "Conversation model response", _ValidateConversationModelResponse, prepared.offeredToolNames);
+		result = ___ParseAndValidateJson(text, "Conversation model response", _ValidateConversationModelResponse, prepared.offeredToolNames, prepared.finalOutput);
 	}
 	catch
 	{

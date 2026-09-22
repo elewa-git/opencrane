@@ -4,7 +4,7 @@ import { PrismaRunAdmissionUnitOfWork, type RunAdmissionCommand, type RunAdmissi
 import { PrismaPromptCompilerRepository, type ExecutionSubjectAuthority } from "@opencrane/backend/agents/execution/inputs";
 import { ConversationComputerTurnAuthorityService, type ConversationComputerRunAdmissionCommand, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { FleetMembershipDeploymentModes, PrismaHumanMembershipEvidenceRepository, type HumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
-import { ___ExecutionSubjectSchema, ExecutionSubjectMembershipKinds, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, type CompiledRunInput, type ExecutionSubject, type RunInputSnapshot } from "@opencrane/contracts";
+import { ___ExecutionSubjectSchema, CompiledFinalOutputModes, ExecutionSubjectMembershipKinds, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, type CompiledRunInput, type ExecutionSubject, type RunInputSnapshot } from "@opencrane/contracts";
 import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { AgentServiceKind, ModelRoutingScope } from "@prisma/client";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
@@ -37,7 +37,7 @@ function _savedRun(): { snapshot: RunInputSnapshot; compiled: CompiledRunInput }
 {
 	const budget = { maxModelTurns: 1, maxCompletionTokens: 4_096, maxCostUsdMicros: 10_000, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: Date.parse("2026-09-07T00:20:00.000Z") };
 	const snapshot: RunInputSnapshot = { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION, conversationId: "child-1", messageIds: ["message-1"], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: { scope: "none" }, mcpTools: [], modelRoute: {}, budgetPolicy: budget, executionSubject: _subject(), promptCompilerVersion: "v1", digest: `sha256:${"b".repeat(64)}`, compiledAt: "2026-09-07T00:00:00.000Z" };
-	const compiled: CompiledRunInput = { runId: snapshot.runId, attempt: 1, promptCompilerVersion: "v1", instructions: "", messages: [{ role: "user", content: "Group request" }], tools: [], model: { modelAlias: "company-model", maxOutputTokens: 4_096, generatedOutputCapabilities: [] }, budget, digest: `sha256:${"c".repeat(64)}` };
+	const compiled: CompiledRunInput = { runId: snapshot.runId, attempt: 1, promptCompilerVersion: "v1", instructions: "", finalOutput: CompiledFinalOutputModes.Text, messages: [{ role: "user", content: "Group request" }], tools: [], model: { modelAlias: "company-model", maxOutputTokens: 4_096, generatedOutputCapabilities: [] }, budget, digest: `sha256:${"c".repeat(64)}` };
 	return { snapshot, compiled };
 }
 
@@ -95,6 +95,7 @@ describe("conversation run admission composition", function _ConversationRunAdmi
 		const result = await port.admit(command);
 
 		expect(result.compiledInput.messages).toEqual([{ role: "user", content: "Please help with this group request." }]);
+		expect(result.compiledInput.finalOutput).toBe(CompiledFinalOutputModes.Conversation);
 		expect(compilers.prepare).toHaveBeenCalledExactlyOnceWith(command);
 		expect(compilers.prepare.mock.invocationCallOrder[0]).toBeLessThan(resources.mock.invocationCallOrder[0]!);
 		expect(compilers.compile).not.toHaveBeenCalled();
@@ -108,14 +109,15 @@ describe("conversation run admission composition", function _ConversationRunAdmi
 		if (kind === AgentServiceKind.Personal)
 		{
 			expect(transaction.principal.findUnique).toHaveBeenCalledWith({ where: { id_siloId: { id: "human-principal", siloId: "silo-1" } }, select: { subject: true } });
-			expect(result.compiledInput.instructions).toBe("Answer in plain English.");
+			expect(result.compiledInput.instructions).toMatch(/^Answer in plain English\.\n\nFinal conversation answer format:\n/);
 			expect(transaction.authorizationGrant.create).toHaveBeenCalledWith({ data: expect.objectContaining({ siloId: "silo-1", resourceKind: ProductAuthorizationResourceKinds.AgentRun, resourceId: "run-1", subjectPrincipalId: "human-principal", boundaryPrincipalId: "human-principal", boundaryCoverage: "Exact", effect: "Allow" }) });
 		}
 		else
 		{
 			expect(transaction.personaProfile.findUnique).not.toHaveBeenCalled();
 			expect(transaction.authorizationGrant.create).not.toHaveBeenCalled();
-			expect(result.compiledInput.instructions).toBe("");
+			expect(result.compiledInput.instructions).toMatch(/^Final conversation answer format:\n/);
+			expect(result.compiledInput.instructions).not.toContain("Answer in plain English.");
 		}
 	});
 
@@ -222,7 +224,7 @@ function _StandaloneComputerFixture()
 		siloId: "silo-1", endpoint: "http://gateway.test", credentials: { issueOnce, reuseExact: vi.fn(), revoke: vi.fn() },
 		reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, outputPayloads: { store: vi.fn() }, writers: { confirmSaved: vi.fn(), create: vi.fn() },
 		runLifecycle: { start: vi.fn(), complete: vi.fn(), enterRecoveryRequired: vi.fn() },
-		store: { reserveModel: vi.fn(), selectTool: vi.fn(), recordToolResult: vi.fn(), markResponseUnavailable: vi.fn(), loadActive: async function _Active() { return stored; }, createOrRead: async function _Freeze(turn) { stored = turn; return turn; }, load: async function _Load() { return stored; }, markOutput: vi.fn(), settle: vi.fn() },
+		store: { reserveModel: vi.fn(), recordModelRejection: vi.fn(), claimModelRetry: vi.fn(), selectTool: vi.fn(), recordToolResult: vi.fn(), markResponseUnavailable: vi.fn(), loadActive: async function _Active() { return stored; }, createOrRead: async function _Freeze(turn) { stored = turn; return turn; }, load: async function _Load() { return stored; }, markOutput: vi.fn(), settle: vi.fn() },
 		candidates: {
 			admit: vi.fn(),
 			resolve: resolveCandidate,

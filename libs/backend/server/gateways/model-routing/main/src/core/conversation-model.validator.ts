@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { ___ConversationModelDeliverySchema, ___ConversationModelResponseSchema, ___ConversationModelToolHistorySchema, ConversationModelResponseKinds, ConversationModelToolModes, type CompiledToolDefinition, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ___ConversationModelDeliverySchema, ___ConversationModelResponseSchema, ___ConversationModelToolHistorySchema, ConversationModelResponseKinds, ConversationModelToolModes, type CompiledToolDefinition, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
 import { ___CanonicalizeJson, ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { ConversationModelError, ConversationModelFailureCodes, type PreparedConversationModelRequest } from "./conversation-model.types";
+import { _DecodeConversationModelFinalOutput } from "./conversation-model-final-output";
 
 /** Limits serialized request and response bodies independently to one mebibyte. */
 export const _CONVERSATION_MODEL_MAX_BYTES = 1024 * 1024;
@@ -65,6 +66,7 @@ export function _PrepareConversationModelRequest(input: ConversationModelRequest
 			|| !_isPositiveInteger(compiled.budget.maxModelTurns)
 			|| !_isPositiveInteger(compiled.budget.wallClockDeadlineEpochMs)
 			|| typeof compiled.instructions !== "string" || !Array.isArray(compiled.messages)
+			|| compiled.finalOutput !== CompiledFinalOutputModes.Text && compiled.finalOutput !== CompiledFinalOutputModes.Conversation
 			|| input.tools !== ConversationModelToolModes.None && input.tools !== ConversationModelToolModes.Select
 			|| !Array.isArray(input.history))
 			throw new ConversationModelError(ConversationModelFailureCodes.InvalidRequest);
@@ -123,7 +125,7 @@ export function _PrepareConversationModelRequest(input: ConversationModelRequest
 		const deadlineEpochMs = Math.min(input.notAfterEpochMs, compiled.budget.wallClockDeadlineEpochMs, preparedAtEpochMs + 25_000);
 		if (deadlineEpochMs <= Date.now())
 			throw new ConversationModelError(ConversationModelFailureCodes.DeadlineExceeded);
-		return { url, authorization: `Bearer ${input.key}`, body, deadlineEpochMs, preparedAtEpochMs, delivery, offeredToolNames: input.tools === ConversationModelToolModes.Select ? offered.map(tool => tool.modelName) : [] };
+		return { url, authorization: `Bearer ${input.key}`, body, deadlineEpochMs, preparedAtEpochMs, delivery, finalOutput: compiled.finalOutput, offeredToolNames: input.tools === ConversationModelToolModes.Select ? offered.map(tool => tool.modelName) : [] };
 	}
 	catch (error)
 	{
@@ -139,7 +141,7 @@ export function _PrepareConversationModelRequest(input: ConversationModelRequest
  * Extra top-level usage fields carry no authority and are discarded.
  * @throws ConversationModelError when the upstream body cannot be accepted for this request.
  */
-export function _ValidateConversationModelResponse(candidate: unknown, offeredToolNames: readonly string[]): ConversationModelResponse
+export function _ValidateConversationModelResponse(candidate: unknown, offeredToolNames: readonly string[], finalOutput: CompiledFinalOutputModes): ConversationModelResponse
 {
 	if (!_isRecord(candidate) || candidate["error"] != null || !Array.isArray(candidate["choices"]) || candidate["choices"].length !== 1)
 		throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);
@@ -151,7 +153,7 @@ export function _ValidateConversationModelResponse(candidate: unknown, offeredTo
 	if (message["role"] !== "assistant" || Object.keys(message).some(key => !supportedFields.includes(key)) || supportedFields.slice(3).some(key => message[key] != null))
 		throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);
 	if (choice["finish_reason"] === "stop" && message["tool_calls"] == null)
-		return ___ConversationModelResponseSchema.parse({ kind: ConversationModelResponseKinds.Text, text: message["content"] });
+		return _DecodeConversationModelFinalOutput(message["content"], finalOutput);
 	const calls = message["tool_calls"];
 	if (choice["finish_reason"] !== "tool_calls" || !Array.isArray(calls) || calls.length !== 1 || offeredToolNames.length === 0)
 		throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);

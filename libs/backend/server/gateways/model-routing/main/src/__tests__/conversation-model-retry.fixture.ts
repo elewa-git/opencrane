@@ -1,5 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
-import { ConversationModelPreForwardContracts, ConversationModelPreForwardReasons, ConversationModelToolModes, type ConversationModelPreForwardReceipt, type ConversationModelRequest } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ConversationModelPreForwardContracts, ConversationModelPreForwardReasons, ConversationModelToolModes, type ConversationModelPreForwardReceipt, type ConversationModelRequest } from "@opencrane/contracts";
 import { ___CanonicalizeJson, type JsonValue } from "@opencrane/util";
 
 export const _RETRY_NOW = Date.parse("2026-09-22T12:00:00.000Z");
@@ -11,6 +11,7 @@ export function _RetryRequest(overrides: Partial<ConversationModelRequest> = {})
 	return {
 		compiledInput: {
 			promptCompilerVersion: "test-compiler", runId: "run-1", attempt: 1, instructions: "Private instructions.",
+			finalOutput: CompiledFinalOutputModes.Text,
 			messages: [{ role: "user", content: "Private question." }], tools: [],
 			model: { modelAlias: "admitted-model", maxOutputTokens: 400, generatedOutputCapabilities: [] },
 			budget: { maxModelTurns: 1, maxCompletionTokens: 300, maxCostUsdMicros: 1000, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: _RETRY_NOW + 60_000 }, digest: "sha256:test",

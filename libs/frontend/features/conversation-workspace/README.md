@@ -80,9 +80,12 @@ No renderer subscribes to events, reads private tool results, or requests additi
 
 The history adapter admits `a2uiSchemaVersion: "0.8"` with a JSON **array** of the installed SDK's
 `surfaceUpdate`, `beginRendering`, `dataModelUpdate` and `deleteSurface` messages per payload. This
-array framing is a new display-adapter contract, not proof of compatibility with a running producer.
-No production assistant A2UI writer is wired in this slice. A producer, accessible interactive
-choices/forms and their server-owned action/audit path remain separate MVP work.
+array framing is shared with the server's final-answer producer. The dependency-neutral component,
+root and update shapes live in `@opencrane/contracts`; the browser keeps its own replay and SDK
+adaptation. The server produces only one complete literal-only Replace beside its ordinary answer,
+while this history reader retains bounded patch and data-binding support. Accessible interactive
+choices/forms and their server-owned action/audit path remain separate MVP work. Source wiring and
+fixture checks do not prove a deployed producer or a real-account journey.
 
 | Previous display | Replace | Patch | Remove / final deleteSurface |
 | --- | --- | --- | --- |

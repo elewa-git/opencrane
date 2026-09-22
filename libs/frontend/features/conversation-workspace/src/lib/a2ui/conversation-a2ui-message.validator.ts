@@ -1,38 +1,14 @@
 // History payloads are authorised plaintext, not trusted UI instructions. This strict subset of
 // the installed A2UI v0.8 model must change alongside its adjacent display-message types.
 import { z } from "zod";
+import { CONVERSATION_A2UI_DEPTH_LIMIT, CONVERSATION_A2UI_PAYLOAD_BYTES, ___ConversationA2uiBeginRenderingSchema, ___ConversationA2uiSurfaceUpdateSchema } from "@opencrane/contracts";
 
-import type { ConversationA2uiComponent, ConversationA2uiMessage, ConversationA2uiValueMap } from "./conversation-a2ui-message.types";
-
-/** The installed protocol's standard catalogue is an identifier, never a URL to fetch. */
-export const CONVERSATION_A2UI_CATALOGUE = "https://a2ui.org/specification/v0_8/standard_catalog_definition.json";
-/** Bounds both a single history payload and its JSON parse allocation. */
-export const CONVERSATION_A2UI_PAYLOAD_BYTES = 65_536;
-/** Bounds component storage and the expanded tree, including repeated child references. */
-export const CONVERSATION_A2UI_COMPONENT_LIMIT = 256;
-/** Bounds layout nesting independently of the number of stored components. */
-export const CONVERSATION_A2UI_DEPTH_LIMIT = 16;
+import type { ConversationA2uiMessage, ConversationA2uiValueMap } from "./conversation-a2ui-message.types";
 
 /** Rejects blank and control-character identifiers before the SDK can use them. */
 const _Id = z.string().min(1).max(128).regex(/^[^\u0000-\u001f\u007f]+$/u);
 /** Restricts data references to explicit slash paths; no property or prototype traversal aliases. */
 const _Path = z.string().max(512).regex(/^\/(?:[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*)?$/u).refine(function _SafePath(value) { return value.split("/").every(part => !_UnsafeKey(part)); });
-/** Only one literal string or absolute binding is admitted. */
-const _TextValue = z.union([z.object({ literalString: z.string().max(16_384) }).strict(), z.object({ path: _Path }).strict()]);
-/** Uses the standard static child representation without template expansion. */
-const _Children = z.object({ explicitList: z.array(_Id).max(64) }).strict();
-/** Standard layout options map to renderer-owned finite styles. */
-const _Layout = z.object({ children: _Children, distribution: z.enum(["start", "center", "end", "spaceBetween", "spaceAround", "spaceEvenly"]).optional(), alignment: z.enum(["start", "center", "end", "stretch"]).optional() }).strict();
-/** A finite catalogue excludes forms, actions, media, custom components, and arbitrary styling. */
-const _Component: z.ZodType<ConversationA2uiComponent> = z.object({
-	id: _Id, weight: z.number().finite().positive().max(100).optional(),
-	component: z.union([
-		z.object({ Text: z.object({ text: _TextValue, usageHint: z.enum(["h1", "h2", "h3", "h4", "h5", "caption", "body"]).optional() }).strict() }).strict(),
-		z.object({ Row: _Layout }).strict(), z.object({ Column: _Layout }).strict(),
-		z.object({ Card: z.object({ child: _Id }).strict() }).strict(),
-		z.object({ Divider: z.object({ axis: z.literal("horizontal").optional() }).strict() }).strict(),
-	]),
-}).strict();
 
 /** Each typed data entry carries exactly one value; whole-JSON depth is checked before recursion. */
 const _DataEntry: z.ZodType<ConversationA2uiValueMap> = z.lazy(function _Entry()
@@ -49,8 +25,8 @@ const _DataEntry: z.ZodType<ConversationA2uiValueMap> = z.lazy(function _Entry()
 });
 /** Rejects multiple operation keys instead of allowing ambiguous SDK processing order. */
 const _Message: z.ZodType<ConversationA2uiMessage> = z.union([
-	z.object({ beginRendering: z.object({ surfaceId: _Id, root: _Id, catalogId: z.literal(CONVERSATION_A2UI_CATALOGUE).optional() }).strict() }).strict(),
-	z.object({ surfaceUpdate: z.object({ surfaceId: _Id, components: z.array(_Component).min(1).max(CONVERSATION_A2UI_COMPONENT_LIMIT) }).strict() }).strict(),
+	z.object({ beginRendering: ___ConversationA2uiBeginRenderingSchema }).strict(),
+	z.object({ surfaceUpdate: ___ConversationA2uiSurfaceUpdateSchema }).strict(),
 	z.object({ dataModelUpdate: z.object({ surfaceId: _Id, path: _Path.optional(), contents: z.array(_DataEntry).max(64) }).strict() }).strict(),
 	z.object({ deleteSurface: z.object({ surfaceId: _Id }).strict() }).strict(),
 ]);

@@ -1,3 +1,4 @@
+import { CompiledFinalOutputModes } from "@opencrane/contracts";
 import { _ReserveConversationOutputFixture } from "./conversation-output-intent.fixture";
 import { _PrepareBoundDraft } from "./conversation-output-intent.fixture";
 import type { BoundConversationWriterAppend } from "@opencrane/backend/server/conversations/history";
@@ -30,7 +31,7 @@ const _BINDING = {
   expectedRevision: 1n,
   maximumEntryBytes: 65_536,
 };
-const _COMPILED = {
+const _COMPILED = { finalOutput: CompiledFinalOutputModes.Text,
   promptCompilerVersion: "conversation-computer-v1",
   runId: "run-1",
   attempt: 1,
@@ -104,6 +105,7 @@ function _Harness() {
           blockId: "block-1",
           payloadRef: "payload-1",
           ciphertextDigest: "sha256:ciphertext",
+          display: null,
         }),
     },
     runLifecycle: {

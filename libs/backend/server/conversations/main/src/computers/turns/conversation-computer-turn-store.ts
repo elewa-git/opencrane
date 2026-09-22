@@ -1,7 +1,6 @@
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
-import { ___ParseRunBudgetPolicy, ConversationEntryAudiences, ConversationEntryKinds, MessageStates } from "@opencrane/contracts";
+import { ___ParseRunBudgetPolicy } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
-import { _ReadBoundConversationWriterIntent } from "@opencrane/backend/server/conversations/history";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _ConversationComputerEventId } from "../conversation-computer-event-id";
@@ -19,9 +18,11 @@ import { _ConversationComputerTurnCancellationReceiptSchema } from "./conversati
 import { _CONVERSATION_TURN_RESPONSE_UNAVAILABLE_EVENT, _ConversationTurnUnavailableEvent, _ReadConversationTurnUnavailable } from "./conversation-computer-turn-unavailable";
 import type { ConversationComputerLeaseCoordinates } from "@opencrane/backend/server/conversations/computers";
 import type { ConversationComputerOutputDecision, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
+import { _ConversationComputerOutputIntents, _ReadConversationComputerOutputReceipt, _SameConversationComputerOutputReceipt } from "./output/conversation-computer-output-receipt";
 
 const _FROZEN_EVENT = "opencrane.conversation-computer-turn-frozen.v2";
-const _OUTPUT_EVENT = "opencrane.conversation-computer-turn-output.v3";
+/** Records the complete primary answer and optional adjacent display in one output decision. */
+const _OUTPUT_EVENT = "opencrane.conversation-computer-turn-output.v4";
 const _ACTIVE_EVENT = "opencrane.conversation-computer-turn-active.v1";
 const _SETTLED_EVENT = "opencrane.conversation-computer-turn-settled.v1";
 const _CANCELLED_EVENT = "opencrane.conversation-computer-turn-cancelled.v2";
@@ -185,12 +186,12 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 			throw new Error("Conversation computer turn does not record this output decision");
 		if (turn.protocol.output !== null)
 		{
-			if (!_SameReceipt(turn.protocol.output.receipt, requested))
+			if (!_SameConversationComputerOutputReceipt(turn.protocol.output.receipt, requested))
 				throw new Error("Conversation computer turn already has a different output");
 			return { outcome: "idempotent", receipt: turn.protocol.output.receipt };
 		}
 		const reservation = _CurrentReservation(turn);
-		const intent = _OutputIntent(turn, requested, reservation.invocationFence);
+		const intent = _ReadConversationComputerOutputReceipt(turn, requested, reservation.invocationFence);
 		const output = { kind: ConversationComputerTurnProtocolEvents.OutputRecorded, ordinal: reservation.ordinal, modelInvocationFence: reservation.invocationFence, sourceCommandId: reservation.invocationFence, receipt: intent } as const;
 		const protocol = _ReduceConversationComputerTurnProtocol(turn.protocol, output, turn.budget);
 		__ReadConversationGeneratedFileOutput({ ...turn, protocol });
@@ -199,7 +200,7 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 		let outcome: ConversationComputerOutputDecision["outcome"] = "accepted";
 		try
 		{
-			await this.history.appendAtomic({ expectedHeads: [{ streamName: _Stream(bootstrapId), revision: turn.protocol.revision }, { streamName: intent.streamName, revision: conversationRevision }], appends: [{ streamName: _Stream(bootstrapId), expectedRevision: turn.protocol.revision, events: [event] }, { streamName: intent.streamName, expectedRevision: conversationRevision, events: [intent.event] }] });
+			await this.history.appendAtomic({ expectedHeads: [{ streamName: _Stream(bootstrapId), revision: turn.protocol.revision }, { streamName: intent.streamName, revision: conversationRevision }], appends: [{ streamName: _Stream(bootstrapId), expectedRevision: turn.protocol.revision, events: [event] }, { streamName: intent.streamName, expectedRevision: conversationRevision, events: _ConversationComputerOutputIntents(intent).map(part => part.event) }] });
 		}
 		catch (error)
 		{
@@ -210,7 +211,7 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 		const winner = await this.load(bootstrapId);
 		if (winner?.protocol.output === null || winner === null)
 			throw new ConversationComputerOutputPositionConflictError("Conversation computer output position changed before its atomic commit");
-		if (!_SameReceipt(winner.protocol.output.receipt, intent))
+		if (!_SameConversationComputerOutputReceipt(winner.protocol.output.receipt, intent))
 			throw new Error("Conversation computer turn does not record this output decision");
 		return { outcome, receipt: winner.protocol.output.receipt };
 	}
@@ -378,27 +379,13 @@ function _OutputEvent(turn: FrozenConversationComputerTurn, intent: Conversation
 function _ReadOutput(event: HistoryRecordedEvent, turn: FrozenConversationComputerTurn): Extract<ConversationComputerTurnProtocolEvent, { readonly kind: ConversationComputerTurnProtocolEvents.OutputRecorded }>
 {
 	const reservation = _CurrentReservation(turn);
-	const intent = _OutputIntent(turn, event.data["intent"], reservation.invocationFence);
+	const intent = _ReadConversationComputerOutputReceipt(turn, event.data["intent"], reservation.invocationFence);
 	const expected = _OutputEvent(turn, intent, reservation.ordinal, reservation.invocationFence);
 	if (event.revision !== turn.protocol.revision + 1n || event.streamName !== _Stream(turn.bootstrapId) || event.id !== expected.id || event.type !== expected.type
 		|| ___DigestCanonicalJson(event.data as JsonValue) !== ___DigestCanonicalJson(expected.data as unknown as JsonValue)
 		|| ___DigestCanonicalJson(event.metadata as JsonValue) !== ___DigestCanonicalJson(expected.metadata as unknown as JsonValue))
 		throw new Error("Conversation computer output decision crossed its exact event fence");
 	return { kind: ConversationComputerTurnProtocolEvents.OutputRecorded, ordinal: reservation.ordinal, modelInvocationFence: reservation.invocationFence, sourceCommandId: reservation.invocationFence, receipt: intent };
-}
-
-function _OutputIntent(turn: FrozenConversationComputerTurn, value: unknown, sourceCommandId: string): ConversationComputerTurnOutputReceipt
-{
-	const expectedRevision = (value as { readonly expectedRevision?: unknown } | null)?.expectedRevision;
-	if (typeof expectedRevision !== "string" || !/^(0|[1-9][0-9]*)$/u.test(expectedRevision) || BigInt(expectedRevision) < turn.binding.expectedRevision)
-		throw new Error("Conversation computer output decision has an invalid history position");
-	const intent = _ReadBoundConversationWriterIntent({ ...turn.binding, expectedRevision: BigInt(expectedRevision) }, value);
-	const entry = intent.event.data.entry;
-	if (intent.event.id !== sourceCommandId || entry.kind !== ConversationEntryKinds.Message || entry.state !== MessageStates.Completed
-		|| entry.replyToEntryId !== turn.latestPendingEntryId || entry.addressedAgentIdentityId !== null || entry.activation !== "none"
-		|| entry.visibility.audience !== ConversationEntryAudiences.Conversation || entry.causationId !== turn.latestPendingEntryId || entry.correlationId !== turn.latestPendingEntryId)
-		throw new Error("Conversation computer output decision has a different answer shape");
-	return intent;
 }
 
 function _CurrentReservation(turn: FrozenConversationComputerTurn): ConversationComputerTurnModelReservation
@@ -440,12 +427,6 @@ function _Same(left: unknown, right: unknown): boolean
 function _SameFrozenTurn(left: FrozenConversationComputerTurn, right: FrozenConversationComputerTurn): boolean
 {
 	return _Same(_Serializable(left), _Serializable(right));
-}
-
-function _SameReceipt(left: ConversationComputerTurnOutputReceipt, right: ConversationComputerTurnOutputReceipt): boolean
-{
-	return ___DigestCanonicalJson({ ...left, event: { ...left.event, data: { entry: { ...left.event.data.entry, occurredAt: null } } } } as unknown as JsonValue)
-		=== ___DigestCanonicalJson({ ...right, event: { ...right.event, data: { entry: { ...right.event.data.entry, occurredAt: null } } } } as unknown as JsonValue);
 }
 
 function _Metadata(turn: FrozenConversationComputerTurn): Record<string, unknown>

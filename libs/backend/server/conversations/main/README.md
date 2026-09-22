@@ -36,6 +36,7 @@ signed-in participant ──► main ◄── HERE ──► history
 | `computers/tools/` | Proposal admission, current dispatch access and saved result consumption each have their own owner. |
 | `computers/interruptions/` | Select and admit requester-owned Stop commands, record their outcome and let Absurd recover cancellation cleanup. |
 | `computers/turns/workflow/` | Absurd task admission, saved run receipt binding, durable waits, tool-result wakeups and generated-file outcome wakeups. |
+| `computers/turns/output/` | Validate complete read-only results, prepare adjacent answer/display entries, and compare the whole saved output receipt during recovery. |
 | `computers/turns/approval-notifications/` | Recheck the assigned participant and publish one receipt-backed requested-approval history fact before the durable wait. |
 | `computers/turns/tool-progress-notifications/` | Publish ordered requested/running facts with exact recovery receipts; history never grants permission to execute. |
 | `computers/tools/progress/` | Recheck saved admission and the current execution claim before exposing safe progress. |
@@ -101,7 +102,7 @@ signed-in participant ──► main ◄── HERE ──► history
   for provider claims before finalizing. Missing relational lease coordinates fail closed; a
   no-target receipt is written only when an existing exact lease names the checked pointer stream.
 - Lifecycle, checkpoint, turn and review authorities, routers and adapter ports support server composition. The activation worker receives a process logger and an explicit exhaustion callback.
-- `ConversationComputerTurnAuthority` owns the final output-authority recheck, the turn store owns the atomic receipt-and-answer commit, and `ConversationComputerTurnWriterFactory` prepares and exactly confirms that answer. The activation and lifecycle units of work own their transaction isolation.
+- `ConversationComputerTurnAuthority` owns the final output-authority recheck. The turn store commits the receipt, ordinary answer and optional read-only display atomically; the existing history writer prepares and exactly confirms each entry. The activation and lifecycle units of work own their transaction isolation.
 - `PrismaCompanyAssistantDirectory`, `PrismaGroupChildAgentResolver`, `_ResolveConversationCaller` and `_RegisterGroupChildWorkflow` bind current identity and recovery to participant operation owners.
 - `_SelfConversationHistoryOpenapiPaths` contributes the conversation API description.
 
@@ -262,12 +263,40 @@ same event rather than publishing a duplicate. Current owned-elicitation and Con
 checks suppress a new append after expiry or revocation; ordinary history authorization still
 controls later replay and live delivery.
 
-The turn store atomically commits the exact answer receipt and participant-visible history event. Absurd
+The turn store atomically commits the complete output receipt and participant-visible history entries. Absurd
 owns durable deadlines, waits, restart recovery and selection of the next saved step. A new
 physical append rechecks the workload lease, generation, Pod, history position, selected result digest and authority deadline through
 `__AssertConversationComputerAnswerAuthority`. An already accepted matching history entry can be
 recovered after later authority loss. Provider credentials are issued after their reservation commits;
 exact retries reuse the saved receipt and failed cleanup prevents a replacement key.
+
+### Structured final results
+
+The frozen `Conversation` output mode permits an ordinary text answer and one optional complete
+A2UI result. The gateway decodes that requested format; this package checks its graph before
+storing any payload. Only literal Text, Row, Column, Card and Divider components are accepted.
+Missing references, cycles, hidden unused components, actions and data bindings are rejected.
+The server assigns the display identity; model-selected identities never reach history.
+
+SQL stores encrypted text, optional display bytes and a digest-only manifest in the same transaction.
+The manifest fixes both content and display presence before history publication. An exact retry
+reuses the original ciphertext; different text, display or presence conflicts even if no history
+receipt was saved. The Message remains the primary answer and generated-file link target. An
+optional adjacent A2UI Replace entry uses the same author, run and audience and activates no work.
+
+| Saved state | Observation | Result |
+| --- | --- | --- |
+| Model reserved | Valid output and current authority | Save encrypted payloads, then atomically append the decision and all participant entries. |
+| Model reserved | Payload saved but history unavailable | Keep the saved output identity; no accepted participant answer or replacement model call. |
+| Model reserved | Conversation position changes | Recheck authority and prepare the whole output at the new position. |
+| Model reserved | Cancellation wins the turn revision | Append neither answer nor display. |
+| Output recorded | Restart or lost acknowledgement | Confirm every saved entry before completing the run and cleanup. |
+| Output recorded | Changed retry or missing companion | Refuse completion or replacement; retain the original receipt. |
+
+Controlled-port tests cover paired output, company tool continuations, generated-file recovery,
+concurrent retries, cancellation and permission loss. The custody tests use real encryption with a
+controlled SQL transaction. These do not establish real PostgreSQL/Kurrent paired-output recovery
+or an authenticated assistant-to-browser journey.
 
 When an original or final model response cannot be recovered, the turn saves `RecoveryRequired`
 through the run lifecycle authority before returning `response_unavailable` to its workflow.
@@ -316,4 +345,5 @@ A generated-file answer contains encrypted Text and at most one server-selected 
 block. The turn owner compares the file decision before its atomic history commit, then asks the
 file owner to link the exact saved message. Link or settlement failures recover that same answer.
 Once the link is verified, exact-event confirmation and run settlement need no new execution lease;
-new file links still require current authority. Ordinary text recovery keeps its existing lease check.
+new file links still require current authority. Confirmation includes the optional display without
+changing the primary Message link. Ordinary answer recovery keeps its existing lease check.

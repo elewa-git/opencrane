@@ -27,6 +27,7 @@ export { ___GeneratedFileEventName } from "./mcp/generated-file-events";
 export * from "./model-routing/model-routing.types";
 export * from "./model-routing/model-routing.validator";
 export type * from "./inputs/compiled-run-input.types";
+export * from "./inputs/compiled-final-output.types";
 export type { RunBudgetPolicy } from "./inputs/run-budget-policy.types";
 export { ___ParseRunBudgetPolicy } from "./inputs/run-budget-policy.validator";
 export * from "./inputs/prompt-compiler-version";
@@ -57,6 +58,10 @@ export type { ConversationToolProposal, ConversationToolProposalReceipt } from "
 export { ___ConversationToolArgumentsSchema, ___ConversationToolProposalSchema } from "./conversations/conversation-tool-proposal.validator";
 
 export * from "./conversations/conversation-model.types";
+export type * from "./conversations/conversation-a2ui.types";
+export * from "./conversations/conversation-a2ui.validator";
+export type * from "./conversations/conversation-final-output.types";
+export * from "./conversations/conversation-final-output.validator";
 export * from "./conversations/conversation-model-retry.types";
 export { ___ConversationModelDeliverySchema, ___ConversationModelPreForwardEnvelopeSchema, ___ConversationModelPreForwardReceiptSchema } from "./conversations/conversation-model-retry.validator";
 export { ___ConversationModelToolCallSchema, ___ConversationModelToolExchangeSchema, ___ConversationModelToolHistorySchema, ___ConversationModelResponseSchema } from "./conversations/conversation-model.validator";

@@ -170,7 +170,11 @@ export interface ConversationComputerTurnAccounting
 }
 
 /** Keeps the complete server-stamped output intent in the durable turn decision. */
-export type ConversationComputerTurnOutputReceipt = BoundConversationWriterIntent;
+export interface ConversationComputerTurnOutputReceipt extends BoundConversationWriterIntent
+{
+	/** Holds the optional adjacent read-only result committed atomically with the primary Message. */
+	readonly display: BoundConversationWriterIntent | null;
+}
 
 /** Minimal terminal decision retained when Stop wins against final output. */
 export interface ConversationComputerTurnCancellationReceipt

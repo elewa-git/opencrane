@@ -60,6 +60,16 @@ absolute deadline. Its validator rejects missing, unknown or malformed limits. A
 spend cap leaves the existing frozen server cap in force. Compilation and recovery preserve every
 saved value; these contracts do not implement repeated tool execution or grant tool permission.
 
+`CompiledRunInput.finalOutput` is required and sealed into the input digest. `CompiledFinalOutputModes`
+selects literal Text or a Conversation JSON answer containing required ordinary text and an optional
+static display. `ConversationFinalOutput` and its strict validator preserve the text, reject unknown
+fields and bound Unicode and byte size. `ConversationA2uiDisplay` contains the two standard A2UI 0.8
+operations needed for a complete display, using a reserved identifier until the conversation owner
+assigns ownership. Its producer schema accepts literal text and read-only layout components; the
+shared component schema also keeps bindings available to existing history consumers. These wire
+models depend on no renderer SDK. Graph completeness, current permission and persistence belong
+to the conversation owner; shape validation grants no authority.
+
 Connection setup commands carry the generation observed before the request, or `null` before
 any connection generation exists. Disconnect commands carry the generation to revoke. Retries
 keep that original value and their command key so a delayed request cannot change newer work.

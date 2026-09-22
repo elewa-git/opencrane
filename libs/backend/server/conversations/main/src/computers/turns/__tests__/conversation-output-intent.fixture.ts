@@ -14,9 +14,10 @@ export async function _PrepareBoundDraft(binding: BoundConversationWriterBinding
 }
 
 /** Build the completed text answer used by the turn store's intent-versus-reservation proofs. */
-export function _PrepareConversationOutputIntent(turn: FrozenConversationComputerTurn, sourceCommandId: string, payloadRef = "opaque-payload")
+export async function _PrepareConversationOutputIntent(turn: FrozenConversationComputerTurn, sourceCommandId: string, payloadRef = "opaque-payload")
 {
-	return _PrepareBoundDraft(turn.binding, { sourceCommandId, entry: { kind: "message", state: "completed", blocks: [{ id: "block", kind: "text", payloadRef, ciphertextDigest: "sha256:ciphertext" }], replyToEntryId: turn.latestPendingEntryId, addressedAgentIdentityId: null, activation: "none", visibility: { audience: "conversation" }, causationId: turn.latestPendingEntryId, correlationId: turn.latestPendingEntryId } });
+	const answer = await _PrepareBoundDraft(turn.binding, { sourceCommandId, entry: { kind: "message", state: "completed", blocks: [{ id: "block", kind: "text", payloadRef, ciphertextDigest: "sha256:ciphertext" }], replyToEntryId: turn.latestPendingEntryId, addressedAgentIdentityId: null, activation: "none", visibility: { audience: "conversation" }, causationId: turn.latestPendingEntryId, correlationId: turn.latestPendingEntryId } });
+	return { ...answer, display: null };
 }
 
 /** Represent a model request already dispatched before a storage/restart proof begins. */

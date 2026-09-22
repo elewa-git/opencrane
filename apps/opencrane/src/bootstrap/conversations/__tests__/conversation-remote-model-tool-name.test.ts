@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ConversationComputerTurnAuthorityService, ConversationComputerToolResultOutcomes, type ConversationComputerTurnModelReservation, type ConversationComputerTurnToolSelection, type ConversationComputerTurnCandidate, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { McpInvocationDispatchOutcomes, RemoteMcpInvocationExecutor } from "@opencrane/backend/server/gateways/mcp";
-import { ConversationModelResponseKinds, ConversationToolProposalOutcomes, McpConnectionCredentialKinds } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ConversationModelResponseKinds, ConversationToolProposalOutcomes, McpConnectionCredentialKinds } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { _OpenConversationTurnProtocol, _ReserveConversationTurnModel, _SelectConversationTurnTool } from "./conversation-turn-protocol.fixture";
@@ -18,7 +18,7 @@ const _TURN_ID = "31c1f1dc-0010-4f13-9c2f-d3841ffd6651";
 function _ModelSelectionHarness(callName: string)
 {
 	const parametersSchema = { type: "object", required: ["query"], additionalProperties: false, properties: { query: { type: "string" } } };
-	const compiledInput = {
+	const compiledInput = { finalOutput: CompiledFinalOutputModes.Text,
 		promptCompilerVersion: "test-v1",
 		runId: "run-1",
 		attempt: 1,

@@ -126,6 +126,16 @@ calls, refusals, partial answers and unsupported output formats. `ConversationMo
 a fixed category without the provider body or original exception. Request fields never enter its
 operation span, and automatic child tracing is suppressed around the HTTP call.
 
+The required `CompiledRunInput.finalOutput` mode is captured before dispatch. Text mode preserves
+literal answers, including JSON-looking text. Conversation mode requires a strict final JSON object
+with nonblank `text` and optional `display`; the shared validators accept a complete pair of A2UI 0.8
+operations with literal text and static layout components. Missing modes, malformed displays,
+unknown fields and invalid Unicode fail with a fixed error category. Ordinary text is preserved
+exactly and limited to 65,536 UTF-8 bytes; the optional display has its own 65,536-byte limit.
+The conversation owner checks graph completeness and assigns display ownership before storage.
+Tool calls remain separate provider declarations. This transport does not infer a format from text
+or require provider-specific structured-response support.
+
 Every request fixes LiteLLM's `num_retries` and `max_retries` to zero and `disable_fallbacks` to
 true. These settings apply to initial requests, later tool selections and final answers; input
 fields cannot replace them. They prevent the proxy's default retry and fallback behaviour from

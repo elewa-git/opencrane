@@ -2,11 +2,13 @@ import { PrismaGroupChildAccessRepository } from "../../../children/db/prisma-gr
 import { AgentRevisionState, AgentServiceState, ConversationLifecycle, OrgMemberStatus, Prisma, type PrismaClient } from "@prisma/client";
 import { ProductAuthorizationActions } from "@opencrane/models/authorization";
 import { ConversationAuthorKinds, ConversationEntryKinds, MessageStates, type MessageEntry } from "@opencrane/contracts";
+import { ___CanonicalizeJson, ___DigestCanonicalJson } from "@opencrane/util";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import { ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
 import type { ConversationPrivatePayloadCipher, EncryptedConversationPrivatePayload } from "@opencrane/backend/server/conversations/history";
 import type { ConversationComputerOutputPayloadStore, ConversationComputerPendingTurnCompiler, ConversationComputerRunAdmissionCommand, ConversationComputerRunAdmissionPort, ConversationComputerTurnCandidate, ConversationComputerTurnCompileCommand, ConversationComputerTurnHistoryAnchor, ConversationComputerTurnProjectionRepository, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
+import type { ConversationComputerOutputPayload } from "../output/conversation-computer-output.types";
 import { PrismaConversationProductAuthorizationRepository } from "../../../authorization/db/conversation-product-authorization";
 import { _ConversationComputerEventId } from "../../conversation-computer-event-id";
 
@@ -75,21 +77,33 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 		return { binding: { siloId, conversationId, computerId, leaseGeneration: command.lease.leaseGeneration, agentIdentityId, agentServiceId: loaded.service.id, agentName: loaded.service.name, agentAvatarArtifactRevisionId: null, runId, expectedRevision: outputRevision, maximumEntryBytes: 65_536 }, compiledInput, latestPendingEntryId: pending.id, latestPendingEntryPosition: pending.position, modelAlias: compiledInput.model.modelAlias, maximumBudgetUsd: this.maximumTurnCostUsdMicros / 1_000_000, credentialLifetimeSeconds: Math.min(300, remainingAuthoritySeconds), credentialExpiresAt: new Date(authorityExpiresAt).toISOString(), lease: command.lease };
 	}
 
-	/** Encrypt and idempotently persist assistant text before history references it, moving the conversation to the top of every list. */
-	public store(turn: FrozenConversationComputerTurn, sourceCommandId: string, text: string)
+	/**
+	 * Save the answer and optional display before history references either payload.
+	 * The encrypted digest manifest fixes the complete result first, including an absent display.
+	 * All rows use this repository's transaction, so a later payload failure also rolls back the manifest.
+	 * @throws When a retry changes the text, display, or whether a display exists.
+	 */
+	public async store(turn: FrozenConversationComputerTurn, sourceCommandId: string, text: string, display: string | null = null): Promise<ConversationComputerOutputPayload>
+	{
+		const manifest = ___CanonicalizeJson({ textDigest: ___DigestCanonicalJson(text), displayDigest: display === null ? null : ___DigestCanonicalJson(display) });
+		await this._storePayload(turn, _ConversationComputerEventId("output-shape", sourceCommandId), manifest);
+		const primary = await this._storePayload(turn, sourceCommandId, text);
+		const structured = display === null ? null : await this._storePayload(turn, _ConversationComputerEventId("structured-output", sourceCommandId), display);
+		return { blockId: _ConversationComputerEventId("block", sourceCommandId), ...primary, display: structured };
+	}
+
+	/** Reuse identical ciphertext, or create a payload without changing an existing row. */
+	private async _storePayload(turn: FrozenConversationComputerTurn, sourceCommandId: string, text: string)
 	{
 		const payloadRef = _ConversationComputerEventId("payload", sourceCommandId);
-		const blockId = _ConversationComputerEventId("block", sourceCommandId);
 		const coordinates = { siloId: turn.siloId, conversationId: turn.binding.conversationId, payloadRef, authorSubject: turn.binding.agentIdentityId };
-		const encrypted = this.cipher.encrypt(text, coordinates);
-		return (async () =>
-		{
-			const existing = await this.prisma.conversationPrivatePayload.findUnique({ where: { conversationId_authorSubject_idempotencyKey: { conversationId: turn.binding.conversationId, authorSubject: turn.binding.agentIdentityId, idempotencyKey: sourceCommandId } } });
-			const row = existing ?? await this._createPayload(turn, sourceCommandId, payloadRef, encrypted);
-			if (this.cipher.decrypt({ keyId: row.keyId, nonce: row.nonce, authTag: row.authTag, ciphertext: row.ciphertext, ciphertextDigest: row.ciphertextDigest }, { siloId: row.siloId, conversationId: row.conversationId, payloadRef: row.id, authorSubject: row.authorSubject }) !== text)
-				throw new Error("Conversation computer output idempotency key was reused for different text");
-			return { blockId, payloadRef: row.id, ciphertextDigest: row.ciphertextDigest };
-		})();
+		const existing = await this.prisma.conversationPrivatePayload.findUnique({ where: { conversationId_authorSubject_idempotencyKey: { conversationId: turn.binding.conversationId, authorSubject: turn.binding.agentIdentityId, idempotencyKey: sourceCommandId } } });
+		const row = existing ?? await this._createPayload(turn, sourceCommandId, payloadRef, this.cipher.encrypt(text, coordinates));
+		if (row.id !== payloadRef || row.siloId !== coordinates.siloId || row.conversationId !== coordinates.conversationId || row.authorSubject !== coordinates.authorSubject || row.idempotencyKey !== sourceCommandId)
+			throw new Error("Conversation computer output payload crossed its original coordinates");
+		if (this.cipher.decrypt({ keyId: row.keyId, nonce: row.nonce, authTag: row.authTag, ciphertext: row.ciphertext, ciphertextDigest: row.ciphertextDigest }, coordinates) !== text)
+			throw new Error("Conversation computer output idempotency key was reused for different output");
+		return { payloadRef: row.id, ciphertextDigest: row.ciphertextDigest };
 	}
 
 	/** Store one new encrypted payload and move its conversation to the top of every list in the same transaction. */
@@ -117,9 +131,10 @@ export class PrismaConversationComputerTurnUnitOfWork implements ConversationCom
 		return this._Run(repository => repository.compile(command, anchor), Prisma.TransactionIsolationLevel.RepeatableRead);
 	}
 
-	public store(turn: FrozenConversationComputerTurn, sourceCommandId: string, text: string)
+	/** Commit the complete output together; callers cannot observe a partial text/display pair. */
+	public store(turn: FrozenConversationComputerTurn, sourceCommandId: string, text: string, display: string | null = null): Promise<ConversationComputerOutputPayload>
 	{
-		return this._Run(repository => repository.store(turn, sourceCommandId, text), Prisma.TransactionIsolationLevel.Serializable);
+		return this._Run(repository => repository.store(turn, sourceCommandId, text, display), Prisma.TransactionIsolationLevel.Serializable);
 	}
 
 	private _Run<TResult>(operation: (repository: PrismaConversationComputerTurnRepository) => Promise<TResult>, isolationLevel: Prisma.TransactionIsolationLevel): Promise<TResult>

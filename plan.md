@@ -2,8 +2,59 @@
 
 ## MVP continuation — 2026-09-22
 
+### Production structured results — reviewed source; live qualification open
+
+This U2 slice starts at immutable local base
+`58cddfe5d3214fa155c1a24eed9936409d435326`. Architecture preflight permits one optional complete,
+literal-only A2UI result alongside the ordinary answer. Shared contracts own dependency-neutral
+wire shapes; execution inputs own the frozen output mode and instructions; the model gateway
+decodes only that requested format. Conversation output owns graph checks, encrypted payloads,
+the ordered answer/display receipt and recovery. Existing history writers still stamp each entry;
+the turn store commits both entries and its decision in one atomic append. The frontend retains
+its existing replay, component and SDK owners. No permission, schema, provider setting or live
+environment change is part of this slice.
+
+The 496-line turn store delegates output receipt validation/equality to `computers/turns/output/`;
+it retains stream transactions and protocol replay. This separates output shape from lifecycle
+ordering without creating another state machine or a generic history abstraction.
+
+| Saved state | Event or observation | Outcome and owner |
+| --- | --- | --- |
+| ModelReserved | Valid final answer, optional complete display, current authority | SQL stores the complete output identity and encrypted content; Kurrent atomically records the output decision and adjacent participant entries. |
+| ModelReserved | Payload storage succeeds but history is unavailable | No participant output is accepted; an exact retry must match the saved complete output shape. No new model call is authorised. |
+| ModelReserved | Conversation head changes | Reload current authority and prepare the whole output at the new position; never append only its display. |
+| ModelReserved | Cancellation wins the checked turn revision | Refuse the complete output through the existing reducer and atomic revision check. |
+| OutputRecorded | Lost acknowledgement, restart or same response | Confirm both saved entries exactly, then finish file linking, run completion, credential cleanup and settlement. |
+| OutputRecorded | Different text, display, identity or content reference | Refuse; neither append a replacement nor admit another model call. |
+
+Source implementation and checks are complete; independent integrated review and architecture
+postflight pass with no findings. Contracts pass
+205 tests, execution inputs 157, model routing 251 and conversations 820, including optional displays
+after eight company tool exchanges and generated-file completion/restart recovery. The conversation
+workspace passes 127 tests. These package type checks pass; both production UI and server builds
+pass. A joined diagnostic feeds the actual 528-byte producer payload into the existing SDK replay
+owner and obtains the expected Ready Card, Column and two literal Text nodes. Its history is a
+fixture, not an authenticated browser session.
+
+Output tests cover complete-pair recovery, concurrent responses, cancellation winning the atomic
+turn revision, permission loss during preparation and changed text/display/presence after payload
+storage. Custody tests use real AES-GCM encryption and a controlled SQL transaction. Real PostgreSQL
+manifest/rollback qualification and paired-output recovery against real KurrentDB remain open; the
+existing real-service integration suite was not run or counted as passing. No new service was
+started to fill that gap. Live Odoo/model and signed-in browser acceptance also remain open.
+
+Style reports zero errors or warnings across 32 production files, and Prisma boundaries pass across
+307. Module growth reports one responsibility-review candidate: the existing turn port types gain
+the optional model display and complete encrypted-output return type (418 to 422 lines), without
+adding implementation or another authority owner. The live 17-PR graph still passes at snapshot
+`78eb529231b682b688534ad072103c28bc4461f780e9a17ab56b322e9f083efc`.
+This is a local, unpublished partial U2 checkpoint, not completed U2 or MVP acceptance. Disk has
+about 14 GiB free; no VM, container, dependency installation or live environment change was made.
+
+### Previous source checkpoint: read-only result rendering
+
 The active goal remains the complete ten-track MVP, including delegation and scheduled agent work.
-The current source slice adds read-only saved A2UI display replay on top of local checkpoint
+The preceding source slice adds read-only saved A2UI display replay on top of local checkpoint
 `6118a3dd233775d2b3d0e9fb639f68ea505063e6`. It reuses authorized conversation history and the installed
 SDK, with a strict finite catalogue, literal text, SDK-reference collision protection, bounded graph
 and UTF-8 replay work, and no actions/media/network requests. Replace, Patch, Remove, incomplete
@@ -11,7 +62,7 @@ updates, access/selection clearing and cross-author isolation are covered by foc
 feature-local display host owns its states and stories; the existing mapper/presenter/transcript
 compose it without granting message or action authority. Independent source review passes after
 repairing UTF-8 accounting, sticky replay exhaustion, invalid-row limits, overflow-notice semantics
-and transcript heading levels. No production assistant A2UI producer is wired, and no runtime-question approval,
+and transcript heading levels. That checkpoint does not wire a production assistant A2UI producer, and no runtime-question approval,
 private tool result exposure, permission change, install, VM, live account or deployment is involved.
 This is partial U2 source work, not U2 or MVP acceptance. Delegation remains paused: the user's
 "why limit?" asks for an explanation and is not approval of the proposed configurable defaults.
