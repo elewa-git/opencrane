@@ -357,6 +357,17 @@ test("rejects foreign Host even for safe reads before the proxy attaches credent
 		},
 	};
 	const directRewrittenRead = { ...rewrittenRead, headers: { ...rewrittenRead.headers, host: "example-codespace-4200.app.github.dev", "x-forwarded-host": undefined, "x-forwarded-proto": undefined } };
+	const githubNavigation = {
+		method: "GET",
+		headers: {
+			host: "example-codespace-4200.app.github.dev",
+			referer: "https://github.com/",
+			"sec-fetch-dest": "document",
+			"sec-fetch-mode": "navigate",
+			"sec-fetch-site": "cross-site",
+			"sec-fetch-user": "?1",
+		},
+	};
 	const foreignRead = { method: "GET", headers: { host: "foreign.example", origin: "http://foreign.example" } };
 	const foreignUpgrade = { method: "GET", headers: { host: "foreign.example", origin: "http://foreign.example", upgrade: "websocket" } };
 	assert.equal(isAllowedTier3BrowserRequest(localRead, allowed), true);
@@ -364,6 +375,15 @@ test("rejects foreign Host even for safe reads before the proxy attaches credent
 	assert.equal(isAllowedTier3BrowserRequest(forwardedRead, allowed), true);
 	assert.equal(isAllowedTier3BrowserRequest(rewrittenRead, allowed), true);
 	assert.equal(isAllowedTier3BrowserRequest(directRewrittenRead, allowed), true);
+	assert.equal(isAllowedTier3BrowserRequest(githubNavigation, allowed), true);
+	assert.equal(isAllowedTier3BrowserRequest({ ...githubNavigation, headers: { ...githubNavigation.headers, origin: "https://attacker.example" } }, allowed), false);
+	assert.equal(isAllowedTier3BrowserRequest({ ...githubNavigation, headers: { ...githubNavigation.headers, referer: "https://attacker.example/lure" } }, allowed), false);
+	assert.equal(isAllowedTier3BrowserRequest({ ...githubNavigation, headers: { ...githubNavigation.headers, host: "127.0.0.1:4200" } }, allowed), false);
+	assert.equal(isAllowedTier3BrowserRequest({ ...githubNavigation, headers: { ...githubNavigation.headers, "sec-fetch-user": undefined } }, allowed), false);
+	assert.equal(isAllowedTier3BrowserRequest({ ...githubNavigation, headers: { ...githubNavigation.headers, "sec-fetch-dest": "iframe" } }, allowed), false);
+	assert.equal(isAllowedTier3BrowserRequest({ ...githubNavigation, headers: { ...githubNavigation.headers, "sec-fetch-mode": "no-cors" } }, allowed), false);
+	assert.equal(isAllowedTier3BrowserRequest({ ...githubNavigation, headers: { ...githubNavigation.headers, "sec-fetch-site": "same-origin" } }, allowed), false);
+	assert.equal(isAllowedTier3BrowserRequest({ ...githubNavigation, method: "HEAD" }, allowed), false);
 	assert.equal(isAllowedTier3BrowserRequest({ ...rewrittenRead, headers: { ...rewrittenRead.headers, referer: undefined } }, allowed), false);
 	assert.equal(isAllowedTier3BrowserRequest({ ...rewrittenRead, headers: { ...rewrittenRead.headers, referer: "https://attacker.example/" } }, allowed), false);
 	assert.equal(isAllowedTier3BrowserRequest({ ...rewrittenRead, headers: { ...rewrittenRead.headers, "sec-fetch-site": "cross-site" } }, allowed), false);

@@ -101,14 +101,42 @@ export function isAllowedTier3BrowserRequest(request, allowedBrowserOrigins)
 	if (upgrade !== undefined && (typeof upgrade !== "string" || upgrade.toLowerCase() !== "websocket")) return false;
 	const requiresOrigin = !_SAFE_METHODS.has(request.method ?? "GET") || upgrade !== undefined;
 	const referer = request.headers.referer;
+	const allowedSafeRead = (
+		referer === undefined
+		|| _MatchesOrigin(referer, expected)
+		|| _IsGitHubCodespacesNavigation(request, referer, expected)
+	);
 
-	if (!requiresOrigin) return referer === undefined || _MatchesOrigin(referer, expected);
+	if (!requiresOrigin)
+		return allowedSafeRead;
 	if (upgrade !== undefined) return expectedOrigin || codespacesOriginRewrite;
 	if (expectedOrigin || codespacesOriginRewrite) return true;
 
 	if (typeof referer !== "string") return false;
 
 	return _MatchesOrigin(referer, expected);
+}
+
+/**
+ * Accepts the GitHub Referer used when Codespaces opens a private forwarded port. The exact Fetch
+ * Metadata tuple limits this exception to an explicit top-level browser navigation after the
+ * request authority has already selected one coordinator-owned origin.
+ */
+function _IsGitHubCodespacesNavigation(request, referer, expected)
+{
+	const expectedUrl = new URL(expected);
+	const githubCodespacesNavigation = (
+		request.method === "GET"
+		&& expectedUrl.protocol === "https:"
+		&& expectedUrl.hostname !== "127.0.0.1"
+		&& _MatchesOrigin(referer, "https://github.com")
+		&& request.headers["sec-fetch-mode"] === "navigate"
+		&& request.headers["sec-fetch-dest"] === "document"
+		&& request.headers["sec-fetch-site"] === "cross-site"
+		&& request.headers["sec-fetch-user"] === "?1"
+	);
+
+	return githubCodespacesNavigation;
 }
 
 /**

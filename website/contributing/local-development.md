@@ -457,8 +457,11 @@ addresses are rejected even for reads; state changes require the matching browse
 WebSocket upgrades require an `Origin` header. Codespaces may rewrite same-origin subresource and
 API request origins to its HTTPS loopback address. The proxy accepts that rewrite only when the
 forwarded authority is the launcher's exact private address, the Referer names that address and the
-browser reports a same-origin fetch. After admission, the proxy normalises present browser Origin
-and Referer headers to the certificate-pinned ingress origin before forwarding them. The per-launch
+browser reports a same-origin fetch. Opening the private port from GitHub is accepted only as an
+explicit user-activated top-level document navigation after the forwarded authority matches; the
+GitHub Referer does not admit subresources or programmatic requests. After admission, the proxy
+normalises present browser Origin and Referer headers to the certificate-pinned ingress origin before
+forwarding them. The per-launch
 development identity is available only in this explicit standalone k3d profile; ordinary releases
 remain OpenID Connect (OIDC)-only.
 
