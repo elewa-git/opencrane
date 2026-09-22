@@ -10,6 +10,10 @@ grep -Fqx "FROM --platform=linux/amd64 cognee/cognee:1.2.1@sha256:08216665edfbfb
 grep -Fq "ADD --checksum=sha256:${extension_sha}" "$dockerfile"
 grep -Fq "$extension_path" "$dockerfile"
 grep -Fq "ENV HOME=/root" "$dockerfile"
+grep -Fq "HF_HUB_OFFLINE=1" "$dockerfile"
+grep -Fq "TRANSFORMERS_OFFLINE=1" "$dockerfile"
+grep -Fq "TIKTOKEN_CACHE_DIR=/opt/opencrane/tiktoken-cache" "$dockerfile"
+grep -Fq 'tiktoken.get_encoding("cl100k_base").encode("OpenCrane")' "$dockerfile"
 grep -Fq 'test "${TARGETARCH:-amd64}" = "amd64"' "$dockerfile"
 
 [[ "$(grep -Fc "$extension_url" "$dockerfile")" -eq 1 ]]

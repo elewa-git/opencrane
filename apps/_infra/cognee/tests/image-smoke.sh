@@ -8,11 +8,15 @@ extension_sha="8a5eb3c6c70cc86ea34aea777e9fc78687f69d1396055d878d2b9e0a79cb5114"
 docker build --platform linux/amd64 -t "$image" -f apps/_infra/cognee/deploy/Dockerfile .
 docker run --rm --network none --platform linux/amd64 --entrypoint python "$image" -c '
 import hashlib
+import os
 import pathlib
 import platform
 import tempfile
 
 import ladybug
+from cognee.infrastructure.databases.vector.embeddings.OpenAICompatibleEmbeddingEngine import (
+    OpenAICompatibleEmbeddingEngine,
+)
 
 extension = pathlib.Path("'"$extension_path"'")
 assert platform.machine() in {"amd64", "x86_64"}
@@ -25,5 +29,17 @@ with tempfile.TemporaryDirectory() as directory:
     connection.execute("LOAD EXTENSION JSON;")
     connection.close()
     database.close()
-print("Cognee loaded the pinned LadybugDB json extension with networking disabled.")
+
+assert os.environ["HF_HUB_OFFLINE"] == "1"
+assert os.environ["TRANSFORMERS_OFFLINE"] == "1"
+engine = OpenAICompatibleEmbeddingEngine(
+    model="auto-embedding",
+    dimensions=3072,
+    endpoint="http://127.0.0.1:1",
+    api_key="offline-smoke",
+)
+assert type(engine.tokenizer).__name__ == "TikTokenTokenizer"
+assert engine.tokenizer.count_tokens("OpenCrane offline smoke") > 0
+
+print("Cognee loaded its native extension and embedding tokenizer with networking disabled.")
 '
