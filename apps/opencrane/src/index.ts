@@ -36,10 +36,10 @@ import { _CreateProviderEffectCommandExecutor } from "@opencrane/backend/server/
  */
 async function _Main(): Promise<void>
 {
-	// 1. Capture stray console output before constructing dependencies that may log during startup.
+	// Capture stray console output before constructing dependencies that may log during startup.
 	const unbindConsole = ___BindConsole(_log);
 
-	// 2. Freeze process configuration and external clients so every component shares one target.
+	// Read deployment configuration once and share the database, cluster and history clients across the process.
 	const config = _ReadProcessConfig();
 	const agentSandboxReleaseProfile = _ReadAgentSandboxReleaseProfileConfig();
 	const prisma = ___CreatePrismaClient(_log);
@@ -50,7 +50,7 @@ async function _Main(): Promise<void>
 	const memoryWorkflow = { siloId: config.workflows.siloId, gateway: _CreateMemoryGatewayClient(config.runtime) };
 	const workflows = _CreateMcpWorkflowComposition(prisma, config.workflows, config.runtime.memoryGatewayTimeoutMilliseconds);
 
-	// 3. Compose the retained workload authorities.
+	// Build the tool runtime before connecting conversation workflows to its admission and dispatch adapters.
 	const mcpRuntime = _CreateMcpRuntimeComposition({
 		prisma,
 		kubernetes,
@@ -58,8 +58,10 @@ async function _Main(): Promise<void>
 		workflows,
 		history: historyStore.historyStore,
 	});
+	// Generated-file processing reuses the tool runtime's invocation participants for authorization and lifecycle updates.
 	const generatedFiles = _CreateConversationGeneratedFileWorkflowComposition(prisma, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, mcpRuntime.invocationParticipants, workflows.execution);
 	const providerEffects = _CreateProviderEffectCommandExecutor(prisma, kubernetes.coreApi, config.runtime.serverNamespace, _log);
+	// Run admission creates document repositories inside its prompt-preparation and compilation transactions.
 	const documentAuthorities = { create: function _CreatePromptDocumentAuthority(transaction: Prisma.TransactionClient) { return new PrismaConversationPromptDocumentRepository(transaction); } };
 	const conversationRunAdmission = _CreateProductionConversationRunAdmission(prisma, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, documentAuthorities, _CreatePublishedArtifactReader(prisma), config.runAdmission, _log);
 	const conversationComputerWorkflows = _CreateConversationComputerWorkflowComposition({
@@ -76,17 +78,19 @@ async function _Main(): Promise<void>
 		generatedFiles: generatedFiles.resultReader,
 		generatedOutput: generatedFiles.outputLinker,
 	});
+	// Register turn and stop handlers before activation can enqueue turns or request computer cleanup.
 	const conversationComputerActivations = await _StartConversationComputerActivationWorker(prisma, kubernetes.customApi, historyStore.historyStore, workflows.execution, config.workflows.siloId, agentSandboxReleaseProfile, { stopAuthority: conversationComputerWorkflows.stopAuthority, logger: _log, onExhausted: function _RequestProcessShutdown() { process.kill(process.pid, "SIGTERM"); } });
 	const conversationComputerLifecycle = _CreateConversationComputerLifecycleComposition(prisma, historyStore.historyStore, kubernetes.authApi, kubernetes.coreApi, kubernetes.customApi, config.workflows.siloId, agentSandboxReleaseProfile, config.conversationPrivatePayloadKeyringPath, workflows.execution);
+	// Give process shutdown one stop hook for both computer workers before their shared stores close.
 	const conversationComputerWorkers = { stop: async function _StopComputerWorkers(): Promise<void> { await Promise.all([conversationComputerActivations.stop(), conversationComputerLifecycle.worker.stop()]); } };
 
-	// 4. Build separate HTTP listeners; only the internal app receives workload-only routes.
+	// Public product routes authenticate browser sessions; internal routes verify the calling workload's identity.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
 	const publicApp = _CreatePublicApp(prisma, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects, memoryWorkflow, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, mcpRuntime, generatedFiles, workflows.execution, conversationComputerWorkflows.reviewCredentialRouter, conversationComputerLifecycle.router);
-	// 5. Start listeners and workers under one drain order so shared dependencies close exactly once.
+	// Start remaining workers after route composition registers its workflows, then bind both listeners and shutdown cleanup.
 	await _StartProcessLifecycle(publicApp, internalApp, prisma, config, unbindConsole, mcpRuntime.authority, workflows.runtime, providerEffects, historyStore, conversationComputerWorkers);
 }
 
