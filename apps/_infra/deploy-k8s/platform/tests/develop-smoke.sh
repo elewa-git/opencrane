@@ -18,6 +18,7 @@ SMOKE_ACME_EMAIL="${SMOKE_ACME_EMAIL:-develop-smoke@opencrane.test}"
 SMOKE_FIRST_USER_EMAIL="${SMOKE_FIRST_USER_EMAIL:-owner@develop-smoke.opencrane.test}"
 KEEP_CLUSTER="${KEEP_CLUSTER:-0}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-300}"
+SMOKE_INSTALL_TIMEOUT_SECONDS="${SMOKE_INSTALL_TIMEOUT_SECONDS:-$TIMEOUT_SECONDS}"
 SMOKE_PREREQUISITE_TIMEOUT_SECONDS="${SMOKE_PREREQUISITE_TIMEOUT_SECONDS:-$TIMEOUT_SECONDS}"
 K3S_IMAGE="${K3S_IMAGE:-rancher/k3s:v1.30.10-k3s1}"
 CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-v1.15.1}"
@@ -872,9 +873,9 @@ export OPENCRANE_OIDC_SESSION_SECRET="$(_random_secret)"
 # The disposable k3d image is imported by a local tag, not published to an OCI registry. The
 # production deploy path still requires a UI digest; this explicit escape keeps the smoke honest.
 export OPENCRANE_ALLOW_TAG_FLOAT=1
-export TIMEOUT_SECONDS
 # Exercise the production wrapper's required contact and first-owner inputs. The disposable `.test`
 # host cannot complete public ACME, so the final --set flags deliberately restore its local issuer.
+TIMEOUT_SECONDS="$SMOKE_INSTALL_TIMEOUT_SECONDS" \
 "$ROOT_DIR/apps/_infra/deploy-k8s/deploy.sh" \
   --base-domain "$BASE_DOMAIN" \
   --cluster-tenant "$CLUSTER_TENANT" \

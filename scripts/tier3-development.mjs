@@ -45,6 +45,7 @@ export async function runTier3Development(options, operations = {})
 		RELEASE_NAME: identity.releaseName,
 		SMOKE_HOST_PROFILE: environment.SMOKE_HOST_PROFILE || "minimum",
 		SMOKE_INGRESS_PORT: String(identity.ingressPort),
+		SMOKE_INSTALL_TIMEOUT_SECONDS: environment.SMOKE_INSTALL_TIMEOUT_SECONDS || "1800",
 		SMOKE_PREREQUISITE_TIMEOUT_SECONDS: environment.SMOKE_PREREQUISITE_TIMEOUT_SECONDS || "1800",
 		SMOKE_RESOURCE_OWNER: identity.owner,
 		SMOKE_STORAGE_MODE: options.storageMode,
