@@ -36,6 +36,10 @@ their concrete adapters, mounts their routers, and starts and stops them in the 
 [conversation-computer](../conversation-computer/README.md) ·
 [backend capabilities](../../libs/backend/README.md)
 
+The conversation workflow bootstrap receives a `ConversationExecutionContext`
+object. Its named fields identify the database, history, Kubernetes clients, admission and dispatch
+ports, workflow engine, and generated-file services supplied by process startup.
+
 Startup proceeds in five visible stages:
 
 1. initialise telemetry before any instrumented dependency loads;

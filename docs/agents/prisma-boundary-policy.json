@@ -2790,6 +2790,7 @@
 			"libs/backend/server/conversations/main/src/admission/run-admission-composition.ts",
 			"apps/opencrane/src/bootstrap/conversations/conversation-computer-lifecycle-composition.ts",
 			"apps/opencrane/src/bootstrap/conversations/conversation-computer-workflow-composition.ts",
+			"apps/opencrane/src/bootstrap/conversations/conversation-computer-workflow-composition.types.ts",
 			"apps/opencrane/src/bootstrap/conversations/conversation-generated-file-workflow-composition.ts",
 			"apps/opencrane/src/bootstrap/conversations/conversation-generated-file-workflow-composition.types.ts",
 			"apps/opencrane/src/bootstrap/http/internal-app.ts",

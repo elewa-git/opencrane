@@ -56,7 +56,20 @@ async function _Main(): Promise<void>
 	const providerEffects = _CreateProviderEffectCommandExecutor(prisma, kubernetes.coreApi, config.runtime.serverNamespace, _log);
 	const documentAuthorities = { create: function _CreatePromptDocumentAuthority(transaction: Prisma.TransactionClient) { return new PrismaConversationPromptDocumentRepository(transaction); } };
 	const conversationRunAdmission = _CreateProductionConversationRunAdmission(prisma, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, documentAuthorities, _CreatePublishedArtifactReader(prisma), config.runAdmission, _log);
-	const conversationComputerWorkflows = _CreateConversationComputerWorkflowComposition(prisma, historyStore.historyStore, kubernetes.authApi, kubernetes.coreApi, kubernetes.customApi, config.workflows.siloId, agentSandboxReleaseProfile, config.conversationPrivatePayloadKeyringPath, conversationRunAdmission, mcpRuntime.admitToolInvocationInTransaction, mcpRuntime.toolDispatch, workflows.execution, generatedFiles.resultReader, generatedFiles.outputLinker);
+	const conversationComputerWorkflows = _CreateConversationComputerWorkflowComposition({
+		prisma,
+		history: historyStore.historyStore,
+		kubernetes,
+		siloId: config.workflows.siloId,
+		profile: agentSandboxReleaseProfile,
+		keyringPath: config.conversationPrivatePayloadKeyringPath,
+		runAdmission: conversationRunAdmission,
+		runtimeAdmission: mcpRuntime.admitToolInvocationInTransaction,
+		toolDispatch: mcpRuntime.toolDispatch,
+		workflows: workflows.execution,
+		generatedFiles: generatedFiles.resultReader,
+		generatedOutput: generatedFiles.outputLinker,
+	});
 	const conversationComputerActivations = await _StartConversationComputerActivationWorker(prisma, kubernetes.customApi, historyStore.historyStore, workflows.execution, config.workflows.siloId, agentSandboxReleaseProfile, { stopAuthority: conversationComputerWorkflows.stopAuthority, logger: _log, onExhausted: function _RequestProcessShutdown() { process.kill(process.pid, "SIGTERM"); } });
 	const conversationComputerLifecycle = _CreateConversationComputerLifecycleComposition(prisma, historyStore.historyStore, kubernetes.authApi, kubernetes.coreApi, kubernetes.customApi, config.workflows.siloId, agentSandboxReleaseProfile, config.conversationPrivatePayloadKeyringPath, workflows.execution);
 	const conversationComputerWorkers = { stop: async function _StopComputerWorkers(): Promise<void> { await Promise.all([conversationComputerActivations.stop(), conversationComputerLifecycle.worker.stop()]); } };
