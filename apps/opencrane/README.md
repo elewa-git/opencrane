@@ -39,6 +39,8 @@ their concrete adapters, mounts their routers, and starts and stops them in the 
 The conversation workflow bootstrap receives a `ConversationExecutionContext`
 object. Its named fields identify the database, history, Kubernetes clients, admission and dispatch
 ports, workflow engine, and generated-file services supplied by process startup.
+The MCP runtime bootstrap similarly receives an `McpExecutionContext`, naming the process
+services and configuration shared by container-based and remote tool execution.
 
 Startup proceeds in five visible stages:
 

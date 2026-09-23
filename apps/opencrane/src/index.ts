@@ -51,7 +51,13 @@ async function _Main(): Promise<void>
 	const workflows = _CreateMcpWorkflowComposition(prisma, config.workflows, config.runtime.memoryGatewayTimeoutMilliseconds);
 
 	// 3. Compose the retained workload authorities.
-	const mcpRuntime = _CreateMcpRuntimeComposition(prisma, kubernetes, config, workflows, historyStore.historyStore);
+	const mcpRuntime = _CreateMcpRuntimeComposition({
+		prisma,
+		kubernetes,
+		processConfig: config,
+		workflows,
+		history: historyStore.historyStore,
+	});
 	const generatedFiles = _CreateConversationGeneratedFileWorkflowComposition(prisma, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, mcpRuntime.invocationParticipants, workflows.execution);
 	const providerEffects = _CreateProviderEffectCommandExecutor(prisma, kubernetes.coreApi, config.runtime.serverNamespace, _log);
 	const documentAuthorities = { create: function _CreatePromptDocumentAuthority(transaction: Prisma.TransactionClient) { return new PrismaConversationPromptDocumentRepository(transaction); } };

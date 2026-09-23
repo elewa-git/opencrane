@@ -2808,6 +2808,7 @@
 			"libs/backend/server/knowledge/retrieval/main/src/routes/third-party-sources.ts",
 			"apps/opencrane/src/bootstrap/workflows/mcp-workflow-composition.ts",
 			"apps/opencrane/src/bootstrap/workflows/mcp-runtime-composition.ts",
+			"apps/opencrane/src/bootstrap/workflows/mcp-runtime-composition.types.ts",
 			"apps/opencrane/src/bootstrap/process/runtime-composition.ts",
 			"apps/opencrane/src/bootstrap/process/lifecycle.ts",
 			"apps/opencrane/src/bootstrap/process/background-workers.ts",
