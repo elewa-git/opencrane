@@ -2,7 +2,7 @@
 
 ## MVP continuation — 2026-09-22
 
-### Current checkpoint — recursive delegation source decision accepted; MVP acceptance open
+### Current checkpoint — recursive delegation accounting foundation; MVP acceptance open
 
 On 23 September the user superseded the proposed two-level, four-child, two-active defaults:
 recursive delegation must have **no fixed nesting, total-child or concurrent-child cap**. Stopping
@@ -22,7 +22,9 @@ concurrent spawn/stop, restart, repeated Stop, subtree isolation and shared allo
 
 Implementation starts from `39432f27351b1193092dabc553520291481d9729`. The live 18-PR graph passed
 at snapshot `857508056f1eef4fda716758ed565fd4c4c7b4e42e2bf49f84cebebf68790a62` before this slice.
-This decision is not a claim that recursive delegation or its cancellation is already implemented.
+The decision alone did not implement recursive delegation or its cancellation. The next source
+slice, reviewed against `4dfaea9e6fd8a470d5030941dc0186f9ee19a6ff`, now adds the accounting foundation
+described below; the complete delegation journey remains open.
 
 The source preflight confirms three required replacements: single-run cancellation lacks lineage;
 one full-attempt model key cannot safely finance concurrent child keys; and human-only turn admission
@@ -30,11 +32,40 @@ cannot stand in for a delegated trigger. The accepted State × Event contract an
 are recorded in [the delivery design](docs/design/mvp-delivery-plan.md#recursive-delegation-decision--23-september-2026).
 Spawning must return a durable handle before waiting for the child, with a separate join/read path,
 so parallelism is real. Parent completion/failure also starts descendant cleanup and cannot leave
-orphan work. No production code, baseline, provider or deployment was changed by this design update.
+orphan work. The design commit changed no production code, baseline, provider or deployment.
+
+The source slice adds immutable parent/root accounts, child allowance transfers, local spending
+receipts and saved closure causes under `execution/runs`. SQL serializes admission at the root and
+checks every ancestor without a depth cap. Stop, terminal state or deadline prevents new spending
+and child allocations; a closed branch does not close siblings. Matching saved receipts remain
+readable after closure but do not authorize another effect, and uncertain spending is not refunded.
+Account-owned runs reject the old full-attempt credential and unreserved tool paths. This exclusion
+keeps the foundation dormant until reservation-scoped credentials and tool admissions are joined.
+
+All 127 execution-run unit tests and the package type check pass. Ten two-connection PostgreSQL race
+tests are registered with the fresh-baseline SQL target but deliberately skipped in ordinary tests,
+including when a database URL is present. The SQL target explicitly opts in and requires a fresh
+test database; local runs left `DATABASE_URL` unset. The fixtures use actual repositories and Serializable retries; synthetic
+Stop evidence tests database ordering, not requester IAM or the product Stop workflow. Static
+baseline-preservation, release binding, style and Prisma ownership checks pass. These results do not
+prove database races, child execution, restart or recursive cleanup; those require CI and later
+integrated acceptance. No VM, container, provider call or live database was started or changed.
+
+Architecture and independent integrated review pass for this dormant slice. Review caught and
+fixed SQL tests accidentally following the ordinary CI job's database URL: a regression with an
+unreachable URL confirms that ordinary tests skip them, while `test:sql` refuses missing database
+configuration. Workload ownership/render checks pass across three Helm profiles, 18 workload owners,
+four runtime constructs and 11 templates. No package move or new workload was needed. Live stack
+integrity passed again at `a4407614cbf85e6a9a1104760803496241e5aad59eb2cbf4f8ca58a8d9ce3325`.
+
+Remaining source work is reservation-scoped credential/effect admission, current delegation
+permissions and selected context, independent trusted child activation, non-blocking spawn plus
+join/read, durable return to the parent, and restartable descendant cancellation. Parent completion
+must retain its output while descendant cleanup converges. D1 is not complete.
 
 Published source remains `39432f27351b1193092dabc553520291481d9729` on draft #899, directly above
-#898 at `830243b766d9ccb5f4719b511b082e3843b030db`. This documentation note records that tested
-source; it is not another implementation or deployment. The live 18-PR review chain remains
+#898 at `830243b766d9ccb5f4719b511b082e3843b030db` before publication of this source slice. That
+published CI result does not qualify the new accounting baseline. The live 18-PR review chain remains
 #888 → #891 → #892 → #893 → #894 → #896 → #897 → #898 → #899. No predecessor was absorbed or closed.
 
 [Run 35774552213](https://github.com/elewa-git/opencrane/actions/runs/35774552213) tested merge
@@ -52,7 +83,7 @@ message-link guard, governance access and usage attribution/pricing retain their
 decisions. Publication approval does not authorize those changes. Delegation source is now accepted
 under the no-count-cap and top-down cancellation decision above, replacing the earlier proposal.
 
-The full MVP is blocked, not complete. Fresh-install deployment and identity setup, image publication,
+The full MVP is not complete. Fresh-install deployment and identity setup, image publication,
 hosted credential/trust setup, live Odoo/model/browser journeys and real-account restart/revocation/
 isolation acceptance also retain their separate authorization and evidence gates. Proceed with the
 accepted delegation source work; resume the other decision-gated tracks after their pending decisions.
@@ -2596,7 +2627,7 @@ their own completion track; they are not silently bundled into the first tool PR
 | M1 | IN PROGRESS: persistence, transaction-bound Absurd admission and catalog completion are implemented, and the current #899 run passes the Cognee provider contract and database-authority suites. First-dataset permission, fresh authenticated composition and complete isolated Remember/Recall/Correct/Forget journeys remain; provider CI is not live product-memory acceptance. |
 | U2 | Structured-result production/replay passes source review, controlled checks and real-Kurrent paired-output recovery. Visual approval and authenticated live proof remain. Runtime-question source is separately PAUSED pending explicit approval. |
 | F1 | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV capture, scanning and answer-link recovery are implemented in #879 and pass four real-store cases in #880. The pending SQL guard and complete hosted execution/download qualification remain. |
-| D1 | REQUIRED FOR MVP; recursive source implementation accepted 23 September with no fixed depth, child-count or concurrency caps and top-down cancellation. Not yet implemented or qualified; characterization tests do not establish this journey. |
+| D1 | IN PROGRESS; recursive source accepted 23 September with no fixed depth, child-count or concurrency caps. Run-tree accounting and admission fences are implemented locally with 127 package tests passing; ten real-database race tests await CI. Credentials, spawn/join, narrowed context/permissions and recursive cleanup remain unjoined. This is not a working or qualified delegation journey. |
 | S1 | REQUIRED FOR MVP; source activation remains paused for the private-scheduling decisions. |
 | A2 | PARTIAL: protected audit/usage read screens and their controlled tests are implemented. Governance-reader policy, actual usage collection/pricing/attribution and real-account administration acceptance remain open. |
 | T3 | PLANNED, with separate acceptance for its journey. |

@@ -5,6 +5,20 @@ const _MINIMUM_FUNCTIONS = 82;
 const _MINIMUM_TRIGGERS = 93;
 const _MINIMUM_CONSTRAINTS = 240;
 const _REQUIRED_AUTHORITY_MARKERS = [
+	'CREATE TABLE "agent_run_tree_accounts"',
+	'CREATE TABLE "agent_run_tree_reservations"',
+	'ADD CONSTRAINT "agent_run_tree_accounts_material_check"',
+	'ADD CONSTRAINT "agent_run_tree_reservations_material_check"',
+	'CREATE FUNCTION "require_agent_run_tree_open"(target_run_id TEXT)',
+	'CREATE TRIGGER "agent_run_tree_accounts_insert"',
+	'CREATE TRIGGER "agent_run_tree_accounts_update"',
+	'CREATE TRIGGER "agent_run_tree_reservations_authority"',
+	'CREATE TRIGGER "run_model_mint_tree_authority"',
+	'CREATE TRIGGER "tool_invocations_run_tree_authority"',
+	'Run tree lineage and allocated allowance are immutable',
+	'Run tree closure requires saved ancestor Stop, terminal state or elapsed deadline',
+	'Run tree model credentials require reservation-scoped authority',
+	'Run tree tool work requires reservation-scoped authority',
 	'CREATE TABLE "mcp_connections"',
 	'CREATE UNIQUE INDEX mcp_connections_one_generation_barrier_key',
 	'ADD CONSTRAINT mcp_connections_digest_shapes_check',

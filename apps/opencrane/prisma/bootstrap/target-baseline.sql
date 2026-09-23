@@ -251,6 +251,9 @@ CREATE TYPE "AgentRunCancellationDecision" AS ENUM ('cancellation_won', 'output_
 CREATE TYPE "WorkloadKind" AS ENUM ('pod', 'job', 'deployment');
 
 -- CreateEnum
+CREATE TYPE "AgentRunTreeClosureReason" AS ENUM ('authorized_stop', 'terminal_run', 'deadline');
+
+-- CreateEnum
 CREATE TYPE "SkillState" AS ENUM ('active', 'retired');
 
 -- CreateEnum
@@ -1906,6 +1909,48 @@ CREATE TABLE "run_model_credential_mint_authorizations" (
 );
 
 -- CreateTable
+CREATE TABLE "agent_run_tree_accounts" (
+    "run_id" TEXT NOT NULL,
+    "root_run_id" TEXT NOT NULL,
+    "parent_run_id" TEXT,
+    "admission_key" TEXT NOT NULL,
+    "admission_digest" TEXT NOT NULL,
+    "deadline_at" TIMESTAMP(3) NOT NULL,
+    "allocated_model_calls" INTEGER NOT NULL,
+    "allocated_completion_tokens" INTEGER NOT NULL,
+    "allocated_tool_invocations" INTEGER NOT NULL,
+    "allocated_loop_iterations" INTEGER NOT NULL,
+    "allocated_cost_micros" BIGINT NOT NULL,
+    "available_model_calls" INTEGER NOT NULL,
+    "available_completion_tokens" INTEGER NOT NULL,
+    "available_tool_invocations" INTEGER NOT NULL,
+    "available_loop_iterations" INTEGER NOT NULL,
+    "available_cost_micros" BIGINT NOT NULL,
+    "revision" INTEGER NOT NULL DEFAULT 0,
+    "closed_at" TIMESTAMP(3),
+    "closure_source_run_id" TEXT,
+    "closure_reason" "AgentRunTreeClosureReason",
+
+    CONSTRAINT "agent_run_tree_accounts_pkey" PRIMARY KEY ("run_id")
+);
+
+-- CreateTable
+CREATE TABLE "agent_run_tree_reservations" (
+    "id" TEXT NOT NULL,
+    "run_id" TEXT NOT NULL,
+    "idempotency_key" TEXT NOT NULL,
+    "command_digest" TEXT NOT NULL,
+    "model_calls" INTEGER NOT NULL,
+    "completion_tokens" INTEGER NOT NULL,
+    "tool_invocations" INTEGER NOT NULL,
+    "loop_iterations" INTEGER NOT NULL,
+    "cost_micros" BIGINT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "agent_run_tree_reservations_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "skills" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -2984,6 +3029,15 @@ CREATE INDEX "run_model_credential_mint_authorizations_expires_at_idx" ON "run_m
 CREATE UNIQUE INDEX "run_model_credential_mint_authorizations_run_id_attempt_gen_key" ON "run_model_credential_mint_authorizations"("run_id", "attempt", "generation");
 
 -- CreateIndex
+CREATE INDEX "agent_run_tree_accounts_parent_run_id_run_id_idx" ON "agent_run_tree_accounts"("parent_run_id", "run_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_run_tree_accounts_admission_key" ON "agent_run_tree_accounts"("root_run_id", "admission_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_run_tree_reservations_idempotency_key" ON "agent_run_tree_reservations"("run_id", "idempotency_key");
+
+-- CreateIndex
 CREATE INDEX "skills_silo_id_state_idx" ON "skills"("silo_id", "state");
 
 -- CreateIndex
@@ -3440,6 +3494,21 @@ ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_fke
 ALTER TABLE "run_model_credential_mint_authorizations" ADD CONSTRAINT "run_model_credential_mint_authorizations_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "agent_run_tree_accounts" ADD CONSTRAINT "agent_run_tree_accounts_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_run_tree_accounts" ADD CONSTRAINT "agent_run_tree_accounts_root_run_id_fkey" FOREIGN KEY ("root_run_id") REFERENCES "agent_run_tree_accounts"("run_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_run_tree_accounts" ADD CONSTRAINT "agent_run_tree_accounts_parent_run_id_fkey" FOREIGN KEY ("parent_run_id") REFERENCES "agent_run_tree_accounts"("run_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_run_tree_accounts" ADD CONSTRAINT "agent_run_tree_accounts_closure_source_run_id_fkey" FOREIGN KEY ("closure_source_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_run_tree_reservations" ADD CONSTRAINT "agent_run_tree_reservations_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_run_tree_accounts"("run_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "skills" ADD CONSTRAINT "skills_id_current_revision_id_fkey" FOREIGN KEY ("id", "current_revision_id") REFERENCES "skill_revisions"("skill_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -3817,6 +3886,253 @@ CREATE TRIGGER "org_memberships_last_owner_guard"
     FOR EACH ROW EXECUTE FUNCTION "protect_org_membership_last_owner"();
 
 -- Database-native authority guards omitted by Prisma schema diff.
+
+-- Tree accounts divide existing allowance. These guards do not admit a child workflow or grant delegation.
+ALTER TABLE "agent_run_tree_accounts" ADD CONSTRAINT "agent_run_tree_accounts_material_check" CHECK (
+    btrim("run_id") <> '' AND btrim("root_run_id") <> '' AND btrim("admission_key") <> ''
+    AND "admission_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND (("parent_run_id" IS NULL AND "root_run_id" = "run_id")
+        OR ("parent_run_id" IS NOT NULL AND "parent_run_id" <> "run_id" AND "root_run_id" <> "run_id"))
+    AND "allocated_model_calls" >= 0 AND "allocated_completion_tokens" >= 0
+    AND "allocated_tool_invocations" >= 0 AND "allocated_loop_iterations" >= 0
+    AND "allocated_cost_micros" >= 0
+    AND "available_model_calls" BETWEEN 0 AND "allocated_model_calls"
+    AND "available_completion_tokens" BETWEEN 0 AND "allocated_completion_tokens"
+    AND "available_tool_invocations" BETWEEN 0 AND "allocated_tool_invocations"
+    AND "available_loop_iterations" BETWEEN 0 AND "allocated_loop_iterations"
+    AND "available_cost_micros" BETWEEN 0 AND "allocated_cost_micros"
+    AND "revision" >= 0
+    AND num_nonnulls("closed_at", "closure_source_run_id", "closure_reason") IN (0, 3)
+);
+ALTER TABLE "agent_run_tree_reservations" ADD CONSTRAINT "agent_run_tree_reservations_material_check" CHECK (
+    btrim("id") <> '' AND btrim("idempotency_key") <> '' AND "command_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND "model_calls" >= 0 AND "completion_tokens" >= 0 AND "tool_invocations" >= 0
+    AND "loop_iterations" >= 0 AND "cost_micros" >= 0
+    AND ("model_calls" > 0 OR "completion_tokens" > 0 OR "tool_invocations" > 0 OR "loop_iterations" > 0 OR "cost_micros" > 0)
+);
+
+-- Locking the root orders sibling admissions against Stop; walking parents has no depth limit.
+CREATE FUNCTION "require_agent_run_tree_open"(target_run_id TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
+DECLARE
+    cursor_run_id TEXT := target_run_id;
+    tree_root_id TEXT;
+    account "agent_run_tree_accounts"%ROWTYPE;
+    current_run "agent_runs"%ROWTYPE;
+BEGIN
+    SELECT "root_run_id" INTO tree_root_id FROM "agent_run_tree_accounts" WHERE "run_id" = target_run_id;
+    IF tree_root_id IS NULL THEN RAISE EXCEPTION 'Run tree account is missing'; END IF;
+    UPDATE "agent_run_tree_accounts" SET "revision" = "revision" + 1 WHERE "run_id" = tree_root_id;
+    LOOP
+        SELECT * INTO account FROM "agent_run_tree_accounts" WHERE "run_id" = cursor_run_id FOR UPDATE;
+        SELECT * INTO current_run FROM "agent_runs" WHERE "id" = cursor_run_id FOR UPDATE;
+        IF account."run_id" IS NULL OR current_run."id" IS NULL OR account."root_run_id" <> tree_root_id THEN
+            RAISE EXCEPTION 'Run tree ancestor authority is missing';
+        END IF;
+        IF account."closed_at" IS NOT NULL OR account."deadline_at" <= clock_timestamp()
+            OR current_run."cancellation_command_id" IS NOT NULL
+            OR current_run."state" IN ('cancelling', 'completed', 'cancelled', 'failed') THEN
+            RAISE EXCEPTION 'Run tree ancestor no longer accepts work';
+        END IF;
+        EXIT WHEN account."parent_run_id" IS NULL;
+        cursor_run_id := account."parent_run_id";
+    END LOOP;
+END;
+$$;
+
+CREATE FUNCTION "enforce_agent_run_tree_account_insert"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    current_run "agent_runs"%ROWTYPE;
+    parent_run "agent_runs"%ROWTYPE;
+    parent_account "agent_run_tree_accounts"%ROWTYPE;
+    frozen_budget JSONB;
+BEGIN
+    SELECT * INTO current_run FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
+    SELECT "budget_policy" INTO frozen_budget FROM "run_input_snapshots"
+        WHERE "run_id" = NEW."run_id" AND "attempt" = current_run."attempt" AND "input_digest" = current_run."input_snapshot_digest";
+    IF current_run."id" IS NULL OR current_run."state" <> 'accepted' OR current_run."cancellation_command_id" IS NOT NULL THEN
+        RAISE EXCEPTION 'Run tree account requires an accepted run before execution';
+    END IF;
+    IF EXISTS (SELECT 1 FROM "run_model_credential_mint_authorizations" WHERE "run_id" = NEW."run_id")
+        OR EXISTS (SELECT 1 FROM "tool_invocations" WHERE "run_id" = NEW."run_id") THEN
+        RAISE EXCEPTION 'Run tree account cannot adopt existing spending authority';
+    END IF;
+    IF frozen_budget IS NULL OR NOT frozen_budget ?& ARRAY['maxModelTurns', 'maxCompletionTokens', 'maxToolInvocations', 'maxLoopIterations', 'maxCostUsdMicros', 'wallClockDeadlineEpochMs']
+        OR jsonb_typeof(frozen_budget->'maxModelTurns') IS DISTINCT FROM 'number'
+        OR jsonb_typeof(frozen_budget->'maxCompletionTokens') IS DISTINCT FROM 'number'
+        OR jsonb_typeof(frozen_budget->'maxToolInvocations') IS DISTINCT FROM 'number'
+        OR jsonb_typeof(frozen_budget->'maxLoopIterations') IS DISTINCT FROM 'number'
+        OR jsonb_typeof(frozen_budget->'wallClockDeadlineEpochMs') IS DISTINCT FROM 'number'
+        OR jsonb_typeof(frozen_budget->'maxCostUsdMicros') NOT IN ('number', 'null')
+        OR (frozen_budget->>'maxModelTurns') !~ '^[1-9][0-9]*$'
+        OR (frozen_budget->>'maxCompletionTokens') !~ '^[1-9][0-9]*$'
+        OR (frozen_budget->>'maxToolInvocations') !~ '^(0|[1-9][0-9]*)$'
+        OR (frozen_budget->>'maxLoopIterations') !~ '^(0|[1-9][0-9]*)$'
+        OR (frozen_budget->>'wallClockDeadlineEpochMs') !~ '^[1-9][0-9]*$'
+        OR (jsonb_typeof(frozen_budget->'maxCostUsdMicros') = 'number' AND (frozen_budget->>'maxCostUsdMicros') !~ '^[1-9][0-9]*$') THEN
+        RAISE EXCEPTION 'Run tree account requires its frozen budget and future deadline';
+    END IF;
+    IF NEW."deadline_at" IS DISTINCT FROM to_timestamp((frozen_budget->>'wallClockDeadlineEpochMs')::NUMERIC / 1000)
+        OR NEW."deadline_at" <= clock_timestamp() THEN
+        RAISE EXCEPTION 'Run tree account requires its frozen budget and future deadline';
+    END IF;
+    IF NEW."revision" <> 0 OR NEW."closed_at" IS NOT NULL OR NEW."closure_source_run_id" IS NOT NULL OR NEW."closure_reason" IS NOT NULL
+        OR NEW."available_model_calls" <> NEW."allocated_model_calls"
+        OR NEW."available_completion_tokens" <> NEW."allocated_completion_tokens"
+        OR NEW."available_tool_invocations" <> NEW."allocated_tool_invocations"
+        OR NEW."available_loop_iterations" <> NEW."allocated_loop_iterations"
+        OR NEW."available_cost_micros" <> NEW."allocated_cost_micros" THEN
+        RAISE EXCEPTION 'Run tree account must begin open with its complete allocation';
+    END IF;
+    IF NEW."allocated_model_calls" > (frozen_budget->>'maxModelTurns')::INTEGER
+        OR NEW."allocated_completion_tokens" > (frozen_budget->>'maxCompletionTokens')::INTEGER
+        OR NEW."allocated_tool_invocations" > (frozen_budget->>'maxToolInvocations')::INTEGER
+        OR NEW."allocated_loop_iterations" > (frozen_budget->>'maxLoopIterations')::INTEGER
+        OR (jsonb_typeof(frozen_budget->'maxCostUsdMicros') <> 'null'
+            AND NEW."allocated_cost_micros" > (frozen_budget->>'maxCostUsdMicros')::BIGINT) THEN
+        RAISE EXCEPTION 'Run tree allocation exceeds its frozen run budget';
+    END IF;
+    IF NEW."parent_run_id" IS NULL THEN
+        IF NEW."root_run_id" <> NEW."run_id" OR NEW."allocated_cost_micros" <= 0
+            OR NEW."allocated_model_calls" <> (frozen_budget->>'maxModelTurns')::INTEGER
+            OR NEW."allocated_completion_tokens" <> (frozen_budget->>'maxCompletionTokens')::INTEGER
+            OR NEW."allocated_tool_invocations" <> (frozen_budget->>'maxToolInvocations')::INTEGER
+            OR NEW."allocated_loop_iterations" <> (frozen_budget->>'maxLoopIterations')::INTEGER THEN
+            RAISE EXCEPTION 'Run tree root must freeze its original allowance';
+        END IF;
+        RETURN NEW;
+    END IF;
+    PERFORM "require_agent_run_tree_open"(NEW."parent_run_id");
+    SELECT * INTO parent_account FROM "agent_run_tree_accounts" WHERE "run_id" = NEW."parent_run_id";
+    SELECT * INTO parent_run FROM "agent_runs" WHERE "id" = NEW."parent_run_id";
+    IF NEW."root_run_id" <> parent_account."root_run_id" OR current_run."silo_id" <> parent_run."silo_id"
+        OR NEW."deadline_at" > parent_account."deadline_at" OR NEW."run_id" = NEW."parent_run_id"
+        OR NEW."run_id" = NEW."root_run_id" THEN
+        RAISE EXCEPTION 'Run tree child must preserve its parent root, silo and deadline';
+    END IF;
+    UPDATE "agent_run_tree_accounts" SET
+        "available_model_calls" = "available_model_calls" - NEW."allocated_model_calls",
+        "available_completion_tokens" = "available_completion_tokens" - NEW."allocated_completion_tokens",
+        "available_tool_invocations" = "available_tool_invocations" - NEW."allocated_tool_invocations",
+        "available_loop_iterations" = "available_loop_iterations" - NEW."allocated_loop_iterations",
+        "available_cost_micros" = "available_cost_micros" - NEW."allocated_cost_micros",
+        "revision" = "revision" + 1
+    WHERE "run_id" = NEW."parent_run_id"
+        AND "available_model_calls" >= NEW."allocated_model_calls" AND "available_completion_tokens" >= NEW."allocated_completion_tokens"
+        AND "available_tool_invocations" >= NEW."allocated_tool_invocations" AND "available_loop_iterations" >= NEW."allocated_loop_iterations"
+        AND "available_cost_micros" >= NEW."allocated_cost_micros";
+    IF NOT FOUND THEN RAISE EXCEPTION 'Run tree parent has insufficient unreserved allowance'; END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION "enforce_agent_run_tree_account_update"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    cursor_run_id TEXT;
+    source_account "agent_run_tree_accounts"%ROWTYPE;
+    source_run "agent_runs"%ROWTYPE;
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Run tree accounts cannot be deleted'; END IF;
+    IF (to_jsonb(NEW) - ARRAY['available_model_calls', 'available_completion_tokens', 'available_tool_invocations', 'available_loop_iterations', 'available_cost_micros', 'revision', 'closed_at', 'closure_source_run_id', 'closure_reason'])
+        IS DISTINCT FROM (to_jsonb(OLD) - ARRAY['available_model_calls', 'available_completion_tokens', 'available_tool_invocations', 'available_loop_iterations', 'available_cost_micros', 'revision', 'closed_at', 'closure_source_run_id', 'closure_reason']) THEN
+        RAISE EXCEPTION 'Run tree lineage and allocated allowance are immutable';
+    END IF;
+    IF NEW."revision" NOT IN (OLD."revision", OLD."revision" + 1) THEN
+        RAISE EXCEPTION 'Run tree revision must advance one step';
+    END IF;
+    IF ROW(NEW."available_model_calls", NEW."available_completion_tokens", NEW."available_tool_invocations", NEW."available_loop_iterations", NEW."available_cost_micros")
+        IS DISTINCT FROM ROW(OLD."available_model_calls", OLD."available_completion_tokens", OLD."available_tool_invocations", OLD."available_loop_iterations", OLD."available_cost_micros") THEN
+        IF pg_trigger_depth() < 2 OR NEW."available_model_calls" > OLD."available_model_calls"
+            OR NEW."available_completion_tokens" > OLD."available_completion_tokens" OR NEW."available_tool_invocations" > OLD."available_tool_invocations"
+            OR NEW."available_loop_iterations" > OLD."available_loop_iterations" OR NEW."available_cost_micros" > OLD."available_cost_micros" THEN
+            RAISE EXCEPTION 'Run tree available allowance is debited only by admission';
+        END IF;
+        IF NEW."revision" <> OLD."revision" + 1 THEN
+            RAISE EXCEPTION 'Run tree debit must advance its account revision';
+        END IF;
+    END IF;
+    IF ROW(NEW."closed_at", NEW."closure_source_run_id", NEW."closure_reason")
+        IS NOT DISTINCT FROM ROW(OLD."closed_at", OLD."closure_source_run_id", OLD."closure_reason") THEN
+        IF pg_trigger_depth() < 2 AND OLD."run_id" <> OLD."root_run_id" AND NEW."revision" <> OLD."revision" THEN
+            RAISE EXCEPTION 'Only the root account exposes the tree serialization revision';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF OLD."closed_at" IS NOT NULL OR NEW."closed_at" IS NULL OR NEW."closure_source_run_id" IS NULL OR NEW."closure_reason" IS NULL THEN
+        RAISE EXCEPTION 'Run tree closure cannot be replaced or reopened';
+    END IF;
+    IF OLD."root_run_id" <> OLD."run_id" THEN
+        UPDATE "agent_run_tree_accounts" SET "revision" = "revision" + 1 WHERE "run_id" = OLD."root_run_id";
+    END IF;
+    cursor_run_id := OLD."run_id";
+    LOOP
+        SELECT * INTO source_account FROM "agent_run_tree_accounts" WHERE "run_id" = cursor_run_id;
+        EXIT WHEN cursor_run_id = NEW."closure_source_run_id";
+        IF source_account."parent_run_id" IS NULL THEN RAISE EXCEPTION 'Run tree closure source must be this run or an ancestor'; END IF;
+        cursor_run_id := source_account."parent_run_id";
+    END LOOP;
+    SELECT * INTO source_run FROM "agent_runs" WHERE "id" = NEW."closure_source_run_id" FOR UPDATE;
+    IF (NEW."closure_reason" = 'authorized_stop' AND source_run."cancellation_command_id" IS NULL)
+        OR (NEW."closure_reason" = 'terminal_run' AND source_run."state" NOT IN ('completed', 'cancelled', 'failed'))
+        OR (NEW."closure_reason" = 'deadline' AND source_account."deadline_at" > clock_timestamp()) THEN
+        RAISE EXCEPTION 'Run tree closure requires saved ancestor Stop, terminal state or elapsed deadline';
+    END IF;
+    NEW."closed_at" := clock_timestamp();
+    NEW."revision" := OLD."revision" + 1;
+    RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION "enforce_agent_run_tree_reservation"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'Run tree spending reservations are immutable'; END IF;
+    PERFORM "require_agent_run_tree_open"(NEW."run_id");
+    UPDATE "agent_run_tree_accounts" SET
+        "available_model_calls" = "available_model_calls" - NEW."model_calls",
+        "available_completion_tokens" = "available_completion_tokens" - NEW."completion_tokens",
+        "available_tool_invocations" = "available_tool_invocations" - NEW."tool_invocations",
+        "available_loop_iterations" = "available_loop_iterations" - NEW."loop_iterations",
+        "available_cost_micros" = "available_cost_micros" - NEW."cost_micros",
+        "revision" = "revision" + 1
+    WHERE "run_id" = NEW."run_id"
+        AND "available_model_calls" >= NEW."model_calls" AND "available_completion_tokens" >= NEW."completion_tokens"
+        AND "available_tool_invocations" >= NEW."tool_invocations" AND "available_loop_iterations" >= NEW."loop_iterations"
+        AND "available_cost_micros" >= NEW."cost_micros";
+    IF NOT FOUND THEN RAISE EXCEPTION 'Run tree account has insufficient unreserved allowance'; END IF;
+    NEW."created_at" := clock_timestamp();
+    RETURN NEW;
+END;
+$$;
+
+-- An account cannot coexist with the old credential that exposes a complete attempt's allowance.
+CREATE FUNCTION "reject_legacy_model_mint_for_run_tree"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM 1 FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
+    IF EXISTS (SELECT 1 FROM "agent_run_tree_accounts" WHERE "run_id" = NEW."run_id") THEN
+        RAISE EXCEPTION 'Run tree model credentials require reservation-scoped authority';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "reject_legacy_tool_work_for_run_tree"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW."run_id" IS NULL THEN RETURN NEW; END IF;
+    PERFORM 1 FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
+    IF EXISTS (SELECT 1 FROM "agent_run_tree_accounts" WHERE "run_id" = NEW."run_id") THEN
+        RAISE EXCEPTION 'Run tree tool work requires reservation-scoped authority';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "agent_run_tree_accounts_insert" BEFORE INSERT ON "agent_run_tree_accounts"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_run_tree_account_insert"();
+CREATE TRIGGER "agent_run_tree_accounts_update" BEFORE UPDATE OR DELETE ON "agent_run_tree_accounts"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_run_tree_account_update"();
+CREATE TRIGGER "agent_run_tree_reservations_authority" BEFORE INSERT OR UPDATE OR DELETE ON "agent_run_tree_reservations"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_run_tree_reservation"();
+CREATE TRIGGER "run_model_mint_tree_authority" BEFORE INSERT OR UPDATE OF "run_id" ON "run_model_credential_mint_authorizations"
+    FOR EACH ROW EXECUTE FUNCTION "reject_legacy_model_mint_for_run_tree"();
+CREATE TRIGGER "tool_invocations_run_tree_authority" BEFORE INSERT OR UPDATE ON "tool_invocations"
+    FOR EACH ROW EXECUTE FUNCTION "reject_legacy_tool_work_for_run_tree"();
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_identity_check" CHECK (
     btrim("id") <> ''
     AND btrim("silo_id") <> ''

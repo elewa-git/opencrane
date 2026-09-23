@@ -3,6 +3,13 @@
 	"owners": {
 		"repositories": [
 			{
+				"path": "libs/backend/agents/execution/runs/main/src/tree/prisma-run-tree-repository.ts",
+				"adapter": "PrismaRunTreeRepository",
+				"contract": "RunTreeRepository",
+				"contractImportPath": "./run-tree.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/memory/source/prisma-personal-memory-message-source-repository.ts",
 				"adapter": "PrismaPersonalMemoryMessageSourceRepository",
 				"contract": "PersonalMemoryMessageSourceRevalidator",

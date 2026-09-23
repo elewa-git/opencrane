@@ -78,6 +78,37 @@ personal activity API; canonical participant receipts belong to conversation his
 The status projection exposes `cancelling` while durable arbitration or cleanup remains active and
 `cancelled` only after provider claims no longer hold a fence.
 
+### Run-tree accounting foundation
+
+`PrismaRunTreeRepository` is a transaction-bound foundation for recursive delegation. It is not yet
+connected to conversation admission or offered to the model. Its caller must check current product
+permissions and commit the child run, snapshot, allocation and workflow receipt in the same
+Serializable transaction. The adapter does not open a separate transaction or confer permission.
+
+`AgentRunTreeAccount` records parent/root lineage and an immutable allocation. A child takes a
+portion of its parent's available model calls, generated tokens, external tool calls, loop cycles
+and cost; it does not get another copy of the root budget. SQL debits available balances, while
+`AgentRunTreeReservation` keeps every local debit immutable. Exact retries recover the same record;
+changed requests are refused. Uncertain spending is never refunded. Root cost is the lower of the
+frozen revision cap, when present, and the explicit trusted server cap. Children cannot extend a
+saved deadline. There is no fixed depth, child-count or active-child limit.
+
+New allocations and reservations check every ancestor's current run state, Stop evidence and
+deadline under the root lock. Closure records why admission ended; it does not mark provider work
+or descendants as cleaned up. Existing receipts remain readable for recovery after closure without
+authorizing another effect. The adapter acquires the root before closing a descendant so its lock
+order matches allocation and reservation. A conflict must roll back the whole caller transaction.
+
+Until reservation-scoped credentials and tool admission are connected, SQL refuses legacy model
+minting and tool work for any account-owned run. It also refuses to create an account after those
+old spending authorities exist. These deliberate refusals prevent a partial rollout from duplicating
+the budget. Production runs still use the existing path and create no tree account. Spawning,
+selected child context, result return and recursive workflow/key cleanup remain unfinished.
+
+The package's `test:sql` target includes baseline guard tests and independent-client transaction
+races. That target opts into `OPENCRANE_RUN_TREE_SQL_QUALIFICATION=1` and requires `DATABASE_URL`.
+Ordinary tests skip the real-SQL cases even when a database URL is present; a skipped case is not proof.
+
 ## Boundary
 
 This package does not choose personas, memory, tools, models, or Kubernetes settings. The input
@@ -85,8 +116,9 @@ assembler supplies the fixed run input. The conversation workflow runs the serve
 generation before each effect. The saved budget projection supplies explicit model-turn, completion-token,
 tool-invocation, loop-iteration, optional-cost and wall-clock ceilings. Repeated model/tool progression
 consumes those frozen counters and retains an allowance for the final answer. The Pod does not
-schedule or call the model loop. These limits belong to one run; there is not yet a shared allowance
-for delegated children, descendant cancellation, or automatic child-result return.
+schedule or call the model loop. The running conversation path still spends one run's allowance;
+it does not yet use the run-tree accounting foundation above. Delegated child execution,
+descendant cancellation and automatic child-result return are not yet wired.
 
 The current text-turn baseline uses approved personal instructions, conversation history and the
 selected model. New runs explicitly freeze memory as unavailable. Dataset provisioning and memory
