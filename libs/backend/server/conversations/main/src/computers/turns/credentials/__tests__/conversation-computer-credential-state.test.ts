@@ -4,14 +4,14 @@ import { ConversationComputerCredentialPreparationOutcomes as Outcomes, Conversa
 import { _AssertCredentialReusable, _CredentialRequiresRevocation, _PrepareExistingCredential } from "../conversation-computer-credential-state";
 
 const _NOW = Date.parse("2026-09-07T00:00:00.000Z");
-const _INPUT = { bootstrapId: "bootstrap-1", keyAlias: "attempt-1", modelAlias: "model-1", computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" }, lease: { leaseId: "lease-1", leaseGeneration: 1 }, expirySeconds: 300, notAfter: new Date(_NOW + 600_000).toISOString(), maxBudgetUsd: 0.1 };
+const _INPUT = { bootstrapId: "bootstrap-1", runId: "run-1", attempt: 1, keyAlias: "attempt-1", modelAlias: "model-1", computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" }, lease: { leaseId: "lease-1", leaseGeneration: 1 }, expirySeconds: 300, notAfter: new Date(_NOW + 600_000).toISOString(), maxBudgetUsd: 0.1 };
 
 beforeEach(function _Clock() { vi.spyOn(Date, "now").mockReturnValue(_NOW); });
 afterEach(function _RestoreClock() { vi.restoreAllMocks(); });
 
 function _Row(state: States): ConversationComputerCredentialCustody
 {
-	return { bootstrapId: _INPUT.bootstrapId, siloId: "silo-1", conversationId: "conversation-1", keyAlias: "attempt-1", modelAlias: "model-1", state, claimFence: "original-fence", claimExpiresAt: new Date(_NOW + 30_000), expiresAt: new Date(_NOW + 300_000), keyId: "key-1", nonce: Buffer.from("nonce"), authTag: Buffer.from("tag"), ciphertext: Buffer.from("secret"), ciphertextDigest: "cipher-digest", credentialDigest: "key-digest" };
+	return { bootstrapId: _INPUT.bootstrapId, runId: _INPUT.runId, attempt: _INPUT.attempt, siloId: "silo-1", conversationId: "conversation-1", keyAlias: "attempt-1", modelAlias: "model-1", state, claimFence: "original-fence", claimExpiresAt: new Date(_NOW + 30_000), expiresAt: new Date(_NOW + 300_000), keyId: "key-1", nonce: Buffer.from("nonce"), authTag: Buffer.from("tag"), ciphertext: Buffer.from("secret"), ciphertextDigest: "cipher-digest", credentialDigest: "key-digest" };
 }
 
 describe("credential State × Event decisions", function _StateEvents()

@@ -14,10 +14,10 @@ export class ConversationComputerCredentialReceiptCodec
 	/** Builds custody after issuance; the caller must persist it before returning the key. */
 	public seal(input: ConversationComputerCredentialIssueCommand, fence: string, minted: IssuedConversationComputerCredential): EncryptedConversationComputerCredentialCustody
 	{
-		const coordinates = _coordinates(input.computer.siloId, input.computer.conversationId, input.bootstrapId);
+		const coordinates = _coordinates(input.computer.siloId, input.computer.conversationId, input.bootstrapId, input.runId, input.attempt);
 		const encrypted = this.cipher.encrypt(minted.key, coordinates);
 		return {
-			bootstrapId: input.bootstrapId, siloId: input.computer.siloId, conversationId: input.computer.conversationId,
+			bootstrapId: input.bootstrapId, runId: input.runId, attempt: input.attempt, siloId: input.computer.siloId, conversationId: input.computer.conversationId,
 			keyAlias: input.keyAlias, modelAlias: input.modelAlias, state: ConversationComputerCredentialStates.Custodied,
 			claimFence: fence, claimExpiresAt: new Date(0), expiresAt: new Date(minted.expiresAt),
 			...encrypted, credentialDigest: _digest(minted.key),
@@ -32,7 +32,7 @@ export class ConversationComputerCredentialReceiptCodec
 	{
 		if (!_HasEncryptedCredentialCustody(row))
 			throw new Error("Conversation computer credential is not in durable custody");
-		const coordinates = _coordinates(row.siloId, row.conversationId, row.bootstrapId);
+		const coordinates = _coordinates(row.siloId, row.conversationId, row.bootstrapId, row.runId, row.attempt);
 		const key = this.cipher.decrypt({ keyId: row.keyId, nonce: row.nonce, authTag: row.authTag, ciphertext: row.ciphertext, ciphertextDigest: row.ciphertextDigest }, coordinates);
 		if (_digest(key) !== row.credentialDigest)
 			throw new Error("Conversation computer attempt credential digest does not match");
@@ -46,10 +46,10 @@ export function _HasEncryptedCredentialCustody(row: ConversationComputerCredenti
 	return row.keyId !== null && row.nonce !== null && row.authTag !== null && row.ciphertext !== null && row.ciphertextDigest !== null && row.credentialDigest !== null;
 }
 
-/** Binds custody to the bootstrap attempt and its conversation without using a participant identity. */
-function _coordinates(siloId: string, conversationId: string, bootstrapId: string): ConversationPrivatePayloadCoordinates
+/** Binds encrypted custody to its bootstrap, run attempt and conversation without using a participant identity. */
+function _coordinates(siloId: string, conversationId: string, bootstrapId: string, runId: string, attempt: number): ConversationPrivatePayloadCoordinates
 {
-	return { siloId, conversationId, payloadRef: bootstrapId, authorSubject: "conversation-computer" };
+	return { siloId, conversationId, payloadRef: JSON.stringify([bootstrapId, runId, attempt]), authorSubject: "conversation-computer" };
 }
 
 /** Records the same key digest for persistence, reuse and decryption checks. */

@@ -11,7 +11,7 @@ export interface RunTreeSqlFixture
 	readonly serviceId: string;
 	/** Identifies the service's published revision. */
 	readonly revisionId: string;
-	/** Identifies the model used by synthetic legacy mint records. */
+	/** Identifies the model selected by the synthetic attempt credential. */
 	readonly modelId: string;
 	/** Identifies the original human whose synthetic Stop evidence is stored. */
 	readonly requesterId: string;

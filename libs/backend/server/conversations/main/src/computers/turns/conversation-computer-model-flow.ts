@@ -303,7 +303,7 @@ function _CredentialCommand(turn: FrozenConversationComputerTurn, candidate: Con
 	const budget = candidate.compiledInput.budget.maxCostUsdMicros;
 	const firstReservation = turn.protocol.steps[0]?.reservation;
 	const authorityExpiresAtEpochMs = Math.min(firstReservation?.authorityExpiresAtEpochMs ?? turn.budget.wallClockDeadlineEpochMs, Date.parse(candidate.credentialExpiresAt));
-	return { bootstrapId: turn.bootstrapId, computer: { siloId: turn.siloId, conversationId: turn.binding.conversationId, computerId: turn.computerId, agentIdentityId: turn.binding.agentIdentityId }, lease: turn.lease, keyAlias: `attempt-${createHash("sha256").update(turn.bootstrapId).digest("hex").slice(0, 40)}`, modelAlias: turn.modelAlias, maxBudgetUsd: budget === null ? turn.maximumBudgetUsd : Math.min(turn.maximumBudgetUsd, budget / 1_000_000), expirySeconds: Math.min(turn.credentialLifetimeSeconds, candidate.credentialLifetimeSeconds), notAfter: new Date(authorityExpiresAtEpochMs).toISOString() };
+	return { bootstrapId: turn.bootstrapId, runId: turn.compile.runId, attempt: turn.compile.attempt, computer: { siloId: turn.siloId, conversationId: turn.binding.conversationId, computerId: turn.computerId, agentIdentityId: turn.binding.agentIdentityId }, lease: turn.lease, keyAlias: `attempt-${createHash("sha256").update(turn.bootstrapId).digest("hex").slice(0, 40)}`, modelAlias: turn.modelAlias, maxBudgetUsd: budget === null ? turn.maximumBudgetUsd : Math.min(turn.maximumBudgetUsd, budget / 1_000_000), expirySeconds: Math.min(turn.credentialLifetimeSeconds, candidate.credentialLifetimeSeconds), notAfter: new Date(authorityExpiresAtEpochMs).toISOString() };
 }
 
 /** Narrow response acceptance to every current bound without renewing a saved request. */

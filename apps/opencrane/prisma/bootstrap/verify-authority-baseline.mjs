@@ -5,6 +5,13 @@ const _MINIMUM_FUNCTIONS = 82;
 const _MINIMUM_TRIGGERS = 93;
 const _MINIMUM_CONSTRAINTS = 240;
 const _REQUIRED_AUTHORITY_MARKERS = [
+	'CREATE UNIQUE INDEX "conversation_attempt_credentials_run_attempt_key"',
+	'ADD CONSTRAINT "conversation_computer_attempt_credentials_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "agent_runs"("id", "attempt") ON DELETE RESTRICT',
+	'CREATE FUNCTION "enforce_conversation_attempt_credential_authority"()',
+	'CREATE TRIGGER "conversation_attempt_credentials_authority"',
+	'Attempt credential requires its exact run, attempt, silo and conversation',
+	'Attempt credential run, bootstrap and alias bindings are immutable',
+	'Attempt credential custody records cannot be deleted',
 	'CREATE TABLE "agent_run_tree_accounts"',
 	'CREATE TABLE "agent_run_tree_reservations"',
 	'ADD CONSTRAINT "agent_run_tree_accounts_material_check"',
@@ -13,7 +20,6 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE TRIGGER "agent_run_tree_accounts_insert"',
 	'CREATE TRIGGER "agent_run_tree_accounts_update"',
 	'CREATE TRIGGER "agent_run_tree_reservations_authority"',
-	'CREATE TRIGGER "run_model_mint_tree_authority"',
 	'CREATE TRIGGER "tool_invocations_run_tree_authority"',
 	'Run tree lineage and allocated allowance are immutable',
 	'Run tree closure requires saved ancestor Stop, terminal state or elapsed deadline',

@@ -104,10 +104,38 @@ SELECT pg_temp.expect_failure('a child losing the Stop race cannot acquire an ac
 SELECT pg_temp.assert_true('the refused child has no allocation receipt', NOT EXISTS (SELECT 1 FROM "agent_run_tree_accounts" WHERE "run_id" = 'tree-racing-child'));
 
 SELECT pg_temp.seed_tree_run('tree-legacy-key');
-INSERT INTO "run_model_credential_mint_authorizations" ("id", "run_id", "attempt", "generation", "principal_id", "model_definition_id", "authorization_digest", "key_alias", "expires_at")
-VALUES ('tree-legacy-mint', 'tree-legacy-key', 1, 1, 'tree-service-principal', 'tree-model', 'sha256:' || repeat('f', 64), 'tree-legacy-alias', clock_timestamp() + interval '1 hour');
+CREATE FUNCTION pg_temp.save_tree_attempt_credential(bootstrap_id TEXT, run_id TEXT, attempt INTEGER DEFAULT 1, silo_id TEXT DEFAULT 'tree-silo', conversation_id TEXT DEFAULT NULL) RETURNS VOID LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO "conversation_computer_attempt_credentials" ("bootstrap_id", "run_id", "attempt", "silo_id", "conversation_id", "key_alias", "model_alias", "claim_fence", "claim_expires_at", "expires_at")
+    VALUES (bootstrap_id, run_id, attempt, silo_id, COALESCE(conversation_id, run_id || '-conversation'), bootstrap_id || '-alias', 'tree-model', bootstrap_id || '-fence', clock_timestamp() + interval '1 hour', to_timestamp(0));
+END;
+$$;
+SELECT pg_temp.save_tree_attempt_credential('tree-custody', 'tree-legacy-key');
 SELECT pg_temp.expect_failure('an issued full-attempt key cannot acquire a second allocation', $$SELECT pg_temp.open_tree_account('tree-legacy-key')$$, 'cannot adopt existing spending authority');
-SELECT pg_temp.expect_failure('an account cannot receive the old full-attempt key', $$INSERT INTO "run_model_credential_mint_authorizations" ("id", "run_id", "attempt", "generation", "principal_id", "model_definition_id", "authorization_digest", "key_alias", "expires_at") VALUES ('tree-forbidden-mint', 'tree-sibling-4', 1, 1, 'tree-service-principal', 'tree-model', 'sha256:' || repeat('f', 64), 'tree-forbidden-alias', clock_timestamp() + interval '1 hour')$$, 'require reservation-scoped authority');
+SELECT pg_temp.expect_failure('an account cannot receive an actual full-attempt custody row', $$SELECT pg_temp.save_tree_attempt_credential('tree-forbidden-custody', 'tree-sibling-4')$$, 'require reservation-scoped authority');
+SELECT pg_temp.expect_failure('a different bootstrap cannot issue a second full-budget key for the same run', $$SELECT pg_temp.save_tree_attempt_credential('tree-second-bootstrap', 'tree-legacy-key')$$, 'conversation_attempt_credentials_run_attempt_key');
+SELECT pg_temp.expect_failure('custody cannot name a missing run', $$SELECT pg_temp.save_tree_attempt_credential('tree-missing-run', 'absent-run')$$, 'requires its exact run, attempt, silo and conversation');
+SELECT pg_temp.expect_failure('custody cannot substitute another attempt', $$SELECT pg_temp.save_tree_attempt_credential('tree-wrong-attempt', 'tree-legacy-key', 2)$$, 'requires its exact run, attempt, silo and conversation');
+SELECT pg_temp.expect_failure('custody cannot substitute another silo', $$SELECT pg_temp.save_tree_attempt_credential('tree-wrong-silo', 'tree-legacy-key', 1, 'another-silo')$$, 'requires its exact run, attempt, silo and conversation');
+SELECT pg_temp.expect_failure('custody cannot borrow another run conversation', $$SELECT pg_temp.save_tree_attempt_credential('tree-wrong-conversation', 'tree-legacy-key', 1, 'tree-silo', 'tree-root-conversation')$$, 'requires its exact run, attempt, silo and conversation');
+DO $$
+DECLARE field_name TEXT;
+BEGIN
+    FOREACH field_name IN ARRAY ARRAY['bootstrap_id', 'run_id', 'silo_id', 'conversation_id', 'key_alias', 'model_alias'] LOOP
+        PERFORM pg_temp.expect_failure('custody keeps immutable ' || field_name, format('UPDATE conversation_computer_attempt_credentials SET %I = %L WHERE bootstrap_id = %L', field_name, 'changed-binding', 'tree-custody'), 'run, bootstrap and alias bindings are immutable');
+    END LOOP;
+END;
+$$;
+SELECT pg_temp.expect_failure('custody keeps its immutable attempt', $$UPDATE "conversation_computer_attempt_credentials" SET "attempt" = 2 WHERE "bootstrap_id" = 'tree-custody'$$, 'run, bootstrap and alias bindings are immutable');
+UPDATE "conversation_computer_attempt_credentials" SET "state" = 'revoked', "claim_expires_at" = to_timestamp(0) WHERE "bootstrap_id" = 'tree-custody';
+SELECT pg_temp.expect_failure('a revoked tombstone still blocks a second allowance', $$SELECT pg_temp.open_tree_account('tree-legacy-key')$$, 'cannot adopt existing spending authority');
+SELECT pg_temp.expect_failure('deletion cannot erase custody uncertainty', $$DELETE FROM "conversation_computer_attempt_credentials" WHERE "bootstrap_id" = 'tree-custody'$$, 'custody records cannot be deleted');
+SELECT pg_temp.seed_tree_run('tree-cleanup-key');
+SELECT pg_temp.save_tree_attempt_credential('tree-cleanup-custody', 'tree-cleanup-key');
+SELECT pg_temp.stop_tree_run('tree-cleanup-key');
+UPDATE "conversation_computer_attempt_credentials" SET "state" = 'alias_cleanup', "claim_fence" = 'recovered-cleanup-fence' WHERE "bootstrap_id" = 'tree-cleanup-custody';
+UPDATE "conversation_computer_attempt_credentials" SET "state" = 'revoked', "key_id" = NULL, "nonce" = NULL, "auth_tag" = NULL, "ciphertext" = NULL, "ciphertext_digest" = NULL, "credential_digest" = NULL WHERE "bootstrap_id" = 'tree-cleanup-custody';
+SELECT pg_temp.assert_true('Stop and expiry do not prevent custody cleanup', (SELECT "state" = 'revoked' AND "claim_fence" = 'recovered-cleanup-fence' FROM "conversation_computer_attempt_credentials" WHERE "bootstrap_id" = 'tree-cleanup-custody'));
 
 SELECT pg_temp.seed_tree_run('tree-terminal-root');
 SELECT pg_temp.open_tree_account('tree-terminal-root');

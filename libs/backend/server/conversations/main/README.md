@@ -241,6 +241,18 @@ result continuations reuse that credential and cannot increase its allowance aft
 is a per-attempt limit, not a shared delegation budget: issuing a separate full-limit child key would
 add spending capacity. Delegation must partition the root allowance before issuing those keys.
 
+Credential custody records the run and attempt from the frozen turn, not a run inferred from the
+conversation or bootstrap identifier. SQL prevents changing those coordinates and binds them to
+`AgentRun`; the encrypted receipt authenticates them too. One run attempt can claim only one key.
+New custody and a run-tree account exclude each other under the same run lock, including after a
+key is revoked. Cleanup retains that record after clearing the secret, and remains possible after
+Stop or expiry. This protects the existing issuance path while recursive execution is still inactive.
+
+The proxy's nominal key limit is not a worst-case cost reservation for the next request. Before
+enabling per-call keys, delegation needs trusted deployment pricing and bounded input/output cost
+reserved from the shared allowance. Concurrent children must not each gain a fresh first-request
+overshoot. No new key mode is enabled by the custody repair.
+
 The model HTTP deadline limits acceptance of that response. An approval or tool wait may continue
 after it, within the original attempt authority and credential expiry. Each later reservation keeps
 the earlier authority ceiling and any shorter accepted result deadline. The server rechecks current

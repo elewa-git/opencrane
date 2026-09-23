@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 
-import { PrismaClient } from "@prisma/client";
+import { AgentRunState, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { RunTreeClosureReasons, type RunTreeChildCommand, type RunTreeReservationCommand, type RunTreeResources, type RunTreeRootCommand } from "../run-tree.types";
-import { _OverlapRunTreeSqlCommands, _RunTreeSqlCommand, _SaveRunTreeSqlLegacyMint, _SaveRunTreeSqlStop, _SeedRunTreeSqlFixture } from "./run-tree-sql-fixture";
+import { _OverlapRunTreeSqlCommands, _RunTreeSqlCommand, _RunTreeSqlCredentialData, _SaveRunTreeSqlAttemptCredential, _SaveRunTreeSqlStop, _SeedRunTreeSqlFixture } from "./run-tree-sql-fixture";
 import type { RunTreeSqlFixture } from "./run-tree-sql-fixture.types";
 
 /** Independent connections make each race use distinct PostgreSQL transactions. */
@@ -166,7 +166,7 @@ describe.skipIf(process.env.OPENCRANE_RUN_TREE_SQL_QUALIFICATION !== "1")("run-t
 		await expect(_RunTreeSqlCommand(_FIRST, async function _StoppedDescendant(_, repository) { return repository.reserve(_reservation(fixture, 1, 3)); })).rejects.toThrow("ancestor no longer accepts work");
 	}, 30_000);
 
-	it.each([false, true])("prevents overlapping legacy mint and account authority from coexisting; account first=%s", async function _LegacyExclusion(accountFirst)
+	it.each([false, true])("prevents overlapping actual credential custody and tree accounts from coexisting; account first=%s", async function _CredentialExclusion(accountFirst)
 	{
 		const fixture = await _SeedRunTreeSqlFixture(1);
 		const command = _root(fixture);
@@ -174,11 +174,11 @@ describe.skipIf(process.env.OPENCRANE_RUN_TREE_SQL_QUALIFICATION !== "1")("run-t
 		{
 			if (accountFirst)
 				return repository.initializeRoot(command);
-			return _SaveRunTreeSqlLegacyMint(transaction, fixture, command.runId);
+			return _SaveRunTreeSqlAttemptCredential(transaction, fixture, command.runId);
 		}, async function _SecondAuthority(transaction, repository)
 		{
 			if (accountFirst)
-				return _SaveRunTreeSqlLegacyMint(transaction, fixture, command.runId);
+				return _SaveRunTreeSqlAttemptCredential(transaction, fixture, command.runId);
 			return repository.initializeRoot(command);
 		});
 		expect(overlap.backendPids.length).toBeGreaterThanOrEqual(2);
@@ -186,10 +186,72 @@ describe.skipIf(process.env.OPENCRANE_RUN_TREE_SQL_QUALIFICATION !== "1")("run-t
 		expect(overlap.results[0].status).toBe("fulfilled");
 		expect(_failureMessage(overlap.results[1])).toContain(accountFirst ? "require reservation-scoped authority" : "cannot adopt existing spending authority");
 		const accounts = await _FIRST.agentRunTreeAccount.count({ where: { runId: command.runId } });
-		const mints = await _FIRST.runModelCredentialMintAuthorization.count({ where: { runId: command.runId } });
+		const credentials = await _FIRST.conversationComputerAttemptCredential.count({ where: { runId: command.runId } });
 		expect(accounts).toBe(accountFirst ? 1 : 0);
-		expect(mints).toBe(accountFirst ? 0 : 1);
+		expect(credentials).toBe(accountFirst ? 0 : 1);
 	}, 30_000);
+
+	it("requires actual custody to match its admitted run, attempt, silo and conversation", async function _CredentialCoordinates()
+	{
+		const fixture = await _SeedRunTreeSqlFixture(2);
+		const data = _RunTreeSqlCredentialData(fixture, fixture.runIds[0]);
+		const mismatches = [{ ...data, runId: "missing-run" }, { ...data, runId: fixture.runIds[1] }, { ...data, attempt: 2 }, { ...data, siloId: `${fixture.siloId}-other` }, { ...data, conversationId: `${fixture.runIds[1]}-conversation` }];
+		for (const mismatch of mismatches)
+		{
+			await expect(_RunTreeSqlCommand(_FIRST, async function _InvalidCredential(transaction)
+			{
+				return transaction.conversationComputerAttemptCredential.create({ data: mismatch });
+			})).rejects.toThrow("requires its exact run, attempt, silo and conversation");
+		}
+		expect(await _FIRST.conversationComputerAttemptCredential.count({ where: { runId: { in: [...fixture.runIds] } } })).toBe(0);
+	});
+
+	it("keeps one immutable full-budget custody record even after revocation", async function _CredentialTombstone()
+	{
+		const fixture = await _SeedRunTreeSqlFixture(2);
+		const data = _RunTreeSqlCredentialData(fixture, fixture.runIds[0]);
+		await _RunTreeSqlCommand(_FIRST, async function _Custody(transaction) { await transaction.conversationComputerAttemptCredential.create({ data }); });
+		await expect(_RunTreeSqlCommand(_FIRST, async function _SecondBootstrap(transaction)
+		{
+			return transaction.conversationComputerAttemptCredential.create({ data: { ...data, bootstrapId: randomUUID(), keyAlias: randomUUID() } });
+		})).rejects.toThrow("Unique constraint");
+		const changes = [{ bootstrapId: randomUUID() }, { runId: fixture.runIds[1] }, { attempt: 2 }, { siloId: `${fixture.siloId}-other` }, { conversationId: `${fixture.runIds[1]}-conversation` }, { keyAlias: randomUUID() }, { modelAlias: "other-model" }];
+		for (const change of changes)
+		{
+			await expect(_RunTreeSqlCommand(_FIRST, async function _Rebind(transaction)
+			{
+				return transaction.conversationComputerAttemptCredential.update({ where: { bootstrapId: data.bootstrapId }, data: change });
+			})).rejects.toThrow("run, bootstrap and alias bindings are immutable");
+		}
+		await _RunTreeSqlCommand(_FIRST, async function _Revoke(transaction)
+		{
+			await transaction.conversationComputerAttemptCredential.update({ where: { bootstrapId: data.bootstrapId }, data: { state: "alias_cleanup", claimExpiresAt: new Date(0) } });
+			await transaction.conversationComputerAttemptCredential.update({ where: { bootstrapId: data.bootstrapId }, data: { state: "revoked" } });
+		});
+		await expect(_openRoot(fixture)).rejects.toThrow("cannot adopt existing spending authority");
+		await expect(_RunTreeSqlCommand(_FIRST, async function _EraseEvidence(transaction)
+		{
+			return transaction.conversationComputerAttemptCredential.delete({ where: { bootstrapId: data.bootstrapId } });
+		})).rejects.toThrow("custody records cannot be deleted");
+		expect(await _FIRST.conversationComputerAttemptCredential.findUnique({ where: { bootstrapId: data.bootstrapId } })).toMatchObject({ runId: fixture.runIds[0], attempt: 1, state: "revoked" });
+	});
+
+	it("allows expired custody cleanup after Stop without reopening or refunding the run", async function _CleanupAfterStop()
+	{
+		const fixture = await _SeedRunTreeSqlFixture(1);
+		const data = _RunTreeSqlCredentialData(fixture, fixture.runIds[0]);
+		await _RunTreeSqlCommand(_FIRST, async function _Custody(transaction) { await transaction.conversationComputerAttemptCredential.create({ data }); });
+		await _RunTreeSqlCommand(_FIRST, async function _Stop(transaction) { await _SaveRunTreeSqlStop(transaction, fixture, fixture.runIds[0], null); });
+		const fence = randomUUID();
+		await _RunTreeSqlCommand(_FIRST, async function _Cleanup(transaction)
+		{
+			await transaction.conversationComputerAttemptCredential.update({ where: { bootstrapId: data.bootstrapId }, data: { state: "alias_cleanup", claimFence: fence, claimExpiresAt: new Date(0) } });
+			await transaction.conversationComputerAttemptCredential.update({ where: { bootstrapId: data.bootstrapId }, data: { state: "revoked", keyId: null, nonce: null, authTag: null, ciphertext: null, ciphertextDigest: null, credentialDigest: null } });
+		});
+		expect(await _FIRST.conversationComputerAttemptCredential.findUnique({ where: { bootstrapId: data.bootstrapId } })).toMatchObject({ runId: fixture.runIds[0], attempt: 1, state: "revoked", claimFence: fence, expiresAt: new Date(0) });
+		expect(await _FIRST.agentRun.findUnique({ where: { id: fixture.runIds[0] } })).toMatchObject({ state: AgentRunState.Cancelling });
+		expect(await _FIRST.agentRunTreeAccount.count({ where: { runId: fixture.runIds[0] } })).toBe(0);
+	});
 
 	it("rolls back child allocation and local reservation with the caller's complete admission", async function _WholeAdmissionRollback()
 	{

@@ -14,7 +14,6 @@
  * (admission, inputs, protocol), libs/backend/server/conversations, and
  * libs/backend/server/api-spec for the OpenAPI fragments.
  */
-export * from "./attempt-model-key.types";
 export * from "./openapi";
 export * from "./prisma-run-admission-unit-of-work";
 export * from "./prisma-conversation-run-lifecycle-authority";

@@ -92,7 +92,7 @@ model AgentRun {
   service                           AgentService                          @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
   conversation                      Conversation?                         @relation(fields: [conversationId], references: [id], onDelete: Restrict)
   inputSnapshots                    RunInputSnapshot[]
-  modelCredentialMintAuthorizations RunModelCredentialMintAuthorization[]
+  attemptCredentials                ConversationComputerAttemptCredential[]
   approvalRequests                  ApprovalRequest[]
   elicitationRequests               ElicitationRequest[]
   toolInvocations                   ToolInvocation[]
@@ -148,27 +148,6 @@ model RunInputSnapshot {
   @@index([runId, attempt])
   @@index([agentServiceId, agentRevisionId])
   @@map("run_input_snapshots")
-}
-
-/// One durable, single-consumption authorization for the post-commit LiteLLM key mint.
-model RunModelCredentialMintAuthorization {
-  id                   String    @id @default(cuid())
-  runId                String    @map("run_id")
-  attempt              Int
-  generation           Int
-  principalId          String    @map("principal_id")
-  modelDefinitionId    String    @map("model_definition_id")
-  providerConnectionId String?   @map("provider_connection_id")
-  authorizationDigest  String    @map("authorization_digest")
-  keyAlias             String    @unique @map("key_alias")
-  expiresAt            DateTime  @map("expires_at")
-  claimedAt            DateTime? @map("claimed_at")
-  createdAt            DateTime  @default(now()) @map("created_at")
-  run                  AgentRun  @relation(fields: [runId], references: [id], onDelete: Restrict)
-
-  @@unique([runId, attempt, generation])
-  @@index([expiresAt])
-  @@map("run_model_credential_mint_authorizations")
 }
 
 /// Reads the database clock used to admit and finish run work.

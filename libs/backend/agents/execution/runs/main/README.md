@@ -99,11 +99,19 @@ or descendants as cleaned up. Existing receipts remain readable for recovery aft
 authorizing another effect. The adapter acquires the root before closing a descendant so its lock
 order matches allocation and reservation. A conflict must roll back the whole caller transaction.
 
-Until reservation-scoped credentials and tool admission are connected, SQL refuses legacy model
-minting and tool work for any account-owned run. It also refuses to create an account after those
-old spending authorities exist. These deliberate refusals prevent a partial rollout from duplicating
-the budget. Production runs still use the existing path and create no tree account. Spawning,
+Until reservation-scoped credentials and tool admission are connected, SQL refuses full-attempt model
+custody and unreserved tool work for any account-owned run. The actual key owner is
+`ConversationComputerAttemptCredential`, bound to the frozen run and attempt. Account creation and
+credential claims lock the same run row, so neither can be admitted after the other. Even a revoked
+credential retains this exclusion: deleting a key does not restore spent allowance. These deliberate
+refusals prevent a partial rollout from duplicating the budget. Production runs still use the existing
+path and create no tree account. Spawning,
 selected child context, result return and recursive workflow/key cleanup remain unfinished.
+
+Per-call credential activation also needs a trusted worst-case request cost, including input and
+output tokens. The current model definition has no pricing or input-cost bounds, and LiteLLM's
+recorded-spend check does not reserve an upcoming request's cost. Splitting nominal key limits alone
+would not enforce a shared ceiling across concurrent requests. That activation remains disabled.
 
 The package's `test:sql` target includes baseline guard tests and independent-client transaction
 races. That target opts into `OPENCRANE_RUN_TREE_SQL_QUALIFICATION=1` and requires `DATABASE_URL`.

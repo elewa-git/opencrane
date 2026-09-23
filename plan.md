@@ -2,7 +2,7 @@
 
 ## MVP continuation — 2026-09-22
 
-### Current checkpoint — recursive delegation accounting foundation; MVP acceptance open
+### Current checkpoint — actual credential custody joined to delegation fences; MVP acceptance open
 
 On 23 September the user superseded the proposed two-level, four-child, two-active defaults:
 recursive delegation must have **no fixed nesting, total-child or concurrent-child cap**. Stopping
@@ -39,8 +39,10 @@ receipts and saved closure causes under `execution/runs`. SQL serializes admissi
 checks every ancestor without a depth cap. Stop, terminal state or deadline prevents new spending
 and child allocations; a closed branch does not close siblings. Matching saved receipts remain
 readable after closure but do not authorize another effect, and uncertain spending is not refunded.
-Account-owned runs reject the old full-attempt credential and unreserved tool paths. This exclusion
-keeps the foundation dormant until reservation-scoped credentials and tool admissions are joined.
+Account-owned runs reject unreserved tool paths. The first accounting slice guarded an unused model
+mint authorization table rather than the product's actual key custody; the correction below replaces
+that guard. The foundation remains dormant until reservation-scoped credentials and tool admissions
+are joined.
 
 All 127 execution-run unit tests and the package type check pass. Ten two-connection PostgreSQL race
 tests are registered with the fresh-baseline SQL target but deliberately skipped in ordinary tests,
@@ -48,8 +50,11 @@ including when a database URL is present. The SQL target explicitly opts in and 
 test database; local runs left `DATABASE_URL` unset. The fixtures use actual repositories and Serializable retries; synthetic
 Stop evidence tests database ordering, not requester IAM or the product Stop workflow. Static
 baseline-preservation, release binding, style and Prisma ownership checks pass. These results do not
-prove database races, child execution, restart or recursive cleanup; those require CI and later
-integrated acceptance. No VM, container, provider call or live database was started or changed.
+prove child execution, restart or recursive cleanup; those require later integrated acceptance.
+The ten database race cases subsequently executed and passed in CI on `a3cb0f839ee94fdb53509c875a59dc451a85ffa8`
+([database authority job](https://github.com/elewa-git/opencrane/actions/runs/35839314907/job/107110606123)).
+Its model-mint exclusion cases covered the unused table and do not qualify the actual custody repair.
+No local VM, container, provider call or live database was started or changed.
 
 Architecture and independent integrated review pass for this dormant slice. Review caught and
 fixed SQL tests accidentally following the ordinary CI job's database URL: a regression with an
@@ -58,14 +63,39 @@ configuration. Workload ownership/render checks pass across three Helm profiles,
 four runtime constructs and 11 templates. No package move or new workload was needed. Live stack
 integrity passed again at `a4407614cbf85e6a9a1104760803496241e5aad59eb2cbf4f8ca58a8d9ce3325`.
 
+The current repair, based on `a3cb0f839ee94fdb53509c875a59dc451a85ffa8`, binds the live
+`ConversationComputerAttemptCredential` to the frozen run and attempt. Its creation and account
+creation lock the same run, rejecting either admission order. Pending, uncertain and revoked custody
+all retain the spending exclusion; cleanup may still clear the secret after Stop or expiry. Repository
+reads, writes and authenticated ciphertext use the same immutable identity. The unused mint table,
+port and mock-only test are removed, not kept as a parallel authority. The revised SQL fixtures use
+the production custody table and require their own fresh-baseline CI proof.
+
+Per-call key activation has a further engineering requirement: trusted deployment pricing and
+bounded input/output cost must support a worst-case reservation before each send. Current model
+definitions lack these bounds, and pinned LiteLLM checks recorded spending rather than an upcoming
+request's worst-case cost. Fresh child keys would otherwise multiply first-request overshoot. Keep
+the existing key mode unchanged until the shared ceiling is enforceable; this does not reintroduce
+a depth, spawn or parallelism cap.
+
+Local checks for this custody repair pass: 844 conversation tests, 121 execution-run tests, 251
+unchanged model-routing regression tests and all three package type checks plus the server type check.
+Thirteen opt-in SQL cases are skipped locally, not qualified; their updated
+fixtures require fresh-baseline CI. Static baseline preservation, release binding, style and Prisma
+ownership checks pass. Architecture, direct-replacement and independent integrated reviews pass,
+with no verified findings. The type-contract growth
+candidate adds run/attempt identity to the existing issuance command, not a new responsibility.
+Live PR ancestry passes at snapshot `00e4b8f139193380fc57f11426a71c8419f4de2b58f1138383da1ba93a298690`.
+The local context-index doctor cannot open its database; source inspection used repository files.
+
 Remaining source work is reservation-scoped credential/effect admission, current delegation
 permissions and selected context, independent trusted child activation, non-blocking spawn plus
 join/read, durable return to the parent, and restartable descendant cancellation. Parent completion
 must retain its output while descendant cleanup converges. D1 is not complete.
 
-Published source remains `39432f27351b1193092dabc553520291481d9729` on draft #899, directly above
-#898 at `830243b766d9ccb5f4719b511b082e3843b030db` before publication of this source slice. That
-published CI result does not qualify the new accounting baseline. The live 18-PR review chain remains
+Published source is `a3cb0f839ee94fdb53509c875a59dc451a85ffa8` on draft #899, directly above
+#898 at `830243b766d9ccb5f4719b511b082e3843b030db` before publication of the custody correction. That
+published CI result does not qualify the new custody baseline. The live 18-PR review chain remains
 #888 → #891 → #892 → #893 → #894 → #896 → #897 → #898 → #899. No predecessor was absorbed or closed.
 
 [Run 35774552213](https://github.com/elewa-git/opencrane/actions/runs/35774552213) tested merge
@@ -2627,7 +2657,7 @@ their own completion track; they are not silently bundled into the first tool PR
 | M1 | IN PROGRESS: persistence, transaction-bound Absurd admission and catalog completion are implemented, and the current #899 run passes the Cognee provider contract and database-authority suites. First-dataset permission, fresh authenticated composition and complete isolated Remember/Recall/Correct/Forget journeys remain; provider CI is not live product-memory acceptance. |
 | U2 | Structured-result production/replay passes source review, controlled checks and real-Kurrent paired-output recovery. Visual approval and authenticated live proof remain. Runtime-question source is separately PAUSED pending explicit approval. |
 | F1 | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV capture, scanning and answer-link recovery are implemented in #879 and pass four real-store cases in #880. The pending SQL guard and complete hosted execution/download qualification remain. |
-| D1 | IN PROGRESS; recursive source accepted 23 September with no fixed depth, child-count or concurrency caps. Run-tree accounting and admission fences are implemented locally with 127 package tests passing; ten real-database race tests await CI. Credentials, spawn/join, narrowed context/permissions and recursive cleanup remain unjoined. This is not a working or qualified delegation journey. |
+| D1 | IN PROGRESS; recursive source accepted 23 September with no fixed depth, child-count or concurrency caps. Run-tree accounting is published; its ten initial SQL cases passed CI. The actual credential-custody correction passes 121 run and 844 conversation tests locally; thirteen revised SQL cases await fresh-baseline CI. Per-call cost authority, spawn/join, narrowed context/permissions and recursive cleanup remain unjoined. This is not a working or qualified delegation journey. |
 | S1 | REQUIRED FOR MVP; source activation remains paused for the private-scheduling decisions. |
 | A2 | PARTIAL: protected audit/usage read screens and their controlled tests are implemented. Governance-reader policy, actual usage collection/pricing/attribution and real-account administration acceptance remain open. |
 | T3 | PLANNED, with separate acceptance for its journey. |

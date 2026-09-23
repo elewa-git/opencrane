@@ -47,7 +47,9 @@ describe("conversation attempt cost ceiling", function _CostCeiling()
 		const f = await _CostHarness(test.maxCostUsdMicros, test.maximumBudgetUsd);
 		expect(await f.authority.advance(f.step)).toEqual({ outcome: "completed" });
 		const issued = f.credentials.issueOnce.mock.calls[0]![0];
-		expect(issued).toMatchObject({ maxBudgetUsd: test.expectedUsd, bootstrapId: f.step, modelAlias: f.candidate.modelAlias });
+		const saved = (await f.store.load(f.step))!;
+		expect(saved.compile.runId).not.toBe(f.step);
+		expect(issued).toMatchObject({ maxBudgetUsd: test.expectedUsd, bootstrapId: f.step, runId: saved.compile.runId, attempt: saved.compile.attempt, modelAlias: f.candidate.modelAlias });
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		expect(f.credentials.reuseExact).toHaveBeenCalledTimes(2);
 		for (const [reused] of f.credentials.reuseExact.mock.calls)

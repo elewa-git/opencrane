@@ -272,6 +272,10 @@ export interface ConversationComputerCredentialIssueCommand
 {
 	/** Binds the credential to one admitted bootstrap so a retry returns the same key. */
 	readonly bootstrapId: string;
+	/** Identifies the admitted run saved in the frozen turn, not a caller-selected conversation run. */
+	readonly runId: string;
+	/** Binds custody to the frozen run attempt; another attempt cannot reuse this key. */
+	readonly attempt: number;
 	/** Names the computer and conversation whose active-lease row must still exist. */
 	readonly computer: ComputerScope;
 	/** Names the lease the active-lease row must still carry. */

@@ -823,6 +823,8 @@ CREATE TABLE "conversation_private_payloads" (
 -- CreateTable
 CREATE TABLE "conversation_computer_attempt_credentials" (
     "bootstrap_id" TEXT NOT NULL,
+    "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
     "key_alias" TEXT NOT NULL,
     "model_alias" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -1891,24 +1893,6 @@ CREATE TABLE "run_input_snapshots" (
 );
 
 -- CreateTable
-CREATE TABLE "run_model_credential_mint_authorizations" (
-    "id" TEXT NOT NULL,
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "generation" INTEGER NOT NULL,
-    "principal_id" TEXT NOT NULL,
-    "model_definition_id" TEXT NOT NULL,
-    "provider_connection_id" TEXT,
-    "authorization_digest" TEXT NOT NULL,
-    "key_alias" TEXT NOT NULL,
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "claimed_at" TIMESTAMP(3),
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "run_model_credential_mint_authorizations_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "agent_run_tree_accounts" (
     "run_id" TEXT NOT NULL,
     "root_run_id" TEXT NOT NULL,
@@ -2511,6 +2495,9 @@ CREATE UNIQUE INDEX "conversation_private_payloads_conversation_id_author_subjec
 CREATE INDEX "conversation_computer_attempt_credentials_expires_at_idx" ON "conversation_computer_attempt_credentials"("expires_at");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "conversation_attempt_credentials_run_attempt_key" ON "conversation_computer_attempt_credentials"("run_id", "attempt");
+
+-- CreateIndex
 CREATE INDEX "conversation_participants_user_id_archived_at_conversation__idx" ON "conversation_participants"("user_id", "archived_at", "conversation_id");
 
 -- CreateIndex
@@ -3020,15 +3007,6 @@ CREATE UNIQUE INDEX "run_input_snapshots_run_id_attempt_input_digest_key" ON "ru
 CREATE UNIQUE INDEX "run_input_snapshot_run_identity_key" ON "run_input_snapshots"("run_id", "attempt", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "run_model_credential_mint_authorizations_key_alias_key" ON "run_model_credential_mint_authorizations"("key_alias");
-
--- CreateIndex
-CREATE INDEX "run_model_credential_mint_authorizations_expires_at_idx" ON "run_model_credential_mint_authorizations"("expires_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_model_credential_mint_authorizations_run_id_attempt_gen_key" ON "run_model_credential_mint_authorizations"("run_id", "attempt", "generation");
-
--- CreateIndex
 CREATE INDEX "agent_run_tree_accounts_parent_run_id_run_id_idx" ON "agent_run_tree_accounts"("parent_run_id", "run_id");
 
 -- CreateIndex
@@ -3284,6 +3262,9 @@ ALTER TABLE "conversation_computer_active_leases" ADD CONSTRAINT "conversation_c
 ALTER TABLE "conversation_private_payloads" ADD CONSTRAINT "conversation_private_payloads_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "conversation_computer_attempt_credentials" ADD CONSTRAINT "conversation_computer_attempt_credentials_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "agent_runs"("id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -3489,9 +3470,6 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_conversation_id_fkey" FOREIG
 
 -- AddForeignKey
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "run_model_credential_mint_authorizations" ADD CONSTRAINT "run_model_credential_mint_authorizations_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "agent_run_tree_accounts" ADD CONSTRAINT "agent_run_tree_accounts_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3952,7 +3930,7 @@ BEGIN
     IF current_run."id" IS NULL OR current_run."state" <> 'accepted' OR current_run."cancellation_command_id" IS NOT NULL THEN
         RAISE EXCEPTION 'Run tree account requires an accepted run before execution';
     END IF;
-    IF EXISTS (SELECT 1 FROM "run_model_credential_mint_authorizations" WHERE "run_id" = NEW."run_id")
+    IF EXISTS (SELECT 1 FROM "conversation_computer_attempt_credentials" WHERE "run_id" = NEW."run_id")
         OR EXISTS (SELECT 1 FROM "tool_invocations" WHERE "run_id" = NEW."run_id") THEN
         RAISE EXCEPTION 'Run tree account cannot adopt existing spending authority';
     END IF;
@@ -4104,15 +4082,35 @@ END;
 $$;
 
 -- An account cannot coexist with the old credential that exposes a complete attempt's allowance.
-CREATE FUNCTION "reject_legacy_model_mint_for_run_tree"() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION "enforce_conversation_attempt_credential_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    current_run "agent_runs"%ROWTYPE;
 BEGIN
-    PERFORM 1 FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'Attempt credential custody records cannot be deleted';
+    END IF;
+    IF TG_OP = 'UPDATE' THEN
+        IF ROW(NEW."bootstrap_id", NEW."run_id", NEW."attempt", NEW."silo_id", NEW."conversation_id", NEW."key_alias", NEW."model_alias")
+            IS DISTINCT FROM ROW(OLD."bootstrap_id", OLD."run_id", OLD."attempt", OLD."silo_id", OLD."conversation_id", OLD."key_alias", OLD."model_alias") THEN
+            RAISE EXCEPTION 'Attempt credential run, bootstrap and alias bindings are immutable';
+        END IF;
+        -- Cleanup must still record revocation after Stop, expiry or a lost provider response.
+        RETURN NEW;
+    END IF;
+    SELECT * INTO current_run FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
+    IF current_run."id" IS NULL OR current_run."attempt" IS DISTINCT FROM NEW."attempt"
+        OR current_run."silo_id" IS DISTINCT FROM NEW."silo_id"
+        OR current_run."conversation_id" IS DISTINCT FROM NEW."conversation_id" THEN
+        RAISE EXCEPTION 'Attempt credential requires its exact run, attempt, silo and conversation';
+    END IF;
     IF EXISTS (SELECT 1 FROM "agent_run_tree_accounts" WHERE "run_id" = NEW."run_id") THEN
         RAISE EXCEPTION 'Run tree model credentials require reservation-scoped authority';
     END IF;
     RETURN NEW;
 END;
 $$;
+CREATE TRIGGER "conversation_attempt_credentials_authority" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_computer_attempt_credentials"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_attempt_credential_authority"();
 CREATE FUNCTION "reject_legacy_tool_work_for_run_tree"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     IF NEW."run_id" IS NULL THEN RETURN NEW; END IF;
@@ -4129,8 +4127,6 @@ CREATE TRIGGER "agent_run_tree_accounts_update" BEFORE UPDATE OR DELETE ON "agen
     FOR EACH ROW EXECUTE FUNCTION "enforce_agent_run_tree_account_update"();
 CREATE TRIGGER "agent_run_tree_reservations_authority" BEFORE INSERT OR UPDATE OR DELETE ON "agent_run_tree_reservations"
     FOR EACH ROW EXECUTE FUNCTION "enforce_agent_run_tree_reservation"();
-CREATE TRIGGER "run_model_mint_tree_authority" BEFORE INSERT OR UPDATE OF "run_id" ON "run_model_credential_mint_authorizations"
-    FOR EACH ROW EXECUTE FUNCTION "reject_legacy_model_mint_for_run_tree"();
 CREATE TRIGGER "tool_invocations_run_tree_authority" BEFORE INSERT OR UPDATE ON "tool_invocations"
     FOR EACH ROW EXECUTE FUNCTION "reject_legacy_tool_work_for_run_tree"();
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_identity_check" CHECK (

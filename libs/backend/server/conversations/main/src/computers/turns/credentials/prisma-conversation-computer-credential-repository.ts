@@ -18,6 +18,7 @@ export class PrismaConversationComputerCredentialRepository implements Conversat
 	{
 		this._AssertSilo(input);
 		await this._TouchActiveLease(input, "Conversation computer credential requires the current active lease");
+		await this._AssertCurrentRun(input);
 		const existing = await this._ReadCoordinates(input);
 		if (existing !== null)
 			return _PrepareExistingCredential(existing, input);
@@ -25,7 +26,7 @@ export class PrismaConversationComputerCredentialRepository implements Conversat
 		const claimExpiresAt = new Date(Date.now() + 30_000);
 		try
 		{
-			await this.prisma.conversationComputerAttemptCredential.create({ data: { bootstrapId: input.bootstrapId, keyAlias: input.keyAlias, modelAlias: input.modelAlias, siloId: input.computer.siloId, conversationId: input.computer.conversationId, state: ConversationComputerCredentialStates.Pending, claimFence: fence, claimExpiresAt, expiresAt: new Date(0) } });
+			await this.prisma.conversationComputerAttemptCredential.create({ data: { bootstrapId: input.bootstrapId, runId: input.runId, attempt: input.attempt, keyAlias: input.keyAlias, modelAlias: input.modelAlias, siloId: input.computer.siloId, conversationId: input.computer.conversationId, state: ConversationComputerCredentialStates.Pending, claimFence: fence, claimExpiresAt, expiresAt: new Date(0) } });
 		}
 		catch
 		{
@@ -39,6 +40,7 @@ export class PrismaConversationComputerCredentialRepository implements Conversat
 	{
 		this._AssertSilo(input);
 		await this._TouchActiveLease(input, "Conversation computer credential reuse requires the current active lease");
+		await this._AssertCurrentRun(input);
 		const row = await this._ReadCoordinates(input);
 		if (row === null)
 			throw new Error("Conversation computer credential custody is missing");
@@ -50,11 +52,14 @@ export class PrismaConversationComputerCredentialRepository implements Conversat
 		return row;
 	}
 
-	/** Commit encrypted provider-key custody before caller-visible finalization. */
+	/**
+	 * Saves the provider response under its original claim even if the run stopped during issuance.
+	 * Keeping the encrypted key permits cleanup; only finalize may promote it for caller use.
+	 */
 	public async storeCustody(input: ConversationComputerCredentialIssueCommand, fence: string, encrypted: ReturnType<ConversationPrivatePayloadCipher["encrypt"]>, credentialDigest: string, expiresAt: string): Promise<void>
 	{
 		this._AssertSilo(input);
-		_AssertFencedRowCount(await this.prisma.conversationComputerAttemptCredential.updateMany({ where: { bootstrapId: input.bootstrapId, state: ConversationComputerCredentialStates.Pending, claimFence: fence }, data: { state: ConversationComputerCredentialStates.Custodied, keyId: encrypted.keyId, nonce: Buffer.from(encrypted.nonce), authTag: Buffer.from(encrypted.authTag), ciphertext: Buffer.from(encrypted.ciphertext), ciphertextDigest: encrypted.ciphertextDigest, credentialDigest, expiresAt: new Date(expiresAt) } }), 1, "Conversation computer credential lost custody before persistence");
+		_AssertFencedRowCount(await this.prisma.conversationComputerAttemptCredential.updateMany({ where: { bootstrapId: input.bootstrapId, runId: input.runId, attempt: input.attempt, siloId: input.computer.siloId, conversationId: input.computer.conversationId, keyAlias: input.keyAlias, modelAlias: input.modelAlias, state: ConversationComputerCredentialStates.Pending, claimFence: fence }, data: { state: ConversationComputerCredentialStates.Custodied, keyId: encrypted.keyId, nonce: Buffer.from(encrypted.nonce), authTag: Buffer.from(encrypted.authTag), ciphertext: Buffer.from(encrypted.ciphertext), ciphertextDigest: encrypted.ciphertextDigest, credentialDigest, expiresAt: new Date(expiresAt) } }), 1, "Conversation computer credential lost custody before persistence");
 	}
 
 	/** Promote exact committed custody to ready state. */
@@ -62,7 +67,8 @@ export class PrismaConversationComputerCredentialRepository implements Conversat
 	{
 		this._AssertSilo(input);
 		await this._TouchActiveLease(input, "Conversation computer credential finalization requires the current active lease");
-		_AssertFencedRowCount(await this.prisma.conversationComputerAttemptCredential.updateMany({ where: { bootstrapId: input.bootstrapId, siloId: input.computer.siloId, conversationId: input.computer.conversationId, keyAlias: input.keyAlias, modelAlias: input.modelAlias, state: ConversationComputerCredentialStates.Custodied, claimFence: fence, expiresAt: { gt: new Date(), lte: new Date(input.notAfter) } }, data: { state: ConversationComputerCredentialStates.Ready } }), 1, "Conversation computer credential custody could not be finalized");
+		await this._AssertCurrentRun(input);
+		_AssertFencedRowCount(await this.prisma.conversationComputerAttemptCredential.updateMany({ where: { bootstrapId: input.bootstrapId, runId: input.runId, attempt: input.attempt, siloId: input.computer.siloId, conversationId: input.computer.conversationId, keyAlias: input.keyAlias, modelAlias: input.modelAlias, state: ConversationComputerCredentialStates.Custodied, claimFence: fence, expiresAt: { gt: new Date(), lte: new Date(input.notAfter) } }, data: { state: ConversationComputerCredentialStates.Ready } }), 1, "Conversation computer credential custody could not be finalized");
 	}
 
 	/** Mark a pre-custody mint for deterministic alias cleanup on every later retry. */
@@ -95,9 +101,22 @@ export class PrismaConversationComputerCredentialRepository implements Conversat
 	private async _ReadCoordinates(input: ConversationComputerCredentialIssueCommand): Promise<ConversationComputerCredentialCustody | null>
 	{
 		const row = await this.prisma.conversationComputerAttemptCredential.findUnique({ where: { bootstrapId: input.bootstrapId } }) as ConversationComputerCredentialCustody | null;
-		if (row !== null && (row.siloId !== input.computer.siloId || row.conversationId !== input.computer.conversationId || row.keyAlias !== input.keyAlias || row.modelAlias !== input.modelAlias))
+		if (row !== null && (row.runId !== input.runId || row.attempt !== input.attempt || row.siloId !== input.computer.siloId || row.conversationId !== input.computer.conversationId || row.keyAlias !== input.keyAlias || row.modelAlias !== input.modelAlias))
 			throw new Error("Conversation computer credential retry changed its frozen coordinates");
 		return row;
+	}
+
+	/**
+	 * Checks the run's current attempt and conversation before minting or disclosing a key.
+	 * This is an identity check, not a grant or lifecycle decision; cleanup does not use this gate.
+	 */
+	private async _AssertCurrentRun(input: ConversationComputerCredentialIssueCommand): Promise<void>
+	{
+		if (typeof input.runId !== "string" || input.runId.trim().length === 0 || !Number.isSafeInteger(input.attempt) || input.attempt < 1)
+			throw new Error("Conversation computer credential requires a current run and attempt");
+		const run = await this.prisma.agentRun.findFirst({ where: { id: input.runId, attempt: input.attempt, siloId: input.computer.siloId, conversationId: input.computer.conversationId }, select: { id: true } });
+		if (run === null)
+			throw new Error("Conversation computer credential does not match the current run and attempt");
 	}
 
 	/** Touch the active-lease row for this exact computer and lease so the transaction fails if lifecycle cleared or replaced it. */

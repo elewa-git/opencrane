@@ -108,9 +108,10 @@ export async function _OverlapRunTreeSqlCommands<First, Second>(firstClient: Pri
 }
 
 /** Stores synthetic, trigger-checked requester Stop evidence; this does not exercise IAM admission. */
-export async function _SaveRunTreeSqlStop(transaction: Prisma.TransactionClient, fixture: RunTreeSqlFixture, runId: string, rootRunId: string): Promise<void>
+export async function _SaveRunTreeSqlStop(transaction: Prisma.TransactionClient, fixture: RunTreeSqlFixture, runId: string, rootRunId: string | null): Promise<void>
 {
-	await transaction.agentRunTreeAccount.update({ where: { runId: rootRunId }, data: { revision: { increment: 1 } } });
+	if (rootRunId !== null)
+		await transaction.agentRunTreeAccount.update({ where: { runId: rootRunId }, data: { revision: { increment: 1 } } });
 	const commandId = randomUUID();
 	const commandDigest = `sha256:${commandId.replaceAll("-", "").repeat(2)}`;
 	const decisionDigest = `sha256:${randomUUID().replaceAll("-", "").repeat(2)}`;
@@ -118,8 +119,14 @@ export async function _SaveRunTreeSqlStop(transaction: Prisma.TransactionClient,
 	await transaction.$executeRaw`UPDATE agent_runs SET state='cancelling', cancellation_command_id=${commandId}, cancellation_command_digest=${commandDigest}, cancellation_bootstrap_id=${randomUUID()}, cancellation_requested_by_principal_id=${fixture.requesterId}, cancellation_requested_at=clock_timestamp(), cancellation_authorization_decision_digest=${decisionDigest}, cancellation_workflow_task_id=${randomUUID()}, cancellation_workflow_task_name='conversation-computer-stop', cancellation_workflow_task_key=${commandId} WHERE id=${runId}`;
 }
 
-/** Inserts the old full-attempt mint authority without issuing any provider credential. */
-export async function _SaveRunTreeSqlLegacyMint(transaction: Prisma.TransactionClient, fixture: RunTreeSqlFixture, runId: string): Promise<void>
+/** Builds the actual pending custody row written before provider issuance; no provider is called. */
+export function _RunTreeSqlCredentialData(fixture: RunTreeSqlFixture, runId: string): Prisma.ConversationComputerAttemptCredentialUncheckedCreateInput
 {
-	await transaction.runModelCredentialMintAuthorization.create({ data: { id: randomUUID(), runId, attempt: 1, generation: 1, principalId: `${fixture.serviceId}-principal`, modelDefinitionId: fixture.modelId, authorizationDigest: `sha256:${"f".repeat(64)}`, keyAlias: randomUUID(), expiresAt: fixture.deadlineAt } });
+	return { bootstrapId: randomUUID(), runId, attempt: 1, siloId: fixture.siloId, conversationId: `${runId}-conversation`, keyAlias: `attempt-${runId}`, modelAlias: fixture.modelId, state: "pending", claimFence: randomUUID(), claimExpiresAt: fixture.deadlineAt, expiresAt: new Date(0) };
+}
+
+/** Writes production custody rather than a second, unused authorization table. */
+export async function _SaveRunTreeSqlAttemptCredential(transaction: Prisma.TransactionClient, fixture: RunTreeSqlFixture, runId: string): Promise<void>
+{
+	await transaction.conversationComputerAttemptCredential.create({ data: _RunTreeSqlCredentialData(fixture, runId) });
 }
