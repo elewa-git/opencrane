@@ -115,7 +115,7 @@ export async function _SeedConversationToolProposalSqlFixture(options: { readonl
 			},
 		} as never;
 	}
-	const dependencies = { ..._CreateConversationToolDispatchDependencies({} as never, { mode: FleetMembershipDeploymentModes.Standalone, siloId, trustedOidcIssuer: membership.issuer, maximumStalenessMs: options.currentMembershipLifetimeMs ?? 300_000 }),
+	const dependencies = { ..._CreateConversationToolDispatchDependencies({} as never, { mode: FleetMembershipDeploymentModes.Standalone, siloId, trustedIdentityIssuer: membership.issuer, maximumStalenessMs: options.currentMembershipLifetimeMs ?? 300_000 }),
 		identities: { load: async function _Identity() { return { identity, revision: 0n, headDigest: subject.identity.headDigest, headEventId: id("identity-event"), streamName: id("identity-stream") }; } },
 		computers: { load: _LoadComputer } };
 	const binding = { siloId, conversationId, computerId, leaseGeneration: 1, agentIdentityId, agentServiceId, agentName: "SQL assistant", agentAvatarArtifactRevisionId: null, runId, expectedRevision: 0n, maximumEntryBytes: 65_536 };

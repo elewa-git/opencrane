@@ -1,4 +1,5 @@
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
+import type { DevelopmentIdentityAdmission } from "@opencrane/backend/server/iam/identity";
 import { OrganizationMembershipDeploymentModes, type StandaloneOrganizationMembershipConfig } from "@opencrane/backend/server/iam/organization-members";
 import type { FleetOrganizationMembershipHttpClientConfig } from "@opencrane/backend/server/infra/organization-membership-gateway";
 
@@ -121,6 +122,8 @@ export interface OpenCraneProcessConfig
 	readonly conversationPrivatePayloadKeyringPath: string;
 	/** TLS-only KurrentDB history connection settings frozen for this process. */
 	readonly historyStore: OpenCraneHistoryStoreConfig;
+	/** Explicit local k3d identity; null keeps ordinary OIDC as the sole public login path. */
+	readonly k3dDevelopmentAuthentication: K3dDevelopmentAuthenticationConfig | null;
 	/** Port exposed only to platform workloads. */
 	readonly internalPort: number;
 	/** Workload-facing identity and dispatch configuration. */
@@ -131,6 +134,21 @@ export interface OpenCraneProcessConfig
 	readonly standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null;
 	/** Durable control-plane task and MCP protocol-check settings. */
 	readonly workflows: OpenCraneWorkflowConfig;
+}
+
+/**
+ * Carries the identity and transport values selected by the explicit k3d development deployment.
+ * A normal release has no value of this type; startup also refuses to compose it beside OIDC or
+ * Fleet membership, so these coordinates cannot become a second production login path.
+ */
+export interface K3dDevelopmentAuthenticationConfig
+{
+	/** Absolute Secret-mounted path containing the per-launch proof. */
+	readonly credentialPath: string;
+	/** Fixed identity admitted through current Principal and standalone-owner authorities. */
+	readonly identity: DevelopmentIdentityAdmission;
+	/** Exact `.test` ingress authority accepted after Traefik forwarding. */
+	readonly publicHost: string;
 }
 
 /** Process-local bounds that protect PostgreSQL from one service's admission burst. */

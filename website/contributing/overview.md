@@ -47,7 +47,7 @@ Two threads run underneath every step of that journey:
 
 | Page | Covers |
 | --- | --- |
-| [Local development](/contributing/local-development) | The frontend-only workflow, deterministic archetype profiles, cache recovery, and the boundaries of the planned application and k3d tiers |
+| [Local development](/contributing/local-development) | The incremental frontend, local-application and k3d profiles, including archetype selection, cache recovery and local prerequisites |
 | [The CI pipeline](/contributing/ci-pipeline) | The three workflows, what each `docker.yml` job gates, and the caching layers that keep it fast |
 | [Deploying](/contributing/deploying) | The script-only rule, the deploy chain, bootstrap prerequisites, and the warnings that save hours |
 | [Versions and migrations](/contributing/versions-and-migrations) | The pre-1.0 policy: what the release manifest binds, how a schema change is made, and what CI checks |

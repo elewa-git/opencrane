@@ -170,7 +170,11 @@ package imports it.
 - `npx nx run deploy-k8s:develop-smoke` creates a disposable k3d cluster, rebuilds Nx-affected
   OpenCrane workloads with per-project BuildKit caches and reuses digest-validated baseline images
   for unaffected owners, then installs the silo through `deploy.sh`. Image preparation overlaps
-  disposable-cluster prerequisites and transfers the complete image set in one import. A pull
+  disposable-cluster prerequisites. Its default `recommended` host profile transfers the five
+  tag-based images in one import and retains reusable cache. The Tier 3 coordinator selects the
+  `minimum` profile by default; that path clears the user npm cache and unused shared Docker builder
+  state, imports those images individually, publishes the two digest-selected images to the owned
+  loopback registry, and releases their local tags after acceptance. A pull
   request may reuse the exact base qualification only when an exact-SHA push or manual dispatch
   already completed the same k3d job successfully, Nx selects no container owner, and every changed path is explicitly
   non-deployment input. This works for both `develop` and reviewed stacked bases; any missing,

@@ -1,0 +1,48 @@
+{
+  "name": "OpenCrane Tier 3",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:4.1.0": {
+      "version": "28.5.1",
+      "moby": true
+    }
+  },
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "16gb",
+    "storage": "32gb"
+  },
+  "secrets": {
+    "ANTHROPIC_TIER3_PROVIDER_API_KEY": {
+      "description": "Optional personal Anthropic API key for the Tier 3 Agent profile."
+    },
+    "DEEPSEEK_TIER3_PROVIDER_API_KEY": {
+      "description": "Optional personal DeepSeek API key for the Tier 3 Agent profile."
+    },
+    "GEMINI_TIER3_PROVIDER_API_KEY": {
+      "description": "Optional personal Gemini API key for the Tier 3 Agent profile."
+    },
+    "GLM_TIER3_PROVIDER_API_KEY": {
+      "description": "Optional personal GLM API key for the Tier 3 Agent profile."
+    },
+    "MISTRAL_TIER3_PROVIDER_API_KEY": {
+      "description": "Optional personal Mistral API key for the Tier 3 Agent profile."
+    },
+    "OPENAI_TIER3_PROVIDER_API_KEY": {
+      "description": "Optional personal OpenAI API key for the Tier 3 Agent profile."
+    }
+  },
+  "forwardPorts": [4200],
+  "portsAttributes": {
+    "4200": {
+      "label": "OpenCrane Tier 3",
+      "onAutoForward": "notify",
+      "protocol": "http",
+      "requireLocalPort": true
+    }
+  },
+  "postCreateCommand": "npm ci && .devcontainer/verify-tools.sh",
+  "remoteUser": "node"
+}

@@ -17,8 +17,8 @@ export class PrismaHumanMembershipEvidenceRepository implements HumanMembershipE
 			throw new Error("Human membership requires a trust lifetime between one millisecond and 24 hours");
 		if (config.mode === FleetMembershipDeploymentModes.Fleet && !config.trustedIssuerId.trim())
 			throw new Error("Fleet membership requires a trusted issuer");
-		if (config.mode === FleetMembershipDeploymentModes.Standalone && (!config.siloId.trim() || !config.trustedOidcIssuer.trim()))
-			throw new Error("Standalone membership requires a deployment silo and OIDC issuer");
+		if (config.mode === FleetMembershipDeploymentModes.Standalone && (!config.siloId.trim() || !config.trustedIdentityIssuer.trim()))
+			throw new Error("Standalone membership requires a deployment silo and trusted identity issuer");
 	}
 
 	/** Rechecks current authority without falling back from one configured mode to another. */
@@ -31,10 +31,10 @@ export class PrismaHumanMembershipEvidenceRepository implements HumanMembershipE
 		if (this.config.mode !== FleetMembershipDeploymentModes.Standalone || siloId !== this.config.siloId)
 			return null;
 		const principal = await this.transaction.principal.findFirst({
-			where: { id: principalId, siloId, provenance: PrincipalProvenance.External, issuer: this.config.trustedOidcIssuer },
+			where: { id: principalId, siloId, provenance: PrincipalProvenance.External, issuer: this.config.trustedIdentityIssuer },
 			select: { id: true, siloId: true, issuer: true, subject: true, provenance: true },
 		});
-		if (principal === null || principal.id !== principalId || principal.siloId !== siloId || principal.provenance !== PrincipalProvenance.External || principal.issuer !== this.config.trustedOidcIssuer)
+		if (principal === null || principal.id !== principalId || principal.siloId !== siloId || principal.provenance !== PrincipalProvenance.External || principal.issuer !== this.config.trustedIdentityIssuer)
 			return null;
 		const membership = await this.transaction.orgMembership.findUnique({
 			where: { clusterTenant_subject: { clusterTenant: siloId, subject: principal.subject } },

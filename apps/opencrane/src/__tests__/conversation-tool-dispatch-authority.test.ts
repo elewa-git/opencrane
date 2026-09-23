@@ -79,7 +79,7 @@ function _Fixture()
 	const invocation = { id: "invocation-1", siloId: "silo-1", runId: "run-1", attempt: 1, agentRevisionId: "revision-1", mcpTaskId: null, toolRevisionId: "tool-1", effectiveArguments: { query: "permitted record" }, effectiveArgumentsDigest: __DigestCanonicalJson({ query: "permitted record" }), authorizationEvidence: { actorKind: "workload", executionSubject: subject, coordinates: [{ resource: { kind: ProductAuthorizationResourceKinds.McpToolRevision, id: "tool-1" }, action: ProductAuthorizationActions.Invoke }] } } as unknown as ToolInvocationRecord;
 	const identities = { load: vi.fn().mockResolvedValue(identityHead) };
 	const computers = { load: vi.fn().mockResolvedValue(computer) };
-	const config = { mode: FleetMembershipDeploymentModes.Standalone, siloId: "silo-1", trustedOidcIssuer: "https://issuer.test", maximumStalenessMs: 5_000 } as const;
+	const config = { mode: FleetMembershipDeploymentModes.Standalone, siloId: "silo-1", trustedIdentityIssuer: "https://issuer.test", maximumStalenessMs: 5_000 } as const;
 	const dependencies = { ..._CreateConversationToolDispatchDependencies({} as never, config), identities, computers };
 	const authority = new PrismaConversationToolDispatchAuthority(transaction as never, dependencies);
 	return { authority, dependencies, transaction, invocation, subject, identityHead, computer, grants, membership, identities, computers };

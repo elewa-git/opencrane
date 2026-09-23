@@ -213,7 +213,7 @@ function _StandaloneComputerFixture()
 	const row = { id: "local-1", clusterTenant: "silo-1", subject: "human-subject", status: "Active", updatedAt: new Date(observed) };
 	const principal = { id: "human-principal", siloId: "silo-1", issuer: "https://issuer.test", subject: "human-subject", provenance: "External" };
 	const database = { principal: { findFirst: vi.fn().mockResolvedValue(principal) }, orgMembership: { findUnique: vi.fn().mockResolvedValue(row) }, verifiedFleetMembershipRevision: { findFirst: vi.fn().mockResolvedValue(null) } };
-	let config: HumanMembershipEvidenceConfig = { mode: FleetMembershipDeploymentModes.Standalone, siloId: "silo-1", trustedOidcIssuer: "https://issuer.test", maximumStalenessMs: 300_000 };
+	let config: HumanMembershipEvidenceConfig = { mode: FleetMembershipDeploymentModes.Standalone, siloId: "silo-1", trustedIdentityIssuer: "https://issuer.test", maximumStalenessMs: 300_000 };
 	const load: ExecutionSubjectAuthority["load"] = async function _CurrentMembership()
 	{
 		const current = await new PrismaHumanMembershipEvidenceRepository(database as never, config).load("silo-1", "human-principal", now);

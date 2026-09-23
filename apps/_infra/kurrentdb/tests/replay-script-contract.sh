@@ -13,7 +13,11 @@ printf fixture-password
 SH
 cat >"$DIRECTORY/bin/curl" <<'SH'
 #!/bin/sh
-for argument in "$@"; do url="$argument"; done
+show_error=0
+for argument in "$@"; do
+  url="$argument"
+  [ "$argument" != --show-error ] || show_error=1
+done
 case "$url" in
   */health/live)
     printf 'health\n' >>"$REPLAY_CALLS/calls"
@@ -24,6 +28,7 @@ case "$url" in
     printf '%s\n' "$count" >"$REPLAY_CALLS/health-count"
     if [ "$count" -le "${HEALTH_FAILURES:-0}" ]; then
       printf '%s' "${HEALTH_STATUS:-000}"
+      [ "$show_error" = 0 ] || printf 'curl: (%s) mock readiness connection failure\n' "${HEALTH_EXIT:-7}" >&2
       exit "${HEALTH_EXIT:-7}"
     fi
     printf 204
@@ -74,6 +79,9 @@ for code in 7 28 60; do
 done
 HEALTH_FAILURES=1 REPLAY_STATUS=200 run_script
 [[ "$(cat "$DIRECTORY/calls")" == $'health\nhealth\npost' ]] || { echo 'Replay did not recover from its first refused connection.' >&2; exit 1; }
+if grep -Fq 'mock readiness connection failure' "$DIRECTORY/output"; then
+  echo 'Replay printed a retryable readiness failure before recovering.' >&2; exit 1
+fi
 for kind in health post; do
   grep -Fxq -- '--cacert' "$DIRECTORY/$kind-arguments"
   grep -Fxq -- '/var/run/opencrane/kurrentdb-tls/ca.crt' "$DIRECTORY/$kind-arguments"
@@ -81,6 +89,10 @@ for kind in health post; do
   grep -Fxq -- '--max-time' "$DIRECTORY/$kind-arguments"
   grep -Fxq -- '1' "$DIRECTORY/$kind-arguments"
 done
+if grep -Fxq -- '--show-error' "$DIRECTORY/health-arguments"; then
+  echo 'Readiness exposes a retryable curl error before its retry budget expires.' >&2; exit 1
+fi
+grep -Fxq -- '--show-error' "$DIRECTORY/post-arguments"
 grep -Fxq -- 'POST' "$DIRECTORY/post-arguments"
 grep -Fxq -- 'admin:fixture-password' "$DIRECTORY/post-arguments"
 grep -Fxq -- 'https://opencrane-testv5-kurrentdb.opencrane-testv5.svc:2113/subscriptions/computer-activations-testv5/conversation-computer-activation/replayParked' "$DIRECTORY/post-arguments"

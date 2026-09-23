@@ -171,6 +171,42 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		expect(function _readFleetStandaloneFirstUserAdmission() { _ReadProcessConfig(); }).toThrow(/MEMBERSHIP_MODE=standalone/);
 	});
 
+	it("selects an isolated k3d development identity without composing OIDC", function _ReadK3dDevelopmentAuthentication()
+	{
+		vi.stubEnv("OPENCRANE_DEVELOPMENT_AUTHENTICATION", "k3d");
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "standalone");
+		vi.stubEnv("OPENCRANE_STANDALONE_FIRST_USER_EMAIL", "Developer@Example.Test");
+		vi.stubEnv("OPENCRANE_K3D_DEVELOPMENT_HOST", "opencrane.local.opencrane.test");
+		vi.stubEnv("OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL_PATH", "/var/run/opencrane/development-session/credential");
+
+		expect(_ReadProcessConfig()).toMatchObject({
+			k3dDevelopmentAuthentication: {
+				credentialPath: "/var/run/opencrane/development-session/credential",
+				identity: { displayName: "OpenCrane Tier 3 developer", email: "developer@example.test", issuer: "https://identity.local.opencrane.test", siloId: "silo-test", subject: "opencrane-tier3-developer" },
+				publicHost: "opencrane.local.opencrane.test",
+			},
+			standaloneFirstUserAdmission: null,
+		});
+	});
+
+	it("refuses k3d development authentication outside its exact standalone test-host contract", function _RejectInvalidK3dDevelopmentAuthentication()
+	{
+		vi.stubEnv("OPENCRANE_DEVELOPMENT_AUTHENTICATION", "k3d");
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "standalone");
+		vi.stubEnv("OPENCRANE_STANDALONE_FIRST_USER_EMAIL", "developer@example.test");
+		vi.stubEnv("OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL_PATH", "/var/run/opencrane/development-session/credential");
+		vi.stubEnv("OPENCRANE_K3D_DEVELOPMENT_HOST", "opencrane.example.com");
+		expect(function _PublicHost() { _ReadProcessConfig(); }).toThrow(/below \.test/);
+
+		vi.stubEnv("OPENCRANE_K3D_DEVELOPMENT_HOST", "opencrane.local.opencrane.test");
+		vi.stubEnv("OIDC_ISSUER_URL", "https://issuer.example");
+		expect(function _OidcCoexistence() { _ReadProcessConfig(); }).toThrow(/cannot coexist with OIDC/);
+
+		vi.stubEnv("OIDC_ISSUER_URL", "");
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "fleet");
+		expect(function _FleetMode() { _ReadProcessConfig(); }).toThrow(/requires standalone membership/);
+	});
+
 	it("reads Fleet membership with a projected-token path", function _ReadFleetMembership()
 	{
 		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "fleet");

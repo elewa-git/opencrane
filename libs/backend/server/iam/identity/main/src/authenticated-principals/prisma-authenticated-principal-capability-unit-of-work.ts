@@ -37,7 +37,7 @@ export class PrismaAuthenticatedPrincipalCapabilityUnitOfWork implements Authent
 	 * `/auth/me` uses this projection to guide the browser without turning an identity-provider role
 	 * claim into product authorization. Product routes still repeat admission in their write transaction.
 	 *
-	 * Called by: `OidcAuthService.enrichStatusUser`.
+	 * Called by: `OidcAuthService.enrichStatusUser` and the explicit development-authentication composition.
 	 * @param input - Silo, issuer, and subject derived from the verified session and request host.
 	 * @returns True when the current central grant set allows organisation administration.
 	 * @throws When Principal, membership, grant, or authorization persistence is unavailable.

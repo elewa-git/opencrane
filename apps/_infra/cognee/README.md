@@ -14,23 +14,25 @@ Service, storage, and network policy.
 
 Before this image is built, the public LadybugDB extension server provides a native json extension.
 This app downloads that exact binary once, verifies its checksum, and places it where Cognee expects
-it. After deployment, the memory gateway sends admitted requests to Cognee and receives retrieved
-context. Cognee startup never needs the public extension server.
+it. The build also resolves and stores the TikToken `cl100k_base` vocabulary used for embedding
+chunk sizing. After deployment, the memory gateway sends admitted requests to Cognee and receives
+retrieved context. Cognee startup never needs either public source.
 
 ```text
- build: LadybugDB extension -- fixed checksum --> Cognee image  ◄── HERE
-                                                      |
- deploy: memory gateway -- admitted memory request --> Cognee
-                                                      |
-                                                      +--> durable silo storage
+ build: LadybugDB extension -- fixed checksum --+
+                                                 +--> Cognee image  ◄── HERE
+ build: TikToken vocabulary -- package pin ------+         |
+ deploy: memory gateway -- admitted memory request --------> Cognee
+                                                           |
+                                                           +--> durable silo storage
 ```
 
 **In this flow:** the [memory gateway](../../memory-gateway/README.md) owns authenticated access;
 the [silo chart](../deploy-k8s/README.md) composes the deployment.
 
-The invariant is that the required native extension is already present and byte-for-byte verified
-before the image can be published. A wrong download fails the build. A missing extension fails the
-offline image smoke. No runtime network exception hides either failure.
+The invariant is that the required native extension and tokenizer data are already present before
+the image can be published. A wrong extension download fails the build. Missing or unusable runtime
+assets fail the offline image smoke. No runtime network exception hides either failure.
 
 ## Public surface
 
@@ -66,13 +68,20 @@ composes it; no package imports it.
 | LadybugDB extension | `json`, LadybugDB `0.17.0`, Linux AMD64 |
 | Extension SHA-256 | `8a5eb3c6c70cc86ea34aea777e9fc78687f69d1396055d878d2b9e0a79cb5114` |
 | Runtime path | `/root/.lbdb/extension/0.17.0/linux_amd64/json/libjson.lbug_extension` |
+| Embedding tokenizer | TikToken `cl100k_base`, cached under `/opt/opencrane/tiktoken-cache` |
 
 The image is AMD64-only because the extension is a native binary. The Dockerfile fixes the platform
 and sets `HOME=/root`, because LadybugDB derives its extension path from `HOME` and Kubernetes does
 not add that variable when an image omits it. LadybugDB's download URL includes `v0.17.0`, while its
-local loader directory is `0.17.0` without the `v`; keep those distinct. The image smoke starts
-LadybugDB without networking and loads the extension, so a present-but-unusable file cannot pass
-publication.
+local loader directory is `0.17.0` without the `v`; keep those distinct.
+
+Cognee `1.2.1` first treats the LiteLLM alias `auto-embedding` as a Hugging Face tokenizer name.
+`HF_HUB_OFFLINE` and `TRANSFORMERS_OFFLINE` make that lookup fail locally and immediately, after
+which Cognee uses its TikToken fallback. The Dockerfile warms that fallback cache while the image is
+built. The image smoke runs with networking disabled, loads the LadybugDB extension, constructs the
+same OpenAI-compatible embedding engine used by the pod, and tokenizes text. A present-but-unusable
+extension or an uncached tokenizer therefore cannot pass publication.
+
 The app-owned deployer requires the exact published digest for every real silo and reuses the prior
 digest on upgrades. A tag is accepted only for the imported image in the disposable local k3d smoke.
 To bump Cognee or LadybugDB, update the base, extension URL, path, checksum, tests, chart dependency,

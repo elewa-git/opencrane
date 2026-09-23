@@ -3,6 +3,7 @@
 {{- $standaloneMembership := $membership.standalone -}}
 {{- $fleetMembership := $membership.fleet -}}
 {{- $firstUser := .Values.clustertenantManager.firstUser -}}
+{{- $developmentAuthentication := .Values.clustertenantManager.developmentAuthentication -}}
 {{- $ociRegistry := .Values.clustertenantManager.workflows.ociRegistry -}}
 {{- $ociRegistryAuthorization := $ociRegistry.authorization -}}
 {{- $history := .Values.historyStore.kurrentdb -}}
@@ -40,6 +41,23 @@
 {{- end -}}
 {{- if and $firstUser.email (ne $membership.mode "standalone") -}}
 {{- fail "clustertenantManager.firstUser requires membership.mode=standalone" -}}
+{{- end -}}
+{{- if not (or (empty $developmentAuthentication.mode) (eq $developmentAuthentication.mode "k3d")) -}}
+{{- fail "clustertenantManager.developmentAuthentication.mode must be empty or k3d" -}}
+{{- end -}}
+{{- if eq $developmentAuthentication.mode "k3d" -}}
+{{- if ne $membership.mode "standalone" -}}
+{{- fail "k3d development authentication requires membership.mode=standalone" -}}
+{{- end -}}
+{{- if not (hasSuffix ".test" $developmentAuthentication.publicHost) -}}
+{{- fail "k3d development authentication requires a .test publicHost" -}}
+{{- end -}}
+{{- if or (empty $developmentAuthentication.existingSecret) (empty $developmentAuthentication.credentialKey) -}}
+{{- fail "k3d development authentication requires an existingSecret and credentialKey" -}}
+{{- end -}}
+{{- if .Values.clustertenantManager.oidc.issuerUrl -}}
+{{- fail "k3d development authentication cannot coexist with OIDC" -}}
+{{- end -}}
 {{- end -}}
 {{- if not (hasPrefix "https://" $ociRegistry.baseUrl) -}}
 {{- fail "clustertenantManager.workflows.ociRegistry.baseUrl must use https" -}}
@@ -152,6 +170,12 @@ spec:
             - name: OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS
               value: {{ $membership.maximumStalenessMs | quote }}
             {{- if eq $membership.mode "standalone" }}
+            - name: OPENCRANE_MEMBERSHIP_TRUSTED_IDENTITY_ISSUER
+              {{- if eq $developmentAuthentication.mode "k3d" }}
+              value: https://identity.local.opencrane.test
+              {{- else }}
+              value: {{ .Values.clustertenantManager.oidc.issuerUrl | quote }}
+              {{- end }}
             - name: OPENCRANE_INVITATION_SIGNING_KEY_PATH
               value: /var/run/opencrane/invitation-signing/key
             - name: OPENCRANE_PUBLIC_BASE_URL
@@ -166,6 +190,14 @@ spec:
               value: {{ $firstUser.email | quote }}
             - name: OPENCRANE_STANDALONE_CLUSTER_TENANT
               value: {{ $firstUser.clusterTenant | quote }}
+            {{- end }}
+            {{- if eq $developmentAuthentication.mode "k3d" }}
+            - name: OPENCRANE_DEVELOPMENT_AUTHENTICATION
+              value: k3d
+            - name: OPENCRANE_K3D_DEVELOPMENT_HOST
+              value: {{ $developmentAuthentication.publicHost | quote }}
+            - name: OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL_PATH
+              value: /var/run/opencrane/development-session/credential
             {{- end }}
             {{- if eq $membership.mode "fleet" }}
             - name: OPENCRANE_MEMBERSHIP_ISSUER_ID
@@ -343,6 +375,11 @@ spec:
               mountPath: /var/run/opencrane/oci-registry
               readOnly: true
             {{- end }}
+            {{- if eq $developmentAuthentication.mode "k3d" }}
+            - name: development-session
+              mountPath: /var/run/opencrane/development-session
+              readOnly: true
+            {{- end }}
           livenessProbe:
             # A running server can repair a transient dependency connection; the
             # aggregated health route keeps database readiness as the public gate.
@@ -385,6 +422,15 @@ spec:
             items:
               - key: {{ $standaloneMembership.invitationSigningKeyKey | quote }}
                 path: key
+        {{- end }}
+        {{- if eq $developmentAuthentication.mode "k3d" }}
+        - name: development-session
+          secret:
+            secretName: {{ $developmentAuthentication.existingSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ $developmentAuthentication.credentialKey | quote }}
+                path: credential
         {{- end }}
         {{- if eq $membership.mode "fleet" }}
         - name: membership-verification-key

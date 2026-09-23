@@ -43,6 +43,13 @@ function _DevelopSmoke()
 	return readFileSync(path, "utf8");
 }
 
+/** Reads the minimum-host and recommended-host image import strategies. */
+function _DevelopSmokeImageStorage()
+{
+	const path = fileURLToPath(new URL("../../apps/_infra/deploy-k8s/platform/tests/develop-smoke-image-storage.sh", import.meta.url));
+	return readFileSync(path, "utf8");
+}
+
 /** Create real branch history with app changes followed by a checker-only commit. */
 function _ComparisonRepository(t)
 {
@@ -302,21 +309,22 @@ test("reuses only an exact-SHA baseline with a successful current-silo k3d job",
 	}), false);
 });
 
-test("overlaps image preparation and imports one complete direct k3d batch", function _ProtectsFastSmokeOrchestration()
+test("overlaps image preparation and keeps both direct k3d import strategies", function _ProtectsFastSmokeOrchestration()
 {
 	const smoke = _DevelopSmoke();
+	const imageStorage = _DevelopSmokeImageStorage();
 	assert.match(smoke, /_prepare_images &[\s\S]*?IMAGE_PREPARATION_PID=\$!/u);
-	assert.match(smoke, /if ! wait "\$IMAGE_PREPARATION_PID"/u);
+	assert.match(smoke, /if wait "\$IMAGE_PREPARATION_PID"; then[\s\S]*?else[\s\S]*?_capture_failure "\$status" "\$LINENO"/u);
 	assert.match(smoke, /cert-manager jetstack\/cert-manager[\s\S]*?&[\s\S]*?CERT_MANAGER_INSTALL_PID=\$![\s\S]*?cnpg cnpg\/cloudnative-pg/u);
-	assert.match(smoke, /if ! wait "\$CERT_MANAGER_INSTALL_PID"/u);
+	assert.match(smoke, /if wait "\$CERT_MANAGER_INSTALL_PID"; then[\s\S]*?else[\s\S]*?_capture_failure "\$status" "\$LINENO"/u);
 	assert.match(smoke, /docker buildx build --load/u);
 	assert.match(smoke, /--cache-from "type=registry,ref=\$\{SMOKE_BUILD_CACHE\}:\$\{project\}"/u);
 	assert.match(smoke, /--cache-to "type=registry,ref=\$\{SMOKE_BUILD_CACHE_EXPORT\}:\$\{project\},mode=max"/u);
-	// The six image preparations must stay concurrent — serially they dominated the smoke.
+	// The image preparations must stay concurrent because serial execution dominated the smoke.
 	assert.match(smoke, /_prepare_image "\$project" "\$local_image" "\$remote_image" "\$dockerfile" \\\n\s+>"\$log_dir\/\$project\.log" 2>&1 &/u);
-	const imports = smoke.match(/k3d image import/g) ?? [];
-	assert.equal(imports.length, 1);
-	assert.match(smoke, /k3d image import "\$\{SMOKE_IMAGES\[@\]\}" --cluster "\$CLUSTER_NAME" --mode direct/u);
+	assert.match(smoke, /_import_smoke_images/u);
+	assert.match(imageStorage, /k3d image import "\$\{SMOKE_IMAGES\[@\]\}" --cluster "\$CLUSTER_NAME" --mode direct/u);
+	assert.match(imageStorage, /k3d image import "\$image" --cluster "\$CLUSTER_NAME" --mode direct/u);
 });
 
 test("keeps the storage expansion proof targeted while preserving protected qualification", function _SelectsStorageMode()

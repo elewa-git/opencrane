@@ -101,4 +101,132 @@ if env -i "${COMMON_ENV[@]}" \
 fi
 grep -Fq 'regular, non-symbolic-link file' "$FIXTURE_DIR/unsafe-projection.out"
 
+mkdir -p "$FIXTURE_DIR/mock-bin" "$FIXTURE_DIR/mock-state"
+cat > "$FIXTURE_DIR/mock-bin/curl" <<'MOCK_CURL'
+#!/bin/sh
+set -eu
+output_file=""
+request_method="GET"
+request_body=""
+url=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output) output_file="$2"; shift 2 ;;
+    --request) request_method="$2"; shift 2 ;;
+    --data-binary) request_body="$2"; shift 2 ;;
+    --write-out|--cacert|--header) shift 2 ;;
+    --silent|--show-error|--fail) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+case "$url" in
+  */health/live) exit 0 ;;
+  */users/opencrane-history)
+    get_attempts_file="$MOCK_STATE_DIR/get-attempts"
+    get_attempts=0
+    if [ -f "$get_attempts_file" ]; then get_attempts="$(cat "$get_attempts_file")"; fi
+    get_attempts=$((get_attempts + 1))
+    printf '%s' "$get_attempts" > "$get_attempts_file"
+    if [ "${MOCK_ALWAYS_GET_408:-0}" = 1 ] \
+      || [ "$get_attempts" -le "${MOCK_GET_408_COUNT:-0}" ]; then
+      : > "$output_file"
+      printf 408
+      exit 0
+    fi
+    if [ -f "$MOCK_STATE_DIR/user-created" ]; then
+      printf '{"loginName":"opencrane-history","groups":[]}' > "$output_file"
+      printf 200
+    else
+      : > "$output_file"
+      printf 404
+    fi
+    ;;
+  */users)
+    [ -n "$request_body" ] || exit 9
+    attempts_file="$MOCK_STATE_DIR/create-attempts"
+    attempts=0
+    if [ -f "$attempts_file" ]; then attempts="$(cat "$attempts_file")"; fi
+    attempts=$((attempts + 1))
+    printf '%s' "$attempts" > "$attempts_file"
+    if [ "$attempts" -eq 1 ]; then
+      if [ "${MOCK_TIMEOUT_CREATES_USER:-0}" = 1 ]; then : > "$MOCK_STATE_DIR/user-created"; fi
+      printf 408
+    else
+      : > "$MOCK_STATE_DIR/user-created"
+      printf 201
+    fi
+    ;;
+  */streams/%24settings/head)
+    cat > "$output_file" <<'SETTINGS'
+{"$userStreamAcl":{"$r":["$admins","opencrane-history"],"$w":["$admins","opencrane-history"],"$d":"$admins","$mr":"$admins","$mw":"$admins"},"$systemStreamAcl":{"$r":"$admins","$w":"$admins","$d":"$admins","$mr":"$admins","$mw":"$admins"}}
+SETTINGS
+    printf 200
+    ;;
+  */streams/%24settings) printf 201 ;;
+  */subscriptions/*/info) printf 404 ;;
+  */subscriptions/*)
+    [ "$request_method" = "PUT" ] || exit 9
+    printf 201
+    ;;
+  */streams/opencrane-history-bootstrap-probe) printf 404 ;;
+  *) exit 9 ;;
+esac
+MOCK_CURL
+cat > "$FIXTURE_DIR/mock-bin/sleep" <<'MOCK_SLEEP'
+#!/bin/sh
+exit 0
+MOCK_SLEEP
+cat > "$FIXTURE_DIR/mock-bin/date" <<'MOCK_DATE'
+#!/bin/sh
+set -eu
+[ "$1" = +%s ] || exit 9
+clock_file="$MOCK_STATE_DIR/clock"
+clock=100
+if [ -f "$clock_file" ]; then clock="$(cat "$clock_file")"; fi
+printf '%s\n' "$clock"
+printf '%s' "$((clock + 2))" > "$clock_file"
+MOCK_DATE
+chmod 755 "$FIXTURE_DIR/mock-bin/curl" "$FIXTURE_DIR/mock-bin/date" "$FIXTURE_DIR/mock-bin/sleep"
+env -i "${COMMON_ENV[@]}" \
+  PATH="$FIXTURE_DIR/mock-bin:$PATH" \
+  MOCK_STATE_DIR="$FIXTURE_DIR/mock-state" \
+  KURRENTDB_BOOTSTRAP_ENDPOINT=https://kurrentdb.example.test:2113 \
+  /bin/sh "$POLICY"
+[[ "$(cat "$FIXTURE_DIR/mock-state/create-attempts")" == 2 ]]
+[[ -f "$FIXTURE_DIR/mock-state/user-created" ]]
+
+mkdir "$FIXTURE_DIR/mock-state-uncertain"
+env -i "${COMMON_ENV[@]}" \
+  PATH="$FIXTURE_DIR/mock-bin:$PATH" \
+  MOCK_STATE_DIR="$FIXTURE_DIR/mock-state-uncertain" \
+  MOCK_TIMEOUT_CREATES_USER=1 \
+  KURRENTDB_BOOTSTRAP_ENDPOINT=https://kurrentdb.example.test:2113 \
+  /bin/sh "$POLICY"
+[[ "$(cat "$FIXTURE_DIR/mock-state-uncertain/create-attempts")" == 1 ]]
+[[ -f "$FIXTURE_DIR/mock-state-uncertain/user-created" ]]
+
+mkdir "$FIXTURE_DIR/mock-state-get-timeout"
+env -i "${COMMON_ENV[@]}" \
+  PATH="$FIXTURE_DIR/mock-bin:$PATH" \
+  MOCK_STATE_DIR="$FIXTURE_DIR/mock-state-get-timeout" \
+  MOCK_GET_408_COUNT=1 \
+  KURRENTDB_BOOTSTRAP_ENDPOINT=https://kurrentdb.example.test:2113 \
+  /bin/sh "$POLICY"
+[[ "$(cat "$FIXTURE_DIR/mock-state-get-timeout/get-attempts")" == 3 ]]
+[[ "$(cat "$FIXTURE_DIR/mock-state-get-timeout/create-attempts")" == 2 ]]
+
+mkdir "$FIXTURE_DIR/mock-state-deadline"
+if env -i "${COMMON_ENV[@]}" \
+  PATH="$FIXTURE_DIR/mock-bin:$PATH" \
+  MOCK_STATE_DIR="$FIXTURE_DIR/mock-state-deadline" \
+  MOCK_ALWAYS_GET_408=1 \
+  KURRENTDB_BOOTSTRAP_TIMEOUT_SECONDS=3 \
+  KURRENTDB_BOOTSTRAP_ENDPOINT=https://kurrentdb.example.test:2113 \
+  /bin/sh "$POLICY" >"$FIXTURE_DIR/deadline.out" 2>&1; then
+  echo "KurrentDB bootstrap ignored its service-user deadline" >&2
+  exit 1
+fi
+grep -Fq 'did not finish HistoryStore service-user bootstrap before the deadline' "$FIXTURE_DIR/deadline.out"
+[[ "$(cat "$FIXTURE_DIR/mock-state-deadline/get-attempts")" == 2 ]]
+
 echo "KurrentDB bootstrap policy contract: PASS"

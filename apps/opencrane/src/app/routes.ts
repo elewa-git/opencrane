@@ -297,7 +297,7 @@ export function _CreateRateLimitedResourceSharesRouter(prisma: PrismaClient, opt
 	return router;
 }
 
-/** Creates the HTTP adapter that resolves verified OIDC coordinates to a local Principal. */
+/** Creates the HTTP adapter that resolves deployment-trusted identity coordinates to a local Principal. */
 function _CreateResourceShareCallerResolver(directory: AuthenticatedPrincipalDirectory): ResourceShareCallerResolver
 {
 	return async function _ResolveResourceShareCaller(request: Request)
