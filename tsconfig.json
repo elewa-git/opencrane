@@ -324,6 +324,9 @@
       "@opencrane/state/onboarding": [
         "./libs/frontend/state/onboarding/src/index.ts"
       ],
+      "@opencrane/state/local-development": [
+        "./libs/frontend/state/local-development/src/index.ts"
+      ],
       "@opencrane/state/onboarding/projection": [
         "./libs/frontend/state/onboarding/projection/src/index.ts"
       ],
@@ -381,6 +384,9 @@
     },
     {
       "path": "./libs/frontend/state/onboarding"
+    },
+    {
+      "path": "./libs/frontend/state/local-development"
     },
     {
       "path": "./libs/frontend/state/onboarding/projection"
