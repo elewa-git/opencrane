@@ -1,4 +1,4 @@
-import { ConversationModelToolModes } from "@opencrane/contracts";
+import { ConversationComputerRealizationKinds, ConversationModelToolModes } from "@opencrane/contracts";
 import { _ConversationModelRequestDigest } from "../conversation-computer-model-reservation";
 import { _ModelReservationFixture, _ReserveConversationOutputFixture } from "./conversation-output-intent.fixture";
 import { randomUUID } from "node:crypto";
@@ -50,9 +50,18 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 		await history.append(genesis);
 		const turn: FrozenConversationComputerTurn = {
 			bootstrapId: randomUUID(), siloId, computerId,
-			lease: { leaseId: randomUUID(), leaseGeneration: 1, sandboxClaimId: `${computerId}-g1` },
+			lease: {
+				leaseId: randomUUID(),
+				leaseGeneration: 1,
+				realization: {
+					kind: ConversationComputerRealizationKinds.AgentSandbox,
+					claimId: `${computerId}-g1`,
+					sandboxId: `${computerId}-sandbox`,
+					serviceFQDN: `${computerId}.computers.svc.cluster.local`,
+				},
+			},
 			latestPendingEntryId: randomUUID(), modelAlias: "proof-model", maximumBudgetUsd: 0.05,
-			credentialLifetimeSeconds: 60, outputSourceCommandId: null, outputReceipt: null, toolSelection: null, continuationReservation: null, modelReservation: null,
+			credentialLifetimeSeconds: 60, outputSourceCommandId: null, outputReceipt: null, toolSelection: null, continuationReservation: null, modelReservation: null, unavailable: false,
 			binding: { siloId, conversationId, computerId, leaseGeneration: 1, agentIdentityId: randomUUID(), agentServiceId: randomUUID(), agentName: "Ada", agentAvatarArtifactRevisionId: null, runId, expectedRevision: 0n, maximumEntryBytes: 65_536 },
 			compile: { runId, attempt: 1, promptCompilerVersion: "proof-v1", digest: `sha256:${"a".repeat(64)}` },
 		};

@@ -1,5 +1,6 @@
-import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease, type ConversationComputer } from "@opencrane/contracts";
+import { ___ComputerLeaseSchema, ___ConversationComputerRealizationSchema, ___ConversationComputerSchema, ComputerLeaseStates, ConversationComputerRealizationKinds, ConversationComputerStates, type ComputerLease, type ConversationComputer, type ConversationComputerRealization } from "@opencrane/contracts";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
+import { z } from "zod";
 
 import type { ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot } from "./conversation-computer-history.types";
 
@@ -7,6 +8,11 @@ import type { ConversationComputerCurrentCommand, ConversationComputerHistorySna
 const _CONVERSATION_COMPUTER_EVENT_TYPE = "opencrane.conversation-computer.v1";
 /** Recognizes the UUID event identifiers that HistoryStore uses for idempotent appends. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/** Composes the public computer and lease contracts into the closed durable event payload. */
+const _ConversationComputerHistorySnapshotSchema: z.ZodType<ConversationComputerHistorySnapshot> = z.object({
+	computer: ___ConversationComputerSchema,
+	lease: ___ComputerLeaseSchema.nullable()
+}).strict();
 
 /** Derives the one stream that may represent a computer without accepting a caller-selected stream. */
 export function _ConversationComputerStreamName(computerId: string): string
@@ -45,7 +51,16 @@ export function _ValidatedConversationComputerEvent(event: HistoryRecordedEvent,
 	const snapshot = _ValidatedConversationComputerSnapshot(event.data);
 	// KurrentDB stores a string map: a lease-free computer omits all three lease coordinates.
 	const leaseGeneration = snapshot.lease === null ? undefined : String(snapshot.lease.generation);
-	if (event.metadata.siloId !== snapshot.computer.siloId || event.metadata.computerId !== snapshot.computer.id || event.metadata.conversationId !== snapshot.computer.conversationId || event.metadata.agentIdentityId !== snapshot.computer.agentIdentityId || event.metadata.profileRevisionId !== snapshot.computer.profileRevisionId || event.metadata.leaseId !== snapshot.lease?.id || event.metadata.leaseGeneration !== leaseGeneration || event.metadata.leaseState !== snapshot.lease?.state)
+	if (
+		event.metadata.siloId !== snapshot.computer.siloId
+		|| event.metadata.computerId !== snapshot.computer.id
+		|| event.metadata.conversationId !== snapshot.computer.conversationId
+		|| event.metadata.agentIdentityId !== snapshot.computer.agentIdentityId
+		|| event.metadata.profileRevisionId !== snapshot.computer.profileRevisionId
+		|| event.metadata.leaseId !== snapshot.lease?.id
+		|| event.metadata.leaseGeneration !== leaseGeneration
+		|| event.metadata.leaseState !== snapshot.lease?.state
+	)
 		throw new Error("Conversation computer history received an event that does not match its envelope");
 	if (snapshot.computer.siloId !== command.computer.siloId)
 		throw new Error("Conversation computer history received a computer from a different silo");
@@ -63,40 +78,36 @@ export function _ValidatedConversationComputerEvent(event: HistoryRecordedEvent,
 /** Parses the exact closed computer-and-lease event data without accepting future fields as authority. */
 export function _ValidatedConversationComputerSnapshot(value: unknown): ConversationComputerHistorySnapshot
 {
-	if (!_Record(value) || !_ExactKeys(value, ["computer", "lease"]))
+	const result = _ConversationComputerHistorySnapshotSchema.safeParse(value);
+
+	if (!result.success)
 		throw new Error("Conversation computer history requires a complete computer snapshot");
-	const computer = _ValidatedConversationComputer(value.computer);
-	const lease = value.lease === null ? null : _ValidatedComputerLease(value.lease);
-	_ValidateCurrentLease(computer, lease);
-	return { computer, lease };
+
+	_validateComputerChronology(result.data.computer);
+
+	if (result.data.lease !== null)
+		_validateLeaseChronology(result.data.lease);
+
+	_ValidateCurrentLease(result.data.computer, result.data.lease);
+
+	return result.data;
 }
 
-/** Parses the exact closed ConversationComputer contract at a history boundary. */
-export function _ValidatedConversationComputer(value: unknown): ConversationComputer
+/** Preserves the computer's temporal ordering after its public structure has been parsed. */
+function _validateComputerChronology(computer: ConversationComputer): void
 {
-	if (!_Record(value) || !_ExactKeys(value, ["schemaVersion", "id", "siloId", "conversationId", "agentIdentityId", "profileRevisionId", "state", "leaseGeneration", "workspaceCheckpoint", "createdAt", "updatedAt"]))
-		throw new Error("Conversation computer history requires a valid computer snapshot");
-	if (value.schemaVersion !== 1 || !_Identifier(value.id) || !_Identifier(value.siloId) || !_Identifier(value.conversationId) || !_Identifier(value.agentIdentityId) || !_Identifier(value.profileRevisionId) || !_ComputerState(value.state) || !_NonnegativeInteger(value.leaseGeneration) || !_IsoTimestamp(value.createdAt) || !_IsoTimestamp(value.updatedAt))
-		throw new Error("Conversation computer history requires valid computer coordinates");
-	if (Date.parse(value.updatedAt) < Date.parse(value.createdAt))
+	if (Date.parse(computer.updatedAt) < Date.parse(computer.createdAt))
 		throw new Error("Conversation computer history requires a computer update after its creation");
-	if (value.workspaceCheckpoint !== null)
-		_ValidatedWorkspaceCheckpoint(value.workspaceCheckpoint);
-	return value as unknown as ConversationComputer;
 }
 
-/** Parses the exact closed ComputerLease contract at a history boundary. */
-export function _ValidatedComputerLease(value: unknown): ComputerLease
+/** Preserves lease claim, expiry, and release ordering after its public structure has been parsed. */
+function _validateLeaseChronology(lease: ComputerLease): void
 {
-	if (!_Record(value) || !_ExactKeys(value, ["schemaVersion", "id", "computerId", "generation", "sandboxClaimId", "sandboxId", "serviceFQDN", "state", "claimedAt", "expiresAt", "releasedAt"]))
-		throw new Error("Conversation computer history requires a valid lease snapshot");
-	if (value.schemaVersion !== 1 || !_Identifier(value.id) || !_Identifier(value.computerId) || !_PositiveInteger(value.generation) || !_Identifier(value.sandboxClaimId) || (value.sandboxId !== null && !_Identifier(value.sandboxId)) || (value.serviceFQDN !== null && !_ServiceFqdn(value.serviceFQDN)) || !_LeaseState(value.state) || !_IsoTimestamp(value.claimedAt) || !_IsoTimestamp(value.expiresAt) || (value.releasedAt !== null && !_IsoTimestamp(value.releasedAt)))
-		throw new Error("Conversation computer history requires valid lease coordinates");
-	if (Date.parse(value.expiresAt) <= Date.parse(value.claimedAt))
+	if (Date.parse(lease.expiresAt) <= Date.parse(lease.claimedAt))
 		throw new Error("Conversation computer history requires a lease expiry after its claim");
-	if (value.releasedAt !== null && Date.parse(value.releasedAt) < Date.parse(value.claimedAt))
+
+	if (lease.releasedAt !== null && Date.parse(lease.releasedAt) < Date.parse(lease.claimedAt))
 		throw new Error("Conversation computer history requires a lease release after its claim");
-	return value as unknown as ComputerLease;
 }
 
 /** Checks whether one snapshot has zero or one lease consistent with the computer's lifecycle. */
@@ -104,7 +115,11 @@ function _ValidateCurrentLease(computer: ConversationComputer, lease: ComputerLe
 {
 	if (lease === null)
 	{
-		if (computer.state !== ConversationComputerStates.Cold && computer.state !== ConversationComputerStates.RecoveryRequired && computer.state !== ConversationComputerStates.Retired)
+		if (
+			computer.state !== ConversationComputerStates.Cold
+			&& computer.state !== ConversationComputerStates.RecoveryRequired
+			&& computer.state !== ConversationComputerStates.Retired
+		)
 			throw new Error("Conversation computer history requires a lease for its current computer state");
 		return;
 	}
@@ -112,13 +127,36 @@ function _ValidateCurrentLease(computer: ConversationComputer, lease: ComputerLe
 		throw new Error("Conversation computer history requires the lease to match its computer generation");
 	if (lease.state === ComputerLeaseStates.Claimed)
 	{
-		if (computer.state !== ConversationComputerStates.ClaimPending || lease.sandboxId !== null || lease.serviceFQDN !== null || lease.releasedAt !== null)
-			throw new Error("Conversation computer history requires a pending claim without a sandbox");
+		const validClaimedRealization = lease.realization.kind !== ConversationComputerRealizationKinds.AgentSandbox
+			|| (
+				lease.realization.sandboxId === null
+				&& lease.realization.serviceFQDN === null
+			);
+
+		if (
+			computer.state !== ConversationComputerStates.ClaimPending
+			|| !validClaimedRealization
+			|| lease.releasedAt !== null
+		)
+			throw new Error("Conversation computer history requires a realization valid for a claimed lease");
 		return;
 	}
 	if (lease.state === ComputerLeaseStates.Active)
 	{
-		if ((computer.state !== ConversationComputerStates.Warm && computer.state !== ConversationComputerStates.Cooling) || lease.sandboxId === null || lease.serviceFQDN === null || lease.releasedAt !== null)
+		const validActiveRealization = lease.realization.kind !== ConversationComputerRealizationKinds.AgentSandbox
+			|| (
+				lease.realization.sandboxId !== null
+				&& lease.realization.serviceFQDN !== null
+			);
+
+		if (
+			(
+				computer.state !== ConversationComputerStates.Warm
+				&& computer.state !== ConversationComputerStates.Cooling
+			)
+			|| !validActiveRealization
+			|| lease.releasedAt !== null
+		)
 			throw new Error("Conversation computer history requires an active lease for a warm or cooling computer");
 		return;
 	}
@@ -137,7 +175,11 @@ export function _ValidateSnapshotTransition(previous: ConversationComputerHistor
 		throw new Error("Conversation computer history cannot reactivate a retired computer");
 	if (current.computer.leaseGeneration < previous.computer.leaseGeneration)
 		throw new Error("Conversation computer history decreased its lease generation");
-	if (previous.lease !== null && current.lease !== null && previous.lease.id !== current.lease.id)
+	if (
+		previous.lease
+		&& current.lease
+		&& previous.lease.id !== current.lease.id
+	)
 	{
 		if (previous.lease.state === ComputerLeaseStates.Active || previous.lease.state === ComputerLeaseStates.Claimed)
 			throw new Error("Conversation computer history replaced a nonterminal lease");
@@ -151,81 +193,67 @@ export function _ValidateSnapshotTransition(previous: ConversationComputerHistor
 /** Preserves immutable computer identity, ownership, profile, and creation coordinates. */
 function _SameComputerCoordinates(first: ConversationComputer, current: ConversationComputer): boolean
 {
-	return first.schemaVersion === current.schemaVersion && first.id === current.id && first.siloId === current.siloId && first.conversationId === current.conversationId && first.agentIdentityId === current.agentIdentityId && first.profileRevisionId === current.profileRevisionId && first.createdAt === current.createdAt;
+	return first.schemaVersion === current.schemaVersion
+		&& first.id === current.id
+		&& first.siloId === current.siloId
+		&& first.conversationId === current.conversationId
+		&& first.agentIdentityId === current.agentIdentityId
+		&& first.profileRevisionId === current.profileRevisionId
+		&& first.createdAt === current.createdAt;
 }
 
 /** Allows lifecycle changes for one lease without letting a terminal or foreign lease return. */
 function _ValidateSameLeaseTransition(previous: ComputerLease, current: ComputerLease): void
 {
-	if (previous.schemaVersion !== current.schemaVersion || previous.computerId !== current.computerId || previous.generation !== current.generation || previous.sandboxClaimId !== current.sandboxClaimId || previous.claimedAt !== current.claimedAt)
+	if (
+		previous.schemaVersion !== current.schemaVersion
+		|| previous.computerId !== current.computerId
+		|| previous.generation !== current.generation
+		|| previous.claimedAt !== current.claimedAt
+		|| previous.realization.kind !== current.realization.kind
+	)
 		throw new Error("Conversation computer history changed stable lease coordinates");
-	if (previous.sandboxId !== null && previous.sandboxId !== current.sandboxId)
-		throw new Error("Conversation computer history changed an assigned sandbox");
-	if (previous.serviceFQDN !== null && previous.serviceFQDN !== current.serviceFQDN)
-		throw new Error("Conversation computer history changed an assigned sandbox Service");
+	if (!_SameRealization(previous.realization, current.realization))
+		throw new Error("Conversation computer history changed its realization coordinates");
 	if ((previous.state === ComputerLeaseStates.Released || previous.state === ComputerLeaseStates.Lost) && previous.state !== current.state)
 		throw new Error("Conversation computer history reactivated a terminal lease");
 	if (previous.state === ComputerLeaseStates.Active && current.state === ComputerLeaseStates.Claimed)
 		throw new Error("Conversation computer history moved an active lease back to claimed");
 }
 
-function _ServiceFqdn(value: unknown): value is string
+/** Parses one closed realization variant without accepting credentials or unknown fields. */
+export function _ValidatedConversationComputerRealization(value: unknown): ConversationComputerRealization
 {
-	return typeof value === "string" && value.length <= 253 && value.endsWith(".svc.cluster.local") && value.split(".").every(_Identifier);
+	const result = ___ConversationComputerRealizationSchema.safeParse(value);
+
+	if (!result.success)
+		throw new Error("Conversation computer history requires a valid realization");
+
+	return result.data;
 }
 
-/** Validates the nested immutable workspace checkpoint when one is present. */
-function _ValidatedWorkspaceCheckpoint(value: unknown): void
+/** Keeps realization coordinates immutable once a lease has been recorded. */
+function _SameRealization(previous: ConversationComputerRealization, current: ConversationComputerRealization): boolean
 {
-	if (!_Record(value) || !_ExactKeys(value, ["artifactRevisionId", "digest", "format", "checkpointedAt"]) || !_Identifier(value.artifactRevisionId) || !_Identifier(value.digest) || !_Identifier(value.format) || !_IsoTimestamp(value.checkpointedAt))
-		throw new Error("Conversation computer history requires a valid workspace checkpoint");
-}
-
-/** Checks a plain object has exactly the expected closed contract keys. */
-function _ExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean
-{
-	const actual = Object.keys(value);
-	return actual.length === keys.length && actual.every(key => keys.includes(key));
+	if (previous.kind === ConversationComputerRealizationKinds.AgentSandbox && current.kind === ConversationComputerRealizationKinds.AgentSandbox)
+		return previous.claimId === current.claimId
+			&& (
+				previous.sandboxId === null
+				|| previous.sandboxId === current.sandboxId
+			)
+			&& (
+				previous.serviceFQDN === null
+				|| previous.serviceFQDN === current.serviceFQDN
+			);
+	if (previous.kind === ConversationComputerRealizationKinds.HostDevelopmentProcess && current.kind === ConversationComputerRealizationKinds.HostDevelopmentProcess)
+		return previous.processId === current.processId && previous.endpoint === current.endpoint;
+	return false;
 }
 
 /** Checks a nonempty trusted identifier without normalizing the durable coordinate. */
 function _Identifier(value: unknown): value is string
 {
-	return typeof value === "string" && value.trim().length > 0 && value === value.trim();
-}
-
-/** Checks one nonnegative safe integer stored as the computer's durable generation. */
-function _NonnegativeInteger(value: unknown): value is number
-{
-	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
-}
-
-/** Checks one positive safe integer stored as a lease fence. */
-function _PositiveInteger(value: unknown): value is number
-{
-	return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
-}
-
-/** Checks the exact current ConversationComputer state set. */
-function _ComputerState(value: unknown): value is ConversationComputerStates
-{
-	return value === ConversationComputerStates.Cold || value === ConversationComputerStates.ClaimPending || value === ConversationComputerStates.Warm || value === ConversationComputerStates.Cooling || value === ConversationComputerStates.RecoveryRequired || value === ConversationComputerStates.Retired;
-}
-
-/** Checks the exact current ComputerLease state set. */
-function _LeaseState(value: unknown): value is ComputerLeaseStates
-{
-	return value === ComputerLeaseStates.Claimed || value === ComputerLeaseStates.Active || value === ComputerLeaseStates.Released || value === ComputerLeaseStates.Lost;
-}
-
-/** Checks the ISO timestamp representation stored in the shared computer contracts. */
-function _IsoTimestamp(value: unknown): value is string
-{
-	return typeof value === "string" && !Number.isNaN(Date.parse(value));
-}
-
-/** Narrows one unknown HistoryStore payload to a JSON-object candidate. */
-function _Record(value: unknown): value is Record<string, unknown>
-{
-	return typeof value === "object" && value !== null && !Array.isArray(value);
+	return typeof value === "string"
+		&& !!value.trim()
+		&& value === value.trim();
 }

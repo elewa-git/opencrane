@@ -116,7 +116,7 @@ delivery is acknowledged.
 The final request offers no tools. It uses the original key, matching its saved digest and actual
 expiry, and subtracts the whole first token reservation from the original allowance. Key cleanup
 retains a non-secret spent marker; missing, expired or uncertain custody cannot reset the budget.
-Each HTTP request remains at most 25 seconds and cannot outlive the key or current authority.
+Each HTTP request remains at most 60 seconds and cannot outlive the key or current authority.
 Intermediate tool progress is not appended to participant history, so the compiled conversation
 head stays unchanged until the final answer.
 

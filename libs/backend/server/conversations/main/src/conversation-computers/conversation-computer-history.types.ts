@@ -17,22 +17,22 @@ export interface ConversationComputerCurrentCommand
 }
 
 /**
- * Names one lease of one computer using only what a sandbox Pod can prove about itself.
+ * Names one lease using coordinates presented by its authenticated realized process.
  *
- * A Pod knows its computer id and lease from its labels and the server adds the silo from trusted
- * configuration, so this is the coordinate used for the active-turn stream, the review credential
- * and the turn store. It carries no conversation or agent identity because the Pod never learns them.
+ * The process presents its computer id and lease coordinates, while the server supplies the trusted
+ * silo. The coordinate selects the active-turn stream, review credential, and turn store without
+ * revealing the conversation or agent identity to the process.
  *
  * Called by: `KurrentConversationComputerActivityReader`, `KurrentConversationComputerTurnStore`
  * and `KeyedConversationComputerReviewCredentialDeriver`.
  */
 export interface ConversationComputerLeaseCoordinates
 {
-	/** Identifies the silo fixed by server configuration, never by the Pod. */
+	/** Identifies the silo fixed by server configuration, never by the realized process. */
 	readonly siloId: string;
-	/** Identifies the logical computer named on the Pod label. */
+	/** Identifies the logical computer presented by the authenticated process. */
 	readonly computerId: string;
-	/** Names the lease and generation the Pod claims to hold. */
+	/** Names the lease and generation the authenticated process claims to hold. */
 	readonly lease: LeaseScope;
 }
 

@@ -3,6 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import type { Request, RequestHandler, Response } from "express";
 import { ___DoWithTrace, ___MarkActiveSpanFailed } from "@opencrane/backend/observability";
+import { _RequestHost } from "@opencrane/backend/server/infra/auth";
 import type { HistoryRecordedEvent, HistorySubscription } from "@opencrane/backend/server/infra/history-store";
 
 import { _ConversationEventLimits, _CreateConversationEventAdmission } from "./self-conversation-events-limits";
@@ -201,7 +202,10 @@ function _SameOrigin(request: Request): boolean
 	const site = request.get("sec-fetch-site");
 	if (site !== undefined && site !== "same-origin")
 		return false;
-	const expected = `${request.protocol}://${request.get("host")}`;
+	const host = _RequestHost(request);
+	if (!host)
+		return false;
+	const expected = `${request.protocol}://${host}`;
 	const origin = request.get("origin");
 	if (origin !== undefined)
 		return origin === expected;

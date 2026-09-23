@@ -1,4 +1,4 @@
-import type { CompiledRunInput, ConversationEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationComputerRealizationKinds, ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates, type CompiledRunInput, type ConversationEntry } from "@opencrane/contracts";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -8,8 +8,17 @@ import { _ConversationAuthorizationFixture } from "./conversation-authorization.
 const _COMMAND = {
   computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" },
   profileRevisionId: "profile-1",
-  lease: { leaseId: "lease-1", leaseGeneration: 2, sandboxClaimId: "computer-1-g2" },
-};
+  lease: {
+    leaseId: "lease-1",
+    leaseGeneration: 2,
+    realization: {
+      kind: ConversationComputerRealizationKinds.AgentSandbox,
+      claimId: "computer-1-g2",
+      sandboxId: "sandbox-1",
+      serviceFQDN: "sandbox-1.computers.svc.cluster.local",
+    },
+  },
+} as const;
 
 function _Entry(): ConversationEntry {
   return {
@@ -18,7 +27,7 @@ function _Entry(): ConversationEntry {
     conversationId: "conversation-1",
     position: "1",
     author: {
-      kind: "human",
+      kind: ConversationAuthorKinds.Human,
       principalId: "principal-1",
       participantId: "user-1",
       issuer: "https://issuer.test",
@@ -34,12 +43,12 @@ function _Entry(): ConversationEntry {
     idempotencyKey: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651",
     occurredAt: "2026-09-05T00:00:00.000Z",
     attestation: null,
-    kind: "message",
-    state: "completed",
+    kind: ConversationEntryKinds.Message,
+    state: MessageStates.Completed,
     blocks: [
       {
         id: "block-1",
-        kind: "text",
+        kind: ConversationMessageContentBlockKinds.Text,
         payloadRef: "payload-1",
         ciphertextDigest: "sha256:cipher",
       },
@@ -104,6 +113,7 @@ function _Harness(
   const authorization = _ConversationAuthorizationFixture();
   const transaction = {
     ...authorization,
+	agentRun: { findUnique: vi.fn().mockResolvedValue(null) },
     conversationChildRequest: { findUnique: vi.fn().mockResolvedValue(null) },
     conversation: {
       update: vi.fn().mockResolvedValue({ id: "conversation-1" }),
@@ -287,6 +297,13 @@ describe("PrismaConversationComputerTurnUnitOfWork", function _PrismaConversatio
         orderedMessageIds: ["31c1f1dc-0010-4f13-9c2f-d3841ffd6651"],
       },
     });
+  });
+
+  it("does not readmit a human entry whose earlier run ended", async function _SkipsTerminalEntry() {
+    const harness = _Harness();
+    harness.transaction.agentRun.findUnique.mockResolvedValue({ state: "Failed" });
+    await expect(harness.authority.compile(_COMMAND)).resolves.toBeNull();
+    expect(harness.admission.admit).not.toHaveBeenCalled();
   });
 
   it("fails closed when the application-owned admission port rejects the run", async function _AdmissionDenied() {

@@ -1,4 +1,4 @@
-import { ConversationModelToolModes } from "@opencrane/contracts";
+import { ConversationEntryKinds, ConversationMessageContentBlockKinds, ConversationModelToolModes, MessageStates } from "@opencrane/contracts";
 import { _ConversationModelRequestDigest } from "../conversation-computer-model-reservation";
 import type { ConversationComputerModelReservation } from "../conversation-computer-model.types";
 import type { ConversationComputerTurnStore } from "../conversation-computer-turn.types";
@@ -16,7 +16,7 @@ export async function _PrepareBoundDraft(binding: BoundConversationWriterBinding
 /** Build the completed text answer used by the turn store's intent-versus-reservation proofs. */
 export function _PrepareConversationOutputIntent(turn: FrozenConversationComputerTurn, sourceCommandId: string, payloadRef = "opaque-payload")
 {
-	return _PrepareBoundDraft(turn.binding, { sourceCommandId, entry: { kind: "message", state: "completed", blocks: [{ id: "block", kind: "text", payloadRef, ciphertextDigest: "sha256:ciphertext" }], replyToEntryId: turn.latestPendingEntryId, addressedAgentIdentityId: null, activation: "none", visibility: { audience: "conversation" }, causationId: turn.latestPendingEntryId, correlationId: turn.latestPendingEntryId } });
+	return _PrepareBoundDraft(turn.binding, { sourceCommandId, entry: { kind: ConversationEntryKinds.Message, state: MessageStates.Completed, blocks: [{ id: "block", kind: ConversationMessageContentBlockKinds.Text, payloadRef, ciphertextDigest: "sha256:ciphertext" }], replyToEntryId: turn.latestPendingEntryId, addressedAgentIdentityId: null, activation: "none", visibility: { audience: "conversation" }, causationId: turn.latestPendingEntryId, correlationId: turn.latestPendingEntryId } });
 }
 
 /** Represent a model request already dispatched before a storage/restart proof begins. */

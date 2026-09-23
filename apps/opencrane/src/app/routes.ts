@@ -12,7 +12,6 @@ import { _CreateGlobalModelRoutingDefaultCommandPort, providerByokRouter, modelR
 import { PrismaResourceShareUnitOfWork, ResourceShareService, resourceSharesRouter, type ResourceShareCallerResolver } from "@opencrane/backend/server/iam/grants";
 import { PrismaAuthenticatedPrincipalDirectoryUnitOfWork, type AuthenticatedPrincipalDirectory } from "@opencrane/backend/server/iam/identity";
 import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
-import { spec } from "@opencrane/backend/server/api-spec";
 import { _CreateSelfElicitationActivityRouter, _CreateSelfElicitationRouter } from "@opencrane/backend/agents/execution/elicitation";
 import { _CreateSelfRunStatusRouter } from "@opencrane/backend/agents/execution/runs";
 import { _CreatePersonaOnboardingRouter } from "@opencrane/backend/agents/personal/personas";
@@ -28,16 +27,17 @@ import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import { _OpenapiRouter, _RateLimit } from "@opencrane/backend/server/infra/http";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
-import type { AgentSandboxReleaseProfileConfig, InternalRuntimeConfig } from "./config.types";
+import type { ConversationComputerReleaseProfileConfig, InternalRuntimeConfig } from "./config.types";
 import { _log } from "./log";
 import { _CreateInternalRuntimeComposition } from "./runtime-composition";
 import { _CreatePersonaAgentRevisionSelectionFactory } from "./persona-approval-composition";
 import type { ResourceSharesRouteOptions, RouteMount } from "./routes.types";
 import { _CreateCompanyAssistantComposition } from "./company-assistant-composition";
 import { _CreateUserOnboardingComposition } from "./user-onboarding-composition";
+import { _CreatePublicOpenapiSpec } from "./openapi-composition";
 import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-upload.factory";
 import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
-import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
+import type { McpRuntimeComposition, PublicMcpRuntimeComposition } from "./mcp-runtime-composition.types";
 
 /**
  * Register the authenticated product API from functional route lists.
@@ -47,63 +47,169 @@ import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
  * @param app - Public Express listener, already protected by browser-session authentication.
  * @param prisma - The main product database client.
  * @param artifactScannerEnabled - Whether upload admission has a live scanner consumer.
+ * @param artifactStorageAvailable - Whether conversation-file byte routes have ArtifactStore.
  * @param organizationMembersRouter - Startup-selected standalone or Fleet member authority.
  * @param mcpWorkflows - Shared guarded workflow engine plus saved MCP task authorities.
  * @returns The configured public listener.
  * @throws When the deployment has not supplied its conversation-computer profile.
  */
-export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition, providerEffects: ProviderEffectCommandExecutor, historyStore?: HistoryStore, conversationPrivatePayloadKeyringPath?: string, agentSandboxReleaseProfile?: AgentSandboxReleaseProfileConfig): Express
+export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpWorkflows: McpWorkflowComposition, mcpRuntime: PublicMcpRuntimeComposition | null, providerEffects: ProviderEffectCommandExecutor, historyStore?: HistoryStore, conversationPrivatePayloadKeyringPath?: string, releaseProfile?: ConversationComputerReleaseProfileConfig, artifactStorageAvailable = true, sandboxReviewNamespace?: string): Express
 {
-	if (agentSandboxReleaseProfile === undefined)
+	if (!releaseProfile)
 		throw new Error("Product routes require the configured conversation-computer profile");
-	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner, agentSandboxReleaseProfile.profileName);
-	const conversationHistory = historyStore === undefined || conversationPrivatePayloadKeyringPath === undefined ? null : _CreateConversationHistoryComposition(prisma, historyStore, conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile, mcpWorkflows.execution);
-	const unavailableInitialComputer = { resolve: async function _Unavailable() { return null; }, createOrdinaryGenesis: async function _UnavailableGenesis() { throw new Error("review composition cannot create conversations"); } };
-	const computerReviewAuthority = historyStore === undefined || conversationPrivatePayloadKeyringPath === undefined ? null : new _ConversationComputerReviewAuthority(new PrismaConversationMetadataUnitOfWork(prisma, unavailableInitialComputer), new ConversationComputerHistory(historyStore), KeyedConversationComputerReviewCredentialDeriver.fromKeyring(_ReadConversationPrivatePayloadKeyring(conversationPrivatePayloadKeyringPath)));
-	const computerReview = computerReviewAuthority === null ? null : _CreateConversationComputerReviewRouter({ authority: computerReviewAuthority, sandboxNamespace: agentSandboxReleaseProfile.namespace, logger: _log }, _ResolveRequestPrincipal);
+	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner, releaseProfile.profileName);
+	const conversationHistory = !historyStore || !conversationPrivatePayloadKeyringPath
+		? null
+		: _CreateConversationHistoryComposition(prisma, historyStore, conversationPrivatePayloadKeyringPath, releaseProfile, mcpWorkflows.execution);
+
+	/** Report that the review-only computer resolver cannot find an initial computer. */
+	async function _Unavailable(): Promise<null> { return null; }
+
+	/** Refuse conversation creation through the review-only computer resolver. */
+	async function _UnavailableGenesis(): Promise<never> { throw new Error("review composition cannot create conversations"); }
+
+	const unavailableInitialComputer = {
+		resolve: _Unavailable,
+		createOrdinaryGenesis: _UnavailableGenesis,
+	};
+	const computerReviewAuthority = !historyStore || !conversationPrivatePayloadKeyringPath
+		? null
+		: new _ConversationComputerReviewAuthority(new PrismaConversationMetadataUnitOfWork(prisma, unavailableInitialComputer), new ConversationComputerHistory(historyStore), KeyedConversationComputerReviewCredentialDeriver.fromKeyring(_ReadConversationPrivatePayloadKeyring(conversationPrivatePayloadKeyringPath)));
+	const computerReview = !computerReviewAuthority || !sandboxReviewNamespace
+		? null
+		: _CreateConversationComputerReviewRouter({
+			authority: computerReviewAuthority,
+			sandboxNamespace: sandboxReviewNamespace,
+			logger: _log,
+		}, _ResolveRequestPrincipal);
 	const principalDirectory = new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma);
+	const publicSpec = _CreatePublicOpenapiSpec(artifactStorageAvailable);
 	const identityAndAccessRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/v1/audit", handler: auditRouter(prisma, function _CreateAuditAuthorization(transaction) { return new PrismaAuthorizationAuthority(transaction); }) },
-		{ method: "use", path: "/api/v1/groups", handler: groupsRouter(prisma) },
-		{ method: "use", path: "/api/v1/organization/members", handler: organizationMembersRouter },
-		{ method: "use", path: "/api/v1/resource-shares", handler: _CreateRateLimitedResourceSharesRouter(prisma) },
+		{
+			method: "use",
+			path: "/api/v1/audit",
+			handler: auditRouter(prisma, function _CreateAuditAuthorization(transaction) { return new PrismaAuthorizationAuthority(transaction); }),
+		},
+		{
+			method: "use",
+			path: "/api/v1/groups",
+			handler: groupsRouter(prisma),
+		},
+		{
+			method: "use",
+			path: "/api/v1/organization/members",
+			handler: organizationMembersRouter,
+		},
+		{
+			method: "use",
+			path: "/api/v1/resource-shares",
+			handler: _CreateRateLimitedResourceSharesRouter(prisma),
+		},
 	];
 	const agentRoutes: readonly RouteMount[] = [
-		..._OptionalRoute("/api/v1/organization/company-assistant", historyStore === undefined ? null : _CreateCompanyAssistantComposition(prisma, historyStore, agentSandboxReleaseProfile)),
-		{ method: "use", path: "/api/v1/skills", handler: _CreateSkillCatalogueRouter(prisma, _log) },
-		{ method: "use", path: "/api/v1/skills", handler: __CreateSkillAuthoringValidationSubmissionRouter({ resolveCaller: _ResolveSkillAuthoringValidationCaller, authority: new PrismaSkillAuthoringValidationSubmissionUnitOfWork(prisma, mcpWorkflows.execution), logger: _log }) },
+		..._OptionalRoute("/api/v1/organization/company-assistant", !historyStore ? null : _CreateCompanyAssistantComposition(prisma, historyStore, releaseProfile)),
+		{
+			method: "use",
+			path: "/api/v1/skills",
+			handler: _CreateSkillCatalogueRouter(prisma, _log),
+		},
+		{
+			method: "use",
+			path: "/api/v1/skills",
+			handler: __CreateSkillAuthoringValidationSubmissionRouter({
+				resolveCaller: _ResolveSkillAuthoringValidationCaller,
+				authority: new PrismaSkillAuthoringValidationSubmissionUnitOfWork(prisma, mcpWorkflows.execution),
+				logger: _log,
+			}),
+		},
 	];
 	const personalWorkspaceRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/v1/me/onboarding", handler: onboarding.router },
-		{ method: "use", path: "/api/v1/me/assets", handler: _CreatePersonalArtifactCatalogueRouter(prisma, _log) },
-		{ method: "use", path: "/api/v1/me/persona", handler: _CreatePersonaOnboardingRouter(prisma, _log, onboarding.personaWorkflow, _CreatePersonaAgentRevisionSelectionFactory()) },
-		{ method: "use", path: "/api/v1/me/configuration", handler: _CreatePersonalConfigurationRouter(prisma, _log) },
-		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunStatusRouter(prisma, _log) },
-		{ method: "use", path: "/api/v1/me/conversations", handler: __CreateConversationAssetRouter({ resolveCaller: _ResolveConversationAssetCaller, authority: _CreateConversationAssetAuthority(prisma, process.env, artifactScannerEnabled), logger: _log }) },
+		{
+			method: "use",
+			path: "/api/v1/me/onboarding",
+			handler: onboarding.router,
+		},
+		{
+			method: "use",
+			path: "/api/v1/me/assets",
+			handler: _CreatePersonalArtifactCatalogueRouter(prisma, _log),
+		},
+		{
+			method: "use",
+			path: "/api/v1/me/persona",
+			handler: _CreatePersonaOnboardingRouter(prisma, _log, onboarding.personaWorkflow, _CreatePersonaAgentRevisionSelectionFactory()),
+		},
+		{
+			method: "use",
+			path: "/api/v1/me/configuration",
+			handler: _CreatePersonalConfigurationRouter(prisma, _log),
+		},
+		{
+			method: "use",
+			path: "/api/v1/me/runs",
+			handler: _CreateSelfRunStatusRouter(prisma, _log),
+		},
+		..._CreateConversationAssetRoutes(prisma, artifactScannerEnabled, artifactStorageAvailable),
 		..._OptionalRoute("/api/v1/me/conversations", conversationHistory),
 		..._OptionalRoute("/api/v1/me/conversations", computerReview),
-		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfElicitationRouter(prisma, _log) },
-		{ method: "use", path: "/api/v1/me/activity", handler: _CreateSelfElicitationActivityRouter(prisma, _log) },
+		{
+			method: "use",
+			path: "/api/v1/me/conversations",
+			handler: _CreateSelfElicitationRouter(prisma, _log),
+		},
+		{
+			method: "use",
+			path: "/api/v1/me/activity",
+			handler: _CreateSelfElicitationActivityRouter(prisma, _log),
+		},
 	];
 	const gatewayRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/v1/mcp", handler: mcpOperatorRouter(mcpWorkflows.unitOfWork, principalDirectory, mcpWorkflows.eraProbeWorkflow, mcpWorkflows.ociImageValidationWorkflow, mcpWorkflows.ociImageArtifacts) },
-		{ method: "use", path: "/api/v1/mcp", handler: mcpTaskRouter(mcpWorkflows.unitOfWork, mcpRuntime.taskWorkflow, _CreateMcpCallerResolver(principalDirectory)) },
-		{ method: "use", path: "/api/v1/mcp", handler: mcpRuntime.promotion },
-		{ method: "use", path: "/api/v1/model-routing/defaults", handler: modelRoutingDefaultsRouter(prisma, undefined, undefined, _CreateGlobalModelRoutingDefaultCommandPort(prisma, providerEffects)) },
-		{ method: "use", path: "/api/v1/providers/byok", handler: providerByokRouter(prisma, providerEffects, _log) },
-		{ method: "use", path: "/api/v1/models", handler: modelRegistryRouter(prisma, providerEffects) },
+		..._OptionalRoute("/api/v1/mcp", !mcpRuntime ? null : mcpOperatorRouter(mcpWorkflows.unitOfWork, principalDirectory, mcpWorkflows.eraProbeWorkflow, mcpWorkflows.ociImageValidationWorkflow, mcpWorkflows.ociImageArtifacts)),
+		..._OptionalRoute("/api/v1/mcp", !mcpRuntime ? null : mcpTaskRouter(mcpWorkflows.unitOfWork, mcpRuntime.taskWorkflow, _CreateMcpCallerResolver(principalDirectory))),
+		..._OptionalRoute("/api/v1/mcp", mcpRuntime?.promotion ?? null),
+		{
+			method: "use",
+			path: "/api/v1/model-routing/defaults",
+			handler: modelRoutingDefaultsRouter(prisma, undefined, undefined, _CreateGlobalModelRoutingDefaultCommandPort(prisma, providerEffects)),
+		},
+		{
+			method: "use",
+			path: "/api/v1/providers/byok",
+			handler: providerByokRouter(prisma, providerEffects, _log),
+		},
+		{
+			method: "use",
+			path: "/api/v1/models",
+			handler: modelRegistryRouter(prisma, providerEffects),
+		},
 	];
 	const knowledgeRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/v1/third-party-sources", handler: thirdPartySourcesRouter(prisma) },
+		{
+			method: "use",
+			path: "/api/v1/third-party-sources",
+			handler: thirdPartySourcesRouter(prisma),
+		},
 	];
 	const reportingRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/v1/ai-budget", handler: aiBudgetRouter(prisma) },
-		{ method: "use", path: "/api/v1/token-usage", handler: tokenUsageRouter(prisma) },
+		{
+			method: "use",
+			path: "/api/v1/ai-budget",
+			handler: aiBudgetRouter(prisma),
+		},
+		{
+			method: "use",
+			path: "/api/v1/token-usage",
+			handler: tokenUsageRouter(prisma),
+		},
 	];
 	// The public health route is mounted before authentication by public-app.ts. Everything here
 	// either requires the browser session or publishes the static API description.
 	const infrastructureRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/v1/openapi.json", handler: _OpenapiRouter(spec) },
+		{
+			method: "use",
+			path: "/api/v1/openapi.json",
+			handler: _OpenapiRouter(publicSpec),
+		},
 	];
 	_MountRouteAreas(app, [
 		identityAndAccessRoutes,
@@ -114,28 +220,58 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScan
 		reportingRoutes,
 		infrastructureRoutes,
 	]);
+
 	return app;
+}
+
+/**
+ * Mount conversation-file routes only when this process has the real ArtifactStore service and keys.
+ *
+ * Tier 2 does not start that service; production still constructs its fail-closed asset authority.
+ */
+export function _CreateConversationAssetRoutes(prisma: PrismaClient, artifactScannerEnabled: boolean, artifactStorageAvailable: boolean): readonly RouteMount[]
+{
+	if (!artifactStorageAvailable)
+		return [];
+
+	const options = {
+		resolveCaller: _ResolveConversationAssetCaller,
+		authority: _CreateConversationAssetAuthority(prisma, process.env, artifactScannerEnabled),
+		logger: _log,
+	};
+	const router = __CreateConversationAssetRouter(options);
+	const routes = _OptionalRoute("/api/v1/me/conversations", router);
+
+	return routes;
 }
 
 /** Resolve the onboarding owner only from the authenticated user on the request, never from the request body. */
 const _ResolveUserOnboardingOwner: UserOnboardingOwnerResolver = function _Owner(request)
 {
 	const principal = _ResolveRequestPrincipal(request);
-	return principal === null ? null : { siloId: principal.siloId, subjectId: principal.externalSubject };
+	return principal ? { siloId: principal.siloId, subjectId: principal.externalSubject } : null;
 };
 
 /** Resolve conversation-file authority only from the verified browser principal. */
 const _ResolveConversationAssetCaller = function _ConversationAssetCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
 {
 	const principal = _ResolveRequestPrincipal(request);
-	return principal === null ? null : { siloId: principal.siloId, subjectId: principal.externalSubject, principalId: principal.principalId };
+
+	return principal
+		? {
+			siloId: principal.siloId,
+			subjectId: principal.externalSubject,
+			principalId: principal.principalId,
+		}
+		: null;
 };
 
 /** Resolve skill validation authority only from the verified browser Principal and its silo. */
 const _ResolveSkillAuthoringValidationCaller = function _SkillAuthoringValidationCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
 {
 	const principal = _ResolveRequestPrincipal(request);
-	return principal === null ? null : { siloId: principal.siloId, principalId: principal.principalId };
+
+	return principal ? { siloId: principal.siloId, principalId: principal.principalId } : null;
 };
 
 /**
@@ -157,6 +293,7 @@ export function _CreateRateLimitedResourceSharesRouter(prisma: PrismaClient, opt
 	const resolveCaller = _CreateResourceShareCallerResolver(new PrismaAuthenticatedPrincipalDirectoryUnitOfWork(prisma));
 	router.use(_RateLimit(options?.rateLimit));
 	router.use(resourceSharesRouter(service, resolveCaller));
+
 	return router;
 }
 
@@ -167,8 +304,14 @@ function _CreateResourceShareCallerResolver(directory: AuthenticatedPrincipalDir
 	{
 		const requestPrincipal = _ResolveRequestPrincipal(request);
 		const authUser = request.session?.authUser;
-		if (requestPrincipal === null || !authUser?.issuer || !authUser.sub)
+
+		if (
+			!requestPrincipal
+			|| !authUser?.issuer
+			|| !authUser.sub
+		)
 			return null;
+
 		return directory.resolveAuthenticatedPrincipal(requestPrincipal.siloId, authUser.issuer, authUser.sub);
 	};
 }
@@ -195,25 +338,53 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 {
 	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, workflowExecution);
 	const internalControllerRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillAuthoringValidationController },
-		{ method: "use", path: "/api/internal/agent-controller", handler: mcpRuntime.controller },
+		{
+			method: "use",
+			path: "/api/internal/agent-controller",
+			handler: runtime.skillAuthoringValidationController,
+		},
+		{
+			method: "use",
+			path: "/api/internal/agent-controller",
+			handler: mcpRuntime.controller,
+		},
 		..._OptionalRoute("/api/internal/agent-controller", runtime.artifactPreprocessController),
 	];
 	const internalMcpExecutorRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/internal/mcp-executor", handler: mcpRuntime.companion },
+		{
+			method: "use",
+			path: "/api/internal/mcp-executor",
+			handler: mcpRuntime.companion,
+		},
 	];
 	const internalRuntimeRoutes: readonly RouteMount[] = [
-		{ method: "use", path: "/api/internal/skill-authoring", handler: runtime.skillAuthoringValidationWorker },
+		{
+			method: "use",
+			path: "/api/internal/skill-authoring",
+			handler: runtime.skillAuthoringValidationWorker,
+		},
 	];
 	const internalWorkerRoutes = _OptionalRoute("/api/internal/artifact-preprocessor", runtime.artifactPreprocessor);
 	const internalScannerRoutes = _OptionalRoute("/api/internal/artifact-scanner", runtime.artifactScanner);
-	_MountRouteAreas(app, [internalControllerRoutes, internalRuntimeRoutes, internalMcpExecutorRoutes, internalWorkerRoutes, internalScannerRoutes]);
+	_MountRouteAreas(app, [
+		internalControllerRoutes,
+		internalRuntimeRoutes,
+		internalMcpExecutorRoutes,
+		internalWorkerRoutes,
+		internalScannerRoutes,
+	]);
 }
 
 /** Return a one-entry route list for a router, or an empty list when the router is null. */
 function _OptionalRoute(path: string, handler: Router | null): readonly RouteMount[]
 {
-	return handler === null ? [] : [{ method: "use", path, handler }];
+	return handler
+		? [{
+			method: "use",
+			path,
+			handler,
+		}]
+		: [];
 }
 
 /** Mount route areas in declaration order so neighbouring routers can intentionally share a path. */

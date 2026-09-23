@@ -1940,6 +1940,7 @@
 			"apps/opencrane/src/app/public-app.ts",
 			"apps/opencrane/src/app/run-admission-composition.ts",
 			"apps/opencrane/src/app/conversation-computer-lifecycle-composition.ts",
+			"apps/opencrane/src/development/conversation-computer-lifecycle.ts",
 			"apps/opencrane/src/app/conversation-computer-activation-composition.ts",
 			"apps/opencrane/src/app/conversation-computer-turn-composition.ts",
 			"apps/opencrane/src/app/internal-app.ts",

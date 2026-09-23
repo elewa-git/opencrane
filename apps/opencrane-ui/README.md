@@ -91,6 +91,45 @@ route table mounts only onboarding and chats, does not use the live
 authentication guard, and redirects unsupported live-only routes to the selected entry. Tier 1 makes
 no API, PostgreSQL, KurrentDB, Docker, Cognee, LiteLLM, Agent Sandbox, or Kubernetes connection.
 
+Tier 2 keeps the live gateways and production route table, but directs them to the loopback
+development server through a separate build configuration:
+
+```bash
+npm exec nx run opencrane-ui:serve-browser:tier2 -- --host local-development.localhost --port 4200
+```
+
+The root `npm run dev:tier2*` commands own this child process in normal use. The distinct
+`proxy.tier2.conf.json` file leaves `development-live` pointed at the shared development service and
+keeps the backend-free Tier 1 configurations unchanged. The Tier 2 launcher prints only the safe
+browser address. A fresh tab at that address uses the same-tab **Open current Tier 2 session** button
+to obtain the launcher's private `development-session` URL fragment. The Tier 2 build consumes that
+fragment once, removes it from browser history, retains it in that tab, and adds it only to relative
+`/api/v1` requests. Production, development-live and Tier 1 builds do not contain that build-specific
+request-header or route policy. The launcher-handoff page makes no product authentication request.
+Its button performs a verified same-origin navigation through
+the development-only handoff route. The server redirects that user action to the private fragment
+without returning the credential in JSON or HTML. After the build consumes it, the plain address
+loads the normal application for the rest of that tab's lifetime. Independently opened tabs need the
+handoff again because the credential is stored in `sessionStorage`, not durable shared browser
+storage. A same-origin tab created with an opener can inherit a copy of that storage.
+In a Tier 2 Codespace the coordinator binds this browser server for private port 4200 forwarding
+and adds only the exact forwarded hostname to Vite's allowed-host list. The API proxy still targets
+the local product listener. The Codespaces port must remain private because the handoff grants a
+per-launch development credential to the admitted browser tab.
+
+One Tier 2 command owns a repository worktree at a time. A concurrent command prints a warning and
+exits without removing or replacing the active command's containers. When the owning command stops,
+it removes its disposable containers and session resources, then reminds the developer to close the
+browser tab from that launch before restarting Tier 2. Closing the tab ends that page session so an
+old browser credential is not reused with the next launch.
+
+If an old tab remains open, its next Control Plane response can identify that its private session
+belongs to an earlier launch. The Tier 2 transport clears only that obsolete tab credential and
+replaces the page with a warning. **Open current Tier 2 session in a new tab** performs the same
+verified handoff in a fresh browsing context; the earlier tab remains a terminal warning and can be
+closed. Other `401` responses keep the ordinary product sign-in behavior, and conversation-only
+access changes keep the conversation workspace's existing recovery state.
+
 ## Boundary
 
 Browser-only presentation. It holds no server secrets and no database; onboarding progress, persona
@@ -109,7 +148,8 @@ Build-time and container config (there is no server-side env here — it is a st
 
 | Concern | Where | Notes |
 |---|---|---|
-| Gateway/route profile | `src/app/gateway-profile.providers*.ts`, `src/app/app.routes*.ts` | local fixtures for default/named development · live adapters for production and development-live; chosen by build `fileReplacements` |
+| Gateway/route profile | `src/app/gateway-profile.providers*.ts`, `src/app/app.routes*.ts` | local fixtures for default/named Tier 1 development · live adapters for production, development-live and Tier 2; chosen by build `fileReplacements` |
+| Tier 2 browser session and proxy | `src/app/app.routes.tier2.ts`, `src/app/local-development/tier2-development-session.ts`, `src/app/http-profile.provider.tier2.ts`, `proxy.tier2.conf.json` | offers a verified same-origin launcher handoff before the tab consumes its private fragment, carries that credential on `/api/v1` only, turns the exact replaced-launch response into a new-tab recovery warning, forwards API routes to the loopback Tier 2 server, and preserves the browser's dedicated local host for server-side origin checks |
 | Static serving | `deploy/nginx.conf` | `nginxinc/nginx-unprivileged`, listens `:8080`, `/healthz` probe, immutable caching for hashed assets, SPA fallback to `index.html` |
 | Image | `deploy/Dockerfile` | `ghcr.io/elewa-git/opencrane-ui` |
 | Chart-native SPA workload | `helm/templates/_deployment.tpl`, `_service.tpl` | This app owns its optional Deployment/Service as named templates (see `HELM.md`), composed by the silo umbrella chart. The composer supplies the reviewed image's exact OCI digest; deployment fails rather than reporting success if this workload does not roll out with that digest. |

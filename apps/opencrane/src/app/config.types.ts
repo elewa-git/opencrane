@@ -24,23 +24,28 @@ export type OpenCraneOrganizationMembershipConfig =
 	| { readonly mode: OrganizationMembershipDeploymentModes.Standalone; readonly standalone: StandaloneOrganizationMembershipConfig }
 	| { readonly mode: OrganizationMembershipDeploymentModes.Fleet; readonly fleet: FleetOrganizationMembershipHttpClientConfig };
 
-/** Release-owned Agent Sandbox profile used for every 0.11 conversation computer. */
-export interface AgentSandboxReleaseProfileConfig
+/** Release-owned product profile shared by every conversation-computer realization. */
+export interface ConversationComputerReleaseProfileConfig
 {
 	/** Immutable image digest that identifies the admitted profile revision. */
 	readonly profileRevisionId: string;
 	/** Profile name fixed by the release. */
 	readonly profileName: string;
+	/** Maximum lifetime of one fenced computer lease. */
+	readonly leaseTtlMilliseconds: number;
+	/** Hard per-turn LiteLLM spend ceiling in micro-US-dollars. */
+	readonly maximumTurnCostUsdMicros: number;
+}
+
+/** Production-only coordinates used to realize a conversation computer through Agent Sandbox. */
+export interface AgentSandboxReleaseProfileConfig extends ConversationComputerReleaseProfileConfig
+{
 	/** Warm pool selected by server-created claims. */
 	readonly warmPoolName: string;
 	/** Namespace where the external Agent Sandbox controller accepts claims. */
 	readonly namespace: string;
 	/** ServiceAccount fixed on every conversation-computer Pod. */
 	readonly serviceAccountName: string;
-	/** Maximum lifetime of one fenced computer lease. */
-	readonly leaseTtlMilliseconds: number;
-	/** Hard per-turn LiteLLM spend ceiling in micro-US-dollars. */
-	readonly maximumTurnCostUsdMicros: number;
 }
 
 /** Settings read once at startup, used to compose workload identity, workflow-controller, and worker routes. */

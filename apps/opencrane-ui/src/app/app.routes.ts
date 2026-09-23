@@ -1,101 +1,10 @@
-import { Routes } from "@angular/router";
-
-import { ___OperatorAccessGuard } from "./operator-access.guard";
+import { OPENCRANE_LIVE_ROUTES } from "./app.routes.live";
 
 /**
- * Top-level route table; feature pages are lazy-loaded route containers.
+ * Supplies the unchanged live route table to builds that do not replace this composition module.
  *
- * Every entry loads its component or child routes on demand, so no feature is in the initial bundle.
- * Order matters here: Angular tries these in declaration order and takes the first that matches.
- *
- * Every signed-in route carries `___OperatorAccessGuard`; only `login` and the redirects do not,
- * because `login` is where the guard sends anonymous visitors.
- *
- * Called by: `appConfig` in `app.config.ts`, through `provideRouter`.
- *
- * @see ___OperatorAccessGuard for what "signed in" means on this surface.
+ * Tier 2 replaces this module so a tab without its private launch credential cannot instantiate
+ * guarded routes or start an authentication request. Production, development-live, and Tier 1
+ * continue to import this entry and retain their existing route behaviour.
  */
-export const APP_ROUTES: Routes =
-[
-	{
-		// Public sign-in landing. No access guard — this is the destination the
-		// guard sends anonymous visitors to.
-		path: "login",
-		loadComponent: function loadLoginPage()
-		{
-			return import("./login/login-page.component").then(function pickLoginPage(m)
-			{
-				return m.LoginPageComponent;
-			});
-		}
-	},
-	{
-		// Server-authoritative persona lifecycle and bounded first-chat journey.
-		path: "onboarding",
-		canActivate: [___OperatorAccessGuard],
-		loadChildren: function loadOnboardingRoutes()
-		{
-			return import("@opencrane/features/onboarding").then(function pickOnboardingRoutes(m)
-			{
-				return m.ONBOARDING_ROUTES;
-			});
-		}
-	},
-	{
-		// The MCP catalogue screen gates in-component on the customerAdmin capability.
-		path: "admin",
-		canActivate: [___OperatorAccessGuard],
-		loadChildren: function loadMcpAdminRoutes()
-		{
-			return import("@opencrane/features/tools").then(function pickMcpAdminRoutes(m)
-			{
-				return m.MCP_ADMIN_ROUTES;
-			});
-		}
-	},
-	{
-		// Organization settings shell; the feature exposes only backed child routes.
-		path: "settings",
-		canActivate: [___OperatorAccessGuard],
-		loadChildren: function loadSettingsRoutes()
-		{
-			return import("@opencrane/features/settings").then(function pickSettingsRoutes(m)
-			{
-				return m.SETTINGS_ROUTES;
-			});
-		}
-	},
-	{
-		// Invitation acceptance requires an identity, but anonymous invitees must first be offered the
-		// provider's registration flow. The feature removes its token from browser history before
-		// submitting it to organization authority.
-		path: "invite",
-		data: { registrationOnAnonymous: true },
-		canActivate: [___OperatorAccessGuard],
-		loadComponent: function loadInvitationAcceptance()
-		{
-			return import("@opencrane/features/settings").then(function pickInvitationAcceptance(m)
-			{
-				return m.OrganizationInviteAcceptanceComponent;
-			});
-		}
-	},
-	{
-		// The app owns only the guarded mount. The feature owns selected/index child routes and their
-		// navigation lifecycle; concrete gateways remain bound in app.config.ts.
-		path: "chats",
-		canActivate: [___OperatorAccessGuard],
-		loadChildren: function loadConversationWorkspaceRoutes()
-		{
-			return import("@opencrane/features/conversation-workspace").then(function pickConversationWorkspaceRoutes(m)
-			{
-				return m.CONVERSATION_WORKSPACE_ROUTES;
-			});
-		}
-	},
-	{ path: "", pathMatch: "full", redirectTo: "onboarding" },
-	{
-		path: "**",
-		redirectTo: ""
-	}
-];
+export const APP_ROUTES = OPENCRANE_LIVE_ROUTES;

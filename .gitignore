@@ -36,6 +36,9 @@ __pycache__/
 pr-stack-integrity-evidence.json
 .nx/
 
+# Local LiteLLM provider configurations are generated, never source files.
+apps/_infra/litellm/local-development/*.generated.yaml
+
 # Rag-rat keeps its shared index outside the checkout; Git must also ignore local overrides and logs.
 .rag-rat/
 

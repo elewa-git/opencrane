@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ConversationModelResponseKinds, ConversationModelToolModes, type ConversationModelRequest, type ConversationModelToolCall, type CompiledToolDefinition } from "@opencrane/contracts";
+import { CONVERSATION_MODEL_REQUEST_TIMEOUT_MILLISECONDS, ConversationModelResponseKinds, ConversationModelToolModes, type ConversationModelRequest, type ConversationModelToolCall, type CompiledToolDefinition } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __RequestConversationModel } from "../core/conversation-model";
@@ -8,7 +8,7 @@ import { ConversationModelError, ConversationModelFailureCodes } from "../core/c
 
 const _telemetry = vi.hoisted(function _captureTelemetry()
 {
-	return { fields: [] as unknown[], errors: [] as unknown[], suppressed: 0 };
+	return { fields: [] as unknown[], errors: [] as unknown[], warnings: [] as unknown[][], suppressed: 0 };
 });
 
 vi.mock("@opencrane/backend/observability", function _observabilityContract()
@@ -22,6 +22,16 @@ vi.mock("@opencrane/backend/observability", function _observabilityContract()
 		},
 		___DoWithoutTrace(work: () => unknown)
 			{ _telemetry.suppressed++; return work(); },
+	};
+});
+
+vi.mock("../log", function _modelRoutingLog()
+{
+	return {
+		_log:
+		{
+			warn: function _warn(...args: unknown[]) { _telemetry.warnings.push(args); }
+		}
 	};
 });
 
@@ -46,7 +56,7 @@ function _request(overrides: Partial<ConversationModelRequest> = {}): Conversati
 /** Builds the upstream text envelope, including nullable optional fields emitted by compatible proxies. */
 function _answer(text = "  Saved answer.\n"): unknown
 {
-	return { choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: text, tool_calls: null, refusal: null } }], usage: { completion_tokens: 10 } };
+	return { choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: text, tool_calls: null, refusal: null, provider_specific_fields: null } }], usage: { completion_tokens: 10 } };
 }
 
 /** Gives the fetch double a real streaming Response without opening a socket. */
@@ -61,6 +71,7 @@ beforeEach(function _setup()
 	vi.setSystemTime(_NOW);
 	_telemetry.fields.length = 0;
 	_telemetry.errors.length = 0;
+	_telemetry.warnings.length = 0;
 	_telemetry.suppressed = 0;
 });
 
@@ -121,6 +132,7 @@ describe("one conversation model text exchange", function _transportSuite()
 		vi.stubGlobal("fetch", fetchMock);
 		await expect(__RequestConversationModel(_request(overrides))).rejects.toMatchObject({ code: ConversationModelFailureCodes.InvalidRequest });
 		expect(fetchMock).not.toHaveBeenCalled();
+		expect(_telemetry.warnings).toEqual([[{ failureCode: ConversationModelFailureCodes.InvalidRequest }, "conversation model request failed"]]);
 	});
 
 	it.each(["no-ceiling", "zero-ceiling", "no-turns", "tool-message", "bad-unicode"])("rejects frozen input %s without a request", async function _frozenValidation(kind)
@@ -176,7 +188,7 @@ describe("one conversation model text exchange", function _transportSuite()
 		const request = { ...input, notAfterEpochMs: bound === "reserved" ? _NOW + 10 : input.notAfterEpochMs,
 			compiledInput: { ...input.compiledInput, budget: { ...input.compiledInput.budget, wallClockDeadlineEpochMs: bound === "compiled" ? _NOW + 10 : _NOW + 100_000 } } };
 		const outcome = expect(__RequestConversationModel(request)).rejects.toMatchObject({ code: ConversationModelFailureCodes.DeadlineExceeded });
-		await vi.advanceTimersByTimeAsync(bound === "transport-cap" ? 25_000 : 10);
+		await vi.advanceTimersByTimeAsync(bound === "transport-cap" ? CONVERSATION_MODEL_REQUEST_TIMEOUT_MILLISECONDS : 10);
 		await outcome;
 		expect(seenSignal?.aborted).toBe(true);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -227,13 +239,25 @@ describe("one conversation model text exchange", function _transportSuite()
 		expect(body).not.toContain("Changed after dispatch.");
 	});
 
-	it.each([302, 401, 429, 500])("refuses HTTP %s without following or retrying", async function _httpFailure(status)
+	it.each([302, 400, 401, 403, 404, 429, 500, 502, 503])("refuses HTTP %s without following or retrying", async function _httpFailure(status)
 	{
 		const fetchMock = vi.fn().mockResolvedValue(new Response("secret remote error", { status, headers: { location: "https://other.example" } }));
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModel(_request())).rejects.toMatchObject({ code: ConversationModelFailureCodes.HttpRejected });
+		const failure = await __RequestConversationModel(_request()).catch(function _capture(error: unknown) { return error; });
+		expect(failure).toBeInstanceOf(ConversationModelError);
+		expect(failure).toMatchObject({ code: ConversationModelFailureCodes.HttpRejected, httpStatus: status });
+		expect(failure).not.toHaveProperty("cause");
+		expect(String(failure)).not.toContain("secret remote error");
+		expect(String(failure)).not.toContain("other.example");
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		expect(fetchMock.mock.calls[0]?.[1].redirect).toBe("error");
+		expect(_telemetry.errors).toEqual([failure]);
+		expect(_telemetry.warnings).toEqual([[{
+			failureCode: ConversationModelFailureCodes.HttpRejected,
+			httpStatus: status,
+		}, "conversation model request failed"]]);
+		expect(JSON.stringify(_telemetry.warnings)).not.toContain("secret remote error");
+		expect(JSON.stringify(_telemetry.warnings)).not.toContain("other.example");
 	});
 
 	it("removes the original transport exception before tracing and does not retry a lost response", async function _privateFailure()
@@ -250,6 +274,9 @@ describe("one conversation model text exchange", function _transportSuite()
 		expect(_telemetry.fields).toEqual([{}]);
 		expect(_telemetry.suppressed).toBe(1);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(_telemetry.warnings).toEqual([[{ failureCode: ConversationModelFailureCodes.TransportFailed }, "conversation model request failed"]]);
+		expect(JSON.stringify(_telemetry.warnings)).not.toContain(secret);
+		expect(JSON.stringify(_telemetry.warnings)).not.toContain("litellm.release.svc.cluster.local");
 	});
 
 	it.each(["declared", "streamed"])("rejects a %s oversize body and cancels it", async function _responseSize(kind)
@@ -273,6 +300,7 @@ describe("one conversation model text exchange", function _transportSuite()
 		{ choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: "ok", tool_calls: [] } }] },
 		{ choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: "ok", function_call: { name: "tool" } } }] },
 		{ choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: "ok", refusal: "refused" } }] },
+		{ choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: "ok", provider_specific_fields: { private: "metadata" } } }] },
 		{ choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: [{ type: "text", text: "ok" }] } }] },
 		_answer(" "), _answer("\ud800"), _answer("é".repeat(32_769)),
 	])("rejects malformed or unsupported answer %# without retry", async function _responseShape(body)
@@ -297,6 +325,7 @@ describe("one conversation model text exchange", function _transportSuite()
 		vi.stubGlobal("fetch", fetchMock);
 		await expect(__RequestConversationModel(_request())).rejects.toMatchObject({ code: ConversationModelFailureCodes.UnsupportedResponse });
 		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(_telemetry.warnings).toEqual([[{ failureCode: ConversationModelFailureCodes.UnsupportedResponse }, "conversation model request failed"]]);
 	});
 
 	it("accepts the existing answer byte ceiling without changing text", async function _textBoundary()

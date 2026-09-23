@@ -14,13 +14,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Final
 
-from review_surface.review_surface import start_review_surface
-
 _HEALTH_PATH: Final = "/healthz"
 _READINESS_PATH: Final = "/readyz"
 _DEFAULT_TOKEN_PATH: Final = "/var/run/secrets/opencrane/token"
 _DEFAULT_REVIEW_CREDENTIAL_PATH: Final = "/var/run/opencrane/review/credential"
+_AGENT_SANDBOX_REALIZATION: Final = "agent_sandbox"
+_HOST_DEVELOPMENT_REALIZATION: Final = "host_development_process"
 _MAX_RESPONSE_BYTES: Final = 4 * 1024 * 1024
+_PRIVATE_API_TIMEOUT_SECONDS: Final = 70
+_MODEL_STEP_TIMEOUT_SECONDS: Final = 360
 _BOOTSTRAP_OUTCOMES: Final = frozenset({"ready", "pending", "response_unavailable"})
 _MODEL_STEP_OUTCOMES: Final = frozenset({"completed", "pending", "response_unavailable", "authority_ended"})
 _DEGRADED_OUTCOMES: Final = frozenset({"response_unavailable", "authority_ended"})
@@ -37,32 +39,69 @@ def _required(name: str) -> str:
 
 
 def _configuration() -> dict[str, str]:
-    """Freeze the private gateway and generation coordinates supplied by the sandbox template."""
-    return {
+    """Read lease coordinates and mode-specific bearer paths before any worker starts."""
+    realization_kind = _required("OPENCRANE_COMPUTER_REALIZATION_KIND")
+    if realization_kind not in {_AGENT_SANDBOX_REALIZATION, _HOST_DEVELOPMENT_REALIZATION}:
+        raise RuntimeError("OPENCRANE_COMPUTER_REALIZATION_KIND is invalid")
+    config = {
         "computerId": _required("OPENCRANE_COMPUTER_ID"),
         "generation": _required("OPENCRANE_COMPUTER_GENERATION"),
         "internalEndpoint": _required("OPENCRANE_INTERNAL_ENDPOINT").rstrip("/"),
         "leaseId": _required("OPENCRANE_COMPUTER_LEASE_ID"),
-        "reviewCredentialPath": os.environ.get("OPENCRANE_REVIEW_CREDENTIAL_PATH", _DEFAULT_REVIEW_CREDENTIAL_PATH),
-        "tokenPath": os.environ.get("OPENCRANE_PROJECTED_TOKEN_PATH", _DEFAULT_TOKEN_PATH),
+        "realizationKind": realization_kind,
     }
+    if realization_kind == _HOST_DEVELOPMENT_REALIZATION:
+        config["processId"] = _required("OPENCRANE_COMPUTER_PROCESS_ID")
+        config["readyPath"] = _required("OPENCRANE_HOST_READY_PATH")
+        config["tokenPath"] = _required("OPENCRANE_HOST_BEARER_PATH")
+        endpoint = urllib.parse.urlparse(config["internalEndpoint"])
+        if (
+            endpoint.scheme != "http"
+            or endpoint.hostname not in {"127.0.0.1", "localhost"}
+            or endpoint.username
+            or endpoint.password
+        ):
+            raise RuntimeError("host development requires a loopback private endpoint")
+    else:
+        config["reviewCredentialPath"] = os.environ.get("OPENCRANE_REVIEW_CREDENTIAL_PATH", _DEFAULT_REVIEW_CREDENTIAL_PATH)
+        config["tokenPath"] = os.environ.get("OPENCRANE_PROJECTED_TOKEN_PATH", _DEFAULT_TOKEN_PATH)
+    return config
 
 
 def _read_token(path: str) -> str:
-    """Read the rotating audience-bound token immediately before each server exchange."""
+    """Read the mode-specific private bearer immediately before each server exchange."""
     token = Path(path).read_text(encoding="utf-8").strip()
     if not token:
-        raise RuntimeError("projected workload token is empty")
+        raise RuntimeError("conversation-computer bearer is empty")
     return token
 
 
-def _json_request(url: str, token: str, payload: dict[str, Any] | None = None, empty_outcome: str | None = None) -> dict[str, Any]:
-    """Perform one bounded authenticated JSON exchange with the private control-plane listener."""
+def _json_request(url: str, token: str, payload: dict[str, Any] | None = None, empty_outcome: str | None = None, timeout_seconds: int = _PRIVATE_API_TIMEOUT_SECONDS) -> dict[str, Any]:
+    """Perform one authenticated JSON exchange with a caller-selected socket timeout.
+
+    Routine private routes use the 70-second default. The model-step caller supplies its longer
+    client wait explicitly; this timeout does not enlarge any deadline enforced by the server.
+
+    Args:
+        url: Private control-plane URL selected from trusted process configuration.
+        token: Bearer credential read immediately before the request.
+        payload: JSON object to send, or None for a GET request.
+        empty_outcome: Outcome returned when the private route responds without a body.
+        timeout_seconds: Socket timeout passed to ``urllib.request.urlopen``.
+
+    Returns:
+        The decoded JSON object, or the configured empty-response outcome.
+
+    Raises:
+        RuntimeError: If the response exceeds the byte limit or is not a JSON object.
+        urllib.error.URLError: If the listener cannot be reached within the socket timeout.
+        json.JSONDecodeError: If a non-empty response is not valid JSON.
+    """
     body = None if payload is None else json.dumps(payload, separators=(",", ":")).encode("utf-8")
     request = urllib.request.Request(url, data=body, method="GET" if body is None else "POST")
     request.add_header("Authorization", f"Bearer {token}")
     request.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(request, timeout=30) as response:
+    with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
         raw = response.read(_MAX_RESPONSE_BYTES + 1)
     if len(raw) > _MAX_RESPONSE_BYTES:
         raise RuntimeError("private API response exceeds the computer byte limit")
@@ -75,7 +114,7 @@ def _json_request(url: str, token: str, payload: dict[str, Any] | None = None, e
 
 
 def _lease_query(config: dict[str, str]) -> str:
-    """Encode the immutable lease coordinates that every Pod-initiated GET exchange presents."""
+    """Encode the lease coordinates that every process-initiated GET exchange presents."""
     return urllib.parse.urlencode({"computerId": config["computerId"], "generation": config["generation"], "leaseId": config["leaseId"]})
 
 
@@ -109,7 +148,7 @@ def _bootstrap(config: dict[str, str]) -> dict[str, Any]:
 
 
 def _restore(config: dict[str, str]) -> dict[str, Any]:
-    """Ask the control plane to restore the exact checkpoint bound to this Pod lease."""
+    """Ask the control plane to restore the checkpoint bound to this Agent Sandbox lease."""
     token = _read_token(config["tokenPath"])
     payload = {
         "computerId": config["computerId"],
@@ -128,24 +167,39 @@ def _bootstrap_id(bootstrap: dict[str, Any]) -> str:
 
 
 def _execute_turn(config: dict[str, str], bootstrap: dict[str, Any]) -> str:
-    """Ask the server to advance or recover the conversation's reserved work."""
+    """Ask the server to advance or recover the conversation's reserved work.
+
+    Its 360-second client wait covers the server's 300-second attempt authority plus response
+    completion time; it grants no additional server authority and permits no paid retry.
+
+    Args:
+        config: Trusted private endpoint and bearer-file configuration.
+        bootstrap: Ready status containing the server's saved turn identifier.
+
+    Returns:
+        The server's closed model-step outcome.
+
+    Raises:
+        RuntimeError: If bootstrap is not ready or the response is outside the closed outcome set.
+    """
     if bootstrap.get("outcome") != "ready":
         raise RuntimeError("model step requires a ready bootstrap")
     payload = {"bootstrapId": _bootstrap_id(bootstrap)}
     token = _read_token(config["tokenPath"])
-    result = _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/model-step", token, payload)
+    result = _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/model-step", token, payload, timeout_seconds=_MODEL_STEP_TIMEOUT_SECONDS)
     outcome = result.get("outcome")
     if set(result) != {"outcome"} or not isinstance(outcome, str) or outcome not in _MODEL_STEP_OUTCOMES:
         raise RuntimeError("model step returned an invalid outcome")
     return outcome
 
 
-def _turn_loop() -> None:
-    """Install the review secret, restore the workspace, then poll for the single pending activation."""
+def _turn_loop(config: dict[str, str] | None = None) -> None:
+    """Run mode-specific setup, then poll for the single pending activation."""
     global _LAST_FAILURE_TYPE
-    config = _configuration()
-    credentialed = False
-    restored = False
+    config = config or _configuration()
+    host_development = config["realizationKind"] == _HOST_DEVELOPMENT_REALIZATION
+    credentialed = host_development
+    restored = host_development
     stopped_bootstrap: str | None = None
     stopped_outcome: str | None = None
     retry_delay_seconds = 2
@@ -217,8 +271,22 @@ class _HealthHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
+def _publish_host_readiness(config: dict[str, str]) -> None:
+    """Tell the parent that host configuration passed before entering the work loop."""
+    descriptor = os.open(config["readyPath"], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        handle.write(config["processId"])
+
+
 def main() -> None:
-    """Start the private turn worker beside the fixed health listener."""
+    """Run host work directly or start production work beside the health listener."""
+    config = _configuration()
+    if config["realizationKind"] == _HOST_DEVELOPMENT_REALIZATION:
+        _publish_host_readiness(config)
+        _turn_loop(config)
+        return
+    from review_surface.review_surface import start_review_surface
+
     start_review_surface()
     worker = threading.Thread(target=_turn_loop, name="conversation-turn", daemon=True)
     worker.start()

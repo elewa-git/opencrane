@@ -52,7 +52,7 @@ function _Harness(limits: Partial<SelfConversationEventLimits> = {})
 	function _Start(headers: Record<string, string> = {}, query: Record<string, string> = {}, response = new _Response())
 	{
 		const allHeaders: Record<string, string> = { host: "opencrane.test", "sec-fetch-site": "same-origin", ...headers };
-		const request = { protocol: "https", params: { conversationId: "conversation-1" }, query, get: function _Get(name: string) { return allHeaders[name]; } } as unknown as Request;
+		const request = { protocol: "https", headers: allHeaders, params: { conversationId: "conversation-1" }, query, get: function _Get(name: string) { return allHeaders[name]; } } as unknown as Request;
 		handler(request, response as unknown as Response, vi.fn());
 		return response;
 	}
@@ -85,11 +85,27 @@ describe("participant conversation SSE", function ()
 		harness.resolveCaller.mockReturnValueOnce(null);
 		expect(harness.start().statusCode).toBe(401);
 		expect(harness.start({ origin: "https://other.test" }).statusCode).toBe(403);
+		expect(harness.start({ "x-forwarded-host": "other.test", origin: "https://opencrane.test" }).statusCode).toBe(403);
 		expect(harness.start({ "sec-fetch-site": "same-site" }).statusCode).toBe(403);
 		expect(harness.start({ "last-event-id": "1,2" }).statusCode).toBe(400);
 		expect(harness.start({}, { afterPosition: "18446744073709551616" }).statusCode).toBe(400);
 		expect(harness.read).not.toHaveBeenCalled();
 		expect(harness.subscribe).not.toHaveBeenCalled();
+	});
+
+	it("accepts matching browser origin through the trusted proxy host", async function ()
+	{
+		const harness = _Harness();
+		const response = harness.start({
+			host: "127.0.0.1:8080",
+			"x-forwarded-host": "opencrane.test",
+			origin: "https://opencrane.test"
+		});
+		await vi.waitFor(function _Opened() { expect(harness.subscribe).toHaveBeenCalledOnce(); });
+		harness.shutdown.abort();
+		await _Ended(response);
+		expect(response.statusCode).toBe(200);
+		expect(harness.read).toHaveBeenCalledOnce();
 	});
 
 	it("resumes after Last-Event-ID despite the original URL cursor and emits only authorized page data", async function ()

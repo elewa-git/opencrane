@@ -2,6 +2,7 @@ import type { ConversationModelRequest, ConversationModelResponse } from "@openc
 import { ___DoWithTrace, ___DoWithoutTrace } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
+import { _log } from "../log";
 import { ConversationModelError, ConversationModelFailureCodes, type PreparedConversationModelRequest } from "./conversation-model.types";
 import { _CONVERSATION_MODEL_MAX_BYTES, _PrepareConversationModelRequest, _ValidateConversationModelResponse } from "./conversation-model.validator";
 
@@ -77,7 +78,7 @@ async function _exchange(prepared: PreparedConversationModelRequest, signal: Abo
 	if (!response.ok || response.redirected)
 	{
 		_discardBody(response);
-		throw new ConversationModelError(ConversationModelFailureCodes.HttpRejected);
+		throw new ConversationModelError(ConversationModelFailureCodes.HttpRejected, response.status);
 	}
 	if (response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() !== "application/json")
 	{
@@ -113,30 +114,40 @@ export async function __RequestConversationModel(input: ConversationModelRequest
 {
 	return ___DoWithTrace("conversation.model.request", {}, async function _requestModel()
 	{
-		const prepared = _PrepareConversationModelRequest(input);
 		const controller = new AbortController();
+		let prepared: PreparedConversationModelRequest | undefined;
 		let timer: ReturnType<typeof setTimeout> | undefined;
-		const deadline = new Promise<never>(function _expireRequest(_resolve, reject)
-		{
-			timer = setTimeout(function _abortRequest()
-			{
-				controller.abort();
-				reject(new ConversationModelError(ConversationModelFailureCodes.DeadlineExceeded));
-			}, Math.max(0, prepared.deadlineEpochMs - Date.now()));
-		});
 		try
 		{
+			prepared = _PrepareConversationModelRequest(input);
+			const deadlineEpochMs = prepared.deadlineEpochMs;
+			const deadline = new Promise<never>(function _expireRequest(_resolve, reject)
+			{
+				timer = setTimeout(function _abortRequest()
+				{
+					controller.abort();
+					reject(new ConversationModelError(ConversationModelFailureCodes.DeadlineExceeded));
+				}, Math.max(0, deadlineEpochMs - Date.now()));
+			});
 			if (Date.now() >= prepared.deadlineEpochMs)
 				throw new ConversationModelError(ConversationModelFailureCodes.DeadlineExceeded);
 			return await Promise.race([_exchange(prepared, controller.signal), deadline]);
 		}
 		catch (error)
 		{
-			if (controller.signal.aborted || Date.now() >= prepared.deadlineEpochMs)
-				throw new ConversationModelError(ConversationModelFailureCodes.DeadlineExceeded);
-			if (error instanceof ConversationModelError)
-				throw error;
-			throw new ConversationModelError(ConversationModelFailureCodes.TransportFailed);
+			let failure: ConversationModelError;
+			if (controller.signal.aborted || (prepared && Date.now() >= prepared.deadlineEpochMs))
+				failure = new ConversationModelError(ConversationModelFailureCodes.DeadlineExceeded);
+			else if (error instanceof ConversationModelError)
+				failure = error;
+			else
+				failure = new ConversationModelError(ConversationModelFailureCodes.TransportFailed);
+
+			const failureFields = failure.httpStatus === undefined
+				? { failureCode: failure.code }
+				: { failureCode: failure.code, httpStatus: failure.httpStatus };
+			_log.warn(failureFields, "conversation model request failed");
+			throw failure;
 		}
 		finally
 		{
