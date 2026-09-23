@@ -2,6 +2,63 @@
 
 ## MVP continuation — 2026-09-22
 
+### Current checkpoint — recursive delegation source decision accepted; MVP acceptance open
+
+On 23 September the user superseded the proposed two-level, four-child, two-active defaults:
+recursive delegation must have **no fixed nesting, total-child or concurrent-child cap**. Stopping
+the top task must close further spawning and stop all descendants, including children racing with
+the Stop and children recovered after restart. Stopping a subtree must not affect unrelated work.
+The original shared budget and absolute deadline, selected readable context and narrower current
+permissions still apply. This authorizes the source-only delegation implementation and its reviewed
+fresh-install baseline; it grants no live access and authorizes no provider call or deployment.
+
+The cancellation contract distinguishes a durable stop request from confirmed cleanup. Once an
+ancestor stops, descendants may admit no new model/tool effects or children. Existing provider
+claims must be cancelled where supported or retained as uncertain until reconciled; a Stop cannot
+undo an external write. Parent completion must not leave detached running descendants. Root state,
+lineage, reservations and workflow receipts must survive process replacement. Tests must cover
+more than two levels, four children and two active children to detect accidental policy caps, plus
+concurrent spawn/stop, restart, repeated Stop, subtree isolation and shared allowance conservation.
+
+Implementation starts from `39432f27351b1193092dabc553520291481d9729`. The live 18-PR graph passed
+at snapshot `857508056f1eef4fda716758ed565fd4c4c7b4e42e2bf49f84cebebf68790a62` before this slice.
+This decision is not a claim that recursive delegation or its cancellation is already implemented.
+
+The source preflight confirms three required replacements: single-run cancellation lacks lineage;
+one full-attempt model key cannot safely finance concurrent child keys; and human-only turn admission
+cannot stand in for a delegated trigger. The accepted State × Event contract and implementation waves
+are recorded in [the delivery design](docs/design/mvp-delivery-plan.md#recursive-delegation-decision--23-september-2026).
+Spawning must return a durable handle before waiting for the child, with a separate join/read path,
+so parallelism is real. Parent completion/failure also starts descendant cleanup and cannot leave
+orphan work. No production code, baseline, provider or deployment was changed by this design update.
+
+Published source remains `39432f27351b1193092dabc553520291481d9729` on draft #899, directly above
+#898 at `830243b766d9ccb5f4719b511b082e3843b030db`. This documentation note records that tested
+source; it is not another implementation or deployment. The live 18-PR review chain remains
+#888 → #891 → #892 → #893 → #894 → #896 → #897 → #898 → #899. No predecessor was absorbed or closed.
+
+[Run 35774552213](https://github.com/elewa-git/opencrane/actions/runs/35774552213) tested merge
+`ecece17e841bcf1c98b49ccddfaa2df939a65fe1` and completed by 19:47:52 UTC, verified at 19:49:52 UTC.
+Twelve jobs pass: affected build/test/lint, database authority, KurrentDB, Cognee, API generation,
+affected selection and all six image smokes. The controller startup repair therefore has rebuilt-image
+proof. Storybook alone fails: all 39 interaction/accessibility suites and 247 tests pass, while 130
+visual comparisons pass and 58 fail on missing or changed references. The distinct failing-ID set
+and screenshot byte equality with earlier captures were not established in this inspection. Human
+baseline approval remains required. k3d and both image-publication jobs were skipped, not passed.
+
+The earlier approved source repairs are published, with no new functional CI failure to repair.
+Assistant questions, private schedules, first-memory-dataset creation, the generated-file
+message-link guard, governance access and usage attribution/pricing retain their separate pending
+decisions. Publication approval does not authorize those changes. Delegation source is now accepted
+under the no-count-cap and top-down cancellation decision above, replacing the earlier proposal.
+
+The full MVP is blocked, not complete. Fresh-install deployment and identity setup, image publication,
+hosted credential/trust setup, live Odoo/model/browser journeys and real-account restart/revocation/
+isolation acceptance also retain their separate authorization and evidence gates. Proceed with the
+accepted delegation source work; resume the other decision-gated tracks after their pending decisions.
+Do not substitute more characterization tests,
+automatic screenshot acceptance or repeated status-only checks for those required capabilities.
+
 ### Published rollback correction — database CI passes; controller repair locally verified
 
 The reviewed correction is published as `e48886ce7427affb89e2801b32327e84c3c78067` on draft #899.
@@ -479,13 +536,14 @@ inside the original root budget and deadline. Uncertain issued allowances cannot
 because a worker restarted. The current model-key port has no shared-provider-budget contract.
 
 Historical source reviews did not authorize the rejected reservation writer, Delegate grants,
-delegation SQL or Prisma-owner registrations. A fresh scoped source request now covers lineage and
-baseline changes, reservation/credential gates, opt-in delegation permissions, cancellation and
-parent return. Proposed limits are two delegation levels, four children across the root task and
-two active children at once; these are awaiting approval, not active product defaults. No automatic
-organisation-wide grant, provider call, live database, deployment or publication is authorized.
+delegation SQL or Prisma-owner registrations. The user's 23 September decision now accepts scoped
+source work for lineage and baseline changes, reservation/credential gates, explicit delegation
+permissions, recursive cancellation and parent return. There must be no fixed depth, child-count
+or concurrency caps; the old two/four/two proposal is superseded. No automatic organisation-wide
+grant, provider call, live database or deployment is authorized. Existing draft-publication approval
+remains separate from deployment and live qualification.
 
-Until that approval, work is limited to documenting the current boundary and characterization tests.
+Before that decision, work was limited to documenting the boundary and characterization tests.
 Five new conversation cases cover the null revision cost cap, a lower revision cap, a higher
 revision cap, restart after the server configuration increases, and refusal of a changed frozen cost
 cap. They run the real turn store and encrypted custody against controlled model/provider ports.
@@ -497,7 +555,7 @@ restricted full run could not open test HTTP listeners; the unchanged rerun with
 permission passed. No test or production configuration was relaxed. Style, Prisma ownership,
 module growth and release coherence pass; these are local test/doc checks, not delegation proof.
 The current-head rendered deployment inventory is not requalified by this source preflight. Actual
-parent/child execution, depth-two return, sibling isolation, shared-cost enforcement, revocation,
+parent/child execution beyond the rejected caps, sibling isolation, shared-cost enforcement, revocation,
 restart and cascading cancellation remain required before D1 can be marked complete.
 
 Keep the remaining memory, interaction, files, delegation,
@@ -2216,7 +2274,7 @@ remain separate gates.
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass review and CI in draft #862. Requested/running history producers pass source validation and independent review above #885; the existing transcript and status components are reused. Live qualification and other-participant controls remain separate. |
 | 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | The production structured-result producer and replay pass source review at `73f0ad486`; ten real PostgreSQL custody cases pass in the follow-up above. Paired Kurrent recovery, approved visual baselines and live acceptance remain. Runtime-question source is separately PAUSED pending approval. |
 | 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV production, encrypted capture, scanning and answer-link recovery are implemented in #879; all four combined recovery cases pass again in #880. The pending message-link SQL guard and governed hosted execution through authorized download remain to qualify. |
-| 7 | D1 — autonomous delegation | A bounded child works with explicit context and narrower authority, then returns one durable result. | Follow [#845](https://github.com/elewa-git/opencrane/issues/845): root budgets, depth/fan-out, cancellation and result brokering. |
+| 7 | D1 — autonomous delegation | Recursive children work with selected context and narrower authority, return durable results and stop with their ancestor. | Source accepted 23 September: shared root budget/deadline and no fixed depth, fan-out or concurrency caps. This supersedes the cap clauses in [#845](https://github.com/elewa-git/opencrane/issues/845); cancellation, isolation and result brokering remain required. |
 | 8 | S1 — scheduled work | A reviewed routine fires under current authority with explicit overlap, retry and missed-run policy. | Follow [#848](https://github.com/elewa-git/opencrane/issues/848) through Absurd and existing admission. |
 | 9 | A2 — complete administration | Operators configure agents, connections, models, permissions and budgets, and inspect effective access and actual usage. | Complete and qualify connection activation, agent/tool/model settings, effective permissions, budgets, actual usage/cost and audit screens over the existing protected owners. |
 | 10 | T3 — action recovery | People and operators can reconcile uncertain effects, inspect cancellation races and perform supported safe retries. | Add provider-specific reconciliation and repair controls over durable invocation evidence. |
@@ -2535,10 +2593,11 @@ their own completion track; they are not silently bundled into the first tool PR
 | T1 — first permitted tool retrieval | IN PROGRESS — repeated tool continuation, remote database authority and the larger new-company-assistant budget are implemented in the current #899 stack. Controlled dependent-call/restart tests and database authority checks pass; real integration use and participant result evidence remain required. |
 | T2 | IN PROGRESS: personal and requester-only company approval/resume are implemented with PostgreSQL proof. Real requester accounts, provider execution and recovery/cancellation acceptance remain. |
 | U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
-| M1 | IN PROGRESS: persistence, transaction-bound Absurd admission and catalog completion pass CI in #876–#878. The reviewed candidate shared-file repair passes all 31 image-qualification cases in #881. Authenticated composition, gateway/client integration and product memory journeys remain. The separate production-provider qualification still fails. |
+| M1 | IN PROGRESS: persistence, transaction-bound Absurd admission and catalog completion are implemented, and the current #899 run passes the Cognee provider contract and database-authority suites. First-dataset permission, fresh authenticated composition and complete isolated Remember/Recall/Correct/Forget journeys remain; provider CI is not live product-memory acceptance. |
 | U2 | Structured-result production/replay passes source review, controlled checks and real-Kurrent paired-output recovery. Visual approval and authenticated live proof remain. Runtime-question source is separately PAUSED pending explicit approval. |
 | F1 | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV capture, scanning and answer-link recovery are implemented in #879 and pass four real-store cases in #880. The pending SQL guard and complete hosted execution/download qualification remain. |
-| D1, S1 | REQUIRED FOR MVP; source activation remains paused for the recorded delegation and private-scheduling decisions. Characterization tests do not establish either journey. |
+| D1 | REQUIRED FOR MVP; recursive source implementation accepted 23 September with no fixed depth, child-count or concurrency caps and top-down cancellation. Not yet implemented or qualified; characterization tests do not establish this journey. |
+| S1 | REQUIRED FOR MVP; source activation remains paused for the private-scheduling decisions. |
 | A2 | PARTIAL: protected audit/usage read screens and their controlled tests are implemented. Governance-reader policy, actual usage collection/pricing/attribution and real-account administration acceptance remain open. |
 | T3 | PLANNED, with separate acceptance for its journey. |
 | Q1 — operational acceptance | CONTINUOUS — source checks and CI do not replace fresh-install or real-account acceptance. |
