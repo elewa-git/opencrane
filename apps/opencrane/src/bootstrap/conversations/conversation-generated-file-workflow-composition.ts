@@ -12,11 +12,12 @@ import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/
 import { _CreateConversationToolDispatchDependencies } from "../workflows/mcp-runtime-composition";
 import type { ConversationGeneratedFileWorkflowComposition } from "./conversation-generated-file-workflow-composition.types";
 
-/** Registers generated-file progression and shares its current-authority checks with the scanner. */
+/** Registers generated-file processing and returns the adapters used by tool results, output linkage and scanning. */
 export function _CreateConversationGeneratedFileWorkflowComposition(prisma: PrismaClient, history: HistoryStore, keyringPath: string, toolInvocations: McpToolInvocationTransactionParticipantFactory, workflows: IWorkflowEngine): ConversationGeneratedFileWorkflowComposition
 {
 	const custodyCipher = AesGcmConversationPrivatePayloadCipher.fromDocument(_ReadConversationPrivatePayloadKeyring(keyringPath));
 	const dispatchDependencies = _CreateConversationToolDispatchDependencies(history, _CreateHumanMembershipEvidenceConfig());
+	// These factories bind quarantine, admission checks and turn wake-ups to each caller's database transaction.
 	const dependencies: GeneratedFileWorkflowPersistenceDependencies = {
 		custodyCipher, toolInvocations, workflows,
 		artifactQuarantine: function _Quarantine(transaction)
@@ -33,21 +34,24 @@ export function _CreateConversationGeneratedFileWorkflowComposition(prisma: Pris
 			return { emit: events.emitGeneratedFile.bind(events) };
 		},
 	};
+	// The workflow and artifact promotion share persistence, including the current conversation admission checks.
 	const persistence = new PrismaConversationGeneratedFileWorkflowUnitOfWork(prisma, dependencies);
 	const service = _CreateArtifactServicePromotionPort(_InternalArtifactServiceUrl(process.env.ARTIFACT_SERVICE_URL ?? ""));
 	const promotion = new GeneratedFileArtifactPromotionPort(persistence, service, _CreateArtifactUploadCryptoPort());
 	_RegisterConversationGeneratedFileWorkflow(workflows, { persistence, promotion });
-	/** Share one transaction-bound file reader between continuation and saved-output linkage. */
+	/** Builds the same file reader for tool-result continuation and output linkage inside each caller's transaction. */
 	function _ResultReader(transaction: unknown)
 	{
 		const currentTransaction = transaction as Prisma.TransactionClient;
 		const generatedFiles = new PrismaConversationGeneratedFileWorkflowRepository(currentTransaction, dependencies);
 		return new PrismaConversationGeneratedFileResultRepository(currentTransaction, generatedFiles);
 	}
+	// Linkage reloads the saved turn and rechecks dispatch authority before attaching generated files to its output.
 	const turns = new KurrentConversationComputerTurnStore(history);
 	const outputLinker = new PrismaConversationGeneratedFileOutputLinkUnitOfWork(prisma, turns, _ResultReader, dispatchDependencies);
 	return {
 		resultReader: _ResultReader, outputLinker,
+		/** Keeps generated-file authority checks, scan outcomes and workflow wake-ups on the scanner's transaction. */
 		scanAssets(transaction)
 		{
 			const generatedFiles = new PrismaConversationGeneratedFileWorkflowRepository(transaction, dependencies);
