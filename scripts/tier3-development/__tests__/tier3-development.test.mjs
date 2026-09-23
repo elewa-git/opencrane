@@ -456,11 +456,11 @@ test("runs the current smoke before proxying and preserves recommended qualifica
 {
 	const order = [];
 	await runTier3Development(parseTier3Options(["--profile", "infra"]), {
-		environment: { SMOKE_HOST_PROFILE: "recommended" },
+		environment: { SMOKE_HOST_PROFILE: "recommended", SMOKE_PREREQUISITE_TIMEOUT_SECONDS: "900" },
 		inspectResources: async function _Inspect() { return { existingOwner: null }; },
 		measureCapacity: async function _Capacity() { return { cpu: 8, memoryGiB: 32, storageAvailableGiB: 80, storageGiB: 100 }; },
 		readCertificate: async function _Certificate() { order.push("certificate"); return "certificate"; },
-		runSmoke: async function _Smoke(environment) { order.push("smoke"); assert.equal(environment.SMOKE_HOST_PROFILE, "recommended"); assert.equal(environment.KEEP_CLUSTER, "1"); assert.match(environment.SMOKE_RESOURCE_OWNER, /^worktree-/u); },
+		runSmoke: async function _Smoke(environment) { order.push("smoke"); assert.equal(environment.SMOKE_HOST_PROFILE, "recommended"); assert.equal(environment.SMOKE_PREREQUISITE_TIMEOUT_SECONDS, "900"); assert.equal(environment.KEEP_CLUSTER, "1"); assert.match(environment.SMOKE_RESOURCE_OWNER, /^worktree-/u); },
 		createProxy: function _Proxy(options) { order.push("proxy"); assert.equal(options.developmentCredential, null); assert.deepEqual(options.allowedBrowserOrigins, ["http://127.0.0.1:4200"]); return {}; },
 		listenProxy: async function _Listen() { order.push("listen"); },
 		waitForShutdown: async function _Shutdown() { order.push("shutdown"); },
@@ -471,15 +471,17 @@ test("runs the current smoke before proxying and preserves recommended qualifica
 
 test("defaults Tier 3 qualification to the minimum host profile", async function _MinimumHostProfile()
 {
-	let smokeHostProfile;
+	let smokeEnvironment;
 	await runTier3Development(parseTier3Options(["--profile", "infra", "--smoke-only"]), {
 		environment: {},
 		inspectResources: async function _Inspect() { return { existingOwner: null }; },
 		measureCapacity: async function _Capacity() { return { cpu: 4, memoryGiB: 16, storageAvailableGiB: 40, storageGiB: 40 }; },
-		runSmoke: async function _Smoke(environment) { smokeHostProfile = environment.SMOKE_HOST_PROFILE; },
+		runSmoke: async function _Smoke(environment) { smokeEnvironment = environment; },
 		write: function _Write() {},
 	});
-	assert.equal(smokeHostProfile, "minimum");
+	assert.equal(smokeEnvironment.SMOKE_HOST_PROFILE, "minimum");
+	assert.equal(smokeEnvironment.SMOKE_PREREQUISITE_TIMEOUT_SECONDS, "1800");
+	assert.equal(smokeEnvironment.TIMEOUT_SECONDS, "600");
 });
 
 test("rejects invalid Codespaces forwarding identity before acquiring k3d resources", async function _CodespacesPreflight()
@@ -554,6 +556,7 @@ test("keeps the shared smoke defaults compatible with CI", async function _Smoke
 {
 	const source = await readFile(new URL("../../../apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh", import.meta.url), "utf8");
 	assert.match(source, /SMOKE_INGRESS_PORT="\$\{SMOKE_INGRESS_PORT:-8443\}"/u);
+	assert.match(source, /SMOKE_PREREQUISITE_TIMEOUT_SECONDS="\$\{SMOKE_PREREQUISITE_TIMEOUT_SECONDS:-\$TIMEOUT_SECONDS\}"/u);
 	assert.match(source, /SMOKE_RESOURCE_OWNER="\$\{SMOKE_RESOURCE_OWNER:-develop-smoke-\$\$\}"/u);
 	assert.match(source, /--runtime-label "opencrane\.tier3\.owner=\$\{SMOKE_RESOURCE_OWNER\}@all"/u);
 	assert.match(source, /_assert_owned_resource_set/u);
@@ -581,6 +584,7 @@ test("keeps the shared smoke defaults compatible with CI", async function _Smoke
 	assert.match(source, /_start_phase "verify public ingress health"/u);
 	assert.equal((source.match(/_capture_failure "\$status" "\$LINENO"/gu) ?? []).length, 2);
 	assert.match(source, /_start_phase "wait for cert-manager installation"/u);
+	assert.equal((source.match(/--wait --timeout "\$\{SMOKE_PREREQUISITE_TIMEOUT_SECONDS\}s"/gu) ?? []).length, 2);
 	assert.match(source, /_start_phase "prepare candidate images"/u);
 });
 

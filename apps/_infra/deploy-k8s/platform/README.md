@@ -76,6 +76,8 @@ or provider credential. Its Agent profile supplies a generated per-launch develo
 Secret, disables OIDC in the rendered disposable silo, and then exercises BYOK, onboarding and one
 Agent Sandbox turn through the product API. The smoke still owns installation and readiness; the
 coordinator owns the loopback certificate-pinned browser route and the post-install product proof.
+The coordinator allows 30 minutes for the first cert-manager and CloudNativePG image pulls while
+keeping later workload readiness checks at 10 minutes.
 See the [local-development guide](../../../../website/contributing/local-development.md#tier-3--k3d-and-codespaces).
 
 Business logic does not belong here. Server-process infrastructure belongs in `libs/backend/server/infra`;

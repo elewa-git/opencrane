@@ -35,7 +35,21 @@ export async function runTier3Development(options, operations = {})
 	const identity = tier3ResourceIdentity(_REPOSITORY_ROOT);
 	const resources = await (operations.inspectResources ?? inspectTier3Resources)(identity);
 	assertTier3ResourceReplacement(resources.existingOwner, identity.owner, options.replaceOwned);
-	const smokeEnvironment = { ...environment, BASE_DOMAIN: "local.opencrane.test", CLUSTER_NAME: identity.clusterName, CLUSTER_TENANT: identity.clusterTenant, KEEP_CLUSTER: "1", NAMESPACE: identity.namespace, RELEASE_NAME: identity.releaseName, SMOKE_HOST_PROFILE: environment.SMOKE_HOST_PROFILE || "minimum", SMOKE_INGRESS_PORT: String(identity.ingressPort), SMOKE_RESOURCE_OWNER: identity.owner, SMOKE_STORAGE_MODE: options.storageMode, TIMEOUT_SECONDS: environment.TIMEOUT_SECONDS || "600" };
+	const smokeEnvironment = {
+		...environment,
+		BASE_DOMAIN: "local.opencrane.test",
+		CLUSTER_NAME: identity.clusterName,
+		CLUSTER_TENANT: identity.clusterTenant,
+		KEEP_CLUSTER: "1",
+		NAMESPACE: identity.namespace,
+		RELEASE_NAME: identity.releaseName,
+		SMOKE_HOST_PROFILE: environment.SMOKE_HOST_PROFILE || "minimum",
+		SMOKE_INGRESS_PORT: String(identity.ingressPort),
+		SMOKE_PREREQUISITE_TIMEOUT_SECONDS: environment.SMOKE_PREREQUISITE_TIMEOUT_SECONDS || "1800",
+		SMOKE_RESOURCE_OWNER: identity.owner,
+		SMOKE_STORAGE_MODE: options.storageMode,
+		TIMEOUT_SECONDS: environment.TIMEOUT_SECONDS || "600"
+	};
 	const developmentCredential = options.profile === "agent" ? randomBytes(32).toString("base64url") : null;
 	if (developmentCredential !== null) smokeEnvironment.OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL = developmentCredential;
 	await (operations.runSmoke ?? _RunSmoke)(smokeEnvironment);

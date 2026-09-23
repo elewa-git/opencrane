@@ -18,6 +18,7 @@ SMOKE_ACME_EMAIL="${SMOKE_ACME_EMAIL:-develop-smoke@opencrane.test}"
 SMOKE_FIRST_USER_EMAIL="${SMOKE_FIRST_USER_EMAIL:-owner@develop-smoke.opencrane.test}"
 KEEP_CLUSTER="${KEEP_CLUSTER:-0}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-300}"
+SMOKE_PREREQUISITE_TIMEOUT_SECONDS="${SMOKE_PREREQUISITE_TIMEOUT_SECONDS:-$TIMEOUT_SECONDS}"
 K3S_IMAGE="${K3S_IMAGE:-rancher/k3s:v1.30.10-k3s1}"
 CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-v1.15.1}"
 CNPG_CHART_VERSION="${CNPG_CHART_VERSION:-0.29.0}"
@@ -782,11 +783,11 @@ helm repo add cnpg https://cloudnative-pg.github.io/charts --force-update >/dev/
 # after both repository indexes are ready so concurrent Helm processes never mutate repo state.
 helm upgrade --install cert-manager jetstack/cert-manager \
   --namespace cert-manager --create-namespace --version "$CERT_MANAGER_VERSION" \
-  --wait --timeout "${TIMEOUT_SECONDS}s" --set crds.enabled=true &
+  --wait --timeout "${SMOKE_PREREQUISITE_TIMEOUT_SECONDS}s" --set crds.enabled=true &
 CERT_MANAGER_INSTALL_PID=$!
 helm upgrade --install cnpg cnpg/cloudnative-pg \
   --namespace cnpg-system --create-namespace --version "$CNPG_CHART_VERSION" \
-  --wait --timeout "${TIMEOUT_SECONDS}s" --set-string monitoring.podMonitor.enabled=false
+  --wait --timeout "${SMOKE_PREREQUISITE_TIMEOUT_SECONDS}s" --set-string monitoring.podMonitor.enabled=false
 _start_phase "wait for cert-manager installation"
 if wait "$CERT_MANAGER_INSTALL_PID"; then
   CERT_MANAGER_INSTALL_PID=""
