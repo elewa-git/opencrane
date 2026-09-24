@@ -9,6 +9,8 @@ import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { ConversationComputerToolResultOutcomes, type ConversationComputerToolResult, type ConversationComputerToolResults } from "../../turns/conversation-computer-continuation.types";
 import type { ConversationComputerTurnCandidateResolver, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "../../turns/conversation-computer-turn.types";
+import { _ConversationComputerTurnHistoryDigest } from "../../turns/conversation-computer-turn-protocol";
+import { ConversationComputerTurnProtocolStates } from "../../turns/conversation-computer-turn-protocol.types";
 import type { ConversationToolDispatchDependencies } from "../dispatch/conversation-tool-dispatch.types";
 import { ConversationGeneratedFileResultStates, type ConversationGeneratedFileResultRepository, type ConversationGeneratedFileResultRepositoryFactory } from "./conversation-generated-file-result.types";
 import { PrismaConversationToolDispatchAuthority } from "../dispatch/prisma-conversation-tool-dispatch-authority";
@@ -16,16 +18,45 @@ import { PrismaConversationToolDispatchAuthority } from "../dispatch/prisma-conv
 /** Signals that the complete transaction must roll back before reporting unavailable content. */
 class _ResultAuthorityEnded extends Error {}
 
-/** Compare frozen inputs and saved selection while allowing output or call-two progress to advance. */
+/** Compare frozen inputs while allowing the ordered protocol to advance between retries. */
 function _sameTurn(expected: FrozenConversationComputerTurn, stored: FrozenConversationComputerTurn): boolean
 {
 	/** Excludes derived progress while keeping every original turn and selection coordinate. */
 	function _identity(turn: FrozenConversationComputerTurn): JsonValue
 	{
-		const { continuationReservation: _continuation, outputSourceCommandId: _source, outputReceipt: _receipt, ...identity } = turn;
+		const { protocol: _protocol, ...identity } = turn;
 		return { ...identity, binding: { ...turn.binding, expectedRevision: turn.binding.expectedRevision.toString() } } as unknown as JsonValue;
 	}
 	return ___DigestCanonicalJson(_identity(expected)) === ___DigestCanonicalJson(_identity(stored));
+}
+
+/** Select the current tool step for a read, or its historical result after a later model reservation. */
+function _ToolStep(turn: FrozenConversationComputerTurn, consume: boolean)
+{
+	const current = turn.protocol.steps.at(-1);
+	if (!consume && (current?.state === ConversationComputerTurnProtocolStates.ToolPending || current?.state === ConversationComputerTurnProtocolStates.ResultReady))
+		return current;
+	if (current?.state === ConversationComputerTurnProtocolStates.ModelReserved && current.reservation.ordinal > 1
+		&& current.reservation.historyDigest === _ConversationComputerTurnHistoryDigest(turn.protocol.steps))
+	{
+		const historical = turn.protocol.steps.at(-2);
+		if (historical?.state === ConversationComputerTurnProtocolStates.ResultReady)
+			return historical;
+	}
+	return null;
+}
+
+/** Keep a retry bound to the same ordered selection while its step advances to a saved result. */
+function _SameToolStep(expected: ReturnType<typeof _ToolStep>, stored: ReturnType<typeof _ToolStep>): boolean
+{
+	if (expected === null || stored === null)
+		return false;
+	return expected.reservation.ordinal === stored.reservation.ordinal
+		&& expected.reservation.invocationFence === stored.reservation.invocationFence
+		&& expected.selection.proposalId === stored.selection.proposalId
+		&& expected.selection.toolInvocationId === stored.selection.toolInvocationId
+		&& expected.selection.requestFingerprint === stored.selection.requestFingerprint
+		&& (expected.result === null || stored.result?.resultDigest === expected.result.resultDigest);
 }
 
 /**
@@ -53,10 +84,13 @@ export class PrismaConversationToolResultsRepository implements ConversationComp
 	/** Keep read and consume on identical coordinate, payload and current-authority checks. */
 	private async _Read(turn: FrozenConversationComputerTurn, workload: RuntimeWorkloadIdentity, consume: boolean): Promise<ConversationComputerToolResult>
 	{
-		const selection = turn.toolSelection;
-		if (selection === null)
+		const current = turn.protocol.steps.at(-1);
+		const currentModel = current?.state === ConversationComputerTurnProtocolStates.ModelReserved ? current.reservation : null;
+		const step = _ToolStep(turn, consume);
+		if (step === null)
 			return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
-		const command = { siloId: turn.siloId, runId: turn.compile.runId, attempt: turn.compile.attempt, toolInvocationId: selection.proposalId, runtimeInstanceId: turn.computerId, commandId: turn.bootstrapId, requestFingerprint: selection.requestFingerprint };
+		const selection = step.selection;
+		const command = { siloId: turn.siloId, runId: turn.compile.runId, attempt: turn.compile.attempt, toolInvocationId: selection.toolInvocationId, runtimeInstanceId: turn.computerId, commandId: turn.bootstrapId, requestFingerprint: selection.requestFingerprint };
 		let result = await __ReadRunToolResultInTransaction(this.transaction, command);
 		if (result.outcome !== RunToolResultReadOutcomes.Available)
 		{
@@ -65,8 +99,10 @@ export class PrismaConversationToolResultsRepository implements ConversationComp
 			const waitFor = result.pendingKind === RunToolResultPendingKinds.Approval ? "approval" : "result";
 			return { outcome: ConversationComputerToolResultOutcomes.Pending, waitFor, waitUntilEpochMs: result.pendingUntilEpochMs };
 		}
-		const reservation = turn.continuationReservation;
-		if (reservation !== null && (reservation.proposalId !== selection.proposalId || reservation.resultDigest !== result.payloadDigest))
+		const resultReservation = step.reservation;
+		if (step.result !== null && (step.result.proposalId !== selection.proposalId || step.result.resultDigest !== result.payloadDigest))
+			return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
+		if (consume && (currentModel === null || currentModel.historyDigest !== _ConversationComputerTurnHistoryDigest(turn.protocol.steps)))
 			return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
 		const authority = new PrismaConversationToolDispatchAuthority(this.transaction, this.dependencies);
 		const auditedWorkload = { audience: CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, namespace: workload.namespace, serviceAccountName: workload.serviceAccountName, workloadKind: "pod" as const, workloadUid: workload.podUid, podUid: workload.podUid };
@@ -74,7 +110,7 @@ export class PrismaConversationToolResultsRepository implements ConversationComp
 		if (admission === null)
 			return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
 		const admittedUntil = admission.notAfterEpochMs;
-		const notAfterEpochMs = Math.min(admittedUntil, turn.modelReservation?.authorityExpiresAtEpochMs ?? 0, reservation?.authorityExpiresAtEpochMs ?? admittedUntil, consume ? reservation?.dispatchDeadlineEpochMs ?? 0 : admittedUntil);
+		const notAfterEpochMs = Math.min(admittedUntil, resultReservation.authorityExpiresAtEpochMs, step.result?.authorityExpiresAtEpochMs ?? admittedUntil, currentModel?.authorityExpiresAtEpochMs ?? admittedUntil, consume && currentModel !== null ? currentModel.dispatchDeadlineEpochMs : admittedUntil);
 		if (!Number.isSafeInteger(notAfterEpochMs) || notAfterEpochMs <= Date.now())
 			return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
 		const generated = await this.generatedFiles.read({ turn, invocation: result.invocation, payload: result.payload, admission });
@@ -89,10 +125,13 @@ export class PrismaConversationToolResultsRepository implements ConversationComp
 		const generatedFile = generated.state === ConversationGeneratedFileResultStates.NotGenerated ? undefined : generated;
 		if (consume)
 		{
-			if (reservation === null)
+			if (currentModel === null)
 				return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
-			result = await __ConsumeRunToolResultInTransaction(this.transaction, { ...command, payloadDigest: reservation.resultDigest }, new Date());
-			if (result.outcome !== RunToolResultReadOutcomes.Available || !result.consumed || result.payloadDigest !== reservation.resultDigest)
+			const expectedDigest = step.result?.resultDigest;
+			if (expectedDigest === undefined)
+				return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
+			result = await __ConsumeRunToolResultInTransaction(this.transaction, { ...command, payloadDigest: expectedDigest }, new Date());
+			if (result.outcome !== RunToolResultReadOutcomes.Available || !result.consumed || result.payloadDigest !== expectedDigest)
 				throw new _ResultAuthorityEnded();
 		}
 		if (notAfterEpochMs <= Date.now())
@@ -103,8 +142,8 @@ export class PrismaConversationToolResultsRepository implements ConversationComp
 
 /**
  * Verifies the actual saved turn and TokenReviewed Pod before reading a result in its transaction.
- * Consume requires the exact ordinal-two reservation read from KurrentDB, including its proposal,
- * result digest and invocation fence. A caller-supplied reservation cannot acknowledge a delivery.
+ * Consume requires a later model reservation whose ordered history binds the exact historical
+ * result. A caller-supplied result cannot acknowledge a delivery before that binding exists.
  * Database rollback retries repeat those history and Pod checks; uncertain failures are not retried.
  */
 export class PrismaConversationToolResultsUnitOfWork implements ConversationComputerToolResults
@@ -139,13 +178,20 @@ export class PrismaConversationToolResultsUnitOfWork implements ConversationComp
 					if (expected.siloId !== siloId)
 						return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
 					const stored = await store.load(expected.bootstrapId);
-					if (stored === null || !_sameTurn(expected, stored) || stored.toolSelection === null)
+					if (stored === null || !_sameTurn(expected, stored))
 						return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
-					if (consume && (expected.continuationReservation === null || stored.continuationReservation === null
-						|| stored.continuationReservation.ordinal !== 2 || stored.continuationReservation.proposalId !== stored.toolSelection.proposalId
-						|| stored.continuationReservation.compiledInputDigest !== stored.compile.digest
-						|| ___DigestCanonicalJson(expected.continuationReservation as unknown as JsonValue) !== ___DigestCanonicalJson(stored.continuationReservation as unknown as JsonValue)))
+					if (!_SameToolStep(_ToolStep(expected, consume), _ToolStep(stored, consume)))
 						return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
+					if (consume)
+					{
+						const expectedCurrent = expected.protocol.steps.at(-1);
+						const storedCurrent = stored.protocol.steps.at(-1);
+						if (expectedCurrent?.state !== ConversationComputerTurnProtocolStates.ModelReserved
+							|| storedCurrent?.state !== ConversationComputerTurnProtocolStates.ModelReserved
+							|| expectedCurrent.reservation.ordinal !== storedCurrent.reservation.ordinal
+							|| ___DigestCanonicalJson(expectedCurrent.reservation as unknown as JsonValue) !== ___DigestCanonicalJson(storedCurrent.reservation as unknown as JsonValue))
+							return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
+					}
 					await candidates.admit({ computerId: stored.computerId, lease: stored.lease, workload: reviewedWorkload });
 					const repository = new PrismaConversationToolResultsRepository(transaction, dependencies, generatedFiles(transaction));
 					return consume ? repository.consume(stored, reviewedWorkload) : repository.read(stored, reviewedWorkload);

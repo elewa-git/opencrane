@@ -1,14 +1,14 @@
-import type { ConversationComputerToolSelection } from "../conversation-computer-continuation.types";
 import { _ReserveConversationOutputFixture } from "./conversation-output-intent.fixture";
-import type { ConversationComputerModelReservation } from "../conversation-computer-model.types";
 import { _PrepareBoundDraft } from "./conversation-output-intent.fixture";
 import type { BoundConversationWriterAppend } from "@opencrane/backend/server/conversations/history";
-import type { ConversationComputerTurnOutputReceipt } from "../conversation-computer-turn.types";
 import { describe, expect, it, vi } from "vitest";
-import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { ConversationComputerTurnAuthority } from "../conversation-computer-turn-authority";
+import { _ConversationComputerTurnAuthorityEndedError } from "../conversation-computer-turn-errors";
 import type { FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
+import { _ReduceConversationComputerTurnProtocol } from "../conversation-computer-turn-protocol";
+import { ConversationComputerTurnProtocolEvents } from "../conversation-computer-turn-protocol.types";
+import type { ConversationComputerTurnModelReservation, ConversationComputerTurnOutputReceipt, ConversationComputerTurnToolResult, ConversationComputerTurnToolSelection, ConversationComputerTurnUnavailableReceipt } from "../conversation-computer-turn-protocol.types";
 
 const _WORKLOAD = {
   subject: "system:serviceaccount:testv5:conversation-computer",
@@ -46,7 +46,8 @@ const _COMPILED = {
     maxCompletionTokens: 1_024,
     maxCostUsdMicros: 50_000,
     maxToolInvocations: 0,
-    wallClockDeadlineEpochMs: null,
+    maxLoopIterations: 1,
+    wallClockDeadlineEpochMs: 2_000_000_000_000,
   },
   digest: `sha256:${"a".repeat(64)}`,
 };
@@ -92,7 +93,7 @@ function _Harness() {
       reuseExact: vi.fn(),
       revoke: vi.fn().mockResolvedValue(undefined),
     },
-    modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() },
+    modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadExchange: vi.fn(), storeExchange: vi.fn() },
     generatedFiles: { link: vi.fn() }, toolResults: { read: vi.fn(), consume: vi.fn() }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") },
     endpoint: "http://litellm.testv5.svc.cluster.local:4000",
     outputPayloads: {
@@ -110,15 +111,26 @@ function _Harness() {
       complete: vi.fn().mockResolvedValue(undefined),
     },
     store: {
-      reserveContinuation: vi.fn(),
-      reserveModel: vi.fn(async function _ReserveModel(_id: string, reservation: ConversationComputerModelReservation)
+      reserveModel: vi.fn(async function _ReserveModel(_id: string, reservation: ConversationComputerTurnModelReservation)
       {
-        if (stored?.modelReservation !== null || stored?.toolSelection !== null)
+        if (stored === null)
           return false;
-        stored = { ...stored!, modelReservation: reservation };
+        try { stored = { ...stored, protocol: _ReduceConversationComputerTurnProtocol(stored.protocol, { kind: ConversationComputerTurnProtocolEvents.ModelReserved, reservation }, stored.budget) }; }
+        catch { return false; }
         return true;
       }),
-      selectTool: vi.fn(async function _Reserve(_id: string, reservation: ConversationComputerToolSelection) { stored = { ...stored!, toolSelection: reservation }; }),
+      selectTool: vi.fn(async function _Reserve(_id: string, selection: ConversationComputerTurnToolSelection)
+      {
+        stored = { ...stored!, protocol: _ReduceConversationComputerTurnProtocol(stored!.protocol, { kind: ConversationComputerTurnProtocolEvents.ToolSelected, selection }, stored!.budget) };
+      }),
+      recordToolResult: vi.fn(async function _Result(_id: string, result: ConversationComputerTurnToolResult)
+      {
+        stored = { ...stored!, protocol: _ReduceConversationComputerTurnProtocol(stored!.protocol, { kind: ConversationComputerTurnProtocolEvents.ToolResultRecorded, result }, stored!.budget) };
+      }),
+      markResponseUnavailable: vi.fn(async function _Unavailable(_id: string, receipt: ConversationComputerTurnUnavailableReceipt)
+      {
+        stored = { ...stored!, protocol: _ReduceConversationComputerTurnProtocol(stored!.protocol, { kind: ConversationComputerTurnProtocolEvents.ResponseUnavailable, receipt }, stored!.budget) };
+      }),
       createOrRead: vi.fn(async function _Create(
         turn: FrozenConversationComputerTurn,
       ) {
@@ -136,9 +148,12 @@ function _Harness() {
         _id: string,
         receipt: ConversationComputerTurnOutputReceipt,
       ) {
-        if (stored?.outputSourceCommandId === receipt.event.id)
+        if (stored?.protocol.output?.sourceCommandId === receipt.event.id)
           return { outcome: "idempotent" as const, receipt };
-        stored = { ...stored!, outputSourceCommandId: receipt.event.id, outputReceipt: receipt };
+        const step = stored?.protocol.steps.at(-1);
+        if (stored === null || step === undefined)
+          throw new Error("output requires reservation");
+        stored = { ...stored, protocol: _ReduceConversationComputerTurnProtocol(stored.protocol, { kind: ConversationComputerTurnProtocolEvents.OutputRecorded, ordinal: step.reservation.ordinal, modelInvocationFence: step.reservation.invocationFence, sourceCommandId: receipt.event.id, receipt }, stored.budget) };
         return { outcome: "accepted" as const, receipt };
       }),
       settle: vi.fn(async function _Settle() { active = false; }),
@@ -204,7 +219,7 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     const command = {
       bootstrapId: bootstrap!.bootstrapId,
       sourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651",
-      modelInvocationFence: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", modelNotAfterEpochMs: Date.parse("2099-01-01T00:00:00Z"),
+      modelInvocationFence: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", modelNotAfterEpochMs: 2_000_000_000_000,
       text: "Hi",
     };
     await _ReserveConversationOutputFixture(dependencies.store, command.bootstrapId, command.sourceCommandId);
@@ -235,13 +250,14 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     const command = {
       bootstrapId: bootstrap!.bootstrapId,
       sourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651",
-      modelInvocationFence: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", modelNotAfterEpochMs: Date.parse("2099-01-01T00:00:00Z"),
+      modelInvocationFence: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", modelNotAfterEpochMs: 2_000_000_000_000,
       text: "Hi",
     };
     await _ReserveConversationOutputFixture(dependencies.store, command.bootstrapId, command.sourceCommandId);
     await expect(authority.appendOutput(command)).rejects.toThrow(
       "lifecycle unavailable",
     );
+    dependencies.candidates.resolveForWorkflow.mockResolvedValueOnce(null);
     const restartedWorker = new ConversationComputerTurnAuthority(dependencies);
     await expect(restartedWorker.start({ computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, causationId: "entry-1", causationPosition: "1" })).resolves.toBeNull();
     expect(append).toHaveBeenCalledTimes(2);
@@ -301,6 +317,28 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     expect(await authority.advance(bootstrap!.bootstrapId)).toEqual({ outcome: "completed" });
     expect(dependencies.credentials.issueOnce).toHaveBeenLastCalledWith(expect.objectContaining({ expirySeconds: 20, notAfter }));
     expect(dependencies.model.request).toHaveBeenCalledWith(expect.objectContaining({ maxCompletionTokens: 512, notAfterEpochMs: Date.parse(notAfter) }));
+  });
+
+  it("records an expired saved request as unavailable before entering run recovery", async function () {
+    const { authority, dependencies } = _Harness();
+    const bootstrap = await authority.start({ computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, causationId: "entry-1", causationPosition: "1" });
+    await _ReserveConversationOutputFixture(dependencies.store, bootstrap!.bootstrapId, "31c1f1dc-0010-4f13-9c2f-d3841ffd6651");
+    vi.spyOn(Date, "now").mockReturnValue(2_000_000_000_001);
+
+    await expect(authority.advance(bootstrap!.bootstrapId)).resolves.toEqual({ outcome: "response_unavailable" });
+    expect(dependencies.store.markResponseUnavailable).toHaveBeenCalledOnce();
+    expect(dependencies.runLifecycle.enterRecoveryRequired).toHaveBeenCalledWith(expect.objectContaining({ runId: "run-1", attempt: 1 }));
+    vi.restoreAllMocks();
+  });
+
+  it("ends progression without writing when the current lease is proven stale", async function () {
+    const { authority, dependencies } = _Harness();
+    const bootstrap = await authority.start({ computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, causationId: "entry-1", causationPosition: "1" });
+    dependencies.candidates.assertCurrentForWorkflow.mockRejectedValue(new _ConversationComputerTurnAuthorityEndedError("lease replaced"));
+
+    await expect(authority.advance(bootstrap!.bootstrapId)).resolves.toEqual({ outcome: "authority_ended" });
+    expect(dependencies.store.reserveModel).not.toHaveBeenCalled();
+    expect(dependencies.store.markResponseUnavailable).not.toHaveBeenCalled();
   });
 
 });

@@ -1,191 +1,112 @@
-import { _ConversationModelReservationEvent } from "../conversation-computer-model-reservation";
-import { _ModelReservationFixture } from "./conversation-output-intent.fixture";
-import { _PrepareConversationOutputIntent } from "./conversation-output-intent.fixture";
-import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
+import { ConversationModelToolModes } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
+import { _ConversationModelRequestDigest } from "../conversation-computer-model-reservation";
+import { _ConversationComputerTurnHistoryDigest, _InitialConversationComputerTurnProtocol } from "../conversation-computer-turn-protocol";
+import { ConversationComputerTurnProtocolStates } from "../conversation-computer-turn-protocol.types";
+import type { ConversationComputerTurnModelReservation, ConversationComputerTurnToolResult, ConversationComputerTurnToolSelection } from "../conversation-computer-turn-protocol.types";
 import { KurrentConversationComputerTurnStore } from "../conversation-computer-turn-store";
 import type { FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 
 const _ID = "31c1f1dc-0010-4f13-9c2f-d3841ffd6651";
-const _TURN = {
-  bootstrapId: _ID,
-  siloId: "testv5",
-  computerId: "computer-1",
-  lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" },
-  latestPendingEntryId: "entry-1",
-  latestPendingEntryPosition: "1",
-  modelAlias: "testv5-default",
-  maximumBudgetUsd: 0.05,
-  credentialLifetimeSeconds: 300,
-  outputSourceCommandId: null,
-  outputReceipt: null, cancellationReceipt: null,
-  toolSelection: null, continuationReservation: null, modelReservation: null,
-  binding: {
-    siloId: "testv5",
-    conversationId: "conversation-1",
-    computerId: "computer-1",
-    leaseGeneration: 1,
-    agentIdentityId: "identity-1",
-    agentServiceId: "service-1",
-    agentName: "Ada",
-    agentAvatarArtifactRevisionId: null,
-    runId: "run-1",
-    expectedRevision: 1n,
-    maximumEntryBytes: 65_536,
-  },
-  compile: {
-    runId: "run-1",
-    attempt: 1,
-    promptCompilerVersion: "computer-v1",
-    digest: `sha256:${"a".repeat(64)}`,
-  },
-} satisfies FrozenConversationComputerTurn;
-
-/** The frozen event data as KurrentDB stores it: flat lease fields and a string stream revision. */
-const _STORED_TURN = {
-  bootstrapId: _TURN.bootstrapId,
-  siloId: _TURN.siloId,
-  computerId: _TURN.computerId,
-  generation: 1,
-  leaseId: "lease-1",
-  binding: { ..._TURN.binding, expectedRevision: "1" },
-  latestPendingEntryId: _TURN.latestPendingEntryId,
-  latestPendingEntryPosition: "1",
-  modelAlias: _TURN.modelAlias,
-  maximumBudgetUsd: _TURN.maximumBudgetUsd,
-  credentialLifetimeSeconds: _TURN.credentialLifetimeSeconds,
-  sandboxClaimId: "computer-1-g1",
-  compile: _TURN.compile,
+const _DIGEST_A = `sha256:${"a".repeat(64)}`;
+const _DIGEST_B = `sha256:${"b".repeat(64)}`;
+const _TURN: FrozenConversationComputerTurn = {
+	bootstrapId: _ID,
+	siloId: "testv5",
+	computerId: "computer-1",
+	lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" },
+	latestPendingEntryId: "entry-1",
+	latestPendingEntryPosition: "1",
+	modelAlias: "testv5-default",
+	maximumBudgetUsd: 0.05,
+	credentialLifetimeSeconds: 300,
+	binding: { siloId: "testv5", conversationId: "conversation-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Ada", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 1n, maximumEntryBytes: 65_536 },
+	compile: { runId: "run-1", attempt: 1, promptCompilerVersion: "computer-v2", digest: _DIGEST_A },
+	budget: { maxModelTurns: 3, maxCompletionTokens: 300, maxCostUsdMicros: null, maxToolInvocations: 2, maxLoopIterations: 2, wallClockDeadlineEpochMs: 2_000_000_000_000 },
+	protocol: _InitialConversationComputerTurnProtocol(),
 };
 
-describe("KurrentConversationComputerTurnStore", function _Suite() {
-  it("freezes only coordinates and a digest, never compiled content or a raw model credential", async function _Freeze() {
-    const append = vi
-      .fn()
-      .mockResolvedValue({
-        streamName: `conversation-computer-turn-${_ID}`,
-        revision: 0n,
-      });
-    const store = new KurrentConversationComputerTurnStore({
-      append,
-      appendAtomic: vi.fn(),
-      readStream: vi.fn(() => (async function* _Empty() {})()),
-    });
-    const leaking = {
-      ..._TURN,
-      compiledInput: { instructions: "Help", messages: [{ role: "user", content: "Hi" }] },
-    } as FrozenConversationComputerTurn;
-    await store.createOrRead(leaking);
-    const event = append.mock.calls[0]![0].events[0];
-    const serialized = JSON.stringify(event);
-    expect(serialized).not.toContain("sk-");
-    expect(serialized).not.toContain("compiledInput");
-    expect(serialized).not.toContain("instructions");
-    expect(serialized).not.toContain("messages");
-    expect(serialized).not.toContain("Help");
-    expect(serialized).not.toContain('"Hi"');
-    expect(event.data.turn.compile).toEqual({
-      runId: "run-1",
-      attempt: 1,
-      promptCompilerVersion: "computer-v1",
-      digest: `sha256:${"a".repeat(64)}`,
-    });
-    expect(event.data.turn).toEqual(_STORED_TURN);
-  });
+function _History()
+{
+	const streams = new Map<string, Array<Record<string, unknown>>>();
+	const append = vi.fn(async function _Append(input: { streamName: string; events: readonly Record<string, unknown>[] })
+	{
+		const events = streams.get(input.streamName) ?? [];
+		for (const event of input.events)
+			events.push({ ...structuredClone(event), streamName: input.streamName, revision: BigInt(events.length), recordedAt: new Date() });
+		streams.set(input.streamName, events);
+	});
+	return {
+		streams,
+		append,
+		appendAtomic: vi.fn(),
+		readStream: vi.fn(function _Read(input: { streamName: string })
+		{
+			return (async function* _Events()
+			{
+				for (const event of streams.get(input.streamName) ?? [])
+					yield event;
+			})();
+		}),
+	};
+}
 
-  it("gathers the stored flat lease fields back into the lease bundle", async function _LoadsStoredShape() {
-    const frozenEvent = { streamName: `conversation-computer-turn-${_ID}`, revision: 0n, recordedAt: new Date(), id: _ID, type: "opencrane.conversation-computer-turn-frozen.v1", data: { turn: _STORED_TURN }, metadata: {} };
-    const store = new KurrentConversationComputerTurnStore({ append: vi.fn(), appendAtomic: vi.fn(), readStream: vi.fn(() => (async function* _Events() { yield frozenEvent; })()) });
-    await expect(store.load(_ID)).resolves.toEqual(_TURN);
-  });
+function _Reservation(turn: FrozenConversationComputerTurn): ConversationComputerTurnModelReservation
+{
+	const facts = { ordinal: 1, tools: ConversationModelToolModes.Select, compiledInputDigest: turn.compile.digest, historyDigest: _ConversationComputerTurnHistoryDigest(turn.protocol.steps), maxCompletionTokens: 100, authorityExpiresAtEpochMs: 1_900_000_000_000, dispatchDeadlineEpochMs: 1_800_000_000_000 } as const;
+	return { invocationFence: "41c1f1dc-0010-4f13-9c2f-d3841ffd6651", ...facts, requestDigest: _ConversationModelRequestDigest(turn, facts) };
+}
 
-  it("loads a terminal cancellation winner and refuses a later model reservation", async function _CancellationWinner() {
-    const frozenEvent = { streamName: `conversation-computer-turn-${_ID}`, revision: 0n, recordedAt: new Date(), id: _ID, type: "opencrane.conversation-computer-turn-frozen.v1", data: { turn: _STORED_TURN }, metadata: {} };
-    const commandId = "41c1f1dc-0010-4f13-9c2f-d3841ffd6651";
-    const receipt = { commandId, commandDigest: `sha256:${"b".repeat(64)}`, occurredAt: "2026-09-11T08:00:00.000Z" };
-    const cancelledEvent = { streamName: `conversation-computer-turn-${_ID}`, revision: 1n, recordedAt: new Date(), id: commandId, type: "opencrane.conversation-computer-turn-cancelled.v1", data: receipt, metadata: { bootstrapId: _ID } };
-    const store = new KurrentConversationComputerTurnStore({ append: vi.fn(), appendAtomic: vi.fn(), readStream: vi.fn(() => (async function* _Events() { yield frozenEvent; yield cancelledEvent; })()) });
+const _SELECTION: ConversationComputerTurnToolSelection = { ordinal: 1, modelInvocationFence: "41c1f1dc-0010-4f13-9c2f-d3841ffd6651", declaration: { payloadRef: "private-declaration-1", ciphertextDigest: _DIGEST_A }, proposalId: "proposal-1", toolInvocationId: "proposal-1", requestFingerprint: _DIGEST_B };
+const _RESULT: ConversationComputerTurnToolResult = { ordinal: 1, proposalId: "proposal-1", toolInvocationId: "proposal-1", resultDigest: _DIGEST_A, exchange: { payloadRef: "private-exchange-1", ciphertextDigest: _DIGEST_B }, authorityExpiresAtEpochMs: 1_850_000_000_000 };
 
-    await expect(store.load(_ID)).resolves.toMatchObject({ cancellationReceipt: receipt, outputReceipt: null });
-    await expect(store.reserveModel(_ID, _ModelReservationFixture(_TURN, "51c1f1dc-0010-4f13-9c2f-d3841ffd6651"))).resolves.toBe(false);
-  });
+describe("KurrentConversationComputerTurnStore", function ()
+{
+	it("freezes only coordinates, complete budget and digest evidence", async function ()
+	{
+		const history = _History();
+		const leaking = { ..._TURN, compiledInput: { instructions: "private instructions", messages: ["private message"] } } as FrozenConversationComputerTurn;
+		await new KurrentConversationComputerTurnStore(history as never).createOrRead(leaking);
+		const serialized = JSON.stringify(history.streams.get(`conversation-computer-turn-${_ID}`)?.[0]?.["data"]);
+		expect(serialized).not.toContain("compiledInput");
+		expect(serialized).not.toContain("private instructions");
+		expect(serialized).toContain('"maxLoopIterations":2');
+		expect(serialized).toContain(_DIGEST_A);
+	});
 
-  it("rejects extra fields in a durable cancellation receipt", async function _MalformedCancellation() {
-    const frozenEvent = { streamName: `conversation-computer-turn-${_ID}`, revision: 0n, recordedAt: new Date(), id: _ID, type: "opencrane.conversation-computer-turn-frozen.v1", data: { turn: _STORED_TURN }, metadata: {} };
-    const commandId = "41c1f1dc-0010-4f13-9c2f-d3841ffd6651";
-    const cancelledEvent = { streamName: `conversation-computer-turn-${_ID}`, revision: 1n, recordedAt: new Date(), id: commandId, type: "opencrane.conversation-computer-turn-cancelled.v1", data: { commandId, commandDigest: `sha256:${"b".repeat(64)}`, occurredAt: "2026-09-11T08:00:00.000Z", hidden: "payload" }, metadata: { bootstrapId: _ID } };
-    const store = new KurrentConversationComputerTurnStore({ append: vi.fn(), appendAtomic: vi.fn(), readStream: vi.fn(() => (async function* _Events() { yield frozenEvent; yield cancelledEvent; })()) });
+	it("replays ordered reservation, selection and result events with aggregate accounting", async function ()
+	{
+		const history = _History();
+		const store = new KurrentConversationComputerTurnStore(history as never);
+		const frozen = await store.createOrRead(_TURN);
+		expect(await store.reserveModel(_ID, _Reservation(frozen))).toBe(true);
+		await store.selectTool(_ID, _SELECTION);
+		await store.recordToolResult(_ID, _RESULT);
+		const restored = await store.load(_ID);
+		expect(restored?.protocol.state).toBe(ConversationComputerTurnProtocolStates.ResultReady);
+		expect(restored?.protocol.steps).toHaveLength(1);
+		expect(restored?.protocol.steps[0]?.result).toEqual(_RESULT);
+		expect(restored?.protocol.accounting).toEqual({ reservedModelCalls: 1, reservedCompletionTokens: 100, reservedToolInvocations: 1, toolResultCyclesFed: 0 });
+	});
 
-    await expect(store.load(_ID)).rejects.toThrow();
-  });
+	it("does not append again when the same selected step is recovered", async function ()
+	{
+		const history = _History();
+		const store = new KurrentConversationComputerTurnStore(history as never);
+		const frozen = await store.createOrRead(_TURN);
+		await store.reserveModel(_ID, _Reservation(frozen));
+		await store.selectTool(_ID, _SELECTION);
+		const before = history.append.mock.calls.length;
+		await store.selectTool(_ID, _SELECTION);
+		expect(history.append).toHaveBeenCalledTimes(before);
+	});
 
-  it("rejects a frozen event that lacks the compile anchor", async function _MalformedFrozen() {
-    const frozenEvent = {
-      streamName: `conversation-computer-turn-${_ID}`,
-      revision: 0n,
-      recordedAt: new Date(),
-      id: _ID,
-      type: "opencrane.conversation-computer-turn-frozen.v1",
-      data: {
-        turn: { ..._STORED_TURN, compile: undefined },
-      },
-      metadata: {},
-    };
-    const store = new KurrentConversationComputerTurnStore({
-      append: vi.fn(),
-      appendAtomic: vi.fn(),
-      readStream: vi.fn(() => (async function* _Events() { yield frozenEvent; })()),
-    });
-    await expect(store.load(_ID)).rejects.toThrow("malformed frozen data");
-  });
-
-  it("recognizes the same output retry after a checked-append conflict", async function _Retry() {
-    const outputId = "b8871cc4-cc27-4dad-8785-b23896fa487d";
-    const frozenEvent = {
-      streamName: `conversation-computer-turn-${_ID}`,
-      revision: 0n,
-      recordedAt: new Date(),
-      id: _ID,
-      type: "opencrane.conversation-computer-turn-frozen.v1",
-      data: { turn: _STORED_TURN },
-      metadata: {},
-    };
-    const reservation = _ModelReservationFixture(_TURN, outputId);
-    const modelEvent = { ..._ConversationModelReservationEvent(_TURN, reservation), streamName: frozenEvent.streamName, revision: 1n, recordedAt: new Date() };
-    const outputEvent = {
-      streamName: `conversation-computer-turn-${_ID}`,
-      revision: 2n,
-      recordedAt: new Date(),
-      id: outputId,
-      type: "opencrane.conversation-computer-turn-output.v2",
-      data: { bootstrapId: _ID, modelInvocationFence: outputId, intent: await _PrepareConversationOutputIntent(_TURN, outputId) },
-      metadata: { bootstrapId: _ID },
-    };
-    const history = {
-      append: vi
-        .fn()
-        .mockRejectedValue(
-          new WrongExpectedVersionError(undefined, {
-            streamName: `conversation-computer-turn-${_ID}`,
-            expected: 0n,
-            current: 1n,
-          }),
-        ),
-      readStream: vi.fn(() =>
-        (async function* _Events() {
-          yield frozenEvent;
-          yield modelEvent;
-          yield outputEvent;
-        })(),
-      ),
-	  appendAtomic: vi.fn().mockRejectedValue(new WrongExpectedVersionError(undefined, { streamName: `conversation-computer-turn-${_ID}`, expected: 1n, current: 2n })),
-    };
-    await expect(
-      new KurrentConversationComputerTurnStore(history).markOutput(
-        _ID,
-        await _PrepareConversationOutputIntent(_TURN, outputId),
-      ),
-    ).resolves.toMatchObject({ outcome: "idempotent" });
-  });
+	it("rejects a frozen turn whose projection already contains mutable progress", async function ()
+	{
+		const history = _History();
+		const turn = { ..._TURN, protocol: { ..._TURN.protocol, revision: 1n } };
+		await expect(new KurrentConversationComputerTurnStore(history as never).createOrRead(turn)).rejects.toThrow("empty protocol");
+		expect(history.append).not.toHaveBeenCalled();
+	});
 });

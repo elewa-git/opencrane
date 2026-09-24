@@ -34,8 +34,11 @@ export class PrismaConversationGeneratedFileOutputLinkUnitOfWork implements Conv
 	}
 }
 
-/** Convert the one bigint coordinate before canonical JSON comparison. */
+/** Convert both history revisions before comparing the complete saved turn as canonical JSON. */
 function _TurnJson(turn: FrozenConversationComputerTurn): JsonValue
 {
-	return { ...turn, binding: { ...turn.binding, expectedRevision: turn.binding.expectedRevision.toString() } } as unknown as JsonValue;
+	return { ...turn,
+		binding: { ...turn.binding, expectedRevision: turn.binding.expectedRevision.toString() },
+		protocol: { ...turn.protocol, revision: turn.protocol.revision.toString() },
+	} as unknown as JsonValue;
 }

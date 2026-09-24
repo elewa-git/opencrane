@@ -48,7 +48,7 @@ function _Fixture()
 	const membership = { id: "membership-1", clusterTenant: "silo-1", subject: "user-1", status: OrgMemberStatus.Active as OrgMemberStatus, updatedAt: new Date(_NOW.getTime() - 2_000) };
 	const transaction = {
 		agentRun: { findFirst: vi.fn().mockResolvedValue({ conversationId: "conversation-1", executionSubject: subject, inputSnapshotDigest: `sha256:${"e".repeat(64)}` }) },
-		runInputSnapshot: { findFirst: vi.fn().mockResolvedValue({ budgetPolicy: { wallClockDeadlineEpochMs: _NOW.getTime() + 60_000, maxToolInvocations: 1 } }) },
+		runInputSnapshot: { findFirst: vi.fn().mockResolvedValue({ budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 1, maxCostUsdMicros: null, maxToolInvocations: 1, maxLoopIterations: 1, wallClockDeadlineEpochMs: _NOW.getTime() + 60_000 } }) },
 		mcpServerInstall: { findFirst: vi.fn().mockResolvedValue({ id: "install-1", mcpServerId: "server-1", principalId: "principal-1", connectionStatus: McpConnectionStatus.Credentialless, mcpServer: { credentialRequirement: McpCredentialRequirement.Credentialless, revisions: [{ transport: McpExecutionTransport.OciImage, connection: null }] } }) },
 		toolInvocation: { count: vi.fn().mockResolvedValue(1) },
 		conversation: { findFirst: vi.fn().mockResolvedValue({ id: "conversation-1", computerAgentIdentityId: "identity-1", computerProfileRevisionId: "profile-1" }) },
@@ -151,7 +151,7 @@ describe("current conversation tool dispatch authority", function _Suite()
 		const f = _Fixture();
 		const deadline = _NOW.getTime() + 2_000;
 		if (bound === "run")
-			f.transaction.runInputSnapshot.findFirst.mockResolvedValue({ budgetPolicy: { wallClockDeadlineEpochMs: deadline, maxToolInvocations: 1 } });
+			f.transaction.runInputSnapshot.findFirst.mockResolvedValue({ budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 1, maxCostUsdMicros: null, maxToolInvocations: 1, maxLoopIterations: 1, wallClockDeadlineEpochMs: deadline } });
 		else
 			f.computer.lease.expiresAt = new Date(deadline).toISOString();
 		f.computers.load.mockImplementation(async function _DelayedHistory() { vi.setSystemTime(_NOW.getTime() + 1_000); return f.computer; });
@@ -193,7 +193,7 @@ describe("current conversation tool dispatch authority", function _Suite()
 	it("keeps the original deadline across an awaited authority read", async function _BudgetExpiresDuringHistory()
 	{
 		const f = _Fixture();
-		f.transaction.runInputSnapshot.findFirst.mockResolvedValue({ budgetPolicy: { wallClockDeadlineEpochMs: _NOW.getTime() + 1_000, maxToolInvocations: 1 } });
+		f.transaction.runInputSnapshot.findFirst.mockResolvedValue({ budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 1, maxCostUsdMicros: null, maxToolInvocations: 1, maxLoopIterations: 1, wallClockDeadlineEpochMs: _NOW.getTime() + 1_000 } });
 		f.computers.load.mockImplementation(async function _DelayedHistory() { vi.setSystemTime(_NOW.getTime() + 2_000); return f.computer; });
 		await expect(f.authority.admitUntil(f.invocation, _NOW, _WORKLOAD)).resolves.toBeNull();
 	});

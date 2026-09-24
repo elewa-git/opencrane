@@ -4,6 +4,7 @@ import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/wo
 
 import { ConversationComputerHistory } from "@opencrane/backend/server/conversations/computers";
 import type { ConversationComputerPendingTurnCompiler, ConversationComputerPodLeaseCommand, ConversationComputerTurnCandidate, ConversationComputerTurnCandidateResolver, ConversationComputerTurnExecution, ConversationComputerTurnHistoryAnchor, ConversationComputerTurnProjectionRepository, ConversationComputerTurnWorkflowCommand, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
+import { _ConversationComputerTurnAuthorityEndedError } from "./conversation-computer-turn-errors";
 
 /** Resolves a pending turn only after exact silo, lease, generation, claim and Pod checks. */
 export class ActiveConversationComputerTurnCandidateResolver implements ConversationComputerTurnCandidateResolver
@@ -42,7 +43,7 @@ export class ActiveConversationComputerTurnCandidateResolver implements Conversa
 		const expiresAt = Math.min(Date.parse(current.lease.expiresAt), Date.parse(candidate.credentialExpiresAt));
 		const remainingLeaseSeconds = Math.floor((expiresAt - Date.now()) / 1_000);
 		if (!Number.isFinite(expiresAt) || remainingLeaseSeconds < 1)
-			throw new Error("Conversation computer turn requires enough remaining lease time");
+			throw new _ConversationComputerTurnAuthorityEndedError("Conversation computer turn requires enough remaining lease time");
 		return { ...candidate, credentialLifetimeSeconds: Math.min(candidate.credentialLifetimeSeconds, remainingLeaseSeconds), credentialExpiresAt: new Date(expiresAt).toISOString() };
 	}
 
@@ -51,7 +52,7 @@ export class ActiveConversationComputerTurnCandidateResolver implements Conversa
 	{
 		const { projection, current, lease } = await this._CurrentLease(command);
 		if (!await this.pods.verify({ computerId: command.computerId, lease, workload: command.workload }))
-			throw new Error("Conversation computer review caller is not the lease-bound Sandbox Pod");
+			throw new _ConversationComputerTurnAuthorityEndedError("Conversation computer review caller is not the lease-bound Sandbox Pod");
 		return { projection, current: { ...current, lease: current.lease }, lease };
 	}
 
@@ -60,10 +61,10 @@ export class ActiveConversationComputerTurnCandidateResolver implements Conversa
 	{
 		const projection = await this.projections.resolve(this.siloId, command.computerId);
 		if (projection === null)
-			throw new Error("Conversation computer cannot resolve a computer in the server silo");
+			throw new _ConversationComputerTurnAuthorityEndedError("Conversation computer cannot resolve a computer in the server silo");
 		const current = await this.computers.load({ computer: { siloId: this.siloId, computerId: command.computerId, conversationId: projection.conversationId, agentIdentityId: projection.agentIdentityId }, profileRevisionId: projection.profileRevisionId });
 		if (current === null || current.computer.state !== ConversationComputerStates.Warm || current.lease?.state !== ComputerLeaseStates.Active || current.lease.id !== command.lease.leaseId || current.lease.generation !== command.lease.leaseGeneration || current.computer.leaseGeneration !== command.lease.leaseGeneration || current.lease.sandboxId === null || Date.parse(current.lease.expiresAt) <= Date.now())
-			throw new Error("Conversation computer requires the current active lease generation");
+			throw new _ConversationComputerTurnAuthorityEndedError("Conversation computer requires the current active lease generation");
 		const lease = { leaseId: command.lease.leaseId, leaseGeneration: command.lease.leaseGeneration, sandboxClaimId: `${command.computerId}-g${command.lease.leaseGeneration}` };
 		return { projection, current: { ...current, lease: current.lease }, lease };
 	}
@@ -72,11 +73,11 @@ export class ActiveConversationComputerTurnCandidateResolver implements Conversa
 	public async assertCurrent(turn: FrozenConversationComputerTurn, workload: ConversationComputerPodLeaseCommand["workload"]): Promise<ConversationComputerTurnCandidate>
 	{
 		if (turn.siloId !== this.siloId)
-			throw new Error("Conversation computer output crossed its admitted silo");
+			throw new _ConversationComputerTurnAuthorityEndedError("Conversation computer output crossed its admitted silo");
 		const { projection, current, lease } = await this._Admit({ computerId: turn.computerId, lease: turn.lease, workload });
 		const candidate = await this._Compile(turn.computerId, projection, current, lease, { expectedRevision: turn.binding.expectedRevision, latestPendingEntryId: turn.latestPendingEntryId });
 		if (candidate === null || candidate.latestPendingEntryId !== turn.latestPendingEntryId || candidate.compiledInput.digest !== turn.compile.digest || candidate.modelAlias !== turn.modelAlias)
-			throw new Error("Conversation computer output requires the original conversation history");
+			throw new _ConversationComputerTurnAuthorityEndedError("Conversation computer output requires the original conversation history");
 		return candidate;
 	}
 
@@ -85,7 +86,7 @@ export class ActiveConversationComputerTurnCandidateResolver implements Conversa
 	{
 		const workload = await this.pods.resolve({ computerId, lease, namespace: this.sandbox.namespace, serviceAccountName: this.sandbox.serviceAccountName });
 		if (workload === null)
-			throw new Error("Conversation computer workflow requires the lease-bound Sandbox Pod");
+			throw new _ConversationComputerTurnAuthorityEndedError("Conversation computer workflow requires the lease-bound Sandbox Pod");
 		return workload;
 	}
 
@@ -96,7 +97,7 @@ export class ActiveConversationComputerTurnCandidateResolver implements Conversa
 		const workload = await this._ResolveWorkload(turn.computerId, lease);
 		const candidate = await this._Compile(turn.computerId, projection, current, lease, { expectedRevision: turn.binding.expectedRevision, latestPendingEntryId: turn.latestPendingEntryId });
 		if (candidate === null || candidate.latestPendingEntryId !== turn.latestPendingEntryId || candidate.compiledInput.digest !== turn.compile.digest || candidate.modelAlias !== turn.modelAlias)
-			throw new Error("Conversation computer output requires restart after conversation history changed");
+			throw new _ConversationComputerTurnAuthorityEndedError("Conversation computer output requires restart after conversation history changed");
 		return { candidate, workload };
 	}
 
@@ -104,7 +105,7 @@ export class ActiveConversationComputerTurnCandidateResolver implements Conversa
 	public async assertLeaseForWorkflow(turn: FrozenConversationComputerTurn): Promise<RuntimeWorkloadIdentity>
 	{
 		if (turn.siloId !== this.siloId)
-			throw new Error("Conversation computer output crossed its admitted silo");
+			throw new _ConversationComputerTurnAuthorityEndedError("Conversation computer output crossed its admitted silo");
 		const { lease } = await this._CurrentLease({ computerId: turn.computerId, lease: turn.lease });
 		return this._ResolveWorkload(turn.computerId, lease);
 	}

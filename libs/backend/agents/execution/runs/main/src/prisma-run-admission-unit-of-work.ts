@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient, type RunInputSnapshot as PrismaRunInputSnaps
 
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 import { PrismaAuthorizationAuthority, PrismaManagedAuthorizationGrantRepository, type ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
-import { ___ExecutionSubjectSchema, type RunInputSnapshot } from "@opencrane/contracts";
+import { RUN_INPUT_SNAPSHOT_VERSION, ___ExecutionSubjectSchema, ___ParseRunBudgetPolicy, type RunInputSnapshot } from "@opencrane/contracts";
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
@@ -219,7 +219,7 @@ function _MatchesSnapshot(snapshot: PrismaRunInputSnapshot, storedRunId: string,
 	const parsed = ___ExecutionSubjectSchema.safeParse(snapshot.executionSubject);
 	if (!parsed.success || parsed.data.principalId !== snapshot.principalId || parsed.data.agentIdentityId !== snapshot.agentIdentityId)
 		return false;
-	return snapshot.runId === storedRunId && snapshot.siloId === command.siloId && snapshot.agentServiceId === command.agentServiceId && snapshot.conversationId === command.conversationId && (command.messageInput === null || parsed.data.requester.requesterPrincipalId === command.messageInput.author.principalId) && _MatchesMessageInput(command, snapshot.messageIds);
+	return snapshot.snapshotVersion === RUN_INPUT_SNAPSHOT_VERSION && snapshot.runId === storedRunId && snapshot.siloId === command.siloId && snapshot.agentServiceId === command.agentServiceId && snapshot.conversationId === command.conversationId && (command.messageInput === null || parsed.data.requester.requesterPrincipalId === command.messageInput.author.principalId) && _MatchesMessageInput(command, snapshot.messageIds);
 }
 
 /** Require the transaction-built authority, snapshot, and execution subject to name one first attempt. */
@@ -288,7 +288,7 @@ function _RunInputSnapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnaps
 function _RunInputSnapshot(row: PrismaRunInputSnapshot): RunInputSnapshot
 {
 	const executionSubject = _ExecutionSubject(row.executionSubject, row.agentIdentityId, row.principalId);
-	return { runId: row.runId, attempt: row.attempt, siloId: row.siloId, agentServiceId: row.agentServiceId, agentRevisionId: row.agentRevisionId, snapshotVersion: row.snapshotVersion, conversationId: row.conversationId, messageIds: row.messageIds, personaRevisionId: row.personaRevisionId, preferenceFactIds: row.preferenceFactIds, artifactRevisionIds: row.artifactRevisionIds, skillRevisionIds: row.skillRevisionIds, memoryQueryPolicy: row.memoryQueryPolicy as RunInputSnapshot["memoryQueryPolicy"], mcpTools: row.mcpTools as unknown as RunInputSnapshot["mcpTools"], modelRoute: row.modelRoute as RunInputSnapshot["modelRoute"], budgetPolicy: row.budgetPolicy as RunInputSnapshot["budgetPolicy"], executionSubject, promptCompilerVersion: row.promptCompilerVersion, digest: row.digest, compiledAt: row.compiledAt.toISOString() };
+	return { runId: row.runId, attempt: row.attempt, siloId: row.siloId, agentServiceId: row.agentServiceId, agentRevisionId: row.agentRevisionId, snapshotVersion: row.snapshotVersion, conversationId: row.conversationId, messageIds: row.messageIds, personaRevisionId: row.personaRevisionId, preferenceFactIds: row.preferenceFactIds, artifactRevisionIds: row.artifactRevisionIds, skillRevisionIds: row.skillRevisionIds, memoryQueryPolicy: row.memoryQueryPolicy as RunInputSnapshot["memoryQueryPolicy"], mcpTools: row.mcpTools as unknown as RunInputSnapshot["mcpTools"], modelRoute: row.modelRoute as RunInputSnapshot["modelRoute"], budgetPolicy: ___ParseRunBudgetPolicy(row.budgetPolicy), executionSubject, promptCompilerVersion: row.promptCompilerVersion, digest: row.digest, compiledAt: row.compiledAt.toISOString() };
 }
 
 /** Parse subject evidence and reject a row whose indexed identity coordinates diverge. */

@@ -4,6 +4,7 @@ import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma
 import { ConversationLogToolKinds } from "@opencrane/contracts";
 
 import type { ConversationComputerTurnCandidateResolver, ConversationComputerTurnStore } from "../../turns/conversation-computer-turn.types";
+import { ConversationComputerTurnProtocolStates } from "../../turns/conversation-computer-turn-protocol.types";
 import type { ConversationToolProgressNotificationEvidence, ConversationToolRequestedNotificationCommand, ConversationToolRequestedNotificationEvidenceReader } from "../../turns/tool-progress-notifications/conversation-tool-progress-notification.types";
 import type { ConversationToolRequestedNotificationRecord, ConversationToolRequestedNotificationRepository } from "./conversation-tool-progress-notification-persistence.types";
 
@@ -48,12 +49,17 @@ class _CurrentConversationToolRequestedNotificationEvidenceUnitOfWork implements
 	public async readCurrent(command: ConversationToolRequestedNotificationCommand): Promise<ConversationToolProgressNotificationEvidence | null>
 	{
 		const turn = await this._turns.load(command.bootstrapId);
+		const current = turn?.protocol.steps.at(-1);
+		const selection = current?.state === ConversationComputerTurnProtocolStates.ToolPending ? current.selection : null;
+		const reservation = current?.state === ConversationComputerTurnProtocolStates.ToolPending ? current.reservation : null;
 		if (turn === null || turn.siloId !== command.siloId || turn.binding.conversationId !== command.conversationId
 			|| turn.compile.runId !== command.runId || turn.compile.attempt !== command.attempt
-			|| turn.toolSelection?.proposalId !== command.toolInvocationId || turn.outputReceipt !== null || turn.cancellationReceipt !== null)
+			|| current?.state !== ConversationComputerTurnProtocolStates.ToolPending
+			|| selection === null || reservation === null || selection.ordinal !== reservation.ordinal || selection.proposalId !== selection.toolInvocationId
+			|| selection.toolInvocationId !== command.toolInvocationId || turn.protocol.output !== null || turn.protocol.unavailable !== null || turn.protocol.cancellation !== null)
 			return null;
-		const current = await this._candidates.assertCurrentForWorkflow(turn);
-		const candidate = current.candidate;
+		const execution = await this._candidates.assertCurrentForWorkflow(turn);
+		const candidate = execution.candidate;
 		const input = candidate.compiledInput;
 		if (input.runId !== turn.compile.runId || input.attempt !== turn.compile.attempt || input.digest !== turn.compile.digest
 			|| input.promptCompilerVersion !== turn.compile.promptCompilerVersion)
@@ -66,7 +72,7 @@ class _CurrentConversationToolRequestedNotificationEvidenceUnitOfWork implements
 		if (invocation === null || invocation.siloId !== command.siloId || invocation.runId !== command.runId || invocation.attempt !== command.attempt
 			|| invocation.mcpTaskId !== null || invocation.runtimeInstanceId !== turn.computerId || invocation.commandId !== turn.bootstrapId
 			|| invocation.candidateId !== command.toolInvocationId || invocation.toolInvocationId !== command.toolInvocationId
-			|| invocation.requestFingerprint !== turn.toolSelection.requestFingerprint)
+			|| invocation.requestFingerprint !== selection.requestFingerprint)
 			return null;
 		const tools = input.tools.filter(tool => tool.toolRevisionId === invocation.toolRevisionId);
 		if (tools.length !== 1)

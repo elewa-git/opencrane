@@ -1,14 +1,14 @@
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
-import type { RunInputSnapshot } from "@opencrane/contracts";
+import { RUN_INPUT_SNAPSHOT_VERSION, type RunInputSnapshot } from "@opencrane/contracts";
 
 import { __IsUpgradeSessionAvailable, UPGRADE_SESSION_TOOL } from "../upgrade-session/upgrade-session";
 
 /** Build the smallest immutable snapshot needed to test personal-tool eligibility. */
 function _Snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 {
-	return { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "agent-1", snapshotVersion: 1, conversationId: "conversation-1", messageIds: [], personaRevisionId: "persona-1", preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: {}, budgetPolicy: {}, executionSubject: _ExecutionSubject(), promptCompilerVersion: "test", digest: "sha256:snapshot", compiledAt: "2026-07-23T00:00:00.000Z", ...overrides };
+	return { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "agent-1", snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION, conversationId: "conversation-1", messageIds: [], personaRevisionId: "persona-1", preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: {}, budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 1, maxCostUsdMicros: null, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: 2_000_000_000_000 }, executionSubject: _ExecutionSubject(), promptCompilerVersion: "test", digest: "sha256:snapshot", compiledAt: "2026-07-23T00:00:00.000Z", ...overrides };
 }
 
 /** Builds the execution subject that binds this personal test run to one principal. */

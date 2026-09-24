@@ -35,11 +35,11 @@ function _request(overrides: Partial<ConversationModelRequest> = {}): Conversati
 			promptCompilerVersion: "test-compiler", runId: "run-1", attempt: 1, instructions: "Private instructions.",
 			messages: [{ role: "user", content: "Private question." }, { role: "assistant", content: "Earlier answer." }],
 			tools: [], model: { modelAlias: "admitted-model", maxOutputTokens: 400, generatedOutputCapabilities: [] },
-			budget: { maxModelTurns: 1, maxCompletionTokens: 300, maxCostUsdMicros: 1000, maxToolInvocations: 0, wallClockDeadlineEpochMs: _NOW + 60_000 },
+			budget: { maxModelTurns: 1, maxCompletionTokens: 300, maxCostUsdMicros: 1000, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: _NOW + 60_000 },
 			digest: "sha256:test",
 		},
 		endpoint: "http://litellm.release.svc.cluster.local", key: "sk-private-attempt", modelAlias: "admitted-model",
-		maxCompletionTokens: 200, notAfterEpochMs: _NOW + 25_000, tools: ConversationModelToolModes.None, continuation: null, ...overrides,
+		maxCompletionTokens: 200, notAfterEpochMs: _NOW + 25_000, tools: ConversationModelToolModes.None, history: [], ...overrides,
 	};
 }
 
@@ -91,6 +91,15 @@ describe("one conversation model text exchange", function _transportSuite()
 		expect(vi.getTimerCount()).toBe(0);
 	});
 
+	it("requires ordered history on every request", async function _RequiredHistory()
+	{
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+		const input = _request();
+		await expect(__RequestConversationModel({ ...input, history: undefined as never })).rejects.toMatchObject({ code: ConversationModelFailureCodes.InvalidRequest });
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it.each([[300, 200, 1000, 200], [100, 200, 1000, 100], [null, 200, 1000, 200], [300, null, 1000, 300]])(
 		"caps route %s, budget %s and reservation %s at %s", async function _completionCeilings(route, budget, reserved, expected)
 		{
@@ -132,7 +141,7 @@ describe("one conversation model text exchange", function _transportSuite()
 			instructions: kind === "bad-unicode" ? "\ud800" : compiledInput.instructions,
 			messages: kind === "tool-message" ? [{ role: "tool" as const, content: "pending tool result" }] : compiledInput.messages,
 			model: { ...compiledInput.model, maxOutputTokens: kind === "no-ceiling" ? null : compiledInput.model.maxOutputTokens },
-			budget: { ...compiledInput.budget, maxCompletionTokens: kind === "no-ceiling" ? null : compiledInput.budget.maxCompletionTokens,
+			budget: { ...compiledInput.budget, maxCompletionTokens: kind === "no-ceiling" ? (null as never) : compiledInput.budget.maxCompletionTokens,
 				maxModelTurns: kind === "no-turns" ? 0 : 1 },
 		};
 		if (kind === "zero-ceiling")
@@ -348,7 +357,7 @@ describe("one selected tool and its paired continuation", function _toolExchange
 		const first = JSON.parse(String(fetchMock.mock.calls[0]?.[1].body));
 		expect(first.tools[0].function.name).toBe(tool.modelName);
 		expect(JSON.stringify(first.tools)).not.toContain(sourceName);
-		await __RequestConversationModel({ ...input, tools: ConversationModelToolModes.None, continuation: { call, resultContent: "saved result" } });
+		await __RequestConversationModel({ ...input, tools: ConversationModelToolModes.None, history: [{ call, resultContent: "saved result" }] });
 		const second = JSON.parse(String(fetchMock.mock.calls[1]?.[1].body));
 		expect(second.messages.at(-2).tool_calls[0].function.name).toBe(tool.modelName);
 		expect(second).not.toHaveProperty("tools");
@@ -405,7 +414,7 @@ describe("one selected tool and its paired continuation", function _toolExchange
 		const call = _toolCall({ content: "Checking." });
 		const fetchMock = vi.fn().mockResolvedValue(_response());
 		vi.stubGlobal("fetch", fetchMock);
-		await __RequestConversationModel({ ...first, tools: ConversationModelToolModes.None, continuation: { call, resultContent: '{"result":"Ready"}' } });
+		await __RequestConversationModel({ ...first, tools: ConversationModelToolModes.None, history: [{ call, resultContent: '{"result":"Ready"}' }] });
 		const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1].body));
 		expect(body.messages).toEqual([
 			{ role: "system", content: first.compiledInput.instructions }, ...first.compiledInput.messages,
@@ -416,6 +425,36 @@ describe("one selected tool and its paired continuation", function _toolExchange
 			expect(body).not.toHaveProperty(field);
 		expect(first.compiledInput.messages).toHaveLength(2);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("serializes every ordered pair when Select receives nonempty history", async function _OrderedHistory()
+	{
+		const firstCall = _toolCall({ id: "call_provider-1", content: "First lookup." });
+		const secondCall = _toolCall({ id: "call_provider-2", name: "read_notes", content: "Second lookup." });
+		const first = { call: firstCall, resultContent: "first result" };
+		const second = { call: secondCall, resultContent: "second result" };
+		const tool = _tool({ modelName: "read_notes", name: "read_notes", toolRevisionId: "revision-notes" });
+		const input = _selection([_tool(), tool]);
+		const fetchMock = vi.fn().mockResolvedValue(_response());
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(__RequestConversationModel({ ...input, history: [first, second] })).resolves.toMatchObject({ kind: ConversationModelResponseKinds.Text });
+		const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1].body));
+		expect(body.messages.slice(-4)).toEqual([
+			{ role: "assistant", content: firstCall.content, tool_calls: [{ id: firstCall.id, type: "function", function: { name: firstCall.name, arguments: firstCall.arguments } }] },
+			{ role: "tool", tool_call_id: firstCall.id, content: first.resultContent },
+			{ role: "assistant", content: secondCall.content, tool_calls: [{ id: secondCall.id, type: "function", function: { name: secondCall.name, arguments: secondCall.arguments } }] },
+			{ role: "tool", tool_call_id: secondCall.id, content: second.resultContent },
+		]);
+		expect(body.tools.map((candidate: { function: { name: string } }) => candidate.function.name)).toEqual(["read_file", "read_notes"]);
+	});
+
+	it("rejects the complete ordered history when the serialized request is too large", async function _HistoryRequestSize()
+	{
+		const history = new Array(18).fill(null).map(function _Exchange(_value, index) { return { call: _toolCall({ id: `call-${index}`, content: "c".repeat(30_000) }), resultContent: "r".repeat(30_000) }; });
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(__RequestConversationModel({ ..._selection(), history })).rejects.toMatchObject({ code: ConversationModelFailureCodes.RequestTooLarge });
+		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
 	it.each([
@@ -437,7 +476,7 @@ describe("one selected tool and its paired continuation", function _toolExchange
 		const input = _selection([_tool({ requiresApproval: true })]);
 		const fetchMock = vi.fn().mockResolvedValue(_response());
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModel({ ...input, tools: ConversationModelToolModes.None, continuation: { call: _toolCall(), resultContent: "approved result" } })).resolves.toMatchObject({ kind: ConversationModelResponseKinds.Text });
+		await expect(__RequestConversationModel({ ...input, tools: ConversationModelToolModes.None, history: [{ call: _toolCall(), resultContent: "approved result" }] })).resolves.toMatchObject({ kind: ConversationModelResponseKinds.Text });
 		expect(fetchMock).toHaveBeenCalledOnce();
 	});
 
@@ -476,7 +515,7 @@ describe("one selected tool and its paired continuation", function _toolExchange
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
-	it.each(["unknown", "changed-schema", "select", "oversized", "unicode"])("rejects unusable continuation %s before dispatch", async function _badContinuation(kind)
+	it.each(["unknown", "changed-schema", "oversized", "unicode"])("rejects unusable history %s before dispatch", async function _badHistory(kind)
 	{
 		const input = _selection([_tool({ requiresApproval: kind === "approval", parametersSchemaDigest: kind === "changed-schema" ? "bad" : _tool().parametersSchemaDigest })]);
 		let resultContent = "result";
@@ -484,10 +523,10 @@ describe("one selected tool and its paired continuation", function _toolExchange
 			resultContent = "x".repeat(65_536);
 		if (kind === "unicode")
 			resultContent = "\ud800";
-		const continuation = { call: _toolCall({ name: kind === "unknown" ? "different" : "read_file" }), resultContent };
+		const exchange = { call: _toolCall({ name: kind === "unknown" ? "different" : "read_file" }), resultContent };
 		const fetchMock = vi.fn();
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModel({ ...input, tools: kind === "select" ? ConversationModelToolModes.Select : ConversationModelToolModes.None, continuation })).rejects.toMatchObject({ code: ConversationModelFailureCodes.InvalidRequest });
+		await expect(__RequestConversationModel({ ...input, tools: ConversationModelToolModes.None, history: [exchange] })).rejects.toMatchObject({ code: ConversationModelFailureCodes.InvalidRequest });
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
@@ -495,7 +534,7 @@ describe("one selected tool and its paired continuation", function _toolExchange
 	{
 		const fetchMock = vi.fn().mockResolvedValue(_response(_toolAnswer()));
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModel({ ..._selection(), tools: ConversationModelToolModes.None, continuation: continuation ? { call: _toolCall(), resultContent: "result" } : null })).rejects.toMatchObject({ code: ConversationModelFailureCodes.UnsupportedResponse });
+		await expect(__RequestConversationModel({ ..._selection(), tools: ConversationModelToolModes.None, history: continuation ? [{ call: _toolCall(), resultContent: "result" }] : [] })).rejects.toMatchObject({ code: ConversationModelFailureCodes.UnsupportedResponse });
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 

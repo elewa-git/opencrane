@@ -3,6 +3,7 @@ import { ConversationLogToolKinds } from "@opencrane/contracts";
 
 import { ConversationComputerToolResultOutcomes, type ConversationComputerToolResults } from "../../turns/conversation-computer-continuation.types";
 import type { ConversationComputerTurnCandidateResolver, ConversationComputerTurnStore } from "../../turns/conversation-computer-turn.types";
+import { ConversationComputerTurnProtocolStates } from "../../turns/conversation-computer-turn-protocol.types";
 import type { ConversationToolResultNotificationCommand, ConversationToolResultNotificationEvidence, ConversationToolResultNotificationEvidenceReader } from "../../turns/tool-result-notifications/conversation-tool-result-notification.types";
 
 /** Rechecks one frozen selection, live workflow identity, and terminal delivery without database access. */
@@ -17,9 +18,15 @@ export class CurrentConversationToolResultNotificationEvidenceReader implements 
 		if (!_ValidCommand(command))
 			throw new Error("Tool result notification requires immutable workflow coordinates");
 		const turn = await this._turns.load(command.bootstrapId);
+		const current = turn?.protocol.steps.at(-1);
+		const selection = current?.state === ConversationComputerTurnProtocolStates.ToolPending ? current.selection : null;
+		const reservation = current?.state === ConversationComputerTurnProtocolStates.ToolPending ? current.reservation : null;
 		if (turn === null || turn.siloId !== command.siloId || turn.binding.conversationId !== command.conversationId
 			|| turn.compile.runId !== command.runId || turn.compile.attempt !== command.attempt
-			|| turn.toolSelection?.proposalId !== command.toolInvocationId || turn.continuationReservation !== null || turn.outputReceipt !== null)
+			|| current?.state !== ConversationComputerTurnProtocolStates.ToolPending || selection === null || reservation === null
+			|| selection.ordinal !== reservation.ordinal || selection.modelInvocationFence !== reservation.invocationFence
+			|| selection.proposalId !== selection.toolInvocationId || selection.toolInvocationId !== command.toolInvocationId
+			|| turn.protocol.output !== null || turn.protocol.unavailable !== null || turn.protocol.cancellation !== null)
 			return null;
 		const execution = await this._candidates.assertCurrentForWorkflow(turn);
 		const input = execution.candidate.compiledInput;

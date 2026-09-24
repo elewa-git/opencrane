@@ -4,7 +4,7 @@ import { AgentRunState, ToolInvocationState, ToolResultDeliveryState, PrismaClie
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { PrismaElicitationRepository, PrismaElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
-import { ElicitationBodyKinds, CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
+import { ConversationModelToolModes, ElicitationBodyKinds, CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import { __FakeWorkflowEngine } from "@opencrane/backend/server/infra/workflows/testing";
 import { ConversationGeneratedFileResultStates, ConversationApprovalNotificationOutcomes, PrismaConversationComputerTurnWorkflowEventRepository, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, _RegisterConversationComputerTurnWorkflow, CONVERSATION_COMPUTER_TURN_TASK } from "@opencrane/backend/server/conversations";
 import { ToolInvocationEventTypes } from "@opencrane/backend/server/iam/authorization";
@@ -13,6 +13,7 @@ import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { _ToolHandoffSqlRuntime, _WaitPastSqlDeadline } from "./conversation-tool-handoff.sql-fixture";
 import { _SeedConversationToolProposalSqlFixture } from "./conversation-tool-proposal.sql-fixture";
+import { _ConversationTurnRequest, _RecordConversationTurnResult, _ReserveConversationTurnModel, _SelectConversationTurnTool } from "./conversation-turn-protocol.fixture";
 
 const _First = new PrismaClient();
 const _Runtimes = new Set<ReturnType<typeof _ToolHandoffSqlRuntime>>();
@@ -219,6 +220,15 @@ function _ResultReader(f: Awaited<ReturnType<typeof _SeedConversationToolProposa
 
 function _ResultTurn(f: Awaited<ReturnType<typeof _SeedConversationToolProposalSqlFixture>>, proposalId: string, requestFingerprint: string, resultDigest: string): unknown
 {
-	const deadline = f.candidate.compiledInput.budget.wallClockDeadlineEpochMs!;
-	return { ...f.turn, modelReservation: { ordinal: 1 as const, tools: "select", compiledInputDigest: f.turn.compile.digest, invocationFence: "model-fence", requestDigest: "sha256:request", maxCompletionTokens: 128, authorityExpiresAtEpochMs: deadline, dispatchDeadlineEpochMs: deadline }, toolSelection: { proposalId, requestFingerprint, payloadRef: "payload-ref", ciphertextDigest: "sha256:cipher" }, continuationReservation: resultDigest === "sha256:cipher" ? null : { ordinal: 2 as const, tools: "none", compiledInputDigest: f.turn.compile.digest, invocationFence: "continuation-fence", requestDigest: "sha256:continuation", maxCompletionTokens: 128, authorityExpiresAtEpochMs: deadline, dispatchDeadlineEpochMs: deadline, continuation: { payloadRef: "continuation-ref", ciphertextDigest: resultDigest }, proposalId, resultDigest } };
+	const deadline = f.candidate.compiledInput.budget.wallClockDeadlineEpochMs;
+	const first = f.turn.protocol.steps[0]!.reservation;
+	const selected = _SelectConversationTurnTool(f.turn, { ordinal: first.ordinal, modelInvocationFence: first.invocationFence,
+		proposalId, toolInvocationId: proposalId, requestFingerprint, declaration: { payloadRef: "payload-ref", ciphertextDigest: "sha256:cipher" } });
+	if (resultDigest === "sha256:cipher")
+		return selected;
+	const ready = _RecordConversationTurnResult(selected, { ordinal: first.ordinal, proposalId, toolInvocationId: proposalId,
+		resultDigest, authorityExpiresAtEpochMs: deadline, exchange: { payloadRef: "exchange-ref", ciphertextDigest: resultDigest } });
+	const reservation = _ConversationTurnRequest(ready, { ordinal: 2, invocationFence: "continuation-fence", tools: ConversationModelToolModes.None,
+		maxCompletionTokens: 128, authorityExpiresAtEpochMs: deadline, dispatchDeadlineEpochMs: deadline });
+	return _ReserveConversationTurnModel(ready, reservation);
 }

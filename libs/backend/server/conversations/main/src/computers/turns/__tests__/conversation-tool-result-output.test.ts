@@ -49,23 +49,24 @@ describe("terminal tool history before the final model call", function _Suite()
 		const paused = (await f.store.load(f.step))!;
 		if (boundary === "notification")
 		{
-			expect(paused.continuationReservation).toBeNull();
+			expect(paused.protocol.steps).toHaveLength(1);
+			expect(paused.protocol.steps[0].result).toBeNull();
 			expect(f.model.request).toHaveBeenCalledOnce();
 			expect(f.toolFlags.consumed).toBe(false);
 		}
 		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
 		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
 		const completed = (await f.store.load(f.step))!;
-		expect(completed.modelReservation).toEqual(paused.modelReservation);
-		expect(completed.outputReceipt?.expectedRevision).toBe("2");
+		expect(completed.protocol.steps[0].reservation).toEqual(paused.protocol.steps[0].reservation);
+		expect(completed.protocol.output?.receipt.expectedRevision).toBe("2");
 		const entries = f.history.streams.get(f.stream)!;
 		expect(entries).toHaveLength(4);
 		expect(entries[2].data["entry"]).toMatchObject({ position: "2", kind: "log", logKind: "tool_call", toolName: "records.lookup", phase: "completed", visibility: { audience: "conversation" }, detailsRef: null, resultArtifactRevisionId: null });
-		expect(entries[3].data).toEqual(completed.outputReceipt!.event.data);
+		expect(entries[3].data).toEqual(completed.protocol.output!.receipt.event.data);
 		const reader = new ConversationHistoryReader(f.history);
 		const replay = await reader.read({ siloId: "silo-1", conversationId: "conversation-1", fromRevision: 2n, maxCount: 2, maximumBytes: 65_536 });
 		expect(replay.entries.map(entry => entry.kind)).toEqual(["log", "message"]);
-		expect(f.history.streams.get(`conversation-tool-result-notification-${completed.toolSelection!.proposalId}`)).toHaveLength(1);
+		expect(f.history.streams.get(`conversation-tool-result-notification-${completed.protocol.steps[0].selection!.proposalId}`)).toHaveLength(1);
 		expect(f.model.request).toHaveBeenCalledTimes(2);
 		const [first, final] = f.model.request.mock.calls.map(call => call[0]);
 		expect(first.maxCompletionTokens + final.maxCompletionTokens).toBe(f.candidate.compiledInput.budget.maxCompletionTokens);
@@ -74,7 +75,7 @@ describe("terminal tool history before the final model call", function _Suite()
 		expect(f.credentials.reuseExact).toHaveBeenCalledOnce();
 		expect(f.toolFlags).toMatchObject({ executions: 1, acknowledgements: 1, consumed: true });
 		const visible = JSON.stringify(entries[2].data);
-		for (const privateValue of ["private-query", "private-result", "test-only-key", "Private assistant declaration", completed.continuationReservation!.resultDigest])
+		for (const privateValue of ["private-query", "private-result", "test-only-key", "Private assistant declaration", completed.protocol.steps[0].result!.resultDigest])
 			expect(visible).not.toContain(privateValue);
 		expect(lost).toBe(true);
 	});
@@ -85,7 +86,8 @@ describe("terminal tool history before the final model call", function _Suite()
 		f.notifications.publishTerminal.mockRejectedValueOnce(new Error("history unavailable"));
 		expect(await f.authority.advance(f.step)).toEqual({ outcome: "retry" });
 		const paused = (await f.store.load(f.step))!;
-		expect(paused.continuationReservation).toBeNull();
+		expect(paused.protocol.steps).toHaveLength(1);
+		expect(paused.protocol.steps[0].result).toBeNull();
 		expect(f.toolFlags.consumed).toBe(false);
 		expect(f.model.request).toHaveBeenCalledOnce();
 		expect(await f.restart().advance(f.step)).toEqual({ outcome: "completed" });
@@ -98,7 +100,7 @@ describe("terminal tool history before the final model call", function _Suite()
 		const f = await _ResultJourney();
 		f.notifications.publishTerminal.mockResolvedValue(ConversationToolResultNotificationOutcomes.NoLongerVisible);
 		expect(await f.authority.advance(f.step)).toEqual({ outcome: "authority_ended" });
-		expect((await f.store.load(f.step))?.continuationReservation).toBeNull();
+		expect((await f.store.load(f.step))?.protocol.steps).toHaveLength(1);
 		expect(f.toolFlags.consumed).toBe(false);
 		expect(f.model.request).toHaveBeenCalledOnce();
 		expect(f.history.streams.get(f.stream)).toHaveLength(2);

@@ -15,7 +15,7 @@ function _Fixture()
 {
 	const source = {
 		id: "revision-1", siloId: _CALLER.siloId, agentServiceId: "service-1", revision: 4, state: AgentRevisionState.Published, publishedAt: _NOW,
-		promptPolicyVersion: "policy-original", personaRevisionId: "persona-revision-1", modelDefinitionId: "model-1", budget: { maxTurns: 4, maxTokens: 8_000, maxDurationMs: 60_000 },
+		promptPolicyVersion: "policy-original", personaRevisionId: "persona-revision-1", modelDefinitionId: "model-1", budget: { maxTurns: 4, maxTokens: 8_000, maxCostUsdMicros: null, maxToolInvocations: 2, maxDurationMs: 60_000, maxLoopIterations: 2 },
 		skillAssignments: [{ skillId: "skill-1", skillRevisionId: "skill-revision-1" }],
 		mcpToolAssignments: [{ toolRevisionId: "tool-old" }, { toolRevisionId: "tool-retained" }],
 		boundaryAttachments: [{ boundaryKind: AuthorizationBoundaryKind.Personal, boundaryGroupId: null, boundaryPrincipalId: "principal-1", boundaryCoverage: AuthorizationBoundaryCoverage.Exact }],
@@ -51,7 +51,7 @@ describe("personal agent tool assignment persistence", function _Suite()
 		const result = await f.repository.setTools(_CALLER, _COMMAND, _NOW);
 		expect(result).toEqual({ agentServiceId: "service-1", activeRevisionId: expect.any(String), toolRevisionIds: ["tool-new", "tool-retained"] });
 		expect(f.productEffects.admitRevisionSelection).toHaveBeenCalledWith(expect.objectContaining({ caller: _PRODUCT_CALLER, selectedResource: "tool", source: { agentServiceId: "service-1", agentRevisionId: "revision-1", personaProfileId: "persona-profile-1", modelDefinitionId: "model-1", mcpToolRevisionIds: ["tool-old", "tool-retained"] }, target: expect.objectContaining({ modelDefinitionId: "model-1", mcpToolRevisionIds: ["tool-new", "tool-retained"] }) }));
-		expect(f.transaction.agentRevision.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ revision: 5, personaRevisionId: "persona-revision-1", budget: { maxTurns: 4, maxTokens: 8_000, maxDurationMs: 60_000 }, skillAssignments: { create: [{ skillId: "skill-1", skillRevisionId: "skill-revision-1" }] }, mcpToolAssignments: { create: [{ toolRevisionId: "tool-new", siloId: _CALLER.siloId }, { toolRevisionId: "tool-retained", siloId: _CALLER.siloId }] } }) }));
+		expect(f.transaction.agentRevision.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ revision: 5, personaRevisionId: "persona-revision-1", budget: { maxTurns: 4, maxTokens: 8_000, maxCostUsdMicros: null, maxToolInvocations: 2, maxDurationMs: 60_000, maxLoopIterations: 2 }, skillAssignments: { create: [{ skillId: "skill-1", skillRevisionId: "skill-revision-1" }] }, mcpToolAssignments: { create: [{ toolRevisionId: "tool-new", siloId: _CALLER.siloId }, { toolRevisionId: "tool-retained", siloId: _CALLER.siloId }] } }) }));
 		expect(f.productEffects.admitRevisionPublication).toHaveBeenCalledOnce();
 		expect(f.transaction.agentService.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ activeRevisionId: "revision-1" }), data: { activeRevisionId: result.activeRevisionId, updatedAt: _NOW } }));
 	});

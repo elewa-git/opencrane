@@ -58,12 +58,12 @@ describe.skipIf(!_RUN_REAL_PROOFS)("generated file output across PostgreSQL and 
 		const fixture = await _PrepareGeneratedFileOutputIntegrationFixture(firstPrisma, firstHistory, _Workflows);
 		await expect(fixture.authority.advance(fixture.turn.bootstrapId)).resolves.toEqual({ outcome: "completed" });
 		await _ExpectOneOriginalContinuation(fixture);
-		expect((await fixture.turns.load(fixture.turn.bootstrapId))?.toolSelection?.proposalId).toBe(fixture.capture.command.invocationId);
+		expect((await fixture.turns.load(fixture.turn.bootstrapId))?.protocol.steps.find(step => step.selection !== null)?.selection?.proposalId).toBe(fixture.capture.command.invocationId);
 
 		const saved = await fixture.turns.load(fixture.turn.bootstrapId);
 		_ExpectSavedArtifact(saved, fixture);
 		await _ExpectOneAnswer(firstHistory, fixture);
-		await expect(firstPrisma.conversationAsset.findUniqueOrThrow({ where: { id: fixture.capture.assetId } })).resolves.toMatchObject({ messageId: saved!.outputSourceCommandId });
+		await expect(firstPrisma.conversationAsset.findUniqueOrThrow({ where: { id: fixture.capture.assetId } })).resolves.toMatchObject({ messageId: saved!.protocol.output?.sourceCommandId });
 
 		const recoveryPrisma = _Prisma();
 		const recoveryHistory = _History();
@@ -72,7 +72,7 @@ describe.skipIf(!_RUN_REAL_PROOFS)("generated file output across PostgreSQL and 
 		await _ExpectOneOriginalContinuation(fixture);
 		await expect(recovery.linker.link((await recovery.turns.load(fixture.turn.bootstrapId))!)).resolves.toBeUndefined();
 		await _ExpectOneAnswer(recoveryHistory, fixture);
-		await expect(recoveryPrisma.conversationAsset.count({ where: { id: fixture.capture.assetId, messageId: saved!.outputSourceCommandId } })).resolves.toBe(1);
+		await expect(recoveryPrisma.conversationAsset.count({ where: { id: fixture.capture.assetId, messageId: saved!.protocol.output?.sourceCommandId } })).resolves.toBe(1);
 	});
 
 	it("recovers after Kurrent saves output and the first link attempt loses its response", async function _CrashBeforeLink()
@@ -86,7 +86,7 @@ describe.skipIf(!_RUN_REAL_PROOFS)("generated file output across PostgreSQL and 
 		const recovery = _RecoverGeneratedFileOutputAuthority(_Prisma(), _History(), first);
 		await expect(recovery.authority.advance(first.turn.bootstrapId)).resolves.toEqual({ outcome: "completed" });
 		await _ExpectOneAnswer(_History(), first);
-		await expect(_Prisma().conversationAsset.findUniqueOrThrow({ where: { id: first.capture.assetId } })).resolves.toMatchObject({ messageId: saved!.outputSourceCommandId });
+		await expect(_Prisma().conversationAsset.findUniqueOrThrow({ where: { id: first.capture.assetId } })).resolves.toMatchObject({ messageId: saved!.protocol.output?.sourceCommandId });
 	});
 
 	it("recovers the exact link after completion fails without requiring ended tool authority", async function _CrashAfterLink()
@@ -169,7 +169,7 @@ function _CreateWorkflows()
 /** Require the saved participant output to contain exactly one text and the captured Artifact. */
 function _ExpectSavedArtifact(turn: FrozenConversationComputerTurn | null, fixture: _GeneratedFileOutputIntegrationFixture): void
 {
-	const entry = turn?.outputReceipt?.event.data.entry;
+	const entry = turn?.protocol.output?.receipt?.event.data.entry;
 	expect(entry).toMatchObject({ kind: ConversationEntryKinds.Message, blocks: [
 		{ kind: ConversationMessageContentBlockKinds.Text },
 		{ kind: ConversationMessageContentBlockKinds.Artifact, id: fixture.capture.assetId, artifactId: fixture.capture.operation.artifactId, artifactRevisionId: fixture.capture.operation.revisionId },
@@ -191,11 +191,14 @@ async function _ExpectOneAnswer(history: _KurrentHistoryStore, fixture: _Generat
 /** Change only the caller-supplied Artifact name; the linker must reload and reject it. */
 function _ChangedArtifact(turn: FrozenConversationComputerTurn): FrozenConversationComputerTurn
 {
-	const entry = turn.outputReceipt?.event.data.entry;
-	if (entry?.kind !== ConversationEntryKinds.Message || entry.blocks[1]?.kind !== ConversationMessageContentBlockKinds.Artifact)
+	const output = turn.protocol.output;
+	const entry = output?.receipt.event.data.entry;
+	if (output === null || entry?.kind !== ConversationEntryKinds.Message || entry.blocks[1]?.kind !== ConversationMessageContentBlockKinds.Artifact)
 		throw new Error("Generated output rejection proof requires one saved Artifact");
 	const changedEntry = { ...entry, blocks: [entry.blocks[0]!, { ...entry.blocks[1], name: "substituted.csv" }] };
-	return { ...turn, outputReceipt: { ...turn.outputReceipt!, event: { ...turn.outputReceipt!.event, data: { entry: changedEntry } } } };
+	return { ...turn, protocol: { ...turn.protocol, output: { ...output,
+		receipt: { ...output.receipt, event: { ...output.receipt.event, data: { entry: changedEntry } } },
+	} } };
 }
 
 /** Prove recovery cannot dispatch again or replenish the first reservation's spent token share. */
@@ -209,6 +212,6 @@ async function _ExpectOneOriginalContinuation(fixture: _GeneratedFileOutputInteg
 	const expectedRemaining = Math.min(total - 128, route);
 	expect(fixture.modelDispatches.maxCompletionTokens).toEqual([expectedRemaining]);
 	const saved = await fixture.turns.load(fixture.turn.bootstrapId);
-	expect(saved?.modelReservation?.maxCompletionTokens).toBe(128);
-	expect(saved?.continuationReservation?.maxCompletionTokens).toBe(expectedRemaining);
+	expect(saved?.protocol.steps[0]?.reservation.maxCompletionTokens).toBe(128);
+	expect(saved?.protocol.steps[1]?.reservation.maxCompletionTokens).toBe(expectedRemaining);
 }

@@ -49,7 +49,7 @@ describe("company assistant application composition", function _Suite()
 		app.use(_CreateCompanyAssistantComposition(prisma as never, {} as never, { profileName: "company-test-profile" }, { warn: vi.fn() } as never));
 		const response = await request(app).post("/").set("Host", "acme.opencrane.test").send({ name: "Company assistant", modelDefinitionId: "model-1", invokerPrincipalIds: ["admin"] }).expect(201);
 		expect(response.body.created).toBe(true);
-		expect(transaction.agentRevision.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ data: expect.objectContaining({ budget: { maxTurns: 2, maxTokens: 32_000, maxDurationMs: 120_000 }, promptPolicyVersion: PROMPT_COMPILER_VERSION, mcpToolAssignments: { create: [] } }) }));
+		expect(transaction.agentRevision.create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ data: expect.objectContaining({ budget: { maxTurns: 2, maxTokens: 32_000, maxCostUsdMicros: null, maxToolInvocations: 1, maxDurationMs: 120_000, maxLoopIterations: 1 }, promptPolicyVersion: PROMPT_COMPILER_VERSION, mcpToolAssignments: { create: [] } }) }));
 		expect(transaction.agentService.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ workloadProfile: "company-test-profile" }) }));
 		expect(append).toHaveBeenCalledTimes(1);
 	});

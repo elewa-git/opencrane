@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConversationAssetState } from "@prisma/client";
 
-import { ConversationGeneratedFileResultStates, PrismaConversationToolDispatchAuthority, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
+import { ConversationComputerTurnProtocolStates, ConversationGeneratedFileResultStates, PrismaConversationToolDispatchAuthority, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import * as ToolResults from "@opencrane/backend/server/iam/authorization";
-import { GeneratedFileResultKinds } from "@opencrane/contracts";
+import { ConversationModelToolModes, GeneratedFileResultKinds } from "@opencrane/contracts";
 
 import { _GeneratedFileCapturedMetadataResult } from "../../persistence/generated-file-capture-result";
 import { PrismaConversationGeneratedFileRecordRepository } from "../../persistence/workflow/prisma-conversation-generated-file-record-repository";
@@ -34,13 +34,23 @@ function _Turn(): FrozenConversationComputerTurn
 		lease: { leaseId: "lease-1", leaseGeneration: 3, sandboxClaimId: "claim-1" },
 		compile: { runId: "run-1", attempt: 2, promptCompilerVersion: "v1", digest: _DIGEST },
 		latestPendingEntryId: "entry-1", latestPendingEntryPosition: "1", modelAlias: "model", maximumBudgetUsd: 1,
-		credentialLifetimeSeconds: 60, outputSourceCommandId: _MESSAGE_ID,
-		outputReceipt: { streamName: "conversation-conversation-1", expectedRevision: "2", event: { id: _MESSAGE_ID, type: "opencrane.conversation-entry.v1", data: { entry }, metadata: { siloId: "silo-1" } } },
-		cancellationReceipt: null,
-		toolSelection: { proposalId: "proposal-1", requestFingerprint: _DIGEST, payloadRef: "declaration-1", ciphertextDigest: _DIGEST },
-		continuationReservation: { ordinal: 2, invocationFence: _MESSAGE_ID, tools: "none", compiledInputDigest: _DIGEST, maxCompletionTokens: 100,
-			authorityExpiresAtEpochMs: Date.now() + 60_000, dispatchDeadlineEpochMs: Date.now() + 30_000, continuation: { payloadRef: "continuation-1", ciphertextDigest: _DIGEST }, proposalId: "proposal-1", resultDigest: _DIGEST, requestDigest: _DIGEST },
-		modelReservation: null,
+		credentialLifetimeSeconds: 60,
+		budget: { maxModelTurns: 3, maxCompletionTokens: 300, maxCostUsdMicros: null, maxToolInvocations: 2, maxLoopIterations: 2, wallClockDeadlineEpochMs: Date.now() + 60_000 },
+		protocol: {
+			state: ConversationComputerTurnProtocolStates.OutputRecorded, revision: 5n,
+			accounting: { reservedModelCalls: 2, reservedCompletionTokens: 200, reservedToolInvocations: 1, toolResultCyclesFed: 1 },
+			output: { sourceCommandId: _MESSAGE_ID, receipt: { streamName: "conversation-conversation-1", expectedRevision: "2", event: { id: _MESSAGE_ID, type: "opencrane.conversation-entry.v1", data: { entry }, metadata: { siloId: "silo-1" } } } },
+			cancellation: null, unavailable: null,
+			steps: [{
+				state: ConversationComputerTurnProtocolStates.ResultReady,
+				reservation: { ordinal: 1, invocationFence: "first-fence", tools: ConversationModelToolModes.Select, compiledInputDigest: _DIGEST, historyDigest: _DIGEST, requestDigest: _DIGEST, maxCompletionTokens: 100, authorityExpiresAtEpochMs: Date.now() + 60_000, dispatchDeadlineEpochMs: Date.now() + 30_000 },
+				selection: { ordinal: 1, modelInvocationFence: "first-fence", proposalId: "proposal-1", toolInvocationId: "proposal-1", requestFingerprint: _DIGEST, declaration: { payloadRef: "declaration-1", ciphertextDigest: _DIGEST } },
+				result: { ordinal: 1, proposalId: "proposal-1", toolInvocationId: "proposal-1", resultDigest: _DIGEST, authorityExpiresAtEpochMs: Date.now() + 60_000, exchange: { payloadRef: "exchange-1", ciphertextDigest: _DIGEST } },
+			}, {
+				state: ConversationComputerTurnProtocolStates.ModelReserved, selection: null, result: null,
+				reservation: { ordinal: 2, invocationFence: _MESSAGE_ID, tools: ConversationModelToolModes.None, compiledInputDigest: _DIGEST, historyDigest: _DIGEST, requestDigest: _DIGEST, maxCompletionTokens: 100, authorityExpiresAtEpochMs: Date.now() + 60_000, dispatchDeadlineEpochMs: Date.now() + 30_000 },
+			}],
+		},
 	} as FrozenConversationComputerTurn;
 }
 
@@ -106,6 +116,45 @@ describe("Prisma generated-file output linker", function _Suite()
 		expect(PrismaConversationToolDispatchAuthority.prototype.admitSystem).toHaveBeenCalledWith(expect.objectContaining({ id: "invocation-row-1" }), expect.any(Date), "opencrane-server/conversation-generated-file-v1");
 		expect(harness.read).toHaveBeenCalledWith(expect.objectContaining({ turn: harness.turn, payload: expect.objectContaining({ toolInvocationId: "proposal-1" }) }));
 		expect(harness.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: "asset-1", messageId: null, state: ConversationAssetState.Ready }), data: { messageId: _MESSAGE_ID } }));
+	});
+
+	it("links the exact last result after an earlier tool cycle", async function _LinksLaterStep()
+	{
+		const harness = _Harness();
+		const resultStep = harness.turn.protocol.steps[0]!;
+		const finalStep = harness.turn.protocol.steps[1]!;
+		if (resultStep.result === null || resultStep.selection === null)
+			throw new Error("Fixture requires a saved tool result");
+		const earlier = { ...resultStep,
+			reservation: { ...resultStep.reservation, invocationFence: "earlier-fence" },
+			selection: { ...resultStep.selection, modelInvocationFence: "earlier-fence", proposalId: "earlier-proposal", toolInvocationId: "earlier-proposal", declaration: { ...resultStep.selection.declaration, payloadRef: "earlier-declaration" } },
+			result: { ...resultStep.result, proposalId: "earlier-proposal", toolInvocationId: "earlier-proposal", exchange: { ...resultStep.result.exchange, payloadRef: "earlier-exchange" } },
+		};
+		const turn = { ...harness.turn, protocol: { ...harness.turn.protocol, revision: 8n,
+			accounting: { reservedModelCalls: 3, reservedCompletionTokens: 300, reservedToolInvocations: 2, toolResultCyclesFed: 2 },
+			steps: [earlier,
+				{ ...resultStep, reservation: { ...resultStep.reservation, ordinal: 2 }, selection: { ...resultStep.selection, ordinal: 2 }, result: { ...resultStep.result, ordinal: 2 } },
+				{ ...finalStep, reservation: { ...finalStep.reservation, ordinal: 3 } },
+			],
+		} };
+		harness.load.mockResolvedValue(turn);
+
+		await expect(harness.linker.link(turn)).resolves.toBeUndefined();
+		expect(ToolResults.__ReadRunToolResultInTransaction).toHaveBeenCalledWith(harness.transaction,
+			expect.objectContaining({ toolInvocationId: "proposal-1" }));
+		expect(harness.updateMany).toHaveBeenCalledTimes(1);
+	});
+
+	it("rejects a file whose saved result digest differs from the result feeding the answer", async function _RejectsDifferentResult()
+	{
+		const harness = _Harness();
+		const turn = { ...harness.turn, protocol: { ...harness.turn.protocol,
+			steps: harness.turn.protocol.steps.map(step => step.result === null ? step : { ...step, result: { ...step.result, resultDigest: `sha256:${"b".repeat(64)}` } }),
+		} };
+		harness.load.mockResolvedValue(turn);
+
+		await expect(harness.linker.link(turn)).rejects.toThrow("result is no longer available");
+		expect(harness.updateMany).not.toHaveBeenCalled();
 	});
 
 	it("recognizes the exact link after run authority ends without another result read", async function _RecoversLinked()
@@ -176,7 +225,7 @@ describe("Prisma generated-file output linker", function _Suite()
 	{
 		const harness = _Harness();
 		const now = Date.now();
-		const expiring = { ...harness.turn, continuationReservation: { ...harness.turn.continuationReservation!, authorityExpiresAtEpochMs: now + 100 } };
+		const expiring = { ...harness.turn, protocol: { ...harness.turn.protocol, steps: harness.turn.protocol.steps.map(step => step.result === null ? step : { ...step, result: { ...step.result, authorityExpiresAtEpochMs: now + 100 } }) } };
 		harness.load.mockResolvedValue(expiring);
 		vi.spyOn(PrismaConversationToolDispatchAuthority.prototype, "admitSystem").mockResolvedValue({ notAfterEpochMs: now + 100 } as never);
 		vi.spyOn(Date, "now").mockReturnValueOnce(now).mockReturnValueOnce(now + 101);

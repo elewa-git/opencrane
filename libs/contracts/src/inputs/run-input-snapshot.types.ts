@@ -3,6 +3,8 @@ import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/arti
 import type { ConversationId, MessageId } from "@opencrane/models/conversations";
 import type { JsonValue } from "@opencrane/util";
 
+import type { RunBudgetPolicy } from "./run-budget-policy.types";
+
 /** One exact MCP tool revision frozen when a run is admitted. */
 export interface RunInputSnapshotMcpTool
 {
@@ -52,7 +54,7 @@ export interface RunInputSnapshot
   /** Server-selected model route without provider credentials. */
   modelRoute: JsonValue;
   /** Immutable token, cost, time, and tool limits. */
-  budgetPolicy: JsonValue;
+  budgetPolicy: RunBudgetPolicy;
 	/** Exact evidence-bound identity and principal that may exercise this run. */
   executionSubject: ExecutionSubject;
 	/** Version of the deterministic prompt compiler that will consume this input. */

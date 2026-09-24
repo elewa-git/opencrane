@@ -23,7 +23,7 @@ export function _CreateCompanyAssistantComposition(prisma: PrismaClient, history
 	const authority = new PrismaCompanyAssistantProvisioningUnitOfWork(prisma, {
 		workloadProfile: profile.profileName,
 		promptPolicyVersion: PROMPT_COMPILER_VERSION,
-		budget: { maxTurns: 2, maxTokens: 32_000, maxDurationMs: 120_000 },
+		budget: { maxTurns: 2, maxTokens: 32_000, maxCostUsdMicros: null, maxToolInvocations: 1, maxDurationMs: 120_000, maxLoopIterations: 1 },
 	}, new AgentIdentityHistory(history));
 	return _CreateCompanyAssistantProvisioningRouter(authority, function _ResolveAdministrator(request)
 	{

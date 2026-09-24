@@ -31,7 +31,7 @@ export class PrismaConversationToolProposalRepository implements ConversationToo
 	public async admit(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: PreparedConversationToolProposal, workload: ProductAuthorizationWorkloadContext): Promise<ConversationToolProposalReceipt>
 	{
 		const now = new Date();
-		if (proposal.tool.requiresApproval && Math.min(candidate.compiledInput.budget.wallClockDeadlineEpochMs ?? Number.POSITIVE_INFINITY, Date.parse(candidate.credentialExpiresAt)) <= now.getTime())
+		if (proposal.tool.requiresApproval && Math.min(candidate.compiledInput.budget.wallClockDeadlineEpochMs, Date.parse(candidate.credentialExpiresAt)) <= now.getTime())
 			await this.approvalExpiry(this.transaction, { runId: turn.compile.runId, attempt: turn.compile.attempt, now });
 		const reader = new PrismaConversationToolProposalRunRepository(this.transaction);
 		const run = await reader.load(turn, candidate, proposal);
@@ -45,7 +45,7 @@ export class PrismaConversationToolProposalRepository implements ConversationToo
 		const authority = new PrismaConversationToolDispatchAuthority(this.transaction, this.dependencies);
 		const admittedUntil = await authority.admitUntil(result.invocation, new Date(), workload);
 		if (admittedUntil === null
-			|| candidate.compiledInput.budget.wallClockDeadlineEpochMs! <= Date.now()
+			|| candidate.compiledInput.budget.wallClockDeadlineEpochMs <= Date.now()
 			|| Date.parse(candidate.credentialExpiresAt) <= Date.now())
 				throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 		const invocation = result.invocation.state === ToolInvocationStates.Preparing
@@ -61,7 +61,7 @@ export class PrismaConversationToolProposalRepository implements ConversationToo
 			{
 				const runtimeAdmitted = await this.runtimeAdmission(this.transaction, invocation.id);
 				if (!runtimeAdmitted
-					|| candidate.compiledInput.budget.wallClockDeadlineEpochMs! <= Date.now()
+					|| candidate.compiledInput.budget.wallClockDeadlineEpochMs <= Date.now()
 					|| Date.parse(candidate.credentialExpiresAt) <= Date.now())
 					throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 				return { proposalId: invocation.toolInvocationId, outcome: ConversationToolProposalOutcomes.Existing };
@@ -71,7 +71,7 @@ export class PrismaConversationToolProposalRepository implements ConversationToo
 			if (invocation.state !== ToolInvocationStates.AwaitingApproval)
 				throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 			const deadline = candidate.compiledInput.budget.wallClockDeadlineEpochMs;
-			const expiresAtEpochMs = Math.min(deadline ?? Number.POSITIVE_INFINITY, Date.parse(candidate.credentialExpiresAt));
+			const expiresAtEpochMs = Math.min(deadline, Date.parse(candidate.credentialExpiresAt));
 			if (!Number.isSafeInteger(expiresAtEpochMs) || expiresAtEpochMs <= now.getTime())
 				throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 			const opened = await __OpenDeferredToolApprovalInTransaction(this.transaction, {
@@ -101,7 +101,7 @@ export class PrismaConversationToolProposalRepository implements ConversationToo
 		}
 		const runtimeAdmitted = await this.runtimeAdmission(this.transaction, result.invocation.id);
 		if (!runtimeAdmitted
-			|| candidate.compiledInput.budget.wallClockDeadlineEpochMs! <= Date.now()
+			|| candidate.compiledInput.budget.wallClockDeadlineEpochMs <= Date.now()
 			|| Date.parse(candidate.credentialExpiresAt) <= Date.now())
 			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 		return {

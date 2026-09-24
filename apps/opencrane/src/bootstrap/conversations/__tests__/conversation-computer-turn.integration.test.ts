@@ -1,10 +1,12 @@
 import { BoundConversationWriter } from "@opencrane/backend/server/conversations/history";
 import type { ConversationComputerTurnCandidate } from "@opencrane/backend/server/conversations";
-import { ConversationComputerActivationAuthorityAdapter, ConversationComputerTurnAuthorityService, CONVERSATION_COMPUTER_TURN_TASK, _RegisterConversationComputerTurnWorkflow } from "@opencrane/backend/server/conversations";
+import { ConversationComputerTurnProtocolStates, ConversationComputerActivationAuthorityAdapter, ConversationComputerTurnAuthorityService, CONVERSATION_COMPUTER_TURN_TASK, _RegisterConversationComputerTurnWorkflow } from "@opencrane/backend/server/conversations";
 import { ConversationComputerHistory } from "@opencrane/backend/server/conversations/computers";
 import type { IWorkflowTaskContext, IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
 import { ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { _ReserveConversationTurnModel } from "./conversation-turn-protocol.fixture";
 
 describe("conversation computer turn integration", function _Suite()
 {
@@ -35,7 +37,7 @@ describe("conversation computer turn integration", function _Suite()
 		const workload = { subject: "system:serviceaccount:testv5:computer", namespace: "testv5", serviceAccountName: "computer", podUid: "pod-one" };
 		const candidate: ConversationComputerTurnCandidate = {
 			binding: { siloId: "testv5", conversationId: computer.conversationId, computerId: computer.id, leaseGeneration: 1, agentIdentityId: computer.agentIdentityId, agentServiceId: "service-one", agentName: "Ada", agentAvatarArtifactRevisionId: null, runId: "run-one", expectedRevision: 1n, maximumEntryBytes: 65_536 },
-			compiledInput: { promptCompilerVersion: "v1", runId: "run-one", attempt: 1, instructions: "help", messages: [{ role: "user", content: "hello" }], tools: [], model: { modelAlias: "model-one", maxOutputTokens: null, generatedOutputCapabilities: [] }, budget: { maxModelTurns: 1, maxCompletionTokens: 100, maxCostUsdMicros: 100_000, maxToolInvocations: 0, wallClockDeadlineEpochMs: null }, digest: `sha256:${"b".repeat(64)}` },
+			compiledInput: { promptCompilerVersion: "v1", runId: "run-one", attempt: 1, instructions: "help", messages: [{ role: "user", content: "hello" }], tools: [], model: { modelAlias: "model-one", maxOutputTokens: null, generatedOutputCapabilities: [] }, budget: { maxModelTurns: 1, maxCompletionTokens: 100, maxCostUsdMicros: 100_000, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: 2_000_000_000_000 }, digest: `sha256:${"b".repeat(64)}` },
 			latestPendingEntryId: "entry-one", latestPendingEntryPosition: "1", modelAlias: "model-one", maximumBudgetUsd: 0.1, credentialLifetimeSeconds: 300, credentialExpiresAt: "2099-01-01T00:00:00.000Z",
 			lease: { leaseId: "lease-one", leaseGeneration: 1, sandboxClaimId: "computer-one-g1" },
 		};
@@ -43,10 +45,10 @@ describe("conversation computer turn integration", function _Suite()
 		const authority = new ConversationComputerTurnAuthorityService({
 			logger: { warn: vi.fn() }, model: { request: vi.fn().mockResolvedValue({ kind: "text", text: "assistant answer" }) }, toolProposals: { admit: vi.fn() }, siloId: "testv5", runLifecycle: { start: vi.fn(), complete: vi.fn(), enterRecoveryRequired: vi.fn() },
 			candidates: { resolve: vi.fn().mockResolvedValue(candidate), resolveForWorkflow: vi.fn().mockResolvedValue(execution), assertCurrentForWorkflow: vi.fn().mockResolvedValue(execution), assertLeaseForWorkflow: vi.fn().mockResolvedValue(workload), assertCurrent: vi.fn().mockResolvedValue(candidate), admit: vi.fn() },
-			reviewCredentials: { bearer: vi.fn(), derive: vi.fn().mockReturnValue("keyed-review-secret") }, modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadContinuation: vi.fn(), storeContinuation: vi.fn() }, generatedFiles: { link: vi.fn() }, toolResults: { read: vi.fn(), consume: vi.fn() }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") }, toolRequestedNotifications: { publishRequested: vi.fn() },
+			reviewCredentials: { bearer: vi.fn(), derive: vi.fn().mockReturnValue("keyed-review-secret") }, modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadExchange: vi.fn(), storeExchange: vi.fn() }, generatedFiles: { link: vi.fn() }, toolResults: { read: vi.fn(), consume: vi.fn() }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") }, toolRequestedNotifications: { publishRequested: vi.fn() },
 			credentials: { reuseExact: vi.fn(), issueOnce: vi.fn().mockResolvedValue({ key: "sk-turn", credentialDigest: "sha256:key", expiresAt: "2099-01-01T00:00:00.000Z" }), revoke: vi.fn() }, endpoint: "http://model.stub",
 			outputPayloads: { store: vi.fn().mockResolvedValue({ blockId: "block-one", payloadRef: "payload-one", ciphertextDigest: "sha256:cipher" }) },
-			store: { reserveModel: vi.fn(async (_id, reservation) => { frozen = { ...frozen, modelReservation: reservation }; return true; }), reserveContinuation: vi.fn(), selectTool: vi.fn(), createOrRead: vi.fn(async turn => (frozen ??= turn)), load: vi.fn(async () => frozen), markOutput: vi.fn(async function _Mark(_turnId, receipt) { frozen = { ...frozen, outputReceipt: receipt, outputSourceCommandId: receipt.event.id }; return { outcome: "accepted" as const, receipt }; }), loadActive: vi.fn().mockResolvedValue(null), settle: vi.fn() },
+			store: { reserveModel: vi.fn(async (_id, reservation) => { frozen = _ReserveConversationTurnModel(frozen, reservation); return true; }), recordToolResult: vi.fn(), markResponseUnavailable: vi.fn(), selectTool: vi.fn(), createOrRead: vi.fn(async turn => (frozen ??= turn)), load: vi.fn(async () => frozen), markOutput: vi.fn(async function _Mark(_turnId, receipt) { frozen = { ...frozen, protocol: { ...frozen.protocol, state: ConversationComputerTurnProtocolStates.OutputRecorded, revision: frozen.protocol.revision + 1n, output: { receipt, sourceCommandId: receipt.event.id } } }; return { outcome: "accepted" as const, receipt }; }), loadActive: vi.fn().mockResolvedValue(null), settle: vi.fn() },
 			writers: { confirmSaved: vi.fn(), create: vi.fn(turn => ({ confirm: append, prepare: async function _Prepare(command: Parameters<BoundConversationWriter["prepare"]>[0]) { return new BoundConversationWriter({} as never, turn.binding, { now: function _Now() { return new Date(); } }, { assertMayAppend: async function _Rate() {} }, { assertMayUseVisibility: async function _Visibility() {} }, { assertMayAppend: async function _Fence() {} }).prepare(command); } })) },
 		});
 

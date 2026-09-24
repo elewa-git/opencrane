@@ -1,34 +1,63 @@
-import { createHash } from "node:crypto";
-import { ConversationModelToolModes } from "@opencrane/contracts";
+import { z } from "zod";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { ConversationComputerToolSelection } from "./conversation-computer-continuation.types";
-import { _ConversationToolSelectionSchema } from "./conversation-computer-continuation.validator";
+import { _ConversationComputerEventId } from "../conversation-computer-event-id";
+import type { ConversationComputerTurnToolSelection } from "./conversation-computer-turn-protocol.types";
 import type { FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 
-/** Identifies the saved model declaration that owns the turn's single tool slot. */
-export const _CONVERSATION_TOOL_SELECTED_EVENT = "opencrane.conversation-computer-turn-tool-selected.v1";
+/** Identifies the fresh-install ordered tool-selection event. */
+export const _CONVERSATION_TOOL_SELECTED_EVENT = "opencrane.conversation-computer-turn-tool-selected.v2";
 
-/** Builds a private, content-free selection event after encrypted declaration custody. */
-export function _ConversationToolSelectionEvent(turn: FrozenConversationComputerTurn, selection: ConversationComputerToolSelection)
+const _Digest = z.string().regex(/^sha256:[0-9a-f]{64}$/u);
+const _Identifier = z.string().min(1);
+const _SelectionSchema: z.ZodType<ConversationComputerTurnToolSelection> = z.object({
+	ordinal: z.number().int().positive().safe(),
+	modelInvocationFence: z.string().uuid(),
+	declaration: z.object({ payloadRef: _Identifier, ciphertextDigest: _Digest }).strict(),
+	proposalId: _Identifier,
+	toolInvocationId: _Identifier,
+	requestFingerprint: _Digest,
+}).strict();
+
+/** Builds a content-free per-step selection after encrypted declaration custody. */
+export function _ConversationToolSelectionEvent(turn: FrozenConversationComputerTurn, selection: ConversationComputerTurnToolSelection)
 {
-	const reservation = turn.modelReservation;
-	if (reservation === null || reservation.tools !== ConversationModelToolModes.Select)
-		throw new Error("Conversation computer did not reserve tool selection");
-	const hex = createHash("sha256").update(`tool-selection:${reservation.invocationFence}`).digest("hex");
-	const id = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
-	return { id, type: _CONVERSATION_TOOL_SELECTED_EVENT, data: { bootstrapId: turn.bootstrapId, modelInvocationFence: reservation.invocationFence, selection }, metadata: { bootstrapId: turn.bootstrapId } };
+	return {
+		id: _ConversationComputerEventId(`tool-selection-${selection.ordinal}`, selection.proposalId),
+		type: _CONVERSATION_TOOL_SELECTED_EVENT,
+		data: { bootstrapId: turn.bootstrapId, selection },
+		metadata: _Metadata(turn),
+	};
 }
 
-/** Verifies the exact decision, including full readback after a same-ID append acknowledgement. */
-export function _ReadConversationToolSelection(event: HistoryRecordedEvent, turn: FrozenConversationComputerTurn): ConversationComputerToolSelection
+/**
+ * Verifies one exact selection event without admitting or dispatching its tool.
+ *
+ * Called by: KurrentConversationComputerTurnStore during replay and before append.
+ *
+ * @param event Recorded event or locally prepared candidate at its proposed revision.
+ * @param turn Frozen turn and projection immediately before this event.
+ * @returns The validated selection.
+ * @throws Error when the event identity, stream, revision, metadata or selection differs.
+ */
+export function _ReadConversationToolSelection(event: HistoryRecordedEvent, turn: FrozenConversationComputerTurn): ConversationComputerTurnToolSelection
 {
-	const selection = _ConversationToolSelectionSchema.parse(event.data["selection"]);
+	const selection = _SelectionSchema.parse(event.data["selection"]);
 	const expected = _ConversationToolSelectionEvent(turn, selection);
-	if (event.revision !== 2n || event.streamName !== `conversation-computer-turn-${turn.bootstrapId}` || event.type !== expected.type || event.id !== expected.id
+	if (event.revision !== turn.protocol.revision + 1n || event.streamName !== _Stream(turn.bootstrapId) || event.type !== expected.type || event.id !== expected.id
 		|| ___DigestCanonicalJson(event.data as JsonValue) !== ___DigestCanonicalJson(expected.data as unknown as JsonValue)
-		|| ___DigestCanonicalJson(event.metadata as JsonValue) !== ___DigestCanonicalJson(expected.metadata))
+		|| ___DigestCanonicalJson(event.metadata as JsonValue) !== ___DigestCanonicalJson(expected.metadata as unknown as JsonValue))
 		throw new Error("Conversation computer tool selection crossed its exact event fence");
 	return selection;
+}
+
+function _Metadata(turn: FrozenConversationComputerTurn): Record<string, unknown>
+{
+	return { siloId: turn.siloId, computerId: turn.computerId, leaseId: turn.lease.leaseId, generation: String(turn.lease.leaseGeneration), bootstrapId: turn.bootstrapId };
+}
+
+function _Stream(bootstrapId: string): string
+{
+	return `conversation-computer-turn-${bootstrapId}`;
 }

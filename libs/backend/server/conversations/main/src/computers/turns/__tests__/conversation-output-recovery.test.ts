@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { _InitialConversationComputerTurnProtocol } from "../conversation-computer-turn-protocol";
+
 import { _OutputRecoveryHarness } from "./conversation-output-recovery.fixture";
 import { _PrepareConversationOutputIntent } from "./conversation-output-intent.fixture";
 
@@ -20,7 +22,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		f.history.afterAppend = async function _LoseResponse(command)
 		{
 			const type = command.events[0].type;
-			if (!lost && ((step === "intent" && type.endsWith("turn-output.v2")) || (step === "history" && command.streamName === f.stream) || (step === "settle" && type.endsWith("turn-settled.v1"))))
+			if (!lost && ((step === "intent" && type.endsWith("turn-output.v3")) || (step === "history" && command.streamName === f.stream) || (step === "settle" && type.endsWith("turn-settled.v1"))))
 			{
 				lost = true;
 				throw new Error("response lost");
@@ -34,7 +36,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		if (step === "revoke")
 			f.credentials.revoke.mockRejectedValueOnce(new Error("response lost"));
 		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("response lost");
-		const saved = (await f.store.load(f.output.bootstrapId))!.outputReceipt!;
+		const saved = (await f.store.load(f.output.bootstrapId))!.protocol.output!.receipt;
 		const compilerCalls = f.compiler.compile.mock.calls.length;
 		f.flags.stamp = 100;
 		await expect(f.restart().start(f.workflowCommand)).resolves.toBeNull();
@@ -86,7 +88,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		let arrived = 0;
 		f.history.beforeAppend = async function _BothPrepared(command)
 		{
-			if (!command.events[0].type.endsWith("turn-output.v2"))
+			if (!command.events[0].type.endsWith("turn-output.v3"))
 				return;
 			if (++arrived === 2)
 				ready.release();
@@ -94,7 +96,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		};
 		await Promise.all([f.authority.appendOutput(f.output), f.restart().appendOutput(f.output)]);
 		expect(f.flags.stamp).toBe(2);
-		const saved = (await f.store.load(f.output.bootstrapId))!.outputReceipt!;
+		const saved = (await f.store.load(f.output.bootstrapId))!.protocol.output!.receipt;
 		expect(f.history.streams.get(f.stream)!.slice(2)).toHaveLength(1);
 		expect(f.history.streams.get(f.stream)![2].data).toEqual(saved.event.data);
 		expect(f.flags.payloadWrites).toBe(1);
@@ -105,7 +107,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		const f = await _OutputRecoveryHarness();
 		await f.authority.appendOutput(f.output);
 		const first = (await f.store.load(f.output.bootstrapId))!;
-		const next = { ...first, bootstrapId: "8957851b-21c1-4890-ae32-fb6de5224f2d", latestPendingEntryId: "next-human", latestPendingEntryPosition: "3", outputReceipt: null, cancellationReceipt: null, outputSourceCommandId: null, binding: { ...first.binding, expectedRevision: 3n, runId: "next-run" }, compile: { ...first.compile, runId: "next-run" } };
+		const next = { ...first, bootstrapId: "8957851b-21c1-4890-ae32-fb6de5224f2d", latestPendingEntryId: "next-human", latestPendingEntryPosition: "3", protocol: _InitialConversationComputerTurnProtocol(), binding: { ...first.binding, expectedRevision: 3n, runId: "next-run" }, compile: { ...first.compile, runId: "next-run" } };
 		await f.store.createOrRead(next);
 		let settlementAppends = 0;
 		f.history.beforeAppend = async function _Count(command)
@@ -124,7 +126,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		const f = await _OutputRecoveryHarness();
 		f.history.afterAppend = async function _StopAfterIntent(command)
 		{
-			if (command.events[0].type.endsWith("turn-output.v2"))
+			if (command.events[0].type.endsWith("turn-output.v3"))
 				throw new Error("intent saved");
 		};
 		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("intent saved");
@@ -210,8 +212,8 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		await expect(f.authority.appendOutput(f.output)).resolves.toBe("accepted");
 		expect(f.runLifecycle.complete).toHaveBeenCalledOnce();
 		expect(f.history.streams.get(f.stream)![2].id).toBe("competing-human");
-		expect(f.history.streams.get(f.stream)![3].data).toEqual((await f.store.load(f.output.bootstrapId))!.outputReceipt!.event.data);
-		expect((await f.store.load(f.output.bootstrapId))!.outputReceipt!.expectedRevision).toBe("2");
+		expect(f.history.streams.get(f.stream)![3].data).toEqual((await f.store.load(f.output.bootstrapId))!.protocol.output!.receipt.event.data);
+		expect((await f.store.load(f.output.bootstrapId))!.protocol.output!.receipt.expectedRevision).toBe("2");
 	});
 
 	it("rejects a lease change during payload storage before either output event commits", async function _LeaseChangedDuringPayload()
@@ -225,7 +227,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 			return payload;
 		});
 		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("current active lease generation");
-		expect((await f.store.load(f.output.bootstrapId))!.outputReceipt).toBeNull();
+		expect((await f.store.load(f.output.bootstrapId))!.protocol.output).toBeNull();
 		expect(f.history.streams.get(f.stream)).toHaveLength(2);
 	});
 
@@ -237,7 +239,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 			f.current.lease.expiresAt = "2000-01-01T00:00:00.000Z";
 		};
 		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("current active lease generation");
-		expect((await f.store.load(f.output.bootstrapId))!.outputReceipt).toBeNull();
+		expect((await f.store.load(f.output.bootstrapId))!.protocol.output).toBeNull();
 		expect(f.history.streams.get(f.stream)).toHaveLength(2);
 	});
 

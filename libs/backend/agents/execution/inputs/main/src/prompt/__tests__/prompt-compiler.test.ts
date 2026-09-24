@@ -1,7 +1,7 @@
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
-import { PROMPT_COMPILER_VERSION, type CompiledModelRoute, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
+import { PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, type CompiledModelRoute, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { __AppendCompiledTool, __CompileRunInput } from "../prompt-compiler";
@@ -30,7 +30,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		siloId: "silo-1",
 		agentServiceId: "svc-1",
 		agentRevisionId: "rev-1",
-		snapshotVersion: 1,
+		snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION,
 		conversationId: "conversation-1",
 		messageIds: ["m-1", "m-2"],
 		personaRevisionId: "persona-1",
@@ -40,7 +40,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		memoryQueryPolicy: {},
 		mcpTools: [_mcpTool("mcp-tool-revision-b", "write"), _mcpTool("mcp-tool-revision-a", "read")],
 		modelRoute: { alias: "silo-default" },
-		budgetPolicy: { maxModelTurns: 4, maxCompletionTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 },
+		budgetPolicy: { maxModelTurns: 4, maxCompletionTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, maxLoopIterations: 4, wallClockDeadlineEpochMs: 1_800_000_000_000 },
 		executionSubject: _executionSubject(),
 		promptCompilerVersion: PROMPT_COMPILER_VERSION,
 		digest: "sha256:snap",
@@ -119,14 +119,17 @@ describe("__CompileRunInput", function _describeCompiler()
 	{
 		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories());
 
-		expect(compiled.budget).toEqual({ maxModelTurns: 4, maxCompletionTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 });
+		expect(compiled.budget).toEqual({ maxModelTurns: 4, maxCompletionTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, maxLoopIterations: 4, wallClockDeadlineEpochMs: 1_800_000_000_000 });
 	});
 
-	it("nulls malformed or absent budget limits rather than inventing them", async function _nullsBadBudget()
+	it("rejects malformed or absent budget limits rather than inventing them", async function _rejectsBadBudget()
 	{
-		const compiled = await __CompileRunInput(_snapshot({ budgetPolicy: { maxCompletionTokens: "lots" as unknown as JsonValue } }), 1, _repositories());
+		await expect(__CompileRunInput(_snapshot({ budgetPolicy: { maxCompletionTokens: "lots" as unknown as JsonValue } as never }), 1, _repositories())).rejects.toThrow();
+	});
 
-		expect(compiled.budget).toEqual({ maxModelTurns: null, maxCompletionTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null });
+	it("rejects a changed snapshot schema version before dereferencing records", async function _rejectsSnapshotVersion()
+	{
+		await expect(__CompileRunInput(_snapshot({ snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION - 1 }), 1, _repositories())).rejects.toThrow("snapshot schema");
 	});
 
 	it("assembles persona, artifact, and skill sections without memory content", async function _assembles()
@@ -181,12 +184,12 @@ describe("__CompileRunInput", function _describeCompiler()
 
 	it("seals the immutable snapshot attempt and refuses a mismatched live attempt", async function _BindsLiveAttempt()
 	{
-		const snapshot = _snapshot({ snapshotVersion: 1 });
+		const snapshot = _snapshot();
 		const first = await __CompileRunInput(snapshot, 1, _repositories());
 
 		expect(first.attempt).toBe(1);
 		await expect(__CompileRunInput(snapshot, 2, _repositories())).rejects.toThrow(/live attempt to match/);
-		expect(snapshot.snapshotVersion).toBe(1);
+		expect(snapshot.snapshotVersion).toBe(RUN_INPUT_SNAPSHOT_VERSION);
 	});
 
 	it("rejects a malformed live attempt", async function _RejectsMalformedAttempt()

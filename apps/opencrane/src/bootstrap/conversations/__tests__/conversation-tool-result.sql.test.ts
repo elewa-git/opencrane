@@ -3,9 +3,11 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, ConversationModelToolModes } from "@opencrane/contracts";
-import { ConversationGeneratedFileResultStates, KurrentConversationComputerTurnStore, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, type ConversationComputerContinuationReservation, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
-import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
+import { ConversationGeneratedFileResultStates, KurrentConversationComputerTurnStore, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
+import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
+
+import { _ConversationTurnRequest, _ReserveConversationTurnModel } from "./conversation-turn-protocol.fixture";
 
 import { _ToolHandoffSqlRuntime } from "./conversation-tool-handoff.sql-fixture";
 import { _SeedConversationToolProposalSqlFixture } from "./conversation-tool-proposal.sql-fixture";
@@ -15,16 +17,6 @@ const _Second = new PrismaClient();
 const _Runtimes = new Set<ReturnType<typeof _ToolHandoffSqlRuntime>>();
 const _WORKLOAD = { subject: "system:serviceaccount:computers:computer", namespace: "computers", serviceAccountName: "computer", podUid: "computer-pod-1" };
 const _AUDITED_WORKLOAD = { audience: CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, namespace: _WORKLOAD.namespace, serviceAccountName: _WORKLOAD.serviceAccountName, workloadKind: "pod", workloadUid: _WORKLOAD.podUid, podUid: _WORKLOAD.podUid } as const;
-
-/** Bind the fixture request using the same public fields that the real turn store validates. */
-function _RequestDigest(turn: FrozenConversationComputerTurn, reservation: Omit<ConversationComputerContinuationReservation, "requestDigest"> | { ordinal: 1; tools: ConversationModelToolModes; maxCompletionTokens: number; authorityExpiresAtEpochMs: number; dispatchDeadlineEpochMs: number }): string
-{
-	return ___DigestCanonicalJson({ bootstrapId: turn.bootstrapId, runId: turn.compile.runId, attempt: turn.compile.attempt, compiledInputDigest: turn.compile.digest, modelAlias: turn.modelAlias, ordinal: reservation.ordinal, tools: reservation.tools,
-		continuation: reservation.ordinal === 2 ? reservation.continuation : null,
-		proposalId: reservation.ordinal === 2 ? reservation.proposalId : null,
-		resultDigest: reservation.ordinal === 2 ? reservation.resultDigest : null,
-		maxCompletionTokens: reservation.maxCompletionTokens, authorityExpiresAtEpochMs: reservation.authorityExpiresAtEpochMs, dispatchDeadlineEpochMs: reservation.dispatchDeadlineEpochMs } as unknown as JsonValue);
-}
 
 /** Uses actual event validation with local history storage; this suite qualifies PostgreSQL, not KurrentDB. */
 async function _TurnStore(fixture: Awaited<ReturnType<typeof _SeedConversationToolProposalSqlFixture>>, invocation: { toolInvocationId: string; requestFingerprint: string }, payloadDigest: string, reserve: boolean)
@@ -66,20 +58,24 @@ async function _TurnStore(fixture: Awaited<ReturnType<typeof _SeedConversationTo
 		},
 	};
 	const store = new KurrentConversationComputerTurnStore(history);
-	let turn = await store.createOrRead(fixture.turn);
+	let turn = await store.createOrRead(fixture.frozenTurn);
 	const originalDeadline = fixture.candidate.compiledInput.budget.wallClockDeadlineEpochMs;
 	if (originalDeadline === null)
 		throw new Error("SQL fixture requires its original run deadline");
 	const authorityExpiresAtEpochMs = Math.min(originalDeadline, Date.parse(fixture.candidate.credentialExpiresAt));
-	const first = { ordinal: 1 as const, tools: ConversationModelToolModes.Select, maxCompletionTokens: 128, authorityExpiresAtEpochMs, dispatchDeadlineEpochMs: Math.min(authorityExpiresAtEpochMs, Date.now() + 25_000) };
-	await store.reserveModel(turn.bootstrapId, { ...first, compiledInputDigest: turn.compile.digest, invocationFence: randomUUID(), requestDigest: _RequestDigest(turn, first) });
-	await store.selectTool(turn.bootstrapId, { proposalId: invocation.toolInvocationId, requestFingerprint: invocation.requestFingerprint, payloadRef: randomUUID(), ciphertextDigest: payloadDigest });
+	const first = fixture.turn.protocol.steps[0]!.reservation;
+	await store.reserveModel(turn.bootstrapId, first);
+	await store.selectTool(turn.bootstrapId, { ordinal: first.ordinal, modelInvocationFence: first.invocationFence,
+		proposalId: invocation.toolInvocationId, toolInvocationId: invocation.toolInvocationId, requestFingerprint: invocation.requestFingerprint,
+		declaration: { payloadRef: randomUUID(), ciphertextDigest: payloadDigest } });
+	await store.recordToolResult(turn.bootstrapId, { ordinal: first.ordinal, proposalId: invocation.toolInvocationId,
+		toolInvocationId: invocation.toolInvocationId, resultDigest: payloadDigest,
+		exchange: { payloadRef: randomUUID(), ciphertextDigest: payloadDigest }, authorityExpiresAtEpochMs });
 	turn = (await store.load(turn.bootstrapId))!;
-	const second = { ordinal: 2 as const, tools: ConversationModelToolModes.None, compiledInputDigest: turn.compile.digest, maxCompletionTokens: 128, authorityExpiresAtEpochMs, dispatchDeadlineEpochMs: Math.min(authorityExpiresAtEpochMs, Date.now() + 25_000), invocationFence: randomUUID(),
-		continuation: { payloadRef: randomUUID(), ciphertextDigest: payloadDigest }, proposalId: invocation.toolInvocationId, resultDigest: payloadDigest };
-	const reservation: ConversationComputerContinuationReservation = { ...second, requestDigest: _RequestDigest(turn, second) };
+	const reservation = _ConversationTurnRequest(turn, { ordinal: 2, tools: ConversationModelToolModes.None,
+		maxCompletionTokens: 128, authorityExpiresAtEpochMs, dispatchDeadlineEpochMs: Math.min(authorityExpiresAtEpochMs, Date.now() + 25_000), invocationFence: randomUUID() });
 	if (reserve)
-		await store.reserveContinuation(turn.bootstrapId, reservation);
+		await store.reserveModel(turn.bootstrapId, reservation);
 	return { store, turn: (await store.load(turn.bootstrapId))!, reservation };
 }
 
@@ -168,7 +164,7 @@ describe("exact conversation result acknowledgement on fresh PostgreSQL", functi
 	it("does not consume before a matching second-call reservation exists in the real turn store", async function _NoSavedReservation()
 	{
 		const f = await _Completed(false);
-		await expect(_Owner(_First, f).consume({ ...f.turn, continuationReservation: f.reservation }, _WORKLOAD)).resolves.toEqual({ outcome: "unavailable" });
+		await expect(_Owner(_First, f).consume(_ReserveConversationTurnModel(f.turn, f.reservation), _WORKLOAD)).resolves.toEqual({ outcome: "unavailable" });
 		expect(await _Second.toolResultDelivery.findUniqueOrThrow({ where: { id: f.delivery.id } })).toEqual(f.delivery);
 	});
 

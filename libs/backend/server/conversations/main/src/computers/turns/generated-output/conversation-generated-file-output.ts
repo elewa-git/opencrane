@@ -27,14 +27,18 @@ export function _AssertSameConversationGeneratedFile(expected?: ConversationGene
  */
 export function __ReadConversationGeneratedFileOutput(turn: FrozenConversationComputerTurn): ArtifactMessageContentBlock | null
 {
-	const entry = turn.outputReceipt?.event.data.entry;
+	const entry = turn.protocol.output?.receipt.event.data.entry;
 	if (entry?.kind !== ConversationEntryKinds.Message || entry.blocks[0]?.kind !== ConversationMessageContentBlockKinds.Text)
 		throw new Error("Conversation computer output requires a text answer");
 	if (entry.blocks.length === 1)
 		return null;
 	const artifact = entry.blocks[1];
+	const finalStep = turn.protocol.steps.at(-1);
+	const resultStep = turn.protocol.steps.at(-2);
 	if (entry.blocks.length !== 2 || artifact.kind !== ConversationMessageContentBlockKinds.Artifact
-		|| turn.toolSelection === null || turn.continuationReservation?.ordinal !== 2
+		|| finalStep == null || finalStep.selection !== null || resultStep?.result == null
+		|| finalStep.reservation.ordinal !== resultStep.reservation.ordinal + 1
+		|| finalStep.reservation.invocationFence !== turn.protocol.output?.sourceCommandId
 		|| artifact.id === entry.blocks[0].id)
 		throw new Error("Conversation computer output has an invalid generated file");
 	return artifact;

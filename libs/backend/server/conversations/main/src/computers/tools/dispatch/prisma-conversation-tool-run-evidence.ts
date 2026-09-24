@@ -1,5 +1,6 @@
 import { AgentRunState, type Prisma } from "@prisma/client";
 
+import { ___ParseRunBudgetPolicy, type RunBudgetPolicy } from "@opencrane/contracts";
 import { __DigestCanonicalJson, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -48,13 +49,18 @@ export class PrismaConversationToolRunEvidenceRepository implements Conversation
 			},
 			select: { budgetPolicy: true },
 		});
-		const budget = snapshot?.budgetPolicy;
-		if (budget === null || typeof budget !== "object" || Array.isArray(budget))
+		let budget: RunBudgetPolicy;
+		try
+		{
+			budget = ___ParseRunBudgetPolicy(snapshot?.budgetPolicy);
+		}
+		catch
+		{
 			return null;
+		}
 		const deadline = budget.wallClockDeadlineEpochMs;
 		const toolLimit = budget.maxToolInvocations;
-		if (typeof deadline !== "number" || !Number.isSafeInteger(deadline) || deadline <= now.getTime()
-			|| (toolLimit !== undefined && toolLimit !== null && (typeof toolLimit !== "number" || !Number.isSafeInteger(toolLimit) || toolLimit < 1)))
+		if (deadline <= now.getTime() || toolLimit < 1)
 			return null;
 		// This invocation is already counted, so equality with the allowance is still valid.
 		if (typeof toolLimit === "number" && await this.transaction.toolInvocation.count({ where: { runId: invocation.runId, attempt: invocation.attempt } }) > toolLimit)
