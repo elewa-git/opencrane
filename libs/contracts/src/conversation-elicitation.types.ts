@@ -55,6 +55,27 @@ export interface ElicitationChoice
 	readonly description?: string;
 }
 
+/**
+ * How long one approved answer keeps authorising later matching calls.
+ *
+ * The server decides which of these a given question may be answered with and lists them in
+ * {@link ElicitationApprovalBody.offeredScopes}. A browser cannot widen its own answer: a scope that
+ * was not offered is rejected as an invalid response.
+ *
+ * Only `Once` is carried by the per-invocation receipt. `Session` and `Always` additionally record a
+ * grant, which later admission reads to skip asking again. Denials have no scope — refusing a call
+ * never authorises anything, however the question was answered.
+ */
+export enum ElicitationApprovalScopes
+{
+	/** Authorises only the exact invocation that asked, and nothing after it. */
+	Once = "once",
+	/** Authorises later matching calls in the same conversation, until revoked or expired. */
+	Session = "session",
+	/** Authorises later matching calls in every conversation, until revoked. */
+	Always = "always",
+}
+
 /** Approval body with the exact consequential action disclosed. */
 export interface ElicitationApprovalBody
 {
@@ -74,6 +95,8 @@ export interface ElicitationApprovalBody
 	readonly consequence: string;
 	/** Optional bounded cost disclosure. */
 	readonly cost?: string;
+	/** Scopes this question may be answered with. Absent or empty means only {@link ElicitationApprovalScopes.Once}. */
+	readonly offeredScopes?: readonly ElicitationApprovalScopes[];
 }
 
 /** Body requiring exactly one server-authored choice. */
@@ -153,7 +176,7 @@ export interface ConversationElicitation
 
 /** Participant answer carried through the sole authoritative response endpoint. */
 export type ElicitationResponseValue =
-	| { readonly kind: ElicitationBodyKinds.Approval; readonly approved: boolean }
+	| { readonly kind: ElicitationBodyKinds.Approval; readonly approved: boolean; readonly scope?: ElicitationApprovalScopes }
 	| { readonly kind: ElicitationBodyKinds.SingleChoice; readonly selection: string }
 	| { readonly kind: ElicitationBodyKinds.MultipleChoice; readonly selections: readonly string[] }
 	| { readonly kind: ElicitationBodyKinds.FreeText; readonly text: string };

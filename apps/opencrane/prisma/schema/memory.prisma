@@ -10,6 +10,17 @@ enum MemoryFactState {
   Forgotten     @map("forgotten")
 }
 
+/// How freely a dataset's facts may be recalled without asking the person again.
+///
+/// Read by admission BEFORE a recall runs, which is why it sits on the dataset rather than on each
+/// fact: the gate has to decide whether to ask before it knows which facts would come back.
+/// `Sensitive` datasets may still be recalled, but the question cannot be silenced forever — a
+/// subject may answer `Once` or `Session` for them and never `Always`.
+enum MemoryDatasetSensitivity {
+  Standard  @map("standard")
+  Sensitive @map("sensitive")
+}
+
 enum MemoryConsentState {
   Explicit  @map("explicit")
   Confirmed @map("confirmed")
@@ -23,6 +34,7 @@ model MemoryDataset {
   boundaryPrincipalId String?                   @map("boundary_principal_id")
   cogneeDatasetId     String                    @map("cognee_dataset_id")
   state               MemoryDatasetState        @default(Active)
+  sensitivity         MemoryDatasetSensitivity  @default(Standard)
   createdBy           String                    @map("created_by")
   createdAt           DateTime                  @default(now()) @map("created_at")
   retiredAt           DateTime?                 @map("retired_at")
@@ -43,6 +55,8 @@ model MemoryFactCatalog {
   contentDigest            String              @map("content_digest")
   state                    MemoryFactState     @default(Active)
   consentState             MemoryConsentState  @map("consent_state")
+  /// Write-time classification kept for audit. The recall gate reads MemoryDataset.sensitivity
+  /// instead, because it must decide whether to ask before any fact is retrieved.
   sensitivity              String
   provenance               Json
   sourceArtifactRevisionId String?             @map("source_artifact_revision_id")

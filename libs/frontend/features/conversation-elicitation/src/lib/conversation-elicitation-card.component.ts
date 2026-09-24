@@ -2,8 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from "@an
 import { ButtonModule } from "primeng/button";
 import { MessageModule } from "primeng/message";
 
-import { ElicitationApprovalComponent, ElicitationFreeTextComponent, ElicitationMultipleChoiceComponent, ElicitationSingleChoiceComponent } from "@opencrane/elements/elicitation";
-import { ElicitationBodyKinds, ElicitationRequestStates, type ConversationElicitation, type ElicitationApprovalBody, type ElicitationFreeTextBody, type ElicitationMultipleChoiceBody, type ElicitationResponseValue, type ElicitationSingleChoiceBody } from "@opencrane/state/conversation/elicitation";
+import { ElicitationApprovalComponent, ElicitationFreeTextComponent, ElicitationMultipleChoiceComponent, ElicitationSingleChoiceComponent, type ElicitationApprovalDraft } from "@opencrane/elements/elicitation";
+import { ElicitationApprovalScopes, ElicitationBodyKinds, ElicitationRequestStates, type ConversationElicitation, type ElicitationApprovalBody, type ElicitationFreeTextBody, type ElicitationMultipleChoiceBody, type ElicitationResponseValue, type ElicitationSingleChoiceBody } from "@opencrane/state/conversation/elicitation";
 
 /** Validate the exact controlled draft against the current authoritative body and command state. */
 export function _CanSubmitElicitation(elicitation: ConversationElicitation, draft: ElicitationResponseValue | null, busy: boolean): boolean
@@ -67,7 +67,7 @@ export class ConversationElicitationCardComponent
 	}
 
 	/** Wrap a presentational approval draft in the exact response discriminant. */
-	protected selectApproval(approved: boolean): void { this.draftSelected.emit({ kind: ElicitationBodyKinds.Approval, approved }); }
+	protected selectApproval(draft: ElicitationApprovalDraft): void { this.draftSelected.emit({ kind: ElicitationBodyKinds.Approval, approved: draft.approved, scope: draft.scope }); }
 	/** Wrap a presentational single selection in the exact response discriminant. */
 	protected selectSingleChoice(selection: string): void { this.draftSelected.emit({ kind: ElicitationBodyKinds.SingleChoice, selection }); }
 	/** Wrap presentational multiple selections in the exact response discriminant. */
@@ -76,7 +76,7 @@ export class ConversationElicitationCardComponent
 	protected selectFreeText(text: string): void { this.draftSelected.emit({ kind: ElicitationBodyKinds.FreeText, text }); }
 
 	/** Controlled approval selection. */
-	protected approvalValue(): boolean | null { const draft = this.draft(); return draft?.kind === ElicitationBodyKinds.Approval ? draft.approved : null; }
+	protected approvalValue(): ElicitationApprovalDraft | null { const draft = this.draft(); return draft?.kind === ElicitationBodyKinds.Approval ? { approved: draft.approved, scope: draft.scope ?? ElicitationApprovalScopes.Once } : null; }
 	/** Controlled single selection. */
 	protected singleChoiceValue(): string | null { const draft = this.draft(); return draft?.kind === ElicitationBodyKinds.SingleChoice ? draft.selection : null; }
 	/** Controlled multiple selection. */

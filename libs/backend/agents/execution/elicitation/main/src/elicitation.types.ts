@@ -3,6 +3,8 @@ import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { ToolInvocationClaim, ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import type { JsonValue } from "@opencrane/util";
 
+import type { MemoryPermissionOpenOutcomes } from "./personal-memory-permission.types";
+
 /** Stable fail-closed result of checking one exact personal-memory permission receipt. */
 export enum PersonalMemoryPermissionVerificationOutcomes
 {
@@ -20,8 +22,14 @@ export type PersonalMemoryPermissionVerificationResult =
 /** Production gate that opens and verifies one execution-user memory permission. */
 export interface PersonalMemoryPermissionAuthority
 {
-	/** Open or replay the request for the exact awaiting invocation and immutable snapshot. */
-	openMemoryPermission(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot, now: Date): Promise<boolean>;
+	/**
+	 * Ask for permission, or report that a standing grant already answered.
+	 *
+	 * Returns an outcome rather than a boolean because "no question was opened" is two different
+	 * situations: {@link MemoryPermissionOpenOutcomes.Covered} means the recall may proceed, while
+	 * {@link MemoryPermissionOpenOutcomes.Refused} means it stays blocked.
+	 */
+	openMemoryPermission(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot, now: Date): Promise<MemoryPermissionOpenOutcomes>;
 	/** Verify the exact accepted receipt and current dispatch claim without consuming either. */
 	verifyMemoryPermission(invocation: ToolInvocationRecord, claim: ToolInvocationClaim, snapshot: RunInputSnapshot, now: Date): Promise<PersonalMemoryPermissionVerificationResult>;
 }

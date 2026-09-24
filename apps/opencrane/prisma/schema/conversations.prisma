@@ -31,6 +31,7 @@ model Conversation {
   privatePayloads               ConversationPrivatePayload[]
   runs                          AgentRun[]
   elicitationRequests           ElicitationRequest[]
+  elicitationApprovalGrants     ElicitationApprovalGrant[]
   assets                        ConversationAsset[]
   activeComputerLease           ConversationComputerActiveLease?
   childRequests                 ConversationChildRequest[]

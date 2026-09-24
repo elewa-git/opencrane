@@ -10,7 +10,9 @@
 	</dl>
 	<fieldset [disabled]="disabled()">
 		<legend>Your decision</legend>
-		<label><input type="radio" name="elicitation-approval" [checked]="value() === true" (change)="select(true)" /> Approve</label>
-		<label><input type="radio" name="elicitation-approval" [checked]="value() === false" (change)="select(false)" /> Deny</label>
+		@for (option of options(); track option.scope) {
+			<label><input type="radio" name="elicitation-approval" [checked]="isSelected(option.scope)" (change)="allow(option.scope)" /> {{ option.label }}</label>
+		}
+		<label><input type="radio" name="elicitation-approval" [checked]="isDenied()" (change)="deny()" /> Deny</label>
 	</fieldset>
 </section>

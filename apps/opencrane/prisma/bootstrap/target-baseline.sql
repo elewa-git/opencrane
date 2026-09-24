@@ -104,6 +104,12 @@ CREATE TYPE "ElicitationResultDeliveryState" AS ENUM ('pending', 'consumed');
 CREATE TYPE "PersonalMemoryPermissionReceiptState" AS ENUM ('active', 'consumed');
 
 -- CreateEnum
+CREATE TYPE "ElicitationApprovalGrantScope" AS ENUM ('session', 'always');
+
+-- CreateEnum
+CREATE TYPE "ElicitationApprovalGrantState" AS ENUM ('active', 'revoked');
+
+-- CreateEnum
 CREATE TYPE "GroupMembershipAuthority" AS ENUM ('external', 'local');
 
 -- CreateEnum
@@ -150,6 +156,9 @@ CREATE TYPE "MemoryDatasetState" AS ENUM ('active', 'retired');
 
 -- CreateEnum
 CREATE TYPE "MemoryFactState" AS ENUM ('active', 'corrected', 'forget_pending', 'forgotten');
+
+-- CreateEnum
+CREATE TYPE "MemoryDatasetSensitivity" AS ENUM ('standard', 'sensitive');
 
 -- CreateEnum
 CREATE TYPE "MemoryConsentState" AS ENUM ('explicit', 'confirmed');
@@ -849,6 +858,27 @@ CREATE TABLE "personal_memory_permission_receipts" (
 );
 
 -- CreateTable
+CREATE TABLE "elicitation_approval_grants" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "purpose" "ElicitationPurpose" NOT NULL,
+    "subject_id" TEXT NOT NULL,
+    "resource_kind" TEXT NOT NULL,
+    "resource_id" TEXT NOT NULL,
+    "action" TEXT NOT NULL,
+    "scope" "ElicitationApprovalGrantScope" NOT NULL,
+    "conversation_id" TEXT,
+    "granted_from_id" TEXT NOT NULL,
+    "state" "ElicitationApprovalGrantState" NOT NULL DEFAULT 'active',
+    "expires_at" TIMESTAMP(3),
+    "revoked_at" TIMESTAMP(3),
+    "revoked_by" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "elicitation_approval_grants_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "resource_shares" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -1163,6 +1193,7 @@ CREATE TABLE "memory_datasets" (
     "boundary_principal_id" TEXT,
     "cognee_dataset_id" TEXT NOT NULL,
     "state" "MemoryDatasetState" NOT NULL DEFAULT 'active',
+    "sensitivity" "MemoryDatasetSensitivity" NOT NULL DEFAULT 'standard',
     "created_by" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "retired_at" TIMESTAMP(3),
@@ -2266,6 +2297,15 @@ CREATE INDEX "personal_memory_permission_receipts_run_id_attempt_executio_idx" O
 CREATE UNIQUE INDEX "personal_memory_permission_receipts_request_id_run_id_attem_key" ON "personal_memory_permission_receipts"("request_id", "run_id", "attempt");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "elicitation_approval_grants_granted_from_id_key" ON "elicitation_approval_grants"("granted_from_id");
+
+-- CreateIndex
+CREATE INDEX "elicitation_approval_grants_silo_id_subject_id_purpose_reso_idx" ON "elicitation_approval_grants"("silo_id", "subject_id", "purpose", "resource_kind", "resource_id", "state");
+
+-- CreateIndex
+CREATE INDEX "elicitation_approval_grants_silo_id_conversation_id_state_idx" ON "elicitation_approval_grants"("silo_id", "conversation_id", "state");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "resource_shares_id_silo_id_key" ON "resource_shares"("id", "silo_id");
 
 -- CreateIndex
@@ -2938,6 +2978,9 @@ ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memor
 
 -- AddForeignKey
 ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memory_permission_receipts_tool_invocation_id_fkey" FOREIGN KEY ("tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "elicitation_approval_grants" ADD CONSTRAINT "elicitation_approval_grants_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "resource_shares" ADD CONSTRAINT "resource_shares_owner_principal_id_silo_id_fkey" FOREIGN KEY ("owner_principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;

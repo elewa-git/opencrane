@@ -1,3 +1,5 @@
+import type { ElicitationApprovalScopes } from "@opencrane/contracts";
+
 /** One bounded option already admitted by the server-facing feature boundary. */
 export interface ElicitationControlChoice
 {
@@ -26,6 +28,8 @@ export interface ElicitationApprovalPresentation
 	readonly consequence: string;
 	/** Optional cost disclosure. */
 	readonly cost?: string;
+	/** Scopes the server will accept for this question. Absent or empty means only a one-off answer. */
+	readonly offeredScopes?: readonly ElicitationApprovalScopes[];
 }
 
 /** Presentational single-choice question. */
@@ -53,4 +57,18 @@ export interface ElicitationFreeTextPresentation
 	readonly prompt: string;
 	/** Browser-enforced character limit. */
 	readonly maximumLength: number;
+}
+
+/**
+ * One approval answer: the decision, plus how long it should hold.
+ *
+ * The scope travels with the decision rather than in a separate control, because the person picks
+ * both in one click — "Allow every time" is a single answer, not an approval plus a setting.
+ */
+export interface ElicitationApprovalDraft
+{
+	/** Whether the action was allowed. */
+	readonly approved: boolean;
+	/** How long the answer holds. A denial is always one-off. */
+	readonly scope: ElicitationApprovalScopes;
 }

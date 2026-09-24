@@ -36,6 +36,20 @@ enum PersonalMemoryPermissionReceiptState {
   Consumed @map("consumed")
 }
 
+/// How long one approved answer keeps authorising later matching calls. `Once` is not represented
+/// here: an answer of that scope authorises only its own invocation and records no grant row.
+enum ElicitationApprovalGrantScope {
+  Session @map("session")
+  Always  @map("always")
+}
+
+/// Whether a standing approval grant still suppresses the question. A grant leaves `Active` only by
+/// explicit revocation; expiry is read from `expires_at` instead, so a lapsed grant keeps its history.
+enum ElicitationApprovalGrantState {
+  Active  @map("active")
+  Revoked @map("revoked")
+}
+
 /// Canonical participant-input authority. The runtime may propose a body and purpose, but the server
 /// derives conversation, run, participant, and expiry coordinates before creating this row.
 model ElicitationRequest {
@@ -132,4 +146,38 @@ model PersonalMemoryPermissionReceipt {
   @@unique([requestId, runId, attempt])
   @@index([runId, attempt, executionSubjectId, state, expiresAt])
   @@map("personal_memory_permission_receipts")
+}
+
+/// Standing permission to stop asking one subject the same approval question.
+///
+/// This is prompt suppression, not authorization. It never widens what a subject may do — admission
+/// still resolves capability through `AuthorizationGrant`. It only records that the subject already
+/// answered this question and chose not to be asked again, so a later matching call skips the
+/// elicitation instead of opening a second one.
+///
+/// A row is written only when an approval is answered with scope `Session` or `Always`. `Session`
+/// carries the conversation it was granted in; `Always` carries null and matches every conversation.
+/// The resource coordinates mirror whichever gate minted it: `memory_dataset` + dataset id for a
+/// personal-memory recall, and the `ApprovalRequest` resource kind and id for a deferred tool call.
+model ElicitationApprovalGrant {
+  id             String                        @id @default(cuid())
+  siloId         String                        @map("silo_id")
+  purpose        ElicitationPurpose
+  subjectId      String                        @map("subject_id")
+  resourceKind   String                        @map("resource_kind")
+  resourceId     String                        @map("resource_id")
+  action         String
+  scope          ElicitationApprovalGrantScope
+  conversationId String?                       @map("conversation_id")
+  grantedFromId  String                        @unique @map("granted_from_id")
+  state          ElicitationApprovalGrantState @default(Active)
+  expiresAt      DateTime?                     @map("expires_at")
+  revokedAt      DateTime?                     @map("revoked_at")
+  revokedBy      String?                       @map("revoked_by")
+  createdAt      DateTime                      @default(now()) @map("created_at")
+  conversation   Conversation?                 @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+
+  @@index([siloId, subjectId, purpose, resourceKind, resourceId, state])
+  @@index([siloId, conversationId, state])
+  @@map("elicitation_approval_grants")
 }
