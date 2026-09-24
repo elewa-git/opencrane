@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
-import { ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageContentBlockKinds, type CompiledMessage, type ConversationAuthor, type MessageEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates, type CompiledMessage, type ConversationAuthor, type MessageEntry } from "@opencrane/contracts";
 import type { ConversationPromptMessageRead, ConversationPromptMessageSource } from "@opencrane/backend/agents/execution/inputs";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
@@ -27,7 +27,7 @@ export class PrismaKurrentConversationPromptMessageRepository implements Convers
 		const history = await reader.read({ siloId: this._siloId, conversationId: this._conversationId });
 		if ((history.entries.at(-1)?.position ?? "0") !== this._historyRevision)
 			throw new Error("Conversation prompt history revision changed after admission");
-		const messages = new Map(history.entries.filter(function _CompletedMessage(entry): entry is MessageEntry { return entry.kind === ConversationEntryKinds.Message && entry.state === "completed"; }).map(message => [message.id, message]));
+		const messages = new Map(history.entries.filter(function _CompletedMessage(entry): entry is MessageEntry { return entry.kind === ConversationEntryKinds.Message && entry.state === MessageStates.Completed; }).map(message => [message.id, message]));
 		const selected = messageIds.map(messageId => messages.get(messageId));
 		if (selected.some(message => message === undefined))
 			throw new Error("Conversation prompt message is absent from canonical history");

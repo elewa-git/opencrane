@@ -1,6 +1,6 @@
 import { AvatarTones } from "@opencrane/elements/ui";
 import { ConversationMessageTones, ConversationStatusTones, type ConversationMessagePresentation, type ConversationRichTextPresentation, type ConversationStatusPresentation } from "@opencrane/elements/conversation";
-import { ConversationEntryKinds, ConversationMessageContentBlockKinds, type ArtifactMessageContentBlock, type ConversationEntry, type ToolCallLogEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryKinds, ConversationLogKinds, ConversationMessageContentBlockKinds, ConversationToolCallLogPhases, type ArtifactMessageContentBlock, type ConversationEntry, type ToolCallLogEntry } from "@opencrane/contracts";
 import { ConversationAssetPresentationStates, type ConversationAssetPresentation } from "@opencrane/features/conversation-assets";
 import { ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
 import { toSanitizedMarkdownHtml, toStreamingMarkdownHtml } from "@opencrane/state/conversation/render";
@@ -9,9 +9,6 @@ import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentSta
 
 import { ConversationOnboardingDialogueSpeakers, ConversationSessionRailIconStates, ConversationSessionRailItemKinds, type ConversationOnboardingContinuationPresentation, type ConversationOnboardingDialogueEntryPresentation, type ConversationOnboardingHistoryPresentation, type ConversationRailIdentityPresentation, type ConversationSessionRailItemPresentation, type ConversationSummaryPresentation } from "./conversation-workspace-feature.types";
 import { ConversationWorkspaceTranscriptEntryKinds, type ConversationWorkspaceTranscriptEntry } from "./presentation/conversation-workspace-presentation.types";
-
-/** Schema-owned discriminant for the canonical tool-call log variant. */
-const _TOOL_CALL_LOG_KIND: ToolCallLogEntry["logKind"] = "tool_call";
 
 /**
  * Uses the current directory to name conversations in both the rail and selected header.
@@ -183,11 +180,11 @@ export function _ConversationEntryViews(entries: readonly ConversationEntry[], p
 {
 	const latestTools = new Map<string, ToolCallLogEntry>();
 	for (const entry of entries)
-		if (entry.kind === ConversationEntryKinds.Log && entry.logKind === _TOOL_CALL_LOG_KIND)
+		if (entry.kind === ConversationEntryKinds.Log && entry.logKind === ConversationLogKinds.ToolCall)
 			latestTools.set(entry.toolCallId, entry);
 	return entries.flatMap(function _Entry(entry): readonly ConversationWorkspaceTranscriptEntry[]
 	{
-		if (entry.kind === ConversationEntryKinds.Log && entry.logKind === _TOOL_CALL_LOG_KIND)
+		if (entry.kind === ConversationEntryKinds.Log && entry.logKind === ConversationLogKinds.ToolCall)
 			return latestTools.get(entry.toolCallId)?.id === entry.id ? [{ kind: ConversationWorkspaceTranscriptEntryKinds.ToolActivity, id: entry.id, status: _ConversationToolStatus(entry) }] : [];
 		if (entry.kind !== ConversationEntryKinds.Message)
 			return [];
@@ -220,33 +217,35 @@ function _ConversationArtifact(block: ArtifactMessageContentBlock, messageId: st
 	return { id: block.id, messageId, artifactId: block.artifactId, artifactRevisionId: block.artifactRevisionId, provenance: ConversationAssetProvenance.ParticipantUpload, displayName: block.name, mediaType: block.mediaType, byteLength: null, disposition: null, state: ConversationAssetPresentationStates.Unavailable, detail: "File unavailable", canRetry: false, canRemove: false, uploadProgressPercent: null, contentState: ConversationAssetContentCommandStates.Idle, contentDetail: null };
 }
 
+/** Every saved tool phase needs an explicit display mapping when the shared vocabulary changes. */
+const _TOOL_STATUS_PRESENTATIONS = {
+	[ConversationToolCallLogPhases.Requested]: { label: "Tool requested", detail: "preparing to start.", tone: ConversationStatusTones.Neutral },
+	[ConversationToolCallLogPhases.Running]: { label: "Tool running", detail: "waiting for a result.", tone: ConversationStatusTones.Neutral },
+	[ConversationToolCallLogPhases.Completed]: { label: "Tool result received", detail: "result received. The assistant may still be preparing its answer.", tone: ConversationStatusTones.Neutral },
+	[ConversationToolCallLogPhases.Failed]: { label: "Tool could not finish", detail: "no usable result was received.", tone: ConversationStatusTones.Danger },
+	[ConversationToolCallLogPhases.Cancelled]: { label: "Tool stopped", detail: "ended without a result.", tone: ConversationStatusTones.Danger },
+	[ConversationToolCallLogPhases.RecoveryRequired]: { label: "Tool needs attention", detail: "the outcome is uncertain. OpenCrane will not repeat it automatically.", tone: ConversationStatusTones.Attention },
+} satisfies Record<ToolCallLogEntry["phase"], ConversationStatusPresentation>;
+
 /** Translate a server-attested tool lifecycle fact without exposing arguments, results or coordinates. */
 export function _ConversationToolStatus(entry: ToolCallLogEntry): ConversationStatusPresentation
 {
-	switch (entry.phase)
-	{
-		case "requested": return { label: "Tool requested", detail: `${entry.toolName}: preparing to start.`, tone: ConversationStatusTones.Neutral };
-		case "running": return { label: "Tool running", detail: `${entry.toolName}: waiting for a result.`, tone: ConversationStatusTones.Neutral };
-		case "completed": return { label: "Tool result received", detail: `${entry.toolName}: result received. The assistant may still be preparing its answer.`, tone: ConversationStatusTones.Neutral };
-		case "failed": return { label: "Tool could not finish", detail: `${entry.toolName}: no usable result was received.`, tone: ConversationStatusTones.Danger };
-		case "cancelled": return { label: "Tool stopped", detail: `${entry.toolName}: ended without a result.`, tone: ConversationStatusTones.Danger };
-		case "recovery_required": return { label: "Tool needs attention", detail: `${entry.toolName}: the outcome is uncertain. OpenCrane will not repeat it automatically.`, tone: ConversationStatusTones.Attention };
-		default: return _UnsupportedToolPhase(entry.phase);
-	}
+	if (!Object.hasOwn(_TOOL_STATUS_PRESENTATIONS, entry.phase))
+		throw new Error(`Unsupported tool-call phase: ${String(entry.phase)}`);
+	const presentation = _TOOL_STATUS_PRESENTATIONS[entry.phase];
+	return { ...presentation, detail: `${entry.toolName}: ${presentation.detail}` };
 }
-
-/** Reject a phase that escaped the shared history validator instead of rendering an empty status. */
-function _UnsupportedToolPhase(phase: never): never { throw new Error(`Unsupported tool-call phase: ${String(phase)}`); }
 
 /** Map a stamped author kind to presentation only; the server-stamped name remains authoritative history. */
 function _EntryAuthorPresentation(kind: ConversationEntry["author"]["kind"]): { readonly avatarTone: AvatarTones; readonly tone: ConversationMessageTones }
 {
 	switch (kind)
 	{
-		case "human": return { avatarTone: AvatarTones.Blue, tone: ConversationMessageTones.Participant };
-		case "agent": return { avatarTone: AvatarTones.Brand, tone: ConversationMessageTones.Agent };
-		case "service":
-		case "system": return { avatarTone: AvatarTones.Neutral, tone: ConversationMessageTones.System };
+		case ConversationAuthorKinds.Human: return { avatarTone: AvatarTones.Blue, tone: ConversationMessageTones.Participant };
+		case ConversationAuthorKinds.Agent: return { avatarTone: AvatarTones.Brand, tone: ConversationMessageTones.Agent };
+		case ConversationAuthorKinds.Service:
+		case ConversationAuthorKinds.System: return { avatarTone: AvatarTones.Neutral, tone: ConversationMessageTones.System };
+		default: throw new Error(`Unsupported conversation author kind: ${String(kind)}`);
 	}
 }
 

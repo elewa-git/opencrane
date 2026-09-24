@@ -1,4 +1,5 @@
 import { ToolResultDeliveryOutcomes } from "@opencrane/backend/server/iam/authorization";
+import { ConversationLogToolKinds } from "@opencrane/contracts";
 
 import { ConversationComputerToolResultOutcomes, type ConversationComputerToolResults } from "../../turns/conversation-computer-continuation.types";
 import type { ConversationComputerTurnCandidateResolver, ConversationComputerTurnStore } from "../../turns/conversation-computer-turn.types";
@@ -37,7 +38,7 @@ export class CurrentConversationToolResultNotificationEvidenceReader implements 
 		const outcome = result.payload.outcome === ToolResultDeliveryOutcomes.Succeeded
 			? ToolResultDeliveryOutcomes.Succeeded
 			: ToolResultDeliveryOutcomes.Failed;
-		return { toolName: tool.name, toolKind: "mcp", outcome, resultDigest: result.payloadDigest, occurredAt: result.occurredAt };
+		return { toolName: tool.name, toolKind: ConversationLogToolKinds.Mcp, outcome, resultDigest: result.payloadDigest, occurredAt: result.occurredAt };
 	}
 }
 

@@ -20,6 +20,20 @@ const _BASE = {
 
 describe("conversation entry validation", function ()
 {
+	it.each([
+		{ logKind: "run", fields: { runId: "run-1" }, valid: "started", invalid: "running" },
+		{ logKind: "model", fields: { modelCallId: "model-1" }, valid: "streaming", invalid: "requested" },
+		{ logKind: "tool_call", fields: { toolCallId: "tool-1", toolKind: "mcp", toolName: "Read records", resultArtifactRevisionId: null }, valid: "running", invalid: "started" },
+		{ logKind: "artifact", fields: { artifactId: "artifact-1", artifactRevisionId: null }, valid: "published", invalid: "completed" },
+		{ logKind: "memory", fields: { operation: "recall" }, valid: "denied", invalid: "granted" },
+		{ logKind: "approval", fields: { approvalId: "approval-1", action: "Publish report" }, valid: "granted", invalid: "cancelled" },
+	])("keeps $logKind progress separate from another log's phases", function ({ logKind, fields, valid, invalid })
+	{
+		const entry = { ..._BASE, kind: "log", summary: "Work progress", detailsRef: null, logKind, ...fields };
+		expect(___ConversationEntrySchema.safeParse({ ...entry, phase: valid }).success).toBe(true);
+		expect(___ConversationEntrySchema.safeParse({ ...entry, phase: invalid }).success).toBe(false);
+	});
+
 	it("requires verified requester evidence on human-authored entries", function ()
 	{
 		const human = { ..._BASE, author: { kind: "human", principalId: "principal-1", participantId: "participant-1", issuer: "https://issuer.test", authenticatedAt: "2026-09-05T00:00:00.000Z", name: "Jente", avatarArtifactRevisionId: null }, provenance: "human-authored", runId: null, kind: "message", state: "completed", blocks: [{ id: "text-1", kind: "text", payloadRef: "payload-1", ciphertextDigest: "sha256:payload" }], replyToEntryId: null, addressedAgentIdentityId: null, activation: "start" };

@@ -28,6 +28,13 @@ Personal-session, ordinary chat, group-child and reviewed-share requests require
 uncertain response and supply a new UUID for a new command. Group-child responses identify their
 parent request and Pending, Ready or Unavailable state; parent metadata never grants child access.
 
+Conversation entries share their stored audience, provenance, log and surface-operation vocabulary
+through `conversations/conversation-entry-categories.types.ts`. Each log subtype keeps its own
+phases; a visible log does not authorize work or replace the domain's saved state. Message states
+come from the conversation model. Agent identity kinds likewise have one owner in
+`agents/agent-identity.types.ts`. Changing these serialized values changes both history replay and
+the API contract.
+
 `ConversationMessageActivations.Stop` requests cancellation through the same message API. The
 client sends its retry key and conversation ID; the server selects and saves the original requester's
 eligible turn. Message admission does not mean cleanup has finished: personal status reports

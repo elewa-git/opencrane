@@ -10,6 +10,11 @@
   ],
   "allowedFiles": [
     {
+      "path": "apps/_infra/cognee/deploy/patches/apply-source-patch.py",
+      "owner": "apps/_infra/cognee",
+      "classification": "build-entrypoint"
+    },
+    {
       "path": "apps/opencrane/prisma.config.ts",
       "owner": "apps/opencrane",
       "classification": "prisma-composition"
@@ -273,16 +278,6 @@
       "path": "apps/memory-gateway/src/log.ts",
       "owner": "apps/memory-gateway",
       "classification": "process-logging"
-    },
-    {
-      "path": "apps/memory-gateway/src/search-contract.ts",
-      "owner": "apps/memory-gateway",
-      "classification": "route-composition"
-    },
-    {
-      "path": "apps/memory-gateway/src/server.ts",
-      "owner": "apps/memory-gateway",
-      "classification": "route-composition"
     },
     {
       "path": "apps/memory-gateway/vitest.config.ts",

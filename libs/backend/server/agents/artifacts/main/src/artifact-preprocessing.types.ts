@@ -89,6 +89,29 @@ export interface ArtifactPreprocessCompletionRequest extends ArtifactPreprocesso
 }
 
 /**
+ * Closed results returned by artifact preprocessing repository transitions.
+ *
+ * The preprocessing authority produces these values, and its broker and router consumers decide
+ * whether to continue, report success, retry later, stop permanently, or answer with a conflict.
+ * They are transient in-memory results rather than stored job states, so they grant no authority
+ * by themselves. Their strings remain stable for structural repository ports and tests; callers
+ * must reject any value outside this set instead of inferring a successful transition.
+ */
+export enum ArtifactPreprocessResultStatuses
+{
+	/** A current claim reserved a new output lease; the caller may use the returned lease once. */
+	Issued = "issued",
+	/** The requested output or completion is already durable; the caller may report success. */
+	Completed = "completed",
+	/** The failed delivery is parked until the repository-owned retry time; it is not terminal. */
+	Retryable = "retryable",
+	/** The delivery limit is exhausted and the repository has ended preprocessing for this job. */
+	Terminal = "terminal",
+	/** The command no longer matches current authority; the caller must stop using that claim. */
+	Conflict = "conflict",
+}
+
+/**
  * What happened when the server tried to reserve write authority for the submitted text.
  *
  * `issued` gives back the lease to sign and spend. `completed` means this exact output was
@@ -98,7 +121,7 @@ export interface ArtifactPreprocessCompletionRequest extends ArtifactPreprocesso
  * claim expired (`stale_claim`), or the hash or size failed validation, or a previous lease for
  * this attempt was for different bytes (`invalid_output`).
  */
-export type IssueArtifactPreprocessOutputLeaseResult = { readonly status: "issued"; readonly lease: ArtifactPreprocessOutputLeaseProjection } | { readonly status: "completed" } | { readonly status: "conflict"; readonly reason: "claim_not_found" | "stale_claim" | "invalid_output" };
+export type IssueArtifactPreprocessOutputLeaseResult = { readonly status: `${ArtifactPreprocessResultStatuses.Issued}`; readonly lease: ArtifactPreprocessOutputLeaseProjection } | { readonly status: `${ArtifactPreprocessResultStatuses.Completed}` } | { readonly status: `${ArtifactPreprocessResultStatuses.Conflict}`; readonly reason: "claim_not_found" | "stale_claim" | "invalid_output" };
 
 /**
  * What happened when the server tried to commit the converted revision.
@@ -109,7 +132,7 @@ export type IssueArtifactPreprocessOutputLeaseResult = { readonly status: "issue
  * not match the lease (`stale_claim`), the receipt does not match the stored lease
  * (`invalid_receipt`), or that receipt was already spent (`receipt_consumed`).
  */
-export type CompleteArtifactPreprocessJobResult = { readonly status: "completed" } | { readonly status: "conflict"; readonly reason: "claim_not_found" | "stale_claim" | "invalid_receipt" | "receipt_consumed" };
+export type CompleteArtifactPreprocessJobResult = { readonly status: `${ArtifactPreprocessResultStatuses.Completed}` } | { readonly status: `${ArtifactPreprocessResultStatuses.Conflict}`; readonly reason: "claim_not_found" | "stale_claim" | "invalid_receipt" | "receipt_consumed" };
 
 /**
  * What the server decided after a worker reported its delivery failed.
@@ -120,7 +143,7 @@ export type CompleteArtifactPreprocessJobResult = { readonly status: "completed"
  * missing (`claim_not_found`) or the attempt, fence, or expiry no longer match (`stale_claim`);
  * either way the worker must stop handling that delivery.
  */
-export type FailArtifactPreprocessJobResult = { readonly status: "retryable" | "terminal" } | { readonly status: "conflict"; readonly reason: "claim_not_found" | "stale_claim" };
+export type FailArtifactPreprocessJobResult = { readonly status: `${ArtifactPreprocessResultStatuses.Retryable}` | `${ArtifactPreprocessResultStatuses.Terminal}` } | { readonly status: `${ArtifactPreprocessResultStatuses.Conflict}`; readonly reason: "claim_not_found" | "stale_claim" };
 
 /**
  * Hands out read permission for one job's source PDF.

@@ -16,8 +16,6 @@ export { __CompanyAssistantServiceId, __ManagedAgentIdentityId } from "./company
 export type { ManagedAgentRevisionEvidence, ManagedAgentConversationCandidate, ManagedAgentConversationDependencies, ManagedExecutionEvidenceRepository } from "./company-assistants/managed-agent.types";
 export { AgentRevisionModelSelectionMaterializationCodes, type AgentRevisionModelSelectionRepository, type MaterializeAgentRevisionModelSelectionCommand, type MaterializeAgentRevisionModelSelectionResult } from "./revisions/agent-revision-model-selection.types";
 export { PrismaAgentRevisionPersonaSelectionRepository } from "./revisions/db/prisma-agent-revision-persona-selection";
-export { PrismaRuntimeAgentEffectEligibilityAuthority } from "./execution-evidence/db/prisma-runtime-agent-effect-eligibility";
-export type { RuntimeAgentEffectEligibility, RuntimeAgentEffectEligibilityCommand } from "./execution-evidence/runtime-agent-effect-eligibility.types";
 export { AgentRevisionPersonaSelectionMaterializationCodes } from "./revisions/agent-revision-persona-selection.types";
 export { PrismaPersonalAgentBootstrapRepository } from "./personal-agents/db/prisma-personal-agent-bootstrap-repository";
 export { PersonalAgentProductEffectDenied, PrismaPersonalAgentProductEffectsAuthority } from "./personal-agents/db/prisma-personal-agent-product-effects";
@@ -37,6 +35,6 @@ export { __ExecutionCapabilityEvidence } from "./execution-evidence/execution-ca
 export type { ExecutionCapabilityEvidence, ExecutionCapabilityEvidenceInput } from "./execution-evidence/execution-capability-evidence.types";
 export { PrismaPersonalExecutionEvidenceRepository } from "./execution-evidence/db/prisma-personal-execution-evidence-repository";
 export { PersonalExecutionEvidenceAuthority } from "./execution-evidence/personal-execution-evidence";
-export { PersonalExecutionEvidenceDenialReasons } from "./execution-evidence/personal-execution-evidence.types";
+export { ExecutionEvidenceOutcomes, PersonalExecutionEvidenceDenialReasons } from "./execution-evidence/personal-execution-evidence.types";
 export type { PersonalExecutionEvidence, PersonalExecutionEvidenceAuthorityPort, PersonalExecutionEvidenceCommand, PersonalExecutionEvidenceRepository, PersonalExecutionEvidenceResult, PersonalExecutionEvidenceTransaction, PersonalExecutionIdentityCoordinates, PersonalExecutionRevisionEvidence } from "./execution-evidence/personal-execution-evidence.types";
 export { _CreateCompanyAssistantComposition } from "./company-assistants/company-assistant-composition";

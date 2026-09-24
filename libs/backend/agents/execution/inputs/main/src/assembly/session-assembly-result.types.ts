@@ -121,4 +121,4 @@ export type SessionAssemblyRefusalReason = "invalid_command" | "run_not_admittab
  * current credential ceiling. It must not replace the snapshot used for prompt compilation.
  * Returned by {@link __AssembleRunInputSnapshot} to the OpenCrane conversation admission owner.
  */
-export type AssembleRunInputSnapshotResult = { readonly outcome: "assembled"; readonly admissionOutcome: "accepted" | "idempotent"; readonly snapshot: RunInputSnapshot; readonly currentExecutionSubject: ExecutionSubject } | { readonly outcome: "denied"; readonly reason: SessionAssemblyRefusalReason };
+export type AssembleRunInputSnapshotResult = { readonly outcome: SessionAssemblyOutcomes.Assembled; readonly admissionOutcome: RunInputSnapshotAdmissionOutcomes; readonly snapshot: RunInputSnapshot; readonly currentExecutionSubject: ExecutionSubject } | { readonly outcome: SessionAssemblyOutcomes.Denied; readonly reason: SessionAssemblyRefusalReason };

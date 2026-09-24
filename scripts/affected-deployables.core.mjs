@@ -161,15 +161,18 @@ export function selectImageSmokeProjects(affectedProjects, allProjects, heavyQua
 }
 
 /**
- * Requires provider qualification whenever the existing image-smoke selection includes Cognee.
+ * Requires Cognee's dedicated provider contract when Cognee is affected or heavy qualification
+ * explicitly requests image smoke. This decision is independent of the generic image-smoke
+ * target matrix because Cognee's memory contract builds its image and runs its own smoke.
  *
  * Called by: the affected-deployable selector before emitting the CI job condition.
- * @param {{ project: string }[]} imageSmokes Already selected image-smoke owners.
+ * @param {string[]} affectedProjects All affected Nx project names.
+ * @param {string | undefined} heavyQualification Explicit manual heavyweight selector.
  * @returns {boolean} Whether the pinned Cognee image must prove its memory contract.
  */
-export function selectCogneeMemoryContractRequired(imageSmokes)
+export function selectCogneeMemoryContractRequired(affectedProjects, heavyQualification)
 {
-	return imageSmokes.some(function _Cognee(entry) { return entry.project === "cognee"; });
+	return affectedProjects.includes("cognee") || heavyQualification === "image-smoke" || heavyQualification === "all";
 }
 
 /** Determines whether an affected project can change the generated API contract. */

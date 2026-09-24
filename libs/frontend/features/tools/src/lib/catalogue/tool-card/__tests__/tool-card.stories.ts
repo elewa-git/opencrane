@@ -14,8 +14,8 @@ const meta: Meta<ToolCardComponent> =
 };
 export default meta;
 type Story = StoryObj<ToolCardComponent>;
-/** Available card emits one installation intent. */
-export const Available: Story = { tags: ["visual-test"], play: async function _Install({ canvasElement, args }) { await userEvent.click(within(canvasElement).getByRole("button", { name: "Install" })); await expect(args.installRequested).toHaveBeenCalledOnce(); } };
+/** Available card exposes visible keyboard focus and emits one installation intent. */
+export const Available: Story = { tags: ["visual-test"], play: async function _Install({ canvasElement, args }) { const button = within(canvasElement).getByRole("button", { name: "Install" }); await userEvent.tab(); await expect(button).toHaveFocus(); await userEvent.keyboard("{Enter}"); await expect(args.installRequested).toHaveBeenCalledOnce(); } };
 /** Pending install cannot be submitted again. */
 export const Installing: Story = { args: { busy: true }, play: async function _Disabled({ canvasElement }) { await expect(within(canvasElement).getByRole("button", { name: "Install" })).toBeDisabled(); } };
 /** Installed cards have no installation command. */

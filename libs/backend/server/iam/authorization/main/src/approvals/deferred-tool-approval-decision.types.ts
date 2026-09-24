@@ -94,7 +94,8 @@ export interface ExpireDeferredToolApprovalBatchResult
  *   waiting, the earlier decision went the other way, or the stored data failed its integrity
  *   check. Never retry a `conflict`; re-read first.
  *
- * ./deferred-tool-approval.router.ts maps these to 200, 409, 400, and 404 respectively.
+ * `PrismaToolApprovalPurpose` in execution/elicitation accepts Approved, Denied and AlreadyDecided
+ * as a recorded decision. Other outcomes leave the elicitation command unaccepted.
  */
 export type DecideDeferredToolRequestResult =
 	| { readonly outcome: DeferredToolDecisionOutcomes.Approved; readonly argumentsDigest: string }

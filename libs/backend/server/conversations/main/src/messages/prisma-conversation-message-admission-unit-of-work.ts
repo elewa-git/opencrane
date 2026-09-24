@@ -3,8 +3,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
-import { ComputerLeaseStates, ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageContentBlockKinds, type ArtifactMessageContentBlock, type MessageEntry } from "@opencrane/contracts";
-import { ___DigestCanonicalJson } from "@opencrane/util";
+import { ComputerLeaseStates, ConversationAuthorKinds, ConversationEntryAudiences, ConversationEntryKinds, ConversationEntryProvenance, ConversationMessageContentBlockKinds, MessageStates, type ArtifactMessageContentBlock, type MessageEntry } from "@opencrane/contracts";
 
 import { ConversationHistoryAppendOutcomes, ConversationHistoryAuthority, ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
 import type { ConversationCaller } from "../authorization/conversation-caller.types";
@@ -13,6 +12,7 @@ import type { AdmittedConversationMessagePayload, AuthorizedConversationProjecti
 import { PrismaConversationHistoryRepository } from "./db/prisma-conversation-history-repository";
 import type { ConversationMessageAdmission, ConversationMessageAttachment, ConversationMessageAttachmentAdmissionFactory } from "./conversation-message-admission.types";
 import { _CanonicalConversationMessageAssetIds } from "./conversation-message-admission.validator";
+import { _MatchesConversationMessageRetry } from "./conversation-message-retry.validator";
 import { ConversationMessageActivations, ConversationMessageAdmissionOutcomes, type ConversationMessageAdmissionResult, type ConversationMessageCommand, type PrismaSelfConversationHistoryDependencies } from "./self-conversation-history.types";
 
 /** Limits checked-append retries without silently dropping a contending participant message. */
@@ -99,9 +99,7 @@ export class PrismaConversationMessageAdmissionUnitOfWork implements Conversatio
 				if (existing.kind !== ConversationEntryKinds.Message)
 					throw new Error("Conversation message idempotency key was already used for a different command");
 				const expected = _MessageEntry(caller, conversationId, command, projection, payload, attachments, existing.position, existing.occurredAt);
-				const actualDigest = ___DigestCanonicalJson(existing as unknown as Parameters<typeof ___DigestCanonicalJson>[0]);
-				const expectedDigest = ___DigestCanonicalJson(expected as unknown as Parameters<typeof ___DigestCanonicalJson>[0]);
-				if (actualDigest !== expectedDigest)
+				if (!_MatchesConversationMessageRetry(existing, expected))
 					throw new Error("Conversation message idempotency key was already used for a different command");
 				return { outcome: ConversationMessageAdmissionOutcomes.Idempotent, position: existing.position };
 			}
@@ -156,7 +154,7 @@ function _MessageEntry(caller: ConversationCaller, conversationId: string, comma
 	{
 		return { id: _DeterministicUuid("conversation-message-artifact-block", command.idempotencyKey, attachment.assetId), kind: ConversationMessageContentBlockKinds.Artifact, artifactId: attachment.artifactId, artifactRevisionId: attachment.artifactRevisionId, name: attachment.name, mediaType: attachment.mediaType };
 	});
-	return { schemaVersion: 1, id: command.idempotencyKey, conversationId, position, author: { kind: ConversationAuthorKinds.Human, principalId: caller.principalId, participantId: caller.subjectId, issuer: caller.externalIssuer, authenticatedAt: caller.verifiedAuthenticationAt, name: projection.authorName, avatarArtifactRevisionId: null }, provenance: "human-authored", visibility: { audience: "conversation" }, runId: null, causationId: command.idempotencyKey, correlationId: command.idempotencyKey, idempotencyKey: command.idempotencyKey, occurredAt, attestation: null, kind: ConversationEntryKinds.Message, state: "completed", blocks: [textBlock, ...artifactBlocks], replyToEntryId: null, addressedAgentIdentityId: projection.computerAgentIdentityId, activation: command.activation };
+	return { schemaVersion: 1, id: command.idempotencyKey, conversationId, position, author: { kind: ConversationAuthorKinds.Human, principalId: caller.principalId, participantId: caller.subjectId, issuer: caller.externalIssuer, authenticatedAt: caller.verifiedAuthenticationAt, name: projection.authorName, avatarArtifactRevisionId: null }, provenance: ConversationEntryProvenance.HumanAuthored, visibility: { audience: ConversationEntryAudiences.Conversation }, runId: null, causationId: command.idempotencyKey, correlationId: command.idempotencyKey, idempotencyKey: command.idempotencyKey, occurredAt, attestation: null, kind: ConversationEntryKinds.Message, state: MessageStates.Completed, blocks: [textBlock, ...artifactBlocks], replyToEntryId: null, addressedAgentIdentityId: projection.computerAgentIdentityId, activation: command.activation };
 }
 
 /** Rejects malformed, missing, duplicated or reordered metadata returned by the attachment port. */

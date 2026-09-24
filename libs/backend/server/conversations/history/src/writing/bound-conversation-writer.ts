@@ -1,6 +1,6 @@
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 
-import { ConversationAuthorKinds, ___ConversationComputerEntrySchema, type ConversationEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryProvenance, ___ConversationComputerEntrySchema, type ConversationEntry } from "@opencrane/contracts";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -125,7 +125,7 @@ export class BoundConversationWriter
 		if (this.binding.expectedRevision < 0n)
 			throw new Error("Bound conversation writer requires an immutable conversation genesis");
 		const position = (this.binding.expectedRevision + 1n).toString();
-		return { ...draft, schemaVersion: 1, id: sourceCommandId, conversationId: this.binding.conversationId, position, author: { kind: "agent", agentIdentityId: this.binding.agentIdentityId, agentServiceId: this.binding.agentServiceId, name: this.binding.agentName, avatarArtifactRevisionId: this.binding.agentAvatarArtifactRevisionId }, provenance: "agent-authored", visibility: draft.visibility as ConversationEntry["visibility"], runId: this.binding.runId, causationId: draft.causationId, correlationId: draft.correlationId, idempotencyKey: sourceCommandId, occurredAt: this.clock.now().toISOString(), attestation: null } as ConversationEntry;
+		return { ...draft, schemaVersion: 1, id: sourceCommandId, conversationId: this.binding.conversationId, position, author: { kind: ConversationAuthorKinds.Agent, agentIdentityId: this.binding.agentIdentityId, agentServiceId: this.binding.agentServiceId, name: this.binding.agentName, avatarArtifactRevisionId: this.binding.agentAvatarArtifactRevisionId }, provenance: ConversationEntryProvenance.AgentAuthored, visibility: draft.visibility as ConversationEntry["visibility"], runId: this.binding.runId, causationId: draft.causationId, correlationId: draft.correlationId, idempotencyKey: sourceCommandId, occurredAt: this.clock.now().toISOString(), attestation: null } as ConversationEntry;
 	}
 }
 
@@ -156,7 +156,7 @@ export function _ReadBoundConversationWriterIntent(binding: BoundConversationWri
 		|| entry.author.kind !== ConversationAuthorKinds.Agent || entry.author.agentIdentityId !== binding.agentIdentityId
 		|| entry.author.agentServiceId !== binding.agentServiceId || entry.author.name !== binding.agentName
 		|| entry.author.avatarArtifactRevisionId !== binding.agentAvatarArtifactRevisionId || entry.runId !== binding.runId
-		|| entry.provenance !== "agent-authored" || entry.attestation !== null)
+		|| entry.provenance !== ConversationEntryProvenance.AgentAuthored || entry.attestation !== null)
 		throw new Error("Bound conversation writer saved intent crossed its immutable binding");
 	const intent = _Intent(binding, entry);
 	if (___DigestCanonicalJson(intent as unknown as JsonValue) !== ___DigestCanonicalJson(candidate as unknown as JsonValue))

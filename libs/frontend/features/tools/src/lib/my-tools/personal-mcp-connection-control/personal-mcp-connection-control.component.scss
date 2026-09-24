@@ -22,10 +22,6 @@
 	&__input {
 		width: 100%;
 		font-size: var(--oc-text-sm);
-
-		&:disabled {
-			opacity: var(--oc-opacity-disabled);
-		}
 	}
 
 	&__help,

@@ -11,7 +11,7 @@
 						@if (installed()) {
 							<span class="wo-cat__installed"><i class="pi pi-check"></i> Installed</span>
 						} @else {
-							<button type="button" class="wo-tools__act" [disabled]="busy()" (click)="installRequested.emit()">Install</button>
+							<button pButton type="button" size="small" [text]="true" [disabled]="busy()" (click)="installRequested.emit()">Install</button>
 						}
 					</div>
 				</div>

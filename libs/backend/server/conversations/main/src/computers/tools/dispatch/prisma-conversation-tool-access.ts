@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
-import type { AgentIdentity } from "@opencrane/contracts";
+import { AgentIdentityKinds, type AgentIdentity } from "@opencrane/contracts";
+import { ExecutionEvidenceOutcomes } from "@opencrane/backend/server/agents/agent-services";
 import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
@@ -35,17 +36,17 @@ export class PrismaConversationToolAccessAuthority implements ConversationToolCu
 		const execution = this.dependencies.executionEvidence(this.transaction);
 		const evidenceTransaction = { authorization, admittedAtEpochMs: decisionTime };
 		const command = { requesterPrincipalId: run.subject.requester.requesterPrincipalId, agentRevisionId: run.subject.runScope.agentRevisionId };
-		if (identity.kind === "proxied")
+		if (identity.kind === AgentIdentityKinds.Proxied)
 		{
 			const result = await execution.loadPersonal({ ...command, identity }, evidenceTransaction);
-			if (result.outcome !== "loaded")
+			if (result.outcome !== ExecutionEvidenceOutcomes.Loaded)
 				return null;
 			return { requester: result.value.membership, executionTrustedUntil: result.value.membership.trustedUntil };
 		}
-		if (identity.kind === "managed")
+		if (identity.kind === AgentIdentityKinds.Managed)
 		{
 			const result = await execution.loadManaged({ ...command, identity }, evidenceTransaction);
-			if (result.outcome !== "loaded")
+			if (result.outcome !== ExecutionEvidenceOutcomes.Loaded)
 				return null;
 			return { requester: result.value.requesterMembership, executionTrustedUntil: result.value.membership.trustedUntil };
 		}

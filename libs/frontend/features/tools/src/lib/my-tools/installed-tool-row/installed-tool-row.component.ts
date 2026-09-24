@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from "@angular/core";
+import { ButtonModule } from "primeng/button";
 import { McpInstallStates } from "@opencrane/core";
 import { ScopeChipComponent, ScopeChipTones } from "@opencrane/elements/ui";
 import { MCP_CONNECTION_INDICATORS, MCP_TYPE_CHIPS } from "../../mcp-chip.constants";
@@ -9,7 +10,7 @@ import type { InstalledToolRow } from "../../state/tools-inventory.types";
  * The optional [connection-control] slot composes a feature-owned control before Uninstall;
  * the row does not acquire credential drafts, gateway calls or command sequencing.
  */
-@Component({ selector: "tr[wo-installed-tool-row]", standalone: true, imports: [ScopeChipComponent], templateUrl: "./installed-tool-row.component.html", styleUrl: "./installed-tool-row.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
+@Component({ selector: "tr[wo-installed-tool-row]", standalone: true, imports: [ButtonModule, ScopeChipComponent], templateUrl: "./installed-tool-row.component.html", styleUrl: "./installed-tool-row.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
 export class InstalledToolRowComponent
 {
 	/** Server description joined to its current installation. */

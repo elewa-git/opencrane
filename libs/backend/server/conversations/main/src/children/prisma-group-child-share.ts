@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
-import type { MessageEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryAudiences, ConversationEntryKinds, ConversationMessageContentBlockKinds, ConversationEntryProvenance, MessageStates, type MessageEntry } from "@opencrane/contracts";
 import { _DeterministicUuid } from "../sessions/agent-session-identifiers";
 import { ConversationHistoryAuthority } from "@opencrane/backend/server/conversations/history";
 import { ConversationHistoryAppendOutcomes } from "@opencrane/backend/server/conversations/history";
@@ -35,7 +35,7 @@ export class PrismaGroupChildShareUnitOfWork implements GroupChildSharePort
 		if (request === null)
 			return null;
 		const source = await _ReadGroupChildSource(this.participantHistory, caller, childId, command.sourceEntryId, BigInt(command.sourcePosition));
-		if (source === null || source.entry.author.kind !== "agent" || source.entry.author.agentIdentityId !== request.agentIdentityId || source.entry.author.agentServiceId !== request.agentServiceId)
+		if (source === null || source.entry.author.kind !== ConversationAuthorKinds.Agent || source.entry.author.agentIdentityId !== request.agentIdentityId || source.entry.author.agentServiceId !== request.agentServiceId)
 			return null;
 		const digest = ___DigestCanonicalJson({ childId, parentId: request.parentConversationId, sourceEntryId: command.sourceEntryId, sourcePosition: command.sourcePosition, text: command.text });
 		const payloadRef = _DeterministicUuid("group-child-share-payload", caller.siloId, caller.principalId, command.idempotencyKey, digest);
@@ -50,16 +50,16 @@ export class PrismaGroupChildShareUnitOfWork implements GroupChildSharePort
 			const history = await this.reader.read({ siloId: caller.siloId, conversationId: request.parentConversationId });
 			if (!await this._transaction(repository => repository.canShare(caller, childId, request.parentConversationId)))
 				return null;
-			const repeated = history.entries.find(entry => entry.idempotencyKey === command.idempotencyKey && entry.author.kind === "human" && entry.author.participantId === caller.subjectId);
+			const repeated = history.entries.find(entry => entry.idempotencyKey === command.idempotencyKey && entry.author.kind === ConversationAuthorKinds.Human && entry.author.participantId === caller.subjectId);
 			if (repeated !== undefined)
 			{
-				if (repeated.kind !== "message" || repeated.causationId !== source.entry.id || repeated.correlationId !== request.id || repeated.replyToEntryId !== request.parentMessageId || repeated.blocks.length !== 1 || repeated.blocks[0]?.kind !== "text" || repeated.blocks[0].payloadRef !== payloadRef)
+				if (repeated.kind !== ConversationEntryKinds.Message || repeated.causationId !== source.entry.id || repeated.correlationId !== request.id || repeated.replyToEntryId !== request.parentMessageId || repeated.blocks.length !== 1 || repeated.blocks[0]?.kind !== ConversationMessageContentBlockKinds.Text || repeated.blocks[0].payloadRef !== payloadRef)
 					throw new GroupChildConflictError();
 				return { outcome: ConversationMessageAdmissionOutcomes.Idempotent, position: repeated.position };
 			}
 			const expectedRevision = BigInt(history.entries.at(-1)?.position ?? "0");
 			const position = (expectedRevision + 1n).toString();
-			const entry: MessageEntry = { schemaVersion: 1, id: command.idempotencyKey, conversationId: request.parentConversationId, position, author: { kind: "human", principalId: caller.principalId, participantId: caller.subjectId, issuer: caller.externalIssuer, authenticatedAt: caller.verifiedAuthenticationAt, name: prepared.authorName, avatarArtifactRevisionId: null }, provenance: "human-authored", visibility: { audience: "conversation" }, runId: null, causationId: source.entry.id, correlationId: request.id, idempotencyKey: command.idempotencyKey, occurredAt: new Date().toISOString(), attestation: null, kind: "message", state: "completed", blocks: [{ id: _DeterministicUuid("group-child-share-block", command.idempotencyKey), kind: "text", payloadRef, ciphertextDigest: prepared.payload.ciphertextDigest }], replyToEntryId: request.parentMessageId, addressedAgentIdentityId: null, activation: "none" };
+			const entry: MessageEntry = { schemaVersion: 1, id: command.idempotencyKey, conversationId: request.parentConversationId, position, author: { kind: ConversationAuthorKinds.Human, principalId: caller.principalId, participantId: caller.subjectId, issuer: caller.externalIssuer, authenticatedAt: caller.verifiedAuthenticationAt, name: prepared.authorName, avatarArtifactRevisionId: null }, provenance: ConversationEntryProvenance.HumanAuthored, visibility: { audience: ConversationEntryAudiences.Conversation }, runId: null, causationId: source.entry.id, correlationId: request.id, idempotencyKey: command.idempotencyKey, occurredAt: new Date().toISOString(), attestation: null, kind: ConversationEntryKinds.Message, state: MessageStates.Completed, blocks: [{ id: _DeterministicUuid("group-child-share-block", command.idempotencyKey), kind: ConversationMessageContentBlockKinds.Text, payloadRef, ciphertextDigest: prepared.payload.ciphertextDigest }], replyToEntryId: request.parentMessageId, addressedAgentIdentityId: null, activation: "none" };
 			const result = await this.writer.append({ siloId: caller.siloId, conversationId: request.parentConversationId, expectedRevision, entry });
 			if (result.outcome === ConversationHistoryAppendOutcomes.Appended)
 				return { outcome: ConversationMessageAdmissionOutcomes.Accepted, position };

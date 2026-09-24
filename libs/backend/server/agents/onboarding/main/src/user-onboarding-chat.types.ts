@@ -242,7 +242,7 @@ export interface UserOnboardingAnswerPersistenceResult
  *
  * Called by: __UserOnboardingChatAuthority; implemented by PrismaUserOnboardingRepository and
  * composed by _CreateUserOnboardingRepository in
- * apps/opencrane/src/app/user-onboarding-composition.ts.
+ * libs/backend/server/agents/onboarding/main/src/composition/user-onboarding-composition.ts.
  *
  * @see {@link UserOnboardingRepository} for the workflow-row half of persistence.
  */

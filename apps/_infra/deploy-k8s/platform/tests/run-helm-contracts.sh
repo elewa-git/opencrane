@@ -18,6 +18,7 @@ for contract in \
   current-chart-sources-contract.sh \
   provision-contract.sh \
   preflight-cni-contract.sh \
+  required-conversation-profile-contract.sh \
   kubernetes-api-helm-args-contract.sh \
   pooler-deploy-contract.sh \
   postgres-release-contract.sh \
@@ -33,11 +34,13 @@ for contract in \
   control-plane-image-policy-contract.sh \
   agent-sandbox-contract.sh \
   cluster-tenant-crd-policy-contract.sh \
+  cognee-service-user-secret-contract.sh \
   kurrentdb-bootstrap-secrets-contract.sh \
   kurrentdb-bootstrap-retry-contract.sh \
   kurrentdb-replay-contract.sh \
   kurrentdb-restore-contract.sh \
   silo-deploy-profile-contract.sh \
+  silo-suspension-contract.sh \
   silo-teardown-contract.sh \
   skill-authoring-contract.sh; do
   # Name every contract as it starts and on failure, so a silent `set -e` exit is still attributable in CI logs.

@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 
-import type { AssignedSkillRevision, SessionAssemblyCommand, SessionAssemblyLoad, SkillRevisionEligibilityRead, SkillRevisionEligibilityRepository, SkillRevisionEligibilityRepositoryFactory, SkillRevisionEligibilitySource, ToolPolicyInput } from "../assembly/session-assembly.types";
+import { SessionAssemblyLoadOutcomes, type AssignedSkillRevision, type SessionAssemblyCommand, type SessionAssemblyLoad, type SkillRevisionEligibilityRead, type SkillRevisionEligibilityRepository, type SkillRevisionEligibilityRepositoryFactory, type SkillRevisionEligibilitySource, type ToolPolicyInput } from "../assembly/session-assembly.types";
 
 /** Reads assigned skill revisions through typed Prisma delegates inside run admission. */
 export class PrismaSkillRevisionEligibilityRepository implements SkillRevisionEligibilityRepository
@@ -73,18 +73,18 @@ export class PrismaSkillRevisionEligibilitySource implements SkillRevisionEligib
 		const repository = this.createRepository(transaction);
 		const read = await repository.load(run.agentRevisionId);
 		if (!read.isComplete)
-			return { outcome: "denied", reason: "skill_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "skill_unavailable" };
 		const rows = read.revisions;
 
 		// 2. Allow fewer skills than the revision assigns, but never one it never assigned, and never the same one twice.
 		const assignedIds = rows.map(function _assignedId(row): string { return row.skillRevisionId; });
 		const suppliedIds = [...toolPolicy.skillRevisionIds];
 		if (new Set(suppliedIds).size !== suppliedIds.length || !suppliedIds.every(function _isAssigned(id): boolean { return assignedIds.includes(id); }))
-			return { outcome: "denied", reason: "skill_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "skill_unavailable" };
 
 		// 3. Of the skills the tool policy named, accept only same-silo published revisions with no revokedAt; the snapshot then keeps exactly those ids.
 		if (!rows.filter(function _isSupplied(row): boolean { return suppliedIds.includes(row.skillRevisionId); }).every(function _isEligible(row): boolean { return row.siloId === command.siloId && row.isPublished && row.revokedAt === null; }))
-			return { outcome: "denied", reason: "skill_unavailable" };
-		return { outcome: "loaded", value: null };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "skill_unavailable" };
+		return { outcome: SessionAssemblyLoadOutcomes.Loaded, value: null };
 	}
 }

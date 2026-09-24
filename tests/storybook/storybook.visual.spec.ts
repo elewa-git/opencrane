@@ -1,4 +1,5 @@
-import { expect, test, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
 import type { StorybookIndex, StorybookIndexEntry } from "./storybook.visual.types.js";
 
@@ -40,18 +41,27 @@ const STABLE_SCREENSHOT_CSS = `
 	}
 `;
 
-test("tagged component states match their committed screenshots", async ({ context, request }) =>
-{
-	// 1. Discover explicit visual contracts from the built catalogue so new tagged stories cannot escape coverage.
-	const stories = await _LoadVisualStories(request);
-	expect(stories.length, "Storybook must expose at least one visual-test story").toBeGreaterThan(0);
+/** The Nx static server builds this index before Playwright discovers tests. */
+const VISUAL_STORIES = _VisualStories(JSON.parse(readFileSync(new URL("../../dist/storybook/frontend-elements-ui/index.json", import.meta.url), "utf8")) as StorybookIndex);
 
-	// 2. Capture each story in stable ID order so failures and baseline updates remain reproducible.
-	for (const story of stories)
+test("the served catalogue contains every discovered visual contract", async ({ request }) =>
+{
+	const response = await request.get("/index.json");
+	expect(response.ok(), `Storybook index request failed with ${response.status()}`).toBe(true);
+	const servedStories = _VisualStories(await response.json() as StorybookIndex);
+	expect(VISUAL_STORIES.length, "Storybook must expose at least one visual-test story").toBeGreaterThan(0);
+	expect(servedStories).toEqual(VISUAL_STORIES);
+});
+
+// Each story gets its own deadline and failure report. Adding a component cannot consume the
+// time available to later stories, and one failure does not prevent their screenshots being checked.
+for (const story of VISUAL_STORIES)
+{
+	test(`component state ${story.id} matches its committed screenshot`, async ({ context }) =>
 	{
 		await _CaptureStory(context, story);
-	}
-});
+	});
+}
 
 test("intermediate conversation workspace keeps its rail and context inside the viewport", async ({ page }) =>
 {
@@ -198,17 +208,12 @@ async function _AssertVisualTargets(page: Page, storyId: string): Promise<void>
 }
 
 /**
- * Loads the static Storybook index and returns only explicitly tagged visual contracts.
- * @param request - Playwright request client configured with the Storybook base URL.
+ * Keeps tagged rendered stories from the built catalogue in stable ID order.
+ * @param index - The local or served index from the same Nx Storybook build.
  * @returns Stable-ID-sorted rendered story entries.
  */
-async function _LoadVisualStories(request: APIRequestContext): Promise<readonly StorybookIndexEntry[]>
+function _VisualStories(index: StorybookIndex): readonly StorybookIndexEntry[]
 {
-	const response = await request.get("/index.json");
-	expect(response.ok(), `Storybook index request failed with ${response.status()}`).toBe(true);
-
-	const index = await response.json() as StorybookIndex;
-
 	return Object.values(index.entries)
 		.filter((entry) => entry.type === "story" && entry.tags?.includes(VISUAL_TEST_TAG))
 		.sort((left, right) => left.id.localeCompare(right.id));

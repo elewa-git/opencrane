@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates, type ConversationEntry, type MessageEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryKinds, ConversationEntryProvenance, ConversationMessageContentBlockKinds, MessageStates, type ConversationEntry, type MessageEntry } from "@opencrane/contracts";
 import type { SelfConversationHistoryAuthority } from "../../messages/self-conversation-history.types";
 import type { ConversationCaller } from "../../authorization/conversation-caller.types";
 import type { PersonalMemoryMessageSourceRead, PersonalMemoryMessageSourceReader } from "./personal-memory-message-source.types";
@@ -50,7 +50,7 @@ function _IsExactHumanMessage(entry: ConversationEntry, caller: ConversationCall
 		&& entry.id === messageId
 		&& entry.position === messagePosition.toString()
 		&& entry.state === MessageStates.Completed
-		&& entry.provenance === "human-authored"
+		&& entry.provenance === ConversationEntryProvenance.HumanAuthored
 		&& entry.author.kind === ConversationAuthorKinds.Human
 		&& entry.author.principalId === caller.principalId
 		&& entry.author.participantId === caller.subjectId;

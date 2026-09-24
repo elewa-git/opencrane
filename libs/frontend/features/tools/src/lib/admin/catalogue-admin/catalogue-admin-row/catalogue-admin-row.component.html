@@ -9,17 +9,17 @@
 							<td class="wo-admin__actions">
 								@switch (server().approvalStatus) {
 									@case (status.PendingReview) {
-										<button [disabled]="busy()" type="button" class="wo-tools__act" (click)="approveRequested.emit()">Approve</button>
-										<button [disabled]="busy()" type="button" class="wo-tools__act wo-tools__act--muted" (click)="rejectRequested.emit()">Reject</button>
+										<button pButton [disabled]="busy()" type="button" size="small" [text]="true" (click)="approveRequested.emit()">Approve</button>
+										<button pButton [disabled]="busy()" type="button" size="small" [text]="true" severity="danger" (click)="rejectRequested.emit()">Reject</button>
 									}
 									@case (status.Approved) {
-										<button [disabled]="busy()" type="button" class="wo-tools__act" (click)="publishRequested.emit()">Publish</button>
+										<button pButton [disabled]="busy()" type="button" size="small" [text]="true" (click)="publishRequested.emit()">Publish</button>
 									}
 									@case (status.Published) {
-										<button [disabled]="busy()" type="button" class="wo-tools__act wo-tools__act--muted" (click)="enabledRequested.emit(false)">Disable</button>
+										<button pButton [disabled]="busy()" type="button" size="small" [text]="true" severity="danger" (click)="enabledRequested.emit(false)">Disable</button>
 									}
 									@case (status.Disabled) {
-										<button [disabled]="busy()" type="button" class="wo-tools__act" (click)="enabledRequested.emit(true)">Re-enable</button>
+										<button pButton [disabled]="busy()" type="button" size="small" [text]="true" (click)="enabledRequested.emit(true)">Re-enable</button>
 									}
 								}
 							</td>

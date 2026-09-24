@@ -4,7 +4,7 @@ import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/ba
 import { GeneratedOutputCapability } from "@opencrane/contracts";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { BudgetPolicyInput, BudgetPolicySource, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicyInput, ToolPolicySource } from "../assembly/session-assembly.types";
+import { SessionAssemblyLoadOutcomes, type BudgetPolicyInput, type BudgetPolicySource, type SessionAssemblyCommand, type SessionAssemblyLoad, type ToolPolicyInput, type ToolPolicySource } from "../assembly/session-assembly.types";
 import { __AreRunInputSnapshotMcpToolsValid } from "./mcp-tool-snapshot.validator";
 import { PrismaMcpToolAdmissionClaimRepository } from "./prisma-mcp-tool-admission-claim-repository";
 
@@ -57,7 +57,7 @@ export class PrismaRevisionToolPolicyAuthority implements ToolPolicySource
 			include: { modelDefinition: true, mcpToolAssignments: { include: { toolRevision: { include: { serverRevision: { include: { server: true } } } } } }, skillAssignments: true },
 		});
 		if (revision === null || !_IsModelAvailable(revision.modelDefinition, command.siloId) || !_GeneratedOutputCapabilitiesValid(revision.modelDefinition.generatedOutputCapabilities))
-			return { outcome: "denied", reason: "tool_policy_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "tool_policy_unavailable" };
 		const mcpTools = revision.mcpToolAssignments.map(function _McpTool(assignment)
 		{
 			return {
@@ -75,19 +75,19 @@ export class PrismaRevisionToolPolicyAuthority implements ToolPolicySource
 				|| assignment.toolRevision.serverRevision.server.status !== McpServerStatus.Active
 				|| assignment.toolRevision.serverRevision.server.approvalStatus !== McpApprovalStatus.Published;
 		}) || !__AreRunInputSnapshotMcpToolsValid(mcpTools))
-			return { outcome: "denied", reason: "tool_policy_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "tool_policy_unavailable" };
 
 		// 3. Check every assigned skill and artifact is still in this silo and still published before the snapshot names it.
 		const skillRevisionIds = revision.skillAssignments.map(function _SkillRevisionId(assignment): string { return assignment.skillRevisionId; });
 		const skills = await this.prisma.skillRevision.findMany({ where: { id: { in: skillRevisionIds } }, include: { skill: true } });
 		if (skills.length !== skillRevisionIds.length || skills.some(function _IsSkillUnavailable(skill): boolean { return skill.state !== SkillRevisionState.Published || skill.skill.state !== SkillState.Active || skill.skill.siloId !== command.siloId; }))
-			return { outcome: "denied", reason: "tool_policy_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "tool_policy_unavailable" };
 		const artifactRevisionIds = [...new Set(skills.map(function _ArtifactRevisionId(skill): string { return skill.artifactRevisionId; }))];
 		const artifacts = await this.prisma.artifactRevision.findMany({ where: { id: { in: artifactRevisionIds }, state: ArtifactRevisionState.Published, artifact: { is: { siloId: command.siloId, state: "Active" } } }, select: { id: true } });
 		if (artifacts.length !== artifactRevisionIds.length)
-			return { outcome: "denied", reason: "tool_policy_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "tool_policy_unavailable" };
 		return {
-			outcome: "loaded",
+			outcome: SessionAssemblyLoadOutcomes.Loaded,
 			value: {
 				modelDefinitionId: revision.modelDefinition.id,
 				modelRoute: { alias: revision.modelDefinition.publicModelName, modelDefinitionId: revision.modelDefinition.id, litellmModelId: revision.modelDefinition.litellmModelId, maxOutputTokens: _TEXT_TURN_MAX_OUTPUT_TOKENS, generatedOutputCapabilities: [...revision.modelDefinition.generatedOutputCapabilities].sort() },
@@ -125,11 +125,11 @@ export class PrismaRevisionBudgetPolicyAuthority implements BudgetPolicySource
 			select: { budget: true },
 		});
 		if (revision === null)
-			return { outcome: "denied", reason: "budget_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "budget_unavailable" };
 
 		// 2. Keep only limits that are all present and positive, plus the server's deadline. A caller can never supply a default.
 		const budgetPolicy = _ParseBudget(revision.budget as unknown as JsonValue, transaction.admittedAtEpochMs);
-		return budgetPolicy === null ? { outcome: "denied", reason: "budget_unavailable" } : { outcome: "loaded", value: { budgetPolicy } };
+		return budgetPolicy === null ? { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "budget_unavailable" } : { outcome: SessionAssemblyLoadOutcomes.Loaded, value: { budgetPolicy } };
 	}
 }
 

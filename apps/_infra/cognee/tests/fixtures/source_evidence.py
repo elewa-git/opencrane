@@ -56,7 +56,7 @@ def main() -> None:
     try:
         repairs = validated_repairs(expected, profile)
     except (AssertionError, AttributeError, TypeError, ValueError) as error:
-        mismatches.append(f"Candidate repair declaration is invalid: {error}")
+        mismatches.append(f"Provider repair declaration is invalid: {error}")
         _write_evidence(args.output, evidence)
         raise AssertionError(mismatches[0]) from error
     if actual_version != expected["version"]:
@@ -87,7 +87,7 @@ def main() -> None:
                     module_name, path, actual_digest, repairs[module_name]
                 )
             except (AssertionError, OSError, ValueError) as error:
-                mismatches.append(f"Candidate repair verification failed for {module_name}: {error}")
+                mismatches.append(f"Provider repair verification failed for {module_name}: {error}")
         elif actual_digest != expected_digest:
             mismatches.append(
                 f"Cognee source differs for {module_name}: "
@@ -99,7 +99,7 @@ def main() -> None:
 
     unverified_repairs = set(repairs) - set(repair_evidence)
     if unverified_repairs:
-        mismatches.append("Candidate repairs were not verified: " + ", ".join(sorted(unverified_repairs)))
+        mismatches.append("Provider repairs were not verified: " + ", ".join(sorted(unverified_repairs)))
 
     _write_evidence(args.output, evidence)
     print(f"EVIDENCE cognee_version={actual_version}")

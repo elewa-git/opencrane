@@ -5,6 +5,9 @@ import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { describe, expect, it, vi } from "vitest";
 
 import { _ConversationComputerActiveTurnStreamName } from "../../lifecycle/conversation-computer-activity";
+import { _ConversationModelReservationEvent } from "../../turns/conversation-computer-model-reservation";
+import { KurrentConversationComputerTurnStore } from "../../turns/conversation-computer-turn-store";
+import { _ModelReservationFixture } from "../../turns/__tests__/conversation-output-intent.fixture";
 import { ConversationComputerStopAdmissionKinds, ConversationComputerStopDecisions, type ConversationComputerStopAdmission } from "../conversation-computer-stop.types";
 import { KurrentConversationComputerStopPublisher } from "../kurrent-conversation-computer-stop-publisher";
 
@@ -118,25 +121,38 @@ describe("KurrentConversationComputerStopPublisher", function _Suite()
 	it("retries the same admitted target after an intermediate turn revision wins", async function _TargetContention()
 	{
 		const appendAtomic = vi.fn().mockRejectedValueOnce(new WrongExpectedVersionError(undefined, { streamName: _FROZEN.streamName, expected: 0n, current: 1n })).mockResolvedValue([]);
-		let turnHeadRead = 0;
+		let modelEvent: HistoryRecordedEvent | null = null;
+		let progressed = false;
 		const history = { append: vi.fn(), appendAtomic, readHead: vi.fn(async function _Head(streamName: string)
 		{
 			if (streamName === _FROZEN.streamName)
-				return { streamName, revision: BigInt(turnHeadRead++) };
+				return { streamName, revision: progressed ? 1n : 0n };
 			return { streamName, revision: streamName === "conversation-conversation-1" ? 2n : 0n };
 		}), readStream: vi.fn(function _Read(request: { streamName: string }) { return (async function* _Events()
 		{
 			if (request.streamName === _FROZEN.streamName)
+			{
 				yield _FROZEN;
+				if (progressed && modelEvent !== null)
+					yield modelEvent;
+				else if (modelEvent !== null)
+					progressed = true;
+			}
 			if (request.streamName === _ACTIVE_STREAM)
 				yield _ACTIVE;
 			if (request.streamName === _SELECTION.streamName)
 				yield _SELECTION;
 		})(); }) };
+		const turns = new KurrentConversationComputerTurnStore(history);
+		const frozen = (await turns.load(_BOOTSTRAP))!;
+		const reservation = _ModelReservationFixture(frozen, "61c1f1dc-0010-4f13-9c2f-d3841ffd6651");
+		modelEvent = { ..._ConversationModelReservationEvent(frozen, reservation), streamName: _FROZEN.streamName, revision: 1n, recordedAt: new Date("2026-09-11T08:00:00.000Z") };
 
 		await expect(new KurrentConversationComputerStopPublisher(history).publish(_Target())).resolves.toEqual({ decision: ConversationComputerStopDecisions.CancellationWon, published: true, outputReceiptDigest: null });
 		expect(appendAtomic).toHaveBeenCalledTimes(2);
+		expect(appendAtomic.mock.calls[0]![0].expectedHeads).toContainEqual({ streamName: _FROZEN.streamName, revision: 0n });
 		expect(appendAtomic.mock.calls[1]![0].expectedHeads).toContainEqual({ streamName: _FROZEN.streamName, revision: 1n });
+		expect(history.readHead).not.toHaveBeenCalledWith(_FROZEN.streamName);
 	});
 
 	it("recovers one target selection when a competing no-target delivery loses the command fence", async function _TargetBeatsNoTarget()

@@ -17,8 +17,8 @@
 	text-align: right;
 	white-space: nowrap;
 
-	.wo-tools__act + .wo-tools__act {
-		margin-left: var(--oc-space-3);
+	button + button {
+		margin-inline-start: var(--oc-space-3);
 	}
 }
 

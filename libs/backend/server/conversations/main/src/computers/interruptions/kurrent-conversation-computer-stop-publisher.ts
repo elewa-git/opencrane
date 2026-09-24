@@ -1,13 +1,12 @@
-import { createHash } from "node:crypto";
-
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { HistoryExpectedRevisions, type HistoryEvent, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
-import { ConversationAuthorKinds, ConversationEntryKinds, ___ConversationEntrySchema, type RunLogEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryAudiences, ConversationEntryKinds, ConversationEntryProvenance, ConversationLogKinds, ConversationRunLogPhases, ___ConversationEntrySchema, type RunLogEntry } from "@opencrane/contracts";
 import { _ConversationHistoryEntryAppend } from "@opencrane/backend/server/conversations/history";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _ConversationComputerActiveTurnStreamName } from "../lifecycle/conversation-computer-activity";
-import { _CANCELLED_EVENT, KurrentConversationComputerTurnStore } from "../turns/conversation-computer-turn-store";
+import { _ConversationComputerEventId } from "../conversation-computer-event-id";
+import { KurrentConversationComputerTurnStore } from "../turns/conversation-computer-turn-store";
 import { ConversationComputerStopAdmissionKinds, ConversationComputerStopDecisions, type ConversationComputerStopAdmission, type ConversationComputerStopCommand, type ConversationComputerStopPublishOutcome, type ConversationComputerStopPublisher, type ConversationComputerStopSelection, type ConversationComputerStopTargetResolution } from "./conversation-computer-stop.types";
 import { _ConversationComputerStopReceiptSchema, _ConversationComputerStopSelectionSchema } from "./conversation-computer-stop.validator";
 
@@ -144,17 +143,15 @@ export class KurrentConversationComputerStopPublisher implements ConversationCom
 			return this._recordOutputWinner(admission, ___DigestCanonicalJson(turn!.outputReceipt as unknown as JsonValue));
 		if (turn!.cancellationReceipt !== null)
 			throw new Error("Conversation Stop cancellation winner omitted its atomic receipt");
-		const turnStream = `conversation-computer-turn-${admission.target.bootstrapId}`;
-		const turnHead = await this.history.readHead(turnStream);
 		const activeStream = _ConversationComputerActiveTurnStreamName({ siloId: admission.command.siloId, computerId: admission.command.computerId, lease: { leaseId: admission.target.leaseId, leaseGeneration: admission.target.leaseGeneration } });
 		const active = await _Last(this.history, activeStream);
-		if (turnHead.revision === null || active === null || active.type !== _ACTIVE_EVENT || active.data["bootstrapId"] !== admission.target.bootstrapId)
+		if (active === null || active.type !== _ACTIVE_EVENT || active.data["bootstrapId"] !== admission.target.bootstrapId)
 			throw new Error("Conversation Stop admitted target lost its active pointer before a terminal decision");
 		const conversationStream = `conversation-${admission.command.conversationId}`;
 		const conversationHead = await this.history.readHead(conversationStream);
 		if (conversationHead.revision === null)
 			throw new Error("Conversation Stop requires immutable conversation genesis");
-		const intent = _CancellationIntent(admission, turn!, turnHead.revision, conversationHead.revision, active.revision, this.turns);
+		const intent = _CancellationIntent(admission, turn!, conversationHead.revision, active.revision, this.turns);
 		try
 		{
 			await this.history.appendAtomic(intent);
@@ -201,39 +198,38 @@ export class KurrentConversationComputerStopPublisher implements ConversationCom
 	}
 }
 
-function _CancellationIntent(admission: Extract<ConversationComputerStopAdmission, { kind: ConversationComputerStopAdmissionKinds.Target }>, turn: NonNullable<Awaited<ReturnType<KurrentConversationComputerTurnStore["load"]>>>, turnRevision: bigint, conversationRevision: bigint, activeRevision: bigint, turns: KurrentConversationComputerTurnStore)
+/** Composes turn-owned cancellation with the Stop receipt and participant log in one atomic write. */
+function _CancellationIntent(admission: Extract<ConversationComputerStopAdmission, { kind: ConversationComputerStopAdmissionKinds.Target }>, turn: NonNullable<Awaited<ReturnType<KurrentConversationComputerTurnStore["load"]>>>, conversationRevision: bigint, activeRevision: bigint, turns: KurrentConversationComputerTurnStore)
 {
 	const outcome = _Outcome(ConversationComputerStopDecisions.CancellationWon, true, null);
 	const receipt = _Receipt(admission, outcome);
-	const entryId = _Uuid("stop-entry", admission.command.commandId);
-	const parsed = ___ConversationEntrySchema.parse({ schemaVersion: 1, id: entryId, conversationId: admission.command.conversationId, position: (conversationRevision + 1n).toString(), author: { kind: ConversationAuthorKinds.System, systemId: "opencrane", name: "OpenCrane" }, provenance: "service-attested", visibility: { audience: "conversation" }, runId: admission.target.runId, causationId: admission.command.causationId, correlationId: admission.target.runId, idempotencyKey: entryId, occurredAt: admission.requestedAt, attestation: { serviceId: "opencrane", receiptId: receipt.event.id, domainStream: receipt.streamName, domainRevision: "1", decisionEvidenceId: null }, kind: ConversationEntryKinds.Log, logKind: "run", phase: "interrupted", summary: "Work stopped", detailsRef: null });
-	if (parsed.kind !== ConversationEntryKinds.Log || parsed.logKind !== "run")
+	const entryId = _ConversationComputerEventId("stop-entry", admission.command.commandId);
+	const parsed = ___ConversationEntrySchema.parse({ schemaVersion: 1, id: entryId, conversationId: admission.command.conversationId, position: (conversationRevision + 1n).toString(), author: { kind: ConversationAuthorKinds.System, systemId: "opencrane", name: "OpenCrane" }, provenance: ConversationEntryProvenance.ServiceAttested, visibility: { audience: ConversationEntryAudiences.Conversation }, runId: admission.target.runId, causationId: admission.command.causationId, correlationId: admission.target.runId, idempotencyKey: entryId, occurredAt: admission.requestedAt, attestation: { serviceId: "opencrane", receiptId: receipt.event.id, domainStream: receipt.streamName, domainRevision: "1", decisionEvidenceId: null }, kind: ConversationEntryKinds.Log, logKind: ConversationLogKinds.Run, phase: ConversationRunLogPhases.Interrupted, summary: "Work stopped", detailsRef: null });
+	if (parsed.kind !== ConversationEntryKinds.Log || parsed.logKind !== ConversationLogKinds.Run)
 		throw new Error("Conversation Stop produced an invalid participant log");
 	const entry: RunLogEntry = parsed;
-	const turnStream = `conversation-computer-turn-${admission.target.bootstrapId}`;
-	const cancelled: HistoryEvent = { id: admission.command.commandId, type: _CANCELLED_EVENT, data: { commandId: admission.command.commandId, commandDigest: admission.commandDigest, occurredAt: admission.requestedAt }, metadata: { bootstrapId: admission.target.bootstrapId } };
 	const entryAppend = _ConversationHistoryEntryAppend({ siloId: admission.command.siloId, conversationId: admission.command.conversationId, expectedRevision: conversationRevision, entry });
-	const settlementAppend = turns.settlementAppend(turn, activeRevision);
-	return { expectedHeads: [{ streamName: turnStream, revision: turnRevision }, { streamName: receipt.streamName, revision: 0n }, { streamName: entryAppend.streamName, revision: entryAppend.expectedRevision }, { streamName: settlementAppend.streamName, revision: settlementAppend.expectedRevision }], appends: [{ streamName: turnStream, expectedRevision: turnRevision, events: [cancelled] }, { streamName: receipt.streamName, expectedRevision: 0n, events: [receipt.event] }, entryAppend, settlementAppend] };
+	const [turnAppend, settlementAppend] = turns.cancellationAppends(turn, { commandId: admission.command.commandId, commandDigest: admission.commandDigest, occurredAt: admission.requestedAt }, activeRevision);
+	return { expectedHeads: [{ streamName: turnAppend.streamName, revision: turnAppend.expectedRevision }, { streamName: receipt.streamName, revision: 0n }, { streamName: entryAppend.streamName, revision: entryAppend.expectedRevision }, { streamName: settlementAppend.streamName, revision: settlementAppend.expectedRevision }], appends: [turnAppend, { streamName: receipt.streamName, expectedRevision: 0n, events: [receipt.event] }, entryAppend, settlementAppend] };
 }
 
 function _Selection(selection: Extract<ConversationComputerStopSelection, { kind: ConversationComputerStopAdmissionKinds.Target }>)
 {
 	const streamName = _ReceiptStream(selection.command.commandId);
-	const event: HistoryEvent = { id: _Uuid("stop-selection", selection.command.commandId), type: _SELECTION_EVENT, data: { selection }, metadata: { siloId: selection.command.siloId, conversationId: selection.command.conversationId, commandId: selection.command.commandId } };
+	const event: HistoryEvent = { id: _ConversationComputerEventId("stop-selection", selection.command.commandId), type: _SELECTION_EVENT, data: { selection }, metadata: { siloId: selection.command.siloId, conversationId: selection.command.conversationId, commandId: selection.command.commandId } };
 	return { streamName, event };
 }
 
 function _Receipt(admission: ConversationComputerStopAdmission, outcome: ConversationComputerStopPublishOutcome)
 {
 	const streamName = _ReceiptStream(admission.command.commandId);
-	const event: HistoryEvent = { id: _Uuid("stop-receipt", admission.command.commandId), type: _RECEIPT_EVENT, data: { admission, outcome }, metadata: { siloId: admission.command.siloId, conversationId: admission.command.conversationId, commandId: admission.command.commandId } };
+	const event: HistoryEvent = { id: _ConversationComputerEventId("stop-receipt", admission.command.commandId), type: _RECEIPT_EVENT, data: { admission, outcome }, metadata: { siloId: admission.command.siloId, conversationId: admission.command.conversationId, commandId: admission.command.commandId } };
 	return { streamName, event };
 }
 
 function _ReadReceipt(event: HistoryRecordedEvent, command: ConversationComputerStopCommand): ConversationComputerStopPublishOutcome
 {
-	if (event.streamName !== _ReceiptStream(command.commandId) || event.type !== _RECEIPT_EVENT || event.id !== _Uuid("stop-receipt", command.commandId))
+	if (event.streamName !== _ReceiptStream(command.commandId) || event.type !== _RECEIPT_EVENT || event.id !== _ConversationComputerEventId("stop-receipt", command.commandId))
 		throw new Error("Conversation Stop receipt has invalid stream coordinates");
 	const { admission, outcome } = _ConversationComputerStopReceiptSchema.parse(event.data);
 	const expectedRevision = admission.kind === ConversationComputerStopAdmissionKinds.NoTarget ? 0n : 1n;
@@ -255,7 +251,7 @@ function _ReadSelection(event: HistoryRecordedEvent, command: ConversationComput
 			throw new Error("Conversation Stop no-target selection differs from its command");
 		return selection;
 	}
-	if (event.type !== _SELECTION_EVENT || event.id !== _Uuid("stop-selection", command.commandId))
+	if (event.type !== _SELECTION_EVENT || event.id !== _ConversationComputerEventId("stop-selection", command.commandId))
 		throw new Error("Conversation Stop selection has invalid event coordinates");
 	const selection = _ConversationComputerStopSelectionSchema.parse(event.data["selection"]);
 	_AssertSelectionCommand(selection, command);
@@ -332,12 +328,4 @@ async function _Last(history: Pick<HistoryStore, "readStream">, streamName: stri
 	for await (const event of history.readStream({ streamName }))
 		last = event;
 	return last;
-}
-
-function _Uuid(domain: string, value: string): string
-{
-	const hex = createHash("sha256").update(`${domain}:${value}`).digest("hex").slice(0, 32).split("");
-	hex[12] = "4";
-	hex[16] = "8";
-	return `${hex.slice(0, 8).join("")}-${hex.slice(8, 12).join("")}-${hex.slice(12, 16).join("")}-${hex.slice(16, 20).join("")}-${hex.slice(20).join("")}`;
 }

@@ -1,5 +1,5 @@
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
-import { AgentIdentityStates, ConversationComputerStates, type AgentIdentity, type ConversationComputer } from "@opencrane/contracts";
+import { AgentIdentityKinds, AgentIdentityStates, ConversationComputerStates, type AgentIdentity, type ConversationComputer } from "@opencrane/contracts";
 import { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
 import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { ConversationModes } from "@opencrane/models/conversations";
@@ -66,7 +66,7 @@ export class AgentSessionHistory
 			await this.identities.loadActive(command);
 			return;
 		}
-		const identity: AgentIdentity = { schemaVersion: 1, id: agentIdentityId, siloId: caller.siloId, agentServiceId: candidate.agentServiceId, name: candidate.agentName, avatarArtifactRevisionId: null, state: AgentIdentityStates.Active, createdByPrincipalId: caller.principalId, createdAt: new Date().toISOString(), kind: "proxied", proxiedPrincipalId: caller.principalId, delegationPolicyId: "personal-agent-session-v1" };
+		const identity: AgentIdentity = { schemaVersion: 1, id: agentIdentityId, siloId: caller.siloId, agentServiceId: candidate.agentServiceId, name: candidate.agentName, avatarArtifactRevisionId: null, state: AgentIdentityStates.Active, createdByPrincipalId: caller.principalId, createdAt: new Date().toISOString(), kind: AgentIdentityKinds.Proxied, proxiedPrincipalId: caller.principalId, delegationPolicyId: "personal-agent-session-v1" };
 		try
 		{
 			await this.identities.append({ expectedRevision: HistoryExpectedRevisions.NoStream, eventId: _DeterministicUuid("agent-identity-created", agentIdentityId), identity });

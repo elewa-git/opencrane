@@ -16,6 +16,15 @@ Source follows the steps that change independently:
 
 Each folder keeps its focused tests in `__tests__/`; consumers use the root public barrel.
 
+Source-loader, admission-build, duplicate-verification, and final-admission outcomes remain separate
+internal contracts even where their serialized denial value is the same.
+
+Personal and company-assistant admission share the command and lease validators in `subjects/`.
+These compare the saved run, human requester, computer, profile and lease coordinates before an
+execution subject is returned. The identity and permission readers keep their separate policies;
+the history reader still checks lease state and expiry. A matching identifier cannot replace those
+current-authority checks.
+
 This package is part of the **shared execution flow** used by both personal and managed agents.
 Before a conversation computer executes a run, the platform freezes *everything* that run is allowed to see
 and use into one immutable record — the
@@ -85,8 +94,8 @@ malformed, or digest-mismatched schemas fail admission. During compilation, the 
 identifier produces a 47-character provider-compatible `modelName`; the source name stays unchanged
 for disclosure and MCP dispatch. Different revisions may share a source name, but revision or final
 model-name collisions fail compilation. The alias grants no permission. The assembler never
-receives registry or provider credentials; execution consumes only the admitted OCI-backed MCP
-revision.
+receives registry or provider credentials. It selects admitted MCP revisions; the owning MCP
+executor chooses the transport and rechecks current execution authority.
 
 Invariant: a run either commits with its one complete, digest-sealed input snapshot, or it does not
 exist — there is no partially assembled state, and no snapshot field originates from unverified

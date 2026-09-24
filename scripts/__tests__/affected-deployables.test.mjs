@@ -253,9 +253,8 @@ test("selects affected image smokes unless manual qualification expands to every
 	);
 });
 
-test("selects Cognee provider qualification through the existing image-smoke decision", function _SelectsMemoryContract()
+test("selects Cognee provider qualification independently of the generic image-smoke target", function _SelectsMemoryContract()
 {
-	const all = ["cognee", "mcp-executor"];
 	for (const [affected, manual, required] of [
 		[["cognee"], "", true],
 		[["mcp-executor"], "", false],
@@ -265,7 +264,7 @@ test("selects Cognee provider qualification through the existing image-smoke dec
 		[[], "none", false],
 	])
 	{
-		assert.equal(selectCogneeMemoryContractRequired(selectImageSmokeProjects(affected, all, manual)), required);
+		assert.equal(selectCogneeMemoryContractRequired(affected, manual), required);
 	}
 });
 
@@ -292,35 +291,23 @@ test("requires an uncached Docker memory proof before normal publication", funct
 	const projectPath = fileURLToPath(new URL("../../apps/_infra/cognee/project.json", import.meta.url));
 	const project = JSON.parse(readFileSync(projectPath, "utf8"));
 	assert.equal(project.targets["memory-contract"].cache, false);
+	assert.equal(project.targets["image-smoke"], undefined);
 	assert.doesNotMatch(project.targets.test.options.command, /memory-contract|docker/u);
 });
 
-test("qualifies a disposable Cognee candidate without replacing the production gate", function _IsolatesCandidateQualification()
+test("uses the qualified Cognee profile as the only production gate", function _KeepsOneProviderQualification()
 {
 	const workflow = parse(_Workflow());
-	const candidate = workflow.jobs.cognee_candidate_contract;
-	assert.equal(candidate.needs, "prepare");
-	assert.equal(candidate.if, "needs.prepare.outputs.cognee_memory_contract_required == 'true'");
-	assert.equal(candidate["continue-on-error"], undefined);
-	const execution = candidate.steps.find(function _Execution(step) { return step.run?.includes("cognee:memory-contract-1-5-4"); });
-	assert.equal(execution.run, "npm exec -- nx run cognee:memory-contract-1-5-4");
-	assert.equal(execution["continue-on-error"], undefined);
-	const evidence = candidate.steps.find(function _Evidence(step) { return step.uses === "actions/upload-artifact@v4"; });
-	assert.equal(evidence.if, "always()");
-	assert.equal(evidence.with.path, ".nx/test-results/cognee-memory-contract-1-5-4");
-	assert.equal(evidence.with["if-no-files-found"], "error");
+	assert.equal(workflow.jobs.cognee_candidate_contract, undefined);
 	for (const name of ["build-and-push", "publish-develop-smoke-images"])
 	{
 		const publication = workflow.jobs[name];
 		assert.ok(publication.needs.includes("cognee_memory_contract"));
-		assert.ok(!publication.needs.includes("cognee_candidate_contract"));
-		assert.doesNotMatch(publication.if, /cognee_candidate_contract/u);
 	}
 	const projectPath = fileURLToPath(new URL("../../apps/_infra/cognee/project.json", import.meta.url));
 	const project = JSON.parse(readFileSync(projectPath, "utf8"));
-	assert.equal(project.targets["memory-contract-1-5-4"].cache, false);
-	assert.equal(project.targets["memory-contract-1-5-4"].options.command, "bash apps/_infra/cognee/tests/memory-contract-1.5.4.sh");
-	assert.equal(project.targets["memory-contract-1-5-4"].metadata?.release, undefined);
+	assert.equal(project.targets["memory-contract-1-5-4"], undefined);
+	assert.equal(project.targets["memory-contract"].options.command, "bash apps/_infra/cognee/tests/memory-contract.sh");
 	assert.equal(project.targets.container.metadata.release.dockerfile, "apps/_infra/cognee/deploy/Dockerfile");
 });
 

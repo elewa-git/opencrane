@@ -187,8 +187,20 @@ class _CogneeProviderSession implements CogneeProviderSession
 	}
 }
 
-/** Build the package-private session consumed by memory-gateway provider handlers. */
-export function _CreateCogneeProviderSession(options: CogneeProviderSessionOptions): CogneeProviderSession
+/**
+ * Create the sole authenticated Cognee session for one private memory-gateway process.
+ *
+ * The session reads credentials only when it needs to log in, retains the bearer in memory, shares
+ * concurrent refreshes, and replays one request only after an HTTP 401. Callers must preserve one
+ * instance for the process lifetime and treat every rejection as an unavailable provider.
+ *
+ * Called by: apps/memory-gateway/src/index.ts during process composition.
+ *
+ * @param options - Provider origin, credential reader, response limits, timeout, and first-install policy.
+ * @returns A session that never exposes its bearer token.
+ * @throws {CogneeProviderSessionError} When configuration or a later session exchange fails.
+ */
+export function __CreateCogneeProviderSession(options: CogneeProviderSessionOptions): CogneeProviderSession
 {
 	return new _CogneeProviderSession(options);
 }

@@ -52,7 +52,10 @@ async function _ReadBoundedText(response: Response): Promise<string>
 			throw new MemoryGatewayTransportError("oversize");
 		}
 	}
-	if (response.body === null) return "";
+	if (response.body === null)
+	{
+		return "";
+	}
 
 	const reader = response.body.getReader();
 	const chunks: Uint8Array[] = [];
@@ -60,7 +63,10 @@ async function _ReadBoundedText(response: Response): Promise<string>
 	while (true)
 	{
 		const result = await reader.read();
-		if (result.done) return Buffer.concat(chunks, byteLength).toString("utf8");
+		if (result.done)
+		{
+			return Buffer.concat(chunks, byteLength).toString("utf8");
+		}
 		byteLength += result.value.byteLength;
 		if (byteLength > _MAX_RESPONSE_BYTES)
 		{
@@ -82,7 +88,10 @@ async function _ReadBoundedText(response: Response): Promise<string>
  */
 function _ThrowTransportFailure(error: unknown): never
 {
-	if (error instanceof MemoryGatewayTransportError || error instanceof MemoryGatewayProtocolError) throw error;
+	if (error instanceof MemoryGatewayTransportError || error instanceof MemoryGatewayProtocolError)
+	{
+		throw error;
+	}
 	const isTimeout = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
 	throw new MemoryGatewayTransportError(isTimeout ? "timeout" : "network");
 }
@@ -93,7 +102,10 @@ function _CreateServerTokenReader(tokenFile: string): () => Promise<string>
 	return async function _readServerToken(): Promise<string>
 	{
 		const token = await readFile(tokenFile, "utf8");
-		if (token.trim().length === 0) throw new Error("mounted memory-gateway token is empty");
+		if (token.trim().length === 0)
+		{
+			throw new Error("mounted memory-gateway token is empty");
+		}
 		return token.trim();
 	};
 }
@@ -103,8 +115,8 @@ function _CreateServerTokenReader(tokenFile: string): () => Promise<string>
  *
  * Every exchange re-reads the projected ServiceAccount token and sends it as a bearer token. The
  * memory gateway checks that token with a Kubernetes TokenReview and admits only the OpenCrane
- * server identity; Cognee itself sits behind the gateway, private and unauthenticated, so the
- * gateway is the only thing that ever authorizes a search. Every fetch runs with automatic child
+ * server identity. Cognee sits behind the gateway and authenticates the gateway's service user;
+ * the server never receives that credential. Every fetch runs with automatic child
  * tracing switched off so the bearer header and the remote address cannot become span attributes;
  * the caller's own memory-gateway span stays active. The token audience is
  * `MEMORY_GATEWAY_PROJECTED_TOKEN_AUDIENCE` in libs/contracts/src/memory/memory.types.ts.
@@ -130,7 +142,10 @@ export function __CreateCogneeSession(options: CogneeMemoryGatewayHttpOptions): 
 	async function _Send(path: string, method: string, body: unknown): Promise<Response>
 	{
 		const headers = new Headers({ accept: "application/json" });
-		if (body !== undefined) headers.set("content-type", "application/json");
+		if (body !== undefined)
+		{
+			headers.set("content-type", "application/json");
+		}
 		headers.set("authorization", `Bearer ${await readServerToken()}`);
 		try
 		{

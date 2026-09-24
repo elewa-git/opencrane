@@ -19,6 +19,20 @@ import type { SessionAssemblyRefusalReason } from "./session-assembly-result.typ
 export type SessionAssemblyCommand = RunAdmissionCommand;
 
 /**
+ * Outcomes owned by one input source while the admission transaction is assembled.
+ *
+ * These values are internal control-flow discriminants. They stay separate from the run
+ * admission transaction's build and final outcomes, even though all use the same denial word.
+ */
+export enum SessionAssemblyLoadOutcomes
+{
+	/** The source loaded the complete slice required by its authority. */
+	Loaded = "loaded",
+	/** The source could not prove its slice and the admission must refuse. */
+	Denied = "denied",
+}
+
+/**
  * What one input source returns: either the value it loaded, or a refusal.
  *
  * A refusal from any single source aborts the whole admission with that reason — sources are not
@@ -33,7 +47,7 @@ export type SessionAssemblyCommand = RunAdmissionCommand;
  * @typeParam T - The slice of run input this source owns.
  * @see SessionAssemblyRefusalReason
  */
-export type SessionAssemblyLoad<T> = { readonly outcome: "loaded"; readonly value: T } | { readonly outcome: "denied"; readonly reason: Exclude<SessionAssemblyRefusalReason, "invalid_command" | "persistence_unavailable"> };
+export type SessionAssemblyLoad<T> = { readonly outcome: `${SessionAssemblyLoadOutcomes.Loaded}`; readonly value: T } | { readonly outcome: `${SessionAssemblyLoadOutcomes.Denied}`; readonly reason: Exclude<SessionAssemblyRefusalReason, "invalid_command" | "persistence_unavailable"> };
 
 /** Approved persona evidence available to a personal runtime. */
 export interface ApprovedPersonaInput

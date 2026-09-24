@@ -55,8 +55,9 @@ fi
 # named egress paths. The generic policy excludes Cognee so it cannot widen this list.
 test -n "$COGNEE_POLICY"
 test -n "$COGNEE_DEPLOYMENT"
-awk '/- name: ENABLE_BACKEND_ACCESS_CONTROL/ { getline; if ($0 !~ /value: "false"/) exit 1; found=1 } END { exit !found }' <<<"$COGNEE_DEPLOYMENT"
-awk '/- name: REQUIRE_AUTHENTICATION/ { getline; if ($0 !~ /value: "false"/) exit 1; found=1 } END { exit !found }' <<<"$COGNEE_DEPLOYMENT"
+awk '/- name: ENABLE_BACKEND_ACCESS_CONTROL/ { getline; if ($0 !~ /value: "true"/) exit 1; found=1 } END { exit !found }' <<<"$COGNEE_DEPLOYMENT"
+awk '/- name: REQUIRE_AUTHENTICATION/ { getline; if ($0 !~ /value: "true"/) exit 1; found=1 } END { exit !found }' <<<"$COGNEE_DEPLOYMENT"
+awk '/- name: DB_PROVIDER/ { getline; if ($0 !~ /value: sqlite/) exit 1; found=1 } END { exit !found }' <<<"$COGNEE_DEPLOYMENT"
 grep -Fq '    - Ingress' <<<"$COGNEE_POLICY"
 grep -Fq '    - Egress' <<<"$COGNEE_POLICY"
 grep -Fq '              app.kubernetes.io/component: memory-gateway' <<<"$COGNEE_POLICY"
@@ -72,6 +73,11 @@ test -n "$MEMORY_GATEWAY_DEPLOYMENT"
 grep -Fq '        runAsUser: 1000' <<<"$MEMORY_GATEWAY_DEPLOYMENT"
 grep -Fq '        runAsGroup: 1000' <<<"$MEMORY_GATEWAY_DEPLOYMENT"
 grep -Fq '        fsGroup: 1000' <<<"$MEMORY_GATEWAY_DEPLOYMENT"
+grep -Fq '            - name: COGNEE_CREDENTIAL_EMAIL_PATH' <<<"$MEMORY_GATEWAY_DEPLOYMENT"
+grep -Fq '              value: /var/run/opencrane/cognee-service-user/email' <<<"$MEMORY_GATEWAY_DEPLOYMENT"
+grep -Fq '            - name: COGNEE_ALLOW_FIRST_INSTALL_REGISTRATION' <<<"$MEMORY_GATEWAY_DEPLOYMENT"
+grep -Fq '              value: "false"' <<<"$MEMORY_GATEWAY_DEPLOYMENT"
+grep -Fq 'secretName: "opencrane-cognee-service-user"' <<<"$MEMORY_GATEWAY_DEPLOYMENT"
 grep -Fq '            cidr: "10.43.0.1/32"' <<<"$MEMORY_GATEWAY_POLICY"
 grep -Fq '            cidr: "172.18.0.2/32"' <<<"$MEMORY_GATEWAY_POLICY"
 grep -Fq '              app.kubernetes.io/component: cognee' <<<"$MEMORY_GATEWAY_POLICY"
@@ -88,6 +94,13 @@ if helm template opencrane-without-private-memory-policy "$CHART_DIR" \
   "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set networkPolicy.enabled=false >/dev/null 2>&1; then
   echo "private Cognee must reject a render without its network boundary" >&2
+  exit 1
+fi
+
+if helm template opencrane-without-durable-memory "$CHART_DIR" \
+  "${MEMORY_GATEWAY_API_ARGS[@]}" \
+  --set clustertenantManager.cognee.persistence.enabled=false >/dev/null 2>&1; then
+  echo "qualified Cognee provider must reject an ephemeral data store" >&2
   exit 1
 fi
 

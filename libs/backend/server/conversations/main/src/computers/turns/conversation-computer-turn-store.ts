@@ -3,7 +3,6 @@ import { _CONVERSATION_TOOL_SELECTED_EVENT, _ConversationToolSelectionEvent, _Re
 import type { ConversationComputerContinuationReservation, ConversationComputerToolSelection } from "./conversation-computer-continuation.types";
 import { _ConversationModelReservationEvent, _ReadConversationModelReservation, _ReadConversationContinuationReservation } from "./conversation-computer-model-reservation";
 import type { ConversationComputerModelReservation } from "./conversation-computer-model.types";
-import { createHash } from "node:crypto";
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
@@ -13,15 +12,16 @@ import { _ReadBoundConversationWriterIntent } from "@opencrane/backend/server/co
 import { _ConversationComputerActiveTurnStreamName } from "../lifecycle/conversation-computer-activity";
 import type { ConversationComputerOutputDecision, ConversationComputerTurnCancellationReceipt, ConversationComputerTurnOutputReceipt, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 import type { ConversationComputerLeaseCoordinates } from "@opencrane/backend/server/conversations/computers";
-import { ConversationEntryKinds, MessageStates } from "@opencrane/contracts";
+import { ConversationEntryAudiences, ConversationEntryKinds, MessageStates } from "@opencrane/contracts";
 import { _ConversationComputerTurnCancellationReceiptSchema } from "./conversation-computer-turn-cancellation.validator";
+import { _ConversationComputerEventId } from "../conversation-computer-event-id";
 
 const _FROZEN_EVENT = "opencrane.conversation-computer-turn-frozen.v1";
 const _OUTPUT_EVENT = "opencrane.conversation-computer-turn-output.v2";
 const _ACTIVE_EVENT = "opencrane.conversation-computer-turn-active.v1";
 const _SETTLED_EVENT = "opencrane.conversation-computer-turn-settled.v1";
 /** Names the terminal turn event written when Stop wins against final output. */
-export const _CANCELLED_EVENT = "opencrane.conversation-computer-turn-cancelled.v1";
+const _CANCELLED_EVENT = "opencrane.conversation-computer-turn-cancelled.v1";
 
 /** Reports that newer conversation history won the output position before the atomic commit. */
 export class ConversationComputerOutputPositionConflictError extends Error {}
@@ -241,12 +241,32 @@ export class KurrentConversationComputerTurnStore implements ConversationCompute
 			throw new Error("Conversation computer cannot confirm its own settlement");
 	}
 
-	/** Builds this turn's checked active-pointer settlement for a larger atomic history transaction. */
-	public settlementAppend(turn: FrozenConversationComputerTurn, expectedRevision: bigint): HistoryAppend
+	/**
+	 * Prepares cancellation and pointer settlement for the Stop publisher's atomic history write.
+	 *
+	 * The turn must come from this store's validated load. Its decoded state determines the expected
+	 * revision; a model or tool step that wins afterward forces the publisher to reload and retry.
+	 * The publisher supplies the exact active-pointer revision it checked and must commit both appends
+	 * together with its receipt and participant log. Preparing these values grants no new authority.
+	 */
+	public cancellationAppends(turn: FrozenConversationComputerTurn, receipt: ConversationComputerTurnCancellationReceipt, activeRevision: bigint): readonly [HistoryAppend, HistoryAppend]
+	{
+		if (turn.outputReceipt !== null || turn.cancellationReceipt !== null)
+			throw new Error("Conversation computer cannot cancel a terminal turn");
+		const checked = _ConversationComputerTurnCancellationReceiptSchema.parse(receipt);
+		const revision = _NextTurnRevision(turn);
+		const streamName = _Stream(turn.bootstrapId);
+		const event = { id: checked.commandId, type: _CANCELLED_EVENT, data: { ...checked }, metadata: { bootstrapId: turn.bootstrapId } };
+		_Cancellation({ ...event, streamName, revision, recordedAt: new Date(checked.occurredAt) }, turn);
+		return [{ streamName, expectedRevision: revision - 1n, events: [event] }, this.settlementAppend(turn, activeRevision)];
+	}
+
+	/** Builds the active-pointer settlement used by this store's completion and cancellation paths. */
+	private settlementAppend(turn: FrozenConversationComputerTurn, expectedRevision: bigint): HistoryAppend
 	{
 		if (expectedRevision < 0n)
 			throw new Error("Conversation computer settlement requires an existing active pointer");
-		return { streamName: _ActiveStream(turn), expectedRevision, events: [{ id: _Uuid("settled", turn.bootstrapId), type: _SETTLED_EVENT, data: { bootstrapId: turn.bootstrapId }, metadata: _Metadata(turn) }] };
+		return { streamName: _ActiveStream(turn), expectedRevision, events: [{ id: _ConversationComputerEventId("settled", turn.bootstrapId), type: _SETTLED_EVENT, data: { bootstrapId: turn.bootstrapId }, metadata: _Metadata(turn) }] };
 	}
 
 	private async _Activate(turn: FrozenConversationComputerTurn): Promise<void>
@@ -277,7 +297,7 @@ function _HasSettlement(events: readonly HistoryRecordedEvent[], turn: FrozenCon
 	const metadata = Object.fromEntries(Object.entries(_Metadata(turn)).map(([key, value]) => [key, String(value)]));
 	return events.some(function _Matches(event, index)
 	{
-		if (event.type !== _SETTLED_EVENT || event.id !== _Uuid("settled", turn.bootstrapId))
+		if (event.type !== _SETTLED_EVENT || event.id !== _ConversationComputerEventId("settled", turn.bootstrapId))
 			return false;
 		const prior = events[index - 1];
 		return prior?.type === _ACTIVE_EVENT && _ActiveBootstrap(prior, turn) === turn.bootstrapId
@@ -307,14 +327,6 @@ function _ActiveBootstrap(event: HistoryRecordedEvent, command: ConversationComp
 	if (typeof bootstrapId !== "string" || event.data["siloId"] !== command.siloId || event.data["computerId"] !== command.computerId || event.data["generation"] !== command.lease.leaseGeneration || event.data["leaseId"] !== command.lease.leaseId)
 		throw new Error("Conversation computer active-turn history crossed its lease fence");
 	return bootstrapId;
-}
-
-function _Uuid(domain: string, value: string): string
-{
-	const hex = createHash("sha256").update(`${domain}:${value}`).digest("hex").slice(0, 32).split("");
-	hex[12] = "4";
-	hex[16] = "8";
-	return `${hex.slice(0, 8).join("")}-${hex.slice(8, 12).join("")}-${hex.slice(12, 16).join("")}-${hex.slice(16, 20).join("")}-${hex.slice(20).join("")}`;
 }
 
 /** Only independent server timestamps may differ for concurrent preparations of one command. */
@@ -445,7 +457,7 @@ function _OutputIntent(turn: FrozenConversationComputerTurn, value: unknown): Co
 	const entry = intent.event.data.entry;
 	if (intent.event.id !== _OutputReservation(turn).invocationFence || entry.kind !== ConversationEntryKinds.Message || entry.state !== MessageStates.Completed
 		|| entry.replyToEntryId !== turn.latestPendingEntryId || entry.addressedAgentIdentityId !== null || entry.activation !== "none"
-		|| entry.visibility.audience !== "conversation" || entry.causationId !== turn.latestPendingEntryId || entry.correlationId !== turn.latestPendingEntryId)
+		|| entry.visibility.audience !== ConversationEntryAudiences.Conversation || entry.causationId !== turn.latestPendingEntryId || entry.correlationId !== turn.latestPendingEntryId)
 		throw new Error("Conversation computer output decision has a different answer shape");
 	__ReadConversationGeneratedFileOutput({ ...turn, outputReceipt: intent });
 	return intent;

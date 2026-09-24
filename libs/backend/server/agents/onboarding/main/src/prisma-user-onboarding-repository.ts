@@ -17,7 +17,7 @@ const _BOOTSTRAP_CONVERSATION_PENDING_TRIGGER = "bootstrap conversation must bin
  * client. Exists so the app's composition root never constructs the Prisma class directly.
  *
  * Called by: _CreateUserOnboardingComposition in
- * apps/opencrane/src/app/user-onboarding-composition.ts.
+ * libs/backend/server/agents/onboarding/main/src/composition/user-onboarding-composition.ts.
  *
  * @param prisma - Product database client, or a transaction client in tests.
  * @returns One adapter usable as either onboarding port.

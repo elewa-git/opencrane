@@ -1,10 +1,10 @@
-import { createHash } from "node:crypto";
 import { ConversationHistoryAppendOutcomes, ConversationHistoryAuthority, ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
 import { type HistoryEvent, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
-import { ConversationAuthorKinds, ConversationEntryKinds, ___ConversationEntrySchema, type ApprovalLogEntry, type ConversationElicitation } from "@opencrane/contracts";
+import { ConversationApprovalLogPhases, ConversationAuthorKinds, ConversationEntryAudiences, ConversationEntryKinds, ConversationEntryProvenance, ConversationLogKinds, ___ConversationEntrySchema, type ApprovalLogEntry, type ConversationElicitation } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { ConversationApprovalNotificationOutcomes, type ConversationApprovalNotificationClock, type ConversationApprovalNotificationCommand, type ConversationApprovalNotificationPort, type ConversationApprovalNotificationRequestReader } from "./conversation-approval-notification.types";
+import { _ConversationComputerEventId } from "../../conversation-computer-event-id";
 
 /** Maximum checked conversation-head retries before the workflow retries the whole checkpoint. */
 const _APPEND_ATTEMPTS = 4;
@@ -78,8 +78,8 @@ export class KurrentConversationApprovalNotificationPublisher implements Convers
 function _Intent(command: ConversationApprovalNotificationCommand, request: ConversationElicitation, expectedRevision: bigint)
 {
 	const receiptStream = _ReceiptStream(command.approvalId);
-	const receiptId = _Uuid("approval-notification-receipt", command.approvalId);
-	const entry: ApprovalLogEntry = { schemaVersion: 1, id: command.approvalId, conversationId: command.conversationId, position: (expectedRevision + 1n).toString(), author: { kind: ConversationAuthorKinds.System, systemId: "opencrane", name: "OpenCrane" }, provenance: "service-attested", visibility: { audience: "participant_subset", participantIds: [request.assignedParticipantId] }, runId: command.runId, causationId: command.approvalId, correlationId: command.runId, idempotencyKey: command.approvalId, occurredAt: request.requestedAt, attestation: { serviceId: "opencrane", receiptId, domainStream: receiptStream, domainRevision: "0", decisionEvidenceId: null }, kind: ConversationEntryKinds.Log, logKind: "approval", approvalId: command.approvalId, action: "Invoke tool", phase: "requested", summary: "Approval requested", detailsRef: null };
+	const receiptId = _ConversationComputerEventId("approval-notification-receipt", command.approvalId);
+	const entry: ApprovalLogEntry = { schemaVersion: 1, id: command.approvalId, conversationId: command.conversationId, position: (expectedRevision + 1n).toString(), author: { kind: ConversationAuthorKinds.System, systemId: "opencrane", name: "OpenCrane" }, provenance: ConversationEntryProvenance.ServiceAttested, visibility: { audience: ConversationEntryAudiences.ParticipantSubset, participantIds: [request.assignedParticipantId] }, runId: command.runId, causationId: command.approvalId, correlationId: command.runId, idempotencyKey: command.approvalId, occurredAt: request.requestedAt, attestation: { serviceId: "opencrane", receiptId, domainStream: receiptStream, domainRevision: "0", decisionEvidenceId: null }, kind: ConversationEntryKinds.Log, logKind: ConversationLogKinds.Approval, approvalId: command.approvalId, action: "Invoke tool", phase: ConversationApprovalLogPhases.Requested, summary: "Approval requested", detailsRef: null };
 	const parsed = ___ConversationEntrySchema.parse(entry);
 	const receipt: HistoryEvent = { id: receiptId, type: _RECEIPT_EVENT_TYPE, data: { bootstrapId: command.bootstrapId, approvalId: command.approvalId, intent: { streamName: _ConversationStream(command.conversationId), entry: parsed } }, metadata: { siloId: command.siloId, conversationId: command.conversationId, runId: command.runId, approvalId: command.approvalId } };
 	return { command: { siloId: command.siloId, conversationId: command.conversationId, expectedRevision, entry: parsed, attestation: { streamName: receiptStream, event: receipt } }, streamName: _ConversationStream(command.conversationId), entry: parsed };
@@ -125,12 +125,3 @@ function _ReceiptStream(approvalId: string): string { return `conversation-appro
 
 /** Name the canonical participant conversation stream. */
 function _ConversationStream(conversationId: string): string { return `conversation-${conversationId}`; }
-
-/** Derive a stable UUID without adding a second persisted identifier. */
-function _Uuid(domain: string, value: string): string
-{
-	const hex = createHash("sha256").update(`${domain}:${value}`).digest("hex").slice(0, 32).split("");
-	hex[12] = "4";
-	hex[16] = "8";
-	return `${hex.slice(0, 8).join("")}-${hex.slice(8, 12).join("")}-${hex.slice(12, 16).join("")}-${hex.slice(16, 20).join("")}-${hex.slice(20).join("")}`;
-}

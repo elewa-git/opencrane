@@ -53,6 +53,21 @@ describe("ManagedConversationExecutionSubjectAuthority", function _Suite()
 		const authority = new ManagedConversationExecutionSubjectAuthority({ ...dependencies, executionEvidence: dependencies.executionEvidenceFactory } as never);
 		await expect(authority.load(_Command(), { agentServiceId: "service-1", agentRevisionId: "revision-1" } as never, { prisma: {}, authorization: {}, admittedAt: _NOW, admittedAtEpochMs: Date.parse(_NOW) } as never)).resolves.toEqual({ outcome: "denied", reason: "identity_unavailable" });
 	});
+	it.each([
+		["computer", "id"], ["computer", "siloId"], ["computer", "conversationId"],
+		["computer", "agentIdentityId"], ["computer", "profileRevisionId"],
+		["lease", "id"], ["lease", "computerId"], ["lease", "generation"], ["lease", "sandboxClaimId"],
+	])("rejects substituted %s.%s before loading managed permissions", async function _RejectsHistoryCoordinates(owner, field)
+	{
+		const dependencies = _Dependencies();
+		const active = await dependencies.computerHistory.loadActiveLease();
+		active[owner][field] = field === "generation" ? 4 : "substituted";
+		dependencies.computerHistory.loadActiveLease.mockResolvedValue(active);
+		const authority = new ManagedConversationExecutionSubjectAuthority({ ...dependencies, executionEvidence: dependencies.executionEvidenceFactory } as never);
+		await expect(authority.load(_Command(), { agentServiceId: "service-1", agentRevisionId: "revision-1" } as never, { prisma: {}, authorization: {}, admittedAt: _NOW, admittedAtEpochMs: Date.parse(_NOW) } as never)).resolves.toEqual({ outcome: "denied", reason: "identity_unavailable" });
+		expect(dependencies.executionEvidence.load).not.toHaveBeenCalled();
+	});
+
 	it("rejects a requester Principal substituted for the company Principal before reading identity history", async function _RejectsBorrowedHuman()
 	{
 		const dependencies = _Dependencies();

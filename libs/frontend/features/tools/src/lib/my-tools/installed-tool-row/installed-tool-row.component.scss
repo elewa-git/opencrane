@@ -11,16 +11,5 @@
 	&__actions {
 		text-align: right;
 		white-space: nowrap;
-
-		.wo-tools__act + .wo-tools__act {
-			margin-left: 14px;
-		}
 	}
-
-	&__prompt {
-		.wo-tools__act {
-			margin-left: 6px;
-		}
-	}
-
 }

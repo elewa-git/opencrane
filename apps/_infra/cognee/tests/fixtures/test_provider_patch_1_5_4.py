@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Verify the candidate repair patch and its cross-process file lock."""
+"""Verify the provider repair patch and its cross-process file lock."""
 
 import asyncio
 import hashlib
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -16,12 +17,12 @@ from unittest import mock
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
 PATCH_DIRECTORY = (
-    REPOSITORY_ROOT / "apps/_infra/cognee/tests/candidates/1.5.4/patches"
+    REPOSITORY_ROOT / "apps/_infra/cognee/deploy/patches"
 )
 APPLIER_PATH = PATCH_DIRECTORY / "apply-source-patch.py"
-APPLIER_SPEC = importlib.util.spec_from_file_location("candidate_source_patch", APPLIER_PATH)
+APPLIER_SPEC = importlib.util.spec_from_file_location("provider_source_patch", APPLIER_PATH)
 if APPLIER_SPEC is None or APPLIER_SPEC.loader is None:
-    raise RuntimeError("Unable to load the candidate source patch helper")
+    raise RuntimeError("Unable to load the provider source patch helper")
 APPLIER = importlib.util.module_from_spec(APPLIER_SPEC)
 APPLIER_SPEC.loader.exec_module(APPLIER)
 
@@ -44,15 +45,15 @@ def _managed_lock_source() -> str:
 
 
 def _load_managed_lock() -> types.ModuleType:
-    module = types.ModuleType("candidate_managed_data_file_lock")
+    module = types.ModuleType("provider_managed_data_file_lock")
     exec(compile(_managed_lock_source(), "managed_data_file_lock.py", "exec"), module.__dict__)
     return module
 
 
-class CandidatePatch154Test(unittest.TestCase):
-    def test_candidate_runner_keeps_connection_test_and_tokenizer_offline(self) -> None:
+class ProviderPatch154Test(unittest.TestCase):
+    def test_provider_runner_keeps_connection_test_and_tokenizer_offline(self) -> None:
         runner = (
-            REPOSITORY_ROOT / "apps/_infra/cognee/tests/memory-contract-1.5.4.sh"
+            REPOSITORY_ROOT / "apps/_infra/cognee/tests/memory-contract.sh"
         ).read_text(encoding="utf-8")
         start = runner.index("_start_cognee()")
         end = runner.index('current_case="acl_disabled_negative_control"', start)
@@ -60,7 +61,29 @@ class CandidatePatch154Test(unittest.TestCase):
 
         self.assertIn("--env HF_HUB_OFFLINE=1", start_cognee)
         self.assertIn("--env TRANSFORMERS_OFFLINE=1", start_cognee)
+        self.assertIn("--env DB_PROVIDER=sqlite", start_cognee)
         self.assertNotIn("COGNEE_SKIP_CONNECTION_TEST", start_cognee)
+
+    def test_provider_profile_fixes_single_worker_sqlite_storage(self) -> None:
+        profile = json.loads(
+            (
+                REPOSITORY_ROOT / "apps/_infra/cognee/deploy/provider-profile.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            profile["deployment"],
+            {
+                "replicas": 1,
+                "workersPerReplica": 1,
+                "relationalProvider": "sqlite",
+                "storage": "shared-local-volume",
+            },
+        )
+        smoke = (
+            REPOSITORY_ROOT / "apps/_infra/cognee/tests/image-smoke.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn("gunicorn_commands", smoke)
+        self.assertIn("workersPerReplica", smoke)
 
     def test_patch_applier_rejects_context_drift(self) -> None:
         patch = "--- a/example.py\n+++ b/example.py\n@@ -1 +1 @@\n-old\n+new\n"

@@ -1,13 +1,15 @@
-import type { PersonalExecutionEvidenceTransaction } from "@opencrane/backend/server/agents/agent-services";
-import { PersonalExecutionEvidenceDenialReasons } from "@opencrane/backend/server/agents/agent-services";
+import { AgentIdentityKinds } from "@opencrane/contracts";
+import { ExecutionEvidenceOutcomes, PersonalExecutionEvidenceDenialReasons, type PersonalExecutionEvidenceTransaction } from "@opencrane/backend/server/agents/agent-services";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 
-import type { ExecutionSubjectAuthority, SessionAssemblyCommand, SessionAssemblyLoad } from "../assembly/session-assembly.types";
-import type { PersonalConversationExecutionSubjectCoordinates, PersonalConversationExecutionSubjectDependencies } from "./personal-conversation-execution-subject-authority.types";
+import { SessionAssemblyLoadOutcomes, type ExecutionSubjectAuthority, type SessionAssemblyCommand, type SessionAssemblyLoad } from "../assembly/session-assembly.types";
+import type { PersonalConversationExecutionSubjectDependencies } from "./personal-conversation-execution-subject-authority.types";
+import { _MatchesConversationExecutionCommand, _MatchesConversationExecutionLease } from "./conversation-execution-subject.validator";
 
 /** Builds an attempt-one personal execution subject only from current authority evidence. */
 export class PersonalConversationExecutionSubjectAuthority implements ExecutionSubjectAuthority
 {
+	/** Binds the saved conversation coordinates to current identity, lease and permission readers. */
 	public constructor(private readonly dependencies: PersonalConversationExecutionSubjectDependencies) {}
 
 	/** Rechecks every run, identity, requester, computer, and lease coordinate at the admission fence. */
@@ -15,10 +17,9 @@ export class PersonalConversationExecutionSubjectAuthority implements ExecutionS
 	{
 		const coordinates = this.dependencies.coordinates;
 		const { computer, agent, lease } = coordinates;
-		if (command.conversationId === null || command.trigger !== "interactive" || !_MatchesCommand(command, run, coordinates)
-			|| coordinates.requesterPrincipalId.trim().length === 0
-			|| !Number.isSafeInteger(lease.leaseGeneration) || lease.leaseGeneration <= 0)
-			return { outcome: "denied", reason: "identity_unavailable" };
+		if (command.conversationId === null || command.trigger !== "interactive" || !_MatchesConversationExecutionCommand(command, run, coordinates)
+			|| coordinates.requesterPrincipalId.trim().length === 0)
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "identity_unavailable" };
 
 		let currentIdentity;
 		try
@@ -27,16 +28,16 @@ export class PersonalConversationExecutionSubjectAuthority implements ExecutionS
 		}
 		catch
 		{
-			return { outcome: "denied", reason: "identity_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "identity_unavailable" };
 		}
-		if (currentIdentity.identity.kind !== "proxied")
-			return { outcome: "denied", reason: "identity_unavailable" };
+		if (currentIdentity.identity.kind !== AgentIdentityKinds.Proxied)
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "identity_unavailable" };
 
 		if (transaction.authorization === undefined)
-			return { outcome: "denied", reason: "product_authorization_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "product_authorization_unavailable" };
 		const evidence = await this.dependencies.executionEvidence(transaction).load({ identity: currentIdentity.identity, requesterPrincipalId: coordinates.requesterPrincipalId, agentRevisionId: run.agentRevisionId }, { authorization: transaction.authorization, admittedAtEpochMs: transaction.admittedAtEpochMs } as PersonalExecutionEvidenceTransaction);
-		if (evidence.outcome === "denied")
-			return { outcome: "denied", reason: _EvidenceDenial(evidence.reason) };
+		if (evidence.outcome === ExecutionEvidenceOutcomes.Denied)
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: _EvidenceDenial(evidence.reason) };
 
 		let activeComputer;
 		try
@@ -45,22 +46,18 @@ export class PersonalConversationExecutionSubjectAuthority implements ExecutionS
 		}
 		catch
 		{
-			return { outcome: "denied", reason: "conversation_unavailable" };
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "conversation_unavailable" };
 		}
 
 		const value = evidence.value;
 		if (value.identity.siloId !== command.siloId || value.identity.agentIdentityId !== computer.agentIdentityId
 			|| value.identity.agentServiceId !== run.agentServiceId || value.identity.agentRevisionId !== run.agentRevisionId
-			|| value.identity.principalId !== coordinates.requesterPrincipalId || activeComputer.computer.siloId !== command.siloId
-			|| activeComputer.computer.conversationId !== command.conversationId || activeComputer.computer.agentIdentityId !== computer.agentIdentityId
-			|| activeComputer.computer.profileRevisionId !== agent.profileRevisionId || activeComputer.lease.id !== lease.leaseId
-			|| activeComputer.lease.computerId !== computer.computerId || activeComputer.lease.generation !== lease.leaseGeneration
-			|| activeComputer.lease.sandboxClaimId !== lease.sandboxClaimId)
-			return { outcome: "denied", reason: "identity_unavailable" };
+			|| value.identity.principalId !== coordinates.requesterPrincipalId || !_MatchesConversationExecutionLease(activeComputer, coordinates))
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "identity_unavailable" };
 
 		// The stored execution subject keeps `computerScope` flat with `leaseId` and `leaseGeneration`: PostgreSQL triggers read that shape.
 		const membership = value.membership;
-		return { outcome: "loaded", value: {
+		return { outcome: SessionAssemblyLoadOutcomes.Loaded, value: {
 			schemaVersion: 1,
 			siloId: command.siloId,
 			agentIdentityId: computer.agentIdentityId,
@@ -74,17 +71,6 @@ export class PersonalConversationExecutionSubjectAuthority implements ExecutionS
 			admission: { authorizingPrincipalId: coordinates.requesterPrincipalId, decisionEvidenceId: value.admissionDecisionDigest, admittedAt: transaction.admittedAt },
 		} };
 	}
-}
-
-/** Compares the app-bound conversation command with the command admitted by the transaction. */
-function _MatchesCommand(command: SessionAssemblyCommand, run: Parameters<ExecutionSubjectAuthority["load"]>[1], coordinates: PersonalConversationExecutionSubjectCoordinates): boolean
-{
-	return command.runId === coordinates.runId && command.siloId === coordinates.computer.siloId
-		&& command.conversationId === coordinates.computer.conversationId && command.agentServiceId === coordinates.agent.agentServiceId
-		&& run.agentServiceId === coordinates.agent.agentServiceId && run.agentRevisionId === coordinates.agent.agentRevisionId
-		&& command.requester.issuer === coordinates.requesterIssuer && command.requester.subjectId === coordinates.requesterSubjectId
-		&& command.requester.authenticatedAt === coordinates.requesterAuthenticatedAt
-		&& command.requestIdempotencyKey === coordinates.requestIdempotencyKey;
 }
 
 /** Keeps evidence-authority refusals inside the assembly refusal vocabulary. */

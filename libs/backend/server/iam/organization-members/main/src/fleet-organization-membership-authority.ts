@@ -51,7 +51,7 @@ function _errorKind(operation: FleetOrganizationMembershipOperations, status: nu
  * rotation, response limits, redirects, and timeouts remain behind its injected transport port.
  * Any transport or response-shape failure refuses closed and no local repository is available.
  *
- * Called by: apps/opencrane/src/app/organization-members-composition.ts in Fleet mode.
+ * Called by: apps/opencrane/src/bootstrap/http/organization-members-composition.ts in Fleet mode.
  * @implements OrganizationMembershipAuthority
  */
 export class FleetOrganizationMembershipAuthority implements OrganizationMembershipAuthority

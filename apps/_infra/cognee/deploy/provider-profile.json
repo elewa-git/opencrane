@@ -1,6 +1,12 @@
 {
   "schemaVersion": 1,
-  "candidate": "cognee-1.5.4",
+  "provider": "cognee-1.5.4",
+  "deployment": {
+    "replicas": 1,
+    "workersPerReplica": 1,
+    "relationalProvider": "sqlite",
+    "storage": "shared-local-volume"
+  },
   "source": {
     "repository": "https://github.com/topoteretes/cognee",
     "tag": "v1.5.4",
