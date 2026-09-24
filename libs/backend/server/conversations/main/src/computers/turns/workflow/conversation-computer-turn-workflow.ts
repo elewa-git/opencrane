@@ -62,7 +62,7 @@ export function _RegisterConversationComputerTurnWorkflow(workflows: IWorkflowEn
 					{
 						if (progress.waitFor === "approval")
 						{
-							await context.checkpoint({ stepName: "publish-tool-approval-requested" }, function _PublishRequested()
+							await context.checkpoint({ stepName: `publish-tool-approval-requested:${progress.toolInvocationId}` }, function _PublishRequested()
 							{
 								return dependencies.approvalNotifications.publishRequested({ bootstrapId: turn.bootstrapId, siloId: turn.siloId, conversationId: turn.binding.conversationId, runId: turn.compile.runId, attempt: turn.compile.attempt, approvalId: progress.toolInvocationId });
 							});
@@ -73,7 +73,7 @@ export function _RegisterConversationComputerTurnWorkflow(workflows: IWorkflowEn
 							let progressed;
 							try
 							{
-								progressed = await context.checkpoint({ stepName: "dispatch-mcp-invocation" }, function _Dispatch()
+								progressed = await context.checkpoint({ stepName: `dispatch-mcp-invocation:${progress.toolInvocationId}` }, function _Dispatch()
 								{
 									// The database claim prevents duplicate effects; this checkpoint records workflow progress only.
 									return dependencies.toolDispatch.tryExecute(command);

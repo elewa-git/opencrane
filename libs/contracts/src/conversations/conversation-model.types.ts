@@ -33,18 +33,18 @@ export interface ConversationModelToolCall
 	readonly id: string;
 	/** Selects one unambiguous name from the frozen tools offered to the model. */
 	readonly name: string;
-	/** Preserves the original JSON object text, including whitespace, for exact continuation. */
+	/** Preserves the original JSON object text, including whitespace, for exact tool replay. */
 	readonly arguments: string;
 	/** Preserves any assistant text accompanying the declaration without inventing an answer. */
 	readonly content: string | null;
 }
 
-/** Carries the saved declaration and its authorized result without altering the compiled history. */
-export interface ConversationModelContinuation
+/** Carries one saved assistant declaration and its authorized result in ordered model history. */
+export interface ConversationModelToolExchange
 {
-	/** Supplies the accepted first declaration, including the original provider call id. */
+	/** Supplies the accepted declaration, including the original provider call id. */
 	readonly call: ConversationModelToolCall;
-	/** Supplies the caller's serialized, authorized tool result; it is treated as untrusted content. */
+	/** Supplies the serialized, authorized tool result; it is treated as untrusted content. */
 	readonly resultContent: string;
 }
 
@@ -82,8 +82,8 @@ export interface ConversationModelRequest
 	readonly maxCompletionTokens: number;
 	/** Ends this call's admitted authority, including time spent receiving the response. */
 	readonly notAfterEpochMs: number;
-	/** Allows a first proposal or forbids all tool declarations in this exchange. */
+	/** Allows one proposal for this model step or forbids tool declarations. */
 	readonly tools: ConversationModelToolModes;
-	/** Supplies one saved call/result pair; a continuation must use tools None. */
-	readonly continuation: ConversationModelContinuation | null;
+	/** Supplies every saved assistant/tool pair in ordinal order; an empty array starts the exchange. */
+	readonly history: readonly ConversationModelToolExchange[];
 }

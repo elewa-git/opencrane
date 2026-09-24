@@ -1,6 +1,6 @@
 import { AgentRevisionState, AuthorizationBoundaryCoverage, AuthorizationBoundaryKind, Prisma } from "@prisma/client";
 
-import { __DigestAgentRevisionContent, RevisionBoundaryCoverages, RevisionBoundaryKinds, type AgentBudget, type AgentRevisionContent, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
+import { __DigestAgentRevisionContent, __ParseAgentBudget, RevisionBoundaryCoverages, RevisionBoundaryKinds, type AgentRevisionContent, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
 
 import type { AgentRevisionWriterRepository, CreateAgentRevisionWithinTransactionCommand } from "./prisma-agent-revision-writer.types";
 
@@ -19,7 +19,7 @@ type AgentRevisionWithAssignments = Prisma.AgentRevisionGetPayload<{
 /** Reconstruct complete canonical content from one immutable persisted revision. */
 export function _AgentRevisionContentFromRow(row: AgentRevisionWithAssignments): AgentRevisionContent
 {
-	const budget = row.budget as unknown as AgentBudget;
+	const budget = __ParseAgentBudget(row.budget);
 	return {
 		promptPolicyVersion: row.promptPolicyVersion,
 		personaRevisionId: row.personaRevisionId,
@@ -27,7 +27,10 @@ export function _AgentRevisionContentFromRow(row: AgentRevisionWithAssignments):
 		budget: {
 			maxTurns: budget.maxTurns,
 			maxTokens: budget.maxTokens,
+			maxCostUsdMicros: budget.maxCostUsdMicros,
+			maxToolInvocations: budget.maxToolInvocations,
 			maxDurationMs: budget.maxDurationMs,
+			maxLoopIterations: budget.maxLoopIterations,
 		},
 		skills: row.skillAssignments.map(function _MapSkill(skill)
 		{
@@ -74,7 +77,10 @@ function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionComman
 		budget: {
 			maxTurns: command.content.budget.maxTurns,
 			maxTokens: command.content.budget.maxTokens,
+			maxCostUsdMicros: command.content.budget.maxCostUsdMicros,
+			maxToolInvocations: command.content.budget.maxToolInvocations,
 			maxDurationMs: command.content.budget.maxDurationMs,
+			maxLoopIterations: command.content.budget.maxLoopIterations,
 		},
 		authoredBy: command.authoredBy,
 		createdAt: command.createdAt,

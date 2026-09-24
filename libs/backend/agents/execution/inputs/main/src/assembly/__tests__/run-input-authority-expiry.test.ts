@@ -5,8 +5,9 @@ import { __RunInputAuthorityExpiresAt } from "../run-input-authority-expiry";
 /** Supplies original snapshot ceilings independently of the clock used for a later retry. */
 function _Fixture(execution = 9_000, requester = 8_000, deadline = 7_000)
 {
-	const snapshot = { runId: "run-1", attempt: 1, siloId: "silo-1", budgetPolicy: { wallClockDeadlineEpochMs: deadline }, executionSubject: { siloId: "silo-1", principalId: "principal-1", agentIdentityId: "identity-1", computerScope: { computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 }, runScope: { runId: "run-1", attempt: 1, siloId: "silo-1" }, membership: { kind: "fleet", principalId: "principal-1", siloId: "silo-1", trustedUntil: new Date(execution).toISOString() }, requester: { membership: { kind: "fleet", principalId: "principal-1", siloId: "silo-1", trustedUntil: new Date(requester).toISOString() } } } };
-	const compiled = { runId: "run-1", attempt: 1, budget: { maxModelTurns: 1, maxCompletionTokens: 4_096, wallClockDeadlineEpochMs: deadline } };
+	const budget = { maxModelTurns: 1, maxCompletionTokens: 4_096, maxCostUsdMicros: null, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: deadline };
+	const snapshot = { runId: "run-1", attempt: 1, siloId: "silo-1", budgetPolicy: budget, executionSubject: { siloId: "silo-1", principalId: "principal-1", agentIdentityId: "identity-1", computerScope: { computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 }, runScope: { runId: "run-1", attempt: 1, siloId: "silo-1" }, membership: { kind: "fleet", principalId: "principal-1", siloId: "silo-1", trustedUntil: new Date(execution).toISOString() }, requester: { membership: { kind: "fleet", principalId: "principal-1", siloId: "silo-1", trustedUntil: new Date(requester).toISOString() } } } };
+	const compiled = { runId: "run-1", attempt: 1, budget };
 	return { snapshot, compiled };
 }
 
@@ -67,5 +68,21 @@ describe("__RunInputAuthorityExpiresAt", function _Suite()
 		expect(() => __RunInputAuthorityExpiresAt(f.snapshot as never, { ...f.compiled, budget: { ...f.compiled.budget, wallClockDeadlineEpochMs: 12_000 } } as never, f.snapshot.executionSubject as never)).toThrow("original budget deadline");
 		f.snapshot.executionSubject.requester.membership.trustedUntil = "not-a-date";
 		expect(() => __RunInputAuthorityExpiresAt(f.snapshot as never, f.compiled as never, f.snapshot.executionSubject as never)).toThrow("canonical evidence expiry");
+	});
+
+	it.each([
+		["model turns", {}, { maxModelTurns: 2 }],
+		["completion tokens", {}, { maxCompletionTokens: 8_192 }],
+		["cost null to number", {}, { maxCostUsdMicros: 500_000 }],
+		["cost number to null", { maxCostUsdMicros: 500_000 }, { maxCostUsdMicros: null }],
+		["tool invocations", {}, { maxToolInvocations: 1 }],
+		["loop iterations", {}, { maxLoopIterations: 2 }],
+	] as const)("rejects changed %s allowance even when its deadline is unchanged", function _RejectsAllowanceReplacement(_name, original, replacement)
+	{
+		const f = _Fixture();
+		const originalBudget = { ...f.compiled.budget, ...original };
+		const changedBudget = { ...originalBudget, ...replacement };
+		const snapshot = { ...f.snapshot, budgetPolicy: originalBudget };
+		expect(() => __RunInputAuthorityExpiresAt(snapshot as never, { ...f.compiled, budget: changedBudget } as never, snapshot.executionSubject as never)).toThrow("original budget allowance");
 	});
 });

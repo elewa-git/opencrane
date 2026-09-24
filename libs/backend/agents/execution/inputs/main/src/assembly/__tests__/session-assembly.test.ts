@@ -1,5 +1,5 @@
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
-import type { RunInputSnapshot } from "@opencrane/contracts";
+import { RUN_INPUT_SNAPSHOT_VERSION, type RunInputSnapshot } from "@opencrane/contracts";
 import { __DigestRunInputSnapshot, RunAdmissionMessageInputModes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type RunAdmissionCommand } from "@opencrane/backend/agents/execution/runs";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 import { describe, expect, it, vi } from "vitest";
@@ -34,7 +34,7 @@ function _authorities(): SessionAssemblyAuthorities
 		toolPolicy: { load: async function _load() { const schema = { type: "object" } as const; return { outcome: "loaded", value: { modelDefinitionId: "model-1", modelRoute: {}, mcpTools: [{ toolRevisionId: "tool-1", name: "search", description: null, inputSchema: schema, inputSchemaDigest: ___DigestCanonicalJson(schema) }], skillRevisionIds: [], artifactRevisionIds: [] } } as const; } },
 		skillEligibility: { load: async function _load() { return { outcome: "loaded", value: null } as const; } },
 		productAuthorization: { load: async function _load() { return { outcome: "loaded", value: null } as const; }, verifyExisting: async function _VerifyExisting() { return { outcome: "loaded", value: null } as const; } },
-		budgetPolicy: { load: async function _load() { return { outcome: "loaded", value: { budgetPolicy: {} } } as const; } },
+		budgetPolicy: { load: async function _load() { return { outcome: "loaded", value: { budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 1, maxCostUsdMicros: null, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: 2_000 } } } as const; } },
 	};
 }
 

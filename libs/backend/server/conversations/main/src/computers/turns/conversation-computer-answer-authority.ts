@@ -16,10 +16,11 @@ export async function __AssertConversationComputerAnswerAuthority(turn: FrozenCo
 	const current = await dependencies.candidates.assertCurrent(turn, workload);
 	let notAfter = Date.parse(current.credentialExpiresAt);
 	let generatedFile: ConversationGeneratedFileContinuation | undefined;
-	if (turn.toolSelection !== null)
+	const resultStep = [...turn.protocol.steps].reverse().find(step => step.result !== null);
+	if (resultStep !== undefined)
 	{
 		const result = await dependencies.toolResults.read(turn, workload);
-		if (result.outcome !== ConversationComputerToolResultOutcomes.Available || result.payloadDigest !== turn.continuationReservation?.resultDigest)
+		if (result.outcome !== ConversationComputerToolResultOutcomes.Available || result.payloadDigest !== resultStep.result?.resultDigest)
 			throw new Error("Conversation tool authority ended before answer append");
 		notAfter = Math.min(notAfter, result.notAfterEpochMs);
 		generatedFile = result.generatedFile;

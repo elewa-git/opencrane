@@ -49,7 +49,7 @@ function _fixture()
 		compile: { runId: "run-1", attempt: 1 },
 		binding: { conversationId: "conversation-1", agentIdentityId: "identity-1", agentServiceId: "service-1" },
 	} as FrozenConversationComputerTurn;
-	const budgetPolicy = { wallClockDeadlineEpochMs: Date.parse(now) + 60_000, maxToolInvocations: 1 };
+	const budgetPolicy = { maxModelTurns: 1, maxCompletionTokens: 1, maxCostUsdMicros: null, maxToolInvocations: 1, maxLoopIterations: 1, wallClockDeadlineEpochMs: Date.parse(now) + 60_000 };
 	const candidate = { compiledInput: { budget: budgetPolicy } } as ConversationComputerTurnCandidate;
 	const run = { executionSubject: subject, agentRevisionId: "revision-1", inputSnapshotDigest: ___DigestCanonicalJson("snapshot") };
 	const snapshot = {

@@ -1,5 +1,5 @@
-import { PROMPT_COMPILER_VERSION } from "@opencrane/contracts";
-import type { CompiledBudget, CompiledRunInput, CompiledToolDefinition, RunInputSnapshot } from "@opencrane/contracts";
+import { PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION } from "@opencrane/contracts";
+import { ___ParseRunBudgetPolicy, type CompiledRunInput, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
@@ -16,7 +16,8 @@ import type { PromptCompilerRepositories } from "./prompt-compiler.types";
  * and literal budget, orders every collection canonically, stamps {@link PROMPT_COMPILER_VERSION},
  * and seals the result with a SHA-256 digest over the canonical payload. Because every referenced
  * record is immutable, the same snapshot and live-attempt pair always compiles to byte-identical
- * output across restarts. The attempt is dispatch authority, not snapshot schema version.
+ * output across restarts. Both the prompt compiler and snapshot schema versions are dispatch
+ * prerequisites; neither is inferred or upgraded during recovery.
  *
  * @param snapshot - The immutable input snapshot whose `promptCompilerVersion` must equal this compiler's.
  * @param attempt - Authoritative live attempt supplied by the fenced dispatch context.
@@ -73,6 +74,10 @@ async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, rep
 	{
 		throw new Error(`prompt compiler ${PROMPT_COMPILER_VERSION} cannot compile snapshot version ${snapshot.promptCompilerVersion}`);
 	}
+	if (snapshot.snapshotVersion !== RUN_INPUT_SNAPSHOT_VERSION)
+	{
+		throw new Error(`prompt compiler ${PROMPT_COMPILER_VERSION} cannot compile run-input snapshot schema ${snapshot.snapshotVersion}`);
+	}
 	if (!Number.isSafeInteger(snapshot.attempt) || snapshot.attempt < 1)
 	{
 		throw new Error("prompt compiler requires a positive snapshot attempt");
@@ -95,7 +100,7 @@ async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, rep
 
 	// 3. Assemble instructions and budget deterministically, then seal the payload with its digest.
 	const instructions = _assembleInstructions(personaInstructions, artifactSummaries, skillSummaries);
-	const budget = _resolveBudget(snapshot.budgetPolicy);
+	const budget = ___ParseRunBudgetPolicy(snapshot.budgetPolicy);
 	const unsealed = { promptCompilerVersion: PROMPT_COMPILER_VERSION, runId: snapshot.runId, attempt: snapshot.attempt, instructions, messages, tools, model, budget };
 	return { ...unsealed, digest: _digest(unsealed) };
 }
@@ -151,25 +156,6 @@ function _assembleInstructions(personaInstructions: string, artifactSummaries: r
 function _bullets(lines: readonly string[]): string
 {
 	return lines.map(function _bullet(line): string { return `- ${line}`; }).join("\n");
-}
-
-/** Reads the budget numbers out of the snapshot's JSON budget policy. */
-function _resolveBudget(budgetPolicy: JsonValue): CompiledBudget
-{
-	const policy: { readonly [key: string]: JsonValue } = budgetPolicy && typeof budgetPolicy === "object" && !Array.isArray(budgetPolicy) ? budgetPolicy as { readonly [key: string]: JsonValue } : {};
-	return {
-		maxModelTurns: _optionalCount(policy["maxModelTurns"]),
-		maxCompletionTokens: _optionalCount(policy["maxCompletionTokens"]),
-		maxCostUsdMicros: _optionalCount(policy["maxCostUsdMicros"]),
-		maxToolInvocations: _optionalCount(policy["maxToolInvocations"]),
-		wallClockDeadlineEpochMs: _optionalCount(policy["wallClockDeadlineEpochMs"]),
-	};
-}
-
-/** Read one non-negative safe-integer limit, or null when absent or malformed. */
-function _optionalCount(value: JsonValue | undefined): number | null
-{
-	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
 /**

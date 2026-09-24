@@ -1,7 +1,8 @@
 import { AgentRevisionState, ArtifactRevisionState, McpApprovalStatus, McpServerRevisionState, McpServerStatus, ModelRoutingScope, Prisma, SkillRevisionState, SkillState } from "@prisma/client";
 
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
-import { GeneratedOutputCapability } from "@opencrane/contracts";
+import { GeneratedOutputCapability, ___ParseRunBudgetPolicy } from "@opencrane/contracts";
+import { __ParseAgentBudget } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { SessionAssemblyLoadOutcomes, type BudgetPolicyInput, type BudgetPolicySource, type SessionAssemblyCommand, type SessionAssemblyLoad, type ToolPolicyInput, type ToolPolicySource } from "../assembly/session-assembly.types";
@@ -127,9 +128,22 @@ export class PrismaRevisionBudgetPolicyAuthority implements BudgetPolicySource
 		if (revision === null)
 			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "budget_unavailable" };
 
-		// 2. Keep only limits that are all present and positive, plus the server's deadline. A caller can never supply a default.
-		const budgetPolicy = _ParseBudget(revision.budget as unknown as JsonValue, transaction.admittedAtEpochMs);
-		return budgetPolicy === null ? { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "budget_unavailable" } : { outcome: SessionAssemblyLoadOutcomes.Loaded, value: { budgetPolicy } };
+		// 2. Parse every authored ceiling strictly; zero tool calls and a null extra cost cap are valid. A caller can never supply a default.
+		try
+		{
+			if (!Number.isSafeInteger(transaction.admittedAtEpochMs))
+				return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "budget_unavailable" };
+			const budget = __ParseAgentBudget(revision.budget);
+			const deadline = transaction.admittedAtEpochMs + budget.maxDurationMs;
+			if (!Number.isSafeInteger(deadline))
+				return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "budget_unavailable" };
+			const budgetPolicy = ___ParseRunBudgetPolicy({ maxModelTurns: budget.maxTurns, maxCompletionTokens: budget.maxTokens, maxToolInvocations: budget.maxToolInvocations, maxLoopIterations: budget.maxLoopIterations, maxCostUsdMicros: budget.maxCostUsdMicros, wallClockDeadlineEpochMs: deadline });
+			return { outcome: SessionAssemblyLoadOutcomes.Loaded, value: { budgetPolicy } };
+		}
+		catch
+		{
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "budget_unavailable" };
+		}
 	}
 }
 
@@ -143,24 +157,4 @@ function _IsModelAvailable(model: { readonly siloId: string; readonly scope: Mod
 function _GeneratedOutputCapabilitiesValid(values: readonly string[]): boolean
 {
 	return new Set(values).size === values.length && values.every(function _Known(value): boolean { return value === GeneratedOutputCapability.ImagePng || value === GeneratedOutputCapability.CodeExecutionFiles; });
-}
-
-/** Turns the stored JSON budget into the snapshot's budget fields, never filling in a default. */
-function _ParseBudget(value: JsonValue, admittedAtEpochMs: number): BudgetPolicyInput["budgetPolicy"] | null
-{
-	if (value === null || typeof value !== "object" || Array.isArray(value) || !Number.isSafeInteger(admittedAtEpochMs))
-		return null;
-	const budget = value as Readonly<Record<string, unknown>>;
-	if (!_IsPositiveSafeInteger(budget.maxTurns) || !_IsPositiveSafeInteger(budget.maxTokens) || !_IsPositiveSafeInteger(budget.maxDurationMs))
-		return null;
-	const deadline = admittedAtEpochMs + budget.maxDurationMs;
-	if (!Number.isSafeInteger(deadline))
-		return null;
-	return { maxModelTurns: budget.maxTurns, maxCompletionTokens: budget.maxTokens, wallClockDeadlineEpochMs: deadline };
-}
-
-/** Returns whether a JSON value is a positive safe integer that can be used as a limit. */
-function _IsPositiveSafeInteger(value: unknown): value is number
-{
-	return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }

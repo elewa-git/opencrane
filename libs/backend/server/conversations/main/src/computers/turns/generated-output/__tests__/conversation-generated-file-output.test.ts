@@ -18,7 +18,7 @@ describe("generated file output reservation", function _OutputReservation()
 		const artifact: ArtifactMessageContentBlock = { id: "asset-1", kind: ConversationMessageContentBlockKinds.Artifact, artifactId: "artifact-1", artifactRevisionId: "revision-1", name: "counties.csv", mediaType: "text/csv;charset=utf-8" };
 		const substituted = { ...intent, event: { ...intent.event, data: { ...intent.event.data, entry: { ...entry, blocks: [...entry.blocks, artifact] } } } };
 		await expect(f.store.markOutput(turn.bootstrapId, substituted)).rejects.toThrow("invalid generated file");
-		expect((await f.store.load(turn.bootstrapId))!.outputReceipt).toBeNull();
+		expect((await f.store.load(turn.bootstrapId))!.protocol.output).toBeNull();
 		expect(f.history.streams.get(f.stream)).toHaveLength(2);
 	});
 });

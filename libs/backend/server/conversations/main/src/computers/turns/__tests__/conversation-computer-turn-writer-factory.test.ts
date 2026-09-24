@@ -3,9 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 import type { BoundConversationWriterAppend } from "@opencrane/backend/server/conversations/history";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 import { ConversationComputerToolResultOutcomes } from "../conversation-computer-continuation.types";
+import { ConversationModelToolModes } from "@opencrane/contracts";
 import { ConversationComputerTurnWriterFactory } from "../conversation-computer-turn-writer-factory";
 import type { FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
-import { _ModelReservationFixture } from "./conversation-output-intent.fixture";
+import { _InitialConversationComputerTurnProtocol } from "../conversation-computer-turn-protocol";
+import { ConversationComputerTurnProtocolStates } from "../conversation-computer-turn-protocol.types";
+import type { ConversationComputerTurnOutputReceipt } from "../conversation-computer-turn-protocol.types";
 
 const _TURN: FrozenConversationComputerTurn = {
 	bootstrapId: "bootstrap-1", siloId: "silo-1", computerId: "computer-1",
@@ -13,9 +16,9 @@ const _TURN: FrozenConversationComputerTurn = {
 	binding: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", leaseGeneration: 4, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Archive", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 7n, maximumEntryBytes: 10_000 },
 	latestPendingEntryId: "human-entry-1", modelAlias: "model-1", maximumBudgetUsd: 1, credentialLifetimeSeconds: 300,
 	latestPendingEntryPosition: "1",
-	compile: { runId: "run-1", attempt: 1, promptCompilerVersion: "v1", digest: "sha256:input" },
-	outputSourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", outputReceipt: null, cancellationReceipt: null,
-	toolSelection: null, continuationReservation: null, modelReservation: null,
+	compile: { runId: "run-1", attempt: 1, promptCompilerVersion: "v1", digest: `sha256:${"a".repeat(64)}` },
+	budget: { maxModelTurns: 3, maxCompletionTokens: 300, maxCostUsdMicros: null, maxToolInvocations: 2, maxLoopIterations: 2, wallClockDeadlineEpochMs: 4_070_908_800_000 },
+	protocol: _InitialConversationComputerTurnProtocol(),
 };
 const _WORKLOAD = { subject: "system:serviceaccount:testv5:computer", namespace: "testv5", serviceAccountName: "computer", podUid: "pod-1" };
 const _COMMAND: BoundConversationWriterAppend = { sourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", entry: { kind: "message", state: "completed", blocks: [{ id: "block-1", kind: "text", payloadRef: "payload-1", ciphertextDigest: "sha256:payload" }], replyToEntryId: null, addressedAgentIdentityId: null, activation: "none", visibility: { audience: "conversation" }, causationId: "source-1", correlationId: "request-1" } };
@@ -44,14 +47,21 @@ function _Fixture(turn = _TURN)
 /** Bind the answer to the result consumed by the saved final model reservation. */
 function _ToolTurn(): FrozenConversationComputerTurn
 {
-	const reference = { payloadRef: "tool-declaration", ciphertextDigest: "sha256:declaration" };
-	const model = _ModelReservationFixture(_TURN, "first-model-fence");
+	const digest = `sha256:${"b".repeat(64)}`;
+	const reference = { payloadRef: "tool-declaration", ciphertextDigest: digest };
+	const first = { ordinal: 1, invocationFence: "11c1f1dc-0010-4f13-9c2f-d3841ffd6651", tools: ConversationModelToolModes.Select, compiledInputDigest: _TURN.compile.digest, historyDigest: digest, requestDigest: digest, maxCompletionTokens: 100, authorityExpiresAtEpochMs: 4_070_908_800_000, dispatchDeadlineEpochMs: 4_070_908_700_000 };
+	const selection = { ordinal: 1, modelInvocationFence: first.invocationFence, declaration: reference, proposalId: "proposal-1", toolInvocationId: "proposal-1", requestFingerprint: digest };
+	const result = { ordinal: 1, proposalId: "proposal-1", toolInvocationId: "proposal-1", resultDigest: "sha256:result", exchange: { payloadRef: "tool-exchange", ciphertextDigest: digest }, authorityExpiresAtEpochMs: 4_070_908_600_000 };
+	const final = { ...first, ordinal: 2, invocationFence: _COMMAND.sourceCommandId, tools: ConversationModelToolModes.None, authorityExpiresAtEpochMs: 4_070_908_500_000, dispatchDeadlineEpochMs: 4_070_908_400_000 };
 	return {
 		..._TURN,
-		modelReservation: model,
-		toolSelection: { ...reference, proposalId: "proposal-1", requestFingerprint: "sha256:proposal" },
-		continuationReservation: { ...model, ordinal: 2, continuation: reference, proposalId: "proposal-1", resultDigest: "sha256:result" },
+		protocol: { state: ConversationComputerTurnProtocolStates.ModelReserved, revision: 4n, steps: [{ state: ConversationComputerTurnProtocolStates.ResultReady, reservation: first, selection, result }, { state: ConversationComputerTurnProtocolStates.ModelReserved, reservation: final, selection: null, result: null }], accounting: { reservedModelCalls: 2, reservedCompletionTokens: 200, reservedToolInvocations: 1, toolResultCyclesFed: 1 }, output: null, unavailable: null, cancellation: null },
 	};
+}
+
+function _WithOutput(turn: FrozenConversationComputerTurn, receipt: ConversationComputerTurnOutputReceipt): FrozenConversationComputerTurn
+{
+	return { ...turn, protocol: { ...turn.protocol, state: ConversationComputerTurnProtocolStates.OutputRecorded, output: { sourceCommandId: receipt.event.id, receipt } } };
 }
 
 describe("conversation computer output policy", function _Suite()
@@ -62,7 +72,7 @@ describe("conversation computer output policy", function _Suite()
 		const intent = await f.writer.prepare(_COMMAND);
 		await f.writer.append(intent);
 		f.assertCurrent.mockClear().mockRejectedValue(new Error("lease expired"));
-		await expect(f.factory.confirmSaved({ ..._TURN, outputReceipt: intent })).resolves.toBeUndefined();
+		await expect(f.factory.confirmSaved(_WithOutput(_TURN, intent))).resolves.toBeUndefined();
 		expect(f.assertCurrent).not.toHaveBeenCalled();
 		expect(f.append).toHaveBeenCalledOnce();
 	});
@@ -71,7 +81,7 @@ describe("conversation computer output policy", function _Suite()
 	{
 		const f = _Fixture();
 		const intent = await f.writer.prepare(_COMMAND);
-		await expect(f.factory.confirmSaved({ ..._TURN, outputReceipt: intent })).rejects.toThrow("cannot confirm");
+		await expect(f.factory.confirmSaved(_WithOutput(_TURN, intent))).rejects.toThrow("cannot confirm");
 		expect(f.append).not.toHaveBeenCalled();
 	});
 
@@ -80,7 +90,7 @@ describe("conversation computer output policy", function _Suite()
 		const f = _Fixture();
 		const intent = await f.writer.prepare(_COMMAND);
 		await f.append({ streamName: intent.streamName, events: [{ ...intent.event, metadata: { changed: "evidence" } }] });
-		await expect(f.factory.confirmSaved({ ..._TURN, outputReceipt: intent })).rejects.toThrow("different history");
+		await expect(f.factory.confirmSaved(_WithOutput(_TURN, intent))).rejects.toThrow("different history");
 	});
 
 	it("checks the admitted output and current workload lease before appending to its bound stream", async function _Allowed()
@@ -94,7 +104,7 @@ describe("conversation computer output policy", function _Suite()
 		expect(append).toHaveBeenCalledWith(expect.objectContaining({ streamName: "conversation-conversation-1", expectedRevision: 7n }));
 	});
 
-	it.each([null, { ..._TURN, outputSourceCommandId: "other-output" }])("refuses missing or conflicting admitted output", async function _Conflict(current)
+	it.each([null, { ..._TURN, protocol: { ..._TURN.protocol, output: { sourceCommandId: "other-output", receipt: {} as ConversationComputerTurnOutputReceipt } } }])("refuses missing or conflicting admitted output", async function _Conflict(current)
 	{
 		const { writer, append, load } = _Fixture();
 		load.mockResolvedValue(current);

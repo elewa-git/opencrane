@@ -19,7 +19,7 @@ export type ConversationToolApprovalExpiry = (transaction: unknown, command: { r
 /** Server-derived immutable facts passed into the proposal's transactional admission owner. */
 export interface PreparedConversationToolProposal
 {
-	/** Identifies the sole allowed proposal slot for this run attempt. */
+	/** Identifies the allowed proposal for one ordered model step in this run attempt. */
 	readonly proposalId: string;
 	/** Retains the validated frozen tool and exact schema. */
 	readonly tool: CompiledToolDefinition;
@@ -29,7 +29,7 @@ export interface PreparedConversationToolProposal
 	readonly argumentsDigest: `sha256:${string}`;
 	/** Binds the admitted turn, computer, lease and Sandbox claim. */
 	readonly assignmentDigest: `sha256:${string}`;
-	/** Detects a different body or authority binding reused for the same proposal slot. */
+	/** Detects a different body or authority binding reused for the same ordered proposal. */
 	readonly requestFingerprint: `sha256:${string}`;
 }
 

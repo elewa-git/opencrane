@@ -5,15 +5,15 @@ import type { PrismaClient, Prisma } from "@prisma/client";
 
 import { PrismaConversationRunLifecycleUnitOfWork } from "@opencrane/backend/agents/execution/runs";
 import { PrismaConversationGeneratedFileOutputLinkUnitOfWork, PrismaConversationGeneratedFileResultRepository, PrismaConversationGeneratedFileWorkflowRepository } from "@opencrane/backend/server/conversation-assets";
-import { CurrentConversationToolRequestedNotificationEvidenceReader, KurrentConversationToolRequestedNotificationPublisher, ConversationComputerTurnAuthorityService, ConversationComputerTurnWriterFactory, CurrentConversationToolResultNotificationEvidenceReader, KurrentConversationComputerTurnStore, KurrentConversationToolResultNotificationPublisher, PrismaConversationComputerTurnUnitOfWork, PrismaConversationModelCustodyUnitOfWork, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, type ConversationComputerContinuationReservation, type ConversationComputerRunLifecycleCommand, type ConversationComputerTurnAuthorityDependencies, type ConversationComputerTurnCandidateResolver, type ConversationGeneratedFileOutputLinker, type ConversationGeneratedFileResultRepositoryFactory, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
+import { CurrentConversationToolRequestedNotificationEvidenceReader, KurrentConversationToolRequestedNotificationPublisher, ConversationComputerTurnAuthorityService, ConversationComputerTurnWriterFactory, CurrentConversationToolResultNotificationEvidenceReader, KurrentConversationComputerTurnStore, KurrentConversationToolResultNotificationPublisher, PrismaConversationComputerTurnUnitOfWork, PrismaConversationModelCustodyUnitOfWork, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, type ConversationComputerRunLifecycleCommand, type ConversationComputerTurnAuthorityDependencies, type ConversationComputerTurnCandidateResolver, type ConversationGeneratedFileOutputLinker, type ConversationGeneratedFileResultRepositoryFactory, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { AesGcmConversationPrivatePayloadCipher, ConversationHistoryAuthority, ConversationHistoryModes, ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
-import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _ActualGeneratedFileScanner, _CaptureActualGeneratedFileSqlFixture, _ClaimActualGeneratedFile, _GeneratedFileWorkflowDependencies, _QuarantineActualGeneratedFile, type _ActualGeneratedFileCapture } from "./conversation-generated-file-lifecycle.sql-fixture";
 import { _GENERATED_FILE_ARGUMENTS, _GENERATED_FILE_PROPOSER } from "./conversation-generated-file-capture.sql-fixture";
+import { _ConversationTurnRequest } from "./conversation-turn-protocol.fixture";
 
 /** Narrow lifecycle surface used by output completion and its injected recovery fault. */
 export interface _GeneratedFileOutputRunLifecycle
@@ -107,17 +107,19 @@ export async function _PrepareGeneratedFileOutputIntegrationFixture(prisma: Pris
 
 	await history.append(new ConversationHistoryAuthority(history).genesisAppend({ schemaVersion: 1, siloId: capture.fixture.siloId, conversationId: capture.fixture.turn.binding.conversationId, mode: ConversationHistoryModes.AgentSession, agentServiceId: capture.fixture.turn.binding.agentServiceId, createdByPrincipalId: capture.fixture.principalId, createdAt: new Date().toISOString() }, randomUUID()));
 	const turns = new KurrentConversationComputerTurnStore(history);
-	let turn = await turns.createOrRead(capture.fixture.turn);
+	let turn = await turns.createOrRead(capture.fixture.frozenTurn);
 	const invocation = await prisma.toolInvocation.findFirstOrThrow({ where: { runId: capture.fixture.runId } });
 	const delivery = await prisma.toolResultDelivery.findUniqueOrThrow({ where: { toolInvocationId: invocation.id } });
 	const deadline = _OutputDeadline(capture.fixture.candidate);
-	const first = { ordinal: 1 as const, tools: ConversationModelToolModes.Select, maxCompletionTokens: 128, authorityExpiresAtEpochMs: deadline, dispatchDeadlineEpochMs: deadline };
-	await turns.reserveModel(turn.bootstrapId, { ...first, compiledInputDigest: turn.compile.digest, invocationFence: randomUUID(), requestDigest: _RequestDigest(turn, first) });
+	const original = capture.fixture.turn.protocol.steps[0]!.reservation;
+	const first = _ConversationTurnRequest(turn, { ordinal: original.ordinal, invocationFence: original.invocationFence,
+		tools: original.tools, maxCompletionTokens: original.maxCompletionTokens, authorityExpiresAtEpochMs: deadline, dispatchDeadlineEpochMs: deadline });
+	await turns.reserveModel(turn.bootstrapId, first);
 	turn = await _RequiredTurn(turns, turn.bootstrapId);
 	const custody = new PrismaConversationModelCustodyUnitOfWork(prisma, _GENERATED_OUTPUT_CIPHER);
 	await custody.storeDeclaration(turn, {
 		bootstrapId: turn.bootstrapId, runId: turn.compile.runId, attempt: turn.compile.attempt, compiledInputDigest: turn.compile.digest,
-		modelInvocationFence: turn.modelReservation!.invocationFence, acceptedAtEpochMs: Date.now(), requestNotAfterEpochMs: deadline,
+		ordinal: first.ordinal, modelInvocationFence: first.invocationFence, acceptedAtEpochMs: Date.now(), requestNotAfterEpochMs: deadline,
 		credentialDigest: delivery.payloadDigest, credentialExpiresAt: new Date(deadline).toISOString(),
 		call: { id: `generated-file-${invocation.toolInvocationId}`, name: capture.fixture.tool.modelName, arguments: JSON.stringify(_GENERATED_FILE_ARGUMENTS), content: null },
 	});
@@ -146,7 +148,7 @@ function _AuthorityDependencies(prisma: PrismaClient, capture: _ActualGeneratedF
 		endpoint: "http://unused.invalid",
 		model: { async request(input)
 		{
-			if (input.tools !== ConversationModelToolModes.None || input.continuation === null)
+			if (input.tools !== ConversationModelToolModes.None || input.history.length !== 1)
 				throw new Error("Generated output integration permits only the saved continuation call");
 			modelDispatches.maxCompletionTokens.push(input.maxCompletionTokens);
 			return { kind: ConversationModelResponseKinds.Text, text: "I created the requested county totals file." };
@@ -204,16 +206,6 @@ function _OutputDeadline(candidate: _ActualGeneratedFileCapture["fixture"]["cand
 	if (runDeadline === null || !Number.isSafeInteger(runDeadline) || !Number.isSafeInteger(credentialDeadline))
 		throw new Error("Generated output fixture requires fixed run authority");
 	return Math.min(runDeadline, credentialDeadline, Date.now() + 25_000);
-}
-
-/** Bind a reservation to the same canonical fields used by the production turn store. */
-function _RequestDigest(turn: FrozenConversationComputerTurn, reservation: Omit<ConversationComputerContinuationReservation, "requestDigest"> | { readonly ordinal: 1; readonly tools: ConversationModelToolModes; readonly maxCompletionTokens: number; readonly authorityExpiresAtEpochMs: number; readonly dispatchDeadlineEpochMs: number }): string
-{
-	return ___DigestCanonicalJson({ bootstrapId: turn.bootstrapId, runId: turn.compile.runId, attempt: turn.compile.attempt, compiledInputDigest: turn.compile.digest, modelAlias: turn.modelAlias, ordinal: reservation.ordinal, tools: reservation.tools,
-		continuation: reservation.ordinal === 2 ? reservation.continuation : null,
-		proposalId: reservation.ordinal === 2 ? reservation.proposalId : null,
-		resultDigest: reservation.ordinal === 2 ? reservation.resultDigest : null, maxCompletionTokens: reservation.maxCompletionTokens,
-		authorityExpiresAtEpochMs: reservation.authorityExpiresAtEpochMs, dispatchDeadlineEpochMs: reservation.dispatchDeadlineEpochMs } as unknown as JsonValue);
 }
 
 /** Fail closed when Kurrent omitted the saved turn after an accepted append. */

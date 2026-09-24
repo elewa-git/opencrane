@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { ConversationComputerTurnAuthorityService, ConversationComputerToolResultOutcomes, type ConversationComputerModelReservation, type ConversationComputerToolSelection, type ConversationComputerTurnCandidate, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
+import { ConversationComputerTurnAuthorityService, ConversationComputerToolResultOutcomes, type ConversationComputerTurnModelReservation, type ConversationComputerTurnToolSelection, type ConversationComputerTurnCandidate, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { McpInvocationDispatchOutcomes, RemoteMcpInvocationExecutor } from "@opencrane/backend/server/gateways/mcp";
 import { ConversationModelResponseKinds, ConversationToolProposalOutcomes, McpConnectionCredentialKinds } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
+
+import { _OpenConversationTurnProtocol, _ReserveConversationTurnModel, _SelectConversationTurnTool } from "./conversation-turn-protocol.fixture";
 
 import { _CreateConversationMcpToolDispatch } from "../../workflows/mcp-runtime-composition";
 
@@ -24,7 +26,7 @@ function _ModelSelectionHarness(callName: string)
 		messages: [],
 		tools: [{ name: _SOURCE_NAME, modelName: _MODEL_NAME, toolRevisionId: _TOOL_REVISION_ID, description: "Find one record", requiresApproval: false, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) }],
 		model: { modelAlias: "test-model", maxOutputTokens: 100, generatedOutputCapabilities: [] },
-		budget: { maxCompletionTokens: 100, maxModelTurns: 2, maxToolInvocations: 1, maxCostUsdMicros: null, wallClockDeadlineEpochMs: Date.now() + 60_000 },
+		budget: { maxCompletionTokens: 100, maxModelTurns: 2, maxToolInvocations: 1, maxCostUsdMicros: null, maxLoopIterations: 1, wallClockDeadlineEpochMs: Date.now() + 60_000 },
 		digest: `sha256:${"b".repeat(64)}`,
 	};
 	const candidate = {
@@ -43,18 +45,19 @@ function _ModelSelectionHarness(callName: string)
 		latestPendingEntryId: candidate.latestPendingEntryId, latestPendingEntryPosition: candidate.latestPendingEntryPosition,
 		modelAlias: candidate.modelAlias, maximumBudgetUsd: candidate.maximumBudgetUsd, credentialLifetimeSeconds: candidate.credentialLifetimeSeconds,
 		compile: { runId: compiledInput.runId, attempt: compiledInput.attempt, promptCompilerVersion: compiledInput.promptCompilerVersion, digest: compiledInput.digest },
-		outputSourceCommandId: null, outputReceipt: null, cancellationReceipt: null, toolSelection: null, continuationReservation: null, modelReservation: null,
+		budget: compiledInput.budget, protocol: _OpenConversationTurnProtocol(),
 	};
 	const store = {
 		load: vi.fn(async function _Load() { return turn; }),
-		reserveModel: vi.fn(async function _Reserve(_turnId: string, reservation: ConversationComputerModelReservation) { turn = { ...turn, modelReservation: reservation }; return true; }),
-		selectTool: vi.fn(async function _Select(_turnId: string, selection: ConversationComputerToolSelection) { turn = { ...turn, toolSelection: selection }; }),
+		reserveModel: vi.fn(async function _Reserve(_turnId: string, reservation: ConversationComputerTurnModelReservation) { turn = _ReserveConversationTurnModel(turn, reservation); return true; }),
+		selectTool: vi.fn(async function _Select(_turnId: string, selection: ConversationComputerTurnToolSelection) { turn = _SelectConversationTurnTool(turn, selection); }),
 	};
 	const proposals = { admit: vi.fn(async function _Admit(selected: FrozenConversationComputerTurn)
 	{
-		if (selected.toolSelection === null)
+		const selection = selected.protocol.steps.at(-1)?.selection;
+		if (selection == null)
 			throw new Error("The tool must be selected before admission");
-		return { proposalId: selected.toolSelection.proposalId, outcome: ConversationToolProposalOutcomes.Existing };
+		return { proposalId: selection.proposalId, outcome: ConversationToolProposalOutcomes.Existing };
 	}) };
 	const logger = { warn: vi.fn() };
 	const model = { request: vi.fn().mockResolvedValue({ kind: ConversationModelResponseKinds.Tool, call: { id: "model-call-1", name: callName, arguments: JSON.stringify({ query: "private-query" }), content: null } }) };

@@ -5,7 +5,9 @@ import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, ConversationModelToolMo
 import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import { ConversationComputerToolResultOutcomes, type ConversationComputerContinuationReservation } from "../../../turns/conversation-computer-continuation.types";
+import { ConversationComputerToolResultOutcomes } from "../../../turns/conversation-computer-continuation.types";
+import { _ConversationComputerTurnHistoryDigest, _InitialConversationComputerTurnProtocol } from "../../../turns/conversation-computer-turn-protocol";
+import { ConversationComputerTurnProtocolStates, type ConversationComputerTurnModelReservation } from "../../../turns/conversation-computer-turn-protocol.types";
 import { _ConversationModelRequestDigest } from "../../../turns/conversation-computer-model-reservation";
 import { KurrentConversationComputerTurnStore } from "../../../turns/conversation-computer-turn-store";
 import type { FrozenConversationComputerTurn } from "../../../turns/conversation-computer-turn.types";
@@ -35,7 +37,7 @@ async function _savedTurn(reserve: boolean)
 			if (expected !== BigInt(events.length - 1))
 				throw new Error("Fixture received a conflicting history append");
 			for (const event of command.events)
-				events.push({ ...structuredClone(event), metadata: Object.fromEntries(Object.entries(event.metadata).map(([key, value]) => [key, String(value)])), streamName: command.streamName, revision: BigInt(events.length), recordedAt: new Date() });
+				events.push({ ...structuredClone(event), streamName: command.streamName, revision: BigInt(events.length), recordedAt: new Date() });
 			streams.set(command.streamName, events);
 			return { streamName: command.streamName, revision: BigInt(events.length - 1) };
 		},
@@ -52,7 +54,7 @@ async function _savedTurn(reserve: boolean)
 			{
 				const events = streams.get(append.streamName) ?? [];
 				for (const event of append.events)
-					events.push({ ...structuredClone(event), metadata: Object.fromEntries(Object.entries(event.metadata).map(([key, value]) => [key, String(value)])), streamName: append.streamName, revision: BigInt(events.length), recordedAt: new Date() });
+					events.push({ ...structuredClone(event), streamName: append.streamName, revision: BigInt(events.length), recordedAt: new Date() });
 				streams.set(append.streamName, events);
 			}
 			return command.appends.map(append => ({ streamName: append.streamName, revision: BigInt((streams.get(append.streamName) ?? []).length - 1) }));
@@ -69,21 +71,25 @@ async function _savedTurn(reserve: boolean)
 		lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" }, compile: { runId: "run-1", attempt: 1, promptCompilerVersion: "test-v1", digest: _DIGEST },
 		latestPendingEntryId: "input-1", modelAlias: "model-1", maximumBudgetUsd: 1, credentialLifetimeSeconds: 60,
 		latestPendingEntryPosition: "1",
-		modelReservation: null, toolSelection: null, continuationReservation: null, outputReceipt: null, cancellationReceipt: null, outputSourceCommandId: null,
+		budget: { maxModelTurns: 2, maxCompletionTokens: 200, maxCostUsdMicros: null, maxToolInvocations: 1, maxLoopIterations: 1, wallClockDeadlineEpochMs: _NOW.getTime() + 60_000 }, protocol: _InitialConversationComputerTurnProtocol(),
 	};
 	streams.set("conversation-conversation-1", [0n, 1n].map(revision => ({ id: `input-${revision.toString()}`, type: "input", data: {}, metadata: {}, streamName: "conversation-conversation-1", revision, recordedAt: _NOW })));
 	await store.createOrRead(frozen);
-	const first = { ordinal: 1 as const, tools: ConversationModelToolModes.Select, compiledInputDigest: _DIGEST, maxCompletionTokens: 100, authorityExpiresAtEpochMs: _NOW.getTime() + 60_000, dispatchDeadlineEpochMs: _NOW.getTime() + 25_000 };
+	const first = { ordinal: 1 as const, tools: ConversationModelToolModes.Select, compiledInputDigest: _DIGEST, historyDigest: _ConversationComputerTurnHistoryDigest([]), maxCompletionTokens: 100, authorityExpiresAtEpochMs: _NOW.getTime() + 60_000, dispatchDeadlineEpochMs: _NOW.getTime() + 25_000 };
 	await store.reserveModel(frozen.bootstrapId, { ...first, invocationFence: _FIRST, requestDigest: _ConversationModelRequestDigest(frozen, first) });
-	await store.selectTool(frozen.bootstrapId, { proposalId: _PROPOSAL, requestFingerprint: _DIGEST, payloadRef: _REFERENCE, ciphertextDigest: _DIGEST });
+	await store.selectTool(frozen.bootstrapId, { ordinal: 1, modelInvocationFence: _FIRST, declaration: { payloadRef: _REFERENCE, ciphertextDigest: _DIGEST }, proposalId: _PROPOSAL, toolInvocationId: _PROPOSAL, requestFingerprint: _DIGEST });
 	let turn = (await store.load(frozen.bootstrapId))!;
 	const row = _row(turn);
-	const second = { ordinal: 2 as const, tools: ConversationModelToolModes.None, compiledInputDigest: _DIGEST, maxCompletionTokens: 100, authorityExpiresAtEpochMs: _NOW.getTime() + 60_000, dispatchDeadlineEpochMs: _NOW.getTime() + 25_000,
-		proposalId: _PROPOSAL, resultDigest: row.resultDelivery.payloadDigest, continuation: { payloadRef: _REFERENCE, ciphertextDigest: _DIGEST } };
-	const reservation: ConversationComputerContinuationReservation = { ...second, invocationFence: _SECOND, requestDigest: _ConversationModelRequestDigest(turn, second) };
 	if (reserve)
 	{
-		await store.reserveContinuation(turn.bootstrapId, reservation);
+		await store.recordToolResult(frozen.bootstrapId, { ordinal: 1, proposalId: _PROPOSAL, toolInvocationId: _PROPOSAL, resultDigest: row.resultDelivery.payloadDigest, exchange: { payloadRef: _REFERENCE, ciphertextDigest: _DIGEST }, authorityExpiresAtEpochMs: _NOW.getTime() + 60_000 });
+		turn = (await store.load(frozen.bootstrapId))!;
+	}
+	const second = { ordinal: 2 as const, tools: ConversationModelToolModes.None, compiledInputDigest: _DIGEST, historyDigest: _ConversationComputerTurnHistoryDigest(turn.protocol.steps), maxCompletionTokens: 100, authorityExpiresAtEpochMs: _NOW.getTime() + 60_000, dispatchDeadlineEpochMs: _NOW.getTime() + 25_000 };
+	const reservation: ConversationComputerTurnModelReservation = { ...second, invocationFence: _SECOND, requestDigest: _ConversationModelRequestDigest(turn, second) };
+	if (reserve)
+	{
+		await store.reserveModel(turn.bootstrapId, reservation);
 		turn = (await store.load(turn.bootstrapId))!;
 	}
 	return { store, streams, turn, row, reservation };
@@ -92,7 +98,10 @@ async function _savedTurn(reserve: boolean)
 /** Supplies the real IAM reader's linked terminal relation; current guard behavior is independently spied. */
 function _row(turn: FrozenConversationComputerTurn)
 {
-	const _COMMAND = { siloId: turn.siloId, runId: turn.compile.runId, attempt: turn.compile.attempt, toolInvocationId: turn.toolSelection!.proposalId, runtimeInstanceId: turn.computerId, commandId: turn.bootstrapId, requestFingerprint: turn.toolSelection!.requestFingerprint };
+	const selection = turn.protocol.steps.find(step => step.selection !== null)?.selection;
+	if (selection === undefined || selection === null)
+		throw new Error("Fixture requires a selected tool");
+	const _COMMAND = { siloId: turn.siloId, runId: turn.compile.runId, attempt: turn.compile.attempt, toolInvocationId: selection.toolInvocationId, runtimeInstanceId: turn.computerId, commandId: turn.bootstrapId, requestFingerprint: selection.requestFingerprint };
 	const payload = { toolInvocationId: _COMMAND.toolInvocationId, outcome: "succeeded", result: { record: { name: "Private result" } } };
 	return {
 		id: "internal-invocation-1", ..._COMMAND, mcpTaskId: null, agentServiceId: "service-1", agentRevisionId: "revision-1", agentIdentityId: "identity-1", principalId: "principal-1",
@@ -157,6 +166,24 @@ async function _fixture(reserve = true)
 	return { ...saved, unit, readGeneratedFile, run, guard, admit, controls, findFirst, updateMany, current: function _CurrentRow() { return row; } };
 }
 
+/** Clone one ordered step binding for negative tests without reviving removed singular fields. */
+function _WithStepChange(turn: FrozenConversationComputerTurn, field: string): FrozenConversationComputerTurn
+{
+	const steps = [...turn.protocol.steps];
+	const current = steps.at(-1)!;
+	if (["invocationFence", "ordinal", "requestDigest"].includes(field))
+		steps[steps.length - 1] = { ...current, reservation: { ...current.reservation, [field]: field === "ordinal" ? 1 : "changed" } } as typeof current;
+	else
+	{
+		const historical = steps.at(-2)!;
+		const selectionField = field === "proposalId" ? "proposalId" : "requestFingerprint";
+		const resultField = field === "resultDigest" ? "resultDigest" : "proposalId";
+		const result = historical.result === null ? null : { ...historical.result, [resultField]: "changed" };
+		steps[steps.length - 2] = { ...historical, selection: { ...historical.selection!, [selectionField]: "changed" }, result } as typeof historical;
+	}
+	return { ...turn, protocol: { ...turn.protocol, steps } };
+}
+
 beforeEach(function _Clock() { vi.useFakeTimers(); vi.setSystemTime(_NOW); });
 afterEach(function _Restore() { vi.restoreAllMocks(); vi.useRealTimers(); });
 
@@ -181,10 +208,18 @@ describe("saved conversation tool results", function _results()
 		expect(f.updateMany).toHaveBeenCalledOnce();
 	});
 
+	it("does not switch a stale result read to a different ordered invocation", async function _StaleStep()
+	{
+		const f = await _fixture();
+		const stale = _WithStepChange(f.turn, "requestFingerprint");
+		await expect(f.unit.read(stale, _WORKLOAD)).resolves.toEqual({ outcome: ConversationComputerToolResultOutcomes.Unavailable });
+		expect(f.findFirst).not.toHaveBeenCalled();
+	});
+
 	it("rejects a caller-fabricated reservation when the real stream contains only the tool selection", async function _unsavedReservation()
 	{
 		const f = await _fixture(false);
-		await expect(f.unit.consume({ ...f.turn, continuationReservation: f.reservation }, _WORKLOAD)).resolves.toEqual({ outcome: ConversationComputerToolResultOutcomes.Unavailable });
+		await expect(f.unit.consume(f.turn, _WORKLOAD)).resolves.toEqual({ outcome: ConversationComputerToolResultOutcomes.Unavailable });
 		expect(f.findFirst).not.toHaveBeenCalled();
 		expect(f.updateMany).not.toHaveBeenCalled();
 	});
@@ -192,8 +227,7 @@ describe("saved conversation tool results", function _results()
 	it.each(["invocationFence", "proposalId", "resultDigest", "ordinal", "requestDigest"])("rejects mismatched saved reservation %s", async function _wrongReservation(field)
 	{
 		const f = await _fixture();
-		const reservation = { ...f.reservation, [field]: field === "ordinal" ? 1 : "changed" } as ConversationComputerContinuationReservation;
-		await expect(f.unit.consume({ ...f.turn, continuationReservation: reservation }, _WORKLOAD)).resolves.toEqual({ outcome: ConversationComputerToolResultOutcomes.Unavailable });
+		await expect(f.unit.consume(_WithStepChange(f.turn, field), _WORKLOAD)).resolves.toEqual({ outcome: ConversationComputerToolResultOutcomes.Unavailable });
 		expect(f.findFirst).not.toHaveBeenCalled();
 	});
 
@@ -206,8 +240,9 @@ describe("saved conversation tool results", function _results()
 				attempt: kind === "attempt" ? 2 : 1,
 				digest: kind === "compile" ? `sha256:${"f".repeat(64)}` : f.turn.compile.digest,
 			},
-			toolSelection: kind === "selection" ? { ...f.turn.toolSelection!, requestFingerprint: `sha256:${"f".repeat(64)}` } : f.turn.toolSelection,
 		};
+		if (kind === "selection")
+			Object.assign(turn, _WithStepChange(f.turn, "requestFingerprint"));
 		await expect(f.unit.read(turn, _WORKLOAD)).resolves.toEqual({ outcome: ConversationComputerToolResultOutcomes.Unavailable });
 		expect(f.findFirst).not.toHaveBeenCalled();
 	});
@@ -232,7 +267,7 @@ describe("saved conversation tool results", function _results()
 	{
 		const f = await _fixture(false);
 		f.controls.notAfter = _NOW.getTime() + 120_000;
-		await expect(f.unit.read(f.turn, _WORKLOAD)).resolves.toMatchObject({ outcome: ConversationComputerToolResultOutcomes.Available, notAfterEpochMs: f.turn.modelReservation!.authorityExpiresAtEpochMs });
+		await expect(f.unit.read(f.turn, _WORKLOAD)).resolves.toMatchObject({ outcome: ConversationComputerToolResultOutcomes.Available, notAfterEpochMs: f.turn.protocol.steps[0]!.reservation.authorityExpiresAtEpochMs });
 	});
 
 	it("rolls back acknowledgement when a delayed write crosses the admitted deadline", async function _lateWrite()
@@ -284,7 +319,7 @@ describe("saved conversation tool results", function _results()
 		const intent = await _PrepareConversationOutputIntent(f.turn, _SECOND);
 		await f.store.markOutput(f.turn.bootstrapId, intent);
 		const outputTurn = (await f.store.load(f.turn.bootstrapId))!;
-		expect(outputTurn.outputReceipt).not.toBeNull();
+		expect(outputTurn.protocol.output).not.toBeNull();
 		await expect(f.unit.read(outputTurn, _WORKLOAD)).resolves.toMatchObject({ outcome: ConversationComputerToolResultOutcomes.Available });
 		f.current().run.state = AgentRunState.Completed;
 		await expect(f.unit.read(outputTurn, _WORKLOAD)).resolves.toEqual({ outcome: ConversationComputerToolResultOutcomes.Unavailable });

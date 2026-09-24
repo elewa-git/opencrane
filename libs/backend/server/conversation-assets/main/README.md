@@ -150,6 +150,8 @@ compares the complete captured metadata and returns Pending, Ready, Failed or Un
 requires a clean published revision and the original requester's current Artifact read permission.
 
 `PrismaConversationGeneratedFileOutputLinkUnitOfWork` reloads the real turn receipt and binds the generated
-asset to its exact message. A new link rechecks the current invocation and file read authority in
+asset to its exact message. It follows the saved result immediately before the final model step,
+including when earlier tool cycles precede that result. The invocation, result digest and file
+metadata must all agree with that step. A new link rechecks the current invocation and file read authority in
 one transaction. An exact existing link is recovery evidence and does not require new execution
 authority. Different output coordinates or a different existing message fail closed.

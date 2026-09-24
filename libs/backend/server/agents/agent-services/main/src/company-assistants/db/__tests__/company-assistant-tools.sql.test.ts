@@ -12,7 +12,7 @@ import { PrismaCompanyAssistantProvisioningUnitOfWork } from "../prisma-company-
 
 const _First = new PrismaClient();
 const _Second = new PrismaClient();
-const _POLICY = { workloadProfile: "company", promptPolicyVersion: "sql-company-tools-v1", budget: { maxTurns: 2, maxTokens: 4096, maxDurationMs: 60_000 } };
+const _POLICY = { workloadProfile: "company", promptPolicyVersion: "sql-company-tools-v1", budget: { maxTurns: 2, maxTokens: 4096, maxCostUsdMicros: null, maxToolInvocations: 1, maxDurationMs: 60_000, maxLoopIterations: 1 } };
 
 /** Seeds exact grants through the production managed writer and the installed capability catalogue. */
 async function _Grants(transaction: Prisma.TransactionClient, siloId: string, principalId: string, resource: ProductAuthorizationResourceLocator, actions: readonly ProductAuthorizationActions[], managerId = "company-tools-sql-admin")
