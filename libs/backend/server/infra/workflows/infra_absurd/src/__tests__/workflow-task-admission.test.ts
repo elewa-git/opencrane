@@ -87,7 +87,7 @@ describe("WorkflowTaskEventAdmission", function _WorkflowTaskEventAdmissionSuite
 {
 	it("emits through the fixed parameterized Absurd procedure on the caller transaction", async function _CallsAbsurdEventProcedure()
 	{
-		const transaction = _Transaction([{ emit_event: null }]);
+		const transaction = _Transaction([{ acknowledged: 1 }]);
 		const admission = new WorkflowTaskEventAdmission("control-plane");
 
 		await admission.emit(transaction, "opencrane-task:task-1:event:completed:1", { preprocessJobId: "preprocess-1", deliveryCount: 1 });
@@ -95,6 +95,7 @@ describe("WorkflowTaskEventAdmission", function _WorkflowTaskEventAdmissionSuite
 		expect(transaction.$queryRaw).toHaveBeenCalledTimes(1);
 		const [query, ...values] = vi.mocked(transaction.$queryRaw).mock.calls[0] as unknown as [TemplateStringsArray, ...unknown[]];
 		expect(query.join(" ")).toContain("absurd.emit_event");
+		expect(query.join(" ")).toContain("SELECT 1 AS acknowledged");
 		expect(values).toEqual(["control-plane", "opencrane-task:task-1:event:completed:1", '{"preprocessJobId":"preprocess-1","deliveryCount":1}']);
 	});
 

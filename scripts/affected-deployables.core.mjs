@@ -1,11 +1,16 @@
 const DEVELOP_SMOKE_IMAGES = [
+	"agent-controller",
+	"artifact-scanner",
 	"artifact-service",
 	"cognee",
 	"conversation-computer",
 	"kurrentdb",
+	"mcp-executor",
+	"mcp-file-generator",
 	"memory-gateway",
 	"opencrane",
 	"opencrane-ui",
+	"skill-authoring",
 ];
 
 /**
@@ -153,6 +158,18 @@ export function selectImageSmokeProjects(affectedProjects, allProjects, heavyQua
 	return [...new Set(selected)]
 		.sort(function _ByName(left, right) { return left.localeCompare(right); })
 		.map(function _MatrixEntry(project) { return { project }; });
+}
+
+/**
+ * Requires provider qualification whenever the existing image-smoke selection includes Cognee.
+ *
+ * Called by: the affected-deployable selector before emitting the CI job condition.
+ * @param {{ project: string }[]} imageSmokes Already selected image-smoke owners.
+ * @returns {boolean} Whether the pinned Cognee image must prove its memory contract.
+ */
+export function selectCogneeMemoryContractRequired(imageSmokes)
+{
+	return imageSmokes.some(function _Cognee(entry) { return entry.project === "cognee"; });
 }
 
 /** Determines whether an affected project can change the generated API contract. */

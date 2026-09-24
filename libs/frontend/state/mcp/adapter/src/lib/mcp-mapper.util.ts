@@ -1,4 +1,4 @@
-import { McpApprovalStatus, McpConnectionStatus, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
+import { _ParseMcpCredentialRequirement, McpApprovalStatus, McpConnectionFailureCodes, McpConnectionStatus, McpInstalledServer, McpInstallStates, McpServer, McpServerType } from "@opencrane/core";
 import type { McpInstalledWire, McpServerWire } from "./mcp-gateway.types";
 
 /**
@@ -6,8 +6,9 @@ import type { McpInstalledWire, McpServerWire } from "./mcp-gateway.types";
  *
  * Local projections of the `/api/v1/mcp/...` JSON — WeOwnAI never imports
  * OpenCrane source. Enum-bearing fields arrive as raw strings, so the mappers
- * coerce them through the known enum values (with a safe default) and fill
- * missing collections, so every field on the read models is always set — components never see undefined.
+ * coerce them through the known enum values and fill missing collections, so every field on the read
+ * models is always set. Unknown presentation and install values use unavailable defaults, while a
+ * missing or unknown credential requirement rejects the server projection.
  */
 
 /** Coerce a raw string into a {@link McpServerType}, defaulting to single-user. */
@@ -31,6 +32,24 @@ function _ToConnectionStatus(raw: string | undefined): McpConnectionStatus
 	return match ?? McpConnectionStatus.NeedsCredential;
 }
 
+/** Refuse an unknown lifecycle rather than presenting a removal as an available install. */
+function _ToInstallState(raw: string | undefined): McpInstallStates
+{
+	const match = Object.values(McpInstallStates).find(function _Matches(value) { return value === raw; });
+	if (match === undefined)
+		throw new Error("MCP installation lifecycle is invalid.");
+	return match;
+}
+
+/** Keep only failure codes declared by the browser-safe connection contract. */
+function _ToFailureCode(raw: string | null | undefined): McpConnectionFailureCodes | null
+{
+	if (raw === null || raw === undefined)
+		return null;
+	const match = Object.values(McpConnectionFailureCodes).find(function eq(value: McpConnectionFailureCodes): boolean { return value === raw; });
+	return match ?? McpConnectionFailureCodes.CredentialUnavailable;
+}
+
 /** Map a wire server onto the {@link McpServer} read model. */
 export function _MapServer(wire: McpServerWire): McpServer
 {
@@ -41,6 +60,7 @@ export function _MapServer(wire: McpServerWire): McpServer
 		publisher: wire.publisher ?? "",
 		glyph: wire.glyph ?? wire.id.slice(0, 2),
 		type: _ToServerType(wire.type),
+		credentialRequirement: _ParseMcpCredentialRequirement(wire.credentialRequirement),
 		approvalStatus: _ToApprovalStatus(wire.approvalStatus),
 		credentialSchema: wire.credentialSchema ?? [],
 		entitlementSummary: wire.entitlementSummary ?? ""
@@ -52,7 +72,11 @@ export function _MapInstalled(wire: McpInstalledWire): McpInstalledServer
 {
 	return {
 		serverId: wire.serverId,
+		lifecycleState: _ToInstallState(wire.lifecycleState),
 		connectionStatus: _ToConnectionStatus(wire.connectionStatus),
+		connectionGeneration: Number.isSafeInteger(wire.connectionGeneration) && Number(wire.connectionGeneration) > 0 ? Number(wire.connectionGeneration) : null,
+		credentialUpdatedAt: typeof wire.credentialUpdatedAt === "string" ? wire.credentialUpdatedAt : null,
+		failureCode: _ToFailureCode(wire.failureCode),
 		lastUsed: wire.lastUsed ?? null
 	};
 }

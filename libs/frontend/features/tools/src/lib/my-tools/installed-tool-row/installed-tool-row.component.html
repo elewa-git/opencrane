@@ -1,0 +1,20 @@
+							<td class="wo-mono wo-mytools__name">{{ row().server.name }}</td>
+							<td><wo-scope-chip [label]="typeChips[row().server.type].label" [tone]="typeChips[row().server.type].tone" /></td>
+							<td>
+								<span
+									class="wo-tools__status"
+									[class.wo-tools__status--neutral]="indicator().tone === chipTones.Neutral"
+									[class.wo-tools__status--info]="indicator().tone === chipTones.Info"
+									[class.wo-tools__status--success]="indicator().tone === chipTones.Success"
+									[class.wo-tools__status--warning]="indicator().tone === chipTones.Warning"
+									[class.wo-tools__status--danger]="indicator().tone === chipTones.Danger"
+								>
+									<span class="wo-tools__status-dot" [class.wo-tools__status-dot--pulse]="indicator().pulse"></span>
+									{{ indicator().label }}
+								</span>
+							</td>
+							<td class="wo-mytools__muted">{{ row().installed.lastUsed ?? "—" }}</td>
+							<td class="wo-mytools__actions">
+								<ng-content select="[connection-control]" />
+								<button type="button" class="wo-tools__act wo-tools__act--muted" [disabled]="busy() || removing()" (click)="uninstallRequested.emit()">Uninstall</button>
+							</td>

@@ -27,10 +27,19 @@ The store keeps a creation UUID after a failed response so retry opens the same 
 in every mode. A changed member set receives a new command UUID. A successful response clears that command; the next creation receives a new UUID. Creation
 choices stay fixed while the request is in flight and become editable again after failure.
 The package-local creation-command helper compares selections and builds commands; the store owns
-the pending command's lifetime and clears it only after success or an explicit mode change.
+the pending command's lifetime and clears it after success, an explicit mode change or proven access loss.
+Ordinary message commands canonicalize at most ten unique asset ids by code-unit order and freeze them
+with the draft and UUID. An ambiguous failure retains all three for exact retry even when the visible
+draft or file selection changes. After a confirmed send, the next draft or asset set receives a fresh
+command. Attachment-only messages are valid when the set is non-empty.
 
-Current-access loss from the event stream purges the selected history and draft and fences any late
-updates from that connection. The event adapter owns history and computer delivery; the workspace reads metadata when a chat opens,
+Proven access loss from a workspace read, command or event stream erases the conversation list,
+creation directory, selected history, draft and onboarding transcript. It also clears pending creation
+state and rejects older read and command results. Switching between authorized chats preserves an
+in-flight creation: its result can update the list but cannot navigate away from the new selection.
+Replacing a stream releases interrupted command controls without letting their late completions
+change a newer command. The server checks live subscription authority every ten seconds; clearing
+browser state follows that signal or the next denied product request. The event adapter owns history and computer delivery; the workspace reads metadata when a chat opens,
 so newly created children and direct links do not depend on an already-loaded list.
 
 `ConversationGroupChildStore` owns requests made from an existing group message and the editable
@@ -45,7 +54,14 @@ does not promise that no older work exists. Selection, identity, access and hist
 invalidate the read; cancelled or late responses cannot restore an earlier selection. Active work
 and inputs awaiting admission refresh every five seconds for up to one minute, then require an
 explicit refresh. Failed reads clear rows; access denial stops retries until the chat is reopened.
-This store reads status and never starts, cancels or retries assistant execution.
+For the newest active personal run, it also owns one retry-stable Stop control message. The HTTP
+acknowledgement means only that the message was admitted: cancellation or completion must come back
+through the authoritative run read before the presentation claims a result. If an acknowledged Stop
+has no confirmed result after one minute, the store shows that uncertainty and permits a fresh explicit
+Stop command. It never submits that new command automatically. An ambiguous HTTP failure keeps the
+same key for a retry even after that minute. Selection or access loss purges the pending command.
+Company-child controls remain absent because the personal index does not carry
+a protected requester fact for those shared conversations.
 
 ## Public surface
 
@@ -77,8 +93,8 @@ The package also owns the Zod response validators used by its transport adapter.
 
 Opaque participant references are command coordinates, never labels. The state supplies those privacy-safe
 references, a self marker, and server-selected member display names. The directory validator labels
-the signed-in member `You` and preserves other display names; it rejects extra login-subject and email fields. On proven access loss, selected
-history and drafts are cleared before the access-changed state becomes visible.
+the signed-in member `You` and preserves other display names; it rejects extra login-subject and email fields. On proven access loss, retained
+workspace content and drafts are cleared before the access-changed state becomes visible.
 
 The package owns no server authority. It cannot admit a message, start a computer, or decide whether a
 retry is safe. Those decisions stay behind signed-in APIs.

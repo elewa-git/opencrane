@@ -125,6 +125,7 @@ function _ActivityFixture()
 			findMany: vi.fn(async function _List({ where }: { where: Prisma.AgentRunWhereInput }) { return runs.filter(run => run.siloId === where.siloId && run.principalId === (where.principalId as Prisma.StringFilter).equals); }),
 			findFirst: vi.fn(async function _Read({ where }: { where: Prisma.AgentRunWhereInput }) { return runs.find(run => run.id === where.id && run.siloId === where.siloId && run.principalId === (where.principalId as Prisma.StringFilter).equals) ?? null; }),
 		},
+		toolInvocation: { findFirst: vi.fn().mockResolvedValue(null) },
 		runInputSnapshot: {
 			create: vi.fn(async function _Create({ data }: { data: Prisma.RunInputSnapshotUncheckedCreateInput }) { snapshots.push(data as StoredSnapshot); return data; }),
 			findUnique: vi.fn(async function _Read({ where }: { where: Prisma.RunInputSnapshotWhereUniqueInput }) { return snapshots.find(snapshot => snapshot.runId === where.runId_attempt_digest?.runId && snapshot.attempt === where.runId_attempt_digest.attempt && snapshot.digest === where.runId_attempt_digest.digest) ?? null; }),

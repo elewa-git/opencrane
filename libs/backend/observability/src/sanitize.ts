@@ -30,6 +30,8 @@ const _SENSITIVE_FIELD_NAMES = new Set([
 	"providerkey",
 	"materialverifier",
 	"reviewedtoolarguments",
+	"safeproposedarguments",
+	"proposedarguments",
 	"finalarguments",
 	"arguments",
 	"result",

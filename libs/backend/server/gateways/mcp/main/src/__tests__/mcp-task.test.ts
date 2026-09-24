@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
-import { WorkflowTaskStates } from "@opencrane/backend/server/infra/workflows/contract";
+import { WorkflowTaskRetryableError, WorkflowTaskStates } from "@opencrane/backend/server/infra/workflows/contract";
 import { __FakeWorkflowEngine } from "@opencrane/backend/server/infra/workflows/testing";
 
 import type { McpOperatorTransaction, McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
@@ -10,6 +10,8 @@ import { cancelMcpTask, submitMcpTask, submitMcpTaskInput } from "../mcp-tasks/m
 import { __CreateMcpTaskWorkflow } from "../mcp-tasks/mcp-task";
 import { McpTaskCancellationOutcomes, McpTaskInputSubmissionOutcomes, McpTaskStates } from "../mcp-tasks/mcp-task.types";
 import type { McpTaskCaller, McpTaskInputResponse, McpTaskRecord, McpTaskSubmissionCommand, McpTaskWorkflow } from "../mcp-tasks/mcp-task.types";
+import { McpInvocationDispatchOutcomes } from "../runtime/remote-mcp-invocation.types";
+import type { McpInvocationExecutor } from "../runtime/remote-mcp-invocation.types";
 
 /** Mutable task state behind the engine-neutral workflow tests. */
 interface _TaskState
@@ -70,6 +72,7 @@ function _Repository(state: _TaskState): McpTaskRepository
 				result: null,
 				failureCode: null,
 				toolInvocationRowId: null,
+				toolInvocationId: null,
 				workflowTask: null,
 			};
 			return { created: true, task: _Record(state) as McpTaskRecord };
@@ -109,7 +112,7 @@ function _Repository(state: _TaskState): McpTaskRepository
 			if (state.task === null)
 				return null;
 			if (state.task.toolInvocationRowId === null)
-				state.task = { ...state.task, state: McpTaskStates.Queued, toolInvocationRowId: "tool-invocation-1" };
+				state.task = { ...state.task, state: McpTaskStates.Queued, toolInvocationRowId: "tool-invocation-row-1", toolInvocationId: "mcp-task-call:mcp-task-1" };
 			return _Record(state);
 		},
 		async recordFailure(_siloId: string, _taskId: string, _callDigest: string, failureCode: string)
@@ -138,6 +141,12 @@ function _UnitOfWork(state: _TaskState): McpOperatorUnitOfWork
 	return { execute: async function _Execute<Result>(operation: (value: McpOperatorTransaction) => Promise<Result>): Promise<Result> { return operation(transaction); } };
 }
 
+/** Return the default executor response for an OCI-owned invocation. */
+function _InvocationExecutor(): McpInvocationExecutor
+{
+	return { execute: vi.fn().mockResolvedValue(McpInvocationDispatchOutcomes.AwaitingOciCompanion), settleExhausted: vi.fn().mockResolvedValue(true) };
+}
+
 describe("public MCP task workflow", function _McpTaskSuite()
 {
 	it("deduplicates admission and invokes the exact OCI runtime command once", async function _RunsOnce()
@@ -146,12 +155,12 @@ describe("public MCP task workflow", function _McpTaskSuite()
 		const execution = new __FakeWorkflowEngine();
 		const runtime = { recordWorkflowExhaustion: vi.fn().mockResolvedValue(null), admitInvocation: vi.fn().mockImplementation(async function _Admit(invocationId: string)
 		{
-			expect(invocationId).toBe("tool-invocation-1");
+			expect(invocationId).toBe("tool-invocation-row-1");
 			state.task = { ...(state.task as McpTaskRecord), state: McpTaskStates.Completed, result: { temperature: 24 } };
 			return "admitted" as const;
 		}) };
 		const unitOfWork = _UnitOfWork(state);
-		const workflow = __CreateMcpTaskWorkflow({ execution, unitOfWork, runtime, statusPollMilliseconds: 250 });
+		const workflow = __CreateMcpTaskWorkflow({ execution, unitOfWork, runtime, invocationExecutor: _InvocationExecutor(), statusPollMilliseconds: 250 });
 		const first = await submitMcpTask(unitOfWork, workflow, _Caller(), _Command());
 		const replay = await submitMcpTask(unitOfWork, workflow, _Caller(), _Command());
 
@@ -161,6 +170,28 @@ describe("public MCP task workflow", function _McpTaskSuite()
 		expect(replay?.workflowTask).toEqual(first?.workflowTask);
 		expect(runtime.admitInvocation).toHaveBeenCalledTimes(1);
 		expect(execution.taskSnapshot(first?.workflowTask as NonNullable<McpTaskRecord["workflowTask"]>).result).toEqual({ mcpTaskId: "mcp-task-1", state: McpTaskStates.Completed });
+	});
+
+	it("dispatches a remote invocation once and reads its saved terminal task", async function _DispatchesRemote()
+	{
+		const state: _TaskState = { task: null };
+		const execution = new __FakeWorkflowEngine();
+		const runtime = { recordWorkflowExhaustion: vi.fn().mockResolvedValue(null), admitInvocation: vi.fn().mockResolvedValue("admitted") };
+		const invocationExecutor = _InvocationExecutor();
+		vi.mocked(invocationExecutor.execute).mockImplementation(async function _Execute(invocationTarget)
+		{
+			expect(invocationTarget).toEqual({ ownerKind: "mcp_task", siloId: "silo-a", mcpTaskId: "mcp-task-1", toolInvocationId: "mcp-task-call:mcp-task-1" });
+			state.task = { ...(state.task as McpTaskRecord), state: McpTaskStates.Completed, result: { temperature: 24 } };
+			return McpInvocationDispatchOutcomes.Completed;
+		});
+		const unitOfWork = _UnitOfWork(state);
+		const workflow = __CreateMcpTaskWorkflow({ execution, unitOfWork, runtime, invocationExecutor, statusPollMilliseconds: 250 });
+		const task = await submitMcpTask(unitOfWork, workflow, _Caller(), _Command());
+
+		await execution.startWorkers({ workerName: "mcp-remote-task-test" });
+
+		expect(invocationExecutor.execute).toHaveBeenCalledExactlyOnceWith({ ownerKind: "mcp_task", siloId: "silo-a", mcpTaskId: "mcp-task-1", toolInvocationId: "mcp-task-call:mcp-task-1" });
+		expect(execution.taskSnapshot(task?.workflowTask as NonNullable<McpTaskRecord["workflowTask"]>).result).toEqual({ mcpTaskId: "mcp-task-1", state: McpTaskStates.Completed });
 	});
 
 	it("resumes the same waiting task only after its matching response is saved", async function _ResumesInput()
@@ -173,7 +204,7 @@ describe("public MCP task workflow", function _McpTaskSuite()
 			return "admitted" as const;
 		}) };
 		const unitOfWork = _UnitOfWork(state);
-		const workflow = __CreateMcpTaskWorkflow({ execution, unitOfWork, runtime, statusPollMilliseconds: 250 });
+		const workflow = __CreateMcpTaskWorkflow({ execution, unitOfWork, runtime, invocationExecutor: _InvocationExecutor(), statusPollMilliseconds: 250 });
 		const task = await submitMcpTask(unitOfWork, workflow, _Caller(), _Command(true));
 		const workers = execution.startWorkers({ workerName: "mcp-task-input-test" });
 		await vi.waitFor(function _WaitForInput(): void { expect(state.task?.state).toBe(McpTaskStates.InputRequired); });
@@ -200,7 +231,7 @@ describe("public MCP task workflow", function _McpTaskSuite()
 			return "admitted" as const;
 		}) };
 		const unitOfWork = _UnitOfWork(state);
-		const baseWorkflow = __CreateMcpTaskWorkflow({ execution, unitOfWork, runtime, statusPollMilliseconds: 250 });
+		const baseWorkflow = __CreateMcpTaskWorkflow({ execution, unitOfWork, runtime, invocationExecutor: _InvocationExecutor(), statusPollMilliseconds: 250 });
 		const deliverInput = vi.fn().mockImplementationOnce(async function _FailDelivery(): Promise<void>
 		{
 			throw new Error("temporary event delivery failure");
@@ -228,7 +259,7 @@ describe("public MCP task workflow", function _McpTaskSuite()
 		const execution = new __FakeWorkflowEngine();
 		const runtime = { admitInvocation: vi.fn(), recordWorkflowExhaustion: vi.fn().mockResolvedValue(null) };
 		const unitOfWork = _UnitOfWork(state);
-		const workflow = __CreateMcpTaskWorkflow({ execution, unitOfWork, runtime, statusPollMilliseconds: 250 });
+		const workflow = __CreateMcpTaskWorkflow({ execution, unitOfWork, runtime, invocationExecutor: _InvocationExecutor(), statusPollMilliseconds: 250 });
 		const task = await submitMcpTask(unitOfWork, workflow, _Caller(), _Command());
 
 		const cancelled = await cancelMcpTask(unitOfWork, workflow, _Caller(), task?.id as string);
@@ -241,7 +272,7 @@ describe("public MCP task workflow", function _McpTaskSuite()
 
 	it("does not cancel the workflow when the database cancellation fence changes", async function _RefusesChangedCancellationFence()
 	{
-		const state: _TaskState = { task: { id: "mcp-task-1", siloId: "silo-a", principalId: "principal-a", callDigest: "call-digest-1", serverRevisionId: "server-revision-1", toolRevisionId: "tool-revision-1", toolName: "weather.lookup", protocolVersion: "2026-07-28", state: McpTaskStates.Working, inputRequest: null, inputResponse: null, result: null, failureCode: null, toolInvocationRowId: null, workflowTask: { taskId: "workflow-task-1", taskName: "mcp.task.call", idempotencyKey: "workflow-key-1" } } };
+		const state: _TaskState = { task: { id: "mcp-task-1", siloId: "silo-a", principalId: "principal-a", callDigest: "call-digest-1", serverRevisionId: "server-revision-1", toolRevisionId: "tool-revision-1", toolName: "weather.lookup", protocolVersion: "2026-07-28", state: McpTaskStates.Working, inputRequest: null, inputResponse: null, result: null, failureCode: null, toolInvocationRowId: null, toolInvocationId: null, workflowTask: { taskId: "workflow-task-1", taskName: "mcp.task.call", idempotencyKey: "workflow-key-1" } } };
 		const repository = { ..._Repository(state), cancel: vi.fn().mockRejectedValue(new _McpTaskCancellationConflictError()) };
 		const transaction = { mcpTasks: repository, workflowTransaction: _WorkflowTransaction() } as unknown as McpOperatorTransaction;
 		const unitOfWork: McpOperatorUnitOfWork = { execute: async function _Execute<Result>(operation: (value: McpOperatorTransaction) => Promise<Result>): Promise<Result> { return operation(transaction); } };
@@ -267,7 +298,7 @@ describe("public MCP task workflow", function _McpTaskSuite()
 			}),
 		};
 		const unitOfWork = _UnitOfWork(state);
-		const workflow = __CreateMcpTaskWorkflow({ execution, unitOfWork, runtime, statusPollMilliseconds: 250 });
+		const workflow = __CreateMcpTaskWorkflow({ execution, unitOfWork, runtime, invocationExecutor: _InvocationExecutor(), statusPollMilliseconds: 250 });
 		const task = await submitMcpTask(unitOfWork, workflow, _Caller(), _Command());
 		execution.setTaskAttempt(task?.workflowTask as NonNullable<McpTaskRecord["workflowTask"]>, 5);
 
@@ -278,13 +309,35 @@ describe("public MCP task workflow", function _McpTaskSuite()
 		expect(execution.taskSnapshot(task?.workflowTask as NonNullable<McpTaskRecord["workflowTask"]>)).toMatchObject({ state: WorkflowTaskStates.Completed, result: { mcpTaskId: "mcp-task-1", state: McpTaskStates.Failed } });
 	});
 
+	it("records terminal product state when remote dispatch exhausts retryable identity failures", async function _RecordsRemoteExhaustion()
+	{
+		const state: _TaskState = { task: null };
+		const execution = new __FakeWorkflowEngine();
+		const runtime = {
+			admitInvocation: vi.fn().mockResolvedValue("admitted"),
+			recordWorkflowExhaustion: vi.fn().mockResolvedValue({ mcpTaskId: "mcp-task-1", state: McpTaskStates.Failed }),
+		};
+		const invocationExecutor = _InvocationExecutor();
+		vi.mocked(invocationExecutor.execute).mockRejectedValue(new WorkflowTaskRetryableError("Remote MCP server identity is temporarily unavailable"));
+		const unitOfWork = _UnitOfWork(state);
+		const workflow = __CreateMcpTaskWorkflow({ execution, unitOfWork, runtime, invocationExecutor, statusPollMilliseconds: 250 });
+		const task = await submitMcpTask(unitOfWork, workflow, _Caller(), _Command());
+		execution.setTaskAttempt(task?.workflowTask as NonNullable<McpTaskRecord["workflowTask"]>, 5);
+
+		await execution.startWorkers({ workerName: "mcp-remote-exhaustion-test" });
+
+		expect(invocationExecutor.execute).toHaveBeenCalledOnce();
+		expect(runtime.recordWorkflowExhaustion).toHaveBeenCalledOnce();
+		expect(execution.taskSnapshot(task?.workflowTask as NonNullable<McpTaskRecord["workflowTask"]>)).toMatchObject({ state: WorkflowTaskStates.Completed, result: { mcpTaskId: "mcp-task-1", state: McpTaskStates.Failed } });
+	});
+
 	it("leaves a non-final retryable failure to the workflow engine", async function _LeavesRetryToEngine()
 	{
 		const state: _TaskState = { task: null };
 		const execution = new __FakeWorkflowEngine();
 		const runtime = { admitInvocation: vi.fn().mockRejectedValue(new Error("runtime unavailable")), recordWorkflowExhaustion: vi.fn().mockResolvedValue(null) };
 		const unitOfWork = _UnitOfWork(state);
-		const workflow = __CreateMcpTaskWorkflow({ execution, unitOfWork, runtime, statusPollMilliseconds: 250 });
+		const workflow = __CreateMcpTaskWorkflow({ execution, unitOfWork, runtime, invocationExecutor: _InvocationExecutor(), statusPollMilliseconds: 250 });
 		const task = await submitMcpTask(unitOfWork, workflow, _Caller(), _Command());
 		execution.setTaskAttempt(task?.workflowTask as NonNullable<McpTaskRecord["workflowTask"]>, 4);
 

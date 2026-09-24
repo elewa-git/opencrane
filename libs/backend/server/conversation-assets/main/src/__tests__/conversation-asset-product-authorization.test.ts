@@ -42,7 +42,7 @@ describe("conversation asset product authorization", function _Suite()
 
 		await expect(repository.canAccess(_CALLER, { kind: ProductAuthorizationResourceKinds.Artifact, id: "artifact-1" }, ProductAuthorizationActions.Read)).resolves.toBe(true);
 
-		expect(_authorization.listPrincipalEntitled.mock.calls[0]?.[0]).not.toHaveProperty("boundary");
+		expect(_authorization.listPrincipalEntitled).toHaveBeenCalledExactlyOnceWith({ siloId: "silo-1", principalId: "principal-1", resources: [{ kind: ProductAuthorizationResourceKinds.Artifact, id: "artifact-1" }], action: ProductAuthorizationActions.Read, nowEpochMs: expect.any(Number) });
 	});
 
 	it("records artifact mutations through the same Principal-wide authority", async function _AdmitsAcrossBoundaries()
@@ -52,5 +52,14 @@ describe("conversation asset product authorization", function _Suite()
 		await expect(repository.admit(_CALLER, { kind: ProductAuthorizationResourceKinds.Artifact, id: "artifact-1" }, ProductAuthorizationActions.Edit, { assetId: "asset-1" })).resolves.toBe(true);
 
 		expect(_authorization.admitPrincipal.mock.calls[0]?.[0]).not.toHaveProperty("boundary");
+	});
+
+	it("keeps the requesting Principal separate from the actual workload actor", async function _AdmitsGeneratedFile()
+	{
+		const repository = new PrismaConversationAssetProductAuthorizationRepository({} as never);
+		const workload = { audience: "opencrane-mcp-executor", namespace: "mcp", serviceAccountName: "executor", workloadKind: "job", workloadUid: "job-uid", podUid: "pod-uid" } as const;
+		const run = { runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1" };
+		await expect(repository.admitWorkload(_CALLER, { workload, run }, { kind: ProductAuthorizationResourceKinds.ArtifactCollection, id: "silo-1" }, ProductAuthorizationActions.Create, { operationId: "file-1" })).resolves.toBe(true);
+		expect(_authorization.admitPrincipal).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ principalId: _CALLER.principalId, actorKind: "workload", actorId: "pod-uid", workload, run }));
 	});
 });

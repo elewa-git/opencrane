@@ -1,8 +1,9 @@
-import { McpApprovalStatus, McpServerRevisionState, McpServerStatus, type Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
+import { PrismaMcpConnectionReadinessRepository } from "../connections/prisma-mcp-connection-readiness-repository";
 import type { RuntimeMcpEffectEligibility, RuntimeMcpEffectEligibilityCommand } from "./runtime-mcp-effect-eligibility.types";
 
-/** Reads current MCP publication and revision assignment for runtime effect admission. */
+/** Reads current MCP assignment and connection readiness for runtime effect admission. */
 export class PrismaRuntimeMcpEffectEligibilityAuthority implements RuntimeMcpEffectEligibility
 {
 	/** Transaction shared with the ToolInvocation admission. */
@@ -28,19 +29,12 @@ export class PrismaRuntimeMcpEffectEligibilityAuthority implements RuntimeMcpEff
 				agentServiceId: command.agentServiceId,
 				toolRevisionId: command.toolRevisionId,
 				siloId: command.siloId,
-				toolRevision: {
-					is: {
-						serverRevision: {
-							is: {
-								state: McpServerRevisionState.Ready,
-								server: { is: { status: McpServerStatus.Active, approvalStatus: McpApprovalStatus.Published } },
-							},
-						},
-					},
-			},
 			},
 			select: { agentRevisionId: true },
 		});
-		return assignment !== null;
+		if (assignment === null)
+			return false;
+		const readiness = new PrismaMcpConnectionReadinessRepository(this.transaction);
+		return readiness.isReady({ siloId: command.siloId, toolRevisionId: command.toolRevisionId, ownerPrincipalId: command.ownerPrincipalId });
 	}
 }

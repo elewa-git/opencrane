@@ -37,17 +37,23 @@ without implementation detail.
                                       │
                          ┌────────────▼────────────┐
                          │ Conversation computer   │
-                         │ turn request, workspace │
+                         │ workspace preparation   │
                          │ and private review      │
                          └─────────────────────────┘
+
+KurrentDB activation ──► activation transaction ──► Absurd task
+                                                      │ durable progression and waits
+                                                      └──► OpenCrane server authority
 ```
 
 The arrows show responsibility and coordination. The server consumes the activation queue and
 authorises a claim before Agent Sandbox creates compute; KurrentDB does not make permission
-decisions. The conversation computer requests work from the private server. The server keeps the
-prompt and model key, reserves each request, calls LiteLLM and saves accepted content. Current
-continuation implementation also connects one permitted tool result to a final answer. The Pod receives
-status only; [development status](/guide/status) separates qualified checkpoints from work under review.
+decisions. Publishing an active lease atomically admits the existing Absurd conversation-turn task.
+Absurd owns durable progression, waits and restart recovery; the server keeps the prompt and model
+key, reserves each request, calls LiteLLM and saves accepted content. Current continuation
+implementation also connects one permitted tool result to a final answer. The Pod prepares the
+lease-fenced workspace and review surface only; [development status](/guide/status) separates
+qualified checkpoints from work under review.
 
 ## What each part owns
 
@@ -57,7 +63,8 @@ status only; [development status](/guide/status) separates qualified checkpoints
 | Product server | `apps/opencrane` composes the backend libraries. They check current access, admit work and persist protected changes. |
 | PostgreSQL | Current memberships, groups, grants, agent configuration, transactional product records and rebuildable conversation directory/read projections. Private message payloads are stored separately from immutable history. |
 | KurrentDB | Ordered `conversation-{id}` history, computer lifecycle evidence and durable activation delivery. History entries reference encrypted message payloads. |
-| Conversation compute | `apps/conversation-computer` requests the next server-owned step, polls its outcome and provides a private workspace-review gateway. `apps/_infra/agent-sandbox` owns the admitted profile; the upstream Agent Sandbox controller owns Pod lifecycle. |
+| Workflow progression | The existing Absurd control-plane task selects the next saved turn step, owns durable deadlines and tool-result waits, and resumes after restart. The server retains every model, budget, tool and output decision. |
+| Conversation compute | `apps/conversation-computer` prepares its lease-fenced workspace and provides a private workspace-review gateway. `apps/_infra/agent-sandbox` owns the admitted profile; the upstream Agent Sandbox controller owns Pod lifecycle. |
 | Models | LiteLLM routes requests to configured providers and brokers scoped model credentials. Providers may be external to the organisation. |
 | Tools | The MCP catalogue, server-side action authority and `apps/mcp-executor` govern immutable tool packages and isolated execution. The atomic handoff saves a permitted conversation proposal and its executor work together, with claims bounded by the original run and current access. The continuation implementation connects one permitted model-selected tool and its result to a final answer; qualification, approvals and visible progress remain open. |
 | Memory | `apps/memory-gateway` fronts Cognee; OpenCrane owns the metadata and permission decisions. Complete personal-memory journeys remain unfinished. |
@@ -94,9 +101,10 @@ product response limit.
 
 Before each model request, the server records a reservation in the existing private turn stream.
 Only the live handler that wins a fresh reservation may dispatch. The original call allowance,
-token ceilings and run/lease authority remain binding across restart. Bootstrap carries a turn id
-and status; model-step accepts exactly `{bootstrapId}`. The Pod receives no prompt or model key and
-has no direct LiteLLM network path or private tool-proposal/output route.
+token ceilings and run/lease authority remain binding across restart. Absurd addresses the saved
+turn by its admitted activation receipt and waits durably when a request or tool result is pending.
+The Pod receives no prompt, model key, turn status or outcome and has no direct LiteLLM network path
+or private tool-proposal/output route.
 
 The continuation implementation lets the first request select at most one unambiguous tool from the
 frozen set that requires no approval, when the original allowance permits two model calls. The server
@@ -186,7 +194,7 @@ Implemented recovery and backup machinery still needs the live drills listed in
 [deployment configuration](/operators/deployment-configuration) and the [runbook](/operators/runbook).
 
 Text checkpoint `378a755b6` has passed full CI, including all seven fresh PostgreSQL targets and
-24 real KurrentDB cases. The later continuation implementation in PR #830 awaits CI and live
-qualification. Neither replacement is installed on testv5, which has no integration installed for
-the retrieval proof. T1 remains in progress, and approved actions and
+24 real KurrentDB cases. The later continuation implementation and its Absurd orchestration
+follow-up await live qualification. Neither replacement is installed on testv5, which has no
+integration installed for the retrieval proof. T1 remains in progress, and approved actions and
 user-facing recovery retain their separate completion criteria.

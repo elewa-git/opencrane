@@ -415,6 +415,13 @@ smoke_rendered="$(helm template opencrane-smoke "$CHART_DIR" \
   --values "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-values.yaml" \
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
+  --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
+  --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
+  --set-string agentController.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
+  --set-string agentController.skillAuthoringValidation.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd \
+  --set-string opencrane-mcp-executor.mcpExecutor.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee \
+  --set-string artifactScanner.image.digest=sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff \
+  --set-string clustertenantManager.database.existingSecret=smoke-application-database \
   --set-string historyStore.kurrentdb.tls.existingSecret=smoke-kurrent-tls \
   --set-string historyStore.kurrentdb.bootstrapAdmin.existingSecret=smoke-kurrent-admin \
   --set-string historyStore.kurrentdb.bootstrapOps.existingSecret=smoke-kurrent-ops \

@@ -37,14 +37,16 @@ offline image smoke. No runtime network exception hides either failure.
 - `deploy/Dockerfile` builds the OpenCrane-owned Cognee image.
 - `helm/` provides `opencrane.cognee.resources`, the named-template library composed by the silo
   chart.
-- `project.json` registers the container, contract-test, offline image-smoke, and Helm-lint targets.
+- `project.json` registers the container, fast contract tests, offline image smoke, memory-provider
+  qualification, and Helm-lint targets.
 
 There is no importable application code.
 
 ## Boundary
 
-OpenCrane owns how Cognee is built, deployed, reached, and isolated. The vendor owns Cognee's
-behaviour and data model. Only the release-local memory gateway may connect to the Cognee Service.
+OpenCrane owns how Cognee is built, deployed, reached, and isolated. Cognee owns memory storage and
+its data model; candidate-only source repairs remain inside that provider. Only the release-local
+memory gateway may connect to the Cognee Service.
 Cognee may reach release-local LiteLLM, cluster DNS, and optional local telemetry, but not
 `extension.ladybugdb.com` at runtime.
 
@@ -87,6 +89,100 @@ fallback.
 - `sharedPlatform.litellm.mode` must remain `instance`.
 - Cognee's own login middleware stays disabled because the authenticated gateway and NetworkPolicy
   own access to this private Service.
+
+## Provider qualification
+
+Run `npm exec -- nx run cognee:memory-contract` on the CI Docker runner to test the pinned image's
+memory behavior with synthetic facts. The target builds the app-owned image, then runs Cognee and
+a deterministic model/embedding stub on a private Docker network. It records the installed provider
+version and source hashes before checking dataset isolation, document identity, recovery after a lost
+response, restart, indexing and deletion. The driver uses container DNS without publishing a host
+port. The harness removes only its own containers, network and temporary storage.
+The pinned image reports `1.2.1-local`: Cognee appends this suffix when it reads the version from its
+source checkout. Qualification requires that exact value and the reviewed module hashes.
+
+The negative control tests the current configuration, with dataset partitioning and HTTP login
+disabled. The positive candidate enables both: Cognee requires authentication when partitioning is
+enabled. It registers a synthetic account in disposable storage and signs in again after restart;
+the test token stays in process memory and never enters evidence files.
+Authenticated search must identify the exact requested dataset in its response envelope. The
+negative control uses the provider's separate flat response shape; neither parser accepts the
+other mode or silently selects from several datasets.
+A passing provider proof is required before changing the deployment default or enabling personal
+memory writes. An empty result cannot stand in for an
+unavailable provider, a lost response cannot authorize another write, and a chunk identifier cannot
+stand in for the owning document during deletion.
+
+The pinned 1.2.1 image currently fails the last-reference erasure check: it removes retrieval and
+dataset visibility but retains the original uploaded file. Its authenticated candidate passes
+isolation and restart recovery; that does not qualify deletion or enable personal memory. Keep the
+failed evidence and test assertion until a separately reviewed provider image passes the complete
+contract, including interrupted-deletion recovery and local file ownership.
+
+CI selects this uncached target whenever the existing image-smoke selection includes Cognee. A
+selected run fails if Docker or a required provider proof is unavailable. Logs and a machine-readable
+result are retained under `.nx/test-results/cognee-memory-contract` and uploaded by the workflow.
+The ordinary `cognee:test` target stays fast and does not require Docker.
+
+To evaluate the proposed 1.5.4 replacement, run `npm exec -- nx run cognee:memory-contract-1-5-4`
+on the CI Docker runner. Its Dockerfile and immutable image profile live under
+`tests/candidates/1.5.4/`; it creates fresh disposable storage and keeps its own evidence under
+`.nx/test-results/cognee-memory-contract-1-5-4`. The separate CI job retains failures as well as
+successful checks. It does not register a release image or satisfy the production publication gate.
+
+The shared-content check records document/chunk coordinates from the dataset graph separately from
+the ranked search response. Those coordinates survive a failed assertion without retaining source
+text. Use them to distinguish missing document association from a search-ranking result; a bounded
+search response cannot enumerate every chunk belonging to a document. This evidence does not relax
+the candidate's existing assertions or qualify the provider by itself.
+
+The candidate harness disables Cognee's automatic session feedback. These storage tests send fixed
+synthetic queries and require vector search to receive them unchanged; model-driven query rewriting
+is outside this provider qualification. The useful-retrieval, dataset, graph, restart and deletion
+assertions remain required.
+
+The candidate changes dataset and native-database behavior, so its qualification must include the
+full provider journey and deletion recovery. A successful ordinary delete alone does not establish
+safe local file ownership or recovery after an interrupted cleanup. Selecting a production image,
+changing chart defaults and enabling personal memory are later reviewed changes.
+
+The 1.5.4 candidate includes an explicit deletion repair under `tests/candidates/1.5.4/patches/`.
+It retains the document record until unreferenced local files have been removed, so a failed cleanup
+can resume through the same public document coordinate. Ingestion and deletion share a provider-owned
+file lock to protect shared references. Qualification compares the owner-resolved storage identity
+for both datasets and exercises the public cleanup wrapper under that lock. It covers fresh
+installations on Linux with local file storage, the default SQLite store and one shared local volume;
+it makes no claim for remote
+storage or independent stores sharing files. The build and runtime evidence retain the official source
+hashes and separately verify each patch, its base image and its resulting source. Interrupted cleanup, restart and concurrent
+add/delete checks must pass before this candidate can replace the production image.
+
+The authenticated candidate also checks dataset creation with a saved opaque name: repeated and
+concurrent requests must return the same dataset and owner, and a lost response must be recoverable
+by listing that name without sending another create. The existing provider restart then checks all
+saved coordinates again.
+
+The candidate dataset route always passes an authenticated create or same-name retry through the
+authorised-dataset owner. That owner holds Cognee's existing per-dataset lock while it ensures the
+owner’s `read`, `write`, `delete` and `share` grants. A restart retry can therefore complete grants
+that stopped after the dataset row or any one grant. This lock is process-local: the qualification
+is limited to the candidate's one-worker, one-replica SQLite profile and does not establish safety
+for a multi-worker or shared provider. The exact candidate image must still pass the five fault
+boundaries, foreign-owner isolation, concurrent uniqueness and public list/add/search/delete proof
+before personal dataset provisioning can be activated.
+
+The candidate Cognify recovery path extends the existing dataset-data and Cognify routes. An owner
+first reads one locked, bounded input snapshot. Its digest covers the complete raw bytes and private
+routing metadata for at most 1,000 documents of at most 65,536 bytes each. The caller then supplies
+that saved digest with one operation UUID. Under the same dataset lock, a new run compares the
+current snapshot before it records Started; an exact terminal history returns its saved run receipt
+without starting another task. A Started-only or contradictory history returns a fixed recovery
+failure and remains ambiguous. The evidence contains only dataset, document, operation and run
+coordinates plus digests and byte counts; it contains no document text, file paths or credentials.
+
+This recovery authority has the same one-worker, one-replica SQLite limit as the candidate dataset
+lock. Exact-image qualification must still prove response-loss replay, concurrent replay and
+restart refusal of a Started-only run before any candidate image can be selected for production.
 
 ## See also
 

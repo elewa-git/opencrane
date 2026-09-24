@@ -1,1 +1,1 @@
-export * from "./lib/context-panel/context-panel.component";
+export * from "./lib/components/canvas-doc/canvas-doc.component";

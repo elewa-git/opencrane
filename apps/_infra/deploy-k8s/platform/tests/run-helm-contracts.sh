@@ -22,8 +22,10 @@ for contract in \
   pooler-deploy-contract.sh \
   postgres-release-contract.sh \
   workflow-engine-qualification-contract.sh \
+  hosted-generated-file-contract.sh \
   server-key-permissions-contract.sh \
   server-rbac-contract.sh \
+  mcp-connection-custody-contract.sh \
   server-network-policy-contract.sh \
   platform-network-policy-contract.sh \
   post-deploy-health-contract.sh \

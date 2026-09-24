@@ -6,7 +6,7 @@
 
 This feature owns the responsive settings frame, its navigation, the member directory, the
 invitation form, and the public invitation-acceptance screen. The routed page coordinates separate
-directory, create, resend, and acceptance stores; presentational components receive one mapped view
+directory, create, resend, removal, and acceptance stores; presentational components receive one mapped view
 model and emit user intents.
 
 ```
@@ -24,6 +24,12 @@ browser command state and the gateway port.
 The feature never decides whether a caller may invite, whether an external address is allowed, or
 whether payment is required. It displays server-authoritative success and refusal states, including
 a payment-required refusal supplied by Fleet or another host.
+
+An offered Remove access action confirms the exact member with Cancel focused first. The dialog
+interpolates names as text; it never inserts member text as HTML. Protected and removed status remains
+visible beside identity on narrow screens. Removed memberships stay in the Members tab so existing
+conversation attribution remains understandable. A denied directory closes invitation drafts and
+confirmation and removes private links and controls; Refresh explicitly rechecks access.
 
 ## Public surface
 

@@ -1,5 +1,5 @@
 import type { AcceptOrganizationInvitationResult } from "./organization-invite-acceptance.types";
-import type { OrganizationMemberDirectory } from "./organization-member-directory.types";
+import type { OrganizationMember, OrganizationMemberDirectory } from "./organization-member-directory.types";
 import type { CreateOrganizationInvitationsCommand, CreateOrganizationInvitationsResult, OrganizationInviteValidationResult, ResendOrganizationInvitationResult } from "./organization-invitations.types";
 
 /**
@@ -13,6 +13,8 @@ export interface OrganizationMembersGateway
 {
 	/** Loads the directory the signed-in caller may see. */
 	load(): Promise<OrganizationMemberDirectory>;
+	/** Removes one exact membership and returns the retained server-authored Suspended row. */
+	remove(membershipId: string): Promise<OrganizationMember>;
 	/** Validates recipient policy before an administrator confirms creation. */
 	validate(emails: readonly string[]): Promise<OrganizationInviteValidationResult>;
 	/** Creates or recovers invitations under the supplied server idempotency coordinate. */
@@ -36,6 +38,8 @@ export enum OrganizationMembersGatewayErrorKinds
 	Forbidden = "forbidden",
 	/** A required dependency is temporarily unavailable. */
 	Unavailable = "unavailable",
+	/** The exact membership no longer exists in the current organization. */
+	NotFound = "not_found",
 	/** Another command changed the invitation or reused a key differently. */
 	Conflict = "conflict",
 	/** Fleet payment authority reports that no paid seat is available for the invitation. */

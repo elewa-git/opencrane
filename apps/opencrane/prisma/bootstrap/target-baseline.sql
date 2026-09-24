@@ -74,7 +74,7 @@ CREATE TYPE "ToolResultDeliveryState" AS ENUM ('pending', 'consumed');
 CREATE TYPE "ToolInvocationAuthorizationActorKind" AS ENUM ('workload');
 
 -- CreateEnum
-CREATE TYPE "ConversationAssetProvenance" AS ENUM ('participant_upload');
+CREATE TYPE "ConversationAssetProvenance" AS ENUM ('participant_upload', 'agent_output');
 
 -- CreateEnum
 CREATE TYPE "ConversationAssetState" AS ENUM ('uploading', 'processing', 'ready', 'failed', 'removed');
@@ -110,6 +110,15 @@ CREATE TYPE "GroupMembershipAuthority" AS ENUM ('external', 'local');
 CREATE TYPE "PrincipalProvenance" AS ENUM ('external', 'internal');
 
 -- CreateEnum
+CREATE TYPE "McpExecutionTransport" AS ENUM ('oci-image', 'remote-http');
+
+-- CreateEnum
+CREATE TYPE "McpConnectionState" AS ENUM ('awaiting-material', 'activating', 'active', 'revoked', 'failed', 'recovery-required');
+
+-- CreateEnum
+CREATE TYPE "McpConnectionCredentialKind" AS ENUM ('none', 'bearer');
+
+-- CreateEnum
 CREATE TYPE "McpServerTransport" AS ENUM ('streamable-http', 'sse', 'websocket', 'oci-image');
 
 -- CreateEnum
@@ -140,19 +149,37 @@ CREATE TYPE "McpServerStatus" AS ENUM ('active', 'degraded', 'draft');
 CREATE TYPE "McpServerType" AS ENUM ('single-user', 'multi-user', 'remote-oauth');
 
 -- CreateEnum
+CREATE TYPE "McpCredentialRequirement" AS ENUM ('credentialless', 'principal-credential', 'shared-credential');
+
+-- CreateEnum
 CREATE TYPE "McpApprovalStatus" AS ENUM ('pending-review', 'approved', 'published', 'disabled');
 
 -- CreateEnum
-CREATE TYPE "McpConnectionStatus" AS ENUM ('needs-credential', 'shared-key');
+CREATE TYPE "McpConnectionStatus" AS ENUM ('needs-credential', 'credentialless', 'activating', 'active', 'recovery-required');
 
 -- CreateEnum
-CREATE TYPE "MemoryDatasetState" AS ENUM ('active', 'retired');
+CREATE TYPE "McpInstallState" AS ENUM ('installed', 'removing', 'removed');
+
+-- CreateEnum
+CREATE TYPE "MemoryDatasetState" AS ENUM ('provisioning', 'active', 'retired');
 
 -- CreateEnum
 CREATE TYPE "MemoryFactState" AS ENUM ('active', 'corrected', 'forget_pending', 'forgotten');
 
 -- CreateEnum
 CREATE TYPE "MemoryConsentState" AS ENUM ('explicit', 'confirmed');
+
+-- CreateEnum
+CREATE TYPE "PersonalMemoryOperationKind" AS ENUM ('remember', 'correct', 'forget');
+
+-- CreateEnum
+CREATE TYPE "PersonalMemoryOperationPhase" AS ENUM ('dataset_ensure_pending', 'document_add_pending', 'cognify_pending', 'catalog_commit_pending', 'prior_document_delete_pending', 'document_delete_pending', 'catalog_finalize_pending', 'recovery_required', 'completed');
+
+-- CreateEnum
+CREATE TYPE "PersonalMemoryOperationFailureCode" AS ENUM ('authority_ended', 'dataset_unavailable', 'source_unavailable', 'document_conflict', 'index_input_changed', 'indexing_unavailable', 'catalog_conflict', 'deletion_unavailable');
+
+-- CreateEnum
+CREATE TYPE "PersonalMemoryOperationDeliveryState" AS ENUM ('proven_not_sent', 'ambiguous');
 
 -- CreateEnum
 CREATE TYPE "OrgRole" AS ENUM ('owner', 'admin', 'member');
@@ -212,10 +239,13 @@ CREATE TYPE "ThirdPartySourceItemKind" AS ENUM ('mcp-server');
 CREATE TYPE "AgentRunTrigger" AS ENUM ('interactive');
 
 -- CreateEnum
-CREATE TYPE "AgentRunState" AS ENUM ('accepted', 'queued', 'assigned', 'running', 'waiting_for_input', 'recovery_required', 'completed', 'failed');
+CREATE TYPE "AgentRunState" AS ENUM ('accepted', 'queued', 'assigned', 'running', 'waiting_for_input', 'recovery_required', 'cancelling', 'completed', 'cancelled', 'failed');
 
 -- CreateEnum
-CREATE TYPE "AgentRunTerminalReason" AS ENUM ('success', 'policy_denied', 'budget_exhausted', 'runtime_failure', 'invalid_input');
+CREATE TYPE "AgentRunTerminalReason" AS ENUM ('success', 'policy_denied', 'budget_exhausted', 'runtime_failure', 'invalid_input', 'user_cancelled');
+
+-- CreateEnum
+CREATE TYPE "AgentRunCancellationDecision" AS ENUM ('cancellation_won', 'output_won');
 
 -- CreateEnum
 CREATE TYPE "WorkloadKind" AS ENUM ('pod', 'job', 'deployment');
@@ -663,6 +693,55 @@ CREATE TABLE "conversation_assets" (
 );
 
 -- CreateTable
+CREATE TABLE "conversation_generated_files" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
+    "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
+    "bootstrap_id" TEXT NOT NULL,
+    "computer_id" TEXT NOT NULL,
+    "lease_id" TEXT NOT NULL,
+    "lease_generation" INTEGER NOT NULL,
+    "agent_identity_id" TEXT NOT NULL,
+    "requester_principal_id" TEXT NOT NULL,
+    "requester_subject" TEXT NOT NULL,
+    "tool_invocation_row_id" TEXT NOT NULL,
+    "tool_invocation_id" TEXT NOT NULL,
+    "tool_revision_id" TEXT NOT NULL,
+    "server_revision_id" TEXT NOT NULL,
+    "raw_result_digest" TEXT NOT NULL,
+    "custody_manifest_version" TEXT NOT NULL,
+    "ciphertext_manifest_digest" TEXT NOT NULL,
+    "asset_id" TEXT NOT NULL,
+    "artifact_id" TEXT NOT NULL,
+    "revision_id" TEXT NOT NULL,
+    "upload_lease_id" TEXT NOT NULL,
+    "content_address" TEXT NOT NULL,
+    "byte_length" BIGINT NOT NULL,
+    "chunk_count" INTEGER NOT NULL,
+    "display_name" TEXT NOT NULL,
+    "media_type" TEXT NOT NULL,
+    "workflow_task_id" TEXT NOT NULL,
+    "workflow_task_name" TEXT NOT NULL,
+    "workflow_task_key" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "conversation_generated_files_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "conversation_generated_file_chunks" (
+    "operation_id" TEXT NOT NULL,
+    "index" INTEGER NOT NULL,
+    "payload_ref" TEXT NOT NULL,
+    "decoded_byte_length" INTEGER NOT NULL,
+    "ciphertext_digest" TEXT NOT NULL,
+
+    CONSTRAINT "conversation_generated_file_chunks_pkey" PRIMARY KEY ("operation_id","index")
+);
+
+-- CreateTable
 CREATE TABLE "conversations" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -913,6 +992,61 @@ CREATE TABLE "group_memberships" (
 );
 
 -- CreateTable
+CREATE TABLE "mcp_connection_admission_claims" (
+    "silo_id" TEXT NOT NULL,
+    "identity_digest" TEXT NOT NULL,
+    "touched_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "mcp_connection_admission_claims_pkey" PRIMARY KEY ("silo_id","identity_digest")
+);
+
+-- CreateTable
+CREATE TABLE "mcp_connections" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "mcp_server_install_id" TEXT NOT NULL,
+    "mcp_server_id" TEXT NOT NULL,
+    "owner_principal_id" TEXT NOT NULL,
+    "actor_principal_id" TEXT NOT NULL,
+    "agent_service_id" TEXT,
+    "generation" INTEGER NOT NULL,
+    "credential_requirement" "McpCredentialRequirement" NOT NULL,
+    "credential_kind" "McpConnectionCredentialKind" NOT NULL,
+    "endpoint_digest" TEXT NOT NULL,
+    "state" "McpConnectionState" NOT NULL DEFAULT 'awaiting-material',
+    "request_key_digest" TEXT NOT NULL,
+    "command_digest" TEXT NOT NULL,
+    "material_verifier" TEXT,
+    "material_verifier_key_id" TEXT,
+    "authorization_decision_digest" TEXT NOT NULL,
+    "custody_claim_fence" INTEGER NOT NULL DEFAULT 0,
+    "custody_claim_expires_at" TIMESTAMP(3),
+    "custody_attempts" INTEGER NOT NULL DEFAULT 0,
+    "credential_secret_ref" TEXT,
+    "credential_secret_uid" TEXT,
+    "credential_secret_resource_version" TEXT,
+    "credential_custodied_at" TIMESTAMP(3),
+    "task_id" TEXT NOT NULL,
+    "task_name" TEXT NOT NULL,
+    "task_key" TEXT NOT NULL,
+    "revoke_key_digest" TEXT,
+    "revoke_decision_digest" TEXT,
+    "revoke_task_id" TEXT,
+    "revoke_task_name" TEXT,
+    "revoke_task_key" TEXT,
+    "revoked_by_principal_id" TEXT,
+    "failure_code" TEXT,
+    "activated_at" TIMESTAMP(3),
+    "revoked_at" TIMESTAMP(3),
+    "completed_at" TIMESTAMP(3),
+    "cleanup_completed_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "mcp_connections_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "mcp_servers" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -926,6 +1060,7 @@ CREATE TABLE "mcp_servers" (
     "publisher" TEXT,
     "glyph" TEXT,
     "server_type" "McpServerType" NOT NULL DEFAULT 'single-user',
+    "credential_requirement" "McpCredentialRequirement" NOT NULL,
     "approval_status" "McpApprovalStatus" NOT NULL DEFAULT 'pending-review',
     "credential_schema" JSONB NOT NULL DEFAULT '[]',
     "entitlement_summary" TEXT,
@@ -1002,9 +1137,16 @@ CREATE TABLE "mcp_server_revisions" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
     "mcp_server_id" TEXT NOT NULL,
-    "oci_image_validation_id" TEXT NOT NULL,
+    "oci_image_validation_id" TEXT,
     "revision" INTEGER NOT NULL,
-    "registry_reference" TEXT NOT NULL,
+    "transport" "McpExecutionTransport" NOT NULL DEFAULT 'oci-image',
+    "connection_id" TEXT,
+    "connection_generation" INTEGER,
+    "connection_owner_principal_id" TEXT,
+    "endpoint_digest" TEXT,
+    "discovery_evidence_digest" TEXT,
+    "discovery_digest" TEXT,
+    "registry_reference" TEXT,
     "protocol_version" TEXT,
     "state" "McpServerRevisionState" NOT NULL DEFAULT 'discovering',
     "completed_at" TIMESTAMP(3),
@@ -1047,6 +1189,11 @@ CREATE TABLE "mcp_tasks" (
     "server_revision_id" TEXT NOT NULL,
     "tool_revision_id" TEXT NOT NULL,
     "protocol_version" TEXT NOT NULL,
+    "transport" "McpExecutionTransport" NOT NULL DEFAULT 'oci-image',
+    "connection_id" TEXT,
+    "connection_generation" INTEGER,
+    "connection_owner_principal_id" TEXT,
+    "endpoint_digest" TEXT,
     "arguments" JSONB NOT NULL,
     "task_id" TEXT,
     "task_name" TEXT,
@@ -1071,11 +1218,20 @@ CREATE TABLE "mcp_runtime_executions" (
     "server_revision_id" TEXT NOT NULL,
     "tool_invocation_id" TEXT,
     "kind" "McpRuntimeExecutionKind" NOT NULL,
-    "workload_state" "McpExecutorWorkloadState" NOT NULL DEFAULT 'pending',
+    "transport" "McpExecutionTransport" NOT NULL DEFAULT 'oci-image',
+    "connection_id" TEXT,
+    "connection_generation" INTEGER,
+    "connection_owner_principal_id" TEXT,
+    "endpoint_digest" TEXT,
+    "credential_secret_uid" TEXT,
+    "credential_secret_resource_version" TEXT,
+    "remote_claim_fence" TEXT,
+    "remote_claim_expires_at" TIMESTAMP(3),
+    "workload_state" "McpExecutorWorkloadState" DEFAULT 'pending',
     "command_state" "McpExecutorCommandState" NOT NULL DEFAULT 'pending',
     "idempotency_key" TEXT NOT NULL,
     "execution_reference" TEXT NOT NULL,
-    "profile_name" TEXT NOT NULL,
+    "profile_name" TEXT,
     "claimed_at" TIMESTAMP(3),
     "delivery_count" INTEGER NOT NULL DEFAULT 0,
     "claim_expires_at" TIMESTAMP(3),
@@ -1108,6 +1264,7 @@ CREATE TABLE "mcp_server_installs" (
     "id" TEXT NOT NULL,
     "mcp_server_id" TEXT NOT NULL,
     "principal_id" TEXT NOT NULL,
+    "lifecycle_state" "McpInstallState" NOT NULL DEFAULT 'installed',
     "connection_status" "McpConnectionStatus" NOT NULL DEFAULT 'needs-credential',
     "last_used_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1161,7 +1318,7 @@ CREATE TABLE "memory_datasets" (
     "boundary_kind" "AuthorizationBoundaryKind" NOT NULL,
     "boundary_group_id" TEXT,
     "boundary_principal_id" TEXT,
-    "cognee_dataset_id" TEXT NOT NULL,
+    "cognee_dataset_id" TEXT,
     "state" "MemoryDatasetState" NOT NULL DEFAULT 'active',
     "created_by" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1176,6 +1333,7 @@ CREATE TABLE "memory_fact_catalog" (
     "dataset_id" TEXT NOT NULL,
     "cognee_external_id" TEXT NOT NULL,
     "content_digest" TEXT NOT NULL,
+    "revision" INTEGER NOT NULL DEFAULT 1,
     "state" "MemoryFactState" NOT NULL DEFAULT 'active',
     "consent_state" "MemoryConsentState" NOT NULL,
     "sensitivity" TEXT NOT NULL,
@@ -1190,6 +1348,46 @@ CREATE TABLE "memory_fact_catalog" (
     "forgotten_at" TIMESTAMP(3),
 
     CONSTRAINT "memory_fact_catalog_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "personal_memory_operations" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "dataset_id" TEXT NOT NULL,
+    "actor_principal_id" TEXT NOT NULL,
+    "idempotency_key_digest" TEXT NOT NULL,
+    "command_digest" TEXT NOT NULL,
+    "kind" "PersonalMemoryOperationKind" NOT NULL,
+    "phase" "PersonalMemoryOperationPhase" NOT NULL,
+    "recovery_phase" "PersonalMemoryOperationPhase",
+    "revision" INTEGER NOT NULL DEFAULT 1,
+    "source_conversation_id" TEXT,
+    "source_message_id" TEXT,
+    "source_message_position" BIGINT,
+    "source_payload_ref" TEXT,
+    "source_ciphertext_digest" TEXT,
+    "source_author_principal_id" TEXT,
+    "content_digest" TEXT,
+    "target_fact_id" TEXT,
+    "target_document_id" TEXT,
+    "expected_fact_revision" INTEGER,
+    "admitted_provider_dataset_id" TEXT,
+    "provider_dataset_id" TEXT,
+    "provider_document_id" TEXT,
+    "indexing_operation_id" TEXT,
+    "expected_input_evidence_digest" TEXT,
+    "pipeline_run_id" TEXT,
+    "failure_code" "PersonalMemoryOperationFailureCode",
+    "delivery_state" "PersonalMemoryOperationDeliveryState",
+    "workflow_task_id" TEXT NOT NULL,
+    "workflow_task_name" TEXT NOT NULL,
+    "workflow_task_key" TEXT NOT NULL,
+    "admitted_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "recovery_recorded_at" TIMESTAMP(3),
+    "completed_at" TIMESTAMP(3),
+
+    CONSTRAINT "personal_memory_operations_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -1635,6 +1833,20 @@ CREATE TABLE "agent_runs" (
     "attempt" INTEGER NOT NULL DEFAULT 1,
     "state" "AgentRunState" NOT NULL DEFAULT 'accepted',
     "input_snapshot_digest" TEXT NOT NULL,
+    "workflow_task_id" TEXT,
+    "workflow_task_name" TEXT,
+    "workflow_task_key" TEXT,
+    "cancellation_command_id" TEXT,
+    "cancellation_command_digest" TEXT,
+    "cancellation_bootstrap_id" TEXT,
+    "cancellation_requested_by_principal_id" TEXT,
+    "cancellation_requested_at" TIMESTAMP(3),
+    "cancellation_authorization_decision_digest" TEXT,
+    "cancellation_workflow_task_id" TEXT,
+    "cancellation_workflow_task_name" TEXT,
+    "cancellation_workflow_task_key" TEXT,
+    "cancellation_decision" "AgentRunCancellationDecision",
+    "cancellation_decided_at" TIMESTAMP(3),
     "accepted_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "started_at" TIMESTAMP(3),
     "finished_at" TIMESTAMP(3),
@@ -2165,6 +2377,36 @@ CREATE UNIQUE INDEX "conversation_assets_conversation_id_id_key" ON "conversatio
 CREATE UNIQUE INDEX "conversation_assets_participant_idempotency_key" ON "conversation_assets"("conversation_id", "created_by_user_id", "idempotency_key");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "conversation_generated_files_tool_invocation_row_id_key" ON "conversation_generated_files"("tool_invocation_row_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_generated_files_asset_id_key" ON "conversation_generated_files"("asset_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_generated_files_artifact_id_key" ON "conversation_generated_files"("artifact_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_generated_files_revision_id_key" ON "conversation_generated_files"("revision_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_generated_files_upload_lease_id_key" ON "conversation_generated_files"("upload_lease_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_generated_files_workflow_task_id_key" ON "conversation_generated_files"("workflow_task_id");
+
+-- CreateIndex
+CREATE INDEX "conversation_generated_files_silo_id_conversation_id_create_idx" ON "conversation_generated_files"("silo_id", "conversation_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "conversation_generated_files_run_id_attempt_idx" ON "conversation_generated_files"("run_id", "attempt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_generated_files_workflow_task_name_workflow_ta_key" ON "conversation_generated_files"("workflow_task_name", "workflow_task_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_generated_file_chunks_payload_ref_key" ON "conversation_generated_file_chunks"("payload_ref");
+
+-- CreateIndex
 CREATE INDEX "conversations_silo_id_mode_lifecycle_updated_at_idx" ON "conversations"("silo_id", "mode", "lifecycle", "updated_at");
 
 -- CreateIndex
@@ -2302,6 +2544,36 @@ CREATE UNIQUE INDEX "groups_silo_id_name_key" ON "groups"("silo_id", "name");
 CREATE INDEX "group_memberships_silo_id_principal_id_idx" ON "group_memberships"("silo_id", "principal_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "mcp_connections_task_id_key" ON "mcp_connections"("task_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_connections_revoke_task_id_key" ON "mcp_connections"("revoke_task_id");
+
+-- CreateIndex
+CREATE INDEX "mcp_connections_silo_id_state_created_at_idx" ON "mcp_connections"("silo_id", "state", "created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_connections_id_silo_id_key" ON "mcp_connections"("id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_connections_execution_coordinates_key" ON "mcp_connections"("id", "silo_id", "generation", "owner_principal_id", "endpoint_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_connections_mcp_server_install_id_generation_key" ON "mcp_connections"("mcp_server_install_id", "generation");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_connections_silo_id_mcp_server_install_id_request_key_d_key" ON "mcp_connections"("silo_id", "mcp_server_install_id", "request_key_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_connections_silo_id_mcp_server_install_id_revoke_key_di_key" ON "mcp_connections"("silo_id", "mcp_server_install_id", "revoke_key_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_connections_silo_id_task_key_key" ON "mcp_connections"("silo_id", "task_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_connections_silo_id_revoke_task_key_key" ON "mcp_connections"("silo_id", "revoke_task_key");
+
+-- CreateIndex
 CREATE INDEX "mcp_servers_approval_status_idx" ON "mcp_servers"("approval_status");
 
 -- CreateIndex
@@ -2327,6 +2599,9 @@ CREATE INDEX "mcp_server_revisions_silo_id_state_idx" ON "mcp_server_revisions"(
 
 -- CreateIndex
 CREATE UNIQUE INDEX "mcp_server_revisions_mcp_server_id_revision_key" ON "mcp_server_revisions"("mcp_server_id", "revision");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "mcp_server_revisions_connection_id_connection_generation_key" ON "mcp_server_revisions"("connection_id", "connection_generation");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "mcp_server_revisions_oci_image_validation_id_silo_id_key" ON "mcp_server_revisions"("oci_image_validation_id", "silo_id");
@@ -2395,6 +2670,9 @@ CREATE INDEX "mcp_server_installs_principal_id_idx" ON "mcp_server_installs"("pr
 CREATE UNIQUE INDEX "mcp_server_installs_mcp_server_id_principal_id_key" ON "mcp_server_installs"("mcp_server_id", "principal_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "mcp_server_installs_id_mcp_server_id_principal_id_key" ON "mcp_server_installs"("id", "mcp_server_id", "principal_id");
+
+-- CreateIndex
 CREATE INDEX "verified_fleet_membership_revisions_silo_id_expires_at_idx" ON "verified_fleet_membership_revisions"("silo_id", "expires_at");
 
 -- CreateIndex
@@ -2444,6 +2722,21 @@ CREATE UNIQUE INDEX "memory_fact_catalog_dataset_id_cognee_external_id_key" ON "
 
 -- CreateIndex
 CREATE UNIQUE INDEX "memory_fact_catalog_id_dataset_id_key" ON "memory_fact_catalog"("id", "dataset_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "personal_memory_operations_workflow_task_id_key" ON "personal_memory_operations"("workflow_task_id");
+
+-- CreateIndex
+CREATE INDEX "personal_memory_operations_dataset_id_phase_idx" ON "personal_memory_operations"("dataset_id", "phase");
+
+-- CreateIndex
+CREATE INDEX "personal_memory_operations_target_fact_id_dataset_id_idx" ON "personal_memory_operations"("target_fact_id", "dataset_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "personal_memory_operations_replay_key" ON "personal_memory_operations"("silo_id", "idempotency_key_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "personal_memory_operations_workflow_task_key" ON "personal_memory_operations"("workflow_task_name", "workflow_task_key");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "model_routing_defaults_id_silo_id_key" ON "model_routing_defaults"("id", "silo_id");
@@ -2616,6 +2909,15 @@ CREATE INDEX "third_party_source_items_source_id_idx" ON "third_party_source_ite
 CREATE UNIQUE INDEX "third_party_source_items_source_id_kind_upstream_id_key" ON "third_party_source_items"("source_id", "kind", "upstream_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_workflow_task_id_key" ON "agent_runs"("workflow_task_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_cancellation_command_id_key" ON "agent_runs"("cancellation_command_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_cancellation_workflow_task_id_key" ON "agent_runs"("cancellation_workflow_task_id");
+
+-- CreateIndex
 CREATE INDEX "agent_runs_agent_service_id_state_idx" ON "agent_runs"("agent_service_id", "state");
 
 -- CreateIndex
@@ -2644,6 +2946,12 @@ CREATE UNIQUE INDEX "agent_runs_id_input_snapshot_digest_key" ON "agent_runs"("i
 
 -- CreateIndex
 CREATE UNIQUE INDEX "agent_runs_conversation_id_id_key" ON "agent_runs"("conversation_id", "id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_workflow_task_key" ON "agent_runs"("workflow_task_name", "workflow_task_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_cancellation_workflow_task_key" ON "agent_runs"("cancellation_workflow_task_name", "cancellation_workflow_task_key");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "agent_runs_thread_authority_key" ON "agent_runs"("id", "conversation_id", "silo_id", "agent_service_id");
@@ -2904,6 +3212,12 @@ ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_artifact_i
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_upload_lease_id_fkey" FOREIGN KEY ("upload_lease_id") REFERENCES "artifact_upload_leases"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "conversation_generated_files" ADD CONSTRAINT "conversation_generated_files_asset_id_fkey" FOREIGN KEY ("asset_id") REFERENCES "conversation_assets"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_generated_file_chunks" ADD CONSTRAINT "conversation_generated_file_chunks_operation_id_fkey" FOREIGN KEY ("operation_id") REFERENCES "conversation_generated_files"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2964,6 +3278,12 @@ ALTER TABLE "group_memberships" ADD CONSTRAINT "group_memberships_group_id_silo_
 ALTER TABLE "group_memberships" ADD CONSTRAINT "group_memberships_principal_id_silo_id_fkey" FOREIGN KEY ("principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "mcp_connections" ADD CONSTRAINT "mcp_connections_mcp_server_install_id_mcp_server_id_owner__fkey" FOREIGN KEY ("mcp_server_install_id", "mcp_server_id", "owner_principal_id") REFERENCES "mcp_server_installs"("id", "mcp_server_id", "principal_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "mcp_connections" ADD CONSTRAINT "mcp_connections_mcp_server_id_silo_id_fkey" FOREIGN KEY ("mcp_server_id", "silo_id") REFERENCES "mcp_servers"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_source_id_fkey" FOREIGN KEY ("source_id") REFERENCES "third_party_sources"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2971,6 +3291,9 @@ ALTER TABLE "mcp_server_revisions" ADD CONSTRAINT "mcp_server_revisions_mcp_serv
 
 -- AddForeignKey
 ALTER TABLE "mcp_server_revisions" ADD CONSTRAINT "mcp_server_revisions_oci_image_validation_id_silo_id_fkey" FOREIGN KEY ("oci_image_validation_id", "silo_id") REFERENCES "oci_image_validations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "mcp_server_revisions" ADD CONSTRAINT "mcp_server_revisions_connection_id_silo_id_connection_gene_fkey" FOREIGN KEY ("connection_id", "silo_id", "connection_generation", "connection_owner_principal_id", "endpoint_digest") REFERENCES "mcp_connections"("id", "silo_id", "generation", "owner_principal_id", "endpoint_digest") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "mcp_tool_revisions" ADD CONSTRAINT "mcp_tool_revisions_server_revision_id_silo_id_fkey" FOREIGN KEY ("server_revision_id", "silo_id") REFERENCES "mcp_server_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2982,10 +3305,16 @@ ALTER TABLE "mcp_tasks" ADD CONSTRAINT "mcp_tasks_server_revision_id_silo_id_fke
 ALTER TABLE "mcp_tasks" ADD CONSTRAINT "mcp_tasks_tool_revision_id_silo_id_fkey" FOREIGN KEY ("tool_revision_id", "silo_id") REFERENCES "mcp_tool_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "mcp_tasks" ADD CONSTRAINT "mcp_tasks_connection_id_silo_id_connection_generation_conn_fkey" FOREIGN KEY ("connection_id", "silo_id", "connection_generation", "connection_owner_principal_id", "endpoint_digest") REFERENCES "mcp_connections"("id", "silo_id", "generation", "owner_principal_id", "endpoint_digest") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "mcp_runtime_executions" ADD CONSTRAINT "mcp_runtime_executions_server_revision_id_silo_id_fkey" FOREIGN KEY ("server_revision_id", "silo_id") REFERENCES "mcp_server_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "mcp_runtime_executions" ADD CONSTRAINT "mcp_runtime_executions_tool_invocation_id_fkey" FOREIGN KEY ("tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "mcp_runtime_executions" ADD CONSTRAINT "mcp_runtime_executions_connection_id_silo_id_connection_ge_fkey" FOREIGN KEY ("connection_id", "silo_id", "connection_generation", "connection_owner_principal_id", "endpoint_digest") REFERENCES "mcp_connections"("id", "silo_id", "generation", "owner_principal_id", "endpoint_digest") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "mcp_server_installs" ADD CONSTRAINT "mcp_server_installs_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3010,6 +3339,12 @@ ALTER TABLE "memory_fact_catalog" ADD CONSTRAINT "memory_fact_catalog_dataset_id
 
 -- AddForeignKey
 ALTER TABLE "memory_fact_catalog" ADD CONSTRAINT "memory_fact_catalog_supersedes_fact_id_fkey" FOREIGN KEY ("supersedes_fact_id") REFERENCES "memory_fact_catalog"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "personal_memory_operations" ADD CONSTRAINT "personal_memory_operations_dataset_id_fkey" FOREIGN KEY ("dataset_id") REFERENCES "memory_datasets"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "personal_memory_operations" ADD CONSTRAINT "personal_memory_operations_target_fact_id_dataset_id_fkey" FOREIGN KEY ("target_fact_id", "dataset_id") REFERENCES "memory_fact_catalog"("id", "dataset_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "persona_questions" ADD CONSTRAINT "persona_questions_question_set_id_question_set_version_fkey" FOREIGN KEY ("question_set_id", "question_set_version") REFERENCES "persona_question_sets"("question_set_id", "version") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3145,6 +3480,15 @@ ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_registration_digest_check"
     OR ("registration_key_digest" ~ '^sha256:[0-9a-f]{64}$' AND "registration_digest" ~ '^sha256:[0-9a-f]{64}$')
 );
 
+-- Credentialless servers cannot ask callers for a credential. The uploaded-image executor has no
+-- credential or provider-egress path, so only credentialless servers may select that transport.
+ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_credentialless_schema_check" CHECK (
+    "credential_requirement" <> 'credentialless' OR "credential_schema" = '[]'::jsonb
+);
+ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_oci_credential_requirement_check" CHECK (
+    "transport" <> 'oci-image' OR "credential_requirement" = 'credentialless'
+);
+
 ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_era_probe_evidence_check" CHECK (
     ("era_probe_status" = 'not-required' AND "era_probe_attempts" = 0 AND "registration_key_digest" IS NULL AND "registration_digest" IS NULL AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
     OR ("era_probe_status" = 'pending' AND "era_probe_attempts" >= 0 AND "registration_key_digest" IS NOT NULL AND "registration_digest" IS NOT NULL AND "era_protocol_version" IS NULL AND "era_probe_evidence_digest" IS NULL AND "era_probe_failure_code" IS NULL AND "era_probed_at" IS NULL)
@@ -3172,6 +3516,197 @@ ALTER TABLE "oci_image_validations" ADD CONSTRAINT "oci_image_validations_result
     OR ("state" = 'imported' AND "index_digest" ~ '^sha256:[0-9a-f]{64}$' AND "image_manifest_digest" ~ '^sha256:[0-9a-f]{64}$' AND "config_digest" ~ '^sha256:[0-9a-f]{64}$' AND "registry_reference" ~ '^[a-z0-9][a-z0-9.-]*(?::[0-9]+)?/[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$' AND "failure_code" IS NULL AND "completed_at" IS NOT NULL)
     OR ("state" = 'rejected' AND "index_digest" IS NULL AND "image_manifest_digest" IS NULL AND "config_digest" IS NULL AND "registry_reference" IS NULL AND "failure_code" IN ('artifact_mismatch', 'bundle_too_large', 'malformed_zip_package', 'not_oci_image_layout', 'invalid_layout', 'invalid_index', 'invalid_image_manifest', 'validation_failed', 'registry_import_failed') AND "completed_at" IS NOT NULL)
 );
+
+-- A revision belongs to one execution transport. Remote revisions retain the authenticated
+-- connection and both discovery digests; OCI revisions retain only imported-image evidence.
+ALTER TABLE "mcp_server_revisions" ADD CONSTRAINT "mcp_server_revisions_transport_identity_check" CHECK (
+    (
+        "transport" = 'oci-image'
+        AND "oci_image_validation_id" IS NOT NULL
+        AND "registry_reference" IS NOT NULL
+        AND "connection_id" IS NULL
+        AND "connection_generation" IS NULL
+        AND "connection_owner_principal_id" IS NULL
+        AND "endpoint_digest" IS NULL
+        AND "discovery_evidence_digest" IS NULL
+        AND "discovery_digest" IS NULL
+    )
+    OR (
+        "transport" = 'remote-http'
+        AND "oci_image_validation_id" IS NULL
+        AND "registry_reference" IS NULL
+        AND btrim("connection_id") <> ''
+        AND "connection_generation" > 0
+        AND btrim("connection_owner_principal_id") <> ''
+        AND "endpoint_digest" ~ '^sha256:[0-9a-f]{64}$'
+        AND "discovery_evidence_digest" ~ '^sha256:[0-9a-f]{64}$'
+        AND "discovery_digest" ~ '^sha256:[0-9a-f]{64}$'
+    )
+);
+
+-- Insert after the generated mcp_connections table and indexes, before grants/triggers that reference it.
+ALTER TABLE public.mcp_connections
+  ADD CONSTRAINT mcp_connections_digest_shapes_check CHECK (
+    endpoint_digest ~ '^sha256:[0-9a-f]{64}$'
+    AND request_key_digest ~ '^sha256:[0-9a-f]{64}$'
+    AND command_digest ~ '^sha256:[0-9a-f]{64}$'
+    AND authorization_decision_digest ~ '^sha256:[0-9a-f]{64}$'
+    AND (material_verifier IS NULL OR material_verifier ~ '^hmac-sha256:[0-9a-f]{64}$')
+    AND (revoke_key_digest IS NULL OR revoke_key_digest ~ '^sha256:[0-9a-f]{64}$')
+    AND (revoke_decision_digest IS NULL OR revoke_decision_digest ~ '^sha256:[0-9a-f]{64}$')
+  ),
+  ADD CONSTRAINT mcp_connections_custody_claim_check CHECK (
+    custody_claim_fence >= 0
+    AND custody_attempts BETWEEN 0 AND 8
+    AND ((custody_claim_expires_at IS NULL AND custody_claim_fence = 0) OR custody_claim_expires_at IS NOT NULL)
+  ),
+  ADD CONSTRAINT mcp_connections_credential_shape_check CHECK (
+    (
+      credential_kind = 'none'
+      AND material_verifier IS NULL
+      AND material_verifier_key_id IS NULL
+      AND credential_secret_ref IS NULL
+      AND credential_secret_uid IS NULL
+      AND credential_secret_resource_version IS NULL
+      AND credential_custodied_at IS NULL
+    )
+    OR
+    (
+      credential_kind = 'bearer'
+      AND material_verifier IS NOT NULL
+      AND material_verifier_key_id IS NOT NULL
+      AND (
+        (
+          credential_secret_ref IS NULL
+          AND credential_secret_uid IS NULL
+          AND credential_secret_resource_version IS NULL
+          AND credential_custodied_at IS NULL
+        )
+        OR
+        (
+          credential_secret_ref IS NOT NULL
+          AND credential_secret_uid IS NOT NULL
+          AND credential_secret_resource_version IS NOT NULL
+          AND credential_custodied_at IS NOT NULL
+        )
+      )
+    )
+  ),
+  ADD CONSTRAINT mcp_connections_state_evidence_check CHECK (
+    (state = 'awaiting-material' AND completed_at IS NULL AND activated_at IS NULL)
+    OR (state = 'activating' AND completed_at IS NULL AND activated_at IS NULL)
+    OR (state = 'active' AND completed_at IS NOT NULL AND activated_at IS NOT NULL AND failure_code IS NULL)
+    OR (state = 'failed' AND completed_at IS NOT NULL AND activated_at IS NULL AND failure_code IS NOT NULL)
+    OR (state = 'recovery-required' AND completed_at IS NOT NULL AND activated_at IS NULL AND failure_code IS NOT NULL)
+    OR (state = 'revoked' AND completed_at IS NOT NULL AND revoked_at IS NOT NULL)
+  ),
+  ADD CONSTRAINT mcp_connections_revoke_bundle_check CHECK (
+    (
+      state <> 'revoked'
+      AND revoke_key_digest IS NULL
+      AND revoke_decision_digest IS NULL
+      AND revoke_task_id IS NULL
+      AND revoke_task_name IS NULL
+      AND revoke_task_key IS NULL
+      AND revoked_by_principal_id IS NULL
+      AND revoked_at IS NULL
+      AND cleanup_completed_at IS NULL
+    )
+    OR
+    (
+      state = 'revoked'
+      AND revoke_key_digest IS NOT NULL
+      AND revoke_decision_digest IS NOT NULL
+      AND revoke_task_id IS NOT NULL
+      AND revoke_task_name IS NOT NULL
+      AND revoke_task_key IS NOT NULL
+      AND revoked_by_principal_id IS NOT NULL
+      AND revoked_at IS NOT NULL
+    )
+  ),
+  ADD CONSTRAINT mcp_connections_usable_material_check CHECK (
+    credential_kind = 'none'
+    OR state NOT IN ('activating', 'active')
+    OR credential_secret_ref IS NOT NULL
+  );
+
+CREATE UNIQUE INDEX mcp_connections_one_generation_barrier_key
+  ON public.mcp_connections (silo_id, mcp_server_install_id)
+  WHERE state IN ('awaiting-material', 'activating', 'active', 'recovery-required');
+
+CREATE OR REPLACE FUNCTION public.guard_mcp_connection_update()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.id IS DISTINCT FROM OLD.id
+    OR NEW.silo_id IS DISTINCT FROM OLD.silo_id
+    OR NEW.mcp_server_install_id IS DISTINCT FROM OLD.mcp_server_install_id
+    OR NEW.mcp_server_id IS DISTINCT FROM OLD.mcp_server_id
+    OR NEW.owner_principal_id IS DISTINCT FROM OLD.owner_principal_id
+    OR NEW.actor_principal_id IS DISTINCT FROM OLD.actor_principal_id
+    OR NEW.agent_service_id IS DISTINCT FROM OLD.agent_service_id
+    OR NEW.generation IS DISTINCT FROM OLD.generation
+    OR NEW.credential_requirement IS DISTINCT FROM OLD.credential_requirement
+    OR NEW.credential_kind IS DISTINCT FROM OLD.credential_kind
+    OR NEW.endpoint_digest IS DISTINCT FROM OLD.endpoint_digest
+    OR NEW.request_key_digest IS DISTINCT FROM OLD.request_key_digest
+    OR NEW.command_digest IS DISTINCT FROM OLD.command_digest
+    OR NEW.material_verifier IS DISTINCT FROM OLD.material_verifier
+    OR NEW.material_verifier_key_id IS DISTINCT FROM OLD.material_verifier_key_id
+    OR NEW.authorization_decision_digest IS DISTINCT FROM OLD.authorization_decision_digest
+    OR NEW.task_id IS DISTINCT FROM OLD.task_id
+    OR NEW.task_name IS DISTINCT FROM OLD.task_name
+    OR NEW.task_key IS DISTINCT FROM OLD.task_key
+    OR NEW.created_at IS DISTINCT FROM OLD.created_at
+  THEN
+    RAISE EXCEPTION 'MCP connection identity and admission evidence are immutable';
+  END IF;
+
+  IF NOT (
+    NEW.state = OLD.state
+    OR (OLD.state = 'awaiting-material' AND NEW.state IN ('activating', 'recovery-required', 'revoked'))
+    OR (OLD.state = 'activating' AND NEW.state IN ('active', 'failed', 'recovery-required', 'revoked'))
+    OR (OLD.state IN ('active', 'failed', 'recovery-required') AND NEW.state = 'revoked')
+  ) THEN
+    RAISE EXCEPTION 'Invalid MCP connection state transition: % to %', OLD.state, NEW.state;
+  END IF;
+
+  IF OLD.credential_secret_ref IS NOT NULL AND (
+    NEW.credential_secret_ref IS DISTINCT FROM OLD.credential_secret_ref
+    OR NEW.credential_secret_uid IS DISTINCT FROM OLD.credential_secret_uid
+    OR NEW.credential_secret_resource_version IS DISTINCT FROM OLD.credential_secret_resource_version
+    OR NEW.credential_custodied_at IS DISTINCT FROM OLD.credential_custodied_at
+  ) THEN
+    RAISE EXCEPTION 'MCP connection Secret identity is immutable after custody';
+  END IF;
+
+  IF OLD.revoke_key_digest IS NOT NULL AND (
+    NEW.revoke_key_digest IS DISTINCT FROM OLD.revoke_key_digest
+    OR NEW.revoke_decision_digest IS DISTINCT FROM OLD.revoke_decision_digest
+    OR NEW.revoke_task_id IS DISTINCT FROM OLD.revoke_task_id
+    OR NEW.revoke_task_name IS DISTINCT FROM OLD.revoke_task_name
+    OR NEW.revoke_task_key IS DISTINCT FROM OLD.revoke_task_key
+    OR NEW.revoked_by_principal_id IS DISTINCT FROM OLD.revoked_by_principal_id
+    OR NEW.revoked_at IS DISTINCT FROM OLD.revoked_at
+  ) THEN
+    RAISE EXCEPTION 'MCP connection revocation evidence is immutable';
+  END IF;
+
+  IF OLD.activated_at IS NOT NULL AND NEW.activated_at IS DISTINCT FROM OLD.activated_at THEN
+    RAISE EXCEPTION 'MCP connection activation evidence is immutable';
+  END IF;
+  IF OLD.cleanup_completed_at IS NOT NULL AND NEW.cleanup_completed_at IS DISTINCT FROM OLD.cleanup_completed_at THEN
+    RAISE EXCEPTION 'MCP connection cleanup evidence is immutable';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER guard_mcp_connection_update
+BEFORE UPDATE ON public.mcp_connections
+FOR EACH ROW EXECUTE FUNCTION public.guard_mcp_connection_update();
 
 -- Null-safe immutable run/snapshot binding. SQL composite FKs alone skip checks when conversation_id is NULL.
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_input_snapshot_fkey"
@@ -3602,17 +4137,65 @@ BEGIN
         IF NEW."state" <> 'discovering' OR NEW."protocol_version" IS NOT NULL OR NEW."completed_at" IS NOT NULL THEN
             RAISE EXCEPTION 'McpServerRevision must begin discovering without completion evidence';
         END IF;
+        IF NEW."transport" = 'remote-http' THEN
+            PERFORM 1
+            FROM "mcp_connections" connection
+            JOIN "mcp_server_installs" install ON install."id" = connection."mcp_server_install_id"
+            JOIN "mcp_servers" server ON server."id" = connection."mcp_server_id" AND server."silo_id" = connection."silo_id"
+            WHERE connection."id" = NEW."connection_id"
+              AND connection."silo_id" = NEW."silo_id"
+              AND connection."generation" = NEW."connection_generation"
+              AND connection."owner_principal_id" = NEW."connection_owner_principal_id"
+              AND connection."endpoint_digest" = NEW."endpoint_digest"
+              AND connection."mcp_server_id" = NEW."mcp_server_id"
+              AND connection."state" = 'activating'
+              AND install."principal_id" = connection."owner_principal_id"
+              AND install."connection_status" = 'activating'
+              AND server."status" = 'active'
+              AND server."approval_status" = 'published'
+              AND server."transport" = 'streamable-http'
+            FOR UPDATE OF connection, install, server;
+            IF NOT FOUND THEN
+                RAISE EXCEPTION 'Remote McpServerRevision requires its current activating connection and published server';
+            END IF;
+        END IF;
         RETURN NEW;
     END IF;
     IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."mcp_server_id" IS DISTINCT FROM OLD."mcp_server_id"
         OR NEW."oci_image_validation_id" IS DISTINCT FROM OLD."oci_image_validation_id" OR NEW."revision" IS DISTINCT FROM OLD."revision"
-        OR NEW."registry_reference" IS DISTINCT FROM OLD."registry_reference" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'McpServerRevision image identity is immutable';
+        OR NEW."transport" IS DISTINCT FROM OLD."transport" OR NEW."connection_id" IS DISTINCT FROM OLD."connection_id"
+        OR NEW."connection_generation" IS DISTINCT FROM OLD."connection_generation" OR NEW."connection_owner_principal_id" IS DISTINCT FROM OLD."connection_owner_principal_id"
+        OR NEW."endpoint_digest" IS DISTINCT FROM OLD."endpoint_digest" OR NEW."discovery_evidence_digest" IS DISTINCT FROM OLD."discovery_evidence_digest"
+        OR NEW."discovery_digest" IS DISTINCT FROM OLD."discovery_digest" OR NEW."registry_reference" IS DISTINCT FROM OLD."registry_reference"
+        OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+        RAISE EXCEPTION 'McpServerRevision transport and discovery identity is immutable';
     END IF;
     IF OLD."state" <> 'discovering' OR NEW."state" NOT IN ('ready', 'rejected') OR NEW."completed_at" IS NULL
         OR (NEW."state" = 'ready' AND NEW."protocol_version" IS DISTINCT FROM '2026-07-28')
         OR (NEW."state" = 'rejected' AND NEW."protocol_version" IS NOT NULL) THEN
         RAISE EXCEPTION 'McpServerRevision may complete discovery exactly once with checked protocol evidence';
+    END IF;
+    IF NEW."transport" = 'remote-http' THEN
+        PERFORM 1
+        FROM "mcp_connections" connection
+        JOIN "mcp_server_installs" install ON install."id" = connection."mcp_server_install_id"
+        JOIN "mcp_servers" server ON server."id" = connection."mcp_server_id" AND server."silo_id" = connection."silo_id"
+        WHERE connection."id" = NEW."connection_id"
+          AND connection."silo_id" = NEW."silo_id"
+          AND connection."generation" = NEW."connection_generation"
+          AND connection."owner_principal_id" = NEW."connection_owner_principal_id"
+          AND connection."endpoint_digest" = NEW."endpoint_digest"
+          AND connection."mcp_server_id" = NEW."mcp_server_id"
+          AND connection."state" = 'activating'
+          AND install."principal_id" = connection."owner_principal_id"
+          AND install."connection_status" = 'activating'
+          AND server."status" = 'active'
+          AND server."approval_status" = 'published'
+          AND server."transport" = 'streamable-http'
+        FOR UPDATE OF connection, install, server;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'Remote McpServerRevision completion requires its current activating connection and published server';
+        END IF;
     END IF;
     NEW."completed_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
     RETURN NEW;
@@ -3882,16 +4465,24 @@ BEGIN
         OR NEW."accepted_at" IS DISTINCT FROM OLD."accepted_at" THEN
         RAISE EXCEPTION 'AgentRun accepted inputs are immutable';
     END IF;
-    IF OLD."state" IN ('completed', 'failed') THEN
+    IF OLD."workflow_task_id" IS NOT NULL AND (
+        NEW."workflow_task_id" IS DISTINCT FROM OLD."workflow_task_id"
+        OR NEW."workflow_task_name" IS DISTINCT FROM OLD."workflow_task_name"
+        OR NEW."workflow_task_key" IS DISTINCT FROM OLD."workflow_task_key"
+    ) THEN
+        RAISE EXCEPTION 'AgentRun workflow task binding is immutable';
+    END IF;
+    IF OLD."state" IN ('completed', 'cancelled', 'failed') THEN
         RAISE EXCEPTION 'terminal AgentRun attempt coordinates are immutable';
     END IF;
     IF NEW."state" IS DISTINCT FROM OLD."state" AND NOT (
-        (OLD."state" = 'accepted' AND NEW."state" IN ('queued', 'running', 'failed')) OR
+        (OLD."state" = 'accepted' AND NEW."state" IN ('queued', 'running', 'cancelling', 'failed')) OR
         (OLD."state" = 'queued' AND NEW."state" IN ('assigned', 'failed')) OR
         (OLD."state" = 'assigned' AND NEW."state" IN ('running', 'failed')) OR
-        (OLD."state" = 'running' AND NEW."state" IN ('waiting_for_input', 'recovery_required', 'completed', 'failed')) OR
-        (OLD."state" = 'waiting_for_input' AND NEW."state" IN ('running', 'completed', 'failed')) OR
-        (OLD."state" = 'recovery_required' AND NEW."state" IN ('running', 'failed'))
+        (OLD."state" = 'running' AND NEW."state" IN ('waiting_for_input', 'recovery_required', 'cancelling', 'completed', 'failed')) OR
+        (OLD."state" = 'waiting_for_input' AND NEW."state" IN ('running', 'cancelling', 'completed', 'failed')) OR
+        (OLD."state" = 'recovery_required' AND NEW."state" IN ('running', 'cancelling', 'failed')) OR
+        (OLD."state" = 'cancelling' AND NEW."state" IN ('cancelled', 'completed'))
     ) THEN
         RAISE EXCEPTION 'invalid AgentRun state transition';
     END IF;
@@ -3907,6 +4498,85 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+CREATE VIEW "agent_run_authority_clock" AS
+    SELECT 1::INTEGER AS "singleton", date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3) AS "now";
+
+-- A Stop task keeps one immutable target and audit decision across recovery.
+CREATE FUNCTION "enforce_agent_run_cancellation"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    admission_fields INTEGER;
+BEGIN
+    admission_fields := num_nonnulls(NEW."cancellation_command_id", NEW."cancellation_command_digest", NEW."cancellation_bootstrap_id", NEW."cancellation_requested_by_principal_id", NEW."cancellation_requested_at", NEW."cancellation_authorization_decision_digest", NEW."cancellation_workflow_task_id", NEW."cancellation_workflow_task_name", NEW."cancellation_workflow_task_key");
+    IF admission_fields NOT IN (0, 9) THEN
+        RAISE EXCEPTION 'AgentRun cancellation admission must be complete';
+    END IF;
+    IF TG_OP = 'INSERT' AND admission_fields <> 0 THEN
+        RAISE EXCEPTION 'a new AgentRun cannot carry a cancellation admission';
+    END IF;
+    IF admission_fields = 0 THEN
+        IF NEW."state" IN ('cancelling', 'cancelled') OR NEW."cancellation_decision" IS NOT NULL OR NEW."cancellation_decided_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'AgentRun cancellation requires its saved admission';
+        END IF;
+        IF TG_OP = 'UPDATE' AND OLD."cancellation_command_id" IS NOT NULL THEN
+            RAISE EXCEPTION 'AgentRun cancellation admission is immutable';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."state" NOT IN ('cancelling', 'cancelled', 'completed') THEN
+        RAISE EXCEPTION 'an admitted Stop cannot reopen AgentRun work';
+    END IF;
+    IF OLD."cancellation_command_id" IS NULL THEN
+        IF NEW."state" <> 'cancelling' OR NEW."cancellation_decision" IS NOT NULL OR NEW."cancellation_decided_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'Stop admission must enter cancelling before terminal arbitration';
+        END IF;
+        IF NEW."execution_subject"->'requester'->>'requesterPrincipalId' IS DISTINCT FROM NEW."cancellation_requested_by_principal_id" THEN
+            RAISE EXCEPTION 'Stop requires the original run requester';
+        END IF;
+        PERFORM 1 FROM "audit_decisions"
+        WHERE "decision_digest" = NEW."cancellation_authorization_decision_digest"
+          AND "silo_id" = NEW."silo_id" AND "actor_kind" = 'user'
+          AND "actor_id" = NEW."cancellation_requested_by_principal_id"
+          AND "resource_kind" = 'conversation' AND "resource_id" = NEW."conversation_id"
+          AND "action" = 'use' AND "outcome" = 'allow'
+          AND "arguments_digest" = NEW."cancellation_command_digest";
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'Stop requires its exact recorded requester authorization';
+        END IF;
+        NEW."cancellation_requested_at" := clock_timestamp();
+    ELSIF NEW."cancellation_command_id" IS DISTINCT FROM OLD."cancellation_command_id"
+        OR NEW."cancellation_command_digest" IS DISTINCT FROM OLD."cancellation_command_digest"
+        OR NEW."cancellation_bootstrap_id" IS DISTINCT FROM OLD."cancellation_bootstrap_id"
+        OR NEW."cancellation_requested_by_principal_id" IS DISTINCT FROM OLD."cancellation_requested_by_principal_id"
+        OR NEW."cancellation_requested_at" IS DISTINCT FROM OLD."cancellation_requested_at"
+        OR NEW."cancellation_authorization_decision_digest" IS DISTINCT FROM OLD."cancellation_authorization_decision_digest"
+        OR NEW."cancellation_workflow_task_id" IS DISTINCT FROM OLD."cancellation_workflow_task_id"
+        OR NEW."cancellation_workflow_task_name" IS DISTINCT FROM OLD."cancellation_workflow_task_name"
+        OR NEW."cancellation_workflow_task_key" IS DISTINCT FROM OLD."cancellation_workflow_task_key" THEN
+        RAISE EXCEPTION 'AgentRun cancellation admission is immutable';
+    END IF;
+    IF OLD."cancellation_decision" IS NOT NULL AND (
+        NEW."cancellation_decision" IS DISTINCT FROM OLD."cancellation_decision"
+        OR NEW."cancellation_decided_at" IS DISTINCT FROM OLD."cancellation_decided_at"
+    ) THEN
+        RAISE EXCEPTION 'AgentRun cancellation terminal winner is immutable';
+    END IF;
+    IF NEW."cancellation_decision" IS NULL AND NEW."cancellation_decided_at" IS NOT NULL THEN
+        RAISE EXCEPTION 'AgentRun cancellation decision time requires its terminal winner';
+    END IF;
+    IF OLD."cancellation_decision" IS NULL AND NEW."cancellation_decision" IS NOT NULL THEN
+        NEW."cancellation_decided_at" := clock_timestamp();
+    END IF;
+    IF NEW."state" = 'cancelled' AND NEW."cancellation_decision" IS DISTINCT FROM 'cancellation_won'::"AgentRunCancellationDecision" THEN
+        RAISE EXCEPTION 'a cancelled AgentRun requires the cancellation terminal winner';
+    END IF;
+    IF NEW."state" = 'completed' AND NEW."cancellation_decision" IS DISTINCT FROM 'output_won'::"AgentRunCancellationDecision" THEN
+        RAISE EXCEPTION 'an admitted Stop may complete only when final output won';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "agent_runs_cancellation_authority" BEFORE INSERT OR UPDATE ON "agent_runs"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_run_cancellation"();
 CREATE FUNCTION "reject_capability_catalog_revision_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     RAISE EXCEPTION 'CapabilityCatalogRevision rows are immutable';
@@ -3944,6 +4614,7 @@ DECLARE
     current_run "agent_runs"%ROWTYPE;
     current_invocation "tool_invocations"%ROWTYPE;
     bound_request "approval_requests"%ROWTYPE;
+    admitted_stop_cleanup BOOLEAN := FALSE;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ApprovalRequest rows cannot be deleted'; END IF;
     IF TG_OP = 'UPDATE' THEN
@@ -3983,8 +4654,13 @@ BEGIN
     bound_request := CASE WHEN TG_OP = 'INSERT' THEN NEW ELSE OLD END;
     SELECT * INTO current_run FROM "agent_runs" WHERE "id" = bound_request."run_id" FOR UPDATE;
     SELECT * INTO current_invocation FROM "tool_invocations" WHERE "id" = bound_request."tool_invocation_row_id" FOR UPDATE;
+    -- Only the saved cancellation winner may close approvals after lease or membership expiry.
+    admitted_stop_cleanup := TG_OP = 'UPDATE' AND NEW."state" = 'cancelled'
+        AND current_run."state" = 'cancelling'
+        AND current_run."cancellation_decision" = 'cancellation_won'
+        AND current_run."cancellation_command_id" IS NOT NULL;
     IF current_run."attempt" IS DISTINCT FROM bound_request."attempt"
-        OR current_run."state" IS DISTINCT FROM 'waiting_for_input'::"AgentRunState"
+        OR (current_run."state" IS DISTINCT FROM 'waiting_for_input'::"AgentRunState" AND NOT COALESCE(admitted_stop_cleanup, FALSE))
         OR current_invocation."state" IS DISTINCT FROM 'awaiting_approval'::"ToolInvocationState"
         OR current_invocation."run_id" IS DISTINCT FROM bound_request."run_id"
         OR current_invocation."attempt" IS DISTINCT FROM bound_request."attempt"
@@ -4001,17 +4677,19 @@ BEGIN
         OR COALESCE(current_run."execution_subject"->'computerScope'->>'leaseGeneration', '') !~ '^[1-9][0-9]*$' THEN
         RAISE EXCEPTION 'ApprovalRequest requires the current waiting run and its exact computer-lease invocation';
     END IF;
-    PERFORM 1 FROM "conversation_computer_active_leases"
-    WHERE "computer_id" = current_run."execution_subject"->'computerScope'->>'computerId'
-      AND "silo_id" = current_run."silo_id"
-      AND "conversation_id" = current_run."conversation_id"
-      AND "agent_identity_id" = current_run."agent_identity_id"
-      AND "lease_id" = current_run."execution_subject"->'computerScope'->>'leaseId'
-      AND "lease_generation" = (current_run."execution_subject"->'computerScope'->>'leaseGeneration')::INTEGER
-      AND "expires_at" > decision_time
-    FOR UPDATE;
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'ApprovalRequest requires its exact active conversation computer lease';
+    IF NOT COALESCE(admitted_stop_cleanup, FALSE) THEN
+        PERFORM 1 FROM "conversation_computer_active_leases"
+        WHERE "computer_id" = current_run."execution_subject"->'computerScope'->>'computerId'
+          AND "silo_id" = current_run."silo_id"
+          AND "conversation_id" = current_run."conversation_id"
+          AND "agent_identity_id" = current_run."agent_identity_id"
+          AND "lease_id" = current_run."execution_subject"->'computerScope'->>'leaseId'
+          AND "lease_generation" = (current_run."execution_subject"->'computerScope'->>'leaseGeneration')::INTEGER
+          AND "expires_at" > decision_time
+        FOR UPDATE;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'ApprovalRequest requires its exact active conversation computer lease';
+        END IF;
     END IF;
     IF TG_OP = 'INSERT' THEN
         IF NEW."state" <> 'pending' OR NEW."decided_at" IS NOT NULL OR NEW."decided_by" IS NOT NULL THEN
@@ -4023,6 +4701,9 @@ BEGIN
         RETURN NEW;
     END IF;
     IF NEW."state" = 'cancelled' THEN
+        IF NEW."final_arguments" IS NOT NULL OR NEW."final_arguments_digest" IS NOT NULL THEN
+            RAISE EXCEPTION 'ApprovalRequest cancellation cannot approve final arguments';
+        END IF;
         IF NEW."decided_at" IS NULL OR NEW."decided_at" > decision_time OR NEW."decided_at" < OLD."created_at" THEN
             RAISE EXCEPTION 'ApprovalRequest cancellation requires a caller-supplied decision time between creation and now';
         END IF;
@@ -4247,7 +4928,7 @@ BEGIN
     IF EXISTS (
         SELECT 1 FROM "agent_runs"
         WHERE "conversation_id" = OLD."id"
-          AND "state" NOT IN ('completed', 'failed')
+          AND "state" NOT IN ('completed', 'cancelled', 'failed')
     ) THEN
         RAISE EXCEPTION 'Conversation cannot close while a foreground run is active';
     END IF;
@@ -4311,7 +4992,7 @@ BEGIN
         OR conversation_agent_service_id IS DISTINCT FROM NEW."agent_service_id" THEN
         RAISE EXCEPTION 'AgentRun requires the exact agent-session Conversation authority';
     END IF;
-    IF conversation_lifecycle <> 'open' AND NEW."state" NOT IN ('completed', 'failed') THEN
+    IF conversation_lifecycle <> 'open' AND NEW."state" NOT IN ('completed', 'cancelled', 'failed') THEN
         RAISE EXCEPTION 'non-terminal AgentRun requires an open Conversation';
     END IF;
     RETURN NEW;
@@ -5031,8 +5712,85 @@ BEGIN
 END;
 $$;
 CREATE FUNCTION "enforce_artifact_revision_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    artifact_silo_id TEXT;
+    artifact_state "ArtifactState";
+    artifact_current_revision_id TEXT;
+    artifact_deleted_at TIMESTAMP(3);
+    upload_lease_row "artifact_upload_leases"%ROWTYPE;
+    generated_file_row "conversation_generated_files"%ROWTYPE;
+    scan_job_row "artifact_scan_jobs"%ROWTYPE;
+    matching_lease_count INTEGER;
 BEGIN
-    IF TG_OP = 'INSERT' AND NEW."state" <> 'published' THEN RAISE EXCEPTION 'ArtifactRevision becomes visible only through finalization'; END IF;
+    IF TG_OP = 'INSERT' AND NEW."state" = 'quarantined' THEN
+        SELECT "silo_id", "state", "current_revision_id", "deleted_at"
+          INTO artifact_silo_id, artifact_state, artifact_current_revision_id, artifact_deleted_at
+          FROM "artifacts" WHERE "id" = NEW."artifact_id" FOR UPDATE;
+        IF NOT FOUND OR artifact_silo_id IS NULL OR artifact_state IS DISTINCT FROM 'active'::"ArtifactState"
+            OR artifact_current_revision_id IS NOT NULL OR artifact_deleted_at IS NOT NULL THEN
+            RAISE EXCEPTION 'ArtifactRevision quarantine admission requires its active Artifact';
+        END IF;
+
+        IF NEW."provenance"->>'kind' = 'conversation_generated_file' THEN
+            SELECT * INTO generated_file_row FROM "conversation_generated_files"
+              WHERE "id" = NEW."provenance"->>'operationId' FOR UPDATE;
+            IF NOT FOUND OR generated_file_row."silo_id" IS DISTINCT FROM artifact_silo_id
+                OR generated_file_row."artifact_id" IS DISTINCT FROM NEW."artifact_id"
+                OR generated_file_row."revision_id" IS DISTINCT FROM NEW."id"
+                OR generated_file_row."requester_subject" IS DISTINCT FROM NEW."created_by"
+                OR generated_file_row."upload_lease_id" IS NULL THEN
+                RAISE EXCEPTION 'ArtifactRevision generated provenance does not bind its operation';
+            END IF;
+            SELECT * INTO upload_lease_row FROM "artifact_upload_leases"
+              WHERE "id" = generated_file_row."upload_lease_id" FOR UPDATE;
+        ELSE
+            SELECT count(*)::INTEGER INTO matching_lease_count
+              FROM "artifact_upload_leases"
+             WHERE "artifact_id" = NEW."artifact_id"
+               AND "silo_id" = artifact_silo_id
+               AND "state" = 'promoted'::"ArtifactUploadLeaseState"
+               AND "expected_content_address" = NEW."content_address"
+               AND "expected_byte_length" = NEW."byte_length"
+               AND "media_type" = NEW."media_type"
+               AND "promotion_receipt_digest" ~ '^sha256:[0-9a-f]{64}$'
+               AND "promoted_content_address" = NEW."content_address"
+               AND "promoted_byte_length" = NEW."byte_length"
+               AND "promoted_at" IS NOT NULL
+               AND "expires_at" > clock_timestamp();
+            IF matching_lease_count <> 1 THEN
+                RAISE EXCEPTION 'ArtifactRevision quarantine admission requires one promoted upload lease';
+            END IF;
+            SELECT * INTO upload_lease_row FROM "artifact_upload_leases"
+              WHERE "artifact_id" = NEW."artifact_id"
+                AND "silo_id" = artifact_silo_id
+                AND "state" = 'promoted'::"ArtifactUploadLeaseState"
+                AND "expected_content_address" = NEW."content_address"
+                AND "expected_byte_length" = NEW."byte_length"
+                AND "media_type" = NEW."media_type"
+                AND "promotion_receipt_digest" ~ '^sha256:[0-9a-f]{64}$'
+                AND "promoted_content_address" = NEW."content_address"
+                AND "promoted_byte_length" = NEW."byte_length"
+                AND "promoted_at" IS NOT NULL
+                AND "expires_at" > clock_timestamp()
+              LIMIT 1 FOR UPDATE;
+        END IF;
+        IF upload_lease_row."id" IS NULL OR upload_lease_row."artifact_id" IS DISTINCT FROM NEW."artifact_id"
+            OR upload_lease_row."silo_id" IS DISTINCT FROM artifact_silo_id
+            OR upload_lease_row."state" IS DISTINCT FROM 'promoted'::"ArtifactUploadLeaseState"
+            OR upload_lease_row."expected_content_address" IS DISTINCT FROM NEW."content_address"
+            OR upload_lease_row."expected_byte_length" IS DISTINCT FROM NEW."byte_length"
+            OR upload_lease_row."media_type" IS DISTINCT FROM NEW."media_type"
+            OR upload_lease_row."promotion_receipt_digest" IS NULL
+            OR upload_lease_row."promotion_receipt_digest" !~ '^sha256:[0-9a-f]{64}$'
+            OR upload_lease_row."promoted_content_address" IS DISTINCT FROM NEW."content_address"
+            OR upload_lease_row."promoted_byte_length" IS DISTINCT FROM NEW."byte_length"
+            OR upload_lease_row."promoted_at" IS NULL
+            OR upload_lease_row."expires_at" IS NULL OR upload_lease_row."expires_at" <= clock_timestamp() THEN
+            RAISE EXCEPTION 'ArtifactRevision quarantine admission requires its promoted upload lease';
+        END IF;
+    ELSIF TG_OP = 'INSERT' AND NEW."state" <> 'published' THEN
+        RAISE EXCEPTION 'ArtifactRevision becomes visible only through finalization';
+    END IF;
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ArtifactRevision metadata cannot be deleted'; END IF;
     IF TG_OP = 'UPDATE' THEN
         IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."artifact_id" IS DISTINCT FROM OLD."artifact_id" OR NEW."revision" IS DISTINCT FROM OLD."revision"
@@ -5042,10 +5800,57 @@ BEGIN
             OR NEW."created_by" IS DISTINCT FROM OLD."created_by" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
             RAISE EXCEPTION 'ArtifactRevision content and provenance are immutable';
         END IF;
-        IF NOT ((OLD."state" = 'published' AND NEW."state" IN ('published', 'deletion_pending')) OR (OLD."state" = 'deletion_pending' AND NEW."state" IN ('deletion_pending', 'purged')) OR (OLD."state" = 'purged' AND NEW."state" = 'purged')) THEN
+        IF NOT ((OLD."state" = 'quarantined' AND NEW."state" IN ('quarantined', 'published', 'rejected')) OR (OLD."state" = 'published' AND NEW."state" IN ('published', 'deletion_pending')) OR (OLD."state" = 'deletion_pending' AND NEW."state" IN ('deletion_pending', 'purged')) OR (OLD."state" = 'purged' AND NEW."state" = 'purged')) THEN
             RAISE EXCEPTION 'invalid ArtifactRevision lifecycle transition';
         END IF;
+        IF OLD."state" = 'quarantined' AND NEW."state" IN ('published', 'rejected') THEN
+            SELECT "state", "deleted_at" INTO artifact_state, artifact_deleted_at
+              FROM "artifacts" WHERE "id" = NEW."artifact_id" FOR UPDATE;
+            IF NOT FOUND OR artifact_state IS DISTINCT FROM 'active'::"ArtifactState" OR artifact_deleted_at IS NOT NULL THEN
+                RAISE EXCEPTION 'ArtifactRevision finalization requires its active Artifact';
+            END IF;
+            SELECT * INTO scan_job_row FROM "artifact_scan_jobs"
+              WHERE "artifact_revision_id" = NEW."id" FOR UPDATE;
+            IF NOT FOUND OR scan_job_row."state" IS DISTINCT FROM 'claimed'::"ArtifactScanJobState"
+                OR scan_job_row."attempt" <= 0 OR btrim(COALESCE(scan_job_row."claim_fence", '')) = ''
+                OR scan_job_row."claim_expires_at" IS NULL OR scan_job_row."claim_expires_at" <= clock_timestamp() THEN
+                RAISE EXCEPTION 'ArtifactRevision finalization requires its active scan claim';
+            END IF;
+        END IF;
         IF NEW."state" <> 'published' AND EXISTS (SELECT 1 FROM "artifact_preprocess_jobs" WHERE ("source_revision_id" = NEW."id" OR "derived_revision_id" = NEW."id") AND "state" IN ('pending', 'claimed', 'retryable_failed')) THEN RAISE EXCEPTION 'ArtifactRevision required by in-flight preprocessing cannot leave Published'; END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_artifact_revision_scan_admission"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    expected_scan_state "ArtifactScanJobState";
+    matching_scan_job_count INTEGER;
+BEGIN
+    IF TG_OP = 'INSERT' AND NEW."state" = 'quarantined' THEN
+        SELECT count(*)::INTEGER INTO matching_scan_job_count
+          FROM "artifact_scan_jobs"
+         WHERE "artifact_revision_id" = NEW."id" AND "state" = 'pending'::"ArtifactScanJobState";
+        IF matching_scan_job_count <> 1 THEN
+            RAISE EXCEPTION 'Quarantined ArtifactRevision requires one Pending scan job';
+        END IF;
+    ELSIF TG_OP = 'UPDATE' AND OLD."state" = 'quarantined' AND NEW."state" IN ('published', 'rejected') THEN
+        IF NEW."state" = 'published' THEN
+            expected_scan_state := 'clean'::"ArtifactScanJobState";
+        ELSE
+            expected_scan_state := 'rejected'::"ArtifactScanJobState";
+        END IF;
+        SELECT count(*)::INTEGER INTO matching_scan_job_count
+          FROM "artifact_scan_jobs"
+         WHERE "artifact_revision_id" = NEW."id"
+           AND "state" = expected_scan_state
+           AND btrim(COALESCE("scanner_version", '')) <> ''
+           AND "claim_fence" IS NULL
+           AND "claim_expires_at" IS NULL
+           AND "completed_at" IS NOT NULL;
+        IF matching_scan_job_count <> 1 THEN
+            RAISE EXCEPTION 'ArtifactRevision finalization requires its completed scan job';
+        END IF;
     END IF;
     RETURN NEW;
 END;
@@ -5717,9 +6522,51 @@ END;
 $$;
 CREATE FUNCTION "enforce_memory_dataset_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'MemoryDataset catalog rows cannot be deleted'; END IF;
-    IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."boundary_kind" IS DISTINCT FROM OLD."boundary_kind" OR NEW."boundary_group_id" IS DISTINCT FROM OLD."boundary_group_id" OR NEW."boundary_principal_id" IS DISTINCT FROM OLD."boundary_principal_id" OR NEW."cognee_dataset_id" IS DISTINCT FROM OLD."cognee_dataset_id" OR NEW."created_by" IS DISTINCT FROM OLD."created_by" OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN RAISE EXCEPTION 'MemoryDataset authority is immutable'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."state" = 'retired' THEN RAISE EXCEPTION 'retired MemoryDataset is closed'; END IF;
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'MemoryDataset catalog rows cannot be deleted';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."state" = 'provisioning' AND (
+            NEW."boundary_kind" IS DISTINCT FROM 'personal'::"AuthorizationBoundaryKind"
+            OR NEW."boundary_group_id" IS NOT NULL
+            OR NEW."boundary_principal_id" IS NULL
+            OR NEW."created_by" IS DISTINCT FROM NEW."boundary_principal_id") THEN
+            RAISE EXCEPTION 'MemoryDataset must bind its creating personal principal';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW IS NOT DISTINCT FROM OLD THEN
+        RETURN NEW;
+    END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id"
+        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."boundary_kind" IS DISTINCT FROM OLD."boundary_kind"
+        OR NEW."boundary_group_id" IS DISTINCT FROM OLD."boundary_group_id"
+        OR NEW."boundary_principal_id" IS DISTINCT FROM OLD."boundary_principal_id"
+        OR NEW."created_by" IS DISTINCT FROM OLD."created_by"
+        OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+        RAISE EXCEPTION 'MemoryDataset authority is immutable';
+    END IF;
+    IF OLD."state" = 'retired' THEN
+        RAISE EXCEPTION 'retired MemoryDataset is closed';
+    END IF;
+    IF OLD."state" = 'provisioning' THEN
+        IF NEW."state" IS DISTINCT FROM 'active'::"MemoryDatasetState"
+            OR OLD."cognee_dataset_id" IS NOT NULL
+            OR NEW."cognee_dataset_id" IS NULL
+            OR NEW."retired_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'Provisioning MemoryDataset may only adopt one provider UUID';
+        END IF;
+    ELSIF OLD."state" = 'active' THEN
+        IF NEW."state" IS DISTINCT FROM 'retired'::"MemoryDatasetState"
+            OR NEW."cognee_dataset_id" IS DISTINCT FROM OLD."cognee_dataset_id"
+            OR NEW."retired_at" IS NULL
+            OR NEW."retired_at" < OLD."created_at" THEN
+            RAISE EXCEPTION 'Active MemoryDataset may only retire with immutable provider identity';
+        END IF;
+    ELSE
+        RAISE EXCEPTION 'invalid MemoryDataset lifecycle state';
+    END IF;
     RETURN NEW;
 END;
 $$;
@@ -5727,7 +6574,7 @@ CREATE FUNCTION "enforce_memory_fact_lifecycle"() RETURNS trigger LANGUAGE plpgs
 DECLARE prior_dataset TEXT; prior_state "MemoryFactState"; dataset_silo_id TEXT; source_silo_id TEXT;
 BEGIN
     IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'active' THEN RAISE EXCEPTION 'MemoryFact catalog entry must begin Active'; END IF;
+        IF NEW."state" <> 'active' OR NEW."revision" <> 1 THEN RAISE EXCEPTION 'MemoryFact catalog entry must begin Active at revision 1'; END IF;
         SELECT "silo_id" INTO dataset_silo_id FROM "memory_datasets" WHERE "id" = NEW."dataset_id" AND "state" = 'active' FOR UPDATE;
         IF dataset_silo_id IS NULL THEN RAISE EXCEPTION 'MemoryFact requires an active MemoryDataset'; END IF;
         IF NEW."source_artifact_revision_id" IS NOT NULL THEN
@@ -5746,6 +6593,8 @@ BEGIN
         RETURN NEW;
     END IF;
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'MemoryFact catalog rows use explicit forget lifecycle'; END IF;
+    IF NEW IS NOT DISTINCT FROM OLD THEN RETURN NEW; END IF;
+    IF NEW."revision" IS DISTINCT FROM OLD."revision" THEN RAISE EXCEPTION 'MemoryFact revision is database-owned'; END IF;
     IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."dataset_id" IS DISTINCT FROM OLD."dataset_id" OR NEW."cognee_external_id" IS DISTINCT FROM OLD."cognee_external_id" OR NEW."content_digest" IS DISTINCT FROM OLD."content_digest" OR NEW."consent_state" IS DISTINCT FROM OLD."consent_state" OR NEW."sensitivity" IS DISTINCT FROM OLD."sensitivity" OR NEW."provenance" IS DISTINCT FROM OLD."provenance" OR NEW."source_artifact_revision_id" IS DISTINCT FROM OLD."source_artifact_revision_id" OR NEW."source_message_id" IS DISTINCT FROM OLD."source_message_id" OR NEW."supersedes_fact_id" IS DISTINCT FROM OLD."supersedes_fact_id" OR NEW."recorded_by" IS DISTINCT FROM OLD."recorded_by" OR NEW."recorded_at" IS DISTINCT FROM OLD."recorded_at" THEN RAISE EXCEPTION 'MemoryFact content and provenance are immutable'; END IF;
     IF OLD."corrected_at" IS NOT NULL AND NEW."corrected_at" IS DISTINCT FROM OLD."corrected_at" THEN RAISE EXCEPTION 'MemoryFact correction evidence is immutable'; END IF;
     IF OLD."forget_requested_at" IS NOT NULL AND NEW."forget_requested_at" IS DISTINCT FROM OLD."forget_requested_at" THEN RAISE EXCEPTION 'MemoryFact forget request evidence is immutable'; END IF;
@@ -5755,6 +6604,169 @@ BEGIN
         OR (OLD."state" = 'corrected' AND NEW."state" IN ('corrected', 'forget_pending'))
         OR (OLD."state" = 'forget_pending' AND NEW."state" IN ('forget_pending', 'forgotten'))
         OR (OLD."state" = 'forgotten' AND NEW."state" = 'forgotten')) THEN RAISE EXCEPTION 'invalid MemoryFact forget lifecycle'; END IF;
+    NEW."revision" := OLD."revision" + 1;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_personal_memory_operation_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    dataset_row "memory_datasets"%ROWTYPE;
+    target_row "memory_fact_catalog"%ROWTYPE;
+    target_changed_in_transaction BOOLEAN := FALSE;
+    active_phase "PersonalMemoryOperationPhase";
+    prior_active_phase "PersonalMemoryOperationPhase";
+    valid_transition BOOLEAN := FALSE;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'PersonalMemoryOperation rows cannot be deleted';
+    END IF;
+    SELECT * INTO dataset_row FROM "memory_datasets" WHERE "id" = NEW."dataset_id" FOR UPDATE;
+    IF dataset_row."id" IS NULL
+        OR dataset_row."silo_id" IS DISTINCT FROM NEW."silo_id"
+        OR dataset_row."boundary_kind" IS DISTINCT FROM 'personal'::"AuthorizationBoundaryKind"
+        OR dataset_row."boundary_group_id" IS NOT NULL
+        OR dataset_row."boundary_principal_id" IS DISTINCT FROM NEW."actor_principal_id" THEN
+        RAISE EXCEPTION 'PersonalMemoryOperation requires its actor-owned personal dataset';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."revision" <> 1
+            OR NEW."phase" IS DISTINCT FROM (CASE NEW."kind"
+                WHEN 'remember' THEN 'dataset_ensure_pending'::"PersonalMemoryOperationPhase"
+                WHEN 'correct' THEN 'document_add_pending'::"PersonalMemoryOperationPhase"
+                WHEN 'forget' THEN 'document_delete_pending'::"PersonalMemoryOperationPhase"
+            END) THEN
+            RAISE EXCEPTION 'PersonalMemoryOperation must begin at revision 1 in its exact initial phase';
+        END IF;
+        IF NEW."source_author_principal_id" IS NOT NULL
+            AND NEW."source_author_principal_id" IS DISTINCT FROM NEW."actor_principal_id" THEN
+            RAISE EXCEPTION 'PersonalMemoryOperation source author must be its actor';
+        END IF;
+        IF NEW."kind" = 'remember' THEN
+            IF dataset_row."state" NOT IN ('provisioning', 'active')
+                OR NEW."admitted_provider_dataset_id" IS DISTINCT FROM dataset_row."cognee_dataset_id"
+                OR NEW."provider_dataset_id" IS DISTINCT FROM dataset_row."cognee_dataset_id" THEN
+                RAISE EXCEPTION 'Remember admission requires the current personal dataset identity';
+            END IF;
+        ELSE
+            SELECT * INTO target_row FROM "memory_fact_catalog" fact
+            WHERE fact."id" = NEW."target_fact_id" AND fact."dataset_id" = NEW."dataset_id" FOR UPDATE;
+            SELECT fact.xmin = pg_current_xact_id()::xid INTO target_changed_in_transaction FROM "memory_fact_catalog" fact
+            WHERE fact."id" = NEW."target_fact_id" AND fact."dataset_id" = NEW."dataset_id";
+            IF dataset_row."state" IS DISTINCT FROM 'active'::"MemoryDatasetState"
+                OR NEW."admitted_provider_dataset_id" IS DISTINCT FROM dataset_row."cognee_dataset_id"
+                OR NEW."provider_dataset_id" IS DISTINCT FROM dataset_row."cognee_dataset_id"
+                OR target_row."id" IS NULL
+                OR target_row."cognee_external_id" IS DISTINCT FROM NEW."target_document_id"
+                OR (NEW."kind" = 'correct' AND (target_row."state" IS DISTINCT FROM 'active'::"MemoryFactState" OR target_row."revision" IS DISTINCT FROM NEW."expected_fact_revision"))
+                OR (NEW."kind" = 'forget' AND (target_row."state" IS DISTINCT FROM 'forget_pending'::"MemoryFactState" OR target_row."revision" IS DISTINCT FROM NEW."expected_fact_revision" + 1 OR target_changed_in_transaction IS DISTINCT FROM TRUE)) THEN
+                RAISE EXCEPTION 'existing-fact admission requires its exact current target and provider dataset';
+            END IF;
+        END IF;
+    ELSE
+        IF NEW IS NOT DISTINCT FROM OLD THEN RETURN NEW; END IF;
+        IF NEW."id" IS DISTINCT FROM OLD."id"
+            OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+            OR NEW."dataset_id" IS DISTINCT FROM OLD."dataset_id"
+            OR NEW."actor_principal_id" IS DISTINCT FROM OLD."actor_principal_id"
+            OR NEW."idempotency_key_digest" IS DISTINCT FROM OLD."idempotency_key_digest"
+            OR NEW."command_digest" IS DISTINCT FROM OLD."command_digest"
+            OR NEW."kind" IS DISTINCT FROM OLD."kind"
+            OR NEW."source_conversation_id" IS DISTINCT FROM OLD."source_conversation_id"
+            OR NEW."source_message_id" IS DISTINCT FROM OLD."source_message_id"
+            OR NEW."source_message_position" IS DISTINCT FROM OLD."source_message_position"
+            OR NEW."source_payload_ref" IS DISTINCT FROM OLD."source_payload_ref"
+            OR NEW."source_ciphertext_digest" IS DISTINCT FROM OLD."source_ciphertext_digest"
+            OR NEW."source_author_principal_id" IS DISTINCT FROM OLD."source_author_principal_id"
+            OR NEW."content_digest" IS DISTINCT FROM OLD."content_digest"
+            OR NEW."target_fact_id" IS DISTINCT FROM OLD."target_fact_id"
+            OR NEW."target_document_id" IS DISTINCT FROM OLD."target_document_id"
+            OR NEW."expected_fact_revision" IS DISTINCT FROM OLD."expected_fact_revision"
+            OR NEW."admitted_provider_dataset_id" IS DISTINCT FROM OLD."admitted_provider_dataset_id"
+            OR NEW."workflow_task_id" IS DISTINCT FROM OLD."workflow_task_id"
+            OR NEW."workflow_task_name" IS DISTINCT FROM OLD."workflow_task_name"
+            OR NEW."workflow_task_key" IS DISTINCT FROM OLD."workflow_task_key"
+            OR NEW."admitted_at" IS DISTINCT FROM OLD."admitted_at" THEN
+            RAISE EXCEPTION 'PersonalMemoryOperation admission, source, target, and task evidence are immutable';
+        END IF;
+        IF OLD."phase" = 'completed' THEN RAISE EXCEPTION 'completed PersonalMemoryOperation is closed'; END IF;
+        IF NEW."revision" IS DISTINCT FROM OLD."revision" + 1 THEN RAISE EXCEPTION 'PersonalMemoryOperation must advance exactly one revision'; END IF;
+        prior_active_phase := CASE WHEN OLD."phase" = 'recovery_required' THEN OLD."recovery_phase" ELSE OLD."phase" END;
+        valid_transition := NEW."phase" = 'recovery_required' AND NEW."recovery_phase" = prior_active_phase;
+        IF NOT valid_transition THEN
+            valid_transition := CASE NEW."kind"
+                WHEN 'remember' THEN
+                    (prior_active_phase = 'dataset_ensure_pending' AND NEW."phase" = 'document_add_pending') OR
+                    (prior_active_phase = 'document_add_pending' AND NEW."phase" = 'cognify_pending') OR
+                    (prior_active_phase = 'cognify_pending' AND NEW."phase" IN ('cognify_pending', 'catalog_commit_pending')) OR
+                    (prior_active_phase = 'catalog_commit_pending' AND NEW."phase" = 'completed')
+                WHEN 'correct' THEN
+                    (prior_active_phase = 'document_add_pending' AND NEW."phase" = 'cognify_pending') OR
+                    (prior_active_phase = 'cognify_pending' AND NEW."phase" IN ('cognify_pending', 'catalog_commit_pending')) OR
+                    (prior_active_phase = 'catalog_commit_pending' AND NEW."phase" = 'prior_document_delete_pending') OR
+                    (prior_active_phase = 'prior_document_delete_pending' AND NEW."phase" = 'completed')
+                WHEN 'forget' THEN
+                    (prior_active_phase = 'document_delete_pending' AND NEW."phase" = 'catalog_finalize_pending') OR
+                    (prior_active_phase = 'catalog_finalize_pending' AND NEW."phase" = 'completed')
+            END;
+        END IF;
+        IF NOT COALESCE(valid_transition, FALSE) THEN RAISE EXCEPTION 'invalid PersonalMemoryOperation phase progression'; END IF;
+        IF OLD."provider_dataset_id" IS NOT NULL AND NEW."provider_dataset_id" IS DISTINCT FROM OLD."provider_dataset_id" THEN RAISE EXCEPTION 'PersonalMemoryOperation provider dataset receipt is immutable'; END IF;
+        IF OLD."provider_document_id" IS NOT NULL AND NEW."provider_document_id" IS DISTINCT FROM OLD."provider_document_id" THEN RAISE EXCEPTION 'PersonalMemoryOperation document receipt is immutable'; END IF;
+        IF OLD."indexing_operation_id" IS NOT NULL AND NEW."indexing_operation_id" IS DISTINCT FROM OLD."indexing_operation_id" THEN RAISE EXCEPTION 'PersonalMemoryOperation indexing identity is immutable'; END IF;
+        IF OLD."expected_input_evidence_digest" IS NOT NULL AND NEW."expected_input_evidence_digest" IS DISTINCT FROM OLD."expected_input_evidence_digest" THEN RAISE EXCEPTION 'PersonalMemoryOperation indexing evidence is immutable'; END IF;
+        IF OLD."pipeline_run_id" IS NOT NULL AND NEW."pipeline_run_id" IS DISTINCT FROM OLD."pipeline_run_id" THEN RAISE EXCEPTION 'PersonalMemoryOperation pipeline receipt is immutable'; END IF;
+        IF OLD."provider_dataset_id" IS NULL AND NEW."provider_dataset_id" IS NOT NULL AND prior_active_phase <> 'dataset_ensure_pending' THEN RAISE EXCEPTION 'PersonalMemoryOperation adopted a provider dataset outside ensure'; END IF;
+        IF OLD."provider_document_id" IS NULL AND NEW."provider_document_id" IS NOT NULL AND prior_active_phase <> 'document_add_pending' THEN RAISE EXCEPTION 'PersonalMemoryOperation adopted a document outside add'; END IF;
+        IF OLD."indexing_operation_id" IS NULL AND NEW."indexing_operation_id" IS NOT NULL AND prior_active_phase <> 'cognify_pending' THEN RAISE EXCEPTION 'PersonalMemoryOperation adopted indexing evidence outside Cognify'; END IF;
+        IF OLD."pipeline_run_id" IS NULL AND NEW."pipeline_run_id" IS NOT NULL AND (prior_active_phase <> 'cognify_pending' OR NEW."phase" <> 'catalog_commit_pending') THEN RAISE EXCEPTION 'PersonalMemoryOperation adopted a pipeline receipt outside Cognify completion'; END IF;
+    END IF;
+
+    active_phase := CASE WHEN NEW."phase" = 'recovery_required' THEN NEW."recovery_phase" ELSE NEW."phase" END;
+    IF ((NEW."kind" = 'remember' AND active_phase IN ('dataset_ensure_pending', 'document_add_pending', 'cognify_pending', 'catalog_commit_pending', 'completed'))
+        OR (NEW."kind" = 'correct' AND active_phase IN ('document_add_pending', 'cognify_pending', 'catalog_commit_pending', 'prior_document_delete_pending', 'completed'))
+        OR (NEW."kind" = 'forget' AND active_phase IN ('document_delete_pending', 'catalog_finalize_pending', 'completed'))) IS NOT TRUE THEN
+        RAISE EXCEPTION 'PersonalMemoryOperation phase does not match command kind';
+    END IF;
+    IF (NEW."phase" = 'recovery_required') IS DISTINCT FROM (NEW."recovery_phase" IS NOT NULL AND NEW."failure_code" IS NOT NULL AND NEW."recovery_recorded_at" IS NOT NULL AND NEW."completed_at" IS NULL)
+        OR (NEW."phase" <> 'recovery_required' AND (NEW."recovery_phase" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."delivery_state" IS NOT NULL OR NEW."recovery_recorded_at" IS NOT NULL))
+        OR (NEW."phase" = 'recovery_required' AND active_phase IN ('recovery_required', 'completed'))
+        OR (NEW."phase" = 'completed') IS DISTINCT FROM (NEW."completed_at" IS NOT NULL) THEN
+        RAISE EXCEPTION 'PersonalMemoryOperation recovery or completion evidence is malformed';
+    END IF;
+    IF NEW."phase" = 'recovery_required' AND (
+        (NEW."delivery_state" = 'ambiguous' AND ((active_phase = 'dataset_ensure_pending' AND NEW."failure_code" = 'dataset_unavailable') OR (active_phase = 'document_add_pending' AND NEW."failure_code" = 'document_conflict') OR (active_phase = 'cognify_pending' AND NEW."failure_code" = 'indexing_unavailable') OR (active_phase IN ('prior_document_delete_pending', 'document_delete_pending') AND NEW."failure_code" = 'deletion_unavailable'))) OR
+        (NEW."delivery_state" IS NULL AND ((active_phase = 'dataset_ensure_pending' AND NEW."failure_code" IN ('authority_ended', 'dataset_unavailable')) OR (active_phase = 'document_add_pending' AND NEW."failure_code" IN ('authority_ended', 'source_unavailable', 'document_conflict')) OR (active_phase = 'cognify_pending' AND NEW."failure_code" IN ('authority_ended', 'dataset_unavailable', 'index_input_changed', 'indexing_unavailable')) OR (active_phase = 'catalog_commit_pending' AND NEW."failure_code" IN ('authority_ended', 'catalog_conflict')) OR (active_phase IN ('prior_document_delete_pending', 'document_delete_pending') AND NEW."failure_code" IN ('authority_ended', 'deletion_unavailable')) OR (active_phase = 'catalog_finalize_pending' AND NEW."failure_code" IN ('authority_ended', 'catalog_conflict'))))
+    ) IS NOT TRUE THEN RAISE EXCEPTION 'PersonalMemoryOperation failure evidence does not match recovery phase'; END IF;
+    IF (NEW."kind" = 'forget') IS DISTINCT FROM (NEW."source_conversation_id" IS NULL AND NEW."source_message_id" IS NULL AND NEW."source_message_position" IS NULL AND NEW."source_payload_ref" IS NULL AND NEW."source_ciphertext_digest" IS NULL AND NEW."source_author_principal_id" IS NULL AND NEW."content_digest" IS NULL)
+        OR (NEW."kind" <> 'forget' AND (NEW."source_conversation_id" IS NULL OR btrim(NEW."source_conversation_id") = '' OR NEW."source_message_id" IS NULL OR btrim(NEW."source_message_id") = '' OR NEW."source_message_position" IS NULL OR NEW."source_message_position" < 0 OR NEW."source_payload_ref" IS NULL OR btrim(NEW."source_payload_ref") = '' OR NEW."source_ciphertext_digest" !~ '^sha256:[0-9a-f]{64}$' OR NEW."source_author_principal_id" IS DISTINCT FROM NEW."actor_principal_id" OR NEW."content_digest" !~ '^sha256:[0-9a-f]{64}$')) THEN
+        RAISE EXCEPTION 'PersonalMemoryOperation source evidence does not match command kind';
+    END IF;
+    IF (NEW."kind" = 'remember') IS DISTINCT FROM (NEW."target_fact_id" IS NULL AND NEW."target_document_id" IS NULL AND NEW."expected_fact_revision" IS NULL)
+        OR (NEW."kind" <> 'remember' AND (NEW."target_fact_id" IS NULL OR btrim(NEW."target_fact_id") = '' OR NEW."target_document_id" IS NULL OR NEW."expected_fact_revision" IS NULL OR NEW."expected_fact_revision" <= 0)) THEN
+        RAISE EXCEPTION 'PersonalMemoryOperation target evidence does not match command kind';
+    END IF;
+    IF NEW."admitted_provider_dataset_id" IS NOT NULL AND NEW."provider_dataset_id" IS DISTINCT FROM NEW."admitted_provider_dataset_id" THEN RAISE EXCEPTION 'PersonalMemoryOperation changed its admitted provider dataset'; END IF;
+    IF NOT (NEW."kind" = 'remember' AND active_phase = 'dataset_ensure_pending') AND NEW."provider_dataset_id" IS NULL THEN RAISE EXCEPTION 'PersonalMemoryOperation phase requires a provider dataset'; END IF;
+    IF NEW."provider_dataset_id" IS NOT NULL AND (dataset_row."state" <> 'active' OR dataset_row."cognee_dataset_id" IS DISTINCT FROM NEW."provider_dataset_id") THEN RAISE EXCEPTION 'PersonalMemoryOperation provider dataset is not current'; END IF;
+    IF NEW."kind" <> 'forget' AND active_phase NOT IN ('dataset_ensure_pending', 'document_add_pending') AND NEW."provider_document_id" IS NULL THEN RAISE EXCEPTION 'PersonalMemoryOperation phase requires a document receipt'; END IF;
+    IF (NEW."kind" = 'forget' OR active_phase IN ('dataset_ensure_pending', 'document_add_pending')) AND NEW."provider_document_id" IS NOT NULL THEN RAISE EXCEPTION 'PersonalMemoryOperation phase cannot retain a new document receipt'; END IF;
+    IF (NEW."indexing_operation_id" IS NULL) IS DISTINCT FROM (NEW."expected_input_evidence_digest" IS NULL) THEN RAISE EXCEPTION 'PersonalMemoryOperation indexing identity and evidence must be paired'; END IF;
+    IF NEW."kind" = 'forget' AND (NEW."indexing_operation_id" IS NOT NULL OR NEW."pipeline_run_id" IS NOT NULL) THEN RAISE EXCEPTION 'Forget cannot retain indexing evidence'; END IF;
+    IF NEW."kind" <> 'forget' AND active_phase IN ('catalog_commit_pending', 'prior_document_delete_pending', 'completed') AND (NEW."indexing_operation_id" IS NULL OR NEW."pipeline_run_id" IS NULL) THEN RAISE EXCEPTION 'PersonalMemoryOperation phase requires exact indexing completion'; END IF;
+    IF NEW."kind" <> 'forget' AND active_phase NOT IN ('catalog_commit_pending', 'prior_document_delete_pending', 'completed') AND NEW."pipeline_run_id" IS NOT NULL THEN RAISE EXCEPTION 'PersonalMemoryOperation phase cannot retain a pipeline receipt'; END IF;
+
+    IF TG_OP = 'UPDATE' AND prior_active_phase = 'catalog_commit_pending' AND NEW."phase" IN ('completed', 'prior_document_delete_pending') THEN
+        IF NEW."kind" = 'remember' THEN
+            PERFORM 1 FROM "memory_fact_catalog" fact WHERE fact."dataset_id" = NEW."dataset_id" AND fact."cognee_external_id" = NEW."provider_document_id" AND fact."content_digest" = NEW."content_digest" AND fact."state" = 'active' AND fact."recorded_by" = NEW."actor_principal_id" AND fact."source_message_id" IS NOT DISTINCT FROM NEW."source_message_id" AND fact.xmin = pg_current_xact_id()::xid;
+        ELSE
+            PERFORM 1 FROM "memory_fact_catalog" fact JOIN "memory_fact_catalog" prior ON prior."id" = NEW."target_fact_id" AND prior."dataset_id" = NEW."dataset_id" WHERE fact."dataset_id" = NEW."dataset_id" AND fact."supersedes_fact_id" = NEW."target_fact_id" AND fact."cognee_external_id" = NEW."provider_document_id" AND fact."content_digest" = NEW."content_digest" AND fact."state" = 'active' AND fact."recorded_by" = NEW."actor_principal_id" AND fact."source_message_id" IS NOT DISTINCT FROM NEW."source_message_id" AND prior."state" = 'corrected' AND prior."revision" = NEW."expected_fact_revision" + 1 AND fact.xmin = pg_current_xact_id()::xid AND prior.xmin = pg_current_xact_id()::xid;
+        END IF;
+        IF NOT FOUND THEN RAISE EXCEPTION 'CatalogCommitted requires its exact same-transaction fact evidence'; END IF;
+    END IF;
+    IF TG_OP = 'UPDATE' AND NEW."kind" = 'forget' AND prior_active_phase = 'catalog_finalize_pending' AND NEW."phase" = 'completed' THEN
+        PERFORM 1 FROM "memory_fact_catalog" fact WHERE fact."id" = NEW."target_fact_id" AND fact."dataset_id" = NEW."dataset_id" AND fact."cognee_external_id" = NEW."target_document_id" AND fact."state" = 'forgotten' AND fact."revision" = NEW."expected_fact_revision" + 2 AND fact.xmin = pg_current_xact_id()::xid;
+        IF NOT FOUND THEN RAISE EXCEPTION 'CatalogFinalized requires its exact same-transaction Forgotten fact'; END IF;
+    END IF;
     RETURN NEW;
 END;
 $$;
@@ -5843,14 +6855,37 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_nonempty_check" CHECK (
         btrim("input_snapshot_digest") <> '' AND
         "input_snapshot_digest" ~ '^sha256:[0-9a-f]{64}$'
     );
+ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_workflow_task_check" CHECK (
+        ("workflow_task_id" IS NULL AND "workflow_task_name" IS NULL AND "workflow_task_key" IS NULL) OR
+        ("workflow_task_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' AND
+         "workflow_task_name" = 'conversation-computer-turn' AND
+         "workflow_task_key" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+    );
+ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_cancellation_material_check" CHECK (
+    "cancellation_command_id" IS NULL OR (
+        "cancellation_command_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        AND "cancellation_command_digest" ~ '^sha256:[0-9a-f]{64}$'
+        AND "cancellation_authorization_decision_digest" ~ '^sha256:[0-9a-f]{64}$'
+        AND "cancellation_bootstrap_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        AND btrim("cancellation_requested_by_principal_id") <> ''
+        AND "workflow_task_id" IS NOT NULL
+        AND "cancellation_workflow_task_id" <> "workflow_task_id"
+        AND "cancellation_workflow_task_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        AND "cancellation_workflow_task_name" = 'conversation-computer-stop'
+        AND "cancellation_workflow_task_key" = "cancellation_command_id"
+    )
+);
+ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_cancellation_audit_fkey"
+    FOREIGN KEY ("cancellation_authorization_decision_digest") REFERENCES "audit_decisions"("decision_digest") ON DELETE RESTRICT;
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_terminal_check" CHECK (
-        ("state" IN ('completed', 'failed') AND "finished_at" IS NOT NULL AND "terminal_reason" IS NOT NULL) OR
-        ("state" NOT IN ('completed', 'failed') AND "finished_at" IS NULL AND "terminal_reason" IS NULL)
+        ("state" IN ('completed', 'cancelled', 'failed') AND "finished_at" IS NOT NULL AND "terminal_reason" IS NOT NULL) OR
+        ("state" NOT IN ('completed', 'cancelled', 'failed') AND "finished_at" IS NULL AND "terminal_reason" IS NULL)
     );
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_terminal_reason_check" CHECK (
         ("state" = 'completed' AND "terminal_reason" = 'success') OR
-        ("state" = 'failed' AND "terminal_reason" <> 'success') OR
-        "state" NOT IN ('completed', 'failed')
+        ("state" = 'failed' AND "terminal_reason" NOT IN ('success', 'user_cancelled')) OR
+        ("state" = 'cancelled' AND "terminal_reason" = 'user_cancelled') OR
+        "state" NOT IN ('completed', 'cancelled', 'failed')
     );
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_cost_check" CHECK (
         ("cost_amount" IS NULL AND "cost_currency" IS NULL) OR
@@ -5977,7 +7012,7 @@ ALTER TABLE "conversations" ADD CONSTRAINT "conversations_identity_check" CHECK 
 ALTER TABLE "conversation_private_payloads" ADD CONSTRAINT "conversation_private_payloads_encryption_check" CHECK (
         btrim("silo_id") <> '' AND btrim("author_subject") <> '' AND btrim("idempotency_key") <> ''
         AND btrim("key_id") <> '' AND octet_length("nonce") = 12 AND octet_length("auth_tag") = 16
-        AND octet_length("ciphertext") BETWEEN 1 AND 65536
+        AND octet_length("ciphertext") BETWEEN 0 AND 65536
         AND "ciphertext_digest" ~ '^sha256:[0-9a-f]{64}$'
     );
 CREATE FUNCTION "reject_conversation_private_payload_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -5997,7 +7032,7 @@ ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participant
     );
 CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"
     ON "agent_runs"("conversation_id")
-    WHERE "conversation_id" IS NOT NULL AND "state" NOT IN ('completed', 'failed');
+    WHERE "conversation_id" IS NOT NULL AND "state" NOT IN ('completed', 'cancelled', 'failed');
 ALTER TABLE "persona_question_sets" ADD CONSTRAINT "persona_question_sets_valid_check" CHECK (
         btrim("question_set_id") <> '' AND "version" > 0 AND
         (("state" = 'draft' AND "reviewed_by" IS NULL AND "reviewed_at" IS NULL) OR
@@ -6140,7 +7175,7 @@ ALTER TABLE "artifact_revisions" ADD CONSTRAINT "artifact_revisions_content_chec
         AND btrim("media_type") <> '' AND strpos("media_type", '/') > 1 AND jsonb_typeof("provenance") = 'object' AND btrim("created_by") <> ''
     );
 ALTER TABLE "artifact_revisions" ADD CONSTRAINT "artifact_revisions_deletion_check" CHECK (
-        ("state" = 'published' AND "deletion_requested_at" IS NULL AND "purged_at" IS NULL) OR
+        ("state" IN ('quarantined', 'published', 'rejected') AND "deletion_requested_at" IS NULL AND "purged_at" IS NULL) OR
         ("state" = 'deletion_pending' AND "deletion_requested_at" IS NOT NULL AND "purged_at" IS NULL) OR
         ("state" = 'purged' AND "deletion_requested_at" IS NOT NULL AND "purged_at" IS NOT NULL)
     );
@@ -6176,13 +7211,18 @@ ALTER TABLE "skill_revisions" ADD CONSTRAINT "skill_revisions_review_check" CHEC
          AND "signature" IS NOT NULL AND btrim("signature") <> '' AND "signer_key_id" IS NOT NULL AND btrim("signer_key_id") <> '')
     );
 ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_identity_check" CHECK (
-		btrim("silo_id") <> '' AND btrim("cognee_dataset_id") <> '' AND btrim("created_by") <> '' AND
-		(("boundary_kind" = 'group' AND "boundary_group_id" IS NOT NULL AND "boundary_principal_id" IS NULL) OR
-		 ("boundary_kind" = 'personal' AND "boundary_group_id" IS NULL AND "boundary_principal_id" IS NOT NULL))
+		(btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("created_by") <> '' AND
+		 (("boundary_kind" = 'group' AND "boundary_group_id" IS NOT NULL AND btrim("boundary_group_id") <> '' AND "boundary_principal_id" IS NULL) OR
+		  ("boundary_kind" = 'personal' AND "boundary_group_id" IS NULL AND "boundary_principal_id" IS NOT NULL AND btrim("boundary_principal_id") <> ''))) IS TRUE
 	);
-ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_retirement_check" CHECK (("state" = 'retired' AND "retired_at" IS NOT NULL) OR ("state" = 'active' AND "retired_at" IS NULL));
+ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_retirement_check" CHECK ((
+        ("state" = 'provisioning' AND "boundary_kind" = 'personal' AND "boundary_principal_id" = "created_by" AND "cognee_dataset_id" IS NULL AND "retired_at" IS NULL) OR
+        ("state" = 'active' AND "cognee_dataset_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' AND "retired_at" IS NULL) OR
+        ("state" = 'retired' AND "cognee_dataset_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' AND "retired_at" IS NOT NULL AND "retired_at" >= "created_at")
+    ) IS TRUE);
 ALTER TABLE "memory_fact_catalog" ADD CONSTRAINT "memory_fact_catalog_valid_check" CHECK (
-        btrim("cognee_external_id") <> '' AND "content_digest" ~ '^sha256:[0-9a-f]{64}$'
+        btrim("id") <> '' AND btrim("dataset_id") <> '' AND "revision" > 0
+        AND btrim("cognee_external_id") <> '' AND "content_digest" ~ '^sha256:[0-9a-f]{64}$'
         AND btrim("sensitivity") <> '' AND jsonb_typeof("provenance") = 'object' AND btrim("recorded_by") <> ''
         AND ((CASE WHEN "source_artifact_revision_id" IS NOT NULL THEN 1 ELSE 0 END)
             + (CASE WHEN "source_message_id" IS NOT NULL THEN 1 ELSE 0 END)
@@ -6195,6 +7235,25 @@ ALTER TABLE "memory_fact_catalog" ADD CONSTRAINT "memory_fact_catalog_forget_che
         ("state" = 'forget_pending' AND "forget_requested_at" IS NOT NULL AND "forgotten_at" IS NULL) OR
         ("state" = 'forgotten' AND "forget_requested_at" IS NOT NULL AND "forgotten_at" IS NOT NULL)
     );
+ALTER TABLE "personal_memory_operations" ADD CONSTRAINT "personal_memory_operations_identity_check" CHECK ((
+        "id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        AND btrim("silo_id") <> '' AND btrim("dataset_id") <> '' AND btrim("actor_principal_id") <> ''
+        AND "idempotency_key_digest" ~ '^sha256:[0-9a-f]{64}$' AND "command_digest" ~ '^sha256:[0-9a-f]{64}$'
+        AND "revision" > 0
+        AND "workflow_task_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        AND btrim("workflow_task_name") <> '' AND length("workflow_task_name") <= 128
+        AND btrim("workflow_task_key") <> '' AND length("workflow_task_key") <= 256
+        AND "admitted_at" IS NOT NULL
+        AND ("admitted_provider_dataset_id" IS NULL OR "admitted_provider_dataset_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+        AND ("provider_dataset_id" IS NULL OR "provider_dataset_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+        AND ("provider_document_id" IS NULL OR "provider_document_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+        AND ("target_document_id" IS NULL OR "target_document_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+        AND ("indexing_operation_id" IS NULL OR "indexing_operation_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+        AND ("pipeline_run_id" IS NULL OR "pipeline_run_id" ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
+        AND ("expected_input_evidence_digest" IS NULL OR "expected_input_evidence_digest" ~ '^sha256:[0-9a-f]{64}$')
+        AND ("recovery_recorded_at" IS NULL OR "recovery_recorded_at" >= "admitted_at")
+        AND ("completed_at" IS NULL OR "completed_at" >= "admitted_at")
+    ) IS TRUE);
 ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_identity_check" CHECK (btrim("silo_id") <> '' AND btrim("capability_jti") <> '' AND btrim("media_type") <> '' AND strpos("media_type", '/') > 1);
 ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_expected_content_check" CHECK ("expected_content_address" IS NULL OR "expected_content_address" ~ '^sha256:[0-9a-f]{64}$');
 ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_expected_length_check" CHECK ("expected_byte_length" IS NULL OR "expected_byte_length" >= 0);
@@ -6436,6 +7495,8 @@ CREATE TRIGGER "artifact_revisions_silo_provenance" BEFORE INSERT OR UPDATE OF "
 CREATE TRIGGER "artifact_revisions_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "artifact_revisions" FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_revision_lifecycle"();
 CREATE TRIGGER "artifacts_closed_lifecycle" BEFORE UPDATE OR DELETE ON "artifacts" FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_lifecycle"();
 CREATE CONSTRAINT TRIGGER "current_artifact_revisions_remain_published" AFTER UPDATE OF "state" ON "artifact_revisions" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "protect_current_artifact_revision"();
+CREATE CONSTRAINT TRIGGER "artifact_revisions_scan_admission" AFTER INSERT OR UPDATE OF "state" ON "artifact_revisions"
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_revision_scan_admission"();
 CREATE TRIGGER "artifact_revision_parents_immutable" BEFORE UPDATE OR DELETE ON "artifact_revision_parents" FOR EACH ROW EXECUTE FUNCTION "reject_artifact_parent_mutation"();
 CREATE TRIGGER "artifact_revision_parents_same_silo" BEFORE INSERT ON "artifact_revision_parents"
     FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_parent_silo"();
@@ -6451,8 +7512,9 @@ CREATE CONSTRAINT TRIGGER "skill_artifact_revisions_remain_published" AFTER UPDA
     DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "protect_skill_artifact_revision"();
 CREATE TRIGGER "agent_revision_skill_assignments_same_silo" BEFORE INSERT OR UPDATE ON "agent_revision_skill_assignments"
     FOR EACH ROW EXECUTE FUNCTION "enforce_agent_skill_assignment_silo"();
-CREATE TRIGGER "memory_datasets_closed_lifecycle" BEFORE UPDATE OR DELETE ON "memory_datasets" FOR EACH ROW EXECUTE FUNCTION "enforce_memory_dataset_lifecycle"();
+CREATE TRIGGER "memory_datasets_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "memory_datasets" FOR EACH ROW EXECUTE FUNCTION "enforce_memory_dataset_lifecycle"();
 CREATE TRIGGER "memory_fact_catalog_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "memory_fact_catalog" FOR EACH ROW EXECUTE FUNCTION "enforce_memory_fact_lifecycle"();
+CREATE TRIGGER "personal_memory_operations_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "personal_memory_operations" FOR EACH ROW EXECUTE FUNCTION "enforce_personal_memory_operation_lifecycle"();
 CREATE CONSTRAINT TRIGGER "corrected_memory_facts_require_successor" AFTER INSERT OR UPDATE OF "state" ON "memory_fact_catalog"
     DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_corrected_memory_successor"();
 CREATE TRIGGER "artifact_upload_leases_silo_and_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "artifact_upload_leases" FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_upload_lease_silo_and_lifecycle"();
@@ -6947,7 +8009,8 @@ ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_identity_c
     AND ("byte_length" IS NULL OR "byte_length" > 0)
 );
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_provenance_check" CHECK (
-    "provenance" = 'participant_upload' AND "created_by_user_id" IS NOT NULL
+    ("provenance" = 'participant_upload' AND "created_by_user_id" IS NOT NULL)
+    OR ("provenance" = 'agent_output' AND "created_by_user_id" IS NOT NULL)
 );
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_lifecycle_check" CHECK (
     ("state" = 'uploading' AND "upload_lease_id" IS NOT NULL AND "revision_id" IS NULL AND "failure_code" IS NULL)
@@ -10266,3 +11329,216 @@ SELECT absurd.create_queue('control-plane');
 SELECT absurd.create_queue('artifact-preprocessing');
 SELECT absurd.create_queue('skill-authoring');
 SELECT absurd.create_queue('agent-runs');
+
+-- Generated file capture authority
+ALTER TABLE "conversation_generated_file_chunks" ADD CONSTRAINT "conversation_generated_file_chunks_payload_ref_fkey"
+    FOREIGN KEY ("payload_ref") REFERENCES "conversation_private_payloads"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+ALTER TABLE "conversation_generated_files" ADD CONSTRAINT "conversation_generated_files_identity_check" CHECK (
+    btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("conversation_id") <> '' AND btrim("run_id") <> ''
+    AND "attempt" > 0 AND btrim("bootstrap_id") <> '' AND btrim("computer_id") <> '' AND btrim("lease_id") <> ''
+    AND "lease_generation" > 0 AND btrim("agent_identity_id") <> '' AND btrim("requester_principal_id") <> ''
+    AND btrim("requester_subject") <> '' AND btrim("tool_invocation_row_id") <> '' AND btrim("tool_invocation_id") <> ''
+    AND btrim("tool_revision_id") <> '' AND btrim("server_revision_id") <> ''
+    AND "raw_result_digest" ~ '^sha256:[0-9a-f]{64}$' AND "custody_manifest_version" = 'generated-file-custody.v1'
+    AND "ciphertext_manifest_digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("asset_id") <> '' AND btrim("artifact_id") <> ''
+    AND btrim("revision_id") <> '' AND btrim("upload_lease_id") <> '' AND "content_address" ~ '^sha256:[0-9a-f]{64}$'
+    AND "byte_length" BETWEEN 1 AND 1048576 AND "chunk_count" BETWEEN 1 AND 22
+    AND length(btrim("display_name")) BETWEEN 1 AND 128 AND "display_name" = btrim("display_name")
+    AND "media_type" = 'text/csv;charset=utf-8'
+    AND btrim("workflow_task_id") <> '' AND "workflow_task_name" = 'conversation-generated-file'
+    AND "workflow_task_key" ~ '^conversation-generated-file:[0-9a-f]{64}$'
+);
+ALTER TABLE "conversation_generated_file_chunks" ADD CONSTRAINT "conversation_generated_file_chunks_identity_check" CHECK (
+    btrim("operation_id") <> '' AND "index" >= 0 AND "decoded_byte_length" BETWEEN 1 AND 49152
+    AND "ciphertext_digest" ~ '^sha256:[0-9a-f]{64}$' AND "payload_ref" ~ '^generated-file-chunk:[0-9a-f]{64}$'
+);
+
+CREATE FUNCTION "enforce_conversation_generated_file_identity"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    asset_row "conversation_assets"%ROWTYPE;
+    artifact_silo_id TEXT;
+    artifact_owner_principal_id TEXT;
+    artifact_kind "ArtifactKind";
+    artifact_state "ArtifactState";
+    artifact_current_revision_id TEXT;
+    artifact_deleted_at TIMESTAMP(3);
+    invocation "tool_invocations"%ROWTYPE;
+    run_row "agent_runs"%ROWTYPE;
+    lease_row "conversation_computer_active_leases"%ROWTYPE;
+    upload_lease_row "artifact_upload_leases"%ROWTYPE;
+    runtime_row "mcp_runtime_executions"%ROWTYPE;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile rows cannot be deleted';
+    END IF;
+    IF TG_OP = 'UPDATE' THEN
+        IF NEW IS DISTINCT FROM OLD THEN
+            RAISE EXCEPTION 'ConversationGeneratedFile rows are immutable';
+        END IF;
+        RETURN NEW;
+    END IF;
+
+    SELECT * INTO asset_row FROM "conversation_assets" WHERE "id" = NEW."asset_id" FOR UPDATE;
+    IF NOT FOUND OR asset_row."silo_id" IS DISTINCT FROM NEW."silo_id"
+        OR asset_row."conversation_id" IS DISTINCT FROM NEW."conversation_id"
+        OR asset_row."provenance" IS DISTINCT FROM 'agent_output'::"ConversationAssetProvenance"
+        OR asset_row."state" IS DISTINCT FROM 'uploading'::"ConversationAssetState"
+        OR asset_row."artifact_id" IS DISTINCT FROM NEW."artifact_id"
+        OR asset_row."upload_lease_id" IS DISTINCT FROM NEW."upload_lease_id"
+        OR asset_row."byte_length" IS DISTINCT FROM NEW."byte_length"
+        OR asset_row."display_name" IS DISTINCT FROM NEW."display_name"
+        OR asset_row."media_type" IS DISTINCT FROM NEW."media_type"
+        OR asset_row."message_id" IS NOT NULL OR asset_row."revision_id" IS NOT NULL
+        OR asset_row."failure_code" IS NOT NULL OR asset_row."removed_at" IS NOT NULL
+        OR asset_row."idempotency_key" IS DISTINCT FROM NEW."id"
+        OR asset_row."created_by_user_id" IS DISTINCT FROM NEW."requester_subject" THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile requires its exact uploading AgentOutput asset';
+    END IF;
+    SELECT "silo_id", "owner_principal_id", "kind", "state", "current_revision_id", "deleted_at"
+      INTO artifact_silo_id, artifact_owner_principal_id, artifact_kind, artifact_state, artifact_current_revision_id, artifact_deleted_at
+      FROM "artifacts" WHERE "id" = NEW."artifact_id" FOR UPDATE;
+    IF artifact_silo_id IS DISTINCT FROM NEW."silo_id" OR artifact_owner_principal_id IS DISTINCT FROM NEW."requester_principal_id"
+        OR artifact_kind IS DISTINCT FROM 'generated'::"ArtifactKind"
+        OR artifact_state IS DISTINCT FROM 'active'::"ArtifactState"
+        OR artifact_current_revision_id IS NOT NULL OR artifact_deleted_at IS NOT NULL THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile requires its requester-owned Generated Artifact';
+    END IF;
+    SELECT * INTO upload_lease_row FROM "artifact_upload_leases" WHERE "id" = NEW."upload_lease_id" FOR UPDATE;
+    IF NOT FOUND OR upload_lease_row."artifact_id" IS DISTINCT FROM NEW."artifact_id"
+        OR upload_lease_row."silo_id" IS DISTINCT FROM NEW."silo_id"
+        OR upload_lease_row."state" IS DISTINCT FROM 'active'::"ArtifactUploadLeaseState"
+        OR upload_lease_row."expected_byte_length" IS DISTINCT FROM NEW."byte_length"
+        OR upload_lease_row."expected_content_address" IS DISTINCT FROM NEW."content_address"
+        OR upload_lease_row."media_type" IS DISTINCT FROM NEW."media_type"
+        OR upload_lease_row."expires_at" IS NULL OR upload_lease_row."expires_at" <= clock_timestamp() THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile requires its exact active upload lease';
+    END IF;
+    SELECT * INTO invocation FROM "tool_invocations" WHERE "id" = NEW."tool_invocation_row_id" FOR UPDATE;
+    IF NOT FOUND OR invocation."silo_id" IS DISTINCT FROM NEW."silo_id"
+        OR invocation."run_id" IS DISTINCT FROM NEW."run_id" OR invocation."attempt" IS DISTINCT FROM NEW."attempt"
+        OR invocation."agent_identity_id" IS DISTINCT FROM NEW."agent_identity_id"
+        OR invocation."principal_id" IS DISTINCT FROM NEW."requester_principal_id"
+        OR invocation."tool_invocation_id" IS DISTINCT FROM NEW."tool_invocation_id"
+        OR invocation."tool_revision_id" IS DISTINCT FROM NEW."tool_revision_id"
+        OR invocation."runtime_instance_id" IS DISTINCT FROM NEW."computer_id"
+        OR invocation."command_id" IS DISTINCT FROM NEW."bootstrap_id"
+        OR invocation."state" IS DISTINCT FROM 'claimed'::"ToolInvocationState"
+        OR invocation."claim_kind" IS DISTINCT FROM 'dispatch'::"ExternalActionClaimKind"
+        OR invocation."claim_expires_at" IS NULL OR invocation."claim_expires_at" <= clock_timestamp() THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile requires its exact tool invocation coordinates';
+    END IF;
+    SELECT * INTO runtime_row FROM "mcp_runtime_executions" WHERE "tool_invocation_id" = NEW."tool_invocation_row_id" FOR UPDATE;
+    IF NOT FOUND OR runtime_row."silo_id" IS DISTINCT FROM NEW."silo_id" OR runtime_row."server_revision_id" IS DISTINCT FROM NEW."server_revision_id"
+        OR runtime_row."kind" IS DISTINCT FROM 'invocation'::"McpRuntimeExecutionKind"
+        OR runtime_row."workload_state" IS DISTINCT FROM 'registered'::"McpExecutorWorkloadState"
+        OR runtime_row."command_state" IS DISTINCT FROM 'claimed'::"McpExecutorCommandState"
+        OR runtime_row."companion_claim_fence" IS NULL
+        OR runtime_row."companion_claim_expires_at" IS NULL OR runtime_row."companion_claim_expires_at" <= clock_timestamp()
+        OR runtime_row."tool_invocation_claim_fence" IS DISTINCT FROM invocation."claim_fence"
+        OR runtime_row."tool_invocation_claim_revision" IS DISTINCT FROM invocation."revision" THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile requires its exact active MCP invocation claim';
+    END IF;
+    SELECT * INTO run_row FROM "agent_runs" WHERE "id" = NEW."run_id" AND "attempt" = NEW."attempt" FOR UPDATE;
+    IF NOT FOUND OR run_row."silo_id" IS DISTINCT FROM NEW."silo_id"
+        OR run_row."conversation_id" IS DISTINCT FROM NEW."conversation_id"
+        OR run_row."state" IS DISTINCT FROM 'running'::"AgentRunState"
+        OR run_row."agent_identity_id" IS DISTINCT FROM NEW."agent_identity_id"
+        OR run_row."principal_id" IS DISTINCT FROM NEW."requester_principal_id"
+        OR run_row."execution_subject"->'requester'->>'requesterPrincipalId' IS DISTINCT FROM NEW."requester_principal_id"
+        OR run_row."execution_subject"->'requester'->'membership'->>'subjectId' IS DISTINCT FROM NEW."requester_subject"
+        OR run_row."execution_subject"->'runScope'->>'runId' IS DISTINCT FROM NEW."run_id"
+        OR run_row."execution_subject"->'runScope'->>'attempt' IS DISTINCT FROM NEW."attempt"::TEXT THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile requires its exact AgentRun and requester';
+    END IF;
+    SELECT * INTO lease_row FROM "conversation_computer_active_leases"
+      WHERE "computer_id" = NEW."computer_id" AND "silo_id" = NEW."silo_id" AND "conversation_id" = NEW."conversation_id"
+        AND "agent_identity_id" = NEW."agent_identity_id" AND "lease_id" = NEW."lease_id"
+        AND "lease_generation" = NEW."lease_generation" AND "expires_at" > clock_timestamp() FOR UPDATE;
+    IF NOT FOUND OR run_row."execution_subject"->'computerScope'->>'computerId' IS DISTINCT FROM NEW."computer_id"
+        OR run_row."execution_subject"->'computerScope'->>'leaseId' IS DISTINCT FROM NEW."lease_id"
+        OR run_row."execution_subject"->'computerScope'->>'leaseGeneration' IS DISTINCT FROM NEW."lease_generation"::TEXT
+        OR run_row."execution_subject"->'runScope'->>'siloId' IS DISTINCT FROM NEW."silo_id"
+        OR run_row."execution_subject"->'computerScope'->>'siloId' IS DISTINCT FROM NEW."silo_id" THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile requires the current exact computer lease';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION "enforce_conversation_generated_file_chunk_immutability"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    operation_row "conversation_generated_files"%ROWTYPE;
+    payload_row "conversation_private_payloads"%ROWTYPE;
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        SELECT * INTO operation_row FROM "conversation_generated_files" WHERE "id" = NEW."operation_id" FOR UPDATE;
+        IF NOT FOUND OR NEW."index" >= operation_row."chunk_count"
+            OR NEW."decoded_byte_length"::BIGINT IS DISTINCT FROM (CASE
+                WHEN NEW."index" < operation_row."chunk_count" - 1 THEN 49152::BIGINT
+                ELSE operation_row."byte_length" - (49152::BIGINT * (operation_row."chunk_count" - 1))
+            END) THEN
+            RAISE EXCEPTION 'ConversationGeneratedFileChunk requires an existing operation index';
+        END IF;
+        SELECT * INTO payload_row FROM "conversation_private_payloads" WHERE "id" = NEW."payload_ref" FOR UPDATE;
+        IF NOT FOUND OR payload_row."silo_id" IS DISTINCT FROM operation_row."silo_id"
+            OR payload_row."conversation_id" IS DISTINCT FROM operation_row."conversation_id"
+            OR payload_row."author_subject" IS DISTINCT FROM operation_row."agent_identity_id"
+            OR payload_row."idempotency_key" IS DISTINCT FROM NEW."payload_ref"
+            OR payload_row."ciphertext_digest" IS DISTINCT FROM NEW."ciphertext_digest" THEN
+            RAISE EXCEPTION 'ConversationGeneratedFileChunk requires its exact encrypted payload';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF TG_OP <> 'INSERT' THEN
+        RAISE EXCEPTION 'ConversationGeneratedFileChunk rows are immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION "enforce_conversation_generated_file_manifest"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    manifest_operation_id TEXT;
+    expected_count INTEGER;
+    actual_count INTEGER;
+    max_index INTEGER;
+    actual_byte_length BIGINT;
+BEGIN
+    IF TG_TABLE_NAME = 'conversation_generated_files' THEN
+        manifest_operation_id := NEW."id";
+    ELSE
+        manifest_operation_id := NEW."operation_id";
+    END IF;
+    SELECT "chunk_count" INTO expected_count FROM "conversation_generated_files" WHERE "id" = manifest_operation_id;
+    IF expected_count IS NULL THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile manifest has no operation';
+    END IF;
+    SELECT count(*)::INTEGER, max("index"), COALESCE(sum("decoded_byte_length"), 0)::BIGINT INTO actual_count, max_index, actual_byte_length
+      FROM "conversation_generated_file_chunks" WHERE "operation_id" = manifest_operation_id;
+    IF actual_count <> expected_count OR max_index <> expected_count - 1
+        OR actual_byte_length IS DISTINCT FROM (SELECT "byte_length" FROM "conversation_generated_files" WHERE "id" = manifest_operation_id)
+        OR EXISTS (SELECT 1 FROM "conversation_generated_file_chunks" chunk
+                   WHERE chunk."operation_id" = manifest_operation_id
+                     AND chunk."decoded_byte_length"::BIGINT IS DISTINCT FROM (CASE
+                         WHEN chunk."index" < expected_count - 1 THEN 49152::BIGINT
+                         ELSE (SELECT "byte_length" FROM "conversation_generated_files" WHERE "id" = manifest_operation_id)
+                              - (49152::BIGINT * (expected_count - 1))
+                     END))
+        OR EXISTS (SELECT 1 FROM generate_series(0, expected_count - 1) AS series("index")
+                  WHERE NOT EXISTS (SELECT 1 FROM "conversation_generated_file_chunks" chunk
+                                    WHERE chunk."operation_id" = manifest_operation_id AND chunk."index" = series."index")) THEN
+        RAISE EXCEPTION 'ConversationGeneratedFile requires a contiguous complete chunk manifest';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER "conversation_generated_files_authority" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_generated_files"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_generated_file_identity"();
+CREATE TRIGGER "conversation_generated_file_chunks_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_generated_file_chunks"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_generated_file_chunk_immutability"();
+CREATE CONSTRAINT TRIGGER "conversation_generated_files_manifest_complete" AFTER INSERT ON "conversation_generated_files"
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_generated_file_manifest"();
+CREATE CONSTRAINT TRIGGER "conversation_generated_file_chunks_manifest_complete" AFTER INSERT ON "conversation_generated_file_chunks"
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_generated_file_manifest"();

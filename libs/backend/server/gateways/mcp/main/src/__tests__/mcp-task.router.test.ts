@@ -37,6 +37,7 @@ function _Task(state: McpTaskStates): McpTaskRecord
 		result: null,
 		failureCode: null,
 		toolInvocationRowId: "tool-invocation-1",
+		toolInvocationId: "mcp-task-call:mcp-task-1",
 		workflowTask: { taskId: "workflow-task-1", taskName: "mcp-task.call", idempotencyKey: "workflow-key-1" },
 	};
 }

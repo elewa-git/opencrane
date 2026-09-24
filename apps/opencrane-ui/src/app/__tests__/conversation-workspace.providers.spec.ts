@@ -6,6 +6,7 @@ import { CONVERSATION_CURRENT_SUBJECT, CONVERSATION_PERSONAL_RUNS_GATEWAY, CONVE
 import { OpenCraneConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace/adapter";
 import { OpenCraneConversationEventStream } from "@opencrane/state/conversation/adapter";
 import { CONVERSATION_ASSETS_GATEWAY, OpenCraneConversationAssetsGateway } from "@opencrane/state/conversation/assets";
+import { ELICITATION_GATEWAY, OpenCraneConversationElicitationGateway } from "@opencrane/state/conversation/elicitation";
 
 import { provideConversationWorkspaceComposition } from "../conversation-workspace.providers";
 
@@ -33,7 +34,8 @@ describe("Conversation workspace app providers", function _ConversationWorkspace
 			{ provide: CONVERSATION_GROUP_CHILD_GATEWAY, useExisting: OpenCraneConversationWorkspaceGateway },
 			{ provide: CONVERSATION_COMPUTER_REVIEW_GATEWAY, useExisting: OpenCraneConversationWorkspaceGateway },
 			{ provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useExisting: OpenCraneConversationEventStream },
-			{ provide: CONVERSATION_ASSETS_GATEWAY, useClass: OpenCraneConversationAssetsGateway }
+			{ provide: CONVERSATION_ASSETS_GATEWAY, useClass: OpenCraneConversationAssetsGateway },
+			{ provide: ELICITATION_GATEWAY, useClass: OpenCraneConversationElicitationGateway }
 		]));
 	});
 });

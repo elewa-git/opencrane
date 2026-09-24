@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { McpApprovalStatus, McpConnectionStatus, McpServerType } from "@opencrane/core";
+import { McpApprovalStatus, McpConnectionStatus, McpCredentialRequirement, McpServerType } from "@opencrane/core";
 
 import { MockMcpGateway } from "../__test__/mock-mcp-gateway";
 
@@ -22,7 +22,9 @@ describe("MockMcpGateway", () =>
 		const installed = await gateway.listInstalled();
 
 		const stripe = installed.find(function byId(record): boolean { return record.serverId === "stripe"; });
+		const publicWeather = installed.find(function byId(record): boolean { return record.serverId === "public-weather"; });
 		expect(stripe?.connectionStatus).toBe(McpConnectionStatus.NeedsCredential);
+		expect(publicWeather?.connectionStatus).toBe(McpConnectionStatus.Credentialless);
 	});
 
 	it("installs a single-user server as needing a credential", async () =>
@@ -34,13 +36,29 @@ describe("MockMcpGateway", () =>
 		expect(record.connectionStatus).toBe(McpConnectionStatus.NeedsCredential);
 	});
 
-	it("installs a multi-user server ready via the admin shared key", async () =>
+	it("installs an explicitly credentialless server without activation", async () =>
 	{
 		const gateway = new MockMcpGateway();
-		await gateway.uninstall("postgres-prod");
+		await gateway.uninstall("public-weather");
 
-		const record = await gateway.install("postgres-prod");
-		expect(record.connectionStatus).toBe(McpConnectionStatus.SharedKey);
+		const record = await gateway.install("public-weather");
+		expect(record.connectionStatus).toBe(McpConnectionStatus.Credentialless);
+	});
+
+	it.each([
+		["stripe", McpServerType.SingleUser, McpCredentialRequirement.PrincipalCredential],
+		["postgres-prod", McpServerType.MultiUser, McpCredentialRequirement.SharedCredential],
+		["github", McpServerType.RemoteOauth, McpCredentialRequirement.PrincipalCredential]
+	] as const)("keeps credential-requiring %s unavailable", async (serverId, serverType, requirement) =>
+	{
+		const gateway = new MockMcpGateway();
+		await gateway.uninstall(serverId);
+
+		const server = (await gateway.listEntitledCatalogue()).find(candidate => candidate.id === serverId);
+		const record = await gateway.install(serverId);
+		expect(server?.type).toBe(serverType);
+		expect(server?.credentialRequirement).toBe(requirement);
+		expect(record.connectionStatus).toBe(McpConnectionStatus.NeedsCredential);
 	});
 
 	it("uninstalls a server so it drops off the installed list", async () =>

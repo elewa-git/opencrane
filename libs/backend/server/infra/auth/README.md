@@ -43,6 +43,11 @@ typed everywhere. Invariant: **fail-closed** — anything missing, malformed, or
 
 ## Public surface
 
+The source is grouped into `configuration/` for operator settings, `login/` for the identity-provider
+flow, `sessions/` for browser login state, `requests/` for request identity, `organizations/` for
+membership presentation, and `keys/` for mounted public-key access. Tests live with their owner.
+Consumers continue to import the same public entrypoint, `src/index.ts`.
+
 - `___AuthMiddleware`, `AuthenticatedPrincipalAdmission` — the request authentication middleware and
   its fail-closed durable-identity admission port.
 - `___LoadOidcAuthConfig`, `OidcAuthConfig`, `_IsDevAuthMode` — OIDC configuration.

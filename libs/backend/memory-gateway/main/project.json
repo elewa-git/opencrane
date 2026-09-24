@@ -1,0 +1,15 @@
+{
+  "name": "backend-memory-gateway",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/backend/memory-gateway/main/src",
+  "projectType": "library",
+  "tags": [
+    "type:lib",
+    "layer:infra",
+    "scope:memory-gateway"
+  ],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/memory-gateway/main" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/memory-gateway/main" } }
+  }
+}

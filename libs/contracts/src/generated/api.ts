@@ -4,6 +4,42 @@
  */
 
 export interface paths {
+    "/mcp/installed/{serverId}/connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Activate or replace the calling person's exact MCP connection */
+        put: operations["activatePersonalMcpConnection"];
+        post?: never;
+        /** Revoke the calling person's connection before credential cleanup */
+        delete: operations["revokePersonalMcpConnection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/mcp/servers/{serverId}/service-connections/{agentServiceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Activate the managed assistant's exact connection with current organisation administration */
+        put: operations["activateServiceMcpConnection"];
+        post?: never;
+        /** Revoke the managed assistant's connection with current organisation administration */
+        delete: operations["revokeServiceMcpConnection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/mcp/catalog": {
         parameters: {
             query?: never;
@@ -566,6 +602,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/conversations/{conversationId}/elicitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List pending participant-input requests
+         * @description Returns at most fifty unexpired requests assigned to the authenticated participant in the selected readable conversation. Protected purpose payloads, credentials, and resume material are never returned.
+         */
+        get: operations["listMyOpenConversationElicitations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/conversations/{conversationId}/elicitations/{requestId}": {
         parameters: {
             query?: never;
@@ -1015,6 +1071,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/organization/members/{membershipId}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove another non-Owner member's current access
+         * @description Standalone retains the suspended membership and records removal atomically. Authorized retries return that state. Self-removal and Owner removal are refused. Fleet removal is unsupported and never falls back to local writes.
+         */
+        post: operations["removeOrganizationMember"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/organization/members": {
         parameters: {
             query?: never;
@@ -1271,7 +1347,7 @@ export interface paths {
         put?: never;
         /**
          * Post one encrypted participant message
-         * @description Encrypts plaintext before PostgreSQL persistence and appends only an opaque payload reference and ciphertext digest to KurrentDB.
+         * @description Encrypts plaintext and atomically binds up to ten selected Ready PDF assets before appending opaque text and artifact coordinates to KurrentDB. Text may be empty only when at least one asset is selected. Exact retries preserve the original text, asset set, author and activation.
          */
         post: operations["postMyConversationMessage"];
         delete?: never;
@@ -1456,6 +1532,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/organization/company-assistant/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the company assistant's current tool selection
+         * @description Requires current Organization Administer. Returns the exact active immutable revision and sorted tool revision IDs. This read does not record effect admission or supply external credentials.
+         */
+        get: operations["getCompanyAssistantTools"];
+        /**
+         * Replace the company assistant's tool selection
+         * @description Requires current Organization Administer and Assign on every selected same-silo ready tool revision of an active published server. Publishes an immutable successor and reconciles only the company's own Use/Invoke grants for removed and selected tools. A current unchanged selection is a no-op after fresh authorization. A stale expected revision always returns 409, including a retry after an uncertain successful commit; GET the authoritative selection before editing again. Empty selection removes all tools. This API creates no install or external credential binding and cannot borrow human private credentials.
+         */
+        put: operations["setCompanyAssistantTools"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/organization/company-assistant": {
         parameters: {
             query?: never;
@@ -1470,6 +1570,30 @@ export interface paths {
          * @description Requires current Organization Administer and selected Model Use. Select current human Principal IDs explicitly. Once a company assistant exists, this call returns created:false and leaves its name, policy, grants and lifecycle unchanged. Retrying can finish identity establishment after a committed setup; it cannot revive a suspended or revoked identity.
          */
         post: operations["provisionCompanyAssistant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/agent/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the personal agent's current tool selection
+         * @description Requires current Edit on the caller's unique active personal AgentService. Returns its immutable active revision and sorted tool revision IDs without recording effect admission or exposing credentials.
+         */
+        get: operations["getPersonalAgentTools"];
+        /**
+         * Replace the personal agent's tool selection
+         * @description Requires current AgentService Edit and Assign on every selected same-silo ready tool revision of an active published MCP server. Publishes an immutable successor while preserving its persona, model, skills, budget and boundaries, and reconciles only the owner's exact personal Use and Invoke grants. A stale expected revision returns 409, including a retry after an uncertain successful commit. Empty selection removes all tools.
+         */
+        put: operations["setPersonalAgentTools"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1638,6 +1762,15 @@ export interface components {
             /** @enum {string} */
             status: "created" | "updated" | "deleted";
         };
+        OrganizationMemberRemovalCapability: {
+            /** @constant */
+            state: "available";
+        } | {
+            /** @constant */
+            state: "unavailable";
+            /** @enum {string} */
+            reason: "self" | "owner" | "inactive" | "authority_unsupported" | "not_authorized";
+        };
         OrganizationMember: {
             membershipId: string;
             displayName: string;
@@ -1650,6 +1783,7 @@ export interface components {
             /** Format: date-time */
             joinedAt: string;
             isCurrentUser: boolean;
+            removal: components["schemas"]["OrganizationMemberRemovalCapability"];
         };
         OrganizationInvitation: {
             invitationId: string;
@@ -1695,7 +1829,45 @@ export interface components {
         AcceptOrganizationInvitationResult: {
             member: components["schemas"]["OrganizationMember"];
         };
-        /** @description An MCP server exposed by the operator API. Display metadata is optional because this shape serves both the entitled catalogue and the organisation-admin governance view; tools is always present and empty when no Ready OCI revision exists. */
+        RemoveOrganizationMemberResult: {
+            member: components["schemas"]["OrganizationMember"];
+        };
+        McpConnectionCommand: {
+            /** @description Caller key that returns the same admitted generation after an uncertain response. */
+            idempotencyKey: string;
+            /** @description Generation observed before this command, or null before any generation. An identical retry must retain this value; a new command cannot replace a different current generation. */
+            expectedGeneration: number | null;
+            /** @description Material matching the registered server's explicit credential requirement. The token is write-only and never appears in responses or workflow input. */
+            credential: {
+                /** @enum {string} */
+                kind: "none";
+            } | {
+                /** @enum {string} */
+                kind: "bearer";
+                /** @description Bearer token used only for the exact admitted credential custody operation. */
+                token: string;
+            };
+        };
+        McpConnectionProjection: {
+            /**
+             * @description Current connection state. Every effect independently rechecks authority and the saved generation.
+             * @enum {string}
+             */
+            connectionStatus: "needs-credential" | "credentialless" | "activating" | "active" | "recovery-required";
+            /** @description Current admitted generation, or null before connection setup. */
+            connectionGeneration: number | null;
+            /**
+             * Format: date-time
+             * @description Time exact credential custody committed, or null when no credential was stored.
+             */
+            credentialUpdatedAt: string | null;
+            /**
+             * @description Safe failure category without provider responses, secret coordinates or material.
+             * @enum {string|null}
+             */
+            failureCode: "authority-ended" | "endpoint-changed" | "credential-conflict" | "credential-unavailable" | "authentication-rejected" | "unsupported-protocol" | "discovery-rejected" | "workflow-exhausted" | null;
+        };
+        /** @description An MCP server exposed by the operator API. Display metadata is optional because this shape serves both the entitled catalogue and the organisation-admin governance view; tools is always present and empty when no entitled Ready revision exists. */
         McpCatalogServer: {
             /** @description Stable server identifier. */
             id: string;
@@ -1708,23 +1880,28 @@ export interface components {
             /** @description Frontend icon key for the server. */
             glyph?: string;
             /**
-             * @description How the server is configured for connection: single-user requires a caller-owned credential through an external custody flow, multi-user uses an administrator-managed shared key, and remote-oauth requires an OAuth handshake outside this API.
+             * @description How the catalogue presents the connection. This value does not grant installation readiness.
              * @enum {string}
              */
             type?: "single-user" | "multi-user" | "remote-oauth";
+            /**
+             * @description Credential custody required for execution. Credential-requiring installations become usable only after an authorized exact-generation activation.
+             * @enum {string}
+             */
+            credentialRequirement: "credentialless" | "principal-credential" | "shared-credential";
             /**
              * @description Organisation-admin review state. Only published servers appear in the user-facing catalogue; approved servers remain hidden until publication.
              * @enum {string}
              */
             approvalStatus?: "pending-review" | "approved" | "published" | "disabled";
-            /** @description Input fields required by an external custody flow for a single-user connection. This API describes requested values but neither receives nor returns credential material. */
+            /** @description Fields declared by the server for credential setup, independent of its presentation type. Catalogue reads describe the fields and never return credential values. The separate write-only activation command supports the declared authentication profile. */
             credentialSchema?: components["schemas"]["CredentialField"][];
             /** @description Human-readable summary of access grants, returned for the governance view. */
             entitlementSummary?: string;
-            /** @description Tools from the newest Ready OCI server revision. User catalogue rows are entitlement-filtered; administrator visibility never grants execution permission. */
+            /** @description Tools from the newest entitled Ready server revision. User catalogue rows are entitlement-filtered; administrator visibility never grants execution permission. */
             tools: components["schemas"]["McpAssignableToolRevision"][];
         };
-        /** @description An immutable OCI-backed MCP tool schema selected from the newest Ready server revision. Governance eligibility does not replace caller authorization. */
+        /** @description An immutable MCP tool schema selected from the newest Ready server revision. Governance eligibility does not replace caller authorization. */
         McpAssignableToolRevision: {
             /** @description Immutable tool revision identifier saved during discovery. */
             toolRevisionId: string;
@@ -1749,7 +1926,7 @@ export interface components {
              */
             readiness: "ready";
         };
-        /** @description One input an external custody flow requires to connect a single-user MCP server. This API describes the input but neither receives nor returns its value. */
+        /** @description One field declared by an MCP server for credential setup. This API describes the field but neither receives nor returns its value. */
         CredentialField: {
             /** @description Stable submission key for the value. */
             key: string;
@@ -1766,13 +1943,30 @@ export interface components {
         };
         /** @description An MCP server installed by the calling user, with its current connection state. */
         McpInstalled: {
+            /**
+             * @description Safe installation and connection state; current authority and exact generation still govern every execution.
+             * @enum {string}
+             */
+            connectionStatus: "needs-credential" | "credentialless" | "activating" | "active" | "recovery-required";
+            /** @description Current admitted generation, or null before connection setup. */
+            connectionGeneration: number | null;
+            /**
+             * Format: date-time
+             * @description Time exact credential custody committed, or null when no credential was stored.
+             */
+            credentialUpdatedAt: string | null;
+            /**
+             * @description Safe failure category without provider responses, secret coordinates or material.
+             * @enum {string|null}
+             */
+            failureCode: "authority-ended" | "endpoint-changed" | "credential-conflict" | "credential-unavailable" | "authentication-rejected" | "unsupported-protocol" | "discovery-rejected" | "workflow-exhausted" | null;
             /** @description Identifier of the installed server. */
             serverId: string;
             /**
-             * @description Recorded activation requirement: needs-credential requires an external custody flow, while shared-key records an administrator-managed shared key. This API does not activate either state.
+             * @description Durable installation and removal state. Removed installations are omitted from lists.
              * @enum {string}
              */
-            connectionStatus?: "needs-credential" | "shared-key";
+            lifecycleState: "installed" | "removing" | "removed";
             /**
              * Format: date-time
              * @description ISO-8601 timestamp of the server's last use, or null when it has never been used.
@@ -1837,7 +2031,7 @@ export interface components {
             /** @description JSON value inserted into the exact top-level tool argument. */
             value: unknown;
         };
-        /** @description One idempotent asynchronous call of a discovered tool on an installed OCI-backed MCP server. */
+        /** @description One idempotent asynchronous call of a discovered tool on an installed MCP server. */
         McpTaskSubmission: {
             /** @description Caller key that makes retries select the same durable task. */
             idempotencyKey: string;
@@ -1849,11 +2043,11 @@ export interface components {
             arguments: unknown;
             inputRequest?: components["schemas"]["McpTaskInputRequest"];
         };
-        /** @description Caller-visible durable state for one OCI-backed MCP tool call. Arguments, workflow receipts, and executor identifiers are never returned. */
+        /** @description Caller-visible durable state for one MCP tool call. Arguments, workflow receipts, and executor identifiers are never returned. */
         McpTask: {
             /** @description Stable task identifier. */
             id: string;
-            /** @description Immutable OCI-backed MCP server revision. */
+            /** @description Immutable MCP server revision. */
             serverRevisionId: string;
             /** @description Immutable discovered tool revision. */
             toolRevisionId: string;
@@ -2186,7 +2380,11 @@ export interface components {
             runId: string;
             attempt: number;
             /** @enum {string} */
-            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_input" | "recovery_required" | "completed" | "failed";
+            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_input" | "recovery_required" | "cancelling" | "cancelled" | "completed" | "failed";
+            latestTool: {
+                /** @enum {string} */
+                phase: "queued" | "running" | "result_received" | "needs_attention";
+            } | null;
             conversationId: string | null;
             agentRevisionId: string;
             /** Format: date-time */
@@ -2281,6 +2479,220 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    activatePersonalMcpConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serverId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpConnectionCommand"];
+            };
+        };
+        responses: {
+            /** @description The exact connection command is saved. Its safe status may remain pending while custody or discovery completes. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpConnectionProjection"];
+                };
+            };
+            /** @description The connection command is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The connection is unavailable to this caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The command conflicts with saved connection work. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revokePersonalMcpConnection: {
+        parameters: {
+            query: {
+                commandId: string;
+                /** @description Connection generation the caller intends to revoke. An identical retry must retain this value. */
+                expectedGeneration: number;
+            };
+            header?: never;
+            path: {
+                serverId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The exact connection command is saved. Its safe status may remain pending while custody or discovery completes. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpConnectionProjection"];
+                };
+            };
+            /** @description The connection command is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The connection is unavailable to this caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The command conflicts with saved connection work. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    activateServiceMcpConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serverId: string;
+                agentServiceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["McpConnectionCommand"];
+            };
+        };
+        responses: {
+            /** @description The exact connection command is saved. Its safe status may remain pending while custody or discovery completes. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpConnectionProjection"];
+                };
+            };
+            /** @description The connection command is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The connection is unavailable to this caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The command conflicts with saved connection work. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revokeServiceMcpConnection: {
+        parameters: {
+            query: {
+                commandId: string;
+                /** @description Connection generation the caller intends to revoke. An identical retry must retain this value. */
+                expectedGeneration: number;
+            };
+            header?: never;
+            path: {
+                serverId: string;
+                agentServiceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The exact connection command is saved. Its safe status may remain pending while custody or discovery completes. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["McpConnectionProjection"];
+                };
+            };
+            /** @description The connection command is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The connection is unavailable to this caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The command conflicts with saved connection work. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     listMcpCatalog: {
         parameters: {
             query?: never;
@@ -2363,6 +2775,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description Installation removal is still in progress. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     uninstallMcpServer: {
@@ -2376,6 +2797,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description Removal accepted. The installed list retains a Removing row until execution and credential cleanup finish. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Server uninstalled. */
             204: {
                 headers: {
@@ -2438,6 +2866,8 @@ export interface operations {
                     description?: string;
                     /** Format: uri */
                     endpoint: string;
+                    /** @enum {string} */
+                    credentialRequirement: "credentialless" | "principal-credential" | "shared-credential";
                 };
             };
         };
@@ -4143,6 +4573,9 @@ export interface operations {
                                 externalSystem?: string;
                                 consequence: string;
                                 cost?: string;
+                                proposedArguments?: {
+                                    [key: string]: unknown;
+                                } | null;
                             } | {
                                 /** @constant */
                                 kind: "single_choice";
@@ -4211,6 +4644,118 @@ export interface operations {
             };
         };
     };
+    listMyOpenConversationElicitations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Conversation containing the request. */
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current owned requests in oldest-first order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        elicitations: {
+                            /** @constant */
+                            version: "opencrane.elicitation.v1";
+                            requestId: string;
+                            conversationId: string;
+                            runId: string;
+                            attempt: number;
+                            assignedParticipantId: string;
+                            /** @enum {string} */
+                            purpose: "runtime_input" | "tool_approval" | "personal_memory_permission" | "a2ui_action";
+                            /** @enum {string} */
+                            state: "requested" | "answered" | "declined" | "expired" | "cancelled";
+                            body: {
+                                /** @constant */
+                                kind: "approval";
+                                prompt: string;
+                                action: string;
+                                target: string;
+                                dataUse: string;
+                                externalSystem?: string;
+                                consequence: string;
+                                cost?: string;
+                                proposedArguments?: {
+                                    [key: string]: unknown;
+                                } | null;
+                            } | {
+                                /** @constant */
+                                kind: "single_choice";
+                                prompt: string;
+                                choices: {
+                                    value: string;
+                                    label: string;
+                                    description?: string;
+                                }[];
+                            } | {
+                                /** @constant */
+                                kind: "multiple_choice";
+                                prompt: string;
+                                choices: {
+                                    value: string;
+                                    label: string;
+                                    description?: string;
+                                }[];
+                                minimumSelections: number;
+                                maximumSelections: number;
+                            } | {
+                                /** @constant */
+                                kind: "free_text";
+                                prompt: string;
+                                maximumLength: number;
+                                allowEmpty: boolean;
+                            };
+                            requiresStepUp: boolean;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            /** Format: date-time */
+                            expiresAt: string;
+                            /** Format: date-time */
+                            resolvedAt?: string;
+                            safeReason?: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description The selected conversation coordinate is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No authenticated browser session owns the request list. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The elicitation authority is temporarily unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getMyConversationElicitation: {
         parameters: {
             query?: never;
@@ -4254,6 +4799,9 @@ export interface operations {
                                 externalSystem?: string;
                                 consequence: string;
                                 cost?: string;
+                                proposedArguments?: {
+                                    [key: string]: unknown;
+                                } | null;
                             } | {
                                 /** @constant */
                                 kind: "single_choice";
@@ -5749,8 +6297,10 @@ export interface operations {
                             id: string;
                             conversationId: string;
                             messageId: string | null;
+                            artifactId: string | null;
+                            artifactRevisionId: string | null;
                             /** @enum {string} */
-                            provenance: "participant_upload";
+                            provenance: "participant_upload" | "agent_output";
                             /** @enum {string} */
                             state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
@@ -5816,8 +6366,10 @@ export interface operations {
                             id: string;
                             conversationId: string;
                             messageId: string | null;
+                            artifactId: string | null;
+                            artifactRevisionId: string | null;
                             /** @enum {string} */
-                            provenance: "participant_upload";
+                            provenance: "participant_upload" | "agent_output";
                             /** @enum {string} */
                             state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
@@ -5846,8 +6398,10 @@ export interface operations {
                             id: string;
                             conversationId: string;
                             messageId: string | null;
+                            artifactId: string | null;
+                            artifactRevisionId: string | null;
                             /** @enum {string} */
-                            provenance: "participant_upload";
+                            provenance: "participant_upload" | "agent_output";
                             /** @enum {string} */
                             state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
@@ -5980,8 +6534,10 @@ export interface operations {
                             id: string;
                             conversationId: string;
                             messageId: string | null;
+                            artifactId: string | null;
+                            artifactRevisionId: string | null;
                             /** @enum {string} */
-                            provenance: "participant_upload";
+                            provenance: "participant_upload" | "agent_output";
                             /** @enum {string} */
                             state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
@@ -6052,8 +6608,10 @@ export interface operations {
                             id: string;
                             conversationId: string;
                             messageId: string | null;
+                            artifactId: string | null;
+                            artifactRevisionId: string | null;
                             /** @enum {string} */
-                            provenance: "participant_upload";
+                            provenance: "participant_upload" | "agent_output";
                             /** @enum {string} */
                             state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
@@ -6475,6 +7033,77 @@ export interface operations {
                 };
             };
             /** @description Personal asset metadata could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    removeOrganizationMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                membershipId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Removed access or recovered an authorized retry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoveOrganizationMemberResult"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -7532,9 +8161,15 @@ export interface operations {
                 "application/json": {
                     /** Format: uuid */
                     idempotencyKey: string;
+                    /** @description Participant text limited to 65536 UTF-8 bytes; it may be empty only when assetIds is non-empty. */
                     text: string;
-                    /** @enum {string} */
-                    activation: "none" | "start" | "interrupt";
+                    /** @description Unique conversation asset identifiers; the server stores them in ASCII order. */
+                    assetIds: string[];
+                    /**
+                     * @description Stop requests cancellation of the original requester's current turn without starting another turn. Admission is not cancellation completion.
+                     * @enum {string}
+                     */
+                    activation: "none" | "start" | "interrupt" | "stop";
                 };
             };
         };
@@ -7579,14 +8214,14 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Conversation is unavailable to the current participant. */
+            /** @description Conversation or selected asset is unavailable to the current participant. */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Idempotency or activation conflict. */
+            /** @description Idempotency, asset binding or activation conflict. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8010,6 +8645,131 @@ export interface operations {
             };
         };
     };
+    getCompanyAssistantTools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current selection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        agentServiceId: string;
+                        activeRevisionId: string;
+                        toolRevisionIds: string[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current administrator permission denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Active published company assistant unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Selection dependency unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    setCompanyAssistantTools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedActiveRevisionId: string;
+                    toolRevisionIds: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Committed successor or unchanged current selection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        agentServiceId: string;
+                        activeRevisionId: string;
+                        toolRevisionIds: string[];
+                    };
+                };
+            };
+            /** @description Invalid tool selection. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current assignment permission or selected tool unavailable. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Active published company assistant unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Active revision changed; read current selection before another edit. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Assignment dependency unavailable; a failed response may follow a commit, so read current selection. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     provisionCompanyAssistant: {
         parameters: {
             query?: never;
@@ -8079,6 +8839,131 @@ export interface operations {
                 content?: never;
             };
             /** @description Setup dependency unavailable; the same request may be retried. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getPersonalAgentTools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current selection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        agentServiceId: string;
+                        activeRevisionId: string;
+                        toolRevisionIds: string[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current personal-agent permission denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unique active published personal agent unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Selection dependency unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    setPersonalAgentTools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedActiveRevisionId: string;
+                    toolRevisionIds: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Committed successor or authorized unchanged selection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        agentServiceId: string;
+                        activeRevisionId: string;
+                        toolRevisionIds: string[];
+                    };
+                };
+            };
+            /** @description Invalid tool selection. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current Edit, selected Assign, or selected tool availability denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unique active published personal agent unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Active revision changed; read the current selection before another edit. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Assignment dependency unavailable; read current selection after an uncertain response. */
             503: {
                 headers: {
                     [name: string]: unknown;

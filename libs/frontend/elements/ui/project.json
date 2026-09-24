@@ -39,14 +39,17 @@
 				"{workspaceRoot}/libs/frontend/features/conversation-elicitation/src/**/*",
 				"{workspaceRoot}/libs/frontend/elements/conversation/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/conversation-workspace/src/**/*",
-				"{workspaceRoot}/libs/frontend/features/settings/src/**/*"
+				"{workspaceRoot}/libs/frontend/features/settings/src/**/*",
+				"{workspaceRoot}/libs/frontend/features/tools/src/**/*",
+				"{workspaceRoot}/libs/frontend/features/tools/theme.scss"
 			],
 			"options": {
 				"browserTarget": "frontend-elements-ui:build-storybook",
 				"configDir": "libs/frontend/elements/ui/.storybook",
 				"tsConfig": "libs/frontend/elements/ui/.storybook/tsconfig.json",
 				"styles": [
-					"libs/frontend/core/src/lib/theme/opencrane-theme.scss"
+					"libs/frontend/core/src/lib/theme/opencrane-theme.scss",
+					"libs/frontend/features/tools/theme.scss"
 				],
 				"port": 4400,
 				"host": "127.0.0.1",
@@ -74,7 +77,9 @@
 				"{workspaceRoot}/libs/frontend/features/conversation-elicitation/src/**/*",
 				"{workspaceRoot}/libs/frontend/elements/conversation/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/conversation-workspace/src/**/*",
-				"{workspaceRoot}/libs/frontend/features/settings/src/**/*"
+				"{workspaceRoot}/libs/frontend/features/settings/src/**/*",
+				"{workspaceRoot}/libs/frontend/features/tools/src/**/*",
+				"{workspaceRoot}/libs/frontend/features/tools/theme.scss"
 			],
 			"outputs": [
 				"{options.outputDir}"
@@ -84,7 +89,8 @@
 				"configDir": "libs/frontend/elements/ui/.storybook",
 				"tsConfig": "libs/frontend/elements/ui/.storybook/tsconfig.json",
 				"styles": [
-					"libs/frontend/core/src/lib/theme/opencrane-theme.scss"
+					"libs/frontend/core/src/lib/theme/opencrane-theme.scss",
+					"libs/frontend/features/tools/theme.scss"
 				],
 				"outputDir": "dist/storybook/frontend-elements-ui",
 				"compodoc": false,

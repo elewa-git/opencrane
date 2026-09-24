@@ -1,8 +1,19 @@
-import { MemoryGatewayProtocolError } from "./personal-memory-record";
+import { z } from "zod";
+
+import { MemoryGatewayProtocolError } from "./personal-memory-record-receipt";
 import type { MemoryFact, MemoryProvenance, ScopedMemoryFact } from "./memory-gateway-client.types";
 
 /** Version number written into each stored scoped record, so its provenance can be read back safely. A record with any other version is dropped on decode. */
 const _SCOPED_ENVELOPE_VERSION = 1;
+
+/**
+ * Cognee 1.2.1 CHUNKS payload fields that OpenCrane can interpret safely.
+ *
+ * Cognee adds other passage metadata, so this validator deliberately strips unknown fields. Both
+ * identifiers are required: `id` names the returned chunk, while `document_id` names the Data row
+ * that the dataset mutation API accepts.
+ */
+const _CogneeChunkSchema = z.object({ id: z.string().uuid(), document_id: z.string().uuid(), text: z.string() }).strip();
 
 /** Return a plain object suitable for security-boundary parsing. */
 function _AsObject(value: unknown): Record<string, unknown> | null
@@ -50,10 +61,10 @@ export function __DecodeScopedEnvelope(raw: string): { readonly content: string;
 /**
  * Convert a Cognee search response into facts, keeping only entries the gateway fully identified.
  *
- * An entry becomes a fact only if it carries BOTH an identifier and text; a malformed entry is
- * dropped rather than given an invented id. The id may arrive as `id`, `data_id`, or `document_id`,
- * and the text as `text`, `content`, or `chunk`. A response whose overall shape is unrecognised is a
- * protocol failure, so a broken contract can never look like "no facts found".
+ * An entry becomes a fact only when it carries Cognee's UUID chunk `id`, UUID `document_id`, and
+ * `text`. A malformed entry is dropped rather than given an invented identity. The response may
+ * contain other Cognee fields, which are ignored. A response whose overall shape is unrecognised is
+ * a protocol failure, so a broken contract can never look like "no facts found".
  *
  * Called by: http-cognee-memory-gateway-client.ts inside `query`, and {@link __ParseScopedFacts}
  * below with an unbounded limit.
@@ -69,12 +80,10 @@ export function __ParseSearchFacts(payload: unknown, maxResults: number): readon
 	const facts: MemoryFact[] = [];
 	for (const entry of entries)
 	{
-		const item = _AsObject(entry);
-		if (!item) continue;
-		const factId = item["id"] ?? item["data_id"] ?? item["document_id"];
-		const content = item["text"] ?? item["content"] ?? item["chunk"];
-		if (!_IsText(factId) || typeof content !== "string") continue;
-		facts.push({ factId, content });
+		const parsed = _CogneeChunkSchema.safeParse(entry);
+		if (!parsed.success)
+			continue;
+		facts.push({ cogneeDocumentId: parsed.data.document_id, cogneeChunkId: parsed.data.id, content: parsed.data.text });
 		if (facts.length >= maxResults) break;
 	}
 	return facts;
@@ -102,7 +111,7 @@ export function __ParseScopedFacts(payload: unknown, maxResults: number): readon
 	{
 		const envelope = __DecodeScopedEnvelope(fact.content);
 		if (envelope === null) continue;
-		facts.push({ factId: fact.factId, content: envelope.content, provenance: envelope.provenance });
+		facts.push({ cogneeDocumentId: fact.cogneeDocumentId, cogneeChunkId: fact.cogneeChunkId, content: envelope.content, provenance: envelope.provenance });
 		if (facts.length >= maxResults) break;
 	}
 	return facts;

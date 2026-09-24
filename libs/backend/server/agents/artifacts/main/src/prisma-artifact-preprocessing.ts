@@ -10,6 +10,7 @@ import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
 import type { ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputLeaseProjection, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, ArtifactPreprocessSourceLeaseProjection, CompleteArtifactPreprocessJobResult, FailArtifactPreprocessJobResult, IssueArtifactPreprocessOutputLeaseResult } from "./artifact-preprocessing.types";
 import { _ARTIFACT_PREPROCESS_RETRY_DELAY_MILLISECONDS, _ArtifactPreprocessFailureTransition } from "./artifact-preprocess-retry-policy";
+import type { ConversationAssetPreprocessLifecycleRepository } from "./artifact-preprocess-conversation-lifecycle.types";
 import { PrismaArtifactPreprocessControllerRepository } from "./prisma-artifact-preprocess-controller-authority";
 
 /** How long a source-read permission lasts so it expires before any later delivery can be claimed. */
@@ -40,10 +41,10 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 	/** Task-fenced controller lifecycle bound to the same private transaction. */
 	private readonly controller: PrismaArtifactPreprocessControllerRepository;
 	/** Creates the repository for one already-open preprocessing transaction. */
-	constructor(transaction: Prisma.TransactionClient)
+	constructor(transaction: Prisma.TransactionClient, private readonly conversationAssets: ConversationAssetPreprocessLifecycleRepository)
 	{
 		this.transaction = transaction;
-		this.controller = new PrismaArtifactPreprocessControllerRepository(this.transaction);
+		this.controller = new PrismaArtifactPreprocessControllerRepository(this.transaction, conversationAssets);
 	}
 
 	/** Issues or reloads the controller claim for one exact admitted task. */
@@ -256,6 +257,8 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 				where: { id: job.id },
 				data: { state, outputLeaseId: null, failureCode: command.failureCode, nextAttemptAt: transition.nextAttemptAt },
 			});
+			if (transition.terminal)
+				await this.conversationAssets.fail(job.sourceRevisionId);
 			return { status: transition.terminal ? "terminal" : "retryable" };
 		}
 	}

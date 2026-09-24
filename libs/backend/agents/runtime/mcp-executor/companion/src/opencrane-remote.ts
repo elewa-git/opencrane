@@ -46,7 +46,7 @@ async function _Claim(options: McpCompanionRemoteOptions, fetcher: NonNullable<M
 		const value = await _ReadBoundedJson(response, options.maximumResponseBytes);
 		const claim = __ParseMcpCompanionClaimResponse(value);
 		const lease = { executionId: claim.executionId, claimFence: claim.claimFence, expiresAt: claim.expiresAt };
-		return claim.kind === McpCompanionCommandKinds.Discovery ? { kind: claim.kind, lease } : { kind: claim.kind, lease, invocationId: claim.invocationId, toolName: claim.toolName, arguments: claim.arguments };
+		return claim.kind === McpCompanionCommandKinds.Discovery ? { kind: claim.kind, lease } : { kind: claim.kind, lease, invocationId: claim.invocationId, toolName: claim.toolName, arguments: claim.arguments, inputSchema: claim.inputSchema };
 	});
 }
 

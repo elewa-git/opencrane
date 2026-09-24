@@ -1,6 +1,7 @@
 import type { Request } from "express";
 
 import type { OrganizationMemberDirectory } from "./directory.types";
+import type { RemoveOrganizationMemberCommand, RemoveOrganizationMemberResult } from "./removal.types";
 import type { AcceptOrganizationInvitationCommand, AcceptOrganizationInvitationResult, CreateOrganizationInvitationsCommand, CreateOrganizationInvitationsResult, OrganizationInviteValidationResult, ResendOrganizationInvitationCommand, ResendOrganizationInvitationResult, ValidateOrganizationInvitationsCommand } from "./invitations.types";
 
 /** Verified caller facts supplied by the authenticated application boundary. */
@@ -35,6 +36,8 @@ export interface OrganizationMembershipAuthority
 {
 	/** Returns the authoritative directory for a currently authorized caller. */
 	directory(caller: OrganizationMembershipCaller): Promise<OrganizationMemberDirectory>;
+	/** Removes another non-Owner member's access, or refuses an unsupported deployment authority. */
+	remove(command: RemoveOrganizationMemberCommand): Promise<RemoveOrganizationMemberResult>;
 	/** Validates proposed recipients without changing state. */
 	validate(command: ValidateOrganizationInvitationsCommand): Promise<OrganizationInviteValidationResult>;
 	/** Creates or recovers one idempotent invitation batch. */

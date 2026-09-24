@@ -13,6 +13,15 @@ clustertenantManager:
       pullPolicy: IfNotPresent
     persistence:
       size: 1Gi
+  additionalCaCertificates:
+    existingSecret: hosted-generated-file-ca
+    secretKey: ca.crt
+    revision: hosted-generated-file-v1
+  workflows:
+    ociRegistry:
+      authorization:
+        existingSecret: hosted-generated-file-registry-authorization
+        secretKey: authorization
 
 controlPlaneSpa:
   image:
@@ -33,6 +42,37 @@ artifactService:
     pullPolicy: IfNotPresent
   persistence:
     size: 1Gi
+
+artifactScanner:
+  enabled: true
+  namespace: opencrane-develop-smoke-artifact-scanning
+  image:
+    repository: k3d-opencrane-develop-smoke-registry:5000/opencrane-artifact-scanner
+    pullPolicy: IfNotPresent
+
+agentController:
+  enabled: true
+  image:
+    repository: k3d-opencrane-develop-smoke-registry:5000/opencrane-agent-controller
+    pullPolicy: IfNotPresent
+  skillAuthoringValidation:
+    image:
+      repository: k3d-opencrane-develop-smoke-registry:5000/opencrane-skill-authoring
+      pullPolicy: IfNotPresent
+
+opencrane-mcp-executor:
+  mcpExecutor:
+    namespace: opencrane-develop-smoke-mcp-executors
+    image:
+      repository: k3d-opencrane-develop-smoke-registry:5000/opencrane-mcp-executor
+      pullPolicy: IfNotPresent
+
+sharedPlatform:
+  litellm:
+    mode: instance
+
+litellm:
+  enabled: true
 
 historyStore:
   kurrentdb:

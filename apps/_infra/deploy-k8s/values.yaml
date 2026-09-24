@@ -475,6 +475,10 @@ clustertenantManager:
   conversationPrivatePayloadKeyring:
     existingSecret: opencrane-conversation-private-payload
     secretKey: keyring.json
+  # -- Dedicated HMAC keyring for replaying MCP connection commands without saving bearer tokens.
+  mcpConnectionMaterialKeyring:
+    existingSecret: opencrane-mcp-connection-material
+    secretKey: keyring.json
   # -- Bound run admission before snapshot assembly can take a pooled PostgreSQL connection.
   # These apply per silo and AgentService; keep the active limit below the server's five-connection
   # Prisma budget so a hot service cannot starve unrelated control-plane work.
@@ -487,8 +491,8 @@ clustertenantManager:
     databasePoolSize: 2
     workerConcurrency: 2
     pollIntervalMilliseconds: 100
-    mcpEraProbeTimeoutMilliseconds: 5000
-    mcpEraProbeMaximumResponseBytes: 65536
+    mcpRemoteTimeoutMilliseconds: 5000
+    mcpRemoteMaximumResponseBytes: 65536
     # -- OCI Image Layout ZIP admission imports accepted MCP images into this fixed repository.
     # The reserved .invalid default is non-routable; a deployment profile must name its registry.
     ociRegistry:

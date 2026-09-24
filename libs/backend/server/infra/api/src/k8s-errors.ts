@@ -8,7 +8,7 @@
  *
  * Called by: {@link _IsK8sNotFound} and {@link _IsK8sConflict} in this file; those two are
  * what callers use. `_IsK8sNotFound` is used by
- * libs/backend/server/infra/auth/src/per-org-client.ts.
+ * libs/backend/server/infra/auth/src/login/per-org-client.ts.
  *
  * @param err  - The value from a `catch`; any type is accepted.
  * @param code - The HTTP status code to look for, for example 404.

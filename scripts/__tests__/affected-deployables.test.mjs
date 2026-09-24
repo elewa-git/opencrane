@@ -10,6 +10,7 @@ import { parse } from "yaml";
 import {
 	selectAffectedDeployables,
 	selectApiContractChanged,
+	selectCogneeMemoryContractRequired,
 	selectDevelopSmokeImages,
 	selectDevelopSmokeInputsChanged,
 	selectDevelopSmokeProjects,
@@ -173,6 +174,10 @@ test("preserves an app-owned Docker target in the publication matrix", function 
 test("selects the complete current-silo image set from app-owned container metadata", function _SelectsDevelopSmokeImages()
 {
 	const projects = [
+		["agent-controller", "opencrane-agent-controller", "apps/agent-controller/deploy/Dockerfile"],
+		["artifact-scanner", "opencrane-artifact-scanner", "apps/artifact-scanner/deploy/Dockerfile"],
+		["mcp-executor", "opencrane-mcp-executor", "apps/mcp-executor/deploy/Dockerfile"],
+		["mcp-file-generator", "opencrane-mcp-file-generator", "apps/mcp-file-generator/deploy/Dockerfile"],
 		["opencrane", "opencrane-server", "apps/opencrane/deploy/Dockerfile"],
 		["opencrane-ui", "opencrane-ui", "apps/opencrane-ui/deploy/Dockerfile"],
 		["cognee", "opencrane-cognee", "apps/_infra/cognee/deploy/Dockerfile"],
@@ -180,17 +185,23 @@ test("selects the complete current-silo image set from app-owned container metad
 		["kurrentdb", "opencrane-kurrentdb-bootstrap", "apps/_infra/kurrentdb/deploy/Dockerfile"],
 		["memory-gateway", "opencrane-memory-gateway", "apps/memory-gateway/deploy/Dockerfile"],
 		["artifact-service", "opencrane-artifact-service", "apps/artifact-service/deploy/Dockerfile"],
+		["skill-authoring", "opencrane-skill-authoring", "apps/skill-authoring/deploy/Dockerfile"],
 	].map(function _Project([name, image, dockerfile]) {
 		return { name, targets: { container: { metadata: { release: { image, dockerfile } } } } };
 	});
 	assert.deepEqual(selectDevelopSmokeImages(projects), [
+		{ project: "agent-controller", image: "opencrane-agent-controller", dockerfile: "apps/agent-controller/deploy/Dockerfile" },
+		{ project: "artifact-scanner", image: "opencrane-artifact-scanner", dockerfile: "apps/artifact-scanner/deploy/Dockerfile" },
 		{ project: "artifact-service", image: "opencrane-artifact-service", dockerfile: "apps/artifact-service/deploy/Dockerfile" },
 		{ project: "cognee", image: "opencrane-cognee", dockerfile: "apps/_infra/cognee/deploy/Dockerfile" },
 		{ project: "conversation-computer", image: "opencrane-conversation-computer", dockerfile: "apps/conversation-computer/deploy/Dockerfile" },
 		{ project: "kurrentdb", image: "opencrane-kurrentdb-bootstrap", dockerfile: "apps/_infra/kurrentdb/deploy/Dockerfile" },
+		{ project: "mcp-executor", image: "opencrane-mcp-executor", dockerfile: "apps/mcp-executor/deploy/Dockerfile" },
+		{ project: "mcp-file-generator", image: "opencrane-mcp-file-generator", dockerfile: "apps/mcp-file-generator/deploy/Dockerfile" },
 		{ project: "memory-gateway", image: "opencrane-memory-gateway", dockerfile: "apps/memory-gateway/deploy/Dockerfile" },
 		{ project: "opencrane", image: "opencrane-server", dockerfile: "apps/opencrane/deploy/Dockerfile" },
 		{ project: "opencrane-ui", image: "opencrane-ui", dockerfile: "apps/opencrane-ui/deploy/Dockerfile" },
+		{ project: "skill-authoring", image: "opencrane-skill-authoring", dockerfile: "apps/skill-authoring/deploy/Dockerfile" },
 	]);
 	assert.throws(
 		function _MissingOwner() { selectDevelopSmokeImages(projects.filter(function _WithoutServer(project) { return project.name !== "opencrane"; })); },
@@ -201,8 +212,8 @@ test("selects the complete current-silo image set from app-owned container metad
 test("uses Nx affected container owners to select current-silo rebuilds", function _SelectsDevelopSmokeProjects()
 {
 	assert.deepEqual(
-		selectDevelopSmokeProjects(["skill-authoring", "opencrane-ui", "cognee", "memory-gateway", "opencrane-ui", "conversation-computer", "kurrentdb"]),
-		["cognee", "conversation-computer", "kurrentdb", "memory-gateway", "opencrane-ui"],
+		selectDevelopSmokeProjects(["skill-authoring", "opencrane-ui", "cognee", "memory-gateway", "opencrane-ui", "conversation-computer", "kurrentdb", "agent-controller", "artifact-scanner", "mcp-executor", "mcp-file-generator"]),
+		["agent-controller", "artifact-scanner", "cognee", "conversation-computer", "kurrentdb", "mcp-executor", "mcp-file-generator", "memory-gateway", "opencrane-ui", "skill-authoring"],
 	);
 });
 
@@ -220,7 +231,7 @@ test("uses an explicit publication set and makes manual dispatch validation-only
 	assert.deepEqual(selectForcedContainerProjects("all", ["skill-authoring", "opencrane", "skill-authoring"]), ["opencrane", "skill-authoring"]);
 	assert.deepEqual(selectForcedContainerProjects("bootstrap"), ["memory-gateway"]);
 	assert.deepEqual(selectForcedContainerProjects("artifact"), ["artifact-service"]);
-	assert.deepEqual(selectForcedContainerProjects("qualification"), ["artifact-service", "cognee", "conversation-computer", "kurrentdb", "memory-gateway", "opencrane", "opencrane-ui", "postgres"]);
+	assert.deepEqual(selectForcedContainerProjects("qualification"), ["agent-controller", "artifact-scanner", "artifact-service", "cognee", "conversation-computer", "kurrentdb", "mcp-executor", "mcp-file-generator", "memory-gateway", "opencrane", "opencrane-ui", "skill-authoring", "postgres"]);
 	assert.deepEqual(selectForcedContainerProjects("server"), ["opencrane"]);
 	assert.deepEqual(selectForcedContainerProjects("ui"), ["opencrane-ui"]);
 	assert.equal(selectForcedContainerProjects(""), null);
@@ -240,6 +251,77 @@ test("selects affected image smokes unless manual qualification expands to every
 		function _UnknownForce() { selectImageSmokeProjects(affected, all, "everything"); },
 		/unsupported FORCE_HEAVY_QUALIFICATION value/u,
 	);
+});
+
+test("selects Cognee provider qualification through the existing image-smoke decision", function _SelectsMemoryContract()
+{
+	const all = ["cognee", "mcp-executor"];
+	for (const [affected, manual, required] of [
+		[["cognee"], "", true],
+		[["mcp-executor"], "", false],
+		[[], "image-smoke", true],
+		[[], "all", true],
+		[[], "k3d", false],
+		[[], "none", false],
+	])
+	{
+		assert.equal(selectCogneeMemoryContractRequired(selectImageSmokeProjects(affected, all, manual)), required);
+	}
+});
+
+test("requires an uncached Docker memory proof before normal publication", function _ProtectsMemoryContract()
+{
+	const workflow = parse(_Workflow());
+	const provider = workflow.jobs.cognee_memory_contract;
+	assert.equal(provider.needs, "prepare");
+	assert.equal(provider.if, "needs.prepare.outputs.cognee_memory_contract_required == 'true'");
+	assert.equal(provider["continue-on-error"], undefined);
+	const execution = provider.steps.find(function _Execution(step) { return step.run?.includes("cognee:memory-contract"); });
+	assert.equal(execution.run, "npm exec -- nx run cognee:memory-contract");
+	assert.equal(execution["continue-on-error"], undefined);
+	const evidence = provider.steps.find(function _Evidence(step) { return step.uses === "actions/upload-artifact@v4"; });
+	assert.equal(evidence.if, "always()");
+	assert.equal(evidence.with.path, ".nx/test-results/cognee-memory-contract");
+	assert.equal(evidence.with["if-no-files-found"], "error");
+	for (const name of ["build-and-push", "publish-develop-smoke-images"])
+	{
+		const job = workflow.jobs[name];
+		assert.ok(job.needs.includes("cognee_memory_contract"));
+		assert.match(job.if, /needs\.cognee_memory_contract\.result == 'success' \|\| needs\.cognee_memory_contract\.result == 'skipped'/u);
+	}
+	const projectPath = fileURLToPath(new URL("../../apps/_infra/cognee/project.json", import.meta.url));
+	const project = JSON.parse(readFileSync(projectPath, "utf8"));
+	assert.equal(project.targets["memory-contract"].cache, false);
+	assert.doesNotMatch(project.targets.test.options.command, /memory-contract|docker/u);
+});
+
+test("qualifies a disposable Cognee candidate without replacing the production gate", function _IsolatesCandidateQualification()
+{
+	const workflow = parse(_Workflow());
+	const candidate = workflow.jobs.cognee_candidate_contract;
+	assert.equal(candidate.needs, "prepare");
+	assert.equal(candidate.if, "needs.prepare.outputs.cognee_memory_contract_required == 'true'");
+	assert.equal(candidate["continue-on-error"], undefined);
+	const execution = candidate.steps.find(function _Execution(step) { return step.run?.includes("cognee:memory-contract-1-5-4"); });
+	assert.equal(execution.run, "npm exec -- nx run cognee:memory-contract-1-5-4");
+	assert.equal(execution["continue-on-error"], undefined);
+	const evidence = candidate.steps.find(function _Evidence(step) { return step.uses === "actions/upload-artifact@v4"; });
+	assert.equal(evidence.if, "always()");
+	assert.equal(evidence.with.path, ".nx/test-results/cognee-memory-contract-1-5-4");
+	assert.equal(evidence.with["if-no-files-found"], "error");
+	for (const name of ["build-and-push", "publish-develop-smoke-images"])
+	{
+		const publication = workflow.jobs[name];
+		assert.ok(publication.needs.includes("cognee_memory_contract"));
+		assert.ok(!publication.needs.includes("cognee_candidate_contract"));
+		assert.doesNotMatch(publication.if, /cognee_candidate_contract/u);
+	}
+	const projectPath = fileURLToPath(new URL("../../apps/_infra/cognee/project.json", import.meta.url));
+	const project = JSON.parse(readFileSync(projectPath, "utf8"));
+	assert.equal(project.targets["memory-contract-1-5-4"].cache, false);
+	assert.equal(project.targets["memory-contract-1-5-4"].options.command, "bash apps/_infra/cognee/tests/memory-contract-1.5.4.sh");
+	assert.equal(project.targets["memory-contract-1-5-4"].metadata?.release, undefined);
+	assert.equal(project.targets.container.metadata.release.dockerfile, "apps/_infra/cognee/deploy/Dockerfile");
 });
 
 test("uses all affected projects for contract verification and changed files for guard fixtures", function _SelectsPipelineInputs()
@@ -344,7 +426,7 @@ test("keeps heavyweight remote qualification ahead of image publication", functi
 	assert.match(workflow, /run: \.\/apps\/_infra\/deploy-k8s\/platform\/tests\/develop-smoke\.sh/u);
 	assert.match(workflow, /inputs\.heavy_qualification == 'k3d'/u);
 	assert.match(workflow, /inputs\.heavy_qualification == 'all'/u);
-	assert.match(workflow, /needs: \[prepare, test, database, history_store, api_contract, storybook_visual, develop_smoke, image_smoke\]/u);
+	assert.match(workflow, /needs: \[prepare, test, database, history_store, api_contract, storybook_visual, develop_smoke, image_smoke, cognee_memory_contract\]/u);
 	assert.match(workflow, /needs\.history_store\.result == 'success'/u);
 	assert.match(developSmokeJob[0], /needs: prepare/u);
 	assert.match(developSmokeJob[0], /needs\.prepare\.outputs\.develop_smoke_can_skip != 'true'/u);

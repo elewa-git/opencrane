@@ -7,18 +7,25 @@
 This package owns browser state for one server-authoritative question or approval. It reads the
 generic request, keeps a selected draft separate from submission, admits one response command at a
 time, restores that draft after verified sign-in, and adopts only the server's returned lifecycle.
+It discovers the oldest current request when a conversation is selected, preserves a draft across
+harmless refreshes, and performs one exact authority read when the request deadline arrives.
 
 It also maps canonical request references and safe tool histories into Activity rows. It never
 creates a run, chooses the respondent, interprets protected A2UI actions, or reads personal memory.
-Its shared `ConversationActivityRow` also accepts a personal-run status row with an optional answer
-target. The workspace feature derives that row from its authorized run read and currently rendered
-transcript. The target grants no access and does not copy an answer into this state package.
+Its shared `ConversationActivityRow` accepts a personal-run status row with an optional answer
+target and nullable public tool phase. The phase has no tool identity or private payload, and a
+result received phase does not mean that the assistant has completed its answer. The workspace
+feature derives that row from its authorized run read and currently rendered transcript. The target
+grants no access and does not copy an answer into this state package.
 
 ## Public surface
 
-- `ConversationElicitationStore` — component-scoped command, draft, step-up, and reconciliation state.
-- `OpenCraneConversationElicitationGateway` — generated-client adapter for request, response, and Activity reads.
+- `ConversationElicitationStore` — component-scoped discovery, cancellable reads, command, draft,
+  deadline, step-up, and authoritative reconciliation state.
+- `OpenCraneConversationElicitationGateway` — generated-client adapter for selected-conversation
+  pending lists, named request reads, responses, and Activity reads.
 - `__MapElicitationActivity` and `__MapToolActivity` — pure canonical-reference mappers.
+- `ConversationActivityKinds`, `ConversationActivityRow`, and `RunToolProgressPhases` — the derived row vocabulary and public tool-phase categories used by the Activity feature.
 
 ## Dependency direction
 

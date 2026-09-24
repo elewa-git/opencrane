@@ -16,6 +16,9 @@ const _CLAIM = { executionReference: "execution-reference-1", podUid: "pod-uid-1
 /** Current terminal fence shared by completion and failure. */
 const _TERMINAL = { ..._CLAIM, executionId: "execution-1", claimFence: "claim-fence-1" };
 
+/** Private run-owned proof passed to the application history publisher. */
+const _RUN_RECEIPT = { executionId: "execution-1", companionClaimFence: "companion-fence-1", invocationId: "invocation-row-1", siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 1, toolInvocationId: "tool-call-1", requestIdentity: { runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1" }, toolClaim: { invocationId: "invocation-row-1", kind: "dispatch", fence: 4, revision: 7 }, workload: { audience: "opencrane-mcp-executor", namespace: "mcp-executor", serviceAccountName: "mcp-executor-default", workloadKind: "job", workloadUid: "job-1", podUid: "pod-uid-1" } };
+
 /** Build companion router ports with observable authority methods. */
 function _Dependencies(overrides: Partial<McpRuntimeCompanionRouterDependencies> = {}): McpRuntimeCompanionRouterDependencies
 {
@@ -26,6 +29,7 @@ function _Dependencies(overrides: Partial<McpRuntimeCompanionRouterDependencies>
 			failCompanion: vi.fn().mockResolvedValue("failed"),
 		},
 		tokenReviewer: { __Review: vi.fn().mockResolvedValue(_IDENTITY) },
+		publishCurrentRunInvocation: vi.fn().mockResolvedValue(true),
 		logger: { error: vi.fn() },
 		...overrides,
 	} as never;
@@ -69,13 +73,52 @@ describe("MCP runtime companion router", function _DescribeRouter()
 	it("returns the server-selected claim for the reviewed workload identity", async function _Claims()
 	{
 		const claim = { kind: McpCompanionCommandKinds.Discovery, executionId: "execution-1", claimFence: "claim-fence-1", expiresAt: "2999-01-01T00:00:00.000Z" };
-		const claimCompanion = vi.fn().mockResolvedValue(claim);
+		const claimCompanion = vi.fn().mockResolvedValue({ command: claim, runInvocation: null });
 		const dependencies = _Dependencies({ authority: { claimCompanion } as never });
 		const response = await _Token(request(_App(dependencies)).post("/api/internal/mcp-executor/claim")).send(_CLAIM);
 
 		expect(response.status).toBe(200);
 		expect(response.body).toEqual(claim);
 		expect(claimCompanion).toHaveBeenCalledWith(_IDENTITY, "execution-reference-1");
+		expect(dependencies.publishCurrentRunInvocation).not.toHaveBeenCalled();
+	});
+
+	it("publishes a run-owned claim before returning the unchanged wire command", async function _PublishesRunClaimBeforeResponse()
+	{
+		const command = { kind: McpCompanionCommandKinds.Invocation, executionId: "execution-1", claimFence: "claim-fence-1", expiresAt: "2999-01-01T00:00:00.000Z", invocationId: "tool-call-1", toolName: "records.find", inputSchema: { type: "object" }, arguments: { query: "saved" } };
+		const claimCompanion = vi.fn().mockResolvedValue({ command, runInvocation: _RUN_RECEIPT });
+		const publishCurrentRunInvocation = vi.fn().mockResolvedValue(true);
+		const dependencies = _Dependencies({ authority: { claimCompanion } as never, publishCurrentRunInvocation });
+		const response = await _Token(request(_App(dependencies)).post("/api/internal/mcp-executor/claim")).send(_CLAIM);
+
+		expect(response.status).toBe(200);
+		expect(response.body).toEqual(command);
+		expect(publishCurrentRunInvocation).toHaveBeenCalledExactlyOnceWith(_RUN_RECEIPT);
+		expect(JSON.stringify(publishCurrentRunInvocation.mock.calls[0])).not.toContain("saved");
+	});
+
+	it("withholds a claimed run command when post-history authority refuses release", async function _WithholdsRefusedRunClaim()
+	{
+		const command = { kind: McpCompanionCommandKinds.Invocation, executionId: "execution-1", claimFence: "claim-fence-1", expiresAt: "2999-01-01T00:00:00.000Z", invocationId: "tool-call-1", toolName: "records.find", inputSchema: { type: "object" }, arguments: {} };
+		const publishCurrentRunInvocation = vi.fn().mockResolvedValue(false);
+		const dependencies = _Dependencies({ authority: { claimCompanion: vi.fn().mockResolvedValue({ command, runInvocation: _RUN_RECEIPT }) } as never, publishCurrentRunInvocation });
+		const response = await _Token(request(_App(dependencies)).post("/api/internal/mcp-executor/claim")).send(_CLAIM);
+
+		expect(response.status).toBe(410);
+		expect(response.text).toBe("");
+		expect(publishCurrentRunInvocation).toHaveBeenCalledOnce();
+	});
+
+	it("withholds a run command and returns redacted 503 when history publication fails", async function _HandlesHistoryOutage()
+	{
+		const logger = { error: vi.fn() };
+		const publishCurrentRunInvocation = vi.fn().mockRejectedValue(new Error("history content secret"));
+		const dependencies = _Dependencies({ authority: { claimCompanion: vi.fn().mockResolvedValue({ command: { kind: McpCompanionCommandKinds.Invocation, executionId: "execution-1", claimFence: "claim-fence-1", expiresAt: "2999-01-01T00:00:00.000Z", invocationId: "tool-call-1", toolName: "records.find", inputSchema: { type: "object" }, arguments: { secret: "body-secret" } }, runInvocation: _RUN_RECEIPT }) } as never, publishCurrentRunInvocation, logger: logger as never });
+		const response = await _Token(request(_App(dependencies)).post("/api/internal/mcp-executor/claim")).send(_CLAIM);
+
+		expect(response.status).toBe(503);
+		expect(JSON.stringify(logger.error.mock.calls)).not.toContain("body-secret");
+		expect(JSON.stringify(logger.error.mock.calls)).not.toContain("history content secret");
 	});
 
 	it("returns no content for an idle Pod and accepted terminal reports", async function _HandlesNormalOutcomes()

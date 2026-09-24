@@ -1,8 +1,9 @@
 import { Injectable, inject } from "@angular/core";
 
-import { ControlPlaneApiService, McpInstalledServer, McpServer } from "@opencrane/core";
+import { ControlPlaneApiService, McpInstalledServer, McpServer, type McpConnectionProjection } from "@opencrane/core";
 
-import type { McpGateway, McpInstalledWire, McpServerWire } from "./mcp-gateway.types";
+import type { McpConnectionCommand, McpGateway } from "./mcp-gateway.types";
+import { _McpConnectionCommandError, _ReadMcpConnectionResponse, _RequireMcpConnectionAccess } from "./mcp-connection-command.error";
 import { _MapInstalled, _MapServer } from "./mcp-mapper.util";
 
 /**
@@ -13,13 +14,12 @@ import { _MapInstalled, _MapServer } from "./mcp-mapper.util";
  * client) and maps the responses onto the read models. WeOwnAI never imports
  * OpenCrane source; this network contract is the only coupling.
  *
- * The MCP paths are not yet in the pinned OpenAPI contract (backend P0, in
- * parallel), so calls go through {@link ControlPlaneApiService.request} with locally
- * projected wire types until the endpoints are synced into the generated client.
+ * Calls use the generated Control Plane operations. The mapper still validates
+ * the credential requirement before adopting each server into browser state.
  * Bound in `live` mode by `provideControlPlaneGateways`.
  *
- * Credential-bearing operations are intentionally absent until a verified
- * custody boundary is composed.
+ * Personal connection writes use server custody. This adapter retains no request, token or
+ * raw response after the call, and returns only a validated connection projection.
  */
 @Injectable()
 export class OpenCraneMcpGateway implements McpGateway
@@ -30,27 +30,60 @@ export class OpenCraneMcpGateway implements McpGateway
 	/** @inheritdoc */
 	public async listEntitledCatalogue(): Promise<McpServer[]>
 	{
-		const wire = await this._api.request<McpServerWire[]>("GET", "/mcp/catalog");
-		return wire.map(_MapServer);
+		const { data, error, response } = await this._api.client.GET("/mcp/catalog");
+		_RequireMcpConnectionAccess(response.status);
+		if (error !== undefined || data === undefined)
+			throw new Error("The MCP catalogue could not be loaded.");
+		return data.map(_MapServer);
 	}
 
 	/** @inheritdoc */
 	public async listInstalled(): Promise<McpInstalledServer[]>
 	{
-		const wire = await this._api.request<McpInstalledWire[]>("GET", "/mcp/installed");
-		return wire.map(_MapInstalled);
+		const { data, error, response } = await this._api.client.GET("/mcp/installed");
+		_RequireMcpConnectionAccess(response.status);
+		if (error !== undefined || data === undefined)
+			throw new Error("Installed MCP servers could not be loaded.");
+		return data.map(_MapInstalled);
 	}
 
 	/** @inheritdoc */
 	public async install(serverId: string): Promise<McpInstalledServer>
 	{
-		return _MapInstalled(await this._api.request<McpInstalledWire>("POST", "/mcp/installed", { body: { serverId } }));
+		const { data, error } = await this._api.client.POST("/mcp/installed", { body: { serverId } });
+		if (error !== undefined || data === undefined)
+			throw new Error("The MCP server could not be installed.");
+		return _MapInstalled(data);
 	}
 
 	/** @inheritdoc */
 	public async uninstall(serverId: string): Promise<void>
 	{
-		await this._api.request<void>("DELETE", `/mcp/installed/${encodeURIComponent(serverId)}`);
+		const { error } = await this._api.client.DELETE("/mcp/installed/{serverId}", { params: { path: { serverId } } });
+		if (error !== undefined)
+			throw new Error("The MCP server could not be uninstalled.");
+	}
+
+	/** @inheritdoc */
+	public async activatePersonalConnection(serverId: string, command: McpConnectionCommand): Promise<McpConnectionProjection>
+	{
+		try
+		{
+			const { data, response } = await this._api.client.PUT("/mcp/installed/{serverId}/connection", { params: { path: { serverId } }, body: command });
+			return _ReadMcpConnectionResponse(response.status, data);
+		}
+		catch (error) { throw _McpConnectionCommandError(error); }
+	}
+
+	/** @inheritdoc */
+	public async revokePersonalConnection(serverId: string, idempotencyKey: string, expectedGeneration: number): Promise<McpConnectionProjection>
+	{
+		try
+		{
+			const { data, response } = await this._api.client.DELETE("/mcp/installed/{serverId}/connection", { params: { path: { serverId }, query: { commandId: idempotencyKey, expectedGeneration } } });
+			return _ReadMcpConnectionResponse(response.status, data);
+		}
+		catch (error) { throw _McpConnectionCommandError(error); }
 	}
 
 	// --- Admin ---
@@ -58,32 +91,46 @@ export class OpenCraneMcpGateway implements McpGateway
 	/** @inheritdoc */
 	public async listCatalogue(): Promise<McpServer[]>
 	{
-		const wire = await this._api.request<McpServerWire[]>("GET", "/mcp/servers");
-		return wire.map(_MapServer);
+		const { data, error } = await this._api.client.GET("/mcp/servers");
+		if (error !== undefined || data === undefined)
+			throw new Error("MCP governance servers could not be loaded.");
+		return data.map(_MapServer);
 	}
 
 	/** @inheritdoc */
 	public async approve(serverId: string): Promise<McpServer>
 	{
-		return _MapServer(await this._api.request<McpServerWire>("POST", `/mcp/servers/${encodeURIComponent(serverId)}/approve`));
+		const { data, error } = await this._api.client.POST("/mcp/servers/{id}/approve", { params: { path: { id: serverId } } });
+		if (error !== undefined || data === undefined)
+			throw new Error("The MCP server could not be approved.");
+		return _MapServer(data);
 	}
 
 	/** @inheritdoc */
 	public async publish(serverId: string): Promise<McpServer>
 	{
-		return _MapServer(await this._api.request<McpServerWire>("POST", `/mcp/servers/${encodeURIComponent(serverId)}/publish`));
+		const { data, error } = await this._api.client.POST("/mcp/servers/{id}/publish", { params: { path: { id: serverId } } });
+		if (error !== undefined || data === undefined)
+			throw new Error("The MCP server could not be published.");
+		return _MapServer(data);
 	}
 
 	/** @inheritdoc */
 	public async reject(serverId: string): Promise<McpServer>
 	{
-		return _MapServer(await this._api.request<McpServerWire>("POST", `/mcp/servers/${encodeURIComponent(serverId)}/reject`));
+		const { data, error } = await this._api.client.POST("/mcp/servers/{id}/reject", { params: { path: { id: serverId } } });
+		if (error !== undefined || data === undefined)
+			throw new Error("The MCP server could not be rejected.");
+		return _MapServer(data);
 	}
 
 	/** @inheritdoc */
 	public async setEnabled(serverId: string, enabled: boolean): Promise<McpServer>
 	{
-		return _MapServer(await this._api.request<McpServerWire>("POST", `/mcp/servers/${encodeURIComponent(serverId)}/enabled`, { body: { enabled } }));
+		const { data, error } = await this._api.client.POST("/mcp/servers/{id}/enabled", { params: { path: { id: serverId } }, body: { enabled } });
+		if (error !== undefined || data === undefined)
+			throw new Error("The MCP server availability could not be changed.");
+		return _MapServer(data);
 	}
 
 }

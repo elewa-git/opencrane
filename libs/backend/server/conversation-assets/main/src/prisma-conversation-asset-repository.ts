@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import { ArtifactKind, ArtifactRevisionState, ArtifactState, ArtifactUploadLeaseState, ConversationAssetProvenance as PersistedProvenance, ConversationAssetState, ConversationLifecycle, OrgMemberStatus, type Prisma } from "@prisma/client";
 
+import { ArtifactQuarantineOutcomes, PrismaArtifactQuarantineRepository } from "@opencrane/backend/server/agents/artifacts";
+
 import { ___ConversationAssetMediaDisposition, ConversationAssetLifecycle, ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import type { JsonValue } from "@opencrane/util";
@@ -27,7 +29,7 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 			return { outcome: "denied", reason: "conversation_unavailable" };
 		const existing = await this.transaction.conversationAsset.findUnique({ where: { conversationId_createdByUserId_idempotencyKey: { conversationId, createdByUserId: caller.subjectId, idempotencyKey: request.idempotencyKey } }, include: { uploadLease: true } });
 		if (existing !== null)
-			return _ReservationMatches(existing, request) ? { outcome: "idempotent", asset: _ConversationAssetView(existing, caller.subjectId) } : { outcome: "denied", reason: "idempotency_conflict" };
+			return existing.provenance === PersistedProvenance.ParticipantUpload && _ReservationMatches(existing, request) ? { outcome: "idempotent", asset: _ConversationAssetView(existing, caller.subjectId) } : { outcome: "denied", reason: "idempotency_conflict" };
 		if (!await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.ArtifactCollection, id: caller.siloId }, ProductAuthorizationActions.Create, { conversationId, request } as unknown as JsonValue))
 			return { outcome: "denied", reason: "conversation_unavailable" };
 		const artifactId = randomUUID();
@@ -44,7 +46,7 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	{
 		if (!await this._canMutateConversation(caller, conversationId))
 			return null;
-		const asset = await this.transaction.conversationAsset.findFirst({ where: { id: assetId, siloId: caller.siloId, conversationId, createdByUserId: caller.subjectId, state: ConversationAssetState.Uploading }, include: { uploadLease: true } });
+		const asset = await this.transaction.conversationAsset.findFirst({ where: { id: assetId, siloId: caller.siloId, conversationId, createdByUserId: caller.subjectId, provenance: PersistedProvenance.ParticipantUpload, state: ConversationAssetState.Uploading }, include: { uploadLease: true } });
 		const lease = asset?.uploadLease;
 		if (lease === null || lease === undefined || lease.state !== ArtifactUploadLeaseState.Active || lease.expiresAt <= new Date() || lease.expectedContentAddress === null || lease.expectedByteLength === null)
 			return null;
@@ -58,7 +60,7 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	{
 		if (!await this._canMutateConversation(caller, conversationId))
 			return { outcome: "denied", reason: "conversation_unavailable" };
-		const asset = await this.transaction.conversationAsset.findFirst({ where: { id: assetId, siloId: caller.siloId, conversationId, createdByUserId: caller.subjectId } });
+		const asset = await this.transaction.conversationAsset.findFirst({ where: { id: assetId, siloId: caller.siloId, conversationId, createdByUserId: caller.subjectId, provenance: PersistedProvenance.ParticipantUpload } });
 		if (asset === null)
 			return { outcome: "denied", reason: "asset_unavailable" };
 		if (asset.state === ConversationAssetState.Processing || asset.state === ConversationAssetState.Ready)
@@ -67,14 +69,15 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 			return { outcome: "denied", reason: "asset_unavailable" };
 		if (!await this.authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Artifact, id: asset.artifactId }, ProductAuthorizationActions.Create, { assetId, conversationId, receiptDigest }))
 			return { outcome: "denied", reason: "asset_unavailable" };
-		const lease = await this.transaction.artifactUploadLease.findUnique({ where: { id: promotion.leaseId } });
-		if (lease === null || lease.state !== ArtifactUploadLeaseState.Active || lease.expectedContentAddress !== promotion.contentAddress || lease.expectedByteLength !== BigInt(promotion.byteLength) || lease.mediaType !== promotion.mediaType)
-			return { outcome: "denied", reason: "upload_failed" };
-		const now = new Date();
 		const revisionId = randomUUID();
-		await this.transaction.artifactUploadLease.update({ where: { id: lease.id }, data: { state: ArtifactUploadLeaseState.Finalized, promotionReceiptDigest: receiptDigest, promotedContentAddress: promotion.contentAddress, promotedByteLength: BigInt(promotion.byteLength), promotedAt: now, finalizedAt: now } });
-		await this.transaction.artifactRevision.create({ data: { id: revisionId, artifactId: asset.artifactId, revision: 1, state: ArtifactRevisionState.Quarantined, contentAddress: promotion.contentAddress, byteLength: BigInt(promotion.byteLength), mediaType: promotion.mediaType, provenance: { kind: "conversation_participant_upload", conversationAssetId: asset.id }, createdBy: caller.subjectId } });
-		await this.transaction.artifactScanJob.create({ data: { artifactRevisionId: revisionId } });
+		const quarantine = new PrismaArtifactQuarantineRepository(this.transaction);
+		const command = {
+			siloId: caller.siloId, artifactId: asset.artifactId, artifactRevisionId: revisionId, createdBy: caller.subjectId,
+			provenance: { kind: "conversation_participant_upload", conversationAssetId: asset.id },
+			promotion: { leaseId: promotion.leaseId, contentAddress: promotion.contentAddress, byteLength: promotion.byteLength, mediaType: promotion.mediaType, receiptDigest },
+		};
+		if (await quarantine.finalize(command) === ArtifactQuarantineOutcomes.Denied)
+			return { outcome: "denied", reason: "upload_failed" };
 		return { outcome: "accepted", asset: _ConversationAssetView(await this.transaction.conversationAsset.update({ where: { id: asset.id }, data: { revisionId, state: ConversationAssetState.Processing } }), caller.subjectId) };
 	}
 
@@ -106,7 +109,7 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	{
 		if (!await this._canReadConversation(caller, conversationId))
 			return [];
-		return (await this.transaction.conversationAsset.findMany({ where: { conversationId, siloId: caller.siloId, state: { not: ConversationAssetState.Removed }, provenance: PersistedProvenance.ParticipantUpload }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] })).map(function _SafeView(asset) { return _ConversationAssetView(asset, caller.subjectId); });
+		return (await this.transaction.conversationAsset.findMany({ where: { conversationId, siloId: caller.siloId, state: { not: ConversationAssetState.Removed }, provenance: { in: [PersistedProvenance.ParticipantUpload, PersistedProvenance.AgentOutput] } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] })).map(function _SafeView(asset) { return _ConversationAssetView(asset, caller.subjectId); });
 	}
 
 	/** Reloads current participant access and one exact ready, published revision. */
@@ -154,9 +157,22 @@ function _ReservationMatches(asset: { readonly displayName: string; readonly med
 }
 
 /** Project a browser-safe view without technical authority facts. */
-export function _ConversationAssetView(asset: { readonly id: string; readonly conversationId: string; readonly messageId: string | null; readonly provenance: PersistedProvenance; readonly state: ConversationAssetState; readonly displayName: string; readonly mediaType: string; readonly byteLength: bigint | null; readonly failureCode: string | null; readonly createdByUserId?: string | null; readonly revisionId?: string | null; readonly createdAt: Date }, subjectId: string): ConversationAssetView
+export function _ConversationAssetView(asset: { readonly id: string; readonly conversationId: string; readonly messageId: string | null; readonly provenance: PersistedProvenance; readonly state: ConversationAssetState; readonly displayName: string; readonly mediaType: string; readonly byteLength: bigint | null; readonly failureCode: string | null; readonly createdByUserId?: string | null; readonly artifactId?: string | null; readonly revisionId?: string | null; readonly createdAt: Date }, subjectId: string): ConversationAssetView
 {
-	return { id: asset.id, conversationId: asset.conversationId, messageId: asset.messageId, provenance: ConversationAssetProvenance.ParticipantUpload, state: _Lifecycle(asset.state), displayName: asset.displayName, mediaType: asset.mediaType, byteLength: asset.byteLength === null ? null : Number(asset.byteLength), disposition: ___ConversationAssetMediaDisposition(asset.mediaType), failureCode: asset.failureCode, canRemove: _CanRemove(asset, subjectId), createdAt: asset.createdAt.toISOString() };
+	const hasRevision = asset.state !== ConversationAssetState.Removed && asset.artifactId != null && asset.revisionId != null;
+	return { id: asset.id, conversationId: asset.conversationId, messageId: asset.messageId, artifactId: hasRevision ? asset.artifactId! : null,
+		artifactRevisionId: hasRevision ? asset.revisionId! : null,
+		provenance: _Provenance(asset.provenance), state: _Lifecycle(asset.state), displayName: asset.displayName, mediaType: asset.mediaType, byteLength: asset.byteLength === null ? null : Number(asset.byteLength), disposition: ___ConversationAssetMediaDisposition(asset.mediaType), failureCode: asset.failureCode, canRemove: _CanRemove(asset, subjectId), createdAt: asset.createdAt.toISOString() };
+}
+
+/** Preserves whether the participant uploaded the file or a governed tool generated it. */
+function _Provenance(provenance: PersistedProvenance): ConversationAssetProvenance
+{
+	switch (provenance)
+	{
+		case PersistedProvenance.ParticipantUpload: return ConversationAssetProvenance.ParticipantUpload;
+		case PersistedProvenance.AgentOutput: return ConversationAssetProvenance.AgentOutput;
+	}
 }
 
 /** Convert Prisma enum members to the public string-backed lifecycle. */

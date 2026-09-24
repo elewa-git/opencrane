@@ -51,8 +51,11 @@ export class WorkflowTaskEventAdmission implements IWorkflowTaskEventAdmission
 		}
 		try
 		{
-			await client.$queryRaw<readonly unknown[]>`
-				SELECT absurd.emit_event(${this.queueName}, ${acceptedEventName}, ${serializedPayload}::jsonb)
+			await client.$queryRaw<readonly { acknowledged: number }[]>`
+				SELECT 1 AS acknowledged
+				FROM (
+					SELECT absurd.emit_event(${this.queueName}, ${acceptedEventName}, ${serializedPayload}::jsonb) AS invoked
+				) AS emitted
 			`;
 		}
 		catch (cause)

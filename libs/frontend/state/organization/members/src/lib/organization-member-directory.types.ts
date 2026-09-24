@@ -71,6 +71,8 @@ export interface OrganizationMember
 	readonly joinedAt: string;
 	/** Whether this row represents the signed-in caller. */
 	readonly isCurrentUser: boolean;
+	/** Server-authored removal decision; the browser never derives it from the role. */
+	readonly removal: OrganizationMemberRemoval;
 }
 
 /** Authoritative member and invitation directory projection. */
@@ -85,3 +87,32 @@ export interface OrganizationMemberDirectory
 	/** Server-computed pending invitation count. */
 	readonly pendingCount: number;
 }
+
+/** Drives removal presentation from a closed server projection, never a browser permission check. */
+export enum OrganizationMemberRemovalStates
+{
+	/** The server currently offers removal; the command will reauthorize before changing access. */
+	Available = "available",
+	/** The server withholds removal and supplies a fixed reason for the interface. */
+	Unavailable = "unavailable"
+}
+
+/** Explains a server-withheld removal action; unknown wire values are rejected by the adapter. */
+export enum OrganizationMemberRemovalReasons
+{
+	/** The caller cannot remove their own organization membership. */
+	Self = "self",
+	/** Ownership must remain intact; removal cannot change an Owner membership. */
+	Owner = "owner",
+	/** The membership is already inactive and remains recorded. */
+	Inactive = "inactive",
+	/** The selected membership authority does not implement removal. */
+	AuthorityUnsupported = "authority_unsupported",
+	/** The caller can read the directory but lacks removal authority. */
+	NotAuthorized = "not_authorized"
+}
+
+/** Carries the exact current server decision without accepting arbitrary reason strings. */
+export type OrganizationMemberRemoval =
+	| { readonly state: OrganizationMemberRemovalStates.Available }
+	| { readonly state: OrganizationMemberRemovalStates.Unavailable; readonly reason: OrganizationMemberRemovalReasons };
