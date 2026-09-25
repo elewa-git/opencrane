@@ -1,4 +1,6 @@
-import { AgentRunState, ApprovalRequestState, ElicitationBodyKind, ElicitationPurpose, OrgMemberStatus, PrincipalProvenance, Prisma, type ApprovalRequest } from "@prisma/client";
+import { AgentRunState, ApprovalRequestState, ElicitationBodyKind, ElicitationPurpose, OrgMemberStatus, PrincipalProvenance, Prisma, ToolApprovalDecisionScope, type AgentRun, type ApprovalRequest, type ElicitationRequest } from "@prisma/client";
+import { ElicitationApprovalScopes, ElicitationBodyKinds, type ElicitationApprovalBody } from "@opencrane/contracts";
+import type { ExecutionSubject } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 import { __DigestCanonicalJson } from "../authority/canonical-json-digest";
 import { __IsDeferredToolApprovalReplacementAllowed, __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema";
@@ -9,9 +11,11 @@ import { __FindToolInvocationInTransaction, __MarkToolInvocationApprovalRejected
 import { _ExpireDeferredToolApproval } from "./deferred-tool-approval-expiry";
 import { __ReconcileDeferredToolApprovalGrants } from "./deferred-tool-approval-grants";
 import { _ApprovalExecutionSubject, _MatchesApprovalElicitation } from "./deferred-tool-approval-binding";
+import { __CreateToolApprovalScopeInTransaction } from "./prisma-tool-approval-scope";
+import { __ResolveToolApprovalConnection } from "./deferred-tool-approval-opening";
 
 /** Reload requester authority for both the initial decision and a failed conditional update. */
-async function _loadDecisionContext(transaction: Prisma.TransactionClient, command: DecideDeferredToolRequestCommand): Promise<{ readonly approval: ApprovalRequest; readonly invocation: ToolInvocationRecord } | null>
+async function _loadDecisionContext(transaction: Prisma.TransactionClient, command: DecideDeferredToolRequestCommand): Promise<{ readonly approval: ApprovalRequest; readonly invocation: ToolInvocationRecord; readonly run: AgentRun; readonly subject: ExecutionSubject; readonly request: ElicitationRequest; readonly requesterPrincipalId: string } | null>
 {
 	const approval = await transaction.approvalRequest.findUnique({ where: { id: command.approvalRequestId } });
 	if (approval === null || approval.siloId !== command.siloId || approval.toolInvocationRowId === null || approval.elicitationRequestId === null || command.decidedBy !== command.reviewerSubjectId)
@@ -33,7 +37,9 @@ async function _loadDecisionContext(transaction: Prisma.TransactionClient, comma
 	const isToolApproval = request !== null && request.purpose === ElicitationPurpose.ToolApproval && request.bodyKind === ElicitationBodyKind.Approval;
 	if (membership === null || participant === null || participant.accessEndedPosition !== null || !_MatchesApprovalElicitation(approval, request, run, command.reviewerSubjectId, isToolApproval))
 		return null;
-	return { approval, invocation };
+	if (request === null)
+		return null;
+	return { approval, invocation, run, subject, request, requesterPrincipalId: requesters[0]!.id };
 }
 
 /** Maps a decided approval state back to the stable decision literal, or null while still pending. */
@@ -76,6 +82,12 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 	if (context === null)
 		return { outcome: DeferredToolDecisionOutcomes.Conflict };
 	const { approval, invocation } = context;
+	const body = context.request.body as unknown as ElicitationApprovalBody;
+	if (body.kind !== ElicitationBodyKinds.Approval)
+		return { outcome: DeferredToolDecisionOutcomes.Conflict };
+	const decisionScope = command.scope === ElicitationApprovalScopes.Always ? ToolApprovalDecisionScope.Always : ToolApprovalDecisionScope.Once;
+	if (command.scope === ElicitationApprovalScopes.Always && (command.decision !== DeferredToolDecisionKinds.Approved || body.offeredScopes?.includes(ElicitationApprovalScopes.Always) !== true || body.standingScope === undefined))
+		return { outcome: DeferredToolDecisionOutcomes.InvalidArguments };
 	if (approval.reviewedToolArguments === null || approval.reviewedToolSchema === null || approval.reviewedToolSchemaDigest === null || approval.responseSchema === null)
 		return { outcome: DeferredToolDecisionOutcomes.Conflict };
 	const reviewedSchema = approval.reviewedToolSchema as JsonValue;
@@ -92,6 +104,8 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 	if (priorDecision !== null)
 	{
 		if (priorDecision !== command.decision)
+			return { outcome: DeferredToolDecisionOutcomes.Conflict };
+		if (approval.decisionScope !== decisionScope)
 			return { outcome: DeferredToolDecisionOutcomes.Conflict };
 		if (priorDecision === DeferredToolDecisionKinds.Denied)
 			return command.arguments === undefined ? { outcome: DeferredToolDecisionOutcomes.AlreadyDecided, decision: priorDecision } : { outcome: DeferredToolDecisionOutcomes.Conflict };
@@ -114,7 +128,7 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 			return { outcome: DeferredToolDecisionOutcomes.InvalidArguments };
 		const denied = await transaction.approvalRequest.updateMany({
 			where: { id: command.approvalRequestId, state: ApprovalRequestState.Pending, expiresAt: { gt: command.now } },
-			data: { state: ApprovalRequestState.Denied, decidedAt: command.now, decidedBy: command.decidedBy },
+			data: { state: ApprovalRequestState.Denied, decisionScope: ToolApprovalDecisionScope.Once, decidedAt: command.now, decidedBy: command.decidedBy },
 		});
 		if (denied.count !== 1)
 			return _conflictOrExpire(transaction, command);
@@ -142,12 +156,37 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 			decidedBy: command.decidedBy,
 			finalArguments: finalArguments as unknown as Prisma.InputJsonValue,
 			finalArgumentsDigest,
+			decisionScope,
 		},
 	});
 	if (approved.count !== 1)
 		return _conflictOrExpire(transaction, command);
 	if (!await __MarkToolInvocationApprovedInTransaction(transaction, invocation.id, approval.reviewedToolArguments as JsonValue, approval.argumentsDigest, finalArguments, finalArgumentsDigest))
 		throw new Error("deferred approval lost its awaiting invocation fence");
+	if (decisionScope === ToolApprovalDecisionScope.Always)
+	{
+		if (context.run.agentRevisionId === null)
+			throw new Error("standing approval requires an immutable agent revision");
+		const connection = await __ResolveToolApprovalConnection(transaction, context.run, context.subject, approval.resourceId);
+		if (connection === null)
+			throw new Error("standing approval connection changed before consent was saved");
+		await __CreateToolApprovalScopeInTransaction(transaction, {
+			approvalRequestId: approval.id,
+			siloId: approval.siloId,
+			requesterPrincipalId: context.requesterPrincipalId,
+			requesterSubjectId: command.reviewerSubjectId,
+			agentServiceId: context.run.agentServiceId,
+			agentRevisionId: context.run.agentRevisionId,
+			toolRevisionId: approval.resourceId,
+			arguments: finalArguments,
+			argumentsDigest: finalArgumentsDigest,
+			actionLabel: body.action,
+			targetLabel: body.target,
+			externalSystemLabel: body.externalSystem ?? null,
+			connection,
+			now: command.now,
+		});
+	}
 	await __ReconcileDeferredToolApprovalGrants(transaction, approval.siloId, approval.id, null, command.now);
 	return { outcome: DeferredToolDecisionOutcomes.Approved, argumentsDigest: finalArgumentsDigest };
 }

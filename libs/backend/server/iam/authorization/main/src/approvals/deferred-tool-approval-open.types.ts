@@ -59,6 +59,8 @@ export enum DeferToolRequestOutcomes
 	Deferred = "deferred",
 	/** An identical pending approval already owns the invocation. */
 	AlreadyDeferred = "already_deferred",
+	/** An exact active standing consent supplied one-use approval evidence. */
+	StandingConsentApplied = "standing_consent_applied",
 	/** The transaction wrote no approval because the invocation no longer has current authority. */
 	Unavailable = "unavailable",
 }
@@ -74,6 +76,7 @@ export enum DeferToolRequestOutcomes
 export type DeferToolRequestResult =
 	| { readonly outcome: DeferToolRequestOutcomes.Deferred; readonly approvalRequestId: string }
 	| { readonly outcome: DeferToolRequestOutcomes.AlreadyDeferred; readonly approvalRequestId: string }
+	| { readonly outcome: DeferToolRequestOutcomes.StandingConsentApplied }
 	| { readonly outcome: DeferToolRequestOutcomes.Unavailable };
 
 /**

@@ -1,4 +1,4 @@
-import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, ___ConversationToolArgumentsSchema, ___ElicitationExecutionConnectionSchema, type ConversationElicitation, type ElicitationBody, type ElicitationChoice, type ElicitationResponseProjection } from "@opencrane/contracts";
+import { CONVERSATION_ELICITATION_VERSION, ElicitationApprovalScopes, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, ___ConversationToolArgumentsSchema, ___ElicitationExecutionConnectionSchema, type ConversationElicitation, type ElicitationBody, type ElicitationChoice, type ElicitationResponseProjection } from "@opencrane/contracts";
 
 /** Parse one untrusted browser-safe request projection. */
 export function __ParseConversationElicitation(value: unknown): ConversationElicitation
@@ -40,13 +40,35 @@ function _Body(value: unknown): ElicitationBody
 		const cost = _BoundedString(value["cost"], 500) ? { cost: value["cost"] } : {};
 		const proposedArguments = _ProposedArguments(value);
 		const executionConnection = _ExecutionConnection(value);
-		return { kind: value["kind"], prompt: value["prompt"], action: value["action"], target: value["target"], dataUse: value["dataUse"], consequence: value["consequence"], ...proposedArguments, ...externalSystem, ...cost, ...executionConnection };
+		const approvalScopes = _ApprovalScopes(value);
+		return { kind: value["kind"], prompt: value["prompt"], action: value["action"], target: value["target"], dataUse: value["dataUse"], consequence: value["consequence"], ...proposedArguments, ...externalSystem, ...cost, ...executionConnection, ...approvalScopes };
 	}
 	const choices = _Choices(value["choices"]);
 	if (value["kind"] === ElicitationBodyKinds.SingleChoice && choices !== null) return { kind: value["kind"], prompt: value["prompt"], choices };
 	if (value["kind"] === ElicitationBodyKinds.MultipleChoice && choices !== null && Number.isSafeInteger(value["minimumSelections"]) && Number.isSafeInteger(value["maximumSelections"]) && (value["minimumSelections"] as number) >= 0 && (value["maximumSelections"] as number) >= (value["minimumSelections"] as number) && (value["maximumSelections"] as number) <= choices.length) return { kind: value["kind"], prompt: value["prompt"], choices, minimumSelections: value["minimumSelections"] as number, maximumSelections: value["maximumSelections"] as number };
 	if (value["kind"] === ElicitationBodyKinds.FreeText && Number.isSafeInteger(value["maximumLength"]) && (value["maximumLength"] as number) > 0 && (value["maximumLength"] as number) <= 20_000 && typeof value["allowEmpty"] === "boolean") return { kind: value["kind"], prompt: value["prompt"], maximumLength: value["maximumLength"] as number, allowEmpty: value["allowEmpty"] };
 	throw new TypeError("elicitation body kind is invalid");
+}
+
+/** Preserve only the two server-owned approval scopes and require complete standing-scope copy. */
+function _ApprovalScopes(value: Record<string, unknown>): Pick<Extract<ElicitationBody, { readonly kind: ElicitationBodyKinds.Approval }>, "offeredScopes" | "standingScope"> | Record<string, never>
+{
+	if (!("offeredScopes" in value) && !("standingScope" in value))
+		return {};
+	if (!Array.isArray(value["offeredScopes"]) || value["offeredScopes"].length < 1 || value["offeredScopes"].length > 2 || value["offeredScopes"][0] !== ElicitationApprovalScopes.Once || new Set(value["offeredScopes"]).size !== value["offeredScopes"].length || value["offeredScopes"].some(scope => !Object.values(ElicitationApprovalScopes).includes(scope as ElicitationApprovalScopes)))
+		throw new TypeError("elicitation approval scopes are invalid");
+	const offeredScopes = value["offeredScopes"] as ElicitationApprovalScopes[];
+	const offersAlways = offeredScopes.includes(ElicitationApprovalScopes.Always);
+	if (!offersAlways && value["standingScope"] !== undefined)
+		throw new TypeError("standing approval explanation was not offered");
+	if (!offersAlways)
+		return { offeredScopes };
+	const standingScope = value["standingScope"];
+	if (!_Record(standingScope) || Object.keys(standingScope).length !== 1 || !_BoundedString(standingScope["explanation"], 4_000))
+		throw new TypeError("standing approval explanation is invalid");
+	if (value["proposedArguments"] === null || value["proposedArguments"] === undefined)
+		throw new TypeError("standing approval requires reviewable arguments");
+	return { offeredScopes, standingScope: { explanation: standingScope["explanation"] } };
 }
 
 /** Validate supplied connection details without dropping unknown or malformed fields. */

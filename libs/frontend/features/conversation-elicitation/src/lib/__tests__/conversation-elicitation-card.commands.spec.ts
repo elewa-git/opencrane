@@ -3,12 +3,12 @@
 import { ElementRef, Injector, runInInjectionContext, type InputSignal, ɵInputSignalNode as InputSignalNode, ɵSIGNAL as SIGNAL } from "@angular/core";
 import { describe, expect, it, vi } from "vitest";
 
-import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, ElicitationPurposes, ElicitationRequestStates, McpCredentialRequirement, type ConversationElicitation } from "@opencrane/state/conversation/elicitation";
+import { CONVERSATION_ELICITATION_VERSION, ElicitationApprovalScopes, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, ElicitationPurposes, ElicitationRequestStates, McpCredentialRequirement, type ConversationElicitation } from "@opencrane/state/conversation/elicitation";
 
 import { ConversationElicitationCardComponent } from "../conversation-elicitation-card.component";
 
 /** Supply an admissible tool approval without requiring a live server or browser session. */
-const _REQUEST: ConversationElicitation = { version: CONVERSATION_ELICITATION_VERSION, requestId: "request-1", conversationId: "conversation-1", runId: "run-1", attempt: 1, assignedParticipantId: "human-requester", purpose: ElicitationPurposes.ToolApproval, state: ElicitationRequestStates.Requested, body: { kind: ElicitationBodyKinds.Approval, prompt: "Proceed?", action: "Create event", target: "Calendar", dataUse: "Meeting details", proposedArguments: { title: "Planning" }, consequence: "An event is created.", executionConnection: { ownerKind: ElicitationConnectionOwnerKinds.CompanyAssistant, ownerLabel: "Finance assistant", credentialRequirement: McpCredentialRequirement.PrincipalCredential } }, requiresStepUp: false, requestedAt: "2026-09-22T08:00:00.000Z", expiresAt: "2026-09-22T09:00:00.000Z" };
+const _REQUEST: ConversationElicitation = { version: CONVERSATION_ELICITATION_VERSION, requestId: "request-1", conversationId: "conversation-1", runId: "run-1", attempt: 1, assignedParticipantId: "human-requester", purpose: ElicitationPurposes.ToolApproval, state: ElicitationRequestStates.Requested, body: { kind: ElicitationBodyKinds.Approval, prompt: "Proceed?", action: "Create event", target: "Calendar", dataUse: "Meeting details", proposedArguments: { title: "Planning" }, consequence: "An event is created.", offeredScopes: [ElicitationApprovalScopes.Once], executionConnection: { ownerKind: ElicitationConnectionOwnerKinds.CompanyAssistant, ownerLabel: "Finance assistant", credentialRequirement: McpCredentialRequirement.PrincipalCredential } }, requiresStepUp: false, requestedAt: "2026-09-22T08:00:00.000Z", expiresAt: "2026-09-22T09:00:00.000Z" };
 
 /** Set controlled signal inputs directly for command-admission tests without compiling templates. */
 function _setInput<TValue>(target: InputSignal<TValue>, value: TValue): void
@@ -35,8 +35,8 @@ describe("elicitation card command admission", function _commandSuite()
 		const submitted = vi.fn();
 		component.draftSelected.subscribe(selected);
 		component.submitRequested.subscribe(submitted);
-		component["selectApproval"](true);
-		expect(selected).toHaveBeenCalledWith({ kind: ElicitationBodyKinds.Approval, approved: true });
+		component["selectApproval"]({ approved: true, scope: ElicitationApprovalScopes.Once });
+		expect(selected).toHaveBeenCalledWith({ kind: ElicitationBodyKinds.Approval, approved: true, scope: ElicitationApprovalScopes.Once });
 		expect(submitted).not.toHaveBeenCalled();
 		component["submit"]();
 		expect(submitted).not.toHaveBeenCalled();
@@ -53,12 +53,12 @@ describe("elicitation card command admission", function _commandSuite()
 		component.draftSelected.subscribe(selected);
 		component.submitRequested.subscribe(submitted);
 		_setInput(component.draft, { kind: ElicitationBodyKinds.Approval, approved: true });
-		component["selectApproval"](true);
+		component["selectApproval"]({ approved: true, scope: ElicitationApprovalScopes.Once });
 		component["submit"]();
 		expect(selected).not.toHaveBeenCalled();
 		expect(submitted).not.toHaveBeenCalled();
-		component["selectApproval"](false);
-		expect(selected).toHaveBeenCalledWith({ kind: ElicitationBodyKinds.Approval, approved: false });
+		component["selectApproval"]({ approved: false, scope: ElicitationApprovalScopes.Once });
+		expect(selected).toHaveBeenCalledWith({ kind: ElicitationBodyKinds.Approval, approved: false, scope: ElicitationApprovalScopes.Once });
 		_setInput(component.draft, { kind: ElicitationBodyKinds.Approval, approved: false });
 		component["submit"]();
 		expect(submitted).toHaveBeenCalledOnce();
@@ -73,8 +73,8 @@ describe("elicitation card command admission", function _commandSuite()
 		component.submitRequested.subscribe(submitted);
 		_setInput(component.draft, { kind: ElicitationBodyKinds.Approval, approved: true });
 		_setInput(component.stepUpPath, "/api/v1/auth/reauthenticate");
-		component["selectApproval"](true);
-		component["selectApproval"](false);
+		component["selectApproval"]({ approved: true, scope: ElicitationApprovalScopes.Once });
+		component["selectApproval"]({ approved: false, scope: ElicitationApprovalScopes.Once });
 		component["submit"]();
 		expect(selected).not.toHaveBeenCalled();
 		expect(submitted).not.toHaveBeenCalled();
@@ -89,8 +89,8 @@ describe("elicitation card command admission", function _commandSuite()
 		component.submitRequested.subscribe(submitted);
 		_setInput(component.draft, { kind: ElicitationBodyKinds.Approval, approved: true });
 		_setInput(component[inputName], true);
-		component["selectApproval"](true);
-		component["selectApproval"](false);
+		component["selectApproval"]({ approved: true, scope: ElicitationApprovalScopes.Once });
+		component["selectApproval"]({ approved: false, scope: ElicitationApprovalScopes.Once });
 		component["submit"]();
 		expect(selected).not.toHaveBeenCalled();
 		expect(submitted).not.toHaveBeenCalled();

@@ -599,6 +599,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/tool-approval-scopes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List my standing tool approvals
+         * @description Returns only requester-owned, currently readable standing approvals. Hidden arguments, credentials, and connection coordinates are never returned.
+         */
+        get: operations["listMyToolApprovalScopes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/tool-approval-scopes/{scopeId}/revocation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke my standing tool approval
+         * @description Fences new matching admissions. Actions already claimed remain historical facts. Exact retries return the saved revoked state without restoring authority.
+         */
+        post: operations["revokeMyToolApprovalScope"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/activity/elicitations": {
         parameters: {
             query?: never;
@@ -4781,6 +4821,162 @@ export interface operations {
             };
         };
     };
+    listMyToolApprovalScopes: {
+        parameters: {
+            query?: {
+                /** @description Opaque continuation coordinate from the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Requester-owned standing approvals. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        scopes: {
+                            id: string;
+                            /** @enum {string} */
+                            state: "active" | "revoked";
+                            action: string;
+                            target: string;
+                            externalSystem?: string;
+                            assistantLabel?: string;
+                            connectionOwnerLabel: string;
+                            /** Format: date-time */
+                            createdAt: string;
+                            /** Format: date-time */
+                            revokedAt?: string;
+                        }[];
+                        nextCursor?: string;
+                    };
+                };
+            };
+            /** @description No authenticated browser session owns the scope list. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The standing approval catalogue is temporarily unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revokeMyToolApprovalScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque standing approval identifier. */
+                scopeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    idempotencyKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Authoritative revoked state or exact idempotent replay. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        scope: {
+                            id: string;
+                            /** @enum {string} */
+                            state: "active" | "revoked";
+                            action: string;
+                            target: string;
+                            externalSystem?: string;
+                            assistantLabel?: string;
+                            connectionOwnerLabel: string;
+                            /** Format: date-time */
+                            createdAt: string;
+                            /** Format: date-time */
+                            revokedAt?: string;
+                        };
+                        idempotent: boolean;
+                    };
+                };
+            };
+            /** @description The revocation command is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No authenticated browser session owns the revocation. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Current product authority does not allow revocation. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The scope is absent or belongs to another requester. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The idempotency key conflicts with an earlier command. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Standing approval revocation is temporarily unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     listMyElicitationActivity: {
         parameters: {
             query?: {
@@ -4831,6 +5027,10 @@ export interface operations {
                                 proposedArguments?: {
                                     [key: string]: unknown;
                                 } | null;
+                                offeredScopes?: ("once" | "always")[];
+                                standingScope?: {
+                                    explanation: string;
+                                };
                             } | {
                                 /** @constant */
                                 kind: "single_choice";
@@ -4950,6 +5150,10 @@ export interface operations {
                                 proposedArguments?: {
                                     [key: string]: unknown;
                                 } | null;
+                                offeredScopes?: ("once" | "always")[];
+                                standingScope?: {
+                                    explanation: string;
+                                };
                             } | {
                                 /** @constant */
                                 kind: "single_choice";
@@ -5071,6 +5275,10 @@ export interface operations {
                                 proposedArguments?: {
                                     [key: string]: unknown;
                                 } | null;
+                                offeredScopes?: ("once" | "always")[];
+                                standingScope?: {
+                                    explanation: string;
+                                };
                             } | {
                                 /** @constant */
                                 kind: "single_choice";
@@ -5159,6 +5367,8 @@ export interface operations {
                         /** @constant */
                         kind: "approval";
                         approved: boolean;
+                        /** @enum {string} */
+                        scope?: "once" | "always";
                     } | {
                         /** @constant */
                         kind: "single_choice";

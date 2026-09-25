@@ -58,6 +58,7 @@ function _LiveTransaction()
 		agentRevisionMcpToolAssignment: { findUnique: vi.fn().mockResolvedValue({ agentServiceId: "service-1", siloId: "silo-1", toolRevision: { siloId: "silo-1", serverRevision: { siloId: "silo-1", mcpServerId: "server-1", transport: McpExecutionTransport.OciImage, connectionId: null, connectionGeneration: null, connectionOwnerPrincipalId: null, endpointDigest: null, server: { credentialRequirement: McpCredentialRequirement.Credentialless }, connection: null } } }) },
 		mcpServerInstall: { findUnique: vi.fn().mockResolvedValue({ id: "install-1", mcpServerId: "server-1", principalId: "principal-1", principal: { siloId: "silo-1", provenance: PrincipalProvenance.External, displayName: "Personal owner" } }) },
 		toolInvocation: { findUnique: vi.fn(async function _invocation() { return _Invocation(); }), updateMany: vi.fn() },
+		toolApprovalScope: { findMany: vi.fn().mockResolvedValue([]) },
 		toolResultDelivery: { create: vi.fn(async function _delivery() { return { id: "delivery-1" }; }) },
 	};
 }

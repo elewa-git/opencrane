@@ -1,4 +1,4 @@
-import { ElicitationBodyKinds, ElicitationConnectionOwnerKinds, ElicitationPurposes, ElicitationRequestStates, McpCredentialRequirement } from "@opencrane/contracts";
+import { ElicitationApprovalScopes, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, ElicitationPurposes, ElicitationRequestStates, McpCredentialRequirement, ToolApprovalScopeStates } from "@opencrane/contracts";
 
 /** Public ownership disclosure without the connection's private custody coordinates. */
 const _EXECUTION_CONNECTION_SCHEMA = {
@@ -17,7 +17,7 @@ const _CHOICE_SCHEMA = { type: "object", additionalProperties: false, required: 
 
 /** Exact four browser-safe body shapes. */
 const _BODY_SCHEMA = { oneOf: [
-	{ type: "object", additionalProperties: false, required: ["kind", "prompt", "action", "target", "dataUse", "consequence"], properties: { kind: { const: ElicitationBodyKinds.Approval }, prompt: { type: "string" }, action: { type: "string" }, target: { type: "string" }, dataUse: { type: "string" }, externalSystem: { type: "string" }, consequence: { type: "string" }, cost: { type: "string" }, executionConnection: _EXECUTION_CONNECTION_SCHEMA, proposedArguments: { oneOf: [{ type: "object", additionalProperties: true }, { type: "null" }] } } },
+	{ type: "object", additionalProperties: false, required: ["kind", "prompt", "action", "target", "dataUse", "consequence"], properties: { kind: { const: ElicitationBodyKinds.Approval }, prompt: { type: "string" }, action: { type: "string" }, target: { type: "string" }, dataUse: { type: "string" }, externalSystem: { type: "string" }, consequence: { type: "string" }, cost: { type: "string" }, executionConnection: _EXECUTION_CONNECTION_SCHEMA, proposedArguments: { oneOf: [{ type: "object", additionalProperties: true }, { type: "null" }] }, offeredScopes: { type: "array", minItems: 1, uniqueItems: true, items: { type: "string", enum: Object.values(ElicitationApprovalScopes) } }, standingScope: { type: "object", additionalProperties: false, required: ["explanation"], properties: { explanation: { type: "string", minLength: 1, maxLength: 1_000 } } } } },
 	{ type: "object", additionalProperties: false, required: ["kind", "prompt", "choices"], properties: { kind: { const: ElicitationBodyKinds.SingleChoice }, prompt: { type: "string" }, choices: { type: "array", items: _CHOICE_SCHEMA } } },
 	{ type: "object", additionalProperties: false, required: ["kind", "prompt", "choices", "minimumSelections", "maximumSelections"], properties: { kind: { const: ElicitationBodyKinds.MultipleChoice }, prompt: { type: "string" }, choices: { type: "array", items: _CHOICE_SCHEMA }, minimumSelections: { type: "integer" }, maximumSelections: { type: "integer" } } },
 	{ type: "object", additionalProperties: false, required: ["kind", "prompt", "maximumLength", "allowEmpty"], properties: { kind: { const: ElicitationBodyKinds.FreeText }, prompt: { type: "string" }, maximumLength: { type: "integer" }, allowEmpty: { type: "boolean" } } },
@@ -25,7 +25,7 @@ const _BODY_SCHEMA = { oneOf: [
 
 /** Exact four response shapes accepted by the generated client. */
 const _RESPONSE_VALUE_SCHEMA = { oneOf: [
-	{ type: "object", additionalProperties: false, required: ["kind", "approved"], properties: { kind: { const: ElicitationBodyKinds.Approval }, approved: { type: "boolean" } } },
+	{ type: "object", additionalProperties: false, required: ["kind", "approved"], properties: { kind: { const: ElicitationBodyKinds.Approval }, approved: { type: "boolean" }, scope: { type: "string", enum: Object.values(ElicitationApprovalScopes) } } },
 	{ type: "object", additionalProperties: false, required: ["kind", "selection"], properties: { kind: { const: ElicitationBodyKinds.SingleChoice }, selection: { type: "string" } } },
 	{ type: "object", additionalProperties: false, required: ["kind", "selections"], properties: { kind: { const: ElicitationBodyKinds.MultipleChoice }, selections: { type: "array", items: { type: "string" } } } },
 	{ type: "object", additionalProperties: false, required: ["kind", "text"], properties: { kind: { const: ElicitationBodyKinds.FreeText }, text: { type: "string" } } },
@@ -44,8 +44,44 @@ const _ELICITATION_SCHEMA = {
 /** Authoritative terminal response acknowledgement. */
 const _RESPONSE_PROJECTION_SCHEMA = { type: "object", additionalProperties: false, required: ["requestId", "state", "idempotent", "resolvedAt"], properties: { requestId: { type: "string" }, state: { type: "string", enum: Object.values(ElicitationRequestStates) }, idempotent: { type: "boolean" }, resolvedAt: { type: "string", format: "date-time" } } } as const;
 
+/** Browser-safe standing approval summary without reviewed hidden arguments or credentials. */
+const _TOOL_APPROVAL_SCOPE_SCHEMA = { type: "object", additionalProperties: false, required: ["id", "state", "action", "target", "connectionOwnerLabel", "createdAt"], properties: { id: { type: "string" }, state: { type: "string", enum: Object.values(ToolApprovalScopeStates) }, action: { type: "string" }, target: { type: "string" }, externalSystem: { type: "string" }, assistantLabel: { type: "string" }, connectionOwnerLabel: { type: "string" }, createdAt: { type: "string", format: "date-time" }, revokedAt: { type: "string", format: "date-time" } } } as const;
+
 /** OpenAPI paths for the single conversation-scoped elicitation surface. */
 export const _ElicitationOpenapiPaths = {
+	"/me/tool-approval-scopes": {
+		get: {
+			operationId: "listMyToolApprovalScopes",
+			summary: "List my standing tool approvals",
+			description: "Returns only requester-owned, currently readable standing approvals. Hidden arguments, credentials, and connection coordinates are never returned.",
+			tags: ["Conversations"],
+			parameters: [{ name: "cursor", in: "query", required: false, schema: { type: "string", minLength: 1, maxLength: 500 }, description: "Opaque continuation coordinate from the previous page." }],
+			responses: {
+				200: { description: "Requester-owned standing approvals.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["scopes"], properties: { scopes: { type: "array", maxItems: 100, items: _TOOL_APPROVAL_SCOPE_SCHEMA }, nextCursor: { type: "string" } } } } } },
+				401: _Error("No authenticated browser session owns the scope list."),
+				503: _Error("The standing approval catalogue is temporarily unavailable."),
+			},
+		},
+	},
+	"/me/tool-approval-scopes/{scopeId}/revocation": {
+		post: {
+			operationId: "revokeMyToolApprovalScope",
+			summary: "Revoke my standing tool approval",
+			description: "Fences new matching admissions. Actions already claimed remain historical facts. Exact retries return the saved revoked state without restoring authority.",
+			tags: ["Conversations"],
+			parameters: [{ name: "scopeId", in: "path", required: true, schema: { type: "string" }, description: "Opaque standing approval identifier." }],
+			requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["idempotencyKey"], properties: { idempotencyKey: { type: "string", minLength: 1, maxLength: 200 } } } } } },
+			responses: {
+				200: { description: "Authoritative revoked state or exact idempotent replay.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["scope", "idempotent"], properties: { scope: _TOOL_APPROVAL_SCOPE_SCHEMA, idempotent: { type: "boolean" } } } } } },
+				400: _Error("The revocation command is invalid."),
+				401: _Error("No authenticated browser session owns the revocation."),
+				403: _Error("Current product authority does not allow revocation."),
+				404: _Error("The scope is absent or belongs to another requester."),
+				409: _Error("The idempotency key conflicts with an earlier command."),
+				503: _Error("Standing approval revocation is temporarily unavailable."),
+			},
+		},
+	},
 	"/me/activity/elicitations": {
 		get: {
 			operationId: "listMyElicitationActivity",

@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma, ToolInvocationState, type PrismaClient } from "@prisma/client";
 
 import { ConversationToolProposalOutcomes, type ConversationToolProposal, type ConversationToolProposalReceipt } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
@@ -90,6 +90,17 @@ export class PrismaConversationToolProposalRepository implements ConversationToo
 				expiresAt: new Date(expiresAtEpochMs),
 			});
 			if (!opened)
+				throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
+			const openedInvocation = await this.transaction.toolInvocation.findUnique({ where: { id: invocation.id }, select: { state: true } });
+			if (openedInvocation?.state === ToolInvocationState.Ready)
+			{
+				const runtimeAdmitted = await this.runtimeAdmission(this.transaction, invocation.id);
+				if (!runtimeAdmitted
+					|| candidate.compiledInput.budget.wallClockDeadlineEpochMs <= Date.now()
+					|| Date.parse(candidate.credentialExpiresAt) <= Date.now())
+					throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
+			}
+			else if (openedInvocation?.state !== ToolInvocationState.AwaitingApproval)
 				throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 			return {
 				proposalId: result.invocation.toolInvocationId,

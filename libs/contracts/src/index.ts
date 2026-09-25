@@ -7,6 +7,7 @@ export { __CanAppendConversationTimelineEntry, __DecideConversationCommand, __Ha
 export type { AgentSessionConversation, AllowedConversationCommandDecision, CloseConversationCommand, Conversation, ConversationBase, ConversationCommand, ConversationCommandContext, ConversationCommandDecision, ConversationCreationRequest, ConversationId, ConversationMessageTimelineEntry, ConversationMembershipTimelineEntry, ConversationParticipant, ConversationReplayCursor, ConversationRunEventTimelineEntry, ConversationSystemTimelineEntry, ConversationTimelineEntry, ConversationTimelineEntryBase, DeniedConversationCommandDecision, DirectConversation, GroupConversation, Message, MessageId, SubmitMessageConversationCommand, AnswerElicitationConversationCommand, SteerRunConversationCommand } from "@opencrane/models/conversations";
 export * from "@opencrane/models/conversation-assets";
 export * from "./conversations/conversation-elicitation.types";
+export * from "./conversations/tool-approval-scope.types";
 export * from "./conversations/conversation-elicitation.validator";
 export type * from "@opencrane/models/artifacts";
 export * from "./artifacts/artifact-preprocessor.types";

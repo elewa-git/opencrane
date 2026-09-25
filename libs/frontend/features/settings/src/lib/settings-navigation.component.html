@@ -8,6 +8,10 @@
 		<i class="pi pi-users" aria-hidden="true"></i>
 		<span>Members</span>
 	</a>
+	<a routerLink="/settings/approvals" routerLinkActive="settings-navigation__link--active" class="settings-navigation__link" (click)="navigated.emit()">
+		<i class="pi pi-shield" aria-hidden="true"></i>
+		<span>Standing approvals</span>
+	</a>
 	<a routerLink="/settings/audit" routerLinkActive="settings-navigation__link--active" class="settings-navigation__link" (click)="navigated.emit()">
 		<i class="pi pi-list" aria-hidden="true"></i>
 		<span>Audit</span>

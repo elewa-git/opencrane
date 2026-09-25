@@ -1,4 +1,5 @@
 import type { JsonValue } from "@opencrane/util";
+import type { ElicitationApprovalScopes } from "@opencrane/contracts";
 
 /**
  * The two answers a reviewer can give, and they are final.
@@ -47,6 +48,8 @@ export interface DecideDeferredToolRequestCommand
 	readonly reviewerSubjectId: string;
 	/** Reviewer's terminal decision. */
 	readonly decision: DeferredToolDecisionKinds;
+	/** Defaults to Once; Always is valid only for an approved request that explicitly offered it. */
+	readonly scope?: ElicitationApprovalScopes;
 	/** Complete replacement arguments required for approval and forbidden for denial. */
 	readonly arguments?: JsonValue;
 	/** Subject who recorded the decision. */

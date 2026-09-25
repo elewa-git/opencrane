@@ -230,6 +230,22 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 		return updated.count === 1;
 	}
 
+	/** Apply one standing-consent admission before a run is paused for human input. */
+	static async markStandingConsentApprovedInTransaction(transaction: Prisma.TransactionClient, invocationId: string, expectedArguments: JsonValue, expectedArgumentsDigest: string): Promise<boolean>
+	{
+		const invocation = await transaction.toolInvocation.findUnique({ where: { id: invocationId }, include: { standingApprovalAdmission: true } });
+		if (invocation === null || invocation.runId === null || invocation.attempt === null || !invocation.approvalRequired || invocation.standingApprovalAdmission === null
+			|| __DigestCanonicalJson(invocation.arguments as JsonValue) !== __DigestCanonicalJson(expectedArguments)
+			|| invocation.argumentsDigest !== expectedArgumentsDigest
+			|| _ToolInvocationPlan(invocation, ToolInvocationLifecycleEvents.Approved, invocation.createdAt) !== ToolInvocationLifecycleActions.Approve)
+			return false;
+		const updated = await transaction.toolInvocation.updateMany({
+			where: { id: invocationId, state: ToolInvocationState.AwaitingApproval, argumentsDigest: expectedArgumentsDigest, revision: invocation.revision, run: { is: { attempt: invocation.attempt, state: "Running" } } },
+			data: { state: ToolInvocationState.Ready, effectiveArguments: expectedArguments as Prisma.InputJsonValue, effectiveArgumentsDigest: expectedArgumentsDigest, failureCode: null, revision: { increment: 1 } },
+		});
+		return updated.count === 1;
+	}
+
 	/** Terminalise rejected approval and create the exact failure delivery. */
 	async markApprovalRejected(invocationId: string, now: Date, failureCode: string): Promise<boolean>
 	{

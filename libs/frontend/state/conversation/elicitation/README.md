@@ -27,6 +27,9 @@ grants no access and does not copy an answer into this state package.
 - `__MapElicitationActivity` and `__MapToolActivity` — pure canonical-reference mappers.
 - `ConversationActivityKinds`, `ConversationActivityRow`, and `RunToolProgressPhases` — the derived row vocabulary and public tool-phase categories used by the Activity feature.
 - `__CanApproveElicitation` — checks that affirmative drafts have reviewable arguments and valid tool-connection disclosure; this never grants server permission.
+- `ToolApprovalScopeStore`, `ToolApprovalScopeGateway`, and `OpenCraneToolApprovalScopeGateway` —
+  current-requester pagination, per-scope revocation, uncertain retry identity and authoritative
+  result adoption through the generated client.
 - `ElicitationExecutionConnection`, `ElicitationConnectionOwnerKinds`, `McpCredentialRequirement`, and `___ElicitationExecutionConnectionSchema` — re-export the shared disclosure model and validator for feature mapping without bypassing the state package's public API.
 
 ## Boundary
@@ -36,6 +39,11 @@ uses the shared strict validator, rejects unknown disclosure fields, and preserv
 labels unchanged. Other approval purposes omit this disclosure. The store checks it again when
 choosing and submitting, including when a refresh retains an older draft. Denial remains available
 when tool details are incomplete; the server still decides whether to accept any response.
+
+Standing approvals are current-requester consent records, not tool grants. Identity changes purge
+their safe summaries, opaque cursors and saved retry keys. Independent scopes may revoke in parallel,
+while a second command for the same scope is refused. An uncertain retry reuses its saved key, and
+the list follows only the server's opaque continuation cursor so older approvals remain reachable.
 
 ## Dependency direction
 

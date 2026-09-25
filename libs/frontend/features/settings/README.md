@@ -41,8 +41,9 @@ confirmation and removes private links and controls; Refresh explicitly rechecks
 
 Consumed by `opencrane-ui`. It owns routing and presentation only; the backend remains the authority
 for roles, invitations, membership, expiry, identity matching, and host payment policy.
-The Audit and Usage navigation links target the separately composed governance feature. This package
-does not import that feature, load its data, or grant access to those destinations.
+The Audit and Usage links target the separately composed governance feature; Standing approvals
+targets the independent conversation-elicitation feature. This package does not import those
+features, load their data, or grant access to those destinations.
 
 ## Dependency direction
 

@@ -1,5 +1,5 @@
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
-import { AgentRunState, AgentServiceKind, ApprovalRequestState, ElicitationBodyKind, ElicitationPurpose, ExternalActionRecoveryMode, McpCredentialRequirement, McpExecutionTransport, OrgMemberStatus, PrincipalProvenance, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState } from "@prisma/client";
+import { AgentRunState, AgentServiceKind, ApprovalRequestState, ElicitationBodyKind, ElicitationPurpose, ExternalActionRecoveryMode, McpCredentialRequirement, McpExecutionTransport, OrgMemberStatus, PrincipalProvenance, Prisma, ToolApprovalDecisionScope, ToolInvocationAuthorizationActorKind, ToolInvocationState } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const _managedGrantMocks = vi.hoisted(function _ManagedGrantMocks()
@@ -81,6 +81,7 @@ function _requesterDelegates(managed = false)
 		agentRevisionMcpToolAssignment: { findUnique: vi.fn().mockResolvedValue(_toolAssignment()) },
 		mcpServerInstall: { findUnique: vi.fn().mockResolvedValue({ id: "install-1", mcpServerId: "server-1", principalId: installPrincipalId, principal: { siloId: "silo-1", provenance: installPrincipalProvenance, displayName: installPrincipalDisplayName } }) },
 		agentService: { findUnique: vi.fn().mockResolvedValue(managed ? { kind: AgentServiceKind.Managed, name: "Company assistant", principalId: "company-principal", principal: { provenance: PrincipalProvenance.Internal }, revisions: [{ id: "rev-1" }] } : null) },
+		toolApprovalScope: { findMany: vi.fn().mockResolvedValue([]) },
 	};
 }
 
@@ -109,6 +110,8 @@ function _approvalBody(managed = false)
 		consequence: "This invokes the external tool once. Its saved description says: Search the saved records",
 		proposedArguments: { query: "original" },
 		executionConnection: { ownerKind, ownerLabel, credentialRequirement: "credentialless" },
+		offeredScopes: ["once", "always"],
+		standingScope: { explanation: "Approve always applies only to this exact assistant revision, connection owner and generation, tool revision, action, and final reviewed arguments. Any changed detail requires a fresh approval. You can revoke it later." },
 	};
 }
 
@@ -243,7 +246,7 @@ describe("deferred tool approval authority", function _suite()
 	it("replays an identical decision idempotently", async function _idempotent()
 	{
 		const finalArguments = { query: "edited" };
-		const { transaction, updateMany } = _transaction({ ..._pending() as object, state: ApprovalRequestState.Approved, finalArgumentsDigest: __DigestCanonicalJson(finalArguments) }, 0);
+		const { transaction, updateMany } = _transaction({ ..._pending() as object, state: ApprovalRequestState.Approved, decisionScope: ToolApprovalDecisionScope.Once, finalArgumentsDigest: __DigestCanonicalJson(finalArguments) }, 0);
 		const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", reviewerSubjectId: "user-1", decision: DeferredToolDecisionKinds.Approved, arguments: finalArguments, decidedBy: "user-1", now: NOW });
 		expect(result).toEqual({ outcome: "already_decided", decision: DeferredToolDecisionKinds.Approved, argumentsDigest: __DigestCanonicalJson(finalArguments) });
 		expect(updateMany).not.toHaveBeenCalled();
@@ -251,7 +254,7 @@ describe("deferred tool approval authority", function _suite()
 
 	it("conflicts when re-decided the other way", async function _conflict()
 	{
-		const { transaction } = _transaction({ ..._pending() as object, state: ApprovalRequestState.Approved }, 0);
+		const { transaction } = _transaction({ ..._pending() as object, state: ApprovalRequestState.Approved, decisionScope: ToolApprovalDecisionScope.Once }, 0);
 		const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", reviewerSubjectId: "user-1", decision: DeferredToolDecisionKinds.Denied, decidedBy: "user-1", now: NOW });
 		expect(result).toEqual({ outcome: "conflict" });
 	});
@@ -504,7 +507,7 @@ describe("requester-only company tool approvals", function _RequesterOnly()
 	it("replays a saved company decision only for the original requester", async function _DecisionReplay()
 	{
 		const argumentsValue = { query: "edited" };
-		const context = _managedDecision({ state: ApprovalRequestState.Approved, finalArgumentsDigest: __DigestCanonicalJson(argumentsValue) });
+		const context = _managedDecision({ state: ApprovalRequestState.Approved, decisionScope: ToolApprovalDecisionScope.Once, finalArgumentsDigest: __DigestCanonicalJson(argumentsValue) });
 		const command = { approvalRequestId: "approval-1", siloId: "silo-1", reviewerSubjectId: "user-1", decision: DeferredToolDecisionKinds.Approved, arguments: argumentsValue, decidedBy: "user-1", now: NOW };
 		await expect(__DecideDeferredToolRequest(context.transaction, command)).resolves.toMatchObject({ outcome: "already_decided" });
 		await expect(__DecideDeferredToolRequest(context.transaction, { ...command, reviewerSubjectId: "unrelated-admin", decidedBy: "unrelated-admin" })).resolves.toEqual({ outcome: "conflict" });

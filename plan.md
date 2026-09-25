@@ -1,5 +1,91 @@
 # OpenCrane — Active Plan
 
+## Standing approvals visual repair — 25 September 2026
+
+The isolated follow-up starts at #908 head
+`1548b6869cabd9af4ebd1cfcd55d97fbd45eaf05`; unfinished Ask and the original 900-file MVP
+overlay remain separate. The current review order is #908 against develop, then #910 against
+#908. The earlier #899 and #900 review surfaces have merged.
+
+Inspection of #908's saved CI run `36119867522` separates its 61 failures into 40 missing
+baselines, 20 changed images and one confirmation-readiness timeout, with 129 passing tests.
+The timeout came from a workspace story that omitted the server's offered Once scope: selecting
+the radio did not establish the controlled affirmative response. The fixture now offers Once;
+the existing interaction, viewport assertion and Darwin screenshot comparison pass unchanged.
+
+All seven existing Standing approvals settings states are now selected for visual testing,
+with an eighth long-content narrow state. Their first renders exposed a separate layout defect:
+long uncertainty feedback could squeeze the Revoke label across two lines. A correction stays
+within the existing row's action-cell layout; no permission, confirmation, retry, theme or
+screenshot-tolerance change is in scope. The Uncertain story now asserts one rendered line for
+the Revoke label. Fresh Chromium captures confirm that state, a busy revoke and the narrow layout;
+the narrow viewport, client and scroll widths are all 390, with no horizontal overflow. The
+focused run explicitly disabled snapshot updates and reached all three captures; only the
+missing Darwin baselines fail. No reference images were created or accepted.
+
+The fixture-only checks passed 145 frontend tests and both affected lint targets. After the layout
+repair, elicitation lint and all 18 component tests pass again; the production Storybook build,
+40 interaction suites with 257 tests, style/Prisma boundaries and module-growth checks pass.
+Independent integrated review reports no findings on the frozen three-file source overlay
+`e0f77149a2695797417a8b04e233aecd50f280a532a32266c860aec5174043dd` (plan excluded).
+The local renderer was stopped. Candidate images are review evidence, not
+accepted baselines or authenticated browser/provider proof. The original CI images have been
+collected for human before/after review; no baselines have been accepted or committed. #910's
+green run `36126779205` skipped the unaffected visual suite and does not clear the parent gate.
+New-head CI and human visual acceptance remain open; this slice does not complete the MVP.
+
+## Scoped standing tool approvals — publication candidate, 25 September 2026
+
+Publish the reviewed requester-owned tool-consent capability as an incremental child of #900,
+starting from `5674b66bccb3aecfe0eb08f210103eb07dd43736`, then restacked onto #900's
+`36d90551012c3028a1acbb7da53bd1808d4483ea` after its documentation-only parent repair.
+The larger unfinished MVP worktree is
+preserved separately; this candidate does not include its paused Recall, routine, shared-budget,
+delegation or administration-design changes. Existing typed execution contexts remain intact.
+
+The accepted policy offers Approve once or revocable Approve always for an already
+approval-required tool call. A standing decision covers the exact requester, assistant revision,
+connection owner/generation, tool revision/action and reviewed arguments. Hidden arguments cannot
+create standing consent. Every later match still needs a one-use admission, current permissions,
+and a claim bound to the same invocation. Revocation closes unclaimed effects; it cannot undo an
+effect that has already been claimed or justify another dispatch after an uncertain result.
+
+The existing elicitation controls retain an explicit final submit. An authenticated Settings view
+lists the requester's own saved approvals with pagination and explicit revoke confirmation.
+Withdrawal remains available after losing permission to invoke the assistant. The state owner
+preserves uncertain-command retry identity and purges private rows when the session changes.
+The browser's session port supplies display/cache identity only, never execution authority.
+
+#903 remains a distinct memory-consent proposal: dataset-level prompt suppression, sensitivity
+and memory session scope are not tool-effect authorization and are not absorbed or enabled here.
+Its generic scope-selector interaction overlaps the shared elicitation components and must be
+reconciled against the tool disclosure/confirmation contract when that memory proposal is integrated.
+The current tool policy intentionally offers no session-wide permission and copies no memory grants.
+
+#893, #894, #896, #897 and #898 have merged. The remaining open review order is
+#899 → #900 → this candidate. The #899 parent merge preserves its current M1/U2 progress and
+the separately merged Cognee ADR 0017 notes. #900's incremental patch is unchanged. No predecessor
+was absorbed or force-rewritten for this publication, and no product behavior changed in the repair.
+The clean candidate has its own generated API and baseline
+`4e050042851f1f74314cad1d6f03b7d3e6be033dae16304f03bfa1cb752267f6`. Local qualification passes:
+120 database integration tests across 15 files, including 17 standing-consent cases, plus four SQL
+authority suites on isolated PostgreSQL 17.11 in UTC; authorization 303, elicitation 70, conversations
+845, contracts 205 and authorization-model 17 unit tests; and 115 frontend/app tests. All five
+affected backend type checks, four frontend type checks, UI production build, generated API,
+release binding, workflow/authorization/ownership guards and mechanical style pass. The temporary
+database was stopped and its generated data removed. This is not the pinned PostgreSQL 17.5
+release qualification, a clean-branch browser acceptance run, or a real-provider test.
+
+The extracted source was reviewed separately from the dirty worktree. The UI review corrected
+independent Read/Revoke permission handling and fenced late authorization failures from an old
+account before they could clear a new account's state; focused regressions pass. The original
+900-file unpublished source manifest remains byte-for-byte intact. Its earlier 159-test SQL result
+is historical evidence only and is not attributed to this candidate.
+
+Remaining MVP work includes trusted per-tool first-write classification, operational delegation and
+schedules with shared budgets, connected consented recall, and real-account/provider/fresh-install
+acceptance. This source publication does not deploy, change live permissions, or claim MVP completion.
+
 ## MVP continuation — 2026-09-22
 
 Composition readability follow-up to `32872dc9`: replace the conversation workflow bootstrap's

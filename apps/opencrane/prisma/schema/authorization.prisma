@@ -41,6 +41,28 @@ enum ApprovalRequestState {
   Cancelled @map("cancelled")
 }
 
+/// Scope chosen by the original requester for an approved tool invocation.
+enum ToolApprovalDecisionScope {
+  /// Approves only the reviewed invocation.
+  Once   @map("once")
+  /// Also creates an exact, revocable standing consent for later matching invocations.
+  Always @map("always")
+}
+
+/// Lifecycle of an exact requester-owned standing tool consent.
+enum ToolApprovalScopeState {
+  /// Matching invocations may receive a one-use admission while current execution authority remains valid.
+  Active  @map("active")
+  /// New admissions are fenced; already claimed effects remain historical facts.
+  Revoked @map("revoked")
+}
+
+/// Provenance of the one-use approval evidence attached to an invocation.
+enum ToolApprovalAdmissionOrigin {
+  /// The admission was derived from a requester-owned standing consent.
+  StandingConsent @map("standing_consent")
+}
+
 /// Durable lifecycle of one externally effectful runtime tool invocation. These states belong to
 /// ToolInvocation because provider ambiguity, approval, and recovery belong to the runtime tool
 /// path and its transaction-bound authorization admission.
@@ -159,15 +181,77 @@ model ApprovalRequest {
   responseSchema           Json                       @map("response_schema")
   finalArguments           Json?                      @map("final_arguments")
   finalArgumentsDigest     String?                    @map("final_arguments_digest")
+  decisionScope            ToolApprovalDecisionScope? @map("decision_scope")
   createdAt                DateTime                   @default(now()) @map("created_at")
   run                      AgentRun                   @relation(fields: [runId, agentServiceId, agentRevisionId], references: [id, agentServiceId, agentRevisionId], onDelete: Restrict)
   toolInvocation           ToolInvocation             @relation(fields: [toolInvocationRowId], references: [id], onDelete: Restrict)
   elicitationRequest       ElicitationRequest         @relation(fields: [elicitationRequestId], references: [id], onDelete: Restrict)
+  standingScope            ToolApprovalScope?
 
   @@unique([runId, attempt, actionDigest])
   @@index([state, expiresAt])
   @@index([agentIdentityId, principalId])
   @@map("approval_requests")
+}
+
+/// Exact requester-owned standing consent created from one authenticated human approval.
+model ToolApprovalScope {
+  id                           String                 @id @default(cuid())
+  siloId                       String                 @map("silo_id")
+  requesterPrincipalId         String                 @map("requester_principal_id")
+  requesterSubjectId           String                 @map("requester_subject_id")
+  agentServiceId               String                 @map("agent_service_id")
+  agentRevisionId              String                 @map("agent_revision_id")
+  connectionId                 String?                @map("connection_id")
+  connectionOwnerPrincipalId   String                 @map("connection_owner_principal_id")
+  connectionGeneration         Int?                   @map("connection_generation")
+  connectionEndpointDigest     String?                @map("connection_endpoint_digest")
+  toolRevisionId               String                 @map("tool_revision_id")
+  toolAction                   String                 @map("tool_action")
+  reviewedArguments            Json                   @map("reviewed_arguments")
+  argumentsDigest              String                 @map("arguments_digest")
+  routineId                    String?                @map("routine_id")
+  routineRevision              Int?                   @map("routine_revision")
+  actionLabel                  String                 @map("action_label")
+  targetLabel                  String                 @map("target_label")
+  externalSystemLabel          String?                @map("external_system_label")
+  assistantLabel               String?                @map("assistant_label")
+  connectionOwnerLabel         String                 @map("connection_owner_label")
+  sourceApprovalRequestId      String                 @unique @map("source_approval_request_id")
+  scopeIdentityDigest          String                 @map("scope_identity_digest")
+  activeIdentityDigest         String?                @unique @map("active_identity_digest")
+  state                        ToolApprovalScopeState @default(Active)
+  revision                     Int                    @default(0)
+  revocationIdempotencyDigest  String?                @map("revocation_idempotency_digest")
+  revocationCommandDigest      String?                @map("revocation_command_digest")
+  revokedByPrincipalId         String?                @map("revoked_by_principal_id")
+  revokedAt                    DateTime?              @map("revoked_at")
+  createdAt                    DateTime               @default(now()) @map("created_at")
+  sourceApprovalRequest        ApprovalRequest        @relation(fields: [sourceApprovalRequestId], references: [id], onDelete: Restrict)
+  admissions                   ToolApprovalAdmission[]
+
+  @@index([siloId, requesterPrincipalId, state, createdAt])
+  @@index([scopeIdentityDigest, state])
+  @@index([siloId, agentServiceId, agentRevisionId, toolRevisionId, toolAction, argumentsDigest, state])
+  @@map("tool_approval_scopes")
+}
+
+/// One-use approval evidence derived from a standing consent for one concrete invocation.
+model ToolApprovalAdmission {
+  id                 String                      @id @default(cuid())
+  scopeId            String                      @map("scope_id")
+  scopeRevision      Int                         @map("scope_revision")
+  toolInvocationId   String                      @unique @map("tool_invocation_id")
+  origin             ToolApprovalAdmissionOrigin @default(StandingConsent)
+  argumentsDigest    String                      @map("arguments_digest")
+  createdAt          DateTime                    @default(now()) @map("created_at")
+  consumedAt         DateTime?                   @map("consumed_at")
+  consumedClaimFence Int?                        @map("consumed_claim_fence")
+  scope              ToolApprovalScope           @relation(fields: [scopeId], references: [id], onDelete: Restrict)
+  toolInvocation     ToolInvocation               @relation(fields: [toolInvocationId], references: [id], onDelete: Restrict)
+
+  @@index([scopeId, scopeRevision, consumedAt])
+  @@map("tool_approval_admissions")
 }
 
 /// Identifies the only non-task actor class that may own a ToolInvocation.
@@ -226,6 +310,7 @@ model ToolInvocation {
   run                      AgentRun?                        @relation(fields: [runId, agentServiceId, agentRevisionId], references: [id, agentServiceId, agentRevisionId], onDelete: Restrict)
   mcpTask                  McpTask?                         @relation(fields: [mcpTaskId], references: [id], onDelete: Restrict)
   approvalRequests         ApprovalRequest[]
+  standingApprovalAdmission ToolApprovalAdmission?
   resultDelivery           ToolResultDelivery?
   personalMemoryPermission PersonalMemoryPermissionReceipt?
   mcpRuntimeExecution      McpRuntimeExecution?

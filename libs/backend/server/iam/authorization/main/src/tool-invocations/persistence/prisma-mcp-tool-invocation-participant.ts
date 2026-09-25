@@ -11,6 +11,7 @@ import { ExternalActionClaimKinds, ToolInvocationStates } from "../tool-invocati
 import { ToolInvocationClaimOutcomes, ToolInvocationCompletionOutcomes } from "../tool-invocation.types";
 import type { McpTaskToolInvocationLifecycleParticipant, McpToolInvocationTransactionParticipant, McpToolInvocationTransactionParticipantFactory, RunToolInvocationDispatchAuthority } from "../mcp-tool-invocation-participant.types";
 import type { ToolInvocationClaim, ToolInvocationClaimResult, ToolInvocationCompletionResult, ToolInvocationLifecycleEventSink, ToolInvocationRecord, ToolInvocationRecoveryEventSink, ToolInvocationRunRecoveryAuthority, ToolInvocationTransitionResult, ToolResultDeliveryPayload } from "../tool-invocation.types";
+import { __ConsumeStandingToolApprovalAdmissionInTransaction, __ValidateStandingToolApprovalAdmissionInTransaction } from "../../approvals/prisma-tool-approval-scope";
 
 /** Return true only for a persisted MCP task owner. */
 function _IsMcpTaskOwned(invocation: ToolInvocationRecord): boolean
@@ -81,8 +82,20 @@ export class PrismaMcpToolInvocationParticipantUnitOfWork implements McpToolInvo
 				return { outcome: ToolInvocationClaimOutcomes.Winner, invocation: transition.invocation };
 			}
 			boundedLeaseMilliseconds = Math.min(leaseMilliseconds, notAfter - now.getTime());
+			if (invocation.approvalRequired && !await __ValidateStandingToolApprovalAdmissionInTransaction(this._transaction, invocation.id))
+			{
+				const unused = new PrismaRunUnusedToolInvocationRepository(this._transaction);
+				const transition = await unused.complete(invocation, now);
+				if (transition.changed && transition.invocation !== null)
+					await _AppendMcpToolInvocationFailed(this._lifecycleEvents, this._transaction, transition.invocation, _RUN_TOOL_DISPATCH_DENIED, false);
+				if (transition.invocation === null)
+					return { outcome: ToolInvocationClaimOutcomes.Missing };
+				return { outcome: ToolInvocationClaimOutcomes.Winner, invocation: transition.invocation };
+			}
 		}
 		const claimed = await this._repository.claim(invocationId, ExternalActionClaimKinds.Dispatch, now, boundedLeaseMilliseconds);
+		if (claimed.outcome === ToolInvocationClaimOutcomes.Claimed && invocation.approvalRequired)
+			await __ConsumeStandingToolApprovalAdmissionInTransaction(this._transaction, invocationId, claimed.invocation.claimFence, now);
 		if (claimed.outcome === ToolInvocationClaimOutcomes.Claimed && _IsMcpTaskOwned(claimed.invocation))
 		{
 			if (this._mcpTasks === null || !await this._mcpTasks.markClaimed(claimed.invocation, now))

@@ -63,6 +63,8 @@ audit records), `settings/usage` (recorded usage and independently protected bud
 acceptance), and `admin` (MCP tool administration). The root route redirects to
 `/onboarding`; protected routes use `OperatorAccessGuard`. Conversation history and computer state
 remain on the ordinary chat route; the retired relational Agent-thread projection has no child URL.
+`settings/approvals` mounts requester-owned standing approvals for review and revocation without an
+organisation administration role or a current tool Invoke grant.
 
 ## Boundary
 

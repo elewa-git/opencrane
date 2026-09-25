@@ -1,0 +1,10 @@
+:host { display: grid; gap: var(--oc-space-4); }
+.approval-scope-intro { max-width: 72ch; margin: 0; color: var(--oc-ink-muted); }
+.approval-scope-loading { display: grid; gap: var(--oc-space-3); }
+.approval-scope-empty { display: grid; place-items: center; gap: var(--oc-space-2); padding: clamp(var(--oc-space-8), 8vw, 72px); border: 1px solid var(--oc-border-default); border-radius: var(--oc-radius-panel); background: var(--oc-surface-raised); text-align: center; }
+.approval-scope-empty h2, .approval-scope-empty p { margin: 0; }
+.approval-scope-empty p { color: var(--oc-ink-muted); }
+.approval-scope-empty .pi { font-size: var(--oc-text-4xl); color: var(--oc-success); }
+.approval-scope-more { display: flex; justify-content: center; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+@media (max-width: 760px) { :host ::ng-deep .approval-scope-table thead { display: none; } :host ::ng-deep .approval-scope-table tbody { display: grid; } }

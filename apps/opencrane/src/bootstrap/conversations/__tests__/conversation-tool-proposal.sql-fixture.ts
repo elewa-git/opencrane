@@ -42,6 +42,8 @@ interface _FixtureOptions
 	readonly currentMembershipLifetimeMs?: number;
 	/** Frozen completion-token budget for original-allowance recovery proofs. */
 	readonly maximumCompletionTokens?: number;
+	/** Number of tool calls reserved before creating the immutable run snapshot. */
+	readonly maximumToolInvocations?: number;
 	/** Lifetime of the immutable run budget. */
 	readonly runLifetimeMs?: number;
 	/** Selects the existing hidden-argument fixture. */
@@ -99,7 +101,7 @@ export async function _SeedConversationToolProposalSqlFixture(options: _FixtureO
 	const toolDescription = options.tool?.description ?? "Read a dedicated test record";
 	const toolSchemaDigest = ___DigestCanonicalJson(schema);
 	const serverName = "Records SQL proof";
-	const budgetPolicy = { maxModelTurns: 2, maxCompletionTokens: options.maximumCompletionTokens ?? 1_024, maxCostUsdMicros: null, maxToolInvocations: 1, maxLoopIterations: 1, wallClockDeadlineEpochMs: now.getTime() + (options.runLifetimeMs ?? 240_000) };
+	const budgetPolicy = { maxModelTurns: 2, maxCompletionTokens: options.maximumCompletionTokens ?? 1_024, maxCostUsdMicros: null, maxToolInvocations: options.maximumToolInvocations ?? 1, maxLoopIterations: options.maximumToolInvocations ?? 1, wallClockDeadlineEpochMs: now.getTime() + (options.runLifetimeMs ?? 240_000) };
 	const snapshot: RunInputSnapshot = { runId, attempt: 1, siloId, agentServiceId, agentRevisionId, snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION, conversationId, messageIds: [], personaRevisionId, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [{ toolRevisionId, name: toolName, description: toolDescription, inputSchema: schema, inputSchemaDigest: toolSchemaDigest }], modelRoute: { alias: modelId, modelDefinitionId: modelId, litellmModelId: `litellm-${modelId}`, maxOutputTokens: 512, generatedOutputCapabilities: [] }, budgetPolicy, executionSubject: subject, promptCompilerVersion: PROMPT_COMPILER_VERSION, digest: "", compiledAt: now.toISOString() };
 	const snapshotDigest = __DigestRunInputSnapshot(snapshot);
 	const setup = new Client({ connectionString: process.env.DATABASE_URL });

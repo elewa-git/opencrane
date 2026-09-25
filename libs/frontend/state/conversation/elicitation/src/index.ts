@@ -1,6 +1,10 @@
 export { ConversationElicitationStore } from "./lib/conversation-elicitation.store";
-export { __CanApproveElicitation } from "./lib/elicitation-approval.guard";
+export { __CanApproveElicitation, __CanApproveElicitationScope } from "./lib/elicitation-approval.guard";
 export { ELICITATION_GATEWAY, OpenCraneConversationElicitationGateway } from "./lib/opencrane-conversation-elicitation.gateway";
+export { TOOL_APPROVAL_SCOPE_GATEWAY, OpenCraneToolApprovalScopeGateway } from "./lib/opencrane-tool-approval-scope.gateway";
+export { ToolApprovalScopeStore } from "./lib/tool-approval-scope.store";
+export { TOOL_APPROVAL_SCOPE_SESSION, ToolApprovalScopeReadStates } from "./lib/tool-approval-scope.types";
+export type { ToolApprovalScopeGateway, ToolApprovalScopeSession, ToolApprovalScopeState } from "./lib/tool-approval-scope.types";
 export { ElicitationGatewayError, ElicitationGatewayErrorKinds } from "./lib/elicitation-gateway.errors";
 export { __MapElicitationActivity, __MapToolActivity } from "./lib/conversation-activity.mapper";
 export { ConversationActivityKinds } from "./lib/conversation-activity.types";
@@ -8,5 +12,5 @@ export type { ConversationActivityRunState, ConversationActivityRunToolProgress 
 export type { ConversationActivityRow, ConversationActivityTarget, ToolFailureActivityAttempt, ToolFailureActivitySource } from "./lib/conversation-activity.types";
 export type { ConversationElicitationGateway } from "./lib/elicitation-gateway.types";
 export { RunToolProgressPhases } from "@opencrane/contracts";
-export { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, ElicitationPurposes, ElicitationRequestStates, McpCredentialRequirement, ___ElicitationExecutionConnectionSchema } from "@opencrane/contracts";
-export type { ConversationElicitation, ElicitationApprovalBody, ElicitationExecutionConnection, ElicitationFreeTextBody, ElicitationMultipleChoiceBody, ElicitationResponseValue, ElicitationSingleChoiceBody } from "@opencrane/contracts";
+export { CONVERSATION_ELICITATION_VERSION, ElicitationApprovalScopes, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, ElicitationPurposes, ElicitationRequestStates, McpCredentialRequirement, ToolApprovalScopeStates, ___ElicitationExecutionConnectionSchema } from "@opencrane/contracts";
+export type { ConversationElicitation, ElicitationApprovalBody, ElicitationApprovalStandingScope, ElicitationExecutionConnection, ElicitationFreeTextBody, ElicitationMultipleChoiceBody, ElicitationResponseValue, ElicitationSingleChoiceBody, ToolApprovalScopeSummary } from "@opencrane/contracts";

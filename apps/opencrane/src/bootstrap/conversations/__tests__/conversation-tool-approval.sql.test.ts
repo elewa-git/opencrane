@@ -4,7 +4,7 @@ import { AgentRunState, AgentServiceKind, McpExecutionTransport, OrgRole, Princi
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { PrismaElicitationRepository, PrismaElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
-import { ConversationModelToolModes, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, McpCredentialRequirement, CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
+import { ConversationModelToolModes, ElicitationApprovalScopes, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, McpCredentialRequirement, CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import { __FakeWorkflowEngine } from "@opencrane/backend/server/infra/workflows/testing";
 import { ConversationGeneratedFileResultStates, ConversationApprovalNotificationOutcomes, PrismaConversationComputerTurnWorkflowEventRepository, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, _RegisterConversationComputerTurnWorkflow, CONVERSATION_COMPUTER_TURN_TASK } from "@opencrane/backend/server/conversations";
 import { PrismaManagedAuthorizationGrantRepository, ToolInvocationEventTypes } from "@opencrane/backend/server/iam/authorization";
@@ -106,6 +106,8 @@ describe("requester approval through the conversation workflow on PostgreSQL", f
 			externalSystem: f.serverName,
 			consequence: `This invokes the external tool once. Its saved description says: ${f.tool.description}`,
 			proposedArguments: f.proposal.arguments,
+			offeredScopes: [ElicitationApprovalScopes.Once, ElicitationApprovalScopes.Always],
+			standingScope: { explanation: "Approve always applies only to this exact assistant revision, connection owner and generation, tool revision, action, and final reviewed arguments. Any changed detail requires a fresh approval. You can revoke it later." },
 			executionConnection: {
 				ownerKind: agentKind === AgentServiceKind.Managed ? ElicitationConnectionOwnerKinds.CompanyAssistant : ElicitationConnectionOwnerKinds.Personal,
 				ownerLabel: f.executionOwnerLabel,

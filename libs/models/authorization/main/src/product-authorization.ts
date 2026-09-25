@@ -25,6 +25,8 @@ export const PRODUCT_AUTHORIZATION_RULES: readonly ProductAuthorizationRule[] = 
 	..._Rules(ProductAuthorizationResourceKinds.ToolInvocation, [ProductAuthorizationActions.Invoke], ProductAuthorizationEvidenceKinds.Effect),
 	..._Rules(ProductAuthorizationResourceKinds.ApprovalRequest, [ProductAuthorizationActions.Read], ProductAuthorizationEvidenceKinds.Read),
 	..._Rules(ProductAuthorizationResourceKinds.ApprovalRequest, [ProductAuthorizationActions.Decide], ProductAuthorizationEvidenceKinds.Decision),
+	..._Rules(ProductAuthorizationResourceKinds.ToolApprovalScope, [ProductAuthorizationActions.Read], ProductAuthorizationEvidenceKinds.Read),
+	..._Rules(ProductAuthorizationResourceKinds.ToolApprovalScope, [ProductAuthorizationActions.Revoke], ProductAuthorizationEvidenceKinds.Decision),
 	..._PackageRules(ProductAuthorizationResourceKinds.Skill),
 	..._RevisionRules(ProductAuthorizationResourceKinds.SkillRevision),
 	..._PackageRules(ProductAuthorizationResourceKinds.McpServer),
