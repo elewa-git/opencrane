@@ -11,12 +11,15 @@ import { ConversationComputerReviewComponent, type ConversationComputerLocalhost
 import { ConversationWorkspaceContextSections } from "./conversation-workspace-context-panel.types";
 
 /**
- * Presents the selected session's collapsible Activity, Files and Computer review context.
+ * Presents global question Activity and, when a conversation is selected, its Files and Computer
+ * review context.
  *
  * The routed page owns visibility and focus restoration. This component only renders already mapped
- * rows, hides Agent Activity when the immutable mode disallows it, and forwards typed intents.
+ * rows and forwards typed intents; it does not read data or decide which activity the participant may
+ * see.
  *
- * Called by: `ConversationWorkspacePageComponent` beside an ordinary selected conversation.
+ * Called by: `ConversationWorkspacePageComponent` beside the workspace index or a selected
+ * conversation.
  */
 @Component({ selector: "wo-conversation-workspace-context-panel", standalone: true, imports: [NgTemplateOutlet, ButtonModule, TabsModule, ConversationActivityComponent, ConversationComputerReviewComponent, ConversationFilesPanelComponent], templateUrl: "./conversation-workspace-context-panel.component.html", styleUrl: "./conversation-workspace-context-panel.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
 export class ConversationWorkspaceContextPanelComponent
@@ -25,8 +28,10 @@ export class ConversationWorkspaceContextPanelComponent
 	protected readonly sections = ConversationWorkspaceContextSections;
 	/** Locally selected visual section; it carries no server authority. */
 	protected readonly selectedSection = signal(ConversationWorkspaceContextSections.Files);
-	/** Whether the selected immutable mode admits Agent-run Activity. */
+	/** Whether caller-readable Activity is present in this panel. */
 	public readonly activityVisible = input(false);
+	/** Whether a selected conversation contributes Files and computer-review context. */
+	public readonly filesVisible = input(true);
 	/** Ordered browser-safe Activity rows. */
 	public readonly activityRows = input.required<readonly ConversationActivityRow[]>();
 	/** Separates a recent-work read from the lifecycle of each row. */

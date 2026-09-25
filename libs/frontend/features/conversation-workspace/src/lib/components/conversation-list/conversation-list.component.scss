@@ -1,6 +1,6 @@
 :host { display: block; min-width: 0; block-size: 100%; min-block-size: 0; border-inline-end: 1px solid var(--oc-border-subtle); background: var(--oc-surface-subtle); }
 .conversation-list { display: flex; flex-direction: column; block-size: 100%; min-block-size: 0; }
-.conversation-list__brand { display: flex; min-height: var(--oc-conversation-rail-header-min-height); align-items: center; padding: var(--oc-space-3) var(--oc-space-4); border-block-end: 1px solid var(--oc-border-subtle); }
+.conversation-list__brand { display: flex; min-height: var(--oc-conversation-rail-header-min-height); align-items: center; justify-content: space-between; gap: var(--oc-space-2); padding: var(--oc-space-3) var(--oc-space-4); border-block-end: 1px solid var(--oc-border-subtle); }
 :host ::ng-deep .conversation-list__create { justify-content: flex-start; width: 100%; padding: var(--oc-space-3) var(--oc-space-4); color: var(--oc-accent-active); font-size: var(--oc-text-md); }
 nav { overflow: auto; flex: 1; min-height: 0; padding: 0 var(--oc-space-1); }
 nav section { padding-block-end: var(--oc-space-3); }
@@ -11,4 +11,5 @@ ul { display: grid; gap: var(--oc-space-1); margin: 0; padding: 0; list-style: n
 .conversation-list__identity span { display: grid; min-width: 0; }
 .conversation-list__identity strong, .conversation-list__identity small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .conversation-list__identity small { color: var(--oc-ink-muted); }
+.sr-only { position: absolute; inline-size: 1px; block-size: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 52rem) { :host { border-inline-end: 0; border-block-end: 1px solid var(--oc-border-subtle); } nav { max-block-size: 14rem; } .conversation-list__identity { display: none; } }

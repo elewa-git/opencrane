@@ -4,13 +4,14 @@ import { ConversationComputerStates } from "@opencrane/contracts";
 import { ConversationAssetActionKinds, __ConversationAssetPresentation, __ConversationAssetSelectionFeedback, __PendingConversationAssetPresentation, type ConversationAssetActionIntent, type ConversationAssetPresentation, type ConversationAssetSelectionFeedback } from "@opencrane/features/conversation-assets";
 import { ConversationActivityReadStates } from "@opencrane/features/conversation-activity";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
-import { ConversationElicitationStore, type ElicitationResponseValue } from "@opencrane/state/conversation/elicitation";
+import { ConversationElicitationActivityReadStates, ConversationElicitationActivityStore, ConversationElicitationStore, type ConversationActivityRow, type ElicitationResponseValue } from "@opencrane/state/conversation/elicitation";
 import { CONVERSATION_CURRENT_SUBJECT, ConversationGroupChildStore, ConversationComputerReviewStore, ConversationCreationStates, ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, ConversationPersonalRunsStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
 import { _GroupRequestSource, _GroupShareSource } from "./conversation-group.mapper";
 import { _PersonalRunActivity } from "./conversation-personal-run-activity.mapper";
 import { _ConversationRunActions } from "./conversation-run-actions.mapper";
 import { ConversationAssetContentCoordinator } from "./state/conversation-asset-content.coordinator";
+import { ConversationWorkspaceElicitationCoordinator } from "./state/conversation-workspace-elicitation.coordinator";
 
 import { _ConversationEntryViews, _ConversationOnboardingContinuationPresentation, _ConversationOnboardingDialogueEntries, _ConversationOnboardingHistoryPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation } from "./conversation-workspace.mapper";
 import { _ComposerState, _ComputerStatus, _ConnectionStatus } from "./presentation/conversation-workspace-status.mapper";
@@ -37,6 +38,10 @@ export class ConversationWorkspacePresenter
 	public readonly personalRuns = inject(ConversationPersonalRunsStore);
 	/** Existing typed question and approval state for the selected conversation. */
 	public readonly elicitationStore = inject(ConversationElicitationStore);
+	/** Owns authority-checked pending questions across the signed-in workspace. */
+	public readonly elicitationActivity = inject(ConversationElicitationActivityStore);
+	/** Keeps explicit question navigation separate from ordinary selection. */
+	private readonly _elicitationCoordinator = inject(ConversationWorkspaceElicitationCoordinator);
 	/** Whether immutable-mode creation is visible. */
 	public readonly creating = signal(false);
 	/** Stable route state vocabulary used by the template switch. */
@@ -74,10 +79,16 @@ export class ConversationWorkspacePresenter
 	public readonly selectedSummary = computed(() => this.summaries().find(summary => summary.id === this.store.selected()?.id) ?? null);
 	/** Canonical and live transcript rows mapped through the shared sanitizer. */
 	public readonly messages = computed(this._Messages.bind(this));
-	/** Links recent work only to answers currently rendered in this selection. */
-	public readonly activityRows = computed(() => _PersonalRunActivity(this.personalRuns.runs(), this.store.selected()?.id ?? null, this.store.live().entries, new Set(this.messages().flatMap(entry => entry.kind === ConversationWorkspaceTranscriptEntryKinds.Message ? [entry.message.id] : []))));
+	/** Pending questions are available even when no personal conversation is selected. */
+	public readonly activityAvailable = computed(() => this._subject() !== null && this.store.routeState() === ConversationWorkspaceRouteStates.Ready);
+	/** Merges global questions with answers currently rendered in the selected personal chat. */
+	public readonly activityRows = computed(this._ActivityRows.bind(this));
 	/** Presents read progress separately from the server's run lifecycle. */
 	public readonly activityReadState = computed(this._ActivityReadState.bind(this));
+	/** Failure copy stays with the authority-backed source that failed. */
+	public readonly activityError = computed(() => this.elicitationActivity.error() ?? this.personalRuns.error());
+	/** Explicit retry remains available when either current Activity source can refresh. */
+	public readonly activityRefreshAvailable = computed(() => this.activityAvailable() || this.personalRuns.eligible() && !this.personalRuns.accessChanged());
 	/** Current personal work state and Stop availability for the shared action row. */
 	public readonly runActions = computed(() => _ConversationRunActions(this.personalRuns.currentRun(), this.personalRuns.stopPending(), this.personalRuns.stopBusy(), this.personalRuns.stopError()));
 	/** Existing asset presentations for transcript and Files views. */
@@ -112,7 +123,11 @@ export class ConversationWorkspacePresenter
 	/** Hide immutable-mode creation without changing its controlled selection. */
 	public hideCreate(): void { this.creating.set(false); }
 	/** Select one conversation from the feature-local rail. */
-	public async open(conversationId: string): Promise<void> { await this.store.open(conversationId); }
+	public async open(conversationId: string): Promise<void>
+	{
+		this._elicitationCoordinator.cancelNavigation();
+		await this.store.open(conversationId);
+	}
 	/** Opens the explicit company assistant picker for an eligible own message. */
 	public askAssistant(messageId: string): void
 	{
@@ -153,7 +168,16 @@ export class ConversationWorkspacePresenter
 	/** Keep the selected approval response in its component-scoped state owner. */
 	public selectElicitation(value: ElicitationResponseValue): void { this.elicitationStore.select(value); }
 	/** Submit the selected response through the existing authority-backed store. */
-	public async submitElicitation(): Promise<void> { await this.elicitationStore.submit(); }
+	public async submitElicitation(): Promise<void>
+	{
+		await this.elicitationStore.submit();
+		await this.elicitationActivity.refresh();
+	}
+	/** Reconcile both existing Activity sources through their independent read owners. */
+	public async refreshActivity(): Promise<void>
+	{
+		await Promise.all([this.elicitationActivity.refresh(), this.personalRuns.refresh()]);
+	}
 	/** Reconcile the exact request after verified sign-in completes. */
 	public async recoverElicitationAfterStepUp(): Promise<void> { await this.elicitationStore.recoverAfterStepUp(); }
 	/** Route existing asset intents back to their owning store. */
@@ -289,14 +313,28 @@ export class ConversationWorkspacePresenter
 	}
 
 	/** Name the context panel after the capabilities its selected mode can expose. */
-	private _ContextPanelLabel(): string { return this.personalRuns.eligible() ? "Activity and files" : "Files"; }
+	private _ContextPanelLabel(): string { return this.activityAvailable() ? "Activity and files" : "Files"; }
+
+	/** Preserve each source's authority and use stable ordering when timestamps are equal. */
+	private _ActivityRows(): readonly ConversationActivityRow[]
+	{
+		const renderedIds = new Set(this.messages().flatMap(entry => entry.kind === ConversationWorkspaceTranscriptEntryKinds.Message ? [entry.message.id] : []));
+		const runs = _PersonalRunActivity(this.personalRuns.runs(), this.store.selected()?.id ?? null, this.store.live().entries, renderedIds);
+		return [...this.elicitationActivity.rows(), ...runs].sort(function _Newest(left, right)
+		{
+			return Date.parse(right.occurredAt) - Date.parse(left.occurredAt) || left.kind.localeCompare(right.kind) || left.id.localeCompare(right.id);
+		});
+	}
 
 	/** Marks rows as refreshing until the current permission-checked read completes. */
 	private _ActivityReadState(): ConversationActivityReadStates
 	{
-		if (this.personalRuns.loading())
+		if (this.activityError() !== null)
+			return ConversationActivityReadStates.Error;
+		const questions = this.elicitationActivity.readState();
+		if (this.personalRuns.loading() || questions === ConversationElicitationActivityReadStates.Loading || questions === ConversationElicitationActivityReadStates.Refreshing)
 			return this.activityRows().length > 0 ? ConversationActivityReadStates.Refreshing : ConversationActivityReadStates.Loading;
-		return this.personalRuns.error() === null ? ConversationActivityReadStates.Ready : ConversationActivityReadStates.Error;
+		return ConversationActivityReadStates.Ready;
 	}
 
 

@@ -6,7 +6,7 @@ import { MessageModule } from "primeng/message";
 import { ScopeChipComponent } from "@opencrane/elements/ui";
 import { ConversationActivityKinds, type ConversationActivityRow, type ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
 
-import { _ConversationActivityRunStatus, _ConversationActivityToolPhase } from "./conversation-activity-status.mapper";
+import { _ConversationActivityElicitationStatus, _ConversationActivityRunStatus, _ConversationActivityToolPhase } from "./conversation-activity-status.mapper";
 import { ConversationActivityReadStates } from "./conversation-activity.types";
 
 /**
@@ -27,6 +27,8 @@ export class ConversationActivityComponent
 	public readonly readState = input(ConversationActivityReadStates.Ready);
 	/** Contains fixed display copy supplied by the owning read store. */
 	public readonly error = input<string | null>(null);
+	/** Explains an authoritative empty list in the caller's activity scope. */
+	public readonly emptyLabel = input("No recent work is visible in this chat.");
 	/** Enables status refresh only where a caller owns that read operation. */
 	public readonly refreshAvailable = input(false);
 	/** Requests only a new status read, never another execution attempt. */
@@ -39,6 +41,19 @@ export class ConversationActivityComponent
 	protected readonly readStates = ConversationActivityReadStates;
 	/** Supplies participant labels and shared chip tones. */
 	protected readonly runStatus = _ConversationActivityRunStatus;
+	/** Supplies participant-facing request state without exposing protocol labels. */
+	protected readonly elicitationStatus = _ConversationActivityElicitationStatus;
 	/** Supplies fixed tool-phase copy and semantic tone separately from overall work status. */
 	protected readonly toolPhase = _ConversationActivityToolPhase;
+
+	/** Selects the action copy from the row's finite semantic kind. */
+	protected targetLabel(row: ConversationActivityRow): string
+	{
+		switch (row.kind)
+		{
+			case ConversationActivityKinds.Elicitation: return "Answer";
+			case ConversationActivityKinds.ToolFailure: return "Open";
+			case ConversationActivityKinds.Run: return "Open answer";
+		}
+	}
 }

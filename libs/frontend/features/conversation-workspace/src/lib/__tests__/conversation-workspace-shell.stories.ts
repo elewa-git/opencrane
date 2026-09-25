@@ -161,6 +161,20 @@ const _ELICITATIONS = { listOpen: async function _List() { return [_ELICITATION]
 /** Leaves ordinary workspace stories without a participant request. */
 const _NO_ELICITATIONS = { listOpen: async function _List() { return []; }, read: async function _Read() { throw new Error("No elicitation selected."); }, respond: async function _Respond() { throw new Error("Story command unavailable."); }, listActivity: async function _Activity() { return []; } };
 
+/** An ordinary shared question remains readable to an admitted peer, not just its original assignee. */
+const _PENDING_QUESTION: ConversationElicitation = { ..._ELICITATION, requestId: "question-warehouse", purpose: ElicitationPurposes.RuntimeInput, assignedParticipantId: "colleague-1", requiresStepUp: false, body: { kind: ElicitationBodyKinds.FreeText, prompt: "Which warehouse should I count?", maximumLength: 200, allowEmpty: false } };
+/** A different older request proves that an Activity link never chooses the first open question. */
+const _OLDER_QUESTION: ConversationElicitation = { ..._PENDING_QUESTION, requestId: "question-title", requestedAt: "2026-09-05T19:29:00.000Z", body: { kind: ElicitationBodyKinds.FreeText, prompt: "What report title should I use?", maximumLength: 200, allowEmpty: false } };
+/** Deterministic current-readable questions without response or permission mutations. */
+const _QUESTION_ELICITATIONS: ConversationElicitationGateway = {
+	..._NO_ELICITATIONS,
+	listOpen: async function _List() { return [_OLDER_QUESTION, _PENDING_QUESTION]; },
+	listActivity: async function _Activity() { return [_OLDER_QUESTION, _PENDING_QUESTION]; },
+	read: async function _Read(_conversationId, requestId) { return requestId === _PENDING_QUESTION.requestId ? _PENDING_QUESTION : _OLDER_QUESTION; }
+};
+/** An empty rail does not prevent an authorized Activity read from opening its conversation. */
+const _INDEX_WORKSPACE: ConversationWorkspaceGateway = { ..._COMPANY_WORKSPACE_GATEWAY, list: async function _List() { return []; } };
+
 /** Supplies explicit test-only ports around the real routed workspace shell. */
 function _Providers(history: ConversationHistoryProjection, workspace: ConversationWorkspaceGateway = _WORKSPACE_GATEWAY, elicitations: ConversationElicitationGateway = _NO_ELICITATIONS, personalRuns: ConversationPersonalRunsGateway = _PERSONAL_RUNS, assets: ConversationAssetsGateway = _ASSETS, platform: PlatformBridge = _PLATFORM): Decorator
 {
@@ -181,6 +195,65 @@ export const IntermediateLongContent: Story = { tags: ["visual-test"], decorator
 
 /** Wide desktop width keeps rail, transcript, composer, and context panel in one viewport. */
 export const WideLongContent: Story = { tags: ["visual-test"], decorators: [_Providers(_HISTORY)] };
+
+/** Follows the current Activity row to the exact question, then verifies the real card has focus. */
+async function _OpenWarehouseQuestion(canvasElement: HTMLElement): Promise<void>
+{
+	const canvas = within(canvasElement);
+	const activity = await canvas.findByRole("region", { name: "Activity" });
+	const row = within(activity).getByText("Which warehouse should I count?", { exact: true }).closest("li");
+	if (row === null)
+		throw new Error("Question Activity row is missing.");
+	await userEvent.click(within(row).getByRole("button", { name: "Answer" }));
+	await waitFor(function _ExactQuestionFocused()
+	{
+		const card = canvasElement.querySelector("wo-conversation-elicitation-card");
+		expect(card).not.toBeNull();
+		expect(card).toHaveTextContent("Which warehouse should I count?");
+		expect(card).not.toHaveTextContent("What report title should I use?");
+		expect(card?.contains(canvasElement.ownerDocument.activeElement)).toBe(true);
+	});
+}
+
+/** Shows peer-readable questions in a company child and selects a question other than the oldest. */
+export const SharedPendingQuestion: Story = { tags: ["visual-test"], decorators: [_Providers(_COMPANY_TOOL_RESULT_HISTORY, _COMPANY_WORKSPACE_GATEWAY, _QUESTION_ELICITATIONS, _NO_PERSONAL_RUNS)], play: async function _PeerQuestion({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	expect(await canvas.findByText("Shared assistant chat · 3 participants", { exact: true })).toBeVisible();
+	expect(await canvas.findByRole("button", { name: "Activity, 2 questions need your response" })).toBeVisible();
+	await _OpenWarehouseQuestion(canvasElement);
+} };
+
+/** Global Activity stays closed on arrival and opens without creating a chat or exposing Files. */
+export const PendingQuestionFromIndex: Story = { tags: ["visual-test"], decorators: [_Providers(_COMPANY_TOOL_RESULT_HISTORY, _INDEX_WORKSPACE, _QUESTION_ELICITATIONS, _NO_PERSONAL_RUNS)], play: async function _IndexQuestion({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	const trigger = await canvas.findByRole("button", { name: "Activity, 2 questions need your response" });
+	expect(canvas.queryByRole("heading", { name: "Activity" })).not.toBeInTheDocument();
+	await userEvent.click(trigger);
+	expect(await canvas.findByRole("heading", { name: "Activity" })).toBeVisible();
+	expect(canvas.queryByRole("heading", { name: "Files" })).not.toBeInTheDocument();
+	await userEvent.click(canvas.getByRole("button", { name: /Close activity pane/u }));
+	await waitFor(function _RailFocus() { expect(trigger).toHaveFocus(); });
+	await userEvent.click(trigger);
+	await _OpenWarehouseQuestion(canvasElement);
+} };
+
+/** The same exact-target and focus journey works with the narrow context overlay. */
+export const PendingQuestionFromIndexNarrow: Story = { ...PendingQuestionFromIndex, tags: ["visual-test", "visual-test-narrow"] };
+
+/** A stale notice reports the unavailable target without displaying an unrelated older question. */
+export const UnavailableActivityQuestion: Story = { decorators: [_Providers(_COMPANY_TOOL_RESULT_HISTORY, _INDEX_WORKSPACE, { ..._QUESTION_ELICITATIONS, read: async function _Unavailable() { throw new Error("The request is no longer readable."); } }, _NO_PERSONAL_RUNS)], play: async function _UnavailableQuestion({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	await userEvent.click(await canvas.findByRole("button", { name: "Activity, 2 questions need your response" }));
+	const row = (await canvas.findByText("Which warehouse should I count?", { exact: true })).closest("li");
+	if (row === null)
+		throw new Error("Question Activity row is missing.");
+	await userEvent.click(within(row).getByRole("button", { name: "Answer" }));
+	expect(await canvas.findByText("That question is no longer available.")).toBeInTheDocument();
+	expect(canvasElement.querySelector("wo-conversation-elicitation-card")).toBeNull();
+} };
 
 /** The production Files row reaches the prepared browser capability before reading authorized bytes. */
 export const ReadyAssetOpen: Story = { tags: ["visual-test"], decorators: [_Providers(_HISTORY, _WORKSPACE_GATEWAY, _NO_ELICITATIONS, _PERSONAL_RUNS, _READY_ASSETS, _FILE_PLATFORM)], play: async function _OpenReadyAsset({ canvasElement })
@@ -235,7 +308,7 @@ export const CompanyToolResult: Story = { tags: ["visual-test"], decorators: [_P
 export const CompanyToolRecoveryNarrow: Story = { tags: ["visual-test", "visual-test-narrow"], decorators: [_Providers({ ...__CreateConversationHistoryProjection(), entries: [_TOOL_RECOVERY], nextPosition: "2" }, _COMPANY_WORKSPACE_GATEWAY)], play: async function _RecoveryEvidence({ canvasElement })
 {
 	const canvas = within(canvasElement);
-	await userEvent.click(await canvas.findByRole("button", { name: "Close context pane" }));
+	await userEvent.click(await canvas.findByRole("button", { name: "Close activity pane" }));
 	expect(await canvas.findByText("Tool needs attention", { exact: true })).toBeVisible();
 	expect(canvas.getByText(/will not repeat it automatically/u)).toBeVisible();
 	expect(canvas.queryByRole("button", { name: /retry/u })).not.toBeInTheDocument();

@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, afterRenderEffect, effect, inject, input, output, signal, untracked } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, afterRenderEffect, computed, effect, inject, input, output, signal, untracked } from "@angular/core";
 import { ConversationAssetContentStore, ConversationAssetsStore } from "@opencrane/state/conversation/assets";
-import { ConversationElicitationStore, type ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
+import { ConversationElicitationActivityStore, ConversationElicitationStore, type ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
 import { ConversationElicitationCardComponent } from "@opencrane/features/conversation-elicitation";
 import { ConversationGroupChildStore, ConversationComputerReviewStore, ConversationOnboardingHistoryStore, ConversationPersonalRunsStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
@@ -8,6 +8,8 @@ import { ConversationSessionRailItemKinds, type ConversationSessionRailSelection
 import { ConversationWorkspacePresenter } from "../../conversation-workspace.presenter";
 import { ConversationAssetContentCoordinator } from "../../state/conversation-asset-content.coordinator";
 import { ConversationWorkspaceSelectionCoordinator } from "../../state/conversation-workspace-selection.coordinator";
+import { ConversationWorkspaceElicitationCoordinator } from "../../state/conversation-workspace-elicitation.coordinator";
+import { ConversationListComponent } from "../conversation-list/conversation-list.component";
 import { ConversationWorkspaceHeaderComponent } from "../conversation-workspace-header/conversation-workspace-header.component";
 import { CONVERSATION_WORKSPACE_PAGE_IMPORTS } from "./conversation-workspace-page.imports";
 
@@ -27,13 +29,15 @@ import { CONVERSATION_WORKSPACE_PAGE_IMPORTS } from "./conversation-workspace-pa
  *
  * Called by: feature-local `ConversationWorkspaceRouteComponent`, which owns the child chat URLs.
  */
-@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: CONVERSATION_WORKSPACE_PAGE_IMPORTS, templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationWorkspacePresenter, ConversationWorkspaceSelectionCoordinator, ConversationAssetContentCoordinator, ConversationGroupChildStore, ConversationAssetContentStore, ConversationAssetsStore, ConversationComputerReviewStore, ConversationElicitationStore, ConversationOnboardingHistoryStore, ConversationPersonalRunsStore, ConversationWorkspaceStore] })
+@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: CONVERSATION_WORKSPACE_PAGE_IMPORTS, templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationWorkspacePresenter, ConversationWorkspaceSelectionCoordinator, ConversationWorkspaceElicitationCoordinator, ConversationAssetContentCoordinator, ConversationGroupChildStore, ConversationAssetContentStore, ConversationAssetsStore, ConversationComputerReviewStore, ConversationElicitationActivityStore, ConversationElicitationStore, ConversationOnboardingHistoryStore, ConversationPersonalRunsStore, ConversationWorkspaceStore] })
 export class ConversationWorkspacePageComponent
 {
 	/** Composes read-only presentation and typed store intents without class inheritance. */
 	protected readonly vm = inject(ConversationWorkspacePresenter);
 	/** Coordinates selected conversation lifetimes across this page's store instances. */
 	private readonly _selectionCoordinator = inject(ConversationWorkspaceSelectionCoordinator);
+	/** Owns question discovery and permission-checked navigation to one Activity target. */
+	private readonly _elicitationCoordinator = inject(ConversationWorkspaceElicitationCoordinator);
 	/** Optional app-owned route selection adopted after the workspace list loads. */
 	public readonly conversationId = input<string | null>(null);
 	/** Reports participant selection so the app can own the canonical URL. */
@@ -58,9 +62,16 @@ export class ConversationWorkspacePageComponent
 	protected readonly activityAnnouncement = signal("");
 	/** Whether the selected ordinary conversation's Activity and Files context is visible. */
 	protected readonly contextPanelOpen = signal(true);
+	/** Global Activity starts closed and never opens merely because a new question arrives. */
+	protected readonly globalActivityOpen = signal(false);
+	/** Chooses the controlled panel for the currently rendered workspace selection. */
+	protected readonly contextPanelVisible = computed(() => this.vm.store.routeState() === ConversationWorkspaceRouteStates.Ready && (this.vm.store.selected() === null ? this.globalActivityOpen() : this.contextPanelOpen()));
 	/** Header trigger that receives focus after the context panel closes. */
 	@ViewChild(ConversationWorkspaceHeaderComponent)
 	private _header: ConversationWorkspaceHeaderComponent | undefined;
+	/** Persistent Activity action also exists on the index and read-only onboarding history. */
+	@ViewChild(ConversationListComponent)
+	private _list: ConversationListComponent | undefined;
 	/** Current approval card, when the selected conversation is waiting for a decision. */
 	@ViewChild(ConversationElicitationCardComponent)
 	private _elicitationCard: ConversationElicitationCardComponent | undefined;
@@ -113,6 +124,7 @@ export class ConversationWorkspacePageComponent
 	/** Ask the app to select an authoritative newly created conversation. */
 	protected async create(): Promise<void>
 	{
+		this._elicitationCoordinator.cancelNavigation();
 		const navigation = await this.vm.store.create();
 		if (navigation === null)
 			return;
@@ -130,6 +142,7 @@ export class ConversationWorkspacePageComponent
 	 */
 	protected openOnboardingHistory(): void
 	{
+		this._elicitationCoordinator.cancelNavigation();
 		this.vm.store.openOnboardingHistory();
 		if (this.vm.store.onboardingHistorySelected())
 			this.workspaceIndexSelected.emit();
@@ -138,24 +151,56 @@ export class ConversationWorkspacePageComponent
 	/** Reopen the selected conversation's context without changing its durable selection. */
 	protected openContextPanel(): void { this.contextPanelOpen.set(true); }
 
+	/** Show current Activity without changing the selected conversation or onboarding history. */
+	protected openActivity(): void
+	{
+		if (this.vm.store.selected() === null)
+			this.globalActivityOpen.set(true);
+		else
+			this.contextPanelOpen.set(true);
+	}
+
 	/** Close the context panel and return keyboard focus to its persistent header trigger. */
 	protected closeContextPanel(): void
 	{
-		this.contextPanelOpen.set(false);
-		this._header?.restoreContextFocus();
+		if (this.vm.store.selected() === null)
+		{
+			this.globalActivityOpen.set(false);
+			this._list?.restoreActivityFocus();
+		}
+		else
+		{
+			this.contextPanelOpen.set(false);
+			this._header?.restoreContextFocus();
+		}
 	}
 
 	/** Ask the app to replace an archived selection with the next authorized row. */
 	protected async archiveConversation(): Promise<void>
 	{
+		this._elicitationCoordinator.cancelNavigation();
 		const navigation = await this.vm.store.archive();
 		if (navigation !== null)
 			this.conversationSelected.emit(navigation.conversationId);
 	}
 
 	/** Rechecks a mapped answer before moving focus and closing a narrow context overlay. */
-	protected focusActivity(target: ConversationActivityTarget): void
+	protected async focusActivity(target: ConversationActivityTarget): Promise<void>
 	{
+		if (target.requestId !== undefined)
+		{
+			this.activityAnnouncement.set("");
+			if (await this._elicitationCoordinator.open(target))
+			{
+				this.globalActivityOpen.set(false);
+				if (globalThis.matchMedia("(max-width: 70rem)").matches)
+					this.contextPanelOpen.set(false);
+				this.conversationSelected.emit(target.conversationId);
+			}
+			else if (this._elicitationCoordinator.navigationError() !== null)
+				this.activityAnnouncement.set(this._elicitationCoordinator.navigationError()!);
+			return;
+		}
 		const current = this.vm.activityRows().some(row => row.target?.conversationId === target.conversationId && row.target.runId === target.runId && row.target.entryId !== undefined && row.target.entryId === target.entryId);
 		const destination = current && target.entryId !== undefined ? globalThis.document.getElementById(target.entryId) : null;
 		if (target.conversationId !== this.vm.store.selected()?.id || destination === null)
@@ -182,6 +227,15 @@ export class ConversationWorkspacePageComponent
 	/** Return focus to the retained decision after its exact request has been reconciled. */
 	private _RestoreElicitationFocus(): void
 	{
+		const target = this._elicitationCoordinator.focusRequest();
+		const request = this.vm.elicitationStore.elicitation();
+		if (target !== null && request?.conversationId === target.conversationId && request.runId === target.runId && request.requestId === target.requestId && this._elicitationCard !== undefined)
+		{
+			this._elicitationCard.restoreFocus();
+			this._elicitationCoordinator.acknowledgeFocus(request.requestId);
+			this.activityAnnouncement.set("Opened the selected question in the conversation.");
+			return;
+		}
 		if (this.vm.elicitationStore.stepUpPath() !== null || this.vm.elicitationStore.restoreFocusRequestId() === null || this._elicitationCard === undefined)
 			return;
 		this._elicitationCard.restoreFocus();

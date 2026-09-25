@@ -1,5 +1,5 @@
 import { ScopeChipTones } from "@opencrane/elements/ui";
-import { RunToolProgressPhases, type ConversationActivityRunState, type ConversationActivityRunToolProgress } from "@opencrane/state/conversation/elicitation";
+import { ElicitationRequestStates, RunToolProgressPhases, type ConversationActivityRunState, type ConversationActivityRunToolProgress } from "@opencrane/state/conversation/elicitation";
 
 /** Keeps every current API state in one participant-facing label and semantic tone map. */
 const _Statuses: Record<ConversationActivityRunState, { readonly label: string; readonly tone: ScopeChipTones }> = {
@@ -17,6 +17,18 @@ const _Statuses: Record<ConversationActivityRunState, { readonly label: string; 
 
 /** Maps a validated public state without exposing execution terminology or inventing success. */
 export function _ConversationActivityRunStatus(state: ConversationActivityRunState) { return _Statuses[state]; }
+
+/** Keeps request lifecycle wording participant-facing without changing server-owned state. */
+const _ElicitationStatuses: Record<ElicitationRequestStates, { readonly label: string; readonly tone: ScopeChipTones }> = {
+	[ElicitationRequestStates.Requested]: { label: "Needs response", tone: ScopeChipTones.Warning },
+	[ElicitationRequestStates.Answered]: { label: "Answered", tone: ScopeChipTones.Success },
+	[ElicitationRequestStates.Declined]: { label: "Declined", tone: ScopeChipTones.Neutral },
+	[ElicitationRequestStates.Expired]: { label: "Expired", tone: ScopeChipTones.Neutral },
+	[ElicitationRequestStates.Cancelled]: { label: "Cancelled", tone: ScopeChipTones.Neutral },
+};
+
+/** Maps a validated request state without exposing transport vocabulary. */
+export function _ConversationActivityElicitationStatus(state: ElicitationRequestStates): { readonly label: string; readonly tone: ScopeChipTones } { return _ElicitationStatuses[state]; }
 
 /** Maps a public tool phase to a participant-facing chip without implying that an answer exists. */
 const _ToolPhases: Record<NonNullable<ConversationActivityRunToolProgress>["phase"], { readonly label: string; readonly tone: ScopeChipTones }> = {

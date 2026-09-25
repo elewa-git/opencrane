@@ -1,4 +1,4 @@
-:host { display: block; }
+:host { display: block; container-type: inline-size; }
 .activity { display: grid; gap: var(--oc-space-3); }
 .activity header { display: flex; align-items: center; justify-content: space-between; gap: var(--oc-space-3); }
 .activity h2 { margin: 0; font-size: var(--oc-text-lg); }
@@ -10,12 +10,12 @@
 .activity__summary time, .activity__empty, details { color: var(--oc-ink-muted); }
 .activity__marker { width: .625rem; height: .625rem; border-radius: 50%; background: var(--oc-accent); }
 .activity__marker--failed { background: var(--oc-danger); }
-.activity__retrying, .activity__state { padding: var(--oc-space-1) var(--oc-space-2); border-radius: var(--oc-radius-chip); background: var(--oc-surface-subtle); font-size: var(--oc-text-xs); }
+.activity__retrying { padding: var(--oc-space-1) var(--oc-space-2); border-radius: var(--oc-radius-chip); background: var(--oc-surface-subtle); font-size: var(--oc-text-xs); }
 .activity__retrying { color: var(--oc-danger); }
 details { margin-left: calc(.625rem + var(--oc-space-2)); }
 details summary { cursor: pointer; color: var(--oc-ink-strong); }
 details dl { display: grid; gap: var(--oc-space-1); margin: var(--oc-space-2) 0 0; }
 details dl div { display: grid; grid-template-columns: 7rem 1fr; gap: var(--oc-space-2); }
 details dd { margin: 0; overflow-wrap: anywhere; }
-@media (max-width: 640px) { .activity__summary { grid-template-columns: auto minmax(0, 1fr); } .activity__summary p-button, .activity__summary wo-scope-chip, .activity__retrying, .activity__state { grid-column: 2; justify-self: start; } }
+@container (max-width: 640px) { .activity__summary { grid-template-columns: auto minmax(0, 1fr); } .activity__summary p-button, .activity__summary wo-scope-chip, .activity__retrying { grid-column: 2; justify-self: start; } }
 @media (prefers-reduced-motion: reduce) { :host, :host * { scroll-behavior: auto; transition: none; animation: none; } }

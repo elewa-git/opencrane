@@ -17,12 +17,13 @@
                   #contextPanelToggle
                   type="button"
                   class="conversation-workspace__context-toggle"
+                  [attr.aria-label]="contextPanelAccessibleLabel()"
                   aria-controls="conversation-workspace-context-panel"
                   [attr.aria-expanded]="contextPanelOpen()"
                   (click)="contextRequested.emit()"
                 >
                   <i class="pi pi-window-maximize" aria-hidden="true"></i
-                  >{{ contextPanelLabel() }}</button
+                  >{{ contextPanelLabel() }}@if (pendingQuestionCount() > 0) { <span class="conversation-workspace__question-count" aria-hidden="true">{{ pendingQuestionCount() }}</span> }</button
                 ><p-button
                   label="Archive"
                   icon="pi pi-inbox"

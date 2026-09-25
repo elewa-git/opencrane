@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ControlPlaneApiService } from "@opencrane/core";
 import { CONVERSATION_ELICITATION_VERSION, ElicitationApprovalScopes, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates } from "@opencrane/contracts";
 
+import { ElicitationGatewayErrorKinds } from "../elicitation-gateway.errors";
 import { OpenCraneConversationElicitationGateway } from "../opencrane-conversation-elicitation.gateway";
 
 const _ELICITATION = {
@@ -62,6 +63,38 @@ describe("OpenCraneConversationElicitationGateway", function _Suite()
 	{
 		const GET = vi.fn().mockResolvedValue({ data: { elicitations: [{ ..._ELICITATION, conversationId: "conversation-2" }] }, error: undefined, response: { ok: true, status: 200 } });
 		await expect(_Gateway({ GET }).listOpen("conversation-1")).rejects.toThrow("open elicitation list does not match the selected conversation");
+	});
+
+	it("rejects an exact read whose returned coordinate differs from its request", async function _RejectsMismatchedExactRead()
+	{
+		const GET = vi.fn().mockResolvedValue({ data: { elicitation: { ..._ELICITATION, requestId: "request-2" } }, error: undefined, response: { ok: true, status: 200 } });
+		await expect(_Gateway({ GET }).read("conversation-1", "request-1")).rejects.toThrow("elicitation read does not match its requested coordinate");
+	});
+
+	it("bounds and validates the Activity list before returning it", async function _ActivityListBound()
+	{
+		const signal = new AbortController().signal;
+		const GET = vi.fn().mockResolvedValue({ data: { elicitations: [_ELICITATION] }, error: undefined, response: { ok: true, status: 200 } });
+		await expect(_Gateway({ GET }).listActivity(1, signal)).resolves.toEqual([_ELICITATION]);
+		expect(GET).toHaveBeenCalledWith("/me/activity/elicitations", { params: { query: { limit: 1 } }, signal });
+		vi.mocked(GET).mockResolvedValueOnce({ data: { elicitations: [_ELICITATION, _ELICITATION] }, error: undefined, response: { ok: true, status: 200 } });
+		await expect(_Gateway({ GET }).listActivity(1)).rejects.toThrow("elicitation activity list exceeds its response bound");
+		await expect(_Gateway({ GET }).listActivity(101)).rejects.toThrow("elicitation activity limit is invalid");
+	});
+
+	it("rejects malformed Activity rows before they enter browser state", async function _MalformedActivity()
+	{
+		const GET = vi.fn().mockResolvedValue({ data: { elicitations: [{ ..._ELICITATION, requestId: "" }] }, error: undefined, response: { ok: true, status: 200 } });
+		await expect(_Gateway({ GET }).listActivity()).rejects.toThrow("elicitation response has invalid coordinates");
+	});
+
+	it("classifies missing session, permission, and hidden resources as changed access", async function _ChangedAccess()
+	{
+		for (const status of [401, 403, 404])
+		{
+			const GET = vi.fn().mockResolvedValue({ data: undefined, error: {}, response: { ok: false, status } });
+			await expect(_Gateway({ GET }).listActivity()).rejects.toMatchObject({ kind: ElicitationGatewayErrorKinds.Forbidden });
+		}
 	});
 
 	it("accepts omitted, visible, and explicitly hidden proposal arguments", async function _ProposalArguments()

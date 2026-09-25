@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, input, output } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, computed, input, output } from "@angular/core";
 import { ButtonModule } from "primeng/button";
 import type { ConversationSummaryPresentation, ConversationWorkspaceAvailabilityPresentation } from "../../conversation-workspace-feature.types";
+import { _PendingQuestionLabel } from "../../conversation-pending-question.mapper";
 
 /** Owns selected-conversation heading, actions and context-trigger keyboard focus. */
 @Component({ selector: "wo-conversation-workspace-header", standalone: true, imports: [ButtonModule], templateUrl: "./conversation-workspace-header.component.html", styleUrl: "./conversation-workspace-header.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
@@ -20,6 +21,10 @@ export class ConversationWorkspaceHeaderComponent
 	public readonly contextPanelOpen = input(false);
 	/** Capability-aware label for the context trigger. */
 	public readonly contextPanelLabel = input("Files");
+	/** Current authority-backed questions surfaced by the persistent Activity index. */
+	public readonly pendingQuestionCount = input(0);
+	/** Names the existing context action with its pending-question count. */
+	protected readonly contextPanelAccessibleLabel = computed(() => this.pendingQuestionCount() > 0 ? `${this.contextPanelLabel()}, ${_PendingQuestionLabel(this.pendingQuestionCount())}` : this.contextPanelLabel());
 	/** Requests the selected child's parent group. */
 	public readonly backRequested = output<void>();
 	/** Requests archival through the authoritative store. */

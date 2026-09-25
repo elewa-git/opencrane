@@ -26,5 +26,13 @@ export const Child: Story = { tags: ["visual-test"], args: { hasParent: true } }
 export const Closed: Story = { tags: ["visual-test"], args: { closed: true } };
 /** Pending conversation commands keep the selected heading visible. */
 export const Busy: Story = { args: { busy: true } };
+/** The existing context action exposes pending questions without introducing a second notification control. */
+export const PendingQuestions: Story = { tags: ["visual-test"], args: { contextPanelLabel: "Activity and files", pendingQuestionCount: 2 }, play: async function _Pending({ canvasElement })
+{
+	const button = within(canvasElement).getByRole("button", { name: "Activity and files, 2 questions need your response" });
+	await expect(button).toHaveTextContent("2");
+} };
 /** A child header keeps parent navigation and conversation actions usable in a narrow column. */
 export const ChildNarrow: Story = { ...Child, tags: ["visual-test", "visual-test-narrow"] };
+/** A pending-question count remains attached to the context action in a narrow header. */
+export const PendingQuestionsNarrow: Story = { ...PendingQuestions, tags: ["visual-test", "visual-test-narrow"] };
