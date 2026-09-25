@@ -61,6 +61,13 @@ Treat `NetworkPolicy` as the portable L3/L4 floor and workload proof as the appl
 boundary. Both must pass.
 :::
 
+::: info Cognee is the example of what the floor cannot do
+Only the memory gateway may connect to the silo's Cognee. That does not stop one search from reading
+another person's dataset inside Cognee, because Cognee scopes retrieval by dataset only in its
+access-control mode, which needs a login. The gateway therefore signs in with one service user per
+silo. See [long-term memory](/integrators/long-term-memory-cognee#cognee-runs-in-its-access-control-mode).
+:::
+
 ::: warning
 A Cilium-based dataplane does not prove that the cluster serves `CiliumNetworkPolicy`. GKE
 Dataplane V2 enforces standard `NetworkPolicy` but does not expose that namespaced custom policy

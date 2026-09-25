@@ -98,6 +98,7 @@ spec:
               value: sqlite
             # The gateway logs in as one service user for this silo. Cognee must enforce the
             # dataset ACL because NetworkPolicy authenticates the caller pod, not the dataset.
+            # Cognee refuses access control without login, so both switches stay on (ADR 0017).
             - name: ENABLE_BACKEND_ACCESS_CONTROL
               value: "true"
             - name: REQUIRE_AUTHENTICATION
