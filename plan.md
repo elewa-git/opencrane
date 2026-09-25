@@ -1,6 +1,6 @@
 # OpenCrane — Active Plan
 
-## Explicit initial subchat audience — in progress, 25 September 2026
+## Explicit initial subchat audience — published source, 25 September 2026
 
 This incremental source slice starts at published #914, immutable base
 `42a88a2d6c0425f5f4bb78645f357ca12db9bb9d`, on `feat/explicit-subchat-audience`.
@@ -47,6 +47,15 @@ silently accepted. No merge, deployment or live acceptance is claimed.
 This is not post-creation invitation support, an agent-prefilled creation tool, or authenticated
 multi-person acceptance. A separate question asks what prior history later invitees may see; no
 answer is assumed. The model Ask validator approval remains separate and is not retried here.
+
+Draft #915 is published directly above #914. Its first CI run at
+`2e3bf758e1a5332e04329954503cbc195ed965f4` exposed a missed generated-reference update:
+`website/public/openapi.json` still omitted the required participant selection. The existing API
+generator and website synchronisation now produce the same reference bytes; client regeneration
+also updates one stale description, without changing its already-correct TypeScript request shape.
+Independent mechanical verification confirms only those generated mirrors changed. The documentation
+build and link checks pass. Behavioural code and the prior 327-test/279-interaction evidence remain
+unchanged; the repaired exact-SHA CI result is still required.
 
 ## Pending-question notifications — reviewed source candidate, 25 September 2026
 
