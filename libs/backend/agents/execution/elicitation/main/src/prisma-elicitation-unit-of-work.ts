@@ -15,7 +15,7 @@ import { PrismaToolApprovalPurposeAuthority } from "./purposes/tool-approval/pri
 import { PrismaA2uiActionPurposeAuthority } from "./purposes/a2ui-action/prisma-a2ui-action-purpose";
 import { PrismaPersonalMemoryPermissionPurposeAuthority } from "./purposes/personal-memory/prisma-personal-memory-permission-purpose";
 import { _Projection, _ProjectionAt, _PublicPurpose, _PublicState } from "./elicitation-prisma-mapping";
-import type { ElicitationRepository, ElicitationRunWakeFactory, ElicitationRunWakePort, ElicitationUnitOfWork, ExpireElicitationBatchCommand, ExpireElicitationBatchResult, OpenElicitationCommand, PersonalMemoryPermissionAuthority, PersonalMemoryPermissionVerificationResult, RespondToElicitationCommand, RespondToElicitationResult } from "./elicitation.types";
+import { MemoryPermissionOpenOutcomes, type ElicitationRepository, type ElicitationRunWakeFactory, type ElicitationRunWakePort, type ElicitationUnitOfWork, type ExpireElicitationBatchCommand, type ExpireElicitationBatchResult, type OpenElicitationCommand, type PersonalMemoryPermissionAuthority, type PersonalMemoryPermissionVerificationResult, type RespondToElicitationCommand, type RespondToElicitationResult } from "./elicitation.types";
 
 /** Prisma repository bound to exactly one serializable elicitation transaction. */
 export class PrismaElicitationRepository implements ElicitationRepository
@@ -79,14 +79,14 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		return _Projection(created);
 	}
 
-	/** Ask the memory purpose to prepare the question, then use the normal request admission. */
-	async openMemoryPermission(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot, now: Date): Promise<boolean>
+	/** Ask the memory purpose to prepare the question, then use the normal request admission unless a grant already answers it. */
+	async openMemoryPermission(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot, now: Date): Promise<MemoryPermissionOpenOutcomes>
 	{
-		const command = this._memoryPermission.createOpenCommand(invocation, snapshot, now);
-		if (command === null)
-			return false;
-		const opened = await this.open(command);
-		return opened !== null;
+		const plan = await this._memoryPermission.prepareOpen(invocation, snapshot, now);
+		if (plan.outcome !== MemoryPermissionOpenOutcomes.Opened)
+			return plan.outcome;
+		const opened = await this.open(plan.command);
+		return opened === null ? MemoryPermissionOpenOutcomes.Refused : MemoryPermissionOpenOutcomes.Opened;
 	}
 
 	/** Delegate receipt and dispatch-claim checks to the memory permission purpose. */
@@ -324,8 +324,8 @@ export class PrismaElicitationUnitOfWork implements ElicitationUnitOfWork, Perso
 		return ___DoWithTrace("elicitation.open", { runId: command.runId, attempt: command.attempt }, function _TraceOpen() { return unit._execute(function _Open(repository) { return repository.open(command); }); });
 	}
 
-	/** Open one exact personal-memory permission through the elicitation transaction owner. */
-	async openMemoryPermission(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot, now: Date): Promise<boolean>
+	/** Open one exact personal-memory permission through the elicitation transaction owner, or report the grant that covers it. */
+	async openMemoryPermission(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot, now: Date): Promise<MemoryPermissionOpenOutcomes>
 	{
 		const unit = this;
 		return ___DoWithTrace("elicitation.memory_permission.open", { runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId }, function _TraceOpen() { return unit._execute(function _Open(repository) { return repository.openMemoryPermission(invocation, snapshot, now); }); });

@@ -8,5 +8,5 @@ export type { ConversationActivityRunState, ConversationActivityRunToolProgress 
 export type { ConversationActivityRow, ConversationActivityTarget, ToolFailureActivityAttempt, ToolFailureActivitySource } from "./lib/conversation-activity.types";
 export type { ConversationElicitationGateway } from "./lib/elicitation-gateway.types";
 export { RunToolProgressPhases } from "@opencrane/contracts";
-export { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, ElicitationPurposes, ElicitationRequestStates, McpCredentialRequirement, ___ElicitationExecutionConnectionSchema } from "@opencrane/contracts";
+export { CONVERSATION_ELICITATION_VERSION, ElicitationApprovalScopes, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, ElicitationPurposes, ElicitationRequestStates, McpCredentialRequirement, ___ElicitationExecutionConnectionSchema } from "@opencrane/contracts";
 export type { ConversationElicitation, ElicitationApprovalBody, ElicitationExecutionConnection, ElicitationFreeTextBody, ElicitationMultipleChoiceBody, ElicitationResponseValue, ElicitationSingleChoiceBody } from "@opencrane/contracts";

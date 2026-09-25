@@ -1350,7 +1350,12 @@
 				"adapter": "PrismaToolApprovalPurposeAuthority",
 				"contract": "ElicitationPurposeStrategy",
 				"contractImportPath": "../elicitation-purpose.types",
-				"constructs": []
+				"constructs": [
+					{
+						"adapter": "PrismaApprovalGrantRepository",
+						"importPath": "../../prisma-elicitation-approval-grants"
+					}
+				]
 			},
 			{
 				"path": "libs/backend/agents/execution/elicitation/main/src/purposes/a2ui-action/prisma-a2ui-action-purpose.ts",
@@ -1368,8 +1373,19 @@
 					{
 						"adapter": "PrismaToolInvocationElicitationRepository",
 						"importPath": "@opencrane/backend/server/iam/authorization"
+					},
+					{
+						"adapter": "PrismaApprovalGrantRepository",
+						"importPath": "../../prisma-elicitation-approval-grants"
 					}
 				]
+			},
+			{
+				"path": "libs/backend/agents/execution/elicitation/main/src/prisma-elicitation-approval-grants.ts",
+				"adapter": "PrismaApprovalGrantRepository",
+				"contract": "ApprovalGrantRepository",
+				"contractImportPath": "./elicitation-approval-grant.types",
+				"constructs": []
 			},
 			{
 				"path": "libs/backend/server/conversations/main/src/computers/turns/approval-notifications/prisma-conversation-approval-notification-unit-of-work.ts",

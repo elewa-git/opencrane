@@ -16,7 +16,9 @@
 	@if (!approvalAvailable()) { <p class="elicitation-control__warning" role="note">Some proposed details cannot be shown. You can deny this action, but approval is unavailable.</p> }
 	<fieldset [disabled]="disabled()">
 		<legend>Your decision</legend>
-		<label><input type="radio" name="elicitation-approval" [disabled]="!approvalAvailable()" [checked]="value() === true" (change)="select(true)" /> Approve</label>
-		<label><input type="radio" name="elicitation-approval" [checked]="value() === false" (change)="select(false)" /> Deny</label>
+		@for (option of options(); track option.scope) {
+			<label><input type="radio" name="elicitation-approval" [disabled]="!approvalAvailable()" [checked]="isSelected(option.scope)" (change)="allow(option.scope)" /> {{ option.label }}</label>
+		}
+		<label><input type="radio" name="elicitation-approval" [checked]="isDenied()" (change)="deny()" /> Deny</label>
 	</fieldset>
 </section>

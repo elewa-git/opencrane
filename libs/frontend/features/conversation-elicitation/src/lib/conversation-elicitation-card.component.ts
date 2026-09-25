@@ -2,8 +2,8 @@ import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input
 import { ButtonModule } from "primeng/button";
 import { MessageModule } from "primeng/message";
 
-import { ElicitationApprovalComponent, ElicitationFreeTextComponent, ElicitationMultipleChoiceComponent, ElicitationSingleChoiceComponent } from "@opencrane/elements/elicitation";
-import { ElicitationBodyKinds, ElicitationRequestStates, __CanApproveElicitation, type ConversationElicitation, type ElicitationApprovalBody, type ElicitationFreeTextBody, type ElicitationMultipleChoiceBody, type ElicitationResponseValue, type ElicitationSingleChoiceBody } from "@opencrane/state/conversation/elicitation";
+import { ElicitationApprovalComponent, ElicitationFreeTextComponent, ElicitationMultipleChoiceComponent, ElicitationSingleChoiceComponent, type ElicitationApprovalDraft } from "@opencrane/elements/elicitation";
+import { ElicitationApprovalScopes, ElicitationBodyKinds, ElicitationRequestStates, __CanApproveElicitation, type ConversationElicitation, type ElicitationApprovalBody, type ElicitationFreeTextBody, type ElicitationMultipleChoiceBody, type ElicitationResponseValue, type ElicitationSingleChoiceBody } from "@opencrane/state/conversation/elicitation";
 
 import { _MapApprovalPresentation } from "./elicitation-approval.mapper";
 
@@ -98,11 +98,11 @@ export class ConversationElicitationCardComponent
 	}
 
 	/** Wrap a presentational approval draft in the exact response discriminant. */
-	protected selectApproval(approved: boolean): void
+	protected selectApproval(draft: ElicitationApprovalDraft): void
 	{
-		if (this.busy() || this.disabled() || this.stepUpPath() !== null || this.elicitation().state !== ElicitationRequestStates.Requested || (approved && this.approvalUnavailable()))
+		if (this.busy() || this.disabled() || this.stepUpPath() !== null || this.elicitation().state !== ElicitationRequestStates.Requested || (draft.approved && this.approvalUnavailable()))
 			return;
-		this.draftSelected.emit({ kind: ElicitationBodyKinds.Approval, approved });
+		this.draftSelected.emit({ kind: ElicitationBodyKinds.Approval, approved: draft.approved, scope: draft.scope });
 	}
 	/** Recheck controlled inputs when the explicit confirmation intent is delivered. */
 	protected submit(): void
@@ -118,7 +118,7 @@ export class ConversationElicitationCardComponent
 	protected selectFreeText(text: string): void { this.draftSelected.emit({ kind: ElicitationBodyKinds.FreeText, text }); }
 
 	/** Controlled approval selection. */
-	protected approvalValue(): boolean | null { const draft = this.draft(); return draft?.kind === ElicitationBodyKinds.Approval ? draft.approved : null; }
+	protected approvalValue(): ElicitationApprovalDraft | null { const draft = this.draft(); return draft?.kind === ElicitationBodyKinds.Approval ? { approved: draft.approved, scope: draft.scope ?? ElicitationApprovalScopes.Once } : null; }
 	/** Controlled single selection. */
 	protected singleChoiceValue(): string | null { const draft = this.draft(); return draft?.kind === ElicitationBodyKinds.SingleChoice ? draft.selection : null; }
 	/** Controlled multiple selection. */

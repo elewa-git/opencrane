@@ -1,7 +1,7 @@
 import type { ElicitationPurposes, ElicitationResponseValue, RunInputSnapshot } from "@opencrane/contracts";
 import type { ToolInvocationClaim, ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 
-import type { OpenElicitationCommand, PersonalMemoryPermissionVerificationResult } from "../elicitation.types";
+import type { MemoryPermissionOpenOutcomes, OpenElicitationCommand, PersonalMemoryPermissionVerificationResult } from "../elicitation.types";
 
 /** Supplies the saved request fields needed to apply or expire its purpose. */
 export interface ElicitationPurposeRequest
@@ -34,11 +34,24 @@ export interface ElicitationPurposeStrategy
 /** Requires an implementation for every purpose persisted with a request. */
 export type ElicitationPurposeStrategies = Readonly<Record<ElicitationPurposes, ElicitationPurposeStrategy>>;
 
+/** What the memory purpose decided before any question is opened. */
+export type PersonalMemoryPermissionOpenPlan =
+	| {
+		/** The question must be asked; the repository opens it through normal request admission. */
+		readonly outcome: MemoryPermissionOpenOutcomes.Opened;
+		/** The protected question to open. */
+		readonly command: OpenElicitationCommand;
+	}
+	| {
+		/** A standing grant already answers the question, or the invocation and snapshot disagree. */
+		readonly outcome: MemoryPermissionOpenOutcomes.Covered | MemoryPermissionOpenOutcomes.Refused;
+	};
+
 /** Adds question construction and receipt verification to the memory permission response rules. */
 export interface PersonalMemoryPermissionPurpose extends ElicitationPurposeStrategy
 {
-	/** Build the protected question without opening a request or reading memory content. */
-	createOpenCommand(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot, now: Date): OpenElicitationCommand | null;
+	/** Build the protected question, or report that a standing grant already answers it, without reading memory content. */
+	prepareOpen(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot, now: Date): Promise<PersonalMemoryPermissionOpenPlan>;
 	/** Verify the receipt against the active dispatch claim without consuming either. */
 	verify(invocation: ToolInvocationRecord, claim: ToolInvocationClaim, snapshot: RunInputSnapshot, now: Date): Promise<PersonalMemoryPermissionVerificationResult>;
 }

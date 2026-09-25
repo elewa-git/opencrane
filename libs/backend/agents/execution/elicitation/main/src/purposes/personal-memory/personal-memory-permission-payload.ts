@@ -48,7 +48,7 @@ const _PERSONAL_MEMORY_PERMISSION_EXTENSION_MILLISECONDS = 10 * 60 * 1_000;
  * invocation is still at AwaitingApproval, because a payload built from an already-approved or failed
  * invocation would record its revision wrongly and no receipt would ever match it.
  *
- * Called by: `PrismaPersonalMemoryPermissionPurposeAuthority.createOpenCommand`, which turns the payload into the question shown to the user.
+ * Called by: `PrismaPersonalMemoryPermissionPurposeAuthority.prepareOpen`, which turns the payload into the question shown to the user.
  *
  * @param invocation - The `memory:recall` invocation asking for permission.
  * @param snapshot - The frozen inputs of the run that made the request.

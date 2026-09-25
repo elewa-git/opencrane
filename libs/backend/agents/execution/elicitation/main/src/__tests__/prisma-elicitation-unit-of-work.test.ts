@@ -1,4 +1,4 @@
-import { AgentRunState, ApprovalRequestState, ElicitationPurpose, ElicitationRequestState, ExternalActionClaimKind, PersonalMemoryPermissionReceiptState, Prisma, ToolInvocationState } from "@prisma/client";
+import { AgentRunState, ApprovalRequestState, ElicitationPurpose, ElicitationRequestState, ExternalActionClaimKind, MemoryDatasetSensitivity, PersonalMemoryPermissionReceiptState, Prisma, ToolInvocationState } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const _productAuthorization = vi.hoisted(function _ProductAuthorization()
@@ -29,6 +29,7 @@ import { ExecutionSubjectMembershipKinds, PERSONAL_MEMORY_RECALL_TOOL_REVISION }
 import { PrismaElicitationRepository, PrismaElicitationUnitOfWork } from "../prisma-elicitation-unit-of-work";
 import type { ElicitationRunWakePort } from "../elicitation.types";
 import { PrismaRuntimeElicitationUnitOfWork } from "../prisma-runtime-elicitation-unit-of-work";
+import { MemoryPermissionOpenOutcomes } from "../elicitation.types";
 import { _BuildMemoryPermissionPayload } from "../purposes/personal-memory/personal-memory-permission-payload";
 
 const NOW = new Date("2026-08-11T10:00:00.000Z");
@@ -373,9 +374,55 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 			..._Access(),
 			elicitationRequest: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockImplementation(async function _Create(input) { return { ..._Request(), ...input.data }; }) },
 			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", siloId: "silo-1", conversationId: "conversation-1", attempt: 2, state: AgentRunState.Running }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+			memoryDataset: { findFirst: vi.fn().mockResolvedValue({ id: "dataset-1", sensitivity: MemoryDatasetSensitivity.Standard }) },
+			elicitationApprovalGrant: { findFirst: vi.fn().mockResolvedValue(null), upsert: vi.fn() },
 		};
-		await expect(_Unit(transaction).openMemoryPermission(_MemoryInvocation(), _MemorySnapshot(), NOW)).resolves.toBe(true);
+		await expect(_Unit(transaction).openMemoryPermission(_MemoryInvocation(), _MemorySnapshot(), NOW)).resolves.toBe(MemoryPermissionOpenOutcomes.Opened);
 		expect(transaction.elicitationRequest.create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: "run-1", attempt: 2, assignedParticipantId: "user-1", purpose: ElicitationPurpose.PersonalMemoryPermission, expiresAt: new Date("2026-08-11T10:15:00.000Z") }) });
+	});
+
+	it("asks nothing when a standing grant already covers the recall", async function _CoveredByGrant()
+	{
+		const transaction = {
+			..._Access(),
+			elicitationRequest: { findUnique: vi.fn(), create: vi.fn() },
+			agentRun: { findUnique: vi.fn(), updateMany: vi.fn() },
+			memoryDataset: { findFirst: vi.fn().mockResolvedValue({ id: "dataset-1", sensitivity: MemoryDatasetSensitivity.Standard }) },
+			elicitationApprovalGrant: { findFirst: vi.fn().mockResolvedValue({ id: "grant-1", scope: "always" }), upsert: vi.fn() },
+		};
+
+		await expect(_Unit(transaction).openMemoryPermission(_MemoryInvocation(), _MemorySnapshot(), NOW)).resolves.toBe(MemoryPermissionOpenOutcomes.Covered);
+		expect(transaction.elicitationRequest.create).not.toHaveBeenCalled();
+		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
+	});
+
+	it("still asks when the only grant belongs to a different conversation", async function _GrantMissesConversation()
+	{
+		const transaction = {
+			..._Access(),
+			elicitationRequest: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockImplementation(async function _Create(input) { return { ..._Request(), ...input.data }; }) },
+			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", siloId: "silo-1", conversationId: "conversation-1", attempt: 2, state: AgentRunState.Running }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+			memoryDataset: { findFirst: vi.fn().mockResolvedValue({ id: "dataset-1", sensitivity: MemoryDatasetSensitivity.Standard }) },
+			elicitationApprovalGrant: { findFirst: vi.fn().mockResolvedValue(null), upsert: vi.fn() },
+		};
+
+		await expect(_Unit(transaction).openMemoryPermission(_MemoryInvocation(), _MemorySnapshot(), NOW)).resolves.toBe(MemoryPermissionOpenOutcomes.Opened);
+		expect(transaction.elicitationRequest.create).toHaveBeenCalled();
+	});
+
+	it("offers no permanent answer for a sensitive dataset", async function _SensitiveOffersNoAlways()
+	{
+		const transaction = {
+			..._Access(),
+			elicitationRequest: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockImplementation(async function _Create(input) { return { ..._Request(), ...input.data }; }) },
+			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", siloId: "silo-1", conversationId: "conversation-1", attempt: 2, state: AgentRunState.Running }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+			memoryDataset: { findFirst: vi.fn().mockResolvedValue({ id: "dataset-1", sensitivity: MemoryDatasetSensitivity.Sensitive }) },
+			elicitationApprovalGrant: { findFirst: vi.fn().mockResolvedValue(null), upsert: vi.fn() },
+		};
+
+		await _Unit(transaction).openMemoryPermission(_MemoryInvocation(), _MemorySnapshot(), NOW);
+		const body = transaction.elicitationRequest.create.mock.calls[0][0].data.body;
+		expect(body.offeredScopes).toEqual(["once", "session"]);
 	});
 
 	it("does not open an AgentRun memory request for an MCP-task-owned invocation", async function _RejectsMcpTaskOwnership()
@@ -387,7 +434,7 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		};
 		const invocation = _MemoryInvocation({ runId: null, attempt: null, mcpTaskId: "mcp-task-1" });
 
-		await expect(_Unit(transaction).openMemoryPermission(invocation, _MemorySnapshot(), NOW)).resolves.toBe(false);
+		await expect(_Unit(transaction).openMemoryPermission(invocation, _MemorySnapshot(), NOW)).resolves.toBe(MemoryPermissionOpenOutcomes.Refused);
 		expect(transaction.elicitationRequest.findUnique).not.toHaveBeenCalled();
 		expect(transaction.elicitationRequest.create).not.toHaveBeenCalled();
 	});
@@ -402,7 +449,7 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		const snapshot = _MemorySnapshot();
 		const substituted = { ...snapshot, executionSubject: { ...snapshot.executionSubject, principalId: "user-other", identity: { ...snapshot.executionSubject.identity, principalId: "user-other" }, membership: { ...snapshot.executionSubject.membership, principalId: "user-other" } } };
 
-		await expect(_Unit(transaction).openMemoryPermission(_MemoryInvocation(), substituted, NOW)).resolves.toBe(false);
+		await expect(_Unit(transaction).openMemoryPermission(_MemoryInvocation(), substituted, NOW)).resolves.toBe(MemoryPermissionOpenOutcomes.Refused);
 		expect(transaction.elicitationRequest.findUnique).not.toHaveBeenCalled();
 	});
 

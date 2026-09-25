@@ -8,6 +8,8 @@ import { TestBed, type ComponentFixture } from "@angular/core/testing";
 import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@angular/platform-browser-dynamic/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { ElicitationApprovalScopes } from "@opencrane/contracts";
+
 import { ElicitationApprovalComponent, _ApprovalAvailable } from "../elicitation-approval.component";
 import type { ElicitationApprovalPresentation } from "../elicitation-control.types";
 
@@ -70,8 +72,28 @@ describe("ElicitationApprovalComponent", function _ApprovalSuite()
 		const component = TestBed.runInInjectionContext(function _Construct() { return new ElicitationApprovalComponent(); });
 		let emitted: unknown = null;
 		component.valueChange.subscribe(function _Capture(value) { emitted = value; });
-		component.select(false);
-		expect(emitted).toBe(false);
+		_setInput(component.body, _BODY);
+		component.allow(ElicitationApprovalScopes.Once);
+		expect(emitted).toEqual({ approved: true, scope: ElicitationApprovalScopes.Once });
+	});
+
+	it("carries the chosen scope on the draft, so allowing every time is one click", function _ScopedDraft()
+	{
+		const component = TestBed.runInInjectionContext(function _Construct() { return new ElicitationApprovalComponent(); });
+		let emitted: unknown = null;
+		component.valueChange.subscribe(function _Capture(value) { emitted = value; });
+		_setInput(component.body, _BODY);
+		component.allow(ElicitationApprovalScopes.Always);
+		expect(emitted).toEqual({ approved: true, scope: ElicitationApprovalScopes.Always });
+	});
+
+	it("denies at one-off scope however the question was scoped", function _DenialIsOnce()
+	{
+		const component = TestBed.runInInjectionContext(function _Construct() { return new ElicitationApprovalComponent(); });
+		let emitted: unknown = null;
+		component.valueChange.subscribe(function _Capture(value) { emitted = value; });
+		component.deny();
+		expect(emitted).toEqual({ approved: false, scope: ElicitationApprovalScopes.Once });
 	});
 
 	it("keeps denial available when hidden arguments make approval unavailable", function _HiddenArguments()
@@ -127,8 +149,20 @@ describe("ElicitationApprovalComponent", function _ApprovalSuite()
 		const [approve, deny] = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLInputElement>("input[type='radio']");
 		approve.click();
 		deny.click();
-		expect(selected.mock.calls).toEqual([[true], [false]]);
+		expect(selected.mock.calls).toEqual([[{ approved: true, scope: ElicitationApprovalScopes.Once }], [{ approved: false, scope: ElicitationApprovalScopes.Once }]]);
 		expect(fixture.componentInstance.value()).toBeNull();
+	});
+
+	it("offers one allow button per offered scope and keeps every one of them behind the approval guard", function _ScopedButtons()
+	{
+		const offeredScopes = [ElicitationApprovalScopes.Once, ElicitationApprovalScopes.Session, ElicitationApprovalScopes.Always];
+		const available = _renderApproval({ ..._BODY, offeredScopes });
+		const labels = Array.from((available.nativeElement as HTMLElement).querySelectorAll("label")).map(label => label.textContent?.trim());
+		expect(labels).toEqual(["Allow once", "Allow for this session", "Allow every time", "Deny"]);
+		TestBed.resetTestingModule();
+		const hidden = _renderApproval({ ..._BODY, offeredScopes, proposedArguments: null });
+		const radios = Array.from((hidden.nativeElement as HTMLElement).querySelectorAll<HTMLInputElement>("input[type='radio']"));
+		expect(radios.map(radio => radio.matches(":disabled"))).toEqual([true, true, true, false]);
 	});
 
 	it("keeps the owner visible and denial available when arguments are hidden", function _RenderedHiddenArguments()
@@ -142,7 +176,7 @@ describe("ElicitationApprovalComponent", function _ApprovalSuite()
 		expect(deny.matches(":disabled")).toBe(false);
 		approve.click();
 		deny.click();
-		expect(selected.mock.calls).toEqual([[false]]);
+		expect(selected.mock.calls).toEqual([[{ approved: false, scope: ElicitationApprovalScopes.Once }]]);
 		expect(_definition(root, "Connection owner")?.textContent).toBe(_BODY.executionConnection?.owner);
 		expect(root.querySelector("[role='note']")?.textContent).toContain("approval is unavailable");
 	});
@@ -158,8 +192,8 @@ describe("ElicitationApprovalComponent", function _ApprovalSuite()
 			expect(control.matches(":disabled")).toBe(true);
 			control.click();
 		}
-		fixture.componentInstance.select(true);
-		fixture.componentInstance.select(false);
+		fixture.componentInstance.allow(ElicitationApprovalScopes.Once);
+		fixture.componentInstance.deny();
 		expect(selected).not.toHaveBeenCalled();
 		expect(_definition(root, "Connection owner")?.textContent).toBe(_BODY.executionConnection?.owner);
 		expect(_definition(root, "Credential use")?.textContent).toBe(_BODY.executionConnection?.credentialUse);
