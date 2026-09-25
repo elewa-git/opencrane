@@ -7,7 +7,12 @@ This incremental slice starts at published #908, immutable base
 `1548b6869cabd9af4ebd1cfcd55d97fbd45eaf05`, on
 `feat/collaborative-clarification-authority`. The unfinished 900-file MVP overlay remains untouched.
 The published predecessor is #908 against develop; #899 and #900 have merged. #900's merge commit
-is `10abd0ef6182f36bec13d8f1358e43b15ead7cd5`; #908's source head is unchanged.
+is `10abd0ef6182f36bec13d8f1358e43b15ead7cd5`. The later parent visual repair at
+`498282c5aa8e5c1e5defbe0f93e9b79f7780ba06` is merged into this candidate without rewriting
+either history. The prior child head `994834eb26fb67a1a871160e00ea597f6c642373`, including its
+CI fixture type correction, is preserved. The only conflict was these adjacent plan sections;
+both are retained. All three incoming frontend files exactly match the reviewed parent source,
+and the child's backend, contracts, schema and baseline are unchanged by this integration.
 
 The elicitation owner requires a transaction-bound conversation-access port for RuntimeInput
 open, read, list, response and replay. Its conversations adapter reuses existing child access:
@@ -45,6 +50,40 @@ This is response authority only, not completed U2: explicit-audience selection, 
 notifications and real-account acceptance remain separate. Invitation-history policy is untouched.
 Per-tool read-only classification awaits the user's choice of certifying authority and is not part
 of this slice. Publication/deployment/live-provider evidence remains separate from source checks.
+
+## Standing approvals visual repair — 25 September 2026
+
+The isolated follow-up starts at #908 head
+`1548b6869cabd9af4ebd1cfcd55d97fbd45eaf05`; unfinished Ask and the original 900-file MVP
+overlay remain separate. The current review order is #908 against develop, then #910 against
+#908. The earlier #899 and #900 review surfaces have merged.
+
+Inspection of #908's saved CI run `36119867522` separates its 61 failures into 40 missing
+baselines, 20 changed images and one confirmation-readiness timeout, with 129 passing tests.
+The timeout came from a workspace story that omitted the server's offered Once scope: selecting
+the radio did not establish the controlled affirmative response. The fixture now offers Once;
+the existing interaction, viewport assertion and Darwin screenshot comparison pass unchanged.
+
+All seven existing Standing approvals settings states are now selected for visual testing,
+with an eighth long-content narrow state. Their first renders exposed a separate layout defect:
+long uncertainty feedback could squeeze the Revoke label across two lines. A correction stays
+within the existing row's action-cell layout; no permission, confirmation, retry, theme or
+screenshot-tolerance change is in scope. The Uncertain story now asserts one rendered line for
+the Revoke label. Fresh Chromium captures confirm that state, a busy revoke and the narrow layout;
+the narrow viewport, client and scroll widths are all 390, with no horizontal overflow. The
+focused run explicitly disabled snapshot updates and reached all three captures; only the
+missing Darwin baselines fail. No reference images were created or accepted.
+
+The fixture-only checks passed 145 frontend tests and both affected lint targets. After the layout
+repair, elicitation lint and all 18 component tests pass again; the production Storybook build,
+40 interaction suites with 257 tests, style/Prisma boundaries and module-growth checks pass.
+Independent integrated review reports no findings on the frozen three-file source overlay
+`e0f77149a2695797417a8b04e233aecd50f280a532a32266c860aec5174043dd` (plan excluded).
+The local renderer was stopped. Candidate images are review evidence, not
+accepted baselines or authenticated browser/provider proof. The original CI images have been
+collected for human before/after review; no baselines have been accepted or committed. #910's
+green run `36126779205` skipped the unaffected visual suite and does not clear the parent gate.
+New-head CI and human visual acceptance remain open; this slice does not complete the MVP.
 
 ## Scoped standing tool approvals — publication candidate, 25 September 2026
 
