@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { MemoryMutationDeliveryStates } from "../../memory.types";
 import { MEMORY_GATEWAY_LIMITS, MEMORY_GATEWAY_ROUTE_PATHS, MemoryGatewayErrorCodes } from "../memory-gateway.types";
-import { ___MemoryGatewayDatasetCognifyRequestSchema, ___MemoryGatewayDatasetCognifyResponseSchema, ___MemoryGatewayDatasetEnsureRequestSchema, ___MemoryGatewayDatasetEnsureResponseSchema, ___MemoryGatewayDatasetListRequestSchema, ___MemoryGatewayDatasetListResponseSchema, ___MemoryGatewayDocumentAddRequestSchema, ___MemoryGatewayDocumentAddResponseSchema, ___MemoryGatewayDocumentDeleteRequestSchema, ___MemoryGatewayDocumentListRequestSchema, ___MemoryGatewayDocumentListResponseSchema, ___MemoryGatewayDocumentRawDigestRequestSchema, ___MemoryGatewayDocumentRawDigestResponseSchema, ___MemoryGatewayMutationErrorSchema, ___MemoryGatewayReadErrorSchema, ___MemoryGatewaySearchRequestSchema, ___MemoryGatewaySearchResponseSchema } from "../memory-gateway.validator";
+import { ___MemoryGatewayDatasetCognifyRequestSchema, ___MemoryGatewayDatasetCognifyResponseSchema, ___MemoryGatewayDatasetEnsureRequestSchema, ___MemoryGatewayDatasetEnsureResponseSchema, ___MemoryGatewayDatasetListRequestSchema, ___MemoryGatewayDatasetListResponseSchema, ___MemoryGatewayDocumentAddRequestSchema, ___MemoryGatewayDocumentAddResponseSchema, ___MemoryGatewayDocumentDeleteRequestSchema, ___MemoryGatewayDocumentDeleteResponseSchema, ___MemoryGatewayDocumentListRequestSchema, ___MemoryGatewayDocumentListResponseSchema, ___MemoryGatewayDocumentRawDigestRequestSchema, ___MemoryGatewayDocumentRawDigestResponseSchema, ___MemoryGatewayMutationErrorSchema, ___MemoryGatewayReadErrorSchema, ___MemoryGatewaySearchRequestSchema, ___MemoryGatewaySearchResponseSchema } from "../memory-gateway.validator";
 
 /** UUIDs used to prove that document and chunk identities remain separate. */
 const _IDS = {
@@ -84,6 +84,29 @@ describe("memory gateway document contracts", function _DescribeDocuments()
 		expect(___MemoryGatewayDatasetCognifyRequestSchema.parse(cognifyRequest)).toEqual(cognifyRequest);
 		expect(___MemoryGatewayDatasetCognifyResponseSchema.parse(cognifyResponse)).toEqual(cognifyResponse);
 		expect(___MemoryGatewayDocumentDeleteRequestSchema.parse({ datasetId: _IDS.dataset, documentId: _IDS.document })).toEqual({ datasetId: _IDS.dataset, documentId: _IDS.document });
+	});
+
+	it("accepts only content-free deletion receipts with separate dataset and document UUIDs", function _DeleteReceipt()
+	{
+		const receipt = { datasetId: _IDS.dataset, documentId: _IDS.document };
+		expect(___MemoryGatewayDocumentDeleteResponseSchema.parse(receipt)).toEqual(receipt);
+		expect(___MemoryGatewayDocumentDeleteResponseSchema.safeParse({ ...receipt, content: "private fact" }).success).toBe(false);
+		expect(___MemoryGatewayDocumentDeleteResponseSchema.safeParse({ datasetId: _IDS.dataset }).success).toBe(false);
+		expect(___MemoryGatewayDocumentDeleteResponseSchema.safeParse({ ...receipt, documentId: "chunk" }).success).toBe(false);
+		expect(___MemoryGatewayDocumentDeleteResponseSchema.safeParse({ ...receipt, documentId: _IDS.dataset }).success).toBe(false);
+	});
+
+	it("rejects shared UUID identities even when their letter casing differs", function _DistinctUuidIdentity()
+	{
+		const sameId = _IDS.dataset.toUpperCase();
+		expect(___MemoryGatewayDocumentAddResponseSchema.safeParse({ datasetId: _IDS.dataset, documentId: sameId, contentDigest: _DIGEST }).success).toBe(false);
+		expect(___MemoryGatewayDocumentListResponseSchema.safeParse({ datasetId: _IDS.dataset, inputEvidenceDigest: _DIGEST, documents: [{ ..._Document(), documentId: sameId }] }).success).toBe(false);
+		expect(___MemoryGatewayDocumentRawDigestRequestSchema.safeParse({ datasetId: _IDS.dataset, documentId: sameId }).success).toBe(false);
+		expect(___MemoryGatewayDocumentRawDigestResponseSchema.safeParse({ datasetId: _IDS.dataset, documentId: sameId, contentDigest: _DIGEST, byteLength: 4 }).success).toBe(false);
+		expect(___MemoryGatewayDocumentDeleteRequestSchema.safeParse({ datasetId: _IDS.dataset, documentId: sameId }).success).toBe(false);
+		expect(___MemoryGatewayDocumentDeleteResponseSchema.safeParse({ datasetId: _IDS.dataset, documentId: sameId }).success).toBe(false);
+		expect(___MemoryGatewaySearchResponseSchema.safeParse({ datasetId: _IDS.dataset, facts: [{ documentId: sameId, chunkId: _IDS.document, content: "fact" }] }).success).toBe(false);
+		expect(___MemoryGatewaySearchResponseSchema.safeParse({ datasetId: _IDS.dataset, facts: [{ documentId: _IDS.document, chunkId: _IDS.document.toUpperCase(), content: "fact" }] }).success).toBe(false);
 	});
 
 	it("enforces UTF-8 byte bounds instead of JavaScript character counts", function _EnforceTextBytes()

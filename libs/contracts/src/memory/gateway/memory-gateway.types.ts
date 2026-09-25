@@ -225,6 +225,18 @@ export interface MemoryGatewayDocumentDeleteRequest
 	readonly documentId: string;
 }
 
+/**
+ * Confirms that one document is absent from its selected dataset after deletion or recovery.
+ * The workflow must compare both coordinates with its saved target before recording completion.
+ */
+export interface MemoryGatewayDocumentDeleteResponse
+{
+	/** Provider dataset UUID whose membership was checked. */
+	readonly datasetId: string;
+	/** Provider document UUID proven absent from that dataset. */
+	readonly documentId: string;
+}
+
 /** A read failure that cannot claim any mutation was attempted. */
 export interface MemoryGatewayReadError
 {

@@ -9,13 +9,11 @@ gateway: the only process allowed to make network calls to the silo's Cognee mem
 
 OpenCrane keeps product authority in its server. The server first checks the authenticated person,
 their grants, the selected memory scope, and the frozen dataset recorded with the run. This gateway
-does not repeat those product decisions, but it does own **request-shape authorization** for the
-private Cognee plane: identity (TokenReview of the server's audience-bound projected token), route
-(only bounded search), and the payload contract (exactly one validated query, the `CHUNKS` search
-type, exactly one UUID dataset, and a bounded `top_k`). Anything outside that shape is refused with
-`422 invalid_search` before a byte reaches Cognee, and only a canonical re-serialization of the
-validated fields is forwarded. The app composes this admission server with one authenticated Cognee
-session; Cognee then enforces the service user's dataset access-control list (ACL).
+does not repeat those product decisions. It authenticates each caller through Kubernetes TokenReview
+and accepts only the shared, bounded memory routes. The provider adapter translates validated
+requests into Cognee calls and returns receipts bound to the requested dataset, document and operation.
+The app composes that adapter with one authenticated Cognee session; Cognee then enforces the
+service user's dataset access-control list (ACL).
 
 ```
  OpenCrane server  ─ projected caller token ──────────┐
@@ -32,9 +30,10 @@ session; Cognee then enforces the service user's dataset access-control list (AC
 **In this flow:** [opencrane server](../opencrane/README.md) · [Cognee deployment](../_infra/cognee/README.md)
 
 It accepts only the server's exact ServiceAccount identity and the `opencrane-memory-gateway`
-audience. The current transport forwards only bounded search requests. Add, cognify, and deletion
-remain unavailable until OpenCrane owns a durable write lifecycle that can recover safely across
-database, process, and Cognee failures. Anything else is refused, with no direct Cognee fallback.
+audience. It supports search, dataset ensure/list, document add/list/digest/delete and Cognify,
+which processes saved documents for recall. Each call performs one provider operation or reconciles
+its receipt. The server's durable memory workflow owns the sequence, retries and saved progress;
+product Remember, Correct and Forget commands are not yet connected to these operations.
 
 ## Public surface
 
@@ -43,8 +42,8 @@ client, mounted-credential reader and Cognee session, opens the private listener
 shutdown. The request server and provider protocol live in
 [`@opencrane/backend/memory-gateway`](../../libs/backend/memory-gateway/main/README.md).
 
-The private HTTP surface mirrors only Cognee search. It is not a public API and must not be routed
-through ingress.
+The private HTTP surface uses the shared `/api/v1/memory` contract. It is not a public API and must
+not be routed through ingress. Cognee routes remain private to the provider adapter.
 
 ## Boundary
 
@@ -81,6 +80,11 @@ not create or read the Secret.
 
 `clustertenantManager.cognee.install` must remain `true`. **TODO:** support an authenticated BYO or
 non-private Cognee transport before allowing that mode; the chart currently fails closed instead.
+
+The `memory-gateway:test` target runs app configuration tests and the connected client/gateway
+contract in `tests/memory-gateway/__tests__`. The connected test imports both public adapters outside
+the production package graph. Its file and the client sources are explicit test and type-check cache
+inputs; production scope rules remain unchanged.
 
 ## See also
 

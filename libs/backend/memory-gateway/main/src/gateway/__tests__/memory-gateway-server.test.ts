@@ -1,111 +1,159 @@
 import { describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
-import type { CogneeProviderSession } from "../../provider/auth/cognee-provider-session.types";
-import type { CogneeProviderHttpCommand, CogneeProviderHttpResponse } from "../../provider/http/cognee-provider-http.types";
+import { MEMORY_GATEWAY_ROUTE_PATHS, MemoryGatewayErrorCodes, MemoryMutationDeliveryStates } from "@opencrane/contracts";
+
+import { MemoryGatewayProviderMutationError, MemoryGatewayProviderReadError } from "../../provider/operations/memory-gateway-provider-error";
+import type { MemoryGatewayProviderOperations } from "../../provider/operations/memory-gateway-provider-operations.types";
 import { __CreateMemoryGatewayServer } from "../memory-gateway-server";
-import type { MemoryGatewayServerOptions } from "../memory-gateway-server.types";
 
-/** Valid dataset UUID used by the private search boundary. */
-const _DATASET_UUID = "3f6f6bd2-8a3e-4c8e-9a3f-6b1d2e4f5a6b";
+/** Distinct coordinates accepted by the shared wire contract. */
+const _DATASET = "3f6f6bd2-8a3e-4c8e-9a3f-6b1d2e4f5a6b";
+const _DOCUMENT = "fbb3cf99-1b3a-486e-9308-7e31cf19e876";
+const _OPERATION = "6a2345a9-4977-4bea-b7fd-134633125002";
+const _PIPELINE = "fa71b5bc-6385-4f82-a4b9-6df1f9d59271";
+const _NAME = "opaque-memory-dataset-name-with-at-least-43-characters";
+const _DIGEST = `sha256:${"a".repeat(64)}`;
+const _DELETE = `/api/v1/memory/datasets/${_DATASET}/documents/${_DOCUMENT}`;
 
-/** Valid provider chunk projected by the gateway. */
-const _CHUNK = { id: "c15db69b-bf7f-4b8e-83ca-4e18d72f5b07", document_id: "fbb3cf99-1b3a-486e-9308-7e31cf19e876", text: "known fact" };
-
-/** Encode one authenticated provider response. */
-function _ProviderResponse(value: unknown, status = 200): CogneeProviderHttpResponse
+/** Provide typed receipt-producing operations so HTTP tests cannot accidentally contact Cognee. */
+function _Operations(): MemoryGatewayProviderOperations
 {
-	return { status, contentType: "application/json", body: new TextEncoder().encode(JSON.stringify(value)) };
-}
-
-/** Build the complete private server dependencies with one intended override. */
-function _Options(overrides: Partial<MemoryGatewayServerOptions> = {}): MemoryGatewayServerOptions
-{
-	const providerSession: CogneeProviderSession = {
-		ensureReady: vi.fn(async function _ready() {}),
-		exchange: vi.fn(async function _exchange() { return _ProviderResponse([{ dataset_id: _DATASET_UUID, search_result: [_CHUNK] }]); }),
-	};
 	return {
-		providerSession,
-		tokenReviewer: { __Review: vi.fn(async function _review() { return { username: "expected-server" }; }) },
-		log: { error: vi.fn() },
-		...overrides,
+		ensureDataset: vi.fn().mockResolvedValue({ dataset: { datasetId: _DATASET, datasetName: _NAME } }),
+		listDatasets: vi.fn().mockResolvedValue({ datasets: [] }),
+		addDocument: vi.fn().mockResolvedValue({ datasetId: _DATASET, documentId: _DOCUMENT, contentDigest: _DIGEST }),
+		listDocuments: vi.fn().mockResolvedValue({ datasetId: _DATASET, inputEvidenceDigest: _DIGEST, documents: [] }),
+		readDocumentDigest: vi.fn().mockResolvedValue({ datasetId: _DATASET, documentId: _DOCUMENT, contentDigest: _DIGEST, byteLength: 4 }),
+		cognifyDataset: vi.fn().mockResolvedValue({ datasetId: _DATASET, operationId: _OPERATION, inputEvidenceDigest: _DIGEST, pipelineRunId: _PIPELINE }),
+		search: vi.fn().mockResolvedValue({ datasetId: _DATASET, facts: [] }),
+		deleteDocument: vi.fn().mockResolvedValue({ datasetId: _DATASET, documentId: _DOCUMENT }),
 	};
 }
 
-/** Submit one valid private search request. */
-function _Search(server: ReturnType<typeof __CreateMemoryGatewayServer>)
+/** Construct the existing server around synthetic workload review and provider ports. */
+function _Fixture(accepted = true)
 {
-	return request(server).post("/api/v1/search").set("authorization", "Bearer projected-token").send({ query: "known facts", search_type: "CHUNKS", dataset_ids: [_DATASET_UUID.toUpperCase()], top_k: 5 });
+	const operations = _Operations();
+	const providerSession = { ensureReady: vi.fn().mockResolvedValue(undefined), exchange: vi.fn() };
+	const tokenReviewer = { __Review: vi.fn().mockResolvedValue(accepted ? { username: "expected-server" } : null) };
+	const log = { error: vi.fn() };
+	const server = __CreateMemoryGatewayServer({ providerSession, providerOperations: operations, tokenReviewer, log });
+	return { server, operations, providerSession, tokenReviewer, log };
 }
 
-describe("private memory gateway", function _suite()
+/** Each shared POST route has exactly one provider operation and one delivery category. */
+const _POSTS = [
+	{ key: "ensureDataset", path: MEMORY_GATEWAY_ROUTE_PATHS.DatasetEnsure, mutation: true, body: { datasetName: _NAME } },
+	{ key: "listDatasets", path: MEMORY_GATEWAY_ROUTE_PATHS.DatasetList, mutation: false, body: { datasetName: _NAME } },
+	{ key: "addDocument", path: MEMORY_GATEWAY_ROUTE_PATHS.DocumentAdd, mutation: true, body: { datasetId: _DATASET, content: "fact", contentDigest: _DIGEST } },
+	{ key: "listDocuments", path: MEMORY_GATEWAY_ROUTE_PATHS.DocumentList, mutation: false, body: { datasetId: _DATASET } },
+	{ key: "readDocumentDigest", path: MEMORY_GATEWAY_ROUTE_PATHS.DocumentRawDigest, mutation: false, body: { datasetId: _DATASET, documentId: _DOCUMENT } },
+	{ key: "cognifyDataset", path: MEMORY_GATEWAY_ROUTE_PATHS.DatasetCognify, mutation: true, body: { datasetId: _DATASET, operationId: _OPERATION, expectedInputEvidenceDigest: _DIGEST } },
+	{ key: "search", path: MEMORY_GATEWAY_ROUTE_PATHS.Search, mutation: false, body: { datasetId: _DATASET, query: "fact", topK: 3 } },
+] as const;
+
+describe("private memory gateway HTTP boundary", function _Suite()
 {
-	it("keeps liveness local and binds readiness to the provider login", async function _health()
+	it("keeps liveness local and checks the existing provider session for readiness", async function _Health()
 	{
-		const options = _Options();
-		const server = __CreateMemoryGatewayServer(options);
-		await expect(request(server).get("/livez")).resolves.toMatchObject({ status: 204 });
-		expect(options.providerSession.ensureReady).not.toHaveBeenCalled();
-		await expect(request(server).get("/readyz")).resolves.toMatchObject({ status: 204 });
-		expect(options.providerSession.ensureReady).toHaveBeenCalledOnce();
+		const f = _Fixture();
+		expect((await request(f.server).get("/livez")).status).toBe(204);
+		expect(f.providerSession.ensureReady).not.toHaveBeenCalled();
+		expect((await request(f.server).get("/readyz")).status).toBe(204);
+		f.providerSession.ensureReady.mockRejectedValue(new Error("private login failure"));
+		expect((await request(f.server).get("/readyz")).body).toEqual({ error: MemoryGatewayErrorCodes.ProviderUnavailable });
+		expect(JSON.stringify(f.log.error.mock.calls)).not.toContain("private login failure");
 	});
 
-	it("reports unavailable when the provider session cannot authenticate", async function _unready()
+	it.each(_POSTS)("binds $key to its authenticated shared request and validates its receipt", async function _Post(row)
 	{
-		const providerSession = _Options().providerSession;
-		vi.mocked(providerSession.ensureReady).mockRejectedValue(new Error("synthetic credential detail"));
-		const options = _Options({ providerSession });
-		await expect(request(__CreateMemoryGatewayServer(options)).get("/readyz")).resolves.toMatchObject({ status: 503, body: { error: "memory_gateway_unavailable" } });
-		expect(options.log.error).toHaveBeenCalledWith(expect.objectContaining({ err: expect.objectContaining({ message: "memory_gateway_unavailable" }) }), "memory gateway request failed");
+		const f = _Fixture();
+		const result = await request(f.server).post(row.path).set("authorization", "Bearer projected-token").send(row.body);
+		expect(result.status).toBe(200);
+		expect(f.operations[row.key]).toHaveBeenCalledWith(row.body, expect.any(AbortSignal));
+		expect(f.operations[row.key]).toHaveBeenCalledTimes(1);
+		expect(f.tokenReviewer.__Review).toHaveBeenCalledWith("projected-token");
+		expect(f.providerSession.exchange).not.toHaveBeenCalled();
 	});
 
-	it("rejects another workload before reading or forwarding bytes", async function _rejectsWrongServer()
+	it.each(_POSTS)("refuses $key before parsing unauthorized bytes and reports its delivery category", async function _Unauthorized(row)
 	{
-		const options = _Options({ tokenReviewer: { __Review: vi.fn(async function _review() { return null; }) } });
-		await expect(_Search(__CreateMemoryGatewayServer(options))).resolves.toMatchObject({ status: 401 });
-		expect(options.providerSession.exchange).not.toHaveBeenCalled();
+		const f = _Fixture(false);
+		const response = await request(f.server).post(row.path).set("authorization", "Bearer wrong-token").type("json").send("not json");
+		expect(response.status).toBe(401);
+		const body = row.mutation ? { error: MemoryGatewayErrorCodes.Unauthorized, deliveryState: MemoryMutationDeliveryStates.ProvenNotSent } : { error: MemoryGatewayErrorCodes.Unauthorized };
+		expect(response.body).toEqual(body);
+		expect(f.operations[row.key]).not.toHaveBeenCalled();
 	});
 
-	it("sends one canonical request and returns only chunks from the matching dataset", async function _forwards()
+	it.each(_POSTS)("rejects extra $key fields and wrong HTTP methods without a provider call", async function _Invalid(row)
 	{
-		const options = _Options();
-		await expect(_Search(__CreateMemoryGatewayServer(options))).resolves.toMatchObject({ status: 200, body: [_CHUNK] });
-		expect(options.providerSession.exchange).toHaveBeenCalledOnce();
-		const command = vi.mocked(options.providerSession.exchange).mock.calls[0]![0] as CogneeProviderHttpCommand;
-		expect(command.path).toBe("/api/v1/search");
-		expect(command.headers).toEqual({ "content-type": "application/json" });
-		expect(JSON.parse(new TextDecoder().decode(command.body as Uint8Array))).toEqual({ query: "known facts", search_type: "CHUNKS", dataset_ids: [_DATASET_UUID], top_k: 5 });
+		const f = _Fixture();
+		const response = await request(f.server).post(row.path).set("authorization", "Bearer token").send({ ...row.body, subjectId: "browser-subject" });
+		expect(response.status).toBe(422);
+		expect(response.body.deliveryState).toBe(row.mutation ? MemoryMutationDeliveryStates.ProvenNotSent : undefined);
+		expect((await request(f.server).get(row.path).set("authorization", "Bearer token")).status).toBe(404);
+		expect(f.operations[row.key]).not.toHaveBeenCalled();
 	});
 
-	it("fails closed when Cognee returns another dataset envelope", async function _rejectsForeignEnvelope()
+	it("takes deletion coordinates from the path and refuses body and malformed coordinates", async function _Delete()
 	{
-		const providerSession = _Options().providerSession;
-		vi.mocked(providerSession.exchange).mockResolvedValue(_ProviderResponse([{ dataset_id: "0f0e4b1c-9a52-4d0f-8c53-2f3ad34e1b10", search_result: [_CHUNK] }]));
-		await expect(_Search(__CreateMemoryGatewayServer(_Options({ providerSession })))).resolves.toMatchObject({ status: 502, body: { error: "memory_gateway_unavailable" } });
+		const f = _Fixture();
+		const response = await request(f.server).delete(_DELETE).set("authorization", "Bearer token");
+		expect(response.body).toEqual({ datasetId: _DATASET, documentId: _DOCUMENT });
+		expect(f.operations.deleteDocument).toHaveBeenCalledWith({ datasetId: _DATASET, documentId: _DOCUMENT }, expect.any(AbortSignal));
+		expect((await request(f.server).delete(_DELETE).set("authorization", "Bearer token").send({ datasetId: _DATASET })).status).toBe(422);
+		expect((await request(f.server).delete(_DELETE.replace(_DOCUMENT, "invalid")).set("authorization", "Bearer token")).status).toBe(422);
+		expect(f.operations.deleteDocument).toHaveBeenCalledTimes(1);
 	});
 
-	it("refuses unknown fields, multiple datasets, and non-CHUNKS search before provider access", async function _rejectsInvalidSearch()
+	it("reports a rejected deletion as proven non-delivery", async function _DeleteRefusal()
 	{
-		for (const body of [
-			{ query: "known facts", search_type: "CHUNKS", dataset_ids: [_DATASET_UUID], top_k: 5, node_type: "TextSummary" },
-			{ query: "known facts", search_type: "CHUNKS", dataset_ids: [_DATASET_UUID, "0f0e4b1c-9a52-4d0f-8c53-2f3ad34e1b10"], top_k: 5 },
-			{ query: "known facts", search_type: "RAG_COMPLETION", dataset_ids: [_DATASET_UUID], top_k: 5 },
-		])
+		const f = _Fixture(false);
+		const response = await request(f.server).delete(_DELETE).set("authorization", "Bearer wrong-token");
+		expect(response.status).toBe(401);
+		expect(response.body).toEqual({ error: MemoryGatewayErrorCodes.Unauthorized, deliveryState: MemoryMutationDeliveryStates.ProvenNotSent });
+		expect(f.operations.deleteDocument).not.toHaveBeenCalled();
+	});
+
+	it("removes the old inbound search route and hides unknown routes", async function _OldPath()
+	{
+		const f = _Fixture();
+		expect((await request(f.server).post("/api/v1/search").send({})).status).toBe(404);
+		expect((await request(f.server).post("/api/v1/add").send({})).status).toBe(404);
+		expect(f.tokenReviewer.__Review).not.toHaveBeenCalled();
+		expect(f.operations.search).not.toHaveBeenCalled();
+	});
+
+	it("preserves provider mutation ambiguity and fixed error codes without private details", async function _MutationFailure()
+	{
+		const f = _Fixture();
+		vi.mocked(f.operations.deleteDocument).mockRejectedValueOnce(new MemoryGatewayProviderMutationError(MemoryGatewayErrorCodes.Conflict, MemoryMutationDeliveryStates.ProvenNotSent));
+		expect((await request(f.server).delete(_DELETE).set("authorization", "Bearer token")).body).toEqual({ error: MemoryGatewayErrorCodes.Conflict, deliveryState: MemoryMutationDeliveryStates.ProvenNotSent });
+		vi.mocked(f.operations.deleteDocument).mockRejectedValueOnce(new Error("private provider body"));
+		const unknown = await request(f.server).delete(_DELETE).set("authorization", "Bearer token");
+		expect(unknown.body).toEqual({ error: MemoryGatewayErrorCodes.ProviderUnavailable, deliveryState: MemoryMutationDeliveryStates.Ambiguous });
+		expect(JSON.stringify(f.log.error.mock.calls)).not.toContain("private provider body");
+	});
+
+	it("validates successful receipts before sending them and separates read failures from mutation failures", async function _ResponseValidation()
+	{
+		const f = _Fixture();
+		vi.mocked(f.operations.deleteDocument).mockResolvedValueOnce({ datasetId: _DATASET, documentId: "bad" });
+		expect((await request(f.server).delete(_DELETE).set("authorization", "Bearer token")).body).toEqual({ error: MemoryGatewayErrorCodes.ProviderProtocol, deliveryState: MemoryMutationDeliveryStates.Ambiguous });
+		vi.mocked(f.operations.search).mockRejectedValueOnce(new MemoryGatewayProviderReadError(MemoryGatewayErrorCodes.NotFound));
+		expect((await request(f.server).post(MEMORY_GATEWAY_ROUTE_PATHS.Search).set("authorization", "Bearer token").send({ datasetId: _DATASET, query: "fact", topK: 3 })).body).toEqual({ error: MemoryGatewayErrorCodes.NotFound });
+	});
+
+	it("rejects oversized and malformed bodies before mutation dispatch", async function _BodyLimits()
+	{
+		const f = _Fixture();
+		for (const body of ["not json", JSON.stringify({ content: "x".repeat(1024 * 1024 + 1) })])
 		{
-			const options = _Options();
-			const call = request(__CreateMemoryGatewayServer(options)).post("/api/v1/search").set("authorization", "Bearer projected-token").send(body);
-			await expect(call).resolves.toMatchObject({ status: 422, body: { error: "invalid_search" } });
-			expect(options.providerSession.exchange).not.toHaveBeenCalled();
+			const response = await request(f.server).post(MEMORY_GATEWAY_ROUTE_PATHS.DocumentAdd).set("authorization", "Bearer token").type("json").send(body);
+			expect(response.body).toEqual({ error: MemoryGatewayErrorCodes.InvalidRequest, deliveryState: MemoryMutationDeliveryStates.ProvenNotSent });
 		}
-	});
-
-	it("refuses provider write routes before forwarding bytes", async function _rejectsWrites()
-	{
-		const options = _Options();
-		const server = __CreateMemoryGatewayServer(options);
-		await expect(request(server).post("/api/v1/add").set("authorization", "Bearer projected-token").send({ data: "secret" })).resolves.toMatchObject({ status: 404 });
-		await expect(request(server).post("/api/v1/cognify").set("authorization", "Bearer projected-token").send({ datasets: ["ds-1"] })).resolves.toMatchObject({ status: 404 });
-		expect(options.providerSession.exchange).not.toHaveBeenCalled();
+		expect(f.operations.addDocument).not.toHaveBeenCalled();
 	});
 });

@@ -2,10 +2,19 @@ import { z, type ZodType } from "zod";
 
 import { MEMORY_GATEWAY_LIMITS } from "@opencrane/contracts";
 
-import type { CogneeCognifyEvidenceDocumentWire, CogneeCognifyInputEvidenceWire, CogneePipelineRunWire } from "./cognee-provider-wire.types";
+import type { CogneeCognifyEvidenceDocumentWire, CogneeCognifyInputEvidenceWire, CogneeDatasetWire, CogneePipelineRunWire } from "./cognee-provider-wire.types";
 
 /** Provider timestamps must contain a complete date, time, and offset. */
 const _DateTimeSchema = z.string().datetime({ offset: true });
+
+/** Strict DatasetDTO response from the pinned provider. */
+export const _CogneeDatasetWireSchema: ZodType<CogneeDatasetWire> = z.object({
+	id: z.string().uuid(),
+	name: z.string().min(1).max(MEMORY_GATEWAY_LIMITS.DatasetNameMaximumCharacters),
+	createdAt: _DateTimeSchema,
+	updatedAt: _DateTimeSchema.nullable(),
+	ownerId: z.string().uuid(),
+}).strict();
 
 /** SHA-256 format returned by the repaired provider. */
 const _DigestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);

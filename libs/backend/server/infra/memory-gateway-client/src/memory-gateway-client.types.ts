@@ -1,3 +1,5 @@
+import type { MemoryGatewayDatasetCognifyRequest, MemoryGatewayDatasetCognifyResponse, MemoryGatewayDatasetEnsureRequest, MemoryGatewayDatasetEnsureResponse, MemoryGatewayDatasetListRequest, MemoryGatewayDatasetListResponse, MemoryGatewayDocumentAddRequest, MemoryGatewayDocumentAddResponse, MemoryGatewayDocumentDeleteRequest, MemoryGatewayDocumentDeleteResponse, MemoryGatewayDocumentListRequest, MemoryGatewayDocumentListResponse, MemoryGatewayDocumentRawDigestRequest, MemoryGatewayDocumentRawDigestResponse } from "@opencrane/contracts";
+
 /**
  * One fact the memory gateway returned for a recall.
  *
@@ -50,72 +52,13 @@ export interface MemoryQueryResult
 	readonly facts: readonly MemoryFact[];
 }
 
-/**
- * A request to store one fact in a subject's personal memory.
- *
- * Nothing here is derived by the client: the caller supplies the Cognee dataset UUID (OpenCrane's own
- * catalog id never crosses this boundary) and the exact text to store. The durable workflow owns the
- * operation key and rejects changed bytes before calling this port; Cognee 1.2.1 has no HTTP delivery
- * key. No shipped client performs this write yet — both throw `MemoryGatewayUnavailableError`.
- *
- * @see {@link PersonalMemoryRecordReceipt} for the evidence a future verified write may return.
- */
-export interface PersonalMemoryRecordCommand
+/** Authenticated product coordinates retained outside every shared gateway wire body. */
+export interface MemoryGatewayOperationContext
 {
-	/** Silo that owns the personal-memory dataset. */
+	/** Silo derived from the authenticated request host. */
 	readonly siloId: string;
-	/** Authenticated subject whose personal memory may receive this fact. */
+	/** External subject resolved by the product command owner. */
 	readonly subjectId: string;
-	/** Cognee dataset UUID; OpenCrane's catalog id never crosses this boundary. */
-	readonly cogneeDatasetId: string;
-	/** Exact durable fact content, sent only to the remote memory gateway. */
-	readonly content: string;
-}
-
-/**
- * Gateway evidence that identifies the document found after a personal-memory write attempt.
- *
- * This receipt does not mean the catalog adopted the fact or that every Cognee index is complete.
- * The durable workflow must compare the dataset and digest with its admitted operation before it
- * records progress. Transport ambiguity is carried by an error with
- * `MemoryMutationDeliveryStates.Ambiguous`, never by a fabricated receipt.
- */
-export interface PersonalMemoryRecordReceipt
-{
-	/** Cognee dataset UUID in which the gateway verified the document. */
-	readonly cogneeDatasetId: string;
-	/** Cognee Data/document UUID returned by dataset membership recovery, never a CHUNKS id. */
-	readonly cogneeDocumentId: string;
-	/** Digest of the complete verified source content, always lowercase `sha256:<64 hex chars>`. */
-	readonly contentDigest: string;
-}
-
-/** Request to correct the content of one stored fact. */
-export interface MemoryCorrectionCommand
-{
-	/** Silo that owns the memory scope. */
-	readonly siloId: string;
-	/** Subject whose personal memory is being corrected. */
-	readonly subjectId: string;
-	/** Cognee dataset UUID frozen by the admitted operation. */
-	readonly cogneeDatasetId: string;
-	/** Cognee Data/document UUID verified as a member of the admitted dataset. */
-	readonly cogneeDocumentId: string;
-	/** Replacement content to store for the fact. */
-	readonly correctedContent: string;
-}
-
-/** Request to forget one stored fact. */
-export interface MemoryForgetCommand
-{
-	/** Silo that owns the memory scope. */
-	readonly siloId: string;
-	/** Subject whose personal memory is being pruned. */
-	readonly subjectId: string;
-	/** Cognee dataset UUID frozen by the admitted operation. */
-	readonly cogneeDatasetId: string;
-	/** Cognee Data/document UUID verified as a member of the admitted dataset. */
-	readonly cogneeDocumentId: string;
 }
 
 /**
@@ -213,10 +156,14 @@ export interface ScopedMemoryInjectionCommand
  * The one way OpenCrane reads and writes memory: a subject's personal memory, and shared knowledge
  * scopes.
  *
- * Only the two recalls work today. `recordPersonalFact`, `correct`, `forget`, and `injectScoped`
- * throw `MemoryGatewayUnavailableError` in BOTH shipped implementations, because the gateway does not
- * yet own a durable write lifecycle that can be tied back to a remote record. Treat those four as
- * the agreed contract, not as working calls.
+ * Personal-memory mutations expose one remote operation per method. The durable workflow chooses
+ * the next method from saved state and compares every returned coordinate before it records progress.
+ * `injectScoped` remains unavailable until the shared gateway owns that separate write contract.
+ *
+ * Every mutation failure carries delivery evidence, including transport and protocol errors.
+ * `Ambiguous` means the caller must reconcile saved coordinates before another mutation.
+ * `ProvenNotSent` permits retrying the unchanged operation after current authority is checked.
+ * Neither outcome gives the caller permission to replace the saved operation or its allowance.
  *
  * Two implementations: the HTTP client in http-cognee-memory-gateway-client.ts, and
  * `__UnavailableMemoryGatewayClient`, which refuses everything when no gateway is configured.
@@ -241,29 +188,73 @@ export interface MemoryGatewayClient
 	 */
 	query(command: MemoryQueryCommand): Promise<MemoryQueryResult>;
 	/**
-	 * Stores one fact in the authenticated subject's personal memory.
+	 * Ensures the dataset identified by an already saved opaque name.
 	 *
-	 * @param command - Subject, admitted dataset, and exact content. The durable workflow owns the
-	 *   operation key and rejects conflicting bytes before this call.
-	 * @returns Dataset, document and digest evidence. The receipt does not prove catalog adoption or
-	 *   completed indexing.
-	 * @throws MemoryGatewayUnavailableError Always, in both shipped implementations today.
+	 * @param context - Authenticated silo and subject, retained outside the shared wire request.
+	 * @param request - Exact dataset name derived from the saved local dataset identity.
+	 * @returns Provider dataset identity; it does not activate the local dataset.
+	 * @throws MemoryGatewayMutationFailure When the gateway refuses the mutation with delivery evidence.
+	 * @throws MemoryGatewayTransportError When the exchange fails; inspect its delivery state before retrying.
+	 * @throws MemoryGatewayProtocolError When the request or receipt is invalid; an ambiguous receipt requires reconciliation.
 	 */
-	recordPersonalFact(command: PersonalMemoryRecordCommand): Promise<PersonalMemoryRecordReceipt>;
+	ensureDataset(context: MemoryGatewayOperationContext, request: MemoryGatewayDatasetEnsureRequest): Promise<MemoryGatewayDatasetEnsureResponse>;
 	/**
-	 * Replaces the content of one stored fact.
+	 * Lists the provider dataset matching one already saved opaque name.
 	 *
-	 * @param command - Subject, admitted dataset, Cognee document UUID, and replacement content.
-	 * @throws MemoryGatewayUnavailableError Always, in both shipped implementations today.
+	 * @param context - Authenticated silo and subject, retained outside the shared wire request.
+	 * @param request - Exact opaque dataset name to recover.
+	 * @returns Zero or one exact-name dataset.
 	 */
-	correct(command: MemoryCorrectionCommand): Promise<void>;
+	listDatasets(context: MemoryGatewayOperationContext, request: MemoryGatewayDatasetListRequest): Promise<MemoryGatewayDatasetListResponse>;
 	/**
-	 * Deletes one stored fact.
+	 * Adds one digest-bound text document to an exact provider dataset.
 	 *
-	 * @param command - Subject, admitted dataset, and Cognee document UUID to remove.
-	 * @throws MemoryGatewayUnavailableError Always, in both shipped implementations today.
+	 * @param context - Authenticated silo and subject, retained outside the shared wire request.
+	 * @param request - Dataset, complete text, and its caller-saved digest.
+	 * @returns Exact dataset, document, and complete-content digest evidence.
+	 * @throws MemoryGatewayMutationFailure When the gateway refuses the mutation with delivery evidence.
+	 * @throws MemoryGatewayTransportError When the exchange fails; inspect its delivery state before retrying.
+	 * @throws MemoryGatewayProtocolError When the request or receipt is invalid; an ambiguous receipt requires reconciliation.
 	 */
-	forget(command: MemoryForgetCommand): Promise<void>;
+	addDocument(context: MemoryGatewayOperationContext, request: MemoryGatewayDocumentAddRequest): Promise<MemoryGatewayDocumentAddResponse>;
+	/**
+	 * Lists the metadata-only document snapshot for one exact dataset.
+	 *
+	 * @param context - Authenticated silo and subject, retained outside the shared wire request.
+	 * @param request - Exact provider dataset to inspect.
+	 * @returns Dataset-bound document identities, digests, media types, and byte lengths.
+	 */
+	listDocuments(context: MemoryGatewayOperationContext, request: MemoryGatewayDocumentListRequest): Promise<MemoryGatewayDocumentListResponse>;
+	/**
+	 * Reads complete-byte digest evidence for one exact dataset document.
+	 *
+	 * @param context - Authenticated silo and subject, retained outside the shared wire request.
+	 * @param request - Exact provider dataset and document to inspect.
+	 * @returns The gateway's digest and byte-length evidence for those same coordinates.
+	 */
+	readDocumentDigest(context: MemoryGatewayOperationContext, request: MemoryGatewayDocumentRawDigestRequest): Promise<MemoryGatewayDocumentRawDigestResponse>;
+	/**
+	 * Runs or replays one saved blocking indexing operation.
+	 *
+	 * @param context - Authenticated silo and subject, retained outside the shared wire request.
+	 * @param request - Dataset, stable operation id, and expected input-evidence digest.
+	 * @returns Pipeline evidence bound to the same dataset, operation, and digest.
+	 * @throws MemoryGatewayMutationFailure When the gateway refuses the mutation with delivery evidence.
+	 * @throws MemoryGatewayTransportError When the exchange fails; inspect its delivery state before retrying.
+	 * @throws MemoryGatewayProtocolError When the request or receipt is invalid; an ambiguous receipt requires reconciliation.
+	 */
+	cognifyDataset(context: MemoryGatewayOperationContext, request: MemoryGatewayDatasetCognifyRequest): Promise<MemoryGatewayDatasetCognifyResponse>;
+	/**
+	 * Deletes one exact dataset document and returns the gateway's absence proof.
+	 *
+	 * @param context - Authenticated silo and subject, retained outside the shared wire request.
+	 * @param request - Exact provider dataset and document to delete.
+	 * @returns A typed receipt echoing the deleted coordinates.
+	 * @throws MemoryGatewayMutationFailure When the gateway refuses the mutation with delivery evidence.
+	 * @throws MemoryGatewayTransportError When the exchange fails; inspect its delivery state before retrying.
+	 * @throws MemoryGatewayProtocolError When the request or receipt is invalid; an ambiguous receipt requires reconciliation.
+	 */
+	deleteDocument(context: MemoryGatewayOperationContext, request: MemoryGatewayDocumentDeleteRequest): Promise<MemoryGatewayDocumentDeleteResponse>;
 	/**
 	 * Recalls facts from a shared knowledge scope, each with the provenance stamped when it was written.
 	 *

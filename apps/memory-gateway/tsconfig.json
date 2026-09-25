@@ -1,6 +1,14 @@
 {
   "extends": "../../tsconfig.json",
-  "compilerOptions": { "noEmit": true },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": [
+    "src/**/*",
+    "../../tests/memory-gateway/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }
