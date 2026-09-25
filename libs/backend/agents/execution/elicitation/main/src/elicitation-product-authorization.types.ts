@@ -5,6 +5,8 @@ export interface ElicitationProductAuthorization
 {
 	/** Requires Conversation/Read for one current Principal and conversation. */
 	canReadConversation(siloId: string, subjectId: string, conversationId: string, now: Date): Promise<boolean>;
+	/** Requires current Conversation/Use without recording a product admission. */
+	canUseConversation(siloId: string, subjectId: string, conversationId: string, now: Date): Promise<boolean>;
 	/** Filters conversation ids through the Principal's current Conversation/Read grants. */
 	filterReadableConversationIds(siloId: string, subjectId: string, conversationIds: readonly string[], now: Date): Promise<ReadonlySet<string>>;
 	/** Returns elicitation ids whose linked tool approval has a current ApprovalRequest/Read grant. */

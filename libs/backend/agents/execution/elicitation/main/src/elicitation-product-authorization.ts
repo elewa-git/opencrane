@@ -41,6 +41,16 @@ export class PrismaElicitationProductAuthorizationRepository implements Elicitat
 		return decision.outcome === AuthorizationDecisionOutcomes.Allow;
 	}
 
+	/** Requires current Conversation/Use without creating a second admission during replay. */
+	async canUseConversation(siloId: string, subjectId: string, conversationId: string, now: Date): Promise<boolean>
+	{
+		const principalId = await this._resolvePrincipal(siloId, subjectId);
+		if (principalId === null)
+			return false;
+		const decision = await this.authorization.decide({ siloId, principalId, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId }, resource: { kind: ProductAuthorizationResourceKinds.Conversation, id: conversationId }, action: ProductAuthorizationActions.Use, nowEpochMs: now.getTime() });
+		return decision.outcome === AuthorizationDecisionOutcomes.Allow;
+	}
+
 	/** Filters candidate conversation ids through one batched Conversation/Read decision. */
 	async filterReadableConversationIds(siloId: string, subjectId: string, conversationIds: readonly string[], now: Date): Promise<ReadonlySet<string>>
 	{

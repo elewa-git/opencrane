@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 
 import type { ConversationElicitation } from "@opencrane/contracts";
 
+import type { ElicitationConversationAccess } from "./elicitation-conversation-access.types";
 import type { ExpireElicitationBatchCommand, ExpireElicitationBatchResult, OpenElicitationCommand, RuntimeElicitationUnitOfWork } from "./elicitation.types";
 import { PrismaElicitationRepository } from "./prisma-elicitation-unit-of-work";
 
@@ -11,9 +12,6 @@ import { PrismaElicitationRepository } from "./prisma-elicitation-unit-of-work";
  * This adapter never starts a nested transaction. Its repository is constructed from the exact
  * transaction supplied by runtime dispatch, so opening and expiring requests share the caller's
  * locks and commit or roll back with the surrounding command or candidate decision.
- *
- * Called by: `_CreateProductionRuntimeElicitationUnitOfWorkFactory` binds an instance inside every
- * command-polling and candidate-admission transaction.
  *
  * @see RuntimeElicitationUnitOfWork in elicitation.types.ts
  */
@@ -29,10 +27,10 @@ export class PrismaRuntimeElicitationUnitOfWork implements RuntimeElicitationUni
 	 *
 	 * @param transaction - The dispatch transaction that already owns the run lock.
 	 */
-	constructor(transaction: Prisma.TransactionClient)
+	constructor(transaction: Prisma.TransactionClient, conversationAccess: ElicitationConversationAccess | null = null)
 	{
 		this._transaction = transaction;
-		this._repository = new PrismaElicitationRepository(this._transaction);
+		this._repository = new PrismaElicitationRepository(this._transaction, null, conversationAccess);
 	}
 
 	/**

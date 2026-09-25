@@ -7922,6 +7922,8 @@ DECLARE
     current_attempt INTEGER;
     current_state "AgentRunState";
     participant_ended BIGINT;
+    response_count BIGINT;
+    response_row "elicitation_response_attempts"%ROWTYPE;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ElicitationRequest rows cannot be deleted'; END IF;
     IF TG_OP = 'INSERT' THEN
@@ -7953,6 +7955,21 @@ BEGIN
     IF OLD."state" <> 'requested' OR NEW."state" = 'requested' THEN
         RAISE EXCEPTION 'ElicitationRequest may resolve exactly once';
     END IF;
+    -- A shared clarification records the participant whose response resolved the request.
+    IF NEW."purpose" = 'runtime_input' AND NEW."state" IN ('answered', 'declined') THEN
+        SELECT count(*) INTO response_count FROM "elicitation_response_attempts" WHERE "request_id" = NEW."id";
+        IF response_count <> 1 THEN
+            RAISE EXCEPTION 'RuntimeInput resolution requires exactly one saved response';
+        END IF;
+        SELECT * INTO response_row FROM "elicitation_response_attempts" WHERE "request_id" = NEW."id";
+        IF NEW."resolved_by" IS DISTINCT FROM response_row."responding_subject_id"
+            OR NEW."resolved_at" IS DISTINCT FROM response_row."submitted_at"
+            OR NEW."state" IS DISTINCT FROM (CASE
+                WHEN response_row."response"->>'kind' = 'approval' AND response_row."response"->'approved' = 'false'::jsonb
+                THEN 'declined'::"ElicitationRequestState" ELSE 'answered'::"ElicitationRequestState" END) THEN
+            RAISE EXCEPTION 'RuntimeInput resolution must match its saved responder, time and disposition';
+        END IF;
+    END IF;
     RETURN NEW;
 END;
 $$;
@@ -7960,6 +7977,7 @@ $$;
 CREATE FUNCTION "enforce_elicitation_response_attempt_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     request_row "elicitation_requests"%ROWTYPE;
+    child_request "conversation_child_requests"%ROWTYPE;
     participant_ended BIGINT;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ElicitationResponseAttempt rows cannot be deleted'; END IF;
@@ -7968,10 +7986,41 @@ BEGIN
         SELECT "access_ended_position" INTO participant_ended FROM "conversation_participants"
           WHERE "conversation_id" = request_row."conversation_id" AND "user_id" = NEW."responding_subject_id" FOR UPDATE;
         IF request_row."id" IS NULL OR request_row."state" <> 'requested' OR request_row."expires_at" <= clock_timestamp()
-            OR request_row."assigned_participant_id" IS DISTINCT FROM NEW."responding_subject_id" OR NOT FOUND OR participant_ended IS NOT NULL
+            OR (request_row."purpose" <> 'runtime_input' AND request_row."assigned_participant_id" IS DISTINCT FROM NEW."responding_subject_id")
+            OR NOT FOUND OR participant_ended IS NOT NULL
             OR (request_row."requires_step_up" AND
                 (NEW."verified_step_up_at" IS NULL OR NEW."verified_step_up_at" < request_row."created_at" OR NEW."verified_step_up_at" > clock_timestamp())) THEN
             RAISE EXCEPTION 'ElicitationResponseAttempt lacks current participant or step-up authority';
+        END IF;
+        PERFORM 1 FROM "agent_runs"
+          WHERE "id" = request_row."run_id" AND "silo_id" = request_row."silo_id"
+            AND "conversation_id" = request_row."conversation_id" AND "attempt" = request_row."attempt"
+            AND "state" = 'waiting_for_input'
+          FOR SHARE;
+        IF NOT FOUND THEN RAISE EXCEPTION 'ElicitationResponseAttempt requires its exact current waiting run'; END IF;
+        PERFORM 1 FROM "org_memberships"
+          WHERE "cluster_tenant" = request_row."silo_id" AND "subject" = NEW."responding_subject_id" AND "status" = 'active'
+          FOR SHARE;
+        IF NOT FOUND THEN RAISE EXCEPTION 'ElicitationResponseAttempt requires current organization membership'; END IF;
+        -- Parent membership never admits a new child responder or widens its saved audience.
+        IF request_row."purpose" = 'runtime_input' THEN
+            SELECT * INTO child_request FROM "conversation_child_requests"
+              WHERE "child_conversation_id" = request_row."conversation_id" FOR SHARE;
+            IF FOUND THEN
+                IF child_request."silo_id" IS DISTINCT FROM request_row."silo_id" OR child_request."state" <> 'ready'
+                    OR jsonb_typeof(child_request."participant_subject_ids") IS DISTINCT FROM 'array'
+                    OR NOT (child_request."participant_subject_ids" ? NEW."responding_subject_id") THEN
+                    RAISE EXCEPTION 'RuntimeInput response requires its ready child and explicit audience';
+                END IF;
+                PERFORM 1 FROM "conversations" parent
+                  JOIN "conversation_participants" participant ON participant."conversation_id" = parent."id"
+                  WHERE parent."id" = child_request."parent_conversation_id" AND parent."silo_id" = request_row."silo_id"
+                    AND parent."mode" = 'group' AND participant."user_id" = NEW."responding_subject_id"
+                    AND participant."access_ended_position" IS NULL
+                    AND participant."visible_from_position" <= child_request."parent_message_position"
+                  FOR SHARE OF parent, participant;
+                IF NOT FOUND THEN RAISE EXCEPTION 'RuntimeInput response requires current parent source visibility'; END IF;
+            END IF;
         END IF;
         RETURN NEW;
     END IF;

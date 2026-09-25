@@ -121,6 +121,7 @@
             "vitest run src/bootstrap/conversations/__tests__/conversation-run-lifecycle.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-tool-approval.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/tool-approval-scope.sql.test.ts",
+            "vitest run src/bootstrap/conversations/__tests__/elicitation-response.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-tool-result.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-tool-progress.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-output-payload.sql.test.ts",
@@ -144,6 +145,16 @@
         "executor": "nx:run-commands",
         "options": {
           "command": "vitest run src/bootstrap/conversations/__tests__/conversation-stop*.sql.test.ts",
+          "cwd": "apps/opencrane",
+          "env": { "TZ": "UTC" }
+        },
+        "cache": false
+      },
+      "test:elicitation-response-sql": {
+        "executor": "nx:run-commands",
+        "dependsOn": ["db:generate"],
+        "options": {
+          "command": "vitest run src/bootstrap/conversations/__tests__/elicitation-response.sql.test.ts",
           "cwd": "apps/opencrane",
           "env": { "TZ": "UTC" }
         },

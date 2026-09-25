@@ -548,6 +548,13 @@
 				]
 			},
 			{
+				"path": "libs/backend/server/conversations/main/src/children/db/prisma-conversation-elicitation-access.ts",
+				"adapter": "PrismaConversationElicitationAccessRepository",
+				"contract": "ElicitationConversationAccess",
+				"contractImportPath": "@opencrane/backend/agents/execution/elicitation",
+				"constructs": [{ "adapter": "PrismaGroupChildAccessRepository", "importPath": "./prisma-group-child-access-repository" }]
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/messages/db/prisma-conversation-history-repository.ts",
 				"adapter": "PrismaConversationHistoryRepository",
 				"contract": "ConversationHistoryRepository",

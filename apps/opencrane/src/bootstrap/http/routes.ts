@@ -25,7 +25,7 @@ import { _CreatePersonalConfigurationRouter } from "@opencrane/backend/agents/pe
 import { __CreateConversationAssetRouter, _ResolveConversationAssetCaller } from "@opencrane/backend/server/conversation-assets";
 import { _CreateConversationHistoryComposition } from "../conversations/conversation-history-composition";
 import { _ReadConversationPrivatePayloadKeyring } from "@opencrane/backend/server/conversations/history";
-import { _ConversationComputerReviewAuthority, _CreateConversationComputerReviewRouter, KeyedConversationComputerReviewCredentialDeriver, PrismaConversationMetadataReader } from "@opencrane/backend/server/conversations";
+import { _ConversationComputerReviewAuthority, _CreateConversationComputerReviewRouter, KeyedConversationComputerReviewCredentialDeriver, PrismaConversationElicitationAccessRepository, PrismaConversationMetadataReader } from "@opencrane/backend/server/conversations";
 import { ConversationComputerHistory } from "@opencrane/backend/server/conversations/computers";
 import { PrismaConversationComputerTurnWorkflowEventRepository } from "@opencrane/backend/server/conversations";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
@@ -89,8 +89,8 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScan
 		..._OptionalRoute("/api/v1/me/conversations", conversationHistory?.conversations ?? null),
 		..._OptionalRoute("/api/v1/me/memory", conversationHistory?.memory ?? null),
 		..._OptionalRoute("/api/v1/me/conversations", computerReview),
-		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfElicitationRouter(prisma, _log, transaction => new PrismaConversationComputerTurnWorkflowEventRepository(transaction as Prisma.TransactionClient, mcpWorkflows.execution)) },
-		{ method: "use", path: "/api/v1/me/activity", handler: _CreateSelfElicitationActivityRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfElicitationRouter(prisma, _log, transaction => new PrismaConversationComputerTurnWorkflowEventRepository(transaction as Prisma.TransactionClient, mcpWorkflows.execution), function _CreateElicitationAccess(transaction) { return new PrismaConversationElicitationAccessRepository(transaction as Prisma.TransactionClient); }) },
+		{ method: "use", path: "/api/v1/me/activity", handler: _CreateSelfElicitationActivityRouter(prisma, _log, function _CreateElicitationActivityAccess(transaction) { return new PrismaConversationElicitationAccessRepository(transaction as Prisma.TransactionClient); }) },
 		{ method: "use", path: "/api/v1/me/tool-approval-scopes", handler: _CreateSelfToolApprovalScopeRouter(prisma, _log) },
 	];
 	const gatewayRoutes: readonly RouteMount[] = [
