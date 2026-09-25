@@ -11,21 +11,27 @@ vi.mock("../../authorization/db/conversation-product-authorization", () => ({ Pr
 const _CALLER: ConversationCaller = { siloId: "silo", principalId: "principal", subjectId: "subject", externalIssuer: "https://issuer.test", verifiedAuthenticationAt: "2026-09-07T00:00:00.000Z" };
 const _KEY = "31c1f1dc-0010-4f13-9c2f-d3841ffd6651";
 const _SOURCE = "41c1f1dc-0010-4f13-9c2f-d3841ffd6651";
-const _COMMAND = { parentMessageId: _SOURCE, parentMessagePosition: "5", agentServiceId: "company", idempotencyKey: _KEY };
+const _COMMAND = { parentMessageId: _SOURCE, parentMessagePosition: "5", agentServiceId: "company", participantRefs: ["member-peer"], idempotencyKey: _KEY };
 
 /** Models committed request, projection and encrypted payload stages so retries observe the prior writes. */
 function _Fixture()
 {
-	const state = { request: null as any, child: null as any, payload: null as any, joinedAt: 1n, callerJoinedAt: 1n, lateJoinedAt: null as bigint | null, active: true, parentExists: true, sourceVisible: true, sourceAuthor: "principal", sourceAudience: "conversation" };
+	const state = { request: null as any, child: null as any, payload: null as any, joinedAt: 1n, callerJoinedAt: 1n, lateJoinedAt: null as bigint | null, inactiveRefs: [] as string[], peerRemoved: false, active: true, parentExists: true, sourceVisible: true, sourceAuthor: "principal", sourceAudience: "conversation" };
 	const transaction = {
-		principal: { findFirst: vi.fn(async () => ({ id: "principal" })), findMany: vi.fn(async () => [{ id: "principal", subject: "subject" }, { id: "peer-principal", subject: "peer" }]) },
-		orgMembership: { findMany: vi.fn(async () => state.active ? [{ subject: "subject" }, { subject: "peer" }] : []), findUnique: vi.fn(async () => ({ status: "Active", displayName: "Human" })) },
+		principal: { findFirst: vi.fn(async () => ({ id: "principal" })), findMany: vi.fn(async () => [{ id: "principal", subject: "subject" }, { id: "peer-principal", subject: "peer" }, { id: "third-principal", subject: "third" }]) },
+		orgMembership: { findMany: vi.fn(async ({ where }: any) =>
+		{
+			const members = [{ id: "member-self", subject: "subject" }, { id: "member-peer", subject: "peer" }, { id: "member-third", subject: "third" }, { id: "member-nonparent", subject: "outsider" }].filter(member => state.active && !state.inactiveRefs.includes(member.id));
+			return members.filter(member => where.id === undefined || where.id.in.includes(member.id));
+		}), findUnique: vi.fn(async () => ({ status: "Active", displayName: "Human" })) },
 		conversation: {
 			findFirst: vi.fn(async () =>
 			{
 				if (!state.parentExists)
 					return null;
-				const participants = [{ userId: "subject", visibleFromPosition: state.callerJoinedAt }, { userId: "peer", visibleFromPosition: state.joinedAt }];
+				const participants = [{ userId: "subject", visibleFromPosition: state.callerJoinedAt }, { userId: "third", visibleFromPosition: 1n }];
+				if (!state.peerRemoved)
+					participants.push({ userId: "peer", visibleFromPosition: state.joinedAt });
 				if (state.lateJoinedAt !== null)
 					participants.push({ userId: "later-peer", visibleFromPosition: state.lateJoinedAt });
 				return { id: "parent", participants };
@@ -59,6 +65,113 @@ function _Fixture()
 describe("shared group child lifecycle", () =>
 {
 	beforeEach(() => { vi.clearAllMocks(); _authorization.canAccess.mockResolvedValue(true); _authorization.isCurrentlyEligible.mockResolvedValue(true); _authorization.admit.mockResolvedValue(true); });
+	it("creates a requester-only child without involving unselected parent members", async () =>
+	{
+		const f = _Fixture(); f.state.joinedAt = 6n;
+		expect(await f.lifecycle.create(_CALLER, "parent", { ..._COMMAND, participantRefs: [] })).toMatchObject({ state: "pending" });
+		await f.lifecycle.run({ siloId: "silo", requestId: f.state.request.id });
+		expect(f.state.request.participantSubjectIds).toEqual(["subject"]);
+		expect(f.state.child.participants.map((participant: { userId: string }) => participant.userId)).toEqual(["subject"]);
+		expect(_authorization.reconcileParticipants).toHaveBeenCalledWith("silo", f.state.request.childConversationId, ["subject"], "principal", f.state.request.createdAt);
+	});
+	it("grants child participation only to the requester and explicitly selected parent members", async () =>
+	{
+		const f = _Fixture();
+		await f.lifecycle.create(_CALLER, "parent", _COMMAND);
+		await f.lifecycle.run({ siloId: "silo", requestId: f.state.request.id });
+		expect(f.state.request.participantSubjectIds).toEqual(["peer", "subject"]);
+		expect(f.state.child.participants.map((participant: { userId: string }) => participant.userId)).toEqual(["peer", "subject"]);
+		expect(_authorization.reconcileParticipants).toHaveBeenCalledWith("silo", f.state.request.childConversationId, ["peer", "subject"], "principal", f.state.request.createdAt);
+		expect(f.transaction.orgMembership.findMany).toHaveBeenCalledWith({ where: { id: { in: ["member-peer"] }, clusterTenant: "silo", status: "Active" }, select: { id: true, subject: true } });
+	});
+	it("recovers reordered explicit selections and rejects changed selection before another source read", async () =>
+	{
+		const f = _Fixture();
+		const first = await f.lifecycle.create(_CALLER, "parent", { ..._COMMAND, participantRefs: ["member-third", "member-peer"] });
+		const second = await f.lifecycle.create(_CALLER, "parent", { ..._COMMAND, participantRefs: ["member-peer", "member-third"] });
+		expect(second).toEqual(first);
+		expect(f.state.request.participantSubjectIds).toEqual(["peer", "subject", "third"]);
+		expect(f.transaction.conversationChildRequest.create).toHaveBeenCalledTimes(1);
+		expect(f.workflows.spawn).toHaveBeenCalledTimes(1);
+		const reads = f.participantHistory.read.mock.calls.length;
+		await expect(f.lifecycle.create(_CALLER, "parent", _COMMAND)).rejects.toBeInstanceOf(GroupChildConflictError);
+		expect(f.participantHistory.read).toHaveBeenCalledTimes(reads);
+	});
+	it.each([
+		{ reason: "self", participantRefs: ["member-self"] },
+		{ reason: "duplicate", participantRefs: ["member-peer", "member-peer"] },
+		{ reason: "unknown or foreign", participantRefs: ["member-foreign"] },
+		{ reason: "non-parent member", participantRefs: ["member-nonparent"] },
+		{ reason: "inactive", participantRefs: ["member-peer"], inactive: true },
+		{ reason: "source-hidden", participantRefs: ["member-peer"], sourceHidden: true },
+	])("rejects a $reason recipient before decrypting or admitting work", async ({ participantRefs, inactive, sourceHidden }) =>
+	{
+		const f = _Fixture();
+		if (inactive)
+			f.state.inactiveRefs = ["member-peer"];
+		if (sourceHidden)
+			f.state.joinedAt = 6n;
+		expect(await f.lifecycle.create(_CALLER, "parent", { ..._COMMAND, participantRefs })).toBeNull();
+		expect(f.participantHistory.read).not.toHaveBeenCalled();
+		expect(f.transaction.conversationChildRequest.create).not.toHaveBeenCalled();
+		expect(f.workflows.spawn).not.toHaveBeenCalled();
+	});
+	it("refuses missing explicit selection even through the direct lifecycle entrypoint", async () =>
+	{
+		const f = _Fixture();
+		const { participantRefs: _selection, ...missing } = _COMMAND;
+		expect(await f.lifecycle.create(_CALLER, "parent", missing as never)).toBeNull();
+		expect(f.participantHistory.read).not.toHaveBeenCalled();
+		expect(f.transaction.orgMembership.findMany).not.toHaveBeenCalled();
+	});
+	it("checks central Read authority for each selected recipient before decrypting the source", async () =>
+	{
+		const f = _Fixture();
+		_authorization.canAccess.mockImplementation(async caller => caller.subjectId !== "peer");
+		expect(await f.lifecycle.create(_CALLER, "parent", _COMMAND)).toBeNull();
+		expect(f.participantHistory.read).not.toHaveBeenCalled();
+		expect(f.workflows.spawn).not.toHaveBeenCalled();
+	});
+	it.each(["membership", "participation", "source-boundary", "grant"])("rechecks selected recipient %s after preflight and before committing creation", async revoked =>
+	{
+		const f = _Fixture();
+		const read = f.participantHistory.read.getMockImplementation()!;
+		f.participantHistory.read.mockImplementationOnce(async () =>
+		{
+			const page = await read();
+			if (revoked === "membership")
+				f.state.inactiveRefs = ["member-peer"];
+			if (revoked === "participation")
+				f.state.peerRemoved = true;
+			if (revoked === "source-boundary")
+				f.state.joinedAt = 6n;
+			if (revoked === "grant")
+				_authorization.canAccess.mockImplementation(async caller => caller.subjectId !== "peer");
+			return page;
+		});
+		expect(await f.lifecycle.create(_CALLER, "parent", _COMMAND)).toBeNull();
+		expect(f.participantHistory.read).toHaveBeenCalledTimes(1);
+		expect(f.transaction.conversationChildRequest.create).not.toHaveBeenCalled();
+		expect(f.workflows.spawn).not.toHaveBeenCalled();
+	});
+	it("recovers the saved ready request without resolving recipients again or restoring revoked grants", async () =>
+	{
+		const f = _Fixture();
+		await f.lifecycle.create(_CALLER, "parent", _COMMAND);
+		await f.lifecycle.run({ siloId: "silo", requestId: f.state.request.id });
+		f.state.inactiveRefs = ["member-peer"]; f.state.peerRemoved = true;
+		f.transaction.orgMembership.findMany.mockClear();
+		_authorization.reconcileParticipants.mockClear(); _authorization.reconcileCreator.mockClear();
+		expect(await f.lifecycle.create(_CALLER, "parent", _COMMAND)).toMatchObject({ state: "ready" });
+		await f.lifecycle.run({ siloId: "silo", requestId: f.state.request.id });
+		expect(f.state.request.participantSubjectIds).toEqual(["peer", "subject"]);
+		expect(f.transaction.orgMembership.findMany.mock.calls.every(([query]) => query.where.id === undefined)).toBe(true);
+		expect(f.transaction.conversationChildRequest.create).toHaveBeenCalledTimes(1);
+		expect(f.transaction.conversation.create).toHaveBeenCalledTimes(1);
+		expect(f.workflows.spawn).toHaveBeenCalledTimes(1);
+		expect(_authorization.reconcileParticipants).not.toHaveBeenCalled();
+		expect(_authorization.reconcileCreator).not.toHaveBeenCalled();
+	});
 	it("records the failed creation stage without copying upstream text or credentials", async () =>
 	{
 		const f = _Fixture();
@@ -99,8 +212,9 @@ describe("shared group child lifecycle", () =>
 		const reads = f.participantHistory.read.mock.calls.length;
 		await expect(f.lifecycle.create(_CALLER, "parent", { ..._COMMAND, agentServiceId: "different" })).rejects.toBeInstanceOf(GroupChildConflictError);
 		expect(f.participantHistory.read).toHaveBeenCalledTimes(reads);
-		expect(await f.lifecycle.create(_CALLER, "parent", { ..._COMMAND, idempotencyKey: "51c1f1dc-0010-4f13-9c2f-d3841ffd6651" })).toBeNull();
-		expect(f.participantHistory.read).toHaveBeenCalledTimes(reads);
+		await expect(f.lifecycle.create(_CALLER, "parent", { ..._COMMAND, idempotencyKey: "51c1f1dc-0010-4f13-9c2f-d3841ffd6651" })).resolves.toMatchObject({ state: "pending" });
+		expect(f.state.request.participantSubjectIds).toEqual(["peer", "subject"]);
+		expect(f.participantHistory.read).toHaveBeenCalledTimes(reads + 1);
 	});
 	it.each(["membership", "join-boundary", "source", "child"])("does not recover an admitted request after current %s access is lost", async revoked =>
 	{

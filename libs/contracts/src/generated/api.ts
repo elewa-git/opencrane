@@ -1244,7 +1244,7 @@ export interface paths {
         put?: never;
         /**
          * Ask the company assistant about one own group message
-         * @description Admits an idempotent shared child for a caller-owned conversation-audience text message. Every admitted recipient must already see the originating revision. Requires current parent Delegate, conversation creation and selected service Invoke. The child begins pending and becomes ready only after cold history and its activation are durable.
+         * @description Admits an idempotent child for a caller-owned conversation-audience text message and explicitly selected additional recipients. An empty participantRefs array includes only the requester. Every admitted recipient must already see the originating revision. Equivalent recipient orders recover the same request; changing recipients with the same retry key conflicts. Requires current parent Delegate, conversation creation and selected service Invoke. The child begins pending and becomes ready only after cold history and its activation are durable.
          */
         post: operations["createMyGroupConversationChild"];
         delete?: never;
@@ -8010,6 +8010,8 @@ export interface operations {
                     parentMessageId: string;
                     parentMessagePosition: string;
                     agentServiceId: string;
+                    /** @description Additional active parent-group members selected by opaque, case-sensitive organisation membership references. The requester is implicit and must not be repeated; an empty array is requester-only. */
+                    participantRefs: string[];
                     /** Format: uuid */
                     idempotencyKey: string;
                 };

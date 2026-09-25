@@ -31,7 +31,7 @@ signed-in participant ──► main ◄── HERE ──► history
 | `memory/commands/` | Validate and admit explicit Remember, Correct and Forget requests for an already Active personal dataset, and expose authorized content-free status. Never accept plaintext or caller-supplied authority. |
 | `memory/source/` | Read the selected human message through current history access and recheck its encrypted source inside the command transaction. |
 | `memory/workflow/` | Declare identifier-only memory tasks and resume each saved provider and catalog phase through one Absurd workflow owner. The command transaction retains Absurd's returned receipt. First-dataset creation remains separately unfinished. |
-| `children/` | Admit group-child work, preserve its original audience, recover creation, and share human-reviewed text. |
+| `children/` | Resolve explicitly selected parent members, admit group-child work, preserve its original audience, recover creation, and share human-reviewed text. |
 | `computers/` | Separate activation, lifecycle, checkpoint, turn and review operation owners. |
 | `computers/tools/` | Proposal admission, current dispatch access and saved result consumption each have their own owner. |
 | `computers/interruptions/` | Select and admit requester-owned Stop commands, record their outcome and let Absurd recover cancellation cleanup. |
@@ -57,7 +57,10 @@ signed-in participant ──► main ◄── HERE ──► history
   resolves selected PDFs through `ConversationPromptDocumentAuthority`, and verifies their converted
   bytes outside SQL. Initial and restarted compilation repeat the current authority and coordinate
   checks before adding the text as untrusted user content.
-- `PrismaGroupChildAuthority`, `_CreateGroupChildRouter` and `GROUP_CHILD_TASK` compose explicit child requests and recovery.
+- `PrismaGroupChildAuthority`, `_CreateGroupChildRouter` and `GROUP_CHILD_TASK` compose explicit child
+  requests and recovery. Creation accepts only opaque membership references, includes the requester
+  implicitly, and freezes only selected people who currently belong to the parent and can read the
+  source message. Recovery rechecks that saved audience without adding later parent participants.
 - `PrismaConversationElicitationAccessRepository` applies existing child-sharing checks inside the assistant-question transaction; the browser route composition supplies it to elicitation.
 - `PrismaPersonalMemoryCommandUnitOfWork` and `_CreatePersonalMemoryCommandRouter` expose
   `POST /api/v1/me/memory/commands` and `GET /api/v1/me/memory/commands/:commandId`.

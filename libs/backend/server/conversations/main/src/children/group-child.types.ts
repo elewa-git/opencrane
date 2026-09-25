@@ -27,7 +27,7 @@ export interface GroupChildAgentResolver<TTransaction>
 export interface GroupChildAuthority
 {
 	/**
-	 * Admits a new request with the current eligible group audience, or returns its accepted retry.
+	 * Admits a new request with explicitly selected eligible recipients, or returns its accepted retry.
 	 * Retrying a UUID preserves the saved recipients, even after another member joins. Both paths
 	 * require current source access; a ready child also requires current child access.
 	 * @returns The creation state, or null when the source or current access is unavailable.
@@ -79,7 +79,10 @@ export interface GroupChildAccessPort<TTransaction>
 	mayAccess(caller: ConversationCaller, conversationId: string): Promise<boolean>;
 	mayReadOrigin(caller: ConversationCaller, parentConversationId: string, position: bigint): Promise<boolean>;
 	origin(caller: ConversationCaller, conversationId: string): Promise<import("@opencrane/models/conversations").GroupChildOrigin | null>;
-	audience(caller: ConversationCaller, parentId: string, position: bigint, frozen?: readonly string[]): Promise<readonly string[] | null>;
+	/** Resolves selected membership references without treating parent membership as an invitation. */
+	selectedAudience(caller: ConversationCaller, parentId: string, position: bigint, participantRefs: readonly string[]): Promise<readonly string[] | null>;
+	/** Rechecks only the exact selected or previously frozen subjects. */
+	audience(caller: ConversationCaller, parentId: string, position: bigint, subjects: readonly string[]): Promise<readonly string[] | null>;
 	stillAdmitted(request: GroupChildRequest, agents: GroupChildAgentResolver<TTransaction>): Promise<boolean>;
 }
 

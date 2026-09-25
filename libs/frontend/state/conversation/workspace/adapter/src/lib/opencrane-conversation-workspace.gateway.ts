@@ -62,10 +62,10 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 		catch { throw _InvalidResponse(); }
 	}
 
-	/** Admits the selected message and company assistant with the store-owned retry key. */
+	/** Sends the explicit audience with the selected message, assistant and store-owned retry key. */
 	public async createChild(parentConversationId: string, command: GroupChildCreateCommand, signal: AbortSignal): Promise<GroupChildView>
 	{
-		const result = await this._api.client.POST("/me/conversations/{conversationId}/children", { params: { path: { conversationId: parentConversationId } }, body: command, signal });
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/children", { params: { path: { conversationId: parentConversationId } }, body: { ...command, participantRefs: [...command.participantRefs] }, signal });
 		if (result.error !== undefined || result.data === undefined)
 			throw _Failure(result.response?.status);
 		try { return _ParseConversationGroupChild(result.data, parentConversationId, command.parentMessageId, command.parentMessagePosition); }

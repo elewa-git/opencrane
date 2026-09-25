@@ -18,14 +18,16 @@ function _Fixture()
 
 describe("group child participant router", () =>
 {
-	it("binds exact source coordinates and rejects browser-supplied audience", async () =>
+	it("binds exact source coordinates and explicit references without accepting subject authority", async () =>
 	{
-		const f = _Fixture(); const command = { parentMessageId: _KEY, parentMessagePosition: "2", agentServiceId: "company", idempotencyKey: _KEY };
+		const f = _Fixture(); const command = { parentMessageId: _KEY, parentMessagePosition: "2", agentServiceId: "company", participantRefs: [], idempotencyKey: _KEY };
 		const admitted = await request(f.app).post("/me/conversations/parent/children").send(command);
 		expect(admitted.status).toBe(202); expect(admitted.body).toEqual({ child: { state: "pending" } });
 		expect(admitted.headers["cache-control"]).toBe("no-store");
 		expect(f.authority.create).toHaveBeenCalledWith(_CALLER, "parent", command);
 		expect((await request(f.app).post("/me/conversations/parent/children").send({ ...command, participantIds: ["foreign"] })).status).toBe(400);
+		const { participantRefs: _selection, ...missing } = command;
+		expect((await request(f.app).post("/me/conversations/parent/children").send(missing)).status).toBe(400);
 		expect(f.authority.create).toHaveBeenCalledTimes(1);
 	});
 	it("returns reviewed share receipts and the same fixed unavailable error", async () =>

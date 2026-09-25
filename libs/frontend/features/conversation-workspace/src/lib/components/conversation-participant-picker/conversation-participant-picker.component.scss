@@ -1,0 +1,7 @@
+:host { display: block; min-inline-size: 0; }
+.participant-picker { display: grid; gap: var(--oc-space-2); margin: 0; padding: 0; border: 0; min-inline-size: 0; }
+.participant-picker legend { padding: 0; margin-block-end: var(--oc-space-2); color: var(--oc-ink-strong); font-weight: var(--oc-font-weight-medium); }
+.participant-picker__row { display: flex; align-items: center; gap: var(--oc-space-3); padding: var(--oc-space-3); border: 1px solid var(--oc-border-default); border-radius: var(--oc-radius-card); background: var(--oc-surface-raised); }
+.participant-picker__row label { display: grid; gap: var(--oc-space-1); min-inline-size: 0; overflow-wrap: anywhere; cursor: pointer; }
+.participant-picker__row small, .participant-picker__empty { color: var(--oc-ink-muted); }
+.participant-picker__empty { margin: 0; }

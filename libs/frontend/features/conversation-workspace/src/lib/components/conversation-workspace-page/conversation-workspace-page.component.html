@@ -138,7 +138,7 @@
       }
     }
   }
-  <wo-conversation-group-request [source]="vm.groupStore.requestSource()" [assistants]="vm.store.directory()?.companyAssistants ?? []" [selectedId]="vm.groupStore.agentServiceId()" [state]="vm.groupStore.requestState()" [error]="vm.groupStore.requestError()" (assistantSelected)="vm.groupStore.chooseAssistant($event)" (submitted)="vm.groupStore.create()" (dismissed)="vm.groupStore.dismissRequest()" />
+  <wo-conversation-group-request [source]="vm.groupStore.requestSource()" [assistants]="vm.store.directory()?.companyAssistants ?? []" [participants]="vm.groupStore.requestParticipants()" [selectedParticipantRefs]="vm.groupStore.selectedParticipantRefs()" [selectedId]="vm.groupStore.agentServiceId()" [state]="vm.groupStore.requestState()" [error]="vm.groupStore.requestError()" (assistantSelected)="vm.groupStore.chooseAssistant($event)" (participantToggled)="vm.groupStore.toggleParticipant($event)" (submitted)="vm.groupStore.create()" (dismissed)="vm.groupStore.dismissRequest()" />
   <wo-conversation-group-share [visible]="vm.groupStore.shareSource() !== null" [text]="vm.groupStore.shareText()" [state]="vm.groupStore.shareState()" [error]="vm.groupStore.shareError()" (textChanged)="vm.groupStore.editShare($event)" (submitted)="vm.groupStore.share()" (dismissed)="vm.groupStore.dismissShare()" (groupRequested)="backToGroup()" />
   <wo-conversation-create
     [visible]="vm.creating() && vm.store.routeState() === vm.routeStates.Ready"

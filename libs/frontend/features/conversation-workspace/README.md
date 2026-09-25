@@ -129,6 +129,10 @@ remove this history-limit notice. These are rendering/resource safeguards, not a
 A person can select their own posted group message and choose **Ask company assistant**. The picker
 uses the server's permitted company-assistant directory; an empty directory explains that an
 administrator must provision an assistant and grant access. It never substitutes the personal agent.
+A separate participant picker starts with the requester included and no other person selected.
+Only the explicitly selected people share the new assistant chat; the source group does not become
+its audience automatically. The picker displays privacy-safe labels and returns opaque participant
+references without deciding membership or permission.
 A child request shows Preparing, a link to the ready conversation, or Unavailable. The ready child
 opens in this workspace with **Back to group**. A completed assistant response offers an editable
 review and **Share as my message**, so the group receives the human's confirmed text.
@@ -178,6 +182,9 @@ is reset, so reloading cannot reopen a stale modal over the access-change explan
   Direct-chat titles use the other member’s display name. Group titles use the first two other
   members’ names and count the remainder. These labels come from the existing conversation directory;
   a missing member receives generic text. No row shows opaque participant references.
+- `ConversationParticipantPickerComponent` is the controlled feature-local checkbox group reused by
+  ordinary conversation creation and company-assistant subchat creation. It keeps the requester fixed
+  when supplied, emits only opaque peer references, and owns no membership or submission authority.
 
 ## Boundary
 

@@ -45,6 +45,11 @@ so newly created children and direct links do not depend on an already-loaded li
 `ConversationGroupChildStore` owns requests made from an existing group message and the editable
 review before a human shares an assistant result. It retains UUIDs for unchanged retries, locks
 input while submitting, and aborts and purges request/share state when selection or access changes.
+The request begins with the requester only. Additional recipients are explicitly selected from named
+directory members who belong to the parent group. The submitted recipients stay fixed on a retry;
+changing them starts a new command. A change to parent membership clears the draft and cancels its
+pending response, while a display-name refresh preserves the selection. The server checks every
+selected member and freezes the accepted audience; this store cannot invite people into existing chats.
 Pending creation is refreshed every five seconds for at most one minute; the participant can then
 refresh explicitly. Ready means the child can open, not that the assistant finished its work.
 

@@ -34,7 +34,7 @@ export class ConversationWorkspaceSelectionCoordinator
 	private _OpenComposedState(): void
 	{
 		const selected = this.store.selected();
-		this.groupStore.select(selected);
+		this.groupStore.select(selected, this.store.directory()?.participants ?? []);
 		if (selected === null)
 		{
 			this._composedConversationId = null;

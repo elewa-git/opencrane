@@ -22,9 +22,14 @@ effect. There is no cross-store transaction or promise of an immediately running
 
 One company assistant has its own Internal Principal, managed identity, published revision and
 model grant. The requesting human retains separately verified membership and Invoke evidence.
-The fixed child audience contains current parent participants who may all read the originating
-request. A later join cannot widen that audience, and current parent and child access are both
+The fixed child audience contains the requester and the current parent participants explicitly
+selected before creation, each of whom must be able to read the originating request. No additional
+selection means requester-only sharing. A later join cannot widen that audience, and current parent and child access are both
 required on reads and execution. Pending creation eventually becomes Ready or Unavailable.
+
+The explicit-recipient creation rule reflects the accepted sharing decision of September 2026.
+It does not define invitations into an existing child: disclosure of earlier history to a new
+participant remains a separate product decision, and the accepted creation receipt is immutable.
 
 The first return path is a human-reviewed text share bound to the exact child and parent request.
 It is authored by the sharing human. Automatic status, approval, asset and agent result deliveries,

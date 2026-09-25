@@ -4,6 +4,7 @@ import { ___DigestCanonicalJson } from "@opencrane/util";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import { WorkflowTaskRetryableError, type IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 import { ConversationAuthorKinds, ConversationEntryAudiences } from "@opencrane/contracts";
+import { ___GroupChildCreateCommandSchema } from "@opencrane/models/conversations";
 import { _ConversationFailureDiagnostic } from "../messages/conversation-failure-diagnostic";
 import type { ConversationPrivatePayloadCipher } from "@opencrane/backend/server/conversations/history";
 import type { GroupChildAgentResolver, GroupChildCreateCommand, GroupChildTaskInput, GroupChildView, GroupChildLifecyclePort, GroupChildRequest } from "./group-child.types";
@@ -26,14 +27,18 @@ export class PrismaGroupChildLifecycleUnitOfWork implements GroupChildLifecycleP
 	/** Binds one caller UUID to an exact own group message and a currently admitted shared audience. */
 	public async create(caller: ConversationCaller, parentId: string, command: GroupChildCreateCommand): Promise<GroupChildView | null>
 	{
-		const id = _DeterministicUuid("group-child-request", caller.siloId, caller.principalId, command.idempotencyKey);
-		const digest = ___DigestCanonicalJson({ parentConversationId: parentId, ...command });
-		if (caller.externalIssuer === undefined || caller.verifiedAuthenticationAt === undefined || !await this._transaction(repository => repository.canCreate(caller, parentId, command, id, digest)))
+		const parsed = ___GroupChildCreateCommandSchema.safeParse(command);
+		if (!parsed.success)
 			return null;
-		const source = await _ReadGroupChildSource(this.participantHistory, caller, parentId, command.parentMessageId, BigInt(command.parentMessagePosition));
+		const selected = parsed.data;
+		const id = _DeterministicUuid("group-child-request", caller.siloId, caller.principalId, selected.idempotencyKey);
+		const digest = ___DigestCanonicalJson({ parentConversationId: parentId, ...selected });
+		if (caller.externalIssuer === undefined || caller.verifiedAuthenticationAt === undefined || !await this._transaction(repository => repository.canCreate(caller, parentId, selected, id, digest)))
+			return null;
+		const source = await _ReadGroupChildSource(this.participantHistory, caller, parentId, selected.parentMessageId, BigInt(selected.parentMessagePosition));
 		if (source === null || source.entry.author.kind !== ConversationAuthorKinds.Human || source.entry.author.principalId !== caller.principalId || source.entry.author.participantId !== caller.subjectId || source.entry.visibility.audience !== ConversationEntryAudiences.Conversation)
 			return null;
-		return this._transaction(repository => repository.create(caller, parentId, command, id, digest));
+		return this._transaction(repository => repository.create(caller, parentId, selected, id, digest));
 	}
 
 	/** Lists the latest admitted requests whose source and child are still visible to the caller. */
