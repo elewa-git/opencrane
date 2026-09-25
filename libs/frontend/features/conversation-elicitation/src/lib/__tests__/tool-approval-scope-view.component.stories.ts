@@ -11,9 +11,11 @@ import type { ToolApprovalScopeRowView, ToolApprovalScopeViewModel } from "../to
 const _ACTIVE: ToolApprovalScopeRowView = { id: "scope-1", action: "Create calendar event", target: "Nairobi operations calendar", externalSystem: "Company calendar", assistantLabel: "Operations assistant", connectionOwnerLabel: "Personal connection: Amina", createdAtLabel: "25 Sept 2026, 10:00", stateLabel: "Active", stateTone: ScopeChipTones.Success, canRevoke: true, busy: false, error: null, revokedNow: false };
 /** Ready list used by the interactive and narrow stories. */
 const _READY: ToolApprovalScopeViewModel = { readState: ToolApprovalScopeReadStates.Ready, error: null, rows: [_ACTIVE, { ..._ACTIVE, id: "scope-2", action: "Send supplier update", target: "Acacia Supplies", stateLabel: "Revoked", stateTone: ScopeChipTones.Neutral, canRevoke: false, revokedAtLabel: "25 Sept 2026, 11:00" }], hasMore: true };
+/** Long content that proves the responsive row keeps every reviewed label reachable. */
+const _NARROW_READY: ToolApprovalScopeViewModel = { readState: ToolApprovalScopeReadStates.Ready, error: null, rows: [{ ..._ACTIVE, action: "Export the September supplier reconciliation report", target: "Nairobi warehouse procurement and supplier payments workspace", externalSystem: "Company finance platform", assistantLabel: "Regional procurement and operations assistant", connectionOwnerLabel: "Company assistant connection: East Africa purchasing and accounts payable" }], hasMore: false };
 
 /** Storybook catalogue for requester-owned standing approval settings states. */
-const meta: Meta<ToolApprovalScopeViewComponent> = { title: "Settings/Standing approvals", component: ToolApprovalScopeViewComponent, tags: ["autodocs", "standing-approval"], argTypes: { refreshRequested: { action: "refreshRequested" }, loadMoreRequested: { action: "loadMoreRequested" }, revokeRequested: { action: "revokeRequested" } }, parameters: { docs: { description: { component: "Safe requester-owned summaries and explicit revocation confirmation. Stories are synthetic component evidence, not live authority or accepted screenshot baselines." } } } };
+const meta: Meta<ToolApprovalScopeViewComponent> = { title: "Settings/Standing approvals", component: ToolApprovalScopeViewComponent, tags: ["autodocs", "standing-approval", "visual-test"], argTypes: { refreshRequested: { action: "refreshRequested" }, loadMoreRequested: { action: "loadMoreRequested" }, revokeRequested: { action: "revokeRequested" } }, parameters: { docs: { description: { component: "Safe requester-owned summaries and explicit revocation confirmation. Stories are synthetic component evidence, not live authority or accepted screenshot baselines." } } } };
 export default meta;
 
 /** Local story type. */
@@ -33,6 +35,9 @@ export const Ready: Story = { args: { view: _READY, revokeRequested: fn(), loadM
 	expect(args.loadMoreRequested).toHaveBeenCalledOnce();
 } };
 
+/** Long labels remain reachable in the supported narrow settings layout. */
+export const ReadyNarrow: Story = { tags: ["visual-test-narrow"], args: { view: _NARROW_READY } };
+
 /** First-page loading keeps private rows absent. */
 export const Loading: Story = { args: { view: { readState: ToolApprovalScopeReadStates.Loading, error: null, rows: [], hasMore: false } } };
 /** Authoritative empty state explains that future actions ask again. */
@@ -42,6 +47,17 @@ export const Failure: Story = { args: { view: { readState: ToolApprovalScopeRead
 /** One row is independently busy while other rows remain readable. */
 export const Revoking: Story = { args: { view: { ..._READY, rows: [{ ..._ACTIVE, busy: true }, _READY.rows[1]] } } };
 /** Uncertain delivery retains a same-command retry affordance without claiming revocation. */
-export const Uncertain: Story = { args: { view: { ..._READY, rows: [{ ..._ACTIVE, error: "OpenCrane could not confirm whether this approval was revoked. Try again to safely repeat the same request." }] } } };
+export const Uncertain: Story = { args: { view: { ..._READY, rows: [{ ..._ACTIVE, error: "OpenCrane could not confirm whether this approval was revoked. Try again to safely repeat the same request." }] } }, play: async function _Uncertain({ canvasElement })
+{
+	const button = within(canvasElement).getByRole("button", { name: "Revoke" });
+	const label = button.querySelector<HTMLElement>(".p-button-label");
+	if (label === null)
+	{
+		throw new Error("The Revoke button label did not render.");
+	}
+	const labelRange = canvasElement.ownerDocument.createRange();
+	labelRange.selectNodeContents(label);
+	expect(labelRange.getClientRects()).toHaveLength(1);
+} };
 /** Authoritative returned state reports revocation without hiding the historical safe summary. */
 export const Revoked: Story = { args: { view: { ..._READY, rows: [{ ..._ACTIVE, stateLabel: "Revoked", stateTone: ScopeChipTones.Neutral, canRevoke: false, revokedNow: true, revokedAtLabel: "25 Sept 2026, 11:00" }] } } };

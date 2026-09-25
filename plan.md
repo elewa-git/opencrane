@@ -1,5 +1,39 @@
 # OpenCrane — Active Plan
 
+## Standing approvals visual repair — 25 September 2026
+
+The isolated follow-up starts at #908 head
+`1548b6869cabd9af4ebd1cfcd55d97fbd45eaf05`; unfinished Ask and the original 900-file MVP
+overlay remain separate. The current review order is #908 against develop, then #910 against
+#908. The earlier #899 and #900 review surfaces have merged.
+
+Inspection of #908's saved CI run `36119867522` separates its 61 failures into 40 missing
+baselines, 20 changed images and one confirmation-readiness timeout, with 129 passing tests.
+The timeout came from a workspace story that omitted the server's offered Once scope: selecting
+the radio did not establish the controlled affirmative response. The fixture now offers Once;
+the existing interaction, viewport assertion and Darwin screenshot comparison pass unchanged.
+
+All seven existing Standing approvals settings states are now selected for visual testing,
+with an eighth long-content narrow state. Their first renders exposed a separate layout defect:
+long uncertainty feedback could squeeze the Revoke label across two lines. A correction stays
+within the existing row's action-cell layout; no permission, confirmation, retry, theme or
+screenshot-tolerance change is in scope. The Uncertain story now asserts one rendered line for
+the Revoke label. Fresh Chromium captures confirm that state, a busy revoke and the narrow layout;
+the narrow viewport, client and scroll widths are all 390, with no horizontal overflow. The
+focused run explicitly disabled snapshot updates and reached all three captures; only the
+missing Darwin baselines fail. No reference images were created or accepted.
+
+The fixture-only checks passed 145 frontend tests and both affected lint targets. After the layout
+repair, elicitation lint and all 18 component tests pass again; the production Storybook build,
+40 interaction suites with 257 tests, style/Prisma boundaries and module-growth checks pass.
+Independent integrated review reports no findings on the frozen three-file source overlay
+`e0f77149a2695797417a8b04e233aecd50f280a532a32266c860aec5174043dd` (plan excluded).
+The local renderer was stopped. Candidate images are review evidence, not
+accepted baselines or authenticated browser/provider proof. The original CI images have been
+collected for human before/after review; no baselines have been accepted or committed. #910's
+green run `36126779205` skipped the unaffected visual suite and does not clear the parent gate.
+New-head CI and human visual acceptance remain open; this slice does not complete the MVP.
+
 ## Scoped standing tool approvals — publication candidate, 25 September 2026
 
 Publish the reviewed requester-owned tool-consent capability as an incremental child of #900,
