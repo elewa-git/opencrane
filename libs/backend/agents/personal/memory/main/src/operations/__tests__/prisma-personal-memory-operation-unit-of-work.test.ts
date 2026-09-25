@@ -17,6 +17,25 @@ const _RECORDED_AT = new Date("2026-09-13T08:05:00.000Z");
 
 describe("PrismaPersonalMemoryOperationUnitOfWork", function _Suite()
 {
+	it("loads through the callback transaction without using the root Prisma delegate", async function _Load()
+	{
+		const transaction = _Transaction();
+		const rootUpdate = vi.fn(function _RootUpdate() { throw new Error("root delegate must not be used"); });
+		const prisma = {
+			personalMemoryOperation: { updateMany: rootUpdate },
+			$transaction: vi.fn(async function _TransactionCallback(work, policy)
+			{
+				expect(policy).toMatchObject({ isolationLevel: "Serializable" });
+				return work(transaction);
+			}),
+		} as unknown as PrismaClient;
+		const unitOfWork = new PrismaPersonalMemoryOperationUnitOfWork(prisma);
+
+		await expect(unitOfWork.load("silo-1", _OPERATION_ID)).resolves.toMatchObject({ operationId: _OPERATION_ID, siloId: "silo-1" });
+		expect(rootUpdate).not.toHaveBeenCalled();
+		expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+	});
+
 	it("constructs the lifecycle repository on the exact serializable callback transaction", async function _ExactTransaction()
 	{
 		const transaction = _Transaction();
@@ -96,6 +115,7 @@ function _Transaction(): Prisma.TransactionClient
 		memoryFactCatalog: { findFirst: vi.fn(), updateMany: vi.fn() },
 		personalMemoryOperation: {
 			findUnique: vi.fn(async function _FindOperation() { return row; }),
+			findFirst: vi.fn(async function _FindOperationById() { return { ...row, dataset: { siloId: "silo-1", boundaryKind: AuthorizationBoundaryKind.Personal, boundaryPrincipalId: "principal-1", cogneeDatasetId: null, state: MemoryDatasetState.Provisioning } }; }),
 			updateMany: vi.fn(async function _LockOperation() { return { count: 1 }; }),
 		},
 	} as unknown as Prisma.TransactionClient;

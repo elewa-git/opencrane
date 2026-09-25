@@ -41,6 +41,15 @@ Each declared or registered job also supplies its total attempt limit and retry 
 stores those limits with the Absurd task, including when the task is started inside a product database transaction.
 A retryable error lets Absurd schedule the next attempt. A terminal error is saved as failed before
 the SDK can apply that general retry policy, so work that cannot succeed unchanged stops immediately.
+Before an uncached checkpoint operation starts, the adapter extends the claimed task lease by the
+configured `checkpointOperationLeaseSeconds` bound (120 seconds by default). Absurd replays cached
+steps without invoking either the heartbeat or the operation, so a replay cannot repeat the effect.
+The opt-in `checkpoint-lease.integration.test.ts` qualification uses a one-second SQL claim to
+reclaim a run: the stale run's heartbeat rejects before its sentinel effect, and the replacement
+run commits the checkpoint. The uncached `test:sql` target sets
+`OPENCRANE_ABSURD_SQL_QUALIFICATION=1`; provide `DATABASE_URL` and run
+`npm exec -- nx run backend-server-infra-workflows-infra-absurd:test:sql --excludeTaskDependencies`
+against a database with the pinned Absurd SQL installed.
 
 ## Dependency direction
 

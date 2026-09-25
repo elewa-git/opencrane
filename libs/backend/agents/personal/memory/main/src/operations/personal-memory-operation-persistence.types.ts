@@ -154,6 +154,15 @@ export interface PersonalMemoryOperationPersistenceResult
 export interface PersonalMemoryOperationRepository
 {
 	/**
+	 * Loads one operation only when both its operation and silo coordinates match the request.
+	 * The related dataset must still have the saved personal owner and provider identity; the worker
+	 * owns phase-specific lifecycle eligibility. This read never acquires a write lock or changes persistence.
+	 * @param siloId - Trusted silo containing the operation.
+	 * @param operationId - Exact operation UUID to load.
+	 * @returns The validated saved operation, or null when it is absent or belongs to another silo.
+	 */
+	findById(siloId: string, operationId: string): Promise<PersonalMemoryOperationRecord | null>;
+	/**
 	 * Reads immutable admitted coordinates for composite replay preparation without claiming authority.
 	 * The later {@link admit} call reacquires every dataset, fact, and operation lock before deciding replay.
 	 * @param siloId - Trusted silo containing the replay key.
@@ -175,6 +184,7 @@ export interface PersonalMemoryOperationRepository
 	 * @param event - Event bound to the operation UUID, kind, and expected revision.
 	 * @param recordedAt - Database-boundary time used for recovery and completion timestamps.
 	 * @returns The accepted result, denial, retry, or validated concurrent winner.
+	 * @throws {@link PersonalMemoryOperationCatalogConflict} when catalog evidence occupies the saved provider coordinate.
 	 * @throws {@link PersonalMemoryOperationInvalidState} when the saved row is missing or invalid.
 	 */
 	apply(event: PersonalMemoryOperationEvent, recordedAt: Date): Promise<PersonalMemoryOperationPersistenceResult>;
@@ -183,6 +193,8 @@ export interface PersonalMemoryOperationRepository
 /** Opens serializable lifecycle transactions and binds each repository to the callback client. */
 export interface PersonalMemoryOperationUnitOfWork
 {
+	/** Loads one saved operation through a fresh Prisma transaction without writing. */
+	load(siloId: string, operationId: string): Promise<PersonalMemoryOperationRecord | null>;
 	/** Applies one lifecycle event in a fresh serializable transaction. */
 	apply(event: PersonalMemoryOperationEvent, recordedAt: Date): Promise<PersonalMemoryOperationPersistenceResult>;
 }
@@ -195,6 +207,17 @@ export class PersonalMemoryOperationReplayConflict extends Error
 	{
 		super("personal-memory operation replay conflicts with the admitted command");
 		this.name = "PersonalMemoryOperationReplayConflict";
+	}
+}
+
+/** Reports a deterministic catalog creation or finalization conflict with saved coordinates or state. */
+export class PersonalMemoryOperationCatalogConflict extends Error
+{
+	/** Creates a stable error without exposing the conflicting fact or its contents. */
+	constructor()
+	{
+		super("personal-memory catalog creation or finalization conflicts with saved evidence");
+		this.name = "PersonalMemoryOperationCatalogConflict";
 	}
 }
 

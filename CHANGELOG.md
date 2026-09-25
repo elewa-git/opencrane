@@ -15,6 +15,14 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Fixed
 
+- **Already-admitted personal-memory work can resume from its saved step after a server restart.**
+  The existing Absurd workflow advances storage, indexing and catalog updates through the private
+  gateway. Saved receipts retain the original provider coordinates; uncertain delivery remains
+  recoverable. Current membership and MemoryScope permission gate new effects, and catalog writes
+  check that authority in their own transaction. An expired worker cannot start another provider
+  step after Absurd assigns the work to a replacement. Product command admission and live memory
+  qualification remain separate work.
+
 - **Memory integrations can execute and verify individual provider steps through the private gateway.**
   Dataset lookup, document storage, indexing and deletion return typed receipts that can be checked
   against saved operation coordinates. Add and delete reconcile existing provider state before

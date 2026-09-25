@@ -1,6 +1,6 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { _PackageCacheDir } from "../../../../../vitest.cache";
 
 /** Run the pure replay authority tests with workspace aliases. */
-export default defineConfig({ cacheDir: _PackageCacheDir(import.meta.url), plugins: [tsconfigPaths({ projects: ["../../../../../tsconfig.vitest.json"] })], test: { environment: "node" } });
+export default defineConfig({ cacheDir: _PackageCacheDir(import.meta.url), plugins: [tsconfigPaths({ projects: ["../../../../../tsconfig.vitest.json"] })], test: { environment: "node", exclude: [...configDefaults.exclude, "**/*.sql.test.ts"] } });

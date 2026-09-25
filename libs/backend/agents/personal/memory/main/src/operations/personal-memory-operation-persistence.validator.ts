@@ -28,6 +28,9 @@ export const ___PersonalMemoryOperationTaskIdentitySchema: z.ZodType<PersonalMem
 /** Validates the silo-scoped replay lookup performed before composite admission. */
 export const ___PersonalMemoryOperationReplayLookupSchema = z.object({ siloId: _Identifier, idempotencyKeyDigest: _Digest }).strict();
 
+/** Validates the exact silo and operation coordinates used by a saved-phase worker restart. */
+export const ___PersonalMemoryOperationIdLookupSchema = z.object({ siloId: _Identifier, operationId: _Uuid }).strict();
+
 /** Validates secret-free admission evidence before any lock or database write occurs. */
 export const ___AdmitPersonalMemoryOperationCommandSchema: z.ZodType<AdmitPersonalMemoryOperationCommand> = z.object({
 	operationId: _Uuid,

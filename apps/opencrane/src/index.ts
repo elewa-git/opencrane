@@ -16,6 +16,7 @@ import { _CreateInternalApp } from "./bootstrap/http/internal-app";
 import { _CreateMcpWorkflowComposition } from "./bootstrap/workflows/mcp-workflow-composition";
 import { _CreateMcpRuntimeComposition } from "./bootstrap/workflows/mcp-runtime-composition";
 import { _CreateProductionConversationRunAdmission } from "@opencrane/backend/server/conversations";
+import { _CreateMemoryGatewayClient } from "./bootstrap/process/memory-gateway-client.factory";
 import { _CreateKubernetesClients } from "./bootstrap/process/kubernetes-clients";
 import { _StartProcessLifecycle } from "./bootstrap/process/lifecycle";
 import { _log } from "./bootstrap/process/log";
@@ -46,7 +47,8 @@ async function _Main(): Promise<void>
 	const historyStore = _CreateHistoryStoreComposition(config.historyStore);
 	// Stream names carry no silo id, so refuse to share one KurrentDB instance between silos before any worker touches it.
 	await _AssertHistoryStoreSilo(historyStore.historyStore, config.workflows.siloId);
-	const workflows = _CreateMcpWorkflowComposition(prisma, config.workflows);
+	const memoryWorkflow = { siloId: config.workflows.siloId, gateway: _CreateMemoryGatewayClient(config.runtime) };
+	const workflows = _CreateMcpWorkflowComposition(prisma, config.workflows, config.runtime.memoryGatewayTimeoutMilliseconds);
 
 	// 3. Compose the retained workload authorities.
 	const mcpRuntime = _CreateMcpRuntimeComposition(prisma, kubernetes, config, workflows, historyStore.historyStore);
@@ -62,7 +64,7 @@ async function _Main(): Promise<void>
 	// 4. Build separate HTTP listeners; only the internal app receives workload-only routes.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
-	const publicApp = _CreatePublicApp(prisma, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
+	const publicApp = _CreatePublicApp(prisma, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects, memoryWorkflow, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, mcpRuntime, generatedFiles, workflows.execution, conversationComputerWorkflows.reviewCredentialRouter, conversationComputerLifecycle.router);
 	// 5. Start listeners and workers under one drain order so shared dependencies close exactly once.

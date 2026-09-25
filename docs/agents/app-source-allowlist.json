@@ -493,6 +493,16 @@
       "path": "apps/opencrane/src/bootstrap/workflows/mcp-connection-composition.types.ts",
       "owner": "apps/opencrane",
       "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/conversations/personal-memory-operation-workflow-composition.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/conversations/personal-memory-operation-workflow-composition.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
     }
   ],
   "requiredTaggedProjects": [

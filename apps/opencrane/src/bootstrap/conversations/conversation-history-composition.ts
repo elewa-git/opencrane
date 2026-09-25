@@ -1,3 +1,5 @@
+import { _CreatePersonalMemoryOperationWorkflowComposition } from "./personal-memory-operation-workflow-composition";
+import type { PersonalMemoryWorkflowCompositionOptions } from "./personal-memory-operation-workflow-composition.types";
 import { _ReadConversationPrivatePayloadKeyring } from "@opencrane/backend/server/conversations/history";
 
 import type { PrismaClient } from "@prisma/client";
@@ -20,6 +22,7 @@ export function _CreateConversationHistoryComposition(
   keyringPath: string,
   releaseProfile: AgentSandboxReleaseProfileConfig,
   workflows: IWorkflowEngine,
+  memoryWorkflow: PersonalMemoryWorkflowCompositionOptions,
 ) {
   const cipher = AesGcmConversationPrivatePayloadCipher.fromDocument(
     _ReadConversationPrivatePayloadKeyring(keyringPath),
@@ -28,6 +31,7 @@ export function _CreateConversationHistoryComposition(
     cipher,
     computerReader: new ConversationComputerHistory(historyStore),
   }, new ConversationHistoryAuthority(historyStore), function _CreateAttachmentAdmission(transaction) { return new PrismaConversationMessageAttachmentRepository(transaction); });
+  _CreatePersonalMemoryOperationWorkflowComposition(prisma, authority, workflows, memoryWorkflow);
   const resolveCaller = _ResolveConversationCaller;
   const creation = new PrismaAgentSessionCreationUnitOfWork(
     prisma,

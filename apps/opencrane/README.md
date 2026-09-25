@@ -43,9 +43,18 @@ Startup proceeds in five visible stages:
 3. register the Absurd-owned conversation-turn workflow with the bounded personal run-admission
    port and generated-file workflow, then start activation only after the handlers exist. Admission rechecks Kurrent identity,
    lease and message history plus every immutable compiler input;
-4. build the public and internal Express applications; and
+4. build the public and internal Express applications and register saved personal-memory work with
+   the existing participant history authority; and
 5. start the workflow runtime and bounded background workers, then open both listeners under one
    coordinated shutdown path. Signed-in conversation updates use the public SSE route.
+
+Personal-memory tasks carry only silo and operation IDs. Their conversations-owned worker loads
+saved progress, checks current memory permission, and uses one process-wide private gateway client.
+The app adds no public memory command route; first-dataset admission remains unfinished. Before
+an uncached workflow effect, the Absurd adapter verifies and renews its claim beyond the longest
+configured memory, remote-tool or registry call, with a minute for completion evidence. Memory
+pre-reads finish before the mutation checkpoint renews its lease. Catalog permission checks and
+writes share one product transaction.
 
 The route registry is deliberately a catalogue rather than a second application layer:
 
@@ -84,7 +93,7 @@ All other production source lives in `src/bootstrap/`:
 | --- | --- |
 | `configuration/` | Read and type deployment configuration once. |
 | `http/` | Assemble authenticated public and workload-facing routers. |
-| `conversations/` | Connect conversation history and computer lifecycle; register turn and generated-file workflows, share generated-file authority with the scanner, and mount the review credential route. |
+| `conversations/` | Connect conversation history and computer lifecycle; register turn, generated-file and personal-memory workflows, share generated-file authority with the scanner, and mount the review credential route. |
 | `workflows/` | Compose MCP transport and declare workflow tasks. |
 | `process/` | Initialise telemetry and clients, then start, drain, and close resources. |
 

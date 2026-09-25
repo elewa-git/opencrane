@@ -30,7 +30,7 @@ signed-in participant ──► main ◄── HERE ──► history
 | `messages/` | Authorise, encrypt and admit participant messages; read authorised history and stream events. |
 | `memory/commands/` | Validate explicit Remember, Correct and Forget requests without accepting plaintext or caller-supplied authority. |
 | `memory/source/` | Read the selected human message through current history access and recheck its encrypted source inside the command transaction. |
-| `memory/workflow/` | Declare identifier-only memory tasks; the command transaction must retain Absurd's returned receipt. Product command integration is in progress. |
+| `memory/workflow/` | Declare identifier-only memory tasks and resume each saved provider and catalog phase through one Absurd workflow owner. The command transaction must retain Absurd's returned receipt. Product command admission remains unavailable until its explicit grant and route work are approved. |
 | `children/` | Admit group-child work, preserve its original audience, recover creation, and share human-reviewed text. |
 | `computers/` | Separate activation, lifecycle, checkpoint, turn and review operation owners. |
 | `computers/tools/` | Proposal admission, current dispatch access and saved result consumption each have their own owner. |
@@ -61,6 +61,20 @@ signed-in participant ──► main ◄── HERE ──► history
   memory task admission. Absurd assigns the task ID; command composition must save its returned
   receipt and the memory operation in one transaction. The task declaration alone does not admit
   work or make Remember, Correct or Forget available through the product.
+- `PersonalMemoryOperationAuthority` and `_RegisterPersonalMemoryOperationWorkflow` resume the exact
+  saved operation and task receipt through an exhaustive phase dispatcher. `PrismaPersonalMemoryOperationActorUnitOfWork`
+  resolves the original external principal and active membership; `PrismaPersonalMemoryOperationAuthorizationUnitOfWork`
+  checks the current personal dataset and MemoryScope action in one read transaction. Every new
+  provider mutation runs inside a renewed Absurd checkpoint lease and parses its shared strict receipt.
+  Every mutation rechecks the actor and permission before the call; Add also rereads the selected
+  source. Replayed receipts skip the provider call and are checked again before the catalog advances. The gateway owns Add and Delete
+  provider reconciliation; this workflow owns their durable order. No public command route or new
+  MemoryScope grant is part of this package surface.
+  A future product command owner must use `admitPrincipal` and bind its recorded authorization
+  evidence to the command digest in the same transaction that admits the operation and workflow task.
+  The saved-phase worker consumes that one admitted operation; it does not admit a new command,
+  allowance or audit receipt on retries. Its `decidePrincipal` checks only whether the original
+  principal still holds the current action before a new provider or catalog effect.
 - `PrismaKurrentPersonalMemoryMessageSource` reads one selected, completed human message authored
   by the caller. It requires one non-empty text block, limits its UTF-8 content to 64 KiB, and keeps
   decrypted text outside the SQL transaction. `PrismaPersonalMemoryMessageSourceRepository`
@@ -237,6 +251,11 @@ reference is appended. Serializable writes retain their existing retry and confl
 Run `nx run backend-server-conversations:test:integration` with `KURRENTDB_INTEGRATION_URL` to
 exercise approval, tool-result and answer recovery against a real history server. Ordinary package
 tests use controlled ports.
+
+`nx run backend-server-conversations:test:sql` runs the existing group-child SQL checks and the
+personal-memory catalog commit, authority-revocation, rollback, and conflict cases against the
+unchanged database baseline. Those fixtures create synthetic grants for the test only; production
+still has no personal-memory command grant or admission route.
 
 ## See also
 
