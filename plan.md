@@ -36,8 +36,13 @@ Fresh desktop/narrow candidate screenshots are in
 no baseline is accepted or changed. The local renderer is stopped. These are isolated component
 renders, not authenticated product screenshots.
 
-Parent #914's CI browser job failed after publication; its failure is being classified separately
-from these passing local source checks. No merge, deployment or live acceptance is claimed.
+The reviewed source is committed as `5e1d42cf67c45140ad8e0b7ed848e038ced3d792`. Its
+cumulative merge simulation against develop succeeds with tree
+`4cf1405228ce5171651bb2d5a732d4b7fe7a4ffe`; the source still matches all 37 reviewed hashes.
+Parent #914's CI browser job passes 269 interactions, but its visual comparison reports 129 passes
+and 80 failures: 59 missing references and 21 changed images. A later server-readiness timeout was
+cleanup fallout, not the root cause. Screenshot approval remains separate; references are not
+silently accepted. No merge, deployment or live acceptance is claimed.
 
 This is not post-creation invitation support, an agent-prefilled creation tool, or authenticated
 multi-person acceptance. A separate question asks what prior history later invitees may see; no
