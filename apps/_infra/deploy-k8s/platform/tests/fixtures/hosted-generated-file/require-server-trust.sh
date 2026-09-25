@@ -5,7 +5,7 @@ ROOT_DIR="${1:?repository root is required}"
 FIXTURE_DIR="$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/fixtures/hosted-generated-file"
 
 # A values key alone does not prove the server consumes it. Check the actual rendered workload
-# before creating a cluster or credentials; this remains blocked while the CA proposal is pending.
+# before creating a cluster or credentials, so a chart change cannot silently drop the trust.
 source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
 trap cleanup_current_chart_sources EXIT
 prepare_current_chart_sources

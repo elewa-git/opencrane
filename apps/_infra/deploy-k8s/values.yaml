@@ -492,6 +492,17 @@ clustertenantManager:
   mcpConnectionMaterialKeyring:
     existingSecret: opencrane-mcp-connection-material
     secretKey: keyring.json
+  # -- Optional extra CA certificates the server trusts for its own outbound TLS, added to Node's
+  # built-in roots, for example a private registry or MCP server CA. Empty existingSecret trusts
+  # only the built-in roots. The operator creates the Secret; this chart never does.
+  additionalCaCertificates:
+    # -- Pre-created Secret holding one PEM bundle. Empty disables the extra trust.
+    existingSecret: ""
+    # -- Key inside that Secret that holds the PEM bundle.
+    secretKey: ca.crt
+    # -- Operator-chosen label for the bundle's contents; required with existingSecret. Changing it
+    # restarts the server, because Node reads the bundle only when the process starts.
+    revision: ""
   # -- Bound run admission before snapshot assembly can take a pooled PostgreSQL connection.
   # These apply per silo and AgentService; keep the active limit below the server's five-connection
   # Prisma budget so a hot service cannot starve unrelated control-plane work.

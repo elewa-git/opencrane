@@ -8,6 +8,7 @@
 {{- $history := .Values.historyStore.kurrentdb -}}
 {{- $conversationPayloadKeyring := .Values.clustertenantManager.conversationPrivatePayloadKeyring -}}
 {{- $mcpMaterialKeyring := .Values.clustertenantManager.mcpConnectionMaterialKeyring -}}
+{{- $additionalCa := .Values.clustertenantManager.additionalCaCertificates -}}
 {{- $skillAuthoring := (index .Values "opencrane-skill-authoring").skillAuthoring -}}
 {{- $mcpExecutor := (index .Values "opencrane-mcp-executor").mcpExecutor -}}
 {{- $controlPlaneHost := .Values.ingress.controlPlaneHost | default (printf "platform.%s" .Values.ingress.domain) -}}
@@ -57,6 +58,12 @@
 {{- if or (empty $mcpMaterialKeyring.existingSecret) (empty $mcpMaterialKeyring.secretKey) -}}
 {{- fail "clustertenantManager.mcpConnectionMaterialKeyring existingSecret and secretKey are required" -}}
 {{- end -}}
+{{- if and $additionalCa.existingSecret (empty $additionalCa.secretKey) -}}
+{{- fail "clustertenantManager.additionalCaCertificates.secretKey is required when an existingSecret is configured" -}}
+{{- end -}}
+{{- if and $additionalCa.existingSecret (empty $additionalCa.revision) -}}
+{{- fail "clustertenantManager.additionalCaCertificates.revision is required when an existingSecret is configured" -}}
+{{- end -}}
 {{- if eq $mcpMaterialKeyring.existingSecret $conversationPayloadKeyring.existingSecret -}}
 {{- fail "MCP material and conversation payload keyrings must use separate Secrets" -}}
 {{- end -}}
@@ -78,6 +85,11 @@ spec:
       labels:
         {{- include "opencrane.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: opencrane-server
+      {{- if $additionalCa.existingSecret }}
+      annotations:
+        # Node reads NODE_EXTRA_CA_CERTS only at start-up, so a new bundle label restarts the Pod.
+        opencrane.ai/additional-ca-certificates-revision: {{ $additionalCa.revision | quote }}
+      {{- end }}
     spec:
       serviceAccountName: {{ include "opencrane.fullname" . }}-opencrane-server
       {{- with .Values.global.imagePullSecret }}
@@ -333,6 +345,11 @@ spec:
             - name: OPENCRANE_HISTORY_STORE_PASSWORD_PATH
               value: /var/run/opencrane/history-store/credentials/password
             {{- end }}
+            {{- if $additionalCa.existingSecret }}
+            # Adds the operator's CA bundle to Node's built-in roots for this process only.
+            - name: NODE_EXTRA_CA_CERTS
+              value: /var/run/opencrane/outbound-ca/ca.crt
+            {{- end }}
           volumeMounts:
             - name: mcp-connection-material-keyring
               mountPath: /var/run/opencrane/mcp-connection-material
@@ -370,6 +387,11 @@ spec:
               mountPath: /var/run/opencrane/history-store/credentials
               readOnly: true
             {{- end }}
+            {{- if $additionalCa.existingSecret }}
+            - name: additional-ca-certificates
+              mountPath: /var/run/opencrane/outbound-ca
+              readOnly: true
+            {{- end }}
             {{- if $ociRegistryAuthorization.existingSecret }}
             - name: oci-registry-authorization
               mountPath: /var/run/opencrane/oci-registry
@@ -393,6 +415,16 @@ spec:
           resources:
             {{- toYaml .Values.clustertenantManager.resources | nindent 12 }}
       volumes:
+        {{- if $additionalCa.existingSecret }}
+        - name: additional-ca-certificates
+          secret:
+            secretName: {{ $additionalCa.existingSecret | quote }}
+            # 288 is octal 0440, written in decimal so YAML 1.1 and 1.2 readers agree on it.
+            defaultMode: 288
+            items:
+              - key: {{ $additionalCa.secretKey | quote }}
+                path: ca.crt
+        {{- end }}
         - name: mcp-connection-material-keyring
           secret:
             secretName: {{ $mcpMaterialKeyring.existingSecret | quote }}
