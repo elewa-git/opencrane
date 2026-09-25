@@ -28,7 +28,7 @@ export function _CreateConversationRoutes(dependencies: ProductRouteDependencies
 	const { prisma, conversations } = dependencies;
 	const execution = dependencies.tools.workflows.execution;
 	const history = _CreateConversationHistoryComposition(prisma, conversations.history, conversations.keyringPath, conversations.sandboxProfile, execution, conversations.memoryWorkflow);
-	const computerReview = _CreateComputerReviewRouter(prisma, conversations);
+	const computerReview = _createComputerReviewRouter(prisma, conversations);
 	return [
 		{ method: "use", path: "/api/v1/me/conversations", handler: __CreateConversationAssetRouter({ resolveCaller: _ResolveConversationAssetCaller, authority: _CreateConversationAssetAuthority(prisma, process.env, conversations.artifactScannerEnabled), logger: _log }) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: history.conversations },
@@ -46,7 +46,7 @@ export function _CreateConversationRoutes(dependencies: ProductRouteDependencies
  * @param conversations - History, keyring and the computer profile whose namespace holds review targets.
  * @returns The computer-review router.
  */
-function _CreateComputerReviewRouter(prisma: PrismaClient, conversations: ConversationRouteDependencies): Router
+function _createComputerReviewRouter(prisma: PrismaClient, conversations: ConversationRouteDependencies): Router
 {
 	const credentials = KeyedConversationComputerReviewCredentialDeriver.fromKeyring(_ReadConversationPrivatePayloadKeyring(conversations.keyringPath));
 	const authority = new _ConversationComputerReviewAuthority(new PrismaConversationMetadataReader(prisma), new ConversationComputerHistory(conversations.history), credentials);
