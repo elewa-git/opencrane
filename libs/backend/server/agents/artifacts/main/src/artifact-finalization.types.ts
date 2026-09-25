@@ -20,19 +20,6 @@ export interface ArtifactStorePromotionReceipt
 	/** Hash of the receipt string itself, stored on the lease row so the same receipt cannot commit twice. */
 	readonly receiptDigest: string;
 }
-export interface ArtifactStorePromotionReceipt
-{
-	/** Lease that authorized staging and promotion. */
-	readonly leaseId: string;
-	/** Lowercase SHA-256 address produced by ArtifactStore. */
-	readonly contentAddress: string;
-	/** Exact promoted byte count. */
-	readonly byteLength: number;
-	/** Exact promoted media type. */
-	readonly mediaType: string;
-	/** Opaque single-use receipt digest authenticated by ArtifactStore. */
-	readonly receiptDigest: string;
-}
 
 /**
  * Everything needed to publish one revision for bytes that are already stored.
