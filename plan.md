@@ -3,7 +3,9 @@
 ## Scoped standing tool approvals — publication candidate, 25 September 2026
 
 Publish the reviewed requester-owned tool-consent capability as an incremental child of #900,
-starting from `5674b66bccb3aecfe0eb08f210103eb07dd43736`. The larger unfinished MVP worktree is
+starting from `5674b66bccb3aecfe0eb08f210103eb07dd43736`, then restacked onto #900's
+`36d90551012c3028a1acbb7da53bd1808d4483ea` after its documentation-only parent repair.
+The larger unfinished MVP worktree is
 preserved separately; this candidate does not include its paused Recall, routine, shared-budget,
 delegation or administration-design changes. Existing typed execution contexts remain intact.
 
@@ -26,8 +28,10 @@ Its generic scope-selector interaction overlaps the shared elicitation component
 reconciled against the tool disclosure/confirmation contract when that memory proposal is integrated.
 The current tool policy intentionally offers no session-wide permission and copies no memory grants.
 
-#893 has merged. #894 now targets `develop` with the same incremental patch; the open review order
-is #894 → #896 → #897 → #898 → #899 → #900 → this candidate. No predecessor was closed or rewritten.
+#893, #894, #896, #897 and #898 have merged. The remaining open review order is
+#899 → #900 → this candidate. The #899 parent merge preserves its current M1/U2 progress and
+the separately merged Cognee ADR 0017 notes. #900's incremental patch is unchanged. No predecessor
+was absorbed or force-rewritten for this publication, and no product behavior changed in the repair.
 The clean candidate has its own generated API and baseline
 `4e050042851f1f74314cad1d6f03b7d3e6be033dae16304f03bfa1cb752267f6`. Local qualification passes:
 120 database integration tests across 15 files, including 17 standing-consent cases, plus four SQL
