@@ -105,9 +105,10 @@ Run admission performs its own strict check and never supplies missing limits.
   admit the human's invocation and the company Principal's model use.
 - `PrismaManagedAgentConversationResolver` resolves a ready company assistant and filters the
   discovery list through current human Discover, Read and Invoke permissions plus the company's
-  own Model Use permission. Listing checks eligibility without recording mutation or effect
-  admissions. Child creation separately records human Invoke and company Model Use decisions after
-  the same current service, identity, profile and membership checks.
+  own Model Use permission. Listing and direct eligibility checks record no mutation or effect
+  admission; the narrower eligibility check requires only human Invoke and company Model Use.
+  Child creation separately records those two decisions after the same current service, identity,
+  profile and membership checks.
 - `PrismaCompanyAssistantProvisioningUnitOfWork` and `_CreateCompanyAssistantProvisioningRouter`
   provide administrator setup and exact tool selection, including checked identity establishment
   after the setup commit.

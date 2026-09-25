@@ -7,7 +7,7 @@ import { RoutineFiringDisposition, RoutineFiringTrigger } from "@opencrane/model
 import { PrismaRoutineFiringRepository } from "../prisma-routine-firing-repository";
 import type { RoutineFactsRepository } from "../routine-prisma-facts.types";
 import { RoutineOccurrenceStage, type RoutineTaskAdmissionPort } from "../routine-workflow.types";
-import { _Current, _Facts, _FiringRow, _IDENTITY, _NOW, _OCCURRENCE_TASK, _SCHEDULE_TASK, _TaskAdmission } from "./prisma-routine-test-fixtures";
+import { _Current, _Facts, _FiringRow, _IDENTITY, _NOW, _SCHEDULE_TASK, _TaskAdmission } from "./prisma-routine-test-fixtures";
 
 /** Composes the real firing repository from inspectable transaction doubles. */
 function _Repository(transaction: Record<string, unknown>, facts = _Facts(), tasks = _TaskAdmission())

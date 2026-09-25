@@ -1,6 +1,7 @@
 import { ConversationAuthorKinds, ConversationComputerStates, ConversationEntryAudiences, ConversationEntryKinds, ConversationEntryProvenance, ConversationMessageActivations, ConversationMessageContentBlockKinds, MessageStates, type ConversationComputer, type MessageEntry } from "@opencrane/contracts";
 import { ConversationHistoryModes, type ConversationHistoryGenesis } from "@opencrane/backend/server/conversations/history";
 import type { HistoryEvent } from "@opencrane/backend/server/infra/history-store";
+import type { RoutineOccurrencePreparationReceipt } from "@opencrane/backend/server/agents/scheduling/contract";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { _DeterministicUuid } from "../sessions/agent-session-identifiers";
@@ -53,4 +54,10 @@ export function _RoutineInstructionReceiptEvent(record: RoutineOccurrenceHistory
 export function _RoutineHistoryDigest(record: RoutineOccurrenceHistoryRecord): `sha256:${string}`
 {
 	return ___DigestCanonicalJson({ ...record, origin: { ...record.origin }, task: { ...record.task }, audiencePrincipalIds: [...record.audiencePrincipalIds] });
+}
+
+/** Derives the immutable preparation receipt for both history writes and database recovery. */
+export function _RoutinePreparationReceipt(record: RoutineOccurrenceHistoryRecord): RoutineOccurrencePreparationReceipt
+{
+	return { receiptId: _RoutineEventId("receipt", record.conversationId), historyReference: _RoutineInstructionStream(record.conversationId), digest: _RoutineHistoryDigest(record) };
 }

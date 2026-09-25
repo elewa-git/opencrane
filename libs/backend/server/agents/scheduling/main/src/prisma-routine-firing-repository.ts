@@ -1,6 +1,6 @@
 import { AgentRoutineFiringDisposition, AgentRoutineStatus, Prisma } from "@prisma/client";
 
-import { ___ParseRoutineComputerActivationReceipt, ___ParseRoutineOccurrencePreparationReceipt, type RoutineComputerActivationReceipt, type RoutineFiringIdentity, type RoutineOccurrencePreparationReceipt } from "@opencrane/backend/server/agents/scheduling/contract";
+import { ___ParseRoutineComputerActivationReceipt, ___ParseRoutineOccurrencePreparationReceipt, type RoutineComputerActivationReceipt, type RoutineFiringIdentity, type RoutineOccurrenceCommand, type RoutineOccurrencePreparationReceipt } from "@opencrane/backend/server/agents/scheduling/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { RoutineFiringDisposition, RoutineFiringTrigger, RoutineStatus, __PlanRoutineFiring } from "@opencrane/models/agents";
 
@@ -158,20 +158,8 @@ export class PrismaRoutineFiringRepository implements RoutineWorkflowPersistence
 		{
 			throw new Error("routine occurrence stage requires a preparing unadmitted firing");
 		}
-		const current = await this.facts.current(identity.siloId, identity.routineId);
-		const now = await this.facts.databaseNow();
-		const actor = _FiringActor(_MODEL_FIRING_TRIGGER[firing.trigger], firing.routine.originalRequesterPrincipalId);
-		const currentlyAllowed = current !== null && this.facts.modelStatus(current.routine) !== RoutineStatus.Retired
-			&& await this.facts.currentAudienceAllowed(current.routine, current.revision, now)
-			&& await this.facts.findCurrentManagedAgent(current.routine) !== null
-			&& await this.facts.admitFiringActions(current.routine, actor, now, { firingId: identity.firingId, routineRevision: identity.routineRevision, stage });
-		if (!currentlyAllowed)
+		if (!(await this._authorizeCurrentStage(identity, firing, stage)))
 		{
-			const changed = await this.transaction.agentRoutineFiring.updateMany({ where: { id: identity.firingId, siloId: identity.siloId, routineId: identity.routineId, routineRevision: identity.routineRevision, disposition: AgentRoutineFiringDisposition.Preparing, runId: null }, data: { disposition: AgentRoutineFiringDisposition.Refused, refusalReason: `stage_${stage}_current_authority_refused`, finishedAt: now, updatedAt: now } });
-			if (changed.count !== 1)
-			{
-				throw new Error("routine occurrence stage refusal lost its compare-and-set");
-			}
 			return null;
 		}
 		return _OccurrenceInput(identity, firing);
@@ -307,6 +295,28 @@ export class PrismaRoutineFiringRepository implements RoutineWorkflowPersistence
 		return firing;
 	}
 
+	/** Rechecks current lifecycle, audience, service and effects, then durably refuses a denial. */
+	private async _authorizeCurrentStage(identity: RoutineFiringIdentity, firing: RoutineFiringStageRow, stage: RoutineOccurrenceStage): Promise<boolean>
+	{
+		const current = await this.facts.current(identity.siloId, identity.routineId);
+		const now = await this.facts.databaseNow();
+		const actor = _FiringActor(_MODEL_FIRING_TRIGGER[firing.trigger], firing.routine.originalRequesterPrincipalId);
+		const currentlyAllowed = current !== null && this.facts.modelStatus(current.routine) !== RoutineStatus.Retired
+			&& await this.facts.currentAudienceAllowed(current.routine, current.revision, now)
+			&& await this.facts.findCurrentManagedAgent(current.routine) !== null
+			&& await this.facts.admitFiringActions(current.routine, actor, now, { firingId: identity.firingId, routineRevision: identity.routineRevision, stage });
+		if (currentlyAllowed)
+		{
+			return true;
+		}
+		const changed = await this.transaction.agentRoutineFiring.updateMany({ where: { id: identity.firingId, siloId: identity.siloId, routineId: identity.routineId, routineRevision: identity.routineRevision, disposition: AgentRoutineFiringDisposition.Preparing, runId: null }, data: { disposition: AgentRoutineFiringDisposition.Refused, refusalReason: `stage_${stage}_current_authority_refused`, finishedAt: now, updatedAt: now } });
+		if (changed.count !== 1)
+		{
+			throw new Error("routine occurrence stage refusal lost its compare-and-set");
+		}
+		return false;
+	}
+
 	/** Rechecks every current guard and records both effect admissions atomically. */
 	private async _canPrepareFiring(current: CurrentRoutineRows, actor: RoutineFiringActor, now: Date, firingKey: string): Promise<boolean>
 	{
@@ -376,7 +386,20 @@ function _OccurrenceResult(firingId: string, routineId: string, routineRevision:
 function _OccurrenceInput(identity: RoutineFiringIdentity, firing: RoutineFiringStageRow): RoutineOccurrencePreparationInput
 {
 	return {
-		...identity,
+		..._OccurrenceCommand(identity, firing),
+		instruction: { keyId: firing.revision.instructionKeyId, nonce: firing.revision.instructionNonce, authTag: firing.revision.instructionAuthTag, ciphertext: firing.revision.instructionCiphertext, ciphertextDigest: firing.revision.instructionCiphertextDigest as `sha256:${string}` },
+	};
+}
+
+/** Maps one fenced firing row into its exact content-free occurrence command. */
+function _OccurrenceCommand(identity: RoutineFiringIdentity, firing: RoutineFiringStageRow): RoutineOccurrenceCommand
+{
+	return {
+		siloId: identity.siloId,
+		firingId: identity.firingId,
+		routineId: identity.routineId,
+		routineRevision: identity.routineRevision,
+		task: identity.task,
 		admittedRunId: firing.runId,
 		trigger: _MODEL_FIRING_TRIGGER[firing.trigger],
 		scheduledSlot: firing.scheduledSlot?.toISOString() ?? null,
@@ -388,6 +411,5 @@ function _OccurrenceInput(identity: RoutineFiringIdentity, firing: RoutineFiring
 		requesterSubjectId: firing.routine.requesterSubjectId,
 		requesterAuthenticatedAt: firing.routine.requesterAuthenticatedAt.toISOString(),
 		audiencePrincipalIds: [...firing.revision.audiencePrincipalIds],
-		instruction: { keyId: firing.revision.instructionKeyId, nonce: firing.revision.instructionNonce, authTag: firing.revision.instructionAuthTag, ciphertext: firing.revision.instructionCiphertext, ciphertextDigest: firing.revision.instructionCiphertextDigest as `sha256:${string}` },
 	};
 }

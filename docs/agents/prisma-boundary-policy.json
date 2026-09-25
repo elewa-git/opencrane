@@ -3,6 +3,26 @@
 	"owners": {
 		"repositories": [
 			{
+				"path": "libs/backend/server/agents/scheduling/main/src/prisma-routine-occurrence-preparation-repository.ts",
+				"adapter": "PrismaRoutineOccurrencePreparationRepository",
+					"contract": "RoutineOccurrencePreparationRepository",
+					"contractImportPath": "@opencrane/backend/server/agents/scheduling/contract",
+					"constructs": [
+						{ "adapter": "PrismaRoutineFactsRepository", "importPath": "./routine-prisma-facts" },
+						{ "adapter": "PrismaRoutineFiringRepository", "importPath": "./prisma-routine-firing-repository" }
+					]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/routines/prisma-routine-occurrence-projection-repository.ts",
+				"adapter": "PrismaRoutineOccurrenceProjectionRepository",
+				"contract": "RoutineOccurrenceProjectionRepository",
+				"contractImportPath": "./routine-occurrence-preparation.types",
+				"constructs": [
+					{ "adapter": "PrismaConversationHistoryRepository", "importPath": "../messages/db/prisma-conversation-history-repository" },
+					{ "adapter": "PrismaConversationProductAuthorizationRepository", "importPath": "../authorization/db/conversation-product-authorization" }
+				]
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/routines/prisma-routine-occurrence-prompt-message-repository.ts",
 				"adapter": "PrismaRoutineOccurrencePromptMessageRepository",
 				"contract": "ConversationPromptMessageSource",
@@ -1672,6 +1692,15 @@
 			}
 		],
 		"unitsOfWork": [
+			{
+				"path": "libs/backend/server/conversations/main/src/routines/prisma-routine-occurrence-preparation.ts",
+				"adapter": "PrismaRoutineOccurrencePreparationUnitOfWork",
+				"contract": "RoutineOccurrencePreparationPort",
+				"contractImportPath": "@opencrane/backend/server/agents/scheduling/contract",
+				"constructs": [
+					{ "adapter": "PrismaRoutineOccurrenceProjectionRepository", "importPath": "./prisma-routine-occurrence-projection-repository" }
+				]
+			},
 			{
 				"path": "libs/backend/server/agents/scheduling/main/src/prisma-routine-unit-of-work.ts",
 				"adapter": "PrismaRoutineUnitOfWork",

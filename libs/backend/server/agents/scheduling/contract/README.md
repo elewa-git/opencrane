@@ -37,6 +37,8 @@ run identifier or advances the firing.
 - `PrepareRoutineOccurrenceCommand` adds plaintext only for conversation-history preparation.
 - `RoutineOccurrencePreparationPort` and `RoutineOccurrencePreparationReceipt` cover conversation
   history creation or recovery.
+- `RoutineOccurrencePreparationRepository` and its factory let the conversation owner reuse the
+  scheduling authority inside the transaction that publishes prepared history and audience grants.
 - `RoutineComputerActivationPort` and `RoutineComputerActivationReceipt` cover computer activation
   or recovery without receiving instruction content.
 - `RoutineRunAdmissionPort`, `RoutineRunAdmissionInput` and `RoutineRunAdmissionReceipt` cover the
@@ -48,7 +50,9 @@ run identifier or advances the firing.
 
 These declarations grant no permission and perform no I/O. Scheduling rechecks current authority
 before each port call; each implementation must repeat the relevant check at its authoritative
-write. The package contains no lifecycle rules, encrypted instruction envelope, database adapter,
+write. A saved preparation marker means publication already committed and must be recovered without
+recreating removed grants. A fresh publication records that marker in the same transaction as its
+audience grants. The package contains no lifecycle rules, encrypted instruction envelope, database adapter,
 workflow handler or application wiring. Activation and run admission cannot receive plaintext or an
 encrypted instruction through this contract. Any later prompt compilation must reread checked,
 service-attested history through the dedicated routine path; activation uses only content-free facts

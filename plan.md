@@ -1,11 +1,15 @@
 # OpenCrane — Active Plan
 
-## Scheduling foundation — approved draft publication, 25 September 2026
+## Scheduling foundation — published draft #916, 25 September 2026
 
 The user approved a draft PR for the current `feat/conversational-routines` foundation,
 stacked directly on #915 (`feat/explicit-subchat-audience`) at
 `8ae8227c7322a07ffc0f4531e6572a8d73ce7c84`. Review order is
-#908 → #910 → #914 → #915 → this scheduling draft. No predecessor is absorbed or closed;
+#908 → #910 → #914 → #915 → #916. Initial published head is
+`1f4ba7ad7698fad6c88f619041d640baa861b84c`; live stack validation passes snapshot
+`b6001edc29d02e335f895c77b895a027553c414da1d2d6928723d7b70be5abd7`.
+The cumulative candidate merges cleanly with develop `10abd0ef6182f36bec13d8f1358e43b15ead7cd5`
+in the read-only merge simulation. No predecessor is absorbed or closed;
 the other open PR branches remain independent. The checkpoints below describe earlier local
 states, not the publication status of this draft.
 
@@ -24,6 +28,49 @@ Independent joined review passes with no findings. It reuses the completed slice
 checks origin, input assembly, root-run admission, approval, history and composition together.
 PostgreSQL and KurrentDB integration tests remain unexecuted. A draft publication authorizes no
 merge, deployment, live permission change, external action or release tag.
+
+### Occurrence preparation — source implemented and independently reviewed
+
+This source slice starts from the published head above. The actual conversation preparation unit
+of work now rechecks the saved firing through a transaction-bound scheduling contract, then saves
+encrypted service-authored input and a hidden conversation projection with stable computer
+coordinates. Kurrent history establishment remains outside database retry callbacks. A second
+transaction rechecks current authority and publishes only the confirmed audience together with the
+firing's saved preparation receipt. A saved receipt means publication already happened: retry
+recovers it without restoring ended participation or revoked grants. The existing receipt is the
+publication marker; there is no schema change. Managed-agent eligibility is read without recording
+a fictitious current human action. A confirmed loss of eligibility commits a refusal; the workflow
+then ends without activation or run admission.
+
+| Saved state | Preparation attempt | Required result |
+| --- | --- | --- |
+| No projection or receipt | Current firing and managed service remain allowed | Save hidden projection and encrypted instruction together. |
+| Hidden projection, no history | Same immutable command | Reuse coordinates and ciphertext, then establish checked history. |
+| History exists, no preparation receipt | Current authority still permits this occurrence | Publish confirmed participants/grants and save receipt in one transaction. |
+| Preparation receipt exists | Exact retry | Verify saved history/projection and return the receipt without restoring access. |
+| No admitted run; current authority ends | Any unfinished preparation stage | Record refusal, publish no new access, and stop this occurrence. |
+| Conflicting coordinates, ciphertext, history or receipt | Any attempt | Refuse substitution; retain the original evidence. |
+
+The follow-up validation passes 316 tests: 190 scheduling, 9 scheduling-contract, 85 conversation
+routine, 16 encrypted-payload and 16 managed-eligibility checks. Four affected TypeScript targets,
+repository boundary lint, Prisma ownership and mechanical style pass. Module growth has no errors;
+the reviewer accepts the firing lifecycle and preparation-receipt repositories as distinct owners.
+The 19 new preparation tests run the actual unit of work, projection repository, payload owner and
+AES-GCM cipher. Narrow transaction mocks prove ordering and rollback, authority loss, lost
+history/publication responses, unchanged ciphertext, exact audience, and no restored grants.
+Independent integrated review and architecture post-review pass with two Low documentation
+corrections: distinguish encrypted persistence from in-memory plaintext comparison, and explain
+the preparation authority's refused versus recoverable results. No behavioral finding remains.
+
+These tests do not prove PostgreSQL concurrency or KurrentDB integration. The actual activation
+and root-run/turn-task adapters, worker composition and reviewed creation/controls UI remain the
+next implementation work; this preparation adapter alone is not a runnable scheduled task.
+The next slice should reuse the conversation activation authority without its ordinary early turn
+spawn, then join existing root-run admission with turn-task spawning and receipt binding in the
+same transaction. Routine compilation must recover that admitted run and use the checked attested
+instruction, not interactive admission or a fabricated browser session. Bootstrap stays thin and
+registers the existing schedule/occurrence/turn workflow owners. No new schema is currently needed
+for these adapters; loss-of-response receipt recovery remains part of their required test scope.
 
 ## Conversational routines — source implementation in progress, 25 September 2026
 

@@ -75,8 +75,8 @@ export interface RoutineComputerActivationReceipt
 /** Creates or recovers conversation history after the scheduling authority rechecks current access. */
 export interface RoutineOccurrencePreparationPort
 {
-	/** Prepares the occurrence conversation from the frozen audience and plaintext instruction. */
-	prepare(command: PrepareRoutineOccurrenceCommand): Promise<RoutineOccurrencePreparationReceipt>;
+	/** Prepares the occurrence, or returns null after its owner commits a current-authority refusal. */
+	prepare(command: PrepareRoutineOccurrenceCommand): Promise<RoutineOccurrencePreparationReceipt | null>;
 }
 
 /** Activates or recovers the managed agent's computer after preparation is saved. */

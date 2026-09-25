@@ -78,6 +78,8 @@ export { _CreateGroupChildRouter } from "./children/group-child.router";
 export type { GroupChildAgentCandidate, GroupChildAgentResolver, GroupChildAuthority, GroupChildTaskInput } from "./children/group-child.types";
 export type { CompanyAssistantDirectory } from "./metadata/conversation-metadata.types";
 export { RoutineOccurrenceHistory } from "./routines/routine-occurrence-history";
+export { PrismaRoutineOccurrencePreparationUnitOfWork } from "./routines/prisma-routine-occurrence-preparation";
+export type { RoutineOccurrencePreparationDependencies } from "./routines/routine-occurrence-preparation.types";
 export type { RoutineOccurrenceHistoryRecord } from "./routines/routine-occurrence-history.types";
 export { RoutineOccurrencePromptHistoryReader } from "./routines/routine-occurrence-prompt-history-reader";
 export { PrismaRoutineOccurrencePromptMessageRepository } from "./routines/prisma-routine-occurrence-prompt-message-repository";

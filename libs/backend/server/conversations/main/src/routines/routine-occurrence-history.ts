@@ -6,7 +6,7 @@ import { ConversationComputerHistory } from "@opencrane/backend/server/conversat
 import { ConversationHistoryReader, type ConversationHistoryAuthority } from "@opencrane/backend/server/conversations/history";
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import { _RoutineColdComputer, _RoutineEventId, _RoutineGenesis, _RoutineHistoryDigest, _RoutineInstructionEntry, _RoutineInstructionReceiptEvent, _RoutineInstructionStream } from "./routine-occurrence-history.mapper";
+import { _RoutineColdComputer, _RoutineEventId, _RoutineGenesis, _RoutineInstructionEntry, _RoutineInstructionReceiptEvent, _RoutineInstructionStream, _RoutinePreparationReceipt } from "./routine-occurrence-history.mapper";
 import type { RoutineOccurrenceHistoryRecord } from "./routine-occurrence-history.types";
 import { _RoutineOccurrenceHistoryRecordSchema, _RoutineOccurrenceReadCoordinatesSchema } from "./routine-occurrence-history.validator";
 
@@ -48,7 +48,7 @@ export class RoutineOccurrenceHistory
 		_RequireBoundedRecord(record);
 		if (await this._recover(record))
 		{
-			return _PreparationReceipt(record);
+			return _RoutinePreparationReceipt(record);
 		}
 		const genesis = this.authority.genesisAppend(_RoutineGenesis(record), _RoutineEventId("genesis", record.conversationId));
 		const message = this.authority.entryAppend({ siloId: record.siloId, conversationId: record.conversationId, expectedRevision: 0n, entry: _RoutineInstructionEntry(record) });
@@ -75,7 +75,7 @@ export class RoutineOccurrenceHistory
 		{
 			throw new Error("Routine occurrence history did not commit its complete preparation");
 		}
-		return _PreparationReceipt(record);
+		return _RoutinePreparationReceipt(record);
 	}
 
 	/**
@@ -151,10 +151,4 @@ function _RequireBoundedRecord(record: RoutineOccurrenceHistoryRecord): void
 	{
 		throw new Error("Routine instruction receipt exceeds its metadata size limit");
 	}
-}
-
-/** Returns a stable, content-free receipt rather than a new allocation on every retry. */
-function _PreparationReceipt(record: RoutineOccurrenceHistoryRecord): RoutineOccurrencePreparationReceipt
-{
-	return { receiptId: _RoutineEventId("receipt", record.conversationId), historyReference: _RoutineInstructionStream(record.conversationId), digest: _RoutineHistoryDigest(record) };
 }

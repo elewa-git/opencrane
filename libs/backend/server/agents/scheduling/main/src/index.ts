@@ -1,4 +1,5 @@
 export { PrismaRoutineUnitOfWork } from "./prisma-routine-unit-of-work";
+export { PrismaRoutineOccurrencePreparationRepository } from "./prisma-routine-occurrence-preparation-repository";
 export { RoutineAuthority } from "./routine-authority";
 export { RoutineInstructionCipherAdapter } from "./routine-instruction-cipher-adapter";
 export { RoutineTaskAdmission } from "./routine-task-admission";

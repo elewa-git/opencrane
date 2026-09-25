@@ -32,7 +32,7 @@ signed-in participant ──► main ◄── HERE ──► history
 | `memory/source/` | Read the selected human message through current history access and recheck its encrypted source inside the command transaction. |
 | `memory/workflow/` | Declare identifier-only memory tasks and resume each saved provider and catalog phase through one Absurd workflow owner. The command transaction retains Absurd's returned receipt. First-dataset creation remains separately unfinished. |
 | `children/` | Resolve explicitly selected parent members, admit group-child work, preserve its original audience, write a closed group-child genesis origin, recover creation, and share human-reviewed text. |
-| `routines/` | Establish and recover an independent occurrence's service-attested instruction, closed routine origin, cold computer and private preparation receipt; bind prompt admission to that exact history. No permission or turn is admitted by these adapters. |
+| `routines/` | Prepare hidden occurrence projections, encrypted service-authored instructions and checked history; publish the confirmed audience with a scheduling-owned receipt in one transaction. Bind prompt admission to that history without activating a computer or admitting a run. |
 | `computers/` | Separate activation, lifecycle, checkpoint, turn and review operation owners. |
 | `computers/tools/` | Proposal admission, current dispatch access and saved result consumption each have their own owner. |
 | `computers/interruptions/` | Select and admit requester-owned Stop commands, record their outcome and let Absurd recover cancellation cleanup. |
@@ -117,6 +117,26 @@ History and computer snapshot classes are imported directly from their sibling p
 
 ### Routine occurrence preparation
 
+`PrismaRoutineOccurrencePreparationUnitOfWork` implements the scheduling preparation port. It
+checks the persisted firing through an injected transaction-bound scheduling repository, resolves
+current managed-agent eligibility without fabricating a human action, and saves a participant-free
+conversation plus encrypted instruction. The existing payload repository's attested method fixes
+the author to OpenCrane; it never takes a browser identity. Its recovery mode refuses missing rows
+instead of recreating content after a saved preparation.
+
+The conversation's computer identity, profile and creation time are reused after a crash. Current
+published agent revision and permissions are checked again; the executable revision is frozen by
+later root-run admission, not by this projection. Occurrence history is written outside SQL retry
+callbacks. Only after that checked history exists does another Serializable transaction recheck
+authority, publish the confirmed participants and grants, and save the firing's preparation receipt.
+If current execution eligibility has ended, the same transaction commits a refusal instead.
+
+That firing receipt is the publication marker. Exact replay verifies the original projection,
+ciphertext and history and returns it without restoring removed access or reconciling grants.
+Participants cannot see a partly prepared conversation. A failed final receipt write rolls back
+participants and grants together. Tracing records only occurrence identifiers, never instruction
+text. These source checks still need real-database concurrency and authenticated journey proof.
+
 `RoutineOccurrenceHistory` atomically creates three history streams: conversation genesis followed
 by one service-attested instruction, a cold computer, and a private content-free preparation receipt.
 The caller must first save encrypted instruction bytes and keep the relational conversation hidden
@@ -137,9 +157,9 @@ instruction as user-level model content. Ordinary service/system message compila
 this path needs neither a fabricated human author nor a refreshed browser login.
 
 These adapters use the narrow [scheduling contract](../../agents/scheduling/contract/README.md),
-not the scheduling implementation. They are preparation building blocks, not a runnable scheduling
-feature: the projection/grant unit of work, computer activation, runtime wiring and reviewed product
-controls still need integration.
+not the scheduling implementation. They are not yet a runnable scheduling feature: computer
+activation, root-run/turn-task admission, runtime wiring and reviewed product controls still need
+integration. The preparation unit of work is exported but not registered with a worker or route.
 
 ### Tool progress and recovery
 

@@ -25,6 +25,17 @@ function _savedOccurrence(): RoutineOccurrencePreparationInput
 
 describe("routine durable workflows", function _suite()
 {
+	it("ends the occurrence when preparation commits a refusal", async function _PreparationRefusal()
+	{
+		const persistence = { authorizeOccurrenceStage: vi.fn().mockResolvedValue(_savedOccurrence()), recordPreparation: vi.fn(), recordActivation: vi.fn(), bindAdmittedRun: vi.fn() } as unknown as RoutineWorkflowPersistence;
+		const dependencies = { persistence, cipher: { decrypt: vi.fn().mockResolvedValue("Do the work."), encrypt: vi.fn() }, preparation: { prepare: vi.fn().mockResolvedValue(null) }, activation: { activate: vi.fn() }, runAdmission: { admit: vi.fn() } } as unknown as RoutineWorkflowDependencies;
+		const context = { task: _TASK, attempt: 1, checkpoint: vi.fn(async function _Checkpoint(_step, operation) { return await operation(); }) } as unknown as IWorkflowTaskContext;
+		await expect(__CreateRoutineWorkflowDefinitions(dependencies).occurrence.run(context, { siloId: "silo-1", firingId: "firing-1", routineId: "routine-1", routineRevision: 2 })).resolves.toEqual({ firingId: "firing-1", runId: null });
+		expect(persistence.recordPreparation).not.toHaveBeenCalled();
+		expect(dependencies.activation.activate).not.toHaveBeenCalled();
+		expect(dependencies.runAdmission.admit).not.toHaveBeenCalled();
+	});
+
 	it("saves preparation and activation receipts before admitting the exact root run", async function _occurrence()
 	{
 		const events: string[] = [];

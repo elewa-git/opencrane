@@ -75,6 +75,9 @@ actor from the persisted trigger rather than accepting it from a worker request.
   persistence. Authorized reads decrypt only after their read transaction completes.
 - `PrismaRoutineUnitOfWork` opens bounded Serializable transactions and constructs the facts,
   command and firing repositories from the exact transaction callback.
+- `PrismaRoutineOccurrencePreparationRepository` adopts the conversation owner's transaction so
+  authority, final audience grants and the immutable preparation marker commit together. App
+  composition injects it through the narrow scheduling-contract factory.
 - `RoutineInstructionCipherAdapter` binds encrypted instructions to the silo, destination,
   requester and immutable routine revision. Composition supplies the existing mounted payload
   cipher; this package neither loads keys nor implements another encryption algorithm.
@@ -137,7 +140,10 @@ Schedule and occurrence tasks are admitted inside the product transaction. Resta
 bounded active schedule heads with their existing keys. Occurrence preparation and computer
 activation each save an immutable receipt before the next external step. Replayed checkpoint and
 database receipts must contain nonblank references and an exact SHA-256 digest, with no converted or
-discarded fields. Shared run admission must create the root `AgentRun` and set the firing backlink in
+discarded fields. Conversation publication first asks the scheduling-owned repository to match every
+immutable occurrence coordinate and repeat current authority. An existing exact marker is recovered
+without recreating grants; a first marker is saved under a no-run compare-and-set in the same caller-owned
+transaction as publication. Shared run admission must create the root `AgentRun` and set the firing backlink in
 the same transaction; this package then validates that exact link before moving the firing to
 `Running`.
 

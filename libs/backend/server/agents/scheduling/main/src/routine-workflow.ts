@@ -51,6 +51,10 @@ async function _RunOccurrence(dependencies: RoutineWorkflowDependencies, context
 		const preparationCommand: PrepareRoutineOccurrenceCommand = { ...occurrence, instruction };
 		return await dependencies.preparation.prepare(preparationCommand);
 	});
+	if (preparation === null)
+	{
+		return { firingId: identity.firingId, runId: null };
+	}
 	const savedPreparation = await dependencies.persistence.recordPreparation(identity, preparation);
 	if (await dependencies.persistence.authorizeOccurrenceStage(identity, RoutineOccurrenceStage.Activation) === null)
 	{
