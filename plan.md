@@ -72,6 +72,51 @@ instruction, not interactive admission or a fabricated browser session. Bootstra
 registers the existing schedule/occurrence/turn workflow owners. No new schema is currently needed
 for these adapters; loss-of-response receipt recovery remains part of their required test scope.
 
+### Occurrence activation — source implemented and independently reviewed
+
+This wave starts from preparation head `9b75e6efff24b8058363fefe413ea8782326f117`.
+The refreshed live stack passes snapshot
+`5670845f7746d93005eefb738c6c7aa1c164408b5d61ddee972c16f428d6774c` with the same
+#908 → #910 → #914 → #915 → #916 order. Architecture requires a lease-only publication
+contract separate from ordinary message activation, and typed Pending results handled with durable
+sleep. A normal cold start must not exhaust the occurrence task's three failure attempts.
+
+| Current activation state | Event | Required outcome |
+| --- | --- | --- |
+| Prepared, cold computer | Authorized poll | Request its deterministic initial lease; admit no model turn. |
+| Claim pending and unexpired | Sandbox still starting | Save Pending checkpoint, sleep durably and recheck authority before another poll. |
+| Current authority removed | Before claim or lease publication | Commit pre-admission refusal, preserving earlier receipts; admit no run. |
+| Computer retired, lease ended/expired or release profile unavailable | Poll or publication | Commit refusal rather than creating a replacement generation. |
+| Active history, publication missing | Lost response or retry | Verify exact history, then atomically save lease projection and activation receipt. |
+| Activation receipt already saved | Exact unadmitted retry | Recheck authority and verify the receipt; never spawn a turn from activation. |
+| Foreign history, command, lease or receipt | Any poll | Report an integrity error; do not silently replace evidence or treat it as a policy denial. |
+
+Root-run admission and turn-task binding will follow this boundary. They must share a transaction,
+and duplicate admission must read the saved task receipt without spawning another task. The routine
+compiler must recover an already-admitted run. Automatic input authorization must use the system
+actor, not borrow a current human session. Worker/UI composition and live qualification remain open.
+
+The implementation now uses the shared computer lifecycle through a lease-only publisher. It
+commits the active lease and scheduling receipt together after a fresh authority check, returns
+typed Pending for normal cold starts, and durably refuses retired or ended computers. Saved
+activation cannot recreate a missing realization. A recovery-only turn-task receipt reader returns
+the existing task without spawning one; incomplete or malformed bindings fail closed.
+
+Validation passes 372 relevant tests: 220 scheduling, 19 occurrence-contract and 133 conversation
+routine/activation/receipt checks. All three affected TypeScript checks pass. The 15 joined activation
+tests exercise actual computer history and the lease projection with controlled transaction/claim
+ports: rollback, lost commit acknowledgement, authority loss after assignment, lease endings,
+receipt substitution, and no early task admission. They are not real PostgreSQL, KurrentDB or
+Agent Sandbox proof. Mechanical style reports zero errors/warnings, Prisma ownership and agent
+boundaries pass, and module growth has one reviewed cohesive activation-repository candidate.
+
+Independent integrated review and architecture post-review pass for scope digest
+`01c118b4cccbafa7176f13ddd346d04958275e9c4501d75b9c62d762313becc0`.
+The review repaired a real stuck-Preparing path by mapping retired, released, lost and expired
+computers to committed refusal before replay and publication. One Low documentation correction
+records that activation status values are persisted in checkpoints. No behavioral finding remains.
+No schema, workload, route or frontend was changed, and no live service or VM was started.
+
 ## Conversational routines — source implementation in progress, 25 September 2026
 
 The next complete schedule slice starts from #915 at immutable base

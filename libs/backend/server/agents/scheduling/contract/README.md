@@ -26,9 +26,9 @@ owner and adds plaintext only for preparation; each owner returns restart-safe e
 activation · [root-run admission](../../../../agents/execution/runs/main/README.md) owns the admitted
 AgentRun.
 
-The receipt parsers preserve every saved field and reject blank references, malformed SHA-256
-digests and unknown fields. A malformed checkpoint result therefore stops before scheduling binds a
-run identifier or advances the firing.
+The receipt and activation-result parsers preserve every saved field and reject blank references,
+malformed SHA-256 digests, invalid pending deadlines and unknown fields. A malformed checkpoint
+result therefore stops before scheduling binds a run identifier or advances the firing.
 
 ## Public surface
 
@@ -41,10 +41,15 @@ run identifier or advances the firing.
   scheduling authority inside the transaction that publishes prepared history and audience grants.
 - `RoutineComputerActivationPort` and `RoutineComputerActivationReceipt` cover computer activation
   or recovery without receiving instruction content.
+- `RoutineComputerActivationStatus` and `RoutineComputerActivationResult` distinguish an active
+  receipt, a bounded pending wait and a refusal already committed by the activation owner.
+- `RoutineOccurrenceActivationRepository` and its factory let the computer owner repeat scheduling
+  authority and bind activation to the exact saved preparation inside its transaction.
 - `RoutineRunAdmissionPort`, `RoutineRunAdmissionInput` and `RoutineRunAdmissionReceipt` cover the
   content-free root AgentRun hand-off after both earlier receipts are saved.
-- `___ParseRoutineOccurrencePreparationReceipt`, `___ParseRoutineComputerActivationReceipt` and
-  `___ParseRoutineRunAdmissionReceipt` restore checkpoint evidence without normalising it.
+- `___ParseRoutineOccurrencePreparationReceipt`, `___ParseRoutineComputerActivationResult`,
+  `___ParseRoutineComputerActivationReceipt` and `___ParseRoutineRunAdmissionReceipt` restore
+  checkpoint evidence without normalising it.
 
 ## Boundary
 
@@ -52,8 +57,12 @@ These declarations grant no permission and perform no I/O. Scheduling rechecks c
 before each port call; each implementation must repeat the relevant check at its authoritative
 write. A saved preparation marker means publication already committed and must be recovered without
 recreating removed grants. A fresh publication records that marker in the same transaction as its
-audience grants. The package contains no lifecycle rules, encrypted instruction envelope, database adapter,
-workflow handler or application wiring. Activation and run admission cannot receive plaintext or an
+audience grants. Activation repeats current authority even when an activation receipt already
+exists; recovery never turns an old receipt into permission. `Pending` is a normal bounded poll,
+while `Refused` is valid only after the activation owner commits the firing refusal.
+
+The package contains no lifecycle rules, encrypted instruction envelope, database adapter, workflow
+handler or application wiring. Activation and run admission cannot receive plaintext or an
 encrypted instruction through this contract. Any later prompt compilation must reread checked,
 service-attested history through the dedicated routine path; activation uses only content-free facts
 and the saved preparation receipt.

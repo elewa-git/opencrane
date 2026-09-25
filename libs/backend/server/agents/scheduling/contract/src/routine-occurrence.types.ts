@@ -72,6 +72,52 @@ export interface RoutineComputerActivationReceipt
 	readonly digest: `sha256:${string}`;
 }
 
+/**
+ * Stable outcomes returned while scheduling polls computer activation. The workflow stores each
+ * result under a `routine-activate-computer-${pollIndex}` checkpoint and the adjacent parser
+ * validates this closed set before replaying it. These string values are serialized checkpoint
+ * data, so renaming one breaks recovery of saved activation polls.
+ */
+export enum RoutineComputerActivationStatus
+{
+	/** The computer is ready and the receipt may be recorded before run admission. */
+	Active = "active",
+	/** Activation is still owned externally and scheduling should durably poll later. */
+	Pending = "pending",
+	/** The activation owner committed a refusal and scheduling must stop this occurrence. */
+	Refused = "refused",
+}
+
+/** Returns the exact activation evidence after the computer becomes ready. */
+export interface RoutineComputerActivationActiveResult
+{
+	/** Selects the active result shape. */
+	readonly status: RoutineComputerActivationStatus.Active;
+	/** Immutable evidence saved before run admission. */
+	readonly receipt: RoutineComputerActivationReceipt;
+}
+
+/** Supplies the bounded durable wait for one activation poll. */
+export interface RoutineComputerActivationPendingResult
+{
+	/** Selects the pending result shape. */
+	readonly status: RoutineComputerActivationStatus.Pending;
+	/** Earliest epoch millisecond at which scheduling should poll again. */
+	readonly notBeforeEpochMs: number;
+	/** Epoch millisecond after which the activation owner must resolve or refuse the request. */
+	readonly expiresAtEpochMs: number;
+}
+
+/** Confirms that the activation owner durably refused this occurrence. */
+export interface RoutineComputerActivationRefusedResult
+{
+	/** Selects the refused result shape. */
+	readonly status: RoutineComputerActivationStatus.Refused;
+}
+
+/** Complete outcome of one bounded computer-activation poll. */
+export type RoutineComputerActivationResult = RoutineComputerActivationActiveResult | RoutineComputerActivationPendingResult | RoutineComputerActivationRefusedResult;
+
 /** Creates or recovers conversation history after the scheduling authority rechecks current access. */
 export interface RoutineOccurrencePreparationPort
 {
@@ -82,8 +128,8 @@ export interface RoutineOccurrencePreparationPort
 /** Activates or recovers the managed agent's computer after preparation is saved. */
 export interface RoutineComputerActivationPort
 {
-	/** Activates the computer for the same occurrence and preparation receipt. */
-	activate(command: RoutineOccurrenceCommand, preparation: RoutineOccurrencePreparationReceipt): Promise<RoutineComputerActivationReceipt>;
+	/** Activates or polls the computer for the same occurrence and preparation receipt. */
+	activate(command: RoutineOccurrenceCommand, preparation: RoutineOccurrencePreparationReceipt): Promise<RoutineComputerActivationResult>;
 }
 
 /** Supplies frozen occurrence facts and saved stage receipts to root-run admission. */

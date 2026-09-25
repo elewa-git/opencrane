@@ -1,5 +1,5 @@
 import type { IWorkflowTaskContext } from "@opencrane/backend/server/infra/workflows/contract";
-import { ___ParseRoutineRunAdmissionReceipt, type PrepareRoutineOccurrenceCommand, type RoutineFiringIdentity, type RoutineOccurrenceCommand } from "@opencrane/backend/server/agents/scheduling/contract";
+import { RoutineComputerActivationStatus, ___ParseRoutineComputerActivationResult, ___ParseRoutineRunAdmissionReceipt, type PrepareRoutineOccurrenceCommand, type RoutineComputerActivationReceipt, type RoutineFiringIdentity, type RoutineOccurrenceCommand, type RoutineOccurrencePreparationReceipt } from "@opencrane/backend/server/agents/scheduling/contract";
 
 import type { RoutineInstructionContext } from "./routine-instruction.types";
 import { RoutineOccurrenceTaskDeclaration, RoutineScheduleTaskDeclaration } from "./routine-workflow-contract";
@@ -56,15 +56,11 @@ async function _RunOccurrence(dependencies: RoutineWorkflowDependencies, context
 		return { firingId: identity.firingId, runId: null };
 	}
 	const savedPreparation = await dependencies.persistence.recordPreparation(identity, preparation);
-	if (await dependencies.persistence.authorizeOccurrenceStage(identity, RoutineOccurrenceStage.Activation) === null)
+	const savedActivation = await _ActivateOccurrence(dependencies, context, identity, occurrence, savedPreparation);
+	if (savedActivation === null)
 	{
 		return { firingId: identity.firingId, runId: null };
 	}
-	const activation = await context.checkpoint({ stepName: "routine-activate-computer" }, async function _Activate()
-	{
-		return await dependencies.activation.activate(occurrence, savedPreparation);
-	});
-	const savedActivation = await dependencies.persistence.recordActivation(identity, activation);
 	if (await dependencies.persistence.authorizeOccurrenceStage(identity, RoutineOccurrenceStage.RunAdmission) === null)
 	{
 		return { firingId: identity.firingId, runId: null };
@@ -76,4 +72,33 @@ async function _RunOccurrence(dependencies: RoutineWorkflowDependencies, context
 	const admission = ___ParseRoutineRunAdmissionReceipt(admissionValue);
 	await dependencies.persistence.bindAdmittedRun(identity, admission.runId);
 	return { firingId: identity.firingId, runId: admission.runId };
+}
+
+/** Polls activation under a fresh authority fence and durably waits without spending task attempts. */
+async function _ActivateOccurrence(dependencies: RoutineWorkflowDependencies, context: IWorkflowTaskContext, identity: RoutineFiringIdentity, occurrence: RoutineOccurrenceCommand, preparation: RoutineOccurrencePreparationReceipt): Promise<RoutineComputerActivationReceipt | null>
+{
+	let pollIndex = 0;
+	while (true)
+	{
+		if (await dependencies.persistence.authorizeOccurrenceStage(identity, RoutineOccurrenceStage.Activation) === null)
+		{
+			return null;
+		}
+		const activationValue = await context.checkpoint({ stepName: `routine-activate-computer-${pollIndex}` }, async function _Activate()
+		{
+			return await dependencies.activation.activate(occurrence, preparation);
+		});
+		const activation = ___ParseRoutineComputerActivationResult(activationValue);
+		if (activation.status === RoutineComputerActivationStatus.Refused)
+		{
+			return null;
+		}
+		if (activation.status === RoutineComputerActivationStatus.Active)
+		{
+			return await dependencies.persistence.recordActivation(identity, activation.receipt);
+		}
+		const wakeAtEpochMs = Math.min(activation.notBeforeEpochMs, activation.expiresAtEpochMs);
+		await context.sleepUntil(new Date(wakeAtEpochMs), `routine-activation-poll-${pollIndex}`);
+		pollIndex += 1;
+	}
 }

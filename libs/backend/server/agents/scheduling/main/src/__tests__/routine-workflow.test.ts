@@ -1,4 +1,5 @@
 import type { IWorkflowTaskContext, IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
+import { RoutineComputerActivationStatus } from "@opencrane/backend/server/agents/scheduling/contract";
 import { RoutineFiringTrigger } from "@opencrane/models/agents";
 import { describe, expect, it, vi } from "vitest";
 
@@ -52,7 +53,7 @@ describe("routine durable workflows", function _suite()
 			persistence,
 			cipher: { decrypt: vi.fn().mockResolvedValue("Do the work."), encrypt: vi.fn() },
 			preparation: { prepare: vi.fn(async () => { events.push("prepare"); return preparation; }) },
-			activation: { activate: vi.fn(async () => { events.push("activate"); return activation; }) },
+			activation: { activate: vi.fn(async () => { events.push("activate"); return { status: RoutineComputerActivationStatus.Active, receipt: activation }; }) },
 			runAdmission: { admit: vi.fn(async () => { events.push("admit-run"); return admission; }) },
 			ids: { routineId: vi.fn(), revisionId: vi.fn(), firingId: vi.fn(), conversationId: vi.fn(), commandReceiptId: vi.fn() },
 		} as unknown as RoutineWorkflowDependencies;
@@ -92,7 +93,7 @@ describe("routine durable workflows", function _suite()
 			persistence,
 			cipher: { decrypt: vi.fn(), encrypt: vi.fn() },
 			preparation: { prepare: vi.fn() },
-			activation: { activate: vi.fn().mockResolvedValue(activation) },
+			activation: { activate: vi.fn().mockResolvedValue({ status: RoutineComputerActivationStatus.Active, receipt: activation }) },
 			runAdmission: { admit: vi.fn().mockResolvedValue(admission) },
 		} as unknown as RoutineWorkflowDependencies;
 		const checkpoint = vi.fn().mockResolvedValueOnce(preparation).mockImplementation(async function _Execute(_step, operation) { return await operation(); });
@@ -110,6 +111,144 @@ describe("routine durable workflows", function _suite()
 			expect(laterCommand).not.toHaveProperty("instruction");
 			expect(JSON.stringify(laterCommand)).not.toMatch(/ciphertext|authTag|nonce|keyId/u);
 		}
+	});
+
+	it("durably waits through cold activation beyond three seconds without spending another attempt", async function _ColdActivation()
+	{
+		const preparation = { receiptId: "preparation-1", historyReference: "history-1", digest: `sha256:${"b".repeat(64)}` as const };
+		const activation = { receiptId: "activation-1", computerReference: "computer-1", digest: `sha256:${"c".repeat(64)}` as const };
+		const admission = { runId: "run-1", inputSnapshotDigest: `sha256:${"d".repeat(64)}` as const, runTask: { taskId: "run-task-1", taskName: "agents.runs.execute/v1", idempotencyKey: "run-1" } };
+		const pending = { status: RoutineComputerActivationStatus.Pending, notBeforeEpochMs: 5_000, expiresAtEpochMs: 9_000 } as const;
+		const persistence = {
+			authorizeOccurrenceStage: vi.fn().mockResolvedValue(_savedOccurrence()),
+			recordPreparation: vi.fn().mockResolvedValue(preparation),
+			recordActivation: vi.fn().mockResolvedValue(activation),
+			bindAdmittedRun: vi.fn(),
+		} as unknown as RoutineWorkflowPersistence;
+		const dependencies = {
+			persistence,
+			cipher: { decrypt: vi.fn().mockResolvedValue("Do the work."), encrypt: vi.fn() },
+			preparation: { prepare: vi.fn().mockResolvedValue(preparation) },
+			activation: { activate: vi.fn().mockResolvedValueOnce(pending).mockResolvedValueOnce({ status: RoutineComputerActivationStatus.Active, receipt: activation }) },
+			runAdmission: { admit: vi.fn().mockResolvedValue(admission) },
+		} as unknown as RoutineWorkflowDependencies;
+		const checkpoint = vi.fn(async function _Checkpoint(_step, operation) { return await operation(); });
+		const context = { task: _TASK, attempt: 1, checkpoint, sleepUntil: vi.fn().mockResolvedValue(undefined) } as unknown as IWorkflowTaskContext;
+
+		await expect(__CreateRoutineWorkflowDefinitions(dependencies).occurrence.run(context, { siloId: "silo-1", firingId: "firing-1", routineId: "routine-1", routineRevision: 2 })).resolves.toEqual({ firingId: "firing-1", runId: "run-1" });
+
+		expect(context.sleepUntil).toHaveBeenCalledExactlyOnceWith(new Date(5_000), "routine-activation-poll-0");
+		expect(checkpoint.mock.calls.map(function _Step(call) { return call[0].stepName; })).toEqual(["routine-prepare-occurrence", "routine-activate-computer-0", "routine-activate-computer-1", "routine-admit-run"]);
+		expect(persistence.authorizeOccurrenceStage).toHaveBeenCalledTimes(4);
+		expect(dependencies.activation.activate).toHaveBeenCalledTimes(2);
+	});
+
+	it("replays the same indexed activation checkpoints while repeating current authority fences", async function _ActivationReplay()
+	{
+		const preparation = { receiptId: "preparation-1", historyReference: "history-1", digest: `sha256:${"b".repeat(64)}` as const };
+		const activation = { receiptId: "activation-1", computerReference: "computer-1", digest: `sha256:${"c".repeat(64)}` as const };
+		const admission = { runId: "run-1", inputSnapshotDigest: `sha256:${"d".repeat(64)}` as const, runTask: { taskId: "run-task-1", taskName: "agents.runs.execute/v1", idempotencyKey: "run-1" } };
+		const checkpointValues = new Map<string, unknown>([
+			["routine-prepare-occurrence", preparation],
+			["routine-activate-computer-0", { status: RoutineComputerActivationStatus.Pending, notBeforeEpochMs: 5_000, expiresAtEpochMs: 9_000 }],
+			["routine-activate-computer-1", { status: RoutineComputerActivationStatus.Active, receipt: activation }],
+			["routine-admit-run", admission],
+		]);
+		const persistence = {
+			authorizeOccurrenceStage: vi.fn().mockResolvedValue(_savedOccurrence()),
+			recordPreparation: vi.fn().mockResolvedValue(preparation),
+			recordActivation: vi.fn().mockResolvedValue(activation),
+			bindAdmittedRun: vi.fn(),
+		} as unknown as RoutineWorkflowPersistence;
+		const dependencies = {
+			persistence,
+			cipher: { decrypt: vi.fn(), encrypt: vi.fn() },
+			preparation: { prepare: vi.fn() },
+			activation: { activate: vi.fn() },
+			runAdmission: { admit: vi.fn() },
+		} as unknown as RoutineWorkflowDependencies;
+		const checkpoint = vi.fn(async function _Replay(step: { readonly stepName: string }) { return checkpointValues.get(step.stepName); });
+		const context = { task: _TASK, attempt: 2, checkpoint, sleepUntil: vi.fn().mockResolvedValue(undefined) } as unknown as IWorkflowTaskContext;
+
+		await expect(__CreateRoutineWorkflowDefinitions(dependencies).occurrence.run(context, { siloId: "silo-1", firingId: "firing-1", routineId: "routine-1", routineRevision: 2 })).resolves.toEqual({ firingId: "firing-1", runId: "run-1" });
+
+		expect(checkpoint.mock.calls.map(function _Step(call) { return call[0].stepName; })).toEqual([...checkpointValues.keys()]);
+		expect(persistence.authorizeOccurrenceStage).toHaveBeenCalledTimes(4);
+		expect(dependencies.cipher.decrypt).not.toHaveBeenCalled();
+		expect(dependencies.preparation.prepare).not.toHaveBeenCalled();
+		expect(dependencies.activation.activate).not.toHaveBeenCalled();
+		expect(dependencies.runAdmission.admit).not.toHaveBeenCalled();
+	});
+
+	it("stops a pending activation when the next poll loses current authority", async function _LaterActivationDenial()
+	{
+		const saved = _savedOccurrence();
+		const preparation = { receiptId: "preparation-1", historyReference: "history-1", digest: `sha256:${"b".repeat(64)}` as const };
+		const persistence = {
+			authorizeOccurrenceStage: vi.fn().mockResolvedValueOnce(saved).mockResolvedValueOnce(saved).mockResolvedValueOnce(null),
+			recordPreparation: vi.fn().mockResolvedValue(preparation),
+			recordActivation: vi.fn(),
+		} as unknown as RoutineWorkflowPersistence;
+		const dependencies = {
+			persistence,
+			cipher: { decrypt: vi.fn().mockResolvedValue("Do the work."), encrypt: vi.fn() },
+			preparation: { prepare: vi.fn().mockResolvedValue(preparation) },
+			activation: { activate: vi.fn().mockResolvedValue({ status: RoutineComputerActivationStatus.Pending, notBeforeEpochMs: 5_000, expiresAtEpochMs: 9_000 }) },
+			runAdmission: { admit: vi.fn() },
+		} as unknown as RoutineWorkflowDependencies;
+		const context = { task: _TASK, attempt: 1, checkpoint: vi.fn(async function _Checkpoint(_step, operation) { return await operation(); }), sleepUntil: vi.fn().mockResolvedValue(undefined) } as unknown as IWorkflowTaskContext;
+
+		await expect(__CreateRoutineWorkflowDefinitions(dependencies).occurrence.run(context, { siloId: "silo-1", firingId: "firing-1", routineId: "routine-1", routineRevision: 2 })).resolves.toEqual({ firingId: "firing-1", runId: null });
+
+		expect(dependencies.activation.activate).toHaveBeenCalledOnce();
+		expect(context.sleepUntil).toHaveBeenCalledOnce();
+		expect(persistence.recordActivation).not.toHaveBeenCalled();
+		expect(dependencies.runAdmission.admit).not.toHaveBeenCalled();
+	});
+
+	it("returns after the activation owner commits refusal", async function _ActivationRefused()
+	{
+		const preparation = { receiptId: "preparation-1", historyReference: "history-1", digest: `sha256:${"b".repeat(64)}` as const };
+		const persistence = {
+			authorizeOccurrenceStage: vi.fn().mockResolvedValue(_savedOccurrence()),
+			recordPreparation: vi.fn().mockResolvedValue(preparation),
+			recordActivation: vi.fn(),
+		} as unknown as RoutineWorkflowPersistence;
+		const dependencies = {
+			persistence,
+			cipher: { decrypt: vi.fn().mockResolvedValue("Do the work."), encrypt: vi.fn() },
+			preparation: { prepare: vi.fn().mockResolvedValue(preparation) },
+			activation: { activate: vi.fn().mockResolvedValue({ status: RoutineComputerActivationStatus.Refused }) },
+			runAdmission: { admit: vi.fn() },
+		} as unknown as RoutineWorkflowDependencies;
+		const context = { task: _TASK, attempt: 1, checkpoint: vi.fn(async function _Checkpoint(_step, operation) { return await operation(); }), sleepUntil: vi.fn() } as unknown as IWorkflowTaskContext;
+
+		await expect(__CreateRoutineWorkflowDefinitions(dependencies).occurrence.run(context, { siloId: "silo-1", firingId: "firing-1", routineId: "routine-1", routineRevision: 2 })).resolves.toEqual({ firingId: "firing-1", runId: null });
+		expect(persistence.recordActivation).not.toHaveBeenCalled();
+		expect(context.sleepUntil).not.toHaveBeenCalled();
+		expect(dependencies.runAdmission.admit).not.toHaveBeenCalled();
+	});
+
+	it("rejects a malformed activation checkpoint before recording or waiting", async function _InvalidActivation()
+	{
+		const preparation = { receiptId: "preparation-1", historyReference: "history-1", digest: `sha256:${"b".repeat(64)}` as const };
+		const persistence = {
+			authorizeOccurrenceStage: vi.fn().mockResolvedValue(_savedOccurrence()),
+			recordPreparation: vi.fn().mockResolvedValue(preparation),
+			recordActivation: vi.fn(),
+		} as unknown as RoutineWorkflowPersistence;
+		const dependencies = {
+			persistence,
+			cipher: { decrypt: vi.fn().mockResolvedValue("Do the work."), encrypt: vi.fn() },
+			preparation: { prepare: vi.fn().mockResolvedValue(preparation) },
+			activation: { activate: vi.fn().mockResolvedValue({ status: RoutineComputerActivationStatus.Pending, notBeforeEpochMs: 10_000, expiresAtEpochMs: 9_000 }) },
+			runAdmission: { admit: vi.fn() },
+		} as unknown as RoutineWorkflowDependencies;
+		const context = { task: _TASK, attempt: 1, checkpoint: vi.fn(async function _Checkpoint(_step, operation) { return await operation(); }), sleepUntil: vi.fn() } as unknown as IWorkflowTaskContext;
+
+		await expect(__CreateRoutineWorkflowDefinitions(dependencies).occurrence.run(context, { siloId: "silo-1", firingId: "firing-1", routineId: "routine-1", routineRevision: 2 })).rejects.toThrow("routine computer activation result is invalid");
+		expect(persistence.recordActivation).not.toHaveBeenCalled();
+		expect(context.sleepUntil).not.toHaveBeenCalled();
 	});
 
 	it("stops before a later external stage after a durable authority refusal", async function _refusal()
@@ -150,7 +289,7 @@ describe("routine durable workflows", function _suite()
 			persistence,
 			cipher: { decrypt: vi.fn().mockResolvedValue("Do the work."), encrypt: vi.fn() },
 			preparation: { prepare: vi.fn().mockResolvedValue(preparation) },
-			activation: { activate: vi.fn().mockResolvedValue(activation) },
+			activation: { activate: vi.fn().mockResolvedValue({ status: RoutineComputerActivationStatus.Active, receipt: activation }) },
 			runAdmission: { admit: vi.fn().mockResolvedValue({ runId: "run-1", inputSnapshotDigest: "invalid", runTask: { taskId: "task-1", taskName: "agents.runs.execute/v1", idempotencyKey: "run-1" } }) },
 		} as unknown as RoutineWorkflowDependencies;
 		const context = { task: _TASK, attempt: 1, checkpoint: vi.fn(async (_step, operation) => await operation()), waitForEvent: vi.fn(), spawnChild: vi.fn(), awaitChild: vi.fn(), sleepUntil: vi.fn() } as unknown as IWorkflowTaskContext;

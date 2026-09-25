@@ -56,11 +56,12 @@ outcome. Its first result/effect reference remains unchanged through every later
 linked `AgentRun` owns the latest execution outcome. The future run-result adapter that reports those transitions is typed here but is not wired
 by this package.
 
-Before preparation, activation and run admission, the workflow opens a fresh transaction and
-rechecks lifecycle, every fixed audience member, both current effect grants and the selected managed
-service. The firing keeps the immutable instruction and audience revision selected when it was
-created, even if a later edit publishes another routine revision. A denial moves an unadmitted
-firing to `Refused` and retains any earlier stage receipts.
+Before preparation, every activation poll and run admission, the workflow opens a fresh transaction
+and rechecks lifecycle, every fixed audience member, both current effect grants and the selected
+managed service. A pending activation sleeps durably until its next bounded poll instead of failing
+the workflow attempt. The firing keeps the immutable instruction and audience revision selected when
+it was created, even if a later edit publishes another routine revision. A denial moves an
+unadmitted firing to `Refused` and retains any earlier stage receipts.
 The external adapters must repeat the relevant check at their authoritative write because a database
 check cannot remain atomic with later external I/O.
 
@@ -78,6 +79,9 @@ actor from the persisted trigger rather than accepting it from a worker request.
 - `PrismaRoutineOccurrencePreparationRepository` adopts the conversation owner's transaction so
   authority, final audience grants and the immutable preparation marker commit together. App
   composition injects it through the narrow scheduling-contract factory.
+- `PrismaRoutineOccurrenceActivationRepository` adopts the computer owner's transaction, matches
+  the exact saved preparation and repeats current activation authority before first activation or
+  receipt recovery. It records or refuses only an unadmitted preparing firing.
 - `RoutineInstructionCipherAdapter` binds encrypted instructions to the silo, destination,
   requester and immutable routine revision. Composition supplies the existing mounted payload
   cipher; this package neither loads keys nor implements another encryption algorithm.
@@ -138,12 +142,15 @@ transaction; the adapter never retries after that transaction ends.
 
 Schedule and occurrence tasks are admitted inside the product transaction. Restart repair re-admits
 bounded active schedule heads with their existing keys. Occurrence preparation and computer
-activation each save an immutable receipt before the next external step. Replayed checkpoint and
-database receipts must contain nonblank references and an exact SHA-256 digest, with no converted or
-discarded fields. Conversation publication first asks the scheduling-owned repository to match every
+activation each save an immutable receipt before the next external step. Computer activation may
+return a bounded pending result; the workflow uses a deterministic checkpoint for each poll, repeats
+current activation authority outside that checkpoint and sleeps no later than the reported expiry.
+Replayed checkpoint and database receipts must contain nonblank references and an exact SHA-256
+digest, with no converted or discarded fields. Conversation publication first asks the scheduling-owned repository to match every
 immutable occurrence coordinate and repeat current authority. An existing exact marker is recovered
 without recreating grants; a first marker is saved under a no-run compare-and-set in the same caller-owned
-transaction as publication. Shared run admission must create the root `AgentRun` and set the firing backlink in
+transaction as publication. Computer activation uses the same pattern but never bypasses a fresh
+authority check when it recovers a saved activation receipt. Shared run admission must create the root `AgentRun` and set the firing backlink in
 the same transaction; this package then validates that exact link before moving the firing to
 `Running`.
 

@@ -79,6 +79,9 @@ export type { GroupChildAgentCandidate, GroupChildAgentResolver, GroupChildAutho
 export type { CompanyAssistantDirectory } from "./metadata/conversation-metadata.types";
 export { RoutineOccurrenceHistory } from "./routines/routine-occurrence-history";
 export { PrismaRoutineOccurrencePreparationUnitOfWork } from "./routines/prisma-routine-occurrence-preparation";
+export { RoutineComputerActivation } from "./routines/routine-computer-activation";
+export { PrismaRoutineComputerActivationProjectionUnitOfWork } from "./routines/prisma-routine-computer-activation-projection";
+export type { RoutineComputerActivationDependencies } from "./routines/routine-computer-activation.types";
 export type { RoutineOccurrencePreparationDependencies } from "./routines/routine-occurrence-preparation.types";
 export type { RoutineOccurrenceHistoryRecord } from "./routines/routine-occurrence-history.types";
 export { RoutineOccurrencePromptHistoryReader } from "./routines/routine-occurrence-prompt-history-reader";

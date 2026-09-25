@@ -261,13 +261,16 @@ export interface ConversationComputerActivationProjection
  *
  * Called by: {@link ConversationComputerActivationAuthority}.
  */
-export interface ConversationComputerActivationProjectionRepository
+export interface ConversationComputerActivationLeasePublisher
 {
 	/** Resolves coordinates or returns null for a foreign or non-agent conversation. */
 	resolve(command: ConversationComputerActivationCommand): Promise<ConversationComputerActivationProjection | null>;
-	/** Publishes the active lease and admits its server turn workflow after Kurrent has accepted the Active event. */
+	/** Publishes the active lease after Kurrent accepts the Active event; this contract does not admit a turn. */
 	publishActiveLease(command: ConversationComputerActiveLeaseProjectionCommand, activation: Pick<ConversationComputerActivationCommand, "activationEventId" | "causationId" | "causationPosition">): Promise<void>;
 }
+
+/** Ordinary message activation also admits its turn task in the lease-publication transaction. */
+export interface ConversationComputerActivationProjectionRepository extends ConversationComputerActivationLeasePublisher {}
 
 /** Keeps direct relational lease projection access inside the activation UnitOfWork. */
 export interface ConversationComputerActivationProjectionStore

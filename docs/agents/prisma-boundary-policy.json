@@ -3,6 +3,16 @@
 	"owners": {
 		"repositories": [
 			{
+				"path": "libs/backend/server/agents/scheduling/main/src/prisma-routine-occurrence-activation-repository.ts",
+				"adapter": "PrismaRoutineOccurrenceActivationRepository",
+				"contract": "RoutineOccurrenceActivationRepository",
+				"contractImportPath": "@opencrane/backend/server/agents/scheduling/contract",
+				"constructs": [
+					{ "adapter": "PrismaRoutineFactsRepository", "importPath": "./routine-prisma-facts" },
+					{ "adapter": "PrismaRoutineFiringRepository", "importPath": "./prisma-routine-firing-repository" }
+				]
+			},
+			{
 				"path": "libs/backend/server/agents/scheduling/main/src/prisma-routine-occurrence-preparation-repository.ts",
 				"adapter": "PrismaRoutineOccurrencePreparationRepository",
 					"contract": "RoutineOccurrencePreparationRepository",
@@ -1692,6 +1702,15 @@
 			}
 		],
 		"unitsOfWork": [
+			{
+				"path": "libs/backend/server/conversations/main/src/routines/prisma-routine-computer-activation-projection.ts",
+				"adapter": "PrismaRoutineComputerActivationProjectionUnitOfWork",
+				"contract": "RoutineComputerActivationProjection",
+				"contractImportPath": "./routine-computer-activation.types",
+				"constructs": [
+					{ "adapter": "PrismaConversationComputerActivationProjectionRepository", "importPath": "../computers/activation/db/prisma-conversation-computer-activation-repository" }
+				]
+			},
 			{
 				"path": "libs/backend/server/conversations/main/src/routines/prisma-routine-occurrence-preparation.ts",
 				"adapter": "PrismaRoutineOccurrencePreparationUnitOfWork",

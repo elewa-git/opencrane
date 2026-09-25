@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { RoutineComputerActivationReceipt, RoutineOccurrencePreparationReceipt, RoutineRunAdmissionReceipt } from "./routine-occurrence.types";
+import { RoutineComputerActivationStatus, type RoutineComputerActivationReceipt, type RoutineComputerActivationResult, type RoutineOccurrencePreparationReceipt, type RoutineRunAdmissionReceipt } from "./routine-occurrence.types";
 
 /** Accepts a nonblank saved identifier or opaque reference without changing it. */
 const _ReferenceSchema = z.string().refine(function _IsReference(value): boolean { return value.trim().length > 0; });
@@ -32,6 +32,16 @@ const _RoutineComputerActivationReceiptSchema: z.ZodType<RoutineComputerActivati
 	digest: _DigestSchema,
 }).strict();
 
+/** Validates every activation poll outcome without dropping unknown fields. */
+const _RoutineComputerActivationResultSchema: z.ZodType<RoutineComputerActivationResult> = z.discriminatedUnion("status", [
+	z.object({ status: z.literal(RoutineComputerActivationStatus.Active), receipt: _RoutineComputerActivationReceiptSchema }).strict(),
+	z.object({ status: z.literal(RoutineComputerActivationStatus.Pending), notBeforeEpochMs: z.number().int().safe().nonnegative(), expiresAtEpochMs: z.number().int().safe().nonnegative() }).strict(),
+	z.object({ status: z.literal(RoutineComputerActivationStatus.Refused) }).strict(),
+]).refine(function _HasBoundedWait(value): boolean
+{
+	return value.status !== RoutineComputerActivationStatus.Pending || value.notBeforeEpochMs <= value.expiresAtEpochMs;
+});
+
 /** Validates the complete run-admission checkpoint result and rejects unknown fields. */
 const _RoutineRunAdmissionReceiptSchema: z.ZodType<RoutineRunAdmissionReceipt> = z.object({
 	runId: _ReferenceSchema,
@@ -57,6 +67,17 @@ export function ___ParseRoutineComputerActivationReceipt(value: unknown): Routin
 	if (!parsed.success)
 	{
 		throw new Error("routine activation receipt is invalid");
+	}
+	return parsed.data;
+}
+
+/** Restores one complete activation poll outcome without converting saved timing or evidence. */
+export function ___ParseRoutineComputerActivationResult(value: unknown): RoutineComputerActivationResult
+{
+	const parsed = _RoutineComputerActivationResultSchema.safeParse(value);
+	if (!parsed.success)
+	{
+		throw new Error("routine computer activation result is invalid");
 	}
 	return parsed.data;
 }

@@ -32,7 +32,7 @@ signed-in participant ──► main ◄── HERE ──► history
 | `memory/source/` | Read the selected human message through current history access and recheck its encrypted source inside the command transaction. |
 | `memory/workflow/` | Declare identifier-only memory tasks and resume each saved provider and catalog phase through one Absurd workflow owner. The command transaction retains Absurd's returned receipt. First-dataset creation remains separately unfinished. |
 | `children/` | Resolve explicitly selected parent members, admit group-child work, preserve its original audience, write a closed group-child genesis origin, recover creation, and share human-reviewed text. |
-| `routines/` | Prepare hidden occurrence projections, encrypted service-authored instructions and checked history; publish the confirmed audience with a scheduling-owned receipt in one transaction. Bind prompt admission to that history without activating a computer or admitting a run. |
+| `routines/` | Prepare hidden occurrence projections, encrypted instructions and checked history; publish the confirmed audience with a scheduling-owned receipt. Activate the prepared computer through a separate lease-only transaction; leave run and turn-task admission to the later execution owner. |
 | `computers/` | Separate activation, lifecycle, checkpoint, turn and review operation owners. |
 | `computers/tools/` | Proposal admission, current dispatch access and saved result consumption each have their own owner. |
 | `computers/interruptions/` | Select and admit requester-owned Stop commands, record their outcome and let Absurd recover cancellation cleanup. |
@@ -97,7 +97,7 @@ signed-in participant ──► main ◄── HERE ──► history
   decrypted text outside the SQL transaction. `PrismaPersonalMemoryMessageSourceRepository`
   rechecks current read access, the visible position and the encrypted payload coordinates in the
   caller's transaction. Later conversation entries do not invalidate an unchanged selected message.
-- Computer activation atomically admits the existing Absurd turn task when it publishes an active lease. The workflow advances saved model, tool-result, continuation and completion state; the only Pod-facing turn route returns its lease-derived review credential.
+- Ordinary message activation atomically admits the existing Absurd turn task when it publishes an active lease. Routine activation saves only its lease and receipt; it must wait for root-run admission before a turn task exists. The turn workflow advances saved model, tool-result, continuation and completion state; the only Pod-facing turn route returns its lease-derived review credential.
 - Stop handling reloads the immutable causation message to derive its requester and never enters activation. Its Kurrent publisher gives final output and cancellation one checked turn-stream winner; cancellation commits the private receipt, safe interrupted log and active-turn settlement together.
   The turn store constructs and validates cancellation and settlement appends at the revision it
   decoded. The Stop publisher composes that pair with its receipt and log; it cannot substitute a
@@ -156,10 +156,30 @@ author and encrypted-byte digest before decryption. Only this attested routine p
 instruction as user-level model content. Ordinary service/system message compilation is unchanged;
 this path needs neither a fabricated human author nor a refreshed browser login.
 
+### Routine computer activation
+
+`RoutineComputerActivation` verifies the prepared instruction record, then uses the existing
+computer lifecycle and deployment-selected sandbox profile. Its initial lease and claim stay the
+same across polls. A normal cold start returns Pending with a next-check time bounded by the lease
+expiry; the scheduling workflow owns the durable wait. A retired computer, ended or expired lease,
+or unavailable release profile commits a pre-admission refusal. Missing or substituted history
+remains an error.
+
+`PrismaRoutineComputerActivationProjectionUnitOfWork` rechecks scheduling authority before claims
+and inside the transaction that saves the active lease and activation receipt. Its lease-only
+contract never spawns a turn. The receipt binds the preparation, occurrence, computer identity,
+profile, lease generation, expiry and assigned sandbox. Lost responses recover the same receipt;
+a saved receipt cannot recreate a missing realization. Refusal preserves earlier receipts and
+commits before control returns to the workflow. Traces contain occurrence identifiers, not text.
+
+The existing turn-receipt repository also offers a recovery-only reader. Missing or unbound run
+attempts return no receipt; partial or malformed bindings throw. Reading never admits another task.
+This is needed because duplicate run admission skips the initial transaction's task-spawn callback.
+
 These adapters use the narrow [scheduling contract](../../agents/scheduling/contract/README.md),
-not the scheduling implementation. They are not yet a runnable scheduling feature: computer
-activation, root-run/turn-task admission, runtime wiring and reviewed product controls still need
-integration. The preparation unit of work is exported but not registered with a worker or route.
+not the scheduling implementation. They are not yet a runnable scheduling feature: root-run/turn-task
+admission, the routine-aware compiler, runtime wiring and reviewed product controls remain open.
+Preparation and activation are exported but not registered with a worker or route.
 
 ### Tool progress and recovery
 
