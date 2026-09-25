@@ -13,7 +13,11 @@ does not repeat those product decisions. It authenticates each caller through Ku
 and accepts only the shared, bounded memory routes. The provider adapter translates validated
 requests into Cognee calls and returns receipts bound to the requested dataset, document and operation.
 The app composes that adapter with one authenticated Cognee session; Cognee then enforces the
-service user's dataset access-control list (ACL).
+service user's dataset access-control list (ACL). The gateway is Cognee's only network caller and
+its only login: Cognee keeps a search inside the one dataset the gateway names only in
+access-control mode, and that mode requires a logged-in user. The gateway signs in with one service
+user per silo and never shares that session with callers. See
+[ADR 0017](../../docs/adr/0017-cognee-access-control-mode-and-gateway-service-user.md).
 
 ```
  OpenCrane server  ─ projected caller token ──────────┐
@@ -50,7 +54,9 @@ not be routed through ingress. Cognee routes remain private to the provider adap
 This app owns workload authentication, process bootstrap, lifecycle and the read-only credential
 mount. It does not decide human permissions, select a memory dataset, or persist credentials. The
 OpenCrane server remains the product policy authority, and Cognee enforces the exact dataset named
-in the admitted request.
+in the admitted request. Every dataset belongs to the one service user, so Cognee's permissions do
+not separate employees; the server's dataset selection does, and Cognee's access-control mode makes
+that selection hold at retrieval. Network isolation remains the transport wall around this exchange.
 
 ## Dependency direction
 
@@ -78,8 +84,9 @@ chart refuses any render that omits them or disables NetworkPolicy.
 `email` and `password` keys are mounted as files. The silo deploy wrapper requires this name and does
 not create or read the Secret.
 
-`clustertenantManager.cognee.install` must remain `true`. **TODO:** support an authenticated BYO or
-non-private Cognee transport before allowing that mode; the chart currently fails closed instead.
+`clustertenantManager.cognee.install` must remain `true`. A shared or external Cognee is unsupported
+because the per-silo service user and NetworkPolicy both assume a private instance; the chart fails
+closed instead of allowing that mode.
 
 The `memory-gateway:test` target runs app configuration tests and the connected client/gateway
 contract in `tests/memory-gateway/__tests__`. The connected test imports both public adapters outside

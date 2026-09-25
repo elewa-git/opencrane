@@ -48,6 +48,13 @@ OpenCrane owns how Cognee is built, deployed, authenticated and isolated. Cognee
 and its provider data model. All product reads and writes still pass through OpenCrane's memory
 gateway port; no application calls Cognee directly.
 
+Network isolation decides who may call Cognee. It does not decide what one search may see inside
+Cognee: dataset-scoped retrieval exists only in Cognee's access-control mode, and that mode requires
+a login. The gateway therefore holds one Cognee service user per silo and forwards exactly one
+dataset UUID per request. Cognee's own permissions never separate employees; OpenCrane's dataset
+selection does. The decision and its evidence are in
+[ADR 0017](../../../docs/adr/0017-cognee-access-control-mode-and-gateway-service-user.md).
+
 This selected profile is intentionally narrow: one worker, one replica, Cognee's local SQLite
 relational store and one shared local file volume. Managed-file operations share an operating-system
 file lock across processes; dataset locks remain process-local. The qualification makes no safety
@@ -75,10 +82,11 @@ that it loads while the smoke container has no network. Each source repair check
 upstream preimage, patch digest and resulting postimage before the image can build.
 
 The chart fixes one Cognee replica and the SQLite relational provider, requires persistent storage,
-and enables
-`ENABLE_BACKEND_ACCESS_CONTROL` and `REQUIRE_AUTHENTICATION`. The gateway reads the service-user
-email and password from a pre-created Secret mounted as files. First-install registration remains
-disabled by default and requires an explicit, reviewed deployment override.
+and enables `ENABLE_BACKEND_ACCESS_CONTROL` and `REQUIRE_AUTHENTICATION`
+([ADR 0017](../../../docs/adr/0017-cognee-access-control-mode-and-gateway-service-user.md)). The
+gateway reads the service-user email and password from a pre-created Secret mounted as files.
+First-install registration remains disabled by default and requires an explicit, reviewed deployment
+override.
 
 Cognee's chat and embedding calls use the silo's release-local LiteLLM proxy. Keep
 `LLM_MODEL=openai/auto`, `EMBEDDING_PROVIDER=openai_compatible`, and
