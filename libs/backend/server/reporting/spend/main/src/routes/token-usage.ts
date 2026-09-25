@@ -17,7 +17,7 @@ function _ResolveSpendCaller(request: Parameters<SpendRouteCallerResolver>[0]): 
  * Build the token-usage route: recorded usage per user, newest sample first, with each user's
  * effective ceiling resolved for them — their own if they have one, otherwise the global one.
  *
- * Called by: apps/opencrane/src/bootstrap/http/routes.ts, mounted at `/api/v1/token-usage`.
+ * Called by: apps/opencrane/src/bootstrap/http/route-areas/platform-routes.ts, mounted at `/api/v1/token-usage`.
  *
  * @param prisma - Database client used to read usage samples and both kinds of budget row.
  * @returns An Express router carrying the usage route.

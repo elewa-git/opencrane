@@ -19,7 +19,8 @@ import { __UserOnboardingAuthority } from "./user-onboarding-authority";
  * reaches the browser.
  *
  * Called by: _CreateUserOnboardingComposition in
- * libs/backend/server/agents/onboarding/main/src/composition/user-onboarding-composition.ts, mounted in apps/opencrane/src/bootstrap/http/routes.ts.
+ * libs/backend/server/agents/onboarding/main/src/composition/user-onboarding-composition.ts, mounted in
+ * apps/opencrane/src/bootstrap/http/route-areas/personal-workspace-routes.ts.
  *
  * @param dependencies - Workflow authority, chat authority, session owner resolver, and logger.
  * @returns A router ready to mount; it registers no authentication middleware of its own.

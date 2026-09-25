@@ -1,37 +1,24 @@
-import * as k8s from "@kubernetes/client-node";
-import type { PrismaClient } from "@prisma/client";
-import express, { type Express } from "express";
+import express, { type Express, type Router } from "express";
 
 import { ___RequestContext } from "@opencrane/backend/observability";
-import { _ErrorHandler } from "@opencrane/backend/server/infra/http";
-import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+import { _CreateHttpRequestLogger, _ErrorHandler } from "@opencrane/backend/server/infra/http";
 
-import type { InternalRuntimeConfig } from "../configuration/config.types";
 import { _log } from "../process/log";
 import { _RegisterInternalRoutes } from "./routes";
-import { _CreateHttpRequestLogger } from "@opencrane/backend/server/infra/http";
-import type { ConversationGeneratedFileWorkflowComposition } from "../conversations/conversation-generated-file-workflow-composition.types";
-import type { McpRuntimeComposition } from "../workflows/mcp-runtime-composition.types";
-
-/** Fails closed when an isolated app test does not supply the process workflow engine. */
-const _UnavailableWorkflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction"> = {
-	async spawn(): Promise<never>
-	{
-		throw new Error("workflow task admission is unavailable");
-	},
-	async emitEventInTransaction(): Promise<never>
-	{
-		throw new Error("workflow event admission is unavailable");
-	},
-};
+import type { InternalRouteDependencies } from "./routes.types";
 
 /**
  * Build the workload-facing Express application.
  *
  * It carries no browser session middleware: every route on this listener TokenReviews the calling
  * workload itself.
+ *
+ * @param dependencies - Long-lived services shared by the workload-facing routes.
+ * @param conversationComputerReviewCredential - Computer review-credential router, mounted before the generic parser.
+ * @param conversationComputerCheckpoint - Computer checkpoint router, mounted with its own body ceiling.
+ * @returns The internal Express listener before the lifecycle starts it.
  */
-export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, mcpRuntime: McpRuntimeComposition, generatedFiles: Pick<ConversationGeneratedFileWorkflowComposition, "scanAssets">, workflowExecution: Pick<IWorkflowEngine, "spawn" | "emitEventInTransaction"> = _UnavailableWorkflowExecution, conversationComputerReviewCredential?: import("express").Router, conversationComputerCheckpoint?: import("express").Router): Express
+export function _CreateInternalApp(dependencies: InternalRouteDependencies, conversationComputerReviewCredential?: Router, conversationComputerCheckpoint?: Router): Express
 {
 	const app = express();
 
@@ -48,11 +35,11 @@ export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.Authentica
 		app.use("/api/internal/conversation-computer", conversationComputerReviewCredential);
 	if (conversationComputerCheckpoint !== undefined)
 		app.use("/api/internal/conversation-computer/checkpoint", express.json({ limit: 16 * 1_024, strict: true }), conversationComputerCheckpoint);
-	app.use("/api/internal/artifact-preprocessor/jobs/:jobId/output", express.raw({ type: "text/plain", limit: config.artifactPreprocessorMaximumOutputBytes }));
+	app.use("/api/internal/artifact-preprocessor/jobs/:jobId/output", express.raw({ type: "text/plain", limit: dependencies.config.artifactPreprocessorMaximumOutputBytes }));
 	app.use(express.json());
 
 	// 3. Mount only workload-facing routes and terminate failures through the structured handler.
-	_RegisterInternalRoutes(app, prisma, authApi, config, mcpRuntime, generatedFiles, workflowExecution);
+	_RegisterInternalRoutes(app, dependencies);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

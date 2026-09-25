@@ -87,9 +87,27 @@ async function _Main(): Promise<void>
 	// Public product routes authenticate browser sessions; internal routes verify the calling workload's identity.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
-	const publicApp = _CreatePublicApp(prisma, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects, memoryWorkflow, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
+	const publicApp = _CreatePublicApp(authentication, publicHealth, {
+		prisma,
+		conversations: {
+			history: historyStore.historyStore,
+			keyringPath: config.conversationPrivatePayloadKeyringPath,
+			sandboxProfile: agentSandboxReleaseProfile,
+			memoryWorkflow,
+			artifactScannerEnabled: config.runtime.artifactScannerEnabled,
+		},
+		tools: { workflows, runtime: mcpRuntime },
+		providerEffects,
+	});
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);
-	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, mcpRuntime, generatedFiles, workflows.execution, conversationComputerWorkflows.reviewCredentialRouter, conversationComputerLifecycle.router);
+	const internalApp = _CreateInternalApp({
+		prisma,
+		authApi: kubernetes.authApi,
+		config: config.runtime,
+		mcpRuntime,
+		generatedFiles,
+		workflowExecution: workflows.execution,
+	}, conversationComputerWorkflows.reviewCredentialRouter, conversationComputerLifecycle.router);
 	// Start remaining workers after route composition registers its workflows, then bind both listeners and shutdown cleanup.
 	await _StartProcessLifecycle(publicApp, internalApp, prisma, config, unbindConsole, mcpRuntime.authority, workflows.runtime, providerEffects, historyStore, conversationComputerWorkers);
 }

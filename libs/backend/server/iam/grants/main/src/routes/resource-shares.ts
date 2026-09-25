@@ -20,7 +20,7 @@ function _toResponse(record: ResourceShareRecord): ResourceShareResponse
 /**
  * Exposes direct resource sharing without owning identity, persistence, or transaction policy.
  *
- * Called by: apps/opencrane/src/bootstrap/http/routes.ts, mounted only at `/api/v1/resource-shares`.
+ * Called by: apps/opencrane/src/bootstrap/http/route-areas/identity-access-routes.ts, mounted only at `/api/v1/resource-shares`.
  * @param service - Resource-sharing authority composed by the application root.
  * @param resolveCaller - Adapter from verified HTTP identity to one local Principal.
  * @returns Express router for listing migrated shares and recipient revocation.

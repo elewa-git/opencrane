@@ -12,7 +12,7 @@ import type { PersonalArtifactCatalogueRouterDependencies } from "./personal-art
  *
  * Called by: `_CreatePersonalArtifactCatalogueRouter` in
  * prisma-personal-artifact-catalogue.router.ts, mounted at `/api/v1/me/assets` by
- * apps/opencrane/src/bootstrap/http/routes.ts.
+ * apps/opencrane/src/bootstrap/http/route-areas/personal-workspace-routes.ts.
  *
  * @param dependencies - Caller resolver, catalogue repository, and logger.
  * @returns An Express router to mount under the authenticated public API.

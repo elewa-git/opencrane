@@ -7,7 +7,7 @@ import type { ApprovedPersonaBootstrapEvidence } from "./user-onboarding-chat.ty
  * Both fields come from the authenticated request principal. Nothing in this package ever accepts a
  * silo or a subject from a request body, a query string, or a header - if it did, any signed-in
  * user could drive another user's onboarding. The app builds this value in
- * apps/opencrane/src/app/routes.ts and passes it in as a {@link UserOnboardingOwnerResolver}.
+ * apps/opencrane/src/bootstrap/http/route-areas/personal-workspace-routes.ts and passes it in as a {@link UserOnboardingOwnerResolver}.
  *
  * The two fields together are the lookup key for every row in this package (the `siloId_userId`
  * unique key in Postgres).

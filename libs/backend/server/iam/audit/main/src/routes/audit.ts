@@ -26,7 +26,7 @@ function _ResolveAuditCaller(request: Parameters<AuditRouteCallerResolver>[0]): 
  * asks for one row more than the page size so it can report `hasMore` without a second count query.
  * A malformed or incomplete cursor is refused; `limit` is capped at 1000.
  *
- * Called by: apps/opencrane/src/bootstrap/http/routes.ts, mounted at /api/v1/audit.
+ * Called by: apps/opencrane/src/bootstrap/http/route-areas/identity-access-routes.ts, mounted at /api/v1/audit.
  * @param prisma - Silo Prisma client.
  * @returns Express router with the single GET / route.
  * @see AuditEntry
