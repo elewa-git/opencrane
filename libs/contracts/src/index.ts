@@ -37,6 +37,7 @@ export * from "./api/public-health.types";
 export * from "./skills/skill-authoring-validation-bootstrap-reference";
 export * from "./tool-progress";
 export * from "./inputs/run-input-snapshot.types";
+export { ___RunInputOriginSchema } from "./inputs/run-input-origin.validator";
 export * from "./agents/agent-controller-identity.types";
 export * from "./agents/agent-identity.types";
 export * from "./agents/agent-capability-grant.types";

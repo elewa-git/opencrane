@@ -1,5 +1,7 @@
 enum AgentRunTrigger {
   Interactive @map("interactive")
+  Scheduled   @map("scheduled")
+  Manual      @map("manual")
 }
 
 enum AgentRunState {
@@ -50,6 +52,14 @@ model AgentRun {
   agentRevisionId                   String                                @map("agent_revision_id")
   conversationId                    String?                               @map("conversation_id")
   trigger                           AgentRunTrigger
+  /// Links an automatic or manual root run to the one immutable routine occurrence that prepared it.
+  routineFiringId                   String?                               @unique @map("routine_firing_id")
+  /// Freezes the routine aggregate coordinate beside the run for duplicate and audit checks.
+  routineId                         String?                               @map("routine_id")
+  /// Freezes the positive routine revision selected by the occurrence.
+  routineRevision                   Int?                                  @map("routine_revision")
+  /// Freezes the UTC automatic slot; manual and interactive runs keep it null.
+  routineScheduledSlot              DateTime?                             @map("routine_scheduled_slot")
   agentIdentityId                   String                                @map("agent_identity_id")
   principalId                       String                                @map("principal_id")
   executionSubject                  Json                                  @map("execution_subject")
@@ -91,6 +101,7 @@ model AgentRun {
   revision                          AgentRevision                         @relation(fields: [agentServiceId, agentRevisionId], references: [agentServiceId, id], onDelete: Restrict)
   service                           AgentService                          @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
   conversation                      Conversation?                         @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  scheduledFiring                   AgentRoutineFiring?                   @relation("ScheduledFiringRun", fields: [routineFiringId], references: [id], onDelete: Restrict)
   inputSnapshots                    RunInputSnapshot[]
   attemptCredentials                ConversationComputerAttemptCredential[]
   approvalRequests                  ApprovalRequest[]
@@ -139,6 +150,8 @@ model RunInputSnapshot {
   memoryQueryPolicy       Json      @map("memory_query_policy")
   budgetPolicy            Json      @map("budget_policy")
   promptCompilerVersion   String    @map("prompt_compiler_version")
+  /// Exact interactive or routine trigger provenance included in the snapshot digest.
+  origin                  Json
   digest                  String    @unique @map("input_digest")
   compiledAt              DateTime  @default(now()) @map("created_at")
   run                     AgentRun  @relation(fields: [runId], references: [id], onDelete: Restrict)

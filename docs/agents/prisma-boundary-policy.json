@@ -3,6 +3,34 @@
 	"owners": {
 		"repositories": [
 			{
+				"path": "libs/backend/server/conversations/main/src/routines/prisma-routine-occurrence-prompt-message-repository.ts",
+				"adapter": "PrismaRoutineOccurrencePromptMessageRepository",
+				"contract": "ConversationPromptMessageSource",
+				"contractImportPath": "@opencrane/backend/agents/execution/inputs",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/agents/scheduling/main/src/routine-prisma-facts.ts",
+				"adapter": "PrismaRoutineFactsRepository",
+				"contract": "RoutineFactsRepository",
+				"contractImportPath": "./routine-prisma-facts.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/agents/scheduling/main/src/prisma-routine-command-repository.ts",
+				"adapter": "PrismaRoutineCommandRepository",
+				"contract": "RoutineCommandPersistence",
+				"contractImportPath": "./routine-persistence.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/agents/scheduling/main/src/prisma-routine-firing-repository.ts",
+				"adapter": "PrismaRoutineFiringRepository",
+				"contract": "RoutineWorkflowPersistence",
+				"contractImportPath": "./routine-workflow.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/server/iam/authorization/main/src/approvals/prisma-tool-approval-scope.ts",
 				"adapter": "PrismaToolApprovalScopeRepository",
 				"contract": "ToolApprovalScopeAuthority",
@@ -1645,6 +1673,17 @@
 		],
 		"unitsOfWork": [
 			{
+				"path": "libs/backend/server/agents/scheduling/main/src/prisma-routine-unit-of-work.ts",
+				"adapter": "PrismaRoutineUnitOfWork",
+				"contract": "RoutineCommandPersistence",
+				"contractImportPath": "./routine-persistence.types",
+				"constructs": [
+					{ "adapter": "PrismaRoutineFactsRepository", "importPath": "./routine-prisma-facts" },
+					{ "adapter": "PrismaRoutineCommandRepository", "importPath": "./prisma-routine-command-repository" },
+					{ "adapter": "PrismaRoutineFiringRepository", "importPath": "./prisma-routine-firing-repository" }
+				]
+			},
+			{
 				"path": "libs/backend/server/iam/authorization/main/src/approvals/prisma-tool-approval-scope.ts",
 				"adapter": "PrismaToolApprovalScopeUnitOfWork",
 				"contract": "ToolApprovalScopeAuthority",
@@ -2808,6 +2847,8 @@
 			}
 		],
 		"compositions": [
+			"libs/backend/server/agents/scheduling/main/src/routine-prisma-facts.types.ts",
+			"libs/backend/server/agents/scheduling/main/src/routine-unit-of-work.types.ts",
 			"libs/backend/agents/execution/elicitation/main/src/self-tool-approval-scope.router.ts",
 			"libs/backend/server/iam/authorization/main/src/approvals/prisma-tool-approval-scope.ts",
 			"libs/backend/server/agents/artifacts/main/src/service/artifact-upload.factory.ts",

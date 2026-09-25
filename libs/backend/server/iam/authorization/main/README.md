@@ -70,6 +70,10 @@ the ordinary exact boundary-matching rules.
   clock even when PostgreSQL starts the transaction later. Callers supply server-derived time,
   never a browser timestamp. Reconciliation leaves existing activation times unchanged; current
   membership, future validity, expiry, revocation and competing deny grants still govern decisions.
+  Its restriction operation revokes unrevoked manager-owned grants outside an exact retained
+  maximum, including future-dated and expired grants. Retained grants keep their validity dates.
+  It never creates or reactivates a missing grant, so lifecycle retirement can narrow authority
+  without undoing an earlier revocation.
 - Exact resource retirement rechecks organisation administration and soft-revokes every active
   grant on the retiring coordinates inside the owning product transaction.
 - `PrismaManagedShareRevocationRepository` soft-revokes the exact manager-owned grant linked from
@@ -153,10 +157,14 @@ current grants, connection and run limits.
 An `Always` decision may create one active standing scope from that exact human-reviewed request.
 The scope binds the silo, requester Principal and subject, assistant and revision, connection owner,
 generation and endpoint, tool revision and action, canonical final arguments, and the explicitly
-null interactive routine coordinates. A later identical invocation receives a new one-use admission;
-the shared claim transaction rechecks every binding, current execution permission, and the active
-scope revision before consuming it. Changed arguments, assistant or connection details require a
-new human approval. This does not classify tools as writes or make an optional approval mandatory.
+null interactive routine coordinates or the exact routine and immutable routine revision. Routine
+coordinates come from the saved invocation, run, input snapshot, firing and original routine
+approval; a request cannot supply or override them. A routine scope applies to later occurrences of
+that same revision only. Another routine, a revised routine and interactive work cannot reuse it.
+A later identical invocation receives new one-use evidence; the shared claim transaction rechecks
+every binding, the current tool assignment, and the active scope revision before consuming it.
+Changed arguments, assistant, routine revision or connection details require a new human approval.
+This does not classify tools as writes or make an optional approval mandatory.
 
 The requester receives only Personal `ToolApprovalScope` Read and Revoke metadata grants. Listing
 returns safe reviewed labels through stable cursor pages and never returns hidden arguments or

@@ -143,7 +143,11 @@ shared backend libraries. It never imports an application or Kubernetes client.
 ## Data and persistence
 
 The main records are `AgentRun` and its append-only `RunInputSnapshot` rows. Initial admission saves
-the run, attempt-one snapshot and personal-owner read grant together. A conversation run later binds
+the run and attempt-one snapshot together, plus a personal-owner read grant only for a personal
+interactive run. Interactive snapshots bind exact final-human-message provenance. Automatic and
+manual routine snapshots instead bind the exact routine, revision, firing, slot and original
+approval provenance; their `AgentRun` is an independent root linked one-to-one to the firing and
+never a delegated tree child. A conversation run later binds
 one immutable Absurd task receipt before model or tool work can proceed. A failure rolls back its
 whole transaction.
 

@@ -30,6 +30,7 @@ model AgentService {
   updatedAt          DateTime                         @updatedAt @map("updated_at")
   revisions          AgentRevision[]                  @relation("AgentServiceRevisions")
   runs               AgentRun[]
+  selectedRoutines   AgentRoutine[]                   @relation("RoutineSelectedManagedService")
   conversations      Conversation[]
   mcpToolAssignments AgentRevisionMcpToolAssignment[]
   activeRevision     AgentRevision?                   @relation("ActiveAgentRevision", fields: [id, activeRevisionId], references: [agentServiceId, id], onDelete: Restrict)

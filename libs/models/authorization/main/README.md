@@ -20,6 +20,11 @@ from the `ToolInvocation` created only after the effect arguments are complete. 
 | `Decision` | The protected database change and its authorization evidence must commit together. |
 | `Effect` | The transaction creates a one-use admitted command before an external worker performs the effect. |
 
+Routine creation uses `RoutineCollection.Create`; reading, editing, retiring and firing an existing
+routine use its exact `Routine` resource. A routine grant never grants the executing assistant access
+to a model, tool, connection or destination. The scheduling owner separately checks the original
+requester and confirmed audience. This catalogue does not grant routine creation to existing members.
+
 ```
  product domain supplies a typed resource, action, boundary and Principal
                               │

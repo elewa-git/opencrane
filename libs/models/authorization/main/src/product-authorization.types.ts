@@ -22,6 +22,10 @@ export enum ProductAuthorizationResourceKinds
 	AgentRevision = "agent-revision",
 	/** Protects one durable run and its retry or cancellation lifecycle. */
 	AgentRun = "agent-run",
+	/** Protects a reviewed routine and the commands that change or fire it; it grants no execution permissions to its assistant. */
+	Routine = "routine",
+	/** Protects creation of a requester-owned routine before its stable identifier exists. */
+	RoutineCollection = "routine-collection",
 	/** Protects one durable external-action invocation lifecycle. */
 	ToolInvocation = "tool-invocation",
 	/** Protects one public MCP task before complete arguments produce its ToolInvocation. */

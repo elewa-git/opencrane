@@ -22,6 +22,10 @@ contract.
 [`api-spec`](./api-spec/main/) remains flat because it aggregates public paths from every group;
 placing it in one group would imply ownership of those capabilities.
 
+[`agents/scheduling`](./agents/scheduling/main/README.md) owns saved routines and occurrence progress.
+It selects automatic slots through pure agent models and asks injected history, computer, and run
+admission ports to prepare each independent execution; it does not own those implementations.
+
 ## Dependency direction
 
 The grouping is a navigational map, not a new `scope:<group>` policy. Existing per-domain NX

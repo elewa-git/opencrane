@@ -97,6 +97,10 @@ revision identifiers plus each saved name, description, exact input JSON Schema,
 schema digest. Compilation keeps that exact source name for disclosure and MCP dispatch, while it
 adds a provider-compatible `modelName` derived from the immutable revision identifier. The alias is
 sealed into the compiled input; it is neither stored in the snapshot nor used as permission.
+Its required `origin` discriminant keeps an interactive message boundary separate from an automatic
+or manual routine firing. Routine origin freezes the exact routine, revision, firing, slot and
+original approval provenance; it never turns the requester into the managed agent's execution
+Principal.
 Registry and provider credentials remain entirely behind server-owned execution boundaries and
 never enter the snapshot or conversation computer. The compiled model
 route also freezes the model registry's generated-output allowlist; the executor
@@ -173,7 +177,7 @@ personal-memory dataset or adopts a fact.
 - Hand-written DTOs/enums: hierarchical `Group` with nullable `parentId`, `ClusterTenant*`,
   `Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
   model-routing types, memory-gateway constants, `ThirdPartySource*`,
-  `RunInputSnapshot`/`RunInputSnapshotMcpTool`, `ExecutionSubject`,
+  `RunInputSnapshot`/`RunInputSnapshotMcpTool`, `RunInputOrigin`/`AgentRunTriggers`, `ExecutionSubject`,
   `TenantModelSet`, and domain-topology host builders.
 - `ConversationModelRequest`, `ConversationModelResponse`, `ConversationModelToolCall` and
   `ConversationModelToolExchange` — shared server-only model transport contracts. A request carries

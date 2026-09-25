@@ -34,6 +34,7 @@ model Conversation {
   assets                        ConversationAsset[]
   activeComputerLease           ConversationComputerActiveLease?
   childRequests                 ConversationChildRequest[]
+  destinationRoutines           AgentRoutine[]                    @relation("RoutineDestinationConversation")
   service                       AgentService?                   @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
 
   @@unique([id, siloId])

@@ -60,7 +60,7 @@ describe("group child immutable history", () =>
 		await f.history.establish(_REQUEST);
 		expect(f.streams.get("conversation-child")).toHaveLength(1);
 		expect(f.streams.get("conversation-computer-computer")?.[0]?.data).toMatchObject({ computer: { state: "cold", leaseGeneration: 1 }, lease: null });
-		expect(f.streams.get("conversation-child")?.[0]?.data).toMatchObject({ genesis: { origin: { requestId: _ID, parentConversationId: "parent", parentMessageId: _MESSAGE, parentMessagePosition: "3" } } });
+		expect(f.streams.get("conversation-child")?.[0]?.data).toMatchObject({ genesis: { origin: { kind: "group_child", requestId: _ID, parentConversationId: "parent", parentMessageId: _MESSAGE, parentMessagePosition: "3" } } });
 	});
 	it("commits the encrypted child message and activation atomically and recovers without reactivating", async () =>
 	{

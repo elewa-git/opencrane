@@ -119,7 +119,7 @@ if (authorityIndex < 0)
 }
 let authoritySql = _RemoveGeneratedObjects(current.slice(authorityIndex), normalizedGenerated);
 // Keep this accepted catalogue addition bound to the same canonical digest the TypeScript authority uses.
-authoritySql = authoritySql.replace(/(capability-catalog-opencrane-product-authorization-v1'[\s\S]*?\n    )'sha256:[0-9a-f]{64}'(,\n    )'(\[[^\n]*\])'::jsonb/u, function _StandingApprovalCapabilities(_seed, prefix, separator, payload)
+authoritySql = authoritySql.replace(/(capability-catalog-opencrane-product-authorization-v1'[\s\S]*?\n    )'sha256:[0-9a-f]{64}'(,\n    )'(\[[^\n]*\])'::jsonb/u, function _ProductCapabilities(_seed, prefix, separator, payload)
 {
 	const capabilities = JSON.parse(payload);
 	for (const capability of [
@@ -129,6 +129,17 @@ authoritySql = authoritySql.replace(/(capability-catalog-opencrane-product-autho
 	{
 		if (!capabilities.some(existing => existing.id === capability.id))
 			capabilities.splice(capabilities.findIndex(existing => existing.id === "skill:discover"), 0, capability);
+	}
+	for (const capability of [
+		{ id: "routine:read", resourceKind: "routine", actions: ["read"], evidence: "read" },
+		{ id: "routine:edit", resourceKind: "routine", actions: ["edit"], evidence: "decision" },
+		{ id: "routine:retire", resourceKind: "routine", actions: ["retire"], evidence: "decision" },
+		{ id: "routine:use", resourceKind: "routine", actions: ["use"], evidence: "effect" },
+		{ id: "routine-collection:create", resourceKind: "routine-collection", actions: ["create"], evidence: "decision" },
+	])
+	{
+		if (!capabilities.some(existing => existing.id === capability.id))
+			capabilities.splice(capabilities.findIndex(existing => existing.id === "tool-invocation:read"), 0, capability);
 	}
 	const canonical = function _Canonical(value)
 	{
@@ -307,8 +318,9 @@ BEGIN
         OR NEW."revocation_idempotency_digest" IS NOT NULL OR NEW."revocation_command_digest" IS NOT NULL
         OR NEW."scope_identity_digest" !~ '^sha256:[0-9a-f]{64}$' OR NEW."active_identity_digest" IS DISTINCT FROM NEW."scope_identity_digest"
         OR NEW."arguments_digest" !~ '^sha256:[0-9a-f]{64}$'
-        OR NEW."tool_action" <> 'invoke' OR NEW."routine_id" IS NOT NULL OR NEW."routine_revision" IS NOT NULL THEN
-        RAISE EXCEPTION 'new ToolApprovalScope requires exact active interactive consent coordinates';
+        OR NEW."tool_action" <> 'invoke' OR num_nonnulls(NEW."routine_id", NEW."routine_revision") NOT IN (0, 2)
+        OR (NEW."routine_revision" IS NOT NULL AND NEW."routine_revision" <= 0) THEN
+        RAISE EXCEPTION 'new ToolApprovalScope requires exact active consent coordinates';
     END IF;
     SELECT * INTO source_approval FROM "approval_requests" WHERE "id" = NEW."source_approval_request_id" FOR KEY SHARE;
     SELECT * INTO source_request FROM "elicitation_requests" WHERE "id" = source_approval."elicitation_request_id" FOR KEY SHARE;
@@ -320,6 +332,7 @@ BEGIN
         OR source_approval."action" IS DISTINCT FROM NEW."tool_action" OR source_approval."final_arguments" IS DISTINCT FROM NEW."reviewed_arguments"
         OR source_approval."final_arguments_digest" IS DISTINCT FROM NEW."arguments_digest" OR source_approval."principal_id" IS DISTINCT FROM NEW."connection_owner_principal_id"
         OR source_run."execution_subject"->'requester'->>'requesterPrincipalId' IS DISTINCT FROM NEW."requester_principal_id"
+        OR source_run."routine_id" IS DISTINCT FROM NEW."routine_id" OR source_run."routine_revision" IS DISTINCT FROM NEW."routine_revision"
         OR source_request."assigned_participant_id" IS DISTINCT FROM NEW."requester_subject_id" THEN
         RAISE EXCEPTION 'ToolApprovalScope requires its exact requester-approved Always decision';
     END IF;
@@ -335,16 +348,21 @@ CREATE FUNCTION "enforce_tool_approval_admission_write"() RETURNS trigger LANGUA
 DECLARE
     current_scope "tool_approval_scopes"%ROWTYPE;
     current_invocation "tool_invocations"%ROWTYPE;
+    current_run "agent_runs"%ROWTYPE;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ToolApprovalAdmission rows cannot be deleted'; END IF;
     SELECT * INTO current_scope FROM "tool_approval_scopes" WHERE "id" = COALESCE(NEW."scope_id", OLD."scope_id") FOR KEY SHARE;
     SELECT * INTO current_invocation FROM "tool_invocations" WHERE "id" = COALESCE(NEW."tool_invocation_id", OLD."tool_invocation_id") FOR UPDATE;
+    SELECT * INTO current_run FROM "agent_runs" WHERE "id" = current_invocation."run_id" FOR KEY SHARE;
     IF TG_OP = 'INSERT' THEN
         IF NEW."origin" IS DISTINCT FROM 'standing_consent'::"ToolApprovalAdmissionOrigin" OR NEW."consumed_at" IS NOT NULL OR NEW."consumed_claim_fence" IS NOT NULL
             OR current_scope."state" IS DISTINCT FROM 'active'::"ToolApprovalScopeState" OR NEW."scope_revision" IS DISTINCT FROM current_scope."revision"
             OR current_invocation."approval_required" IS DISTINCT FROM TRUE OR current_invocation."state" IS DISTINCT FROM 'awaiting_approval'::"ToolInvocationState"
             OR current_invocation."silo_id" IS DISTINCT FROM current_scope."silo_id" OR current_invocation."agent_service_id" IS DISTINCT FROM current_scope."agent_service_id"
             OR current_invocation."agent_revision_id" IS DISTINCT FROM current_scope."agent_revision_id" OR current_invocation."tool_revision_id" IS DISTINCT FROM current_scope."tool_revision_id"
+            OR current_run."id" IS NULL OR current_run."routine_id" IS DISTINCT FROM current_scope."routine_id"
+            OR current_run."routine_revision" IS DISTINCT FROM current_scope."routine_revision"
+            OR current_run."execution_subject"->'requester'->>'requesterPrincipalId' IS DISTINCT FROM current_scope."requester_principal_id"
             OR current_invocation."arguments_digest" IS DISTINCT FROM NEW."arguments_digest" OR NEW."arguments_digest" IS DISTINCT FROM current_scope."arguments_digest"
             OR current_invocation."arguments" IS DISTINCT FROM current_scope."reviewed_arguments" THEN
             RAISE EXCEPTION 'ToolApprovalAdmission requires an active exact scope and awaiting invocation';

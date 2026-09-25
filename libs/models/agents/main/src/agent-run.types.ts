@@ -1,4 +1,3 @@
-import type { ConversationId } from "@opencrane/models/conversations";
 import type { AgentRevisionId, AgentRunId, AgentServiceId, SiloId } from "./identifiers.types";
 
 /** Records the exact current AgentIdentity head that admission verified for an execution subject. */
@@ -217,8 +216,19 @@ export interface ExecutionSubject
 	readonly admission: ExecutionSubjectAdmissionEvidence;
 }
 
-/** Trigger that created an agent run. */
-export type AgentRunTrigger = "interactive";
+/** Stable durable vocabulary for the server-owned event that created one root run. */
+export enum AgentRunTriggers
+{
+	/** A verified browser turn with one final human-authored message started the run. */
+	Interactive = "interactive",
+	/** The product scheduler admitted one exact automatic routine occurrence. */
+	Scheduled = "scheduled",
+	/** An authorised product command admitted one exact manual routine occurrence. */
+	Manual = "manual",
+}
+
+/** Server-owned event that created one root run. */
+export type AgentRunTrigger = `${AgentRunTriggers}`;
 
 /** Stable durable lifecycle vocabulary for one agent-run attempt. */
 export enum AgentRunStates
@@ -258,8 +268,8 @@ export interface AgentRun
 	readonly agentServiceId: AgentServiceId;
 	/** Immutable revision executed by this run. */
 	readonly agentRevisionId: AgentRevisionId;
-	/** Conversation receiving user-visible output, or null for non-conversational runs. */
-	readonly conversationId: ConversationId | null;
+	/** Stable conversation identifier receiving user-visible output, or null for non-conversational runs. */
+	readonly conversationId: string | null;
 	/** Trigger that created the run. */
 	readonly trigger: AgentRunTrigger;
 	/** Immutable subject whose current evidence admitted this execution. */

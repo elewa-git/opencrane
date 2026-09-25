@@ -56,6 +56,13 @@ an explicit no-personal-memory policy: preference and dataset repositories are s
 provisioning and memory recall remain future work; an enabled policy with no valid dataset still
 denies admission.
 
+Routine occurrences use the same final assembly and current managed-agent authority, but a separate
+service-attested prompt reader supplies the prepared occurrence history. The command contains no
+browser requester and cannot manufacture a human message. Its snapshot freezes the exact routine,
+revision, firing, automatic slot or manual trigger, and original approval provenance. The occurrence
+conversation must already have an active computer lease, and current conversation access is still
+checked through the central authorization authority before admission commits.
+
 Compilation derives the required `finalOutput` mode from the saved conversation ID: a conversation
 run receives Conversation mode, while a run without a conversation receives Text mode. Personal and
 company conversations receive the same final-answer instructions, appended after their existing
@@ -176,6 +183,8 @@ ceiling or substitutes a different allowance.
   content while compiling.
 - `ConversationHistoryAdmissionReader` re-reads the exact Kurrent revision, ordered identifiers,
   final triggering message, and immutable human author before those identifiers enter a snapshot.
+- `RoutineOccurrencePromptAdmissionReader` re-reads the service-authored message set for one exact
+  routine firing; it never converts routine instructions into a human-authored turn.
 - `VerifiedConversationPromptMessageRepository` accepts decrypted messages only when the
   conversation-owned source returns the complete snapshot set exactly once and in order.
 

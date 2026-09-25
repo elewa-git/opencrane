@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationSubjectKinds } from "@opencrane/models/authorization";
 import type { AuthorizationBoundary, AuthorizationResourceLocator, AuthorizationSubject } from "@opencrane/models/authorization";
 import { __ManagedAuthorizationGrantKey, __PlanManagedAuthorizationGrantReconciliation } from "../managed-authorization-grant-policy";
-import type { ManagedAuthorizationGrantRepository, ManagedAuthorizationGrantSpec, ReconcileManagedAuthorizationGrantsCommand } from "../managed-authorization-grants.types";
+import type { ManagedAuthorizationGrantRepository, ManagedAuthorizationGrantRestrictionRepository, ManagedAuthorizationGrantSpec, ReconcileManagedAuthorizationGrantsCommand, RestrictManagedAuthorizationGrantsCommand } from "../managed-authorization-grants.types";
 
 /** Reconciles managed grants through the repository bound to the caller's exact transaction. */
 export function __ReconcileManagedAuthorizationGrantsInTransaction(transaction: Prisma.TransactionClient, command: ReconcileManagedAuthorizationGrantsCommand): Promise<number>
@@ -52,7 +52,7 @@ function _Spec(row: _Row): ManagedAuthorizationGrantSpec
 }
 
 /** Transaction-scoped adapter for one product editor's isolated grants. */
-export class PrismaManagedAuthorizationGrantRepository implements ManagedAuthorizationGrantRepository
+export class PrismaManagedAuthorizationGrantRepository implements ManagedAuthorizationGrantRepository, ManagedAuthorizationGrantRestrictionRepository
 {
 	private readonly _transaction: Prisma.TransactionClient;
 
@@ -85,5 +85,20 @@ export class PrismaManagedAuthorizationGrantRepository implements ManagedAuthori
 	async reconcileManagedResourceGrants(command: ReconcileManagedAuthorizationGrantsCommand): Promise<number>
 	{
 		return PrismaManagedAuthorizationGrantRepository.reconcileInTransaction(this._transaction, command);
+	}
+
+	/** Revokes manager-owned grants outside an exact retained maximum without creating grants. */
+	async restrictManagedResourceGrants(command: RestrictManagedAuthorizationGrantsCommand): Promise<number>
+	{
+		const plan = __PlanManagedAuthorizationGrantReconciliation({ ...command, grants: command.retainedGrants });
+		const rows = await this._transaction.authorizationGrant.findMany({ where: { siloId: command.siloId, managerId: command.managerId, resourceKind: command.resource.kind, resourceId: command.resource.id, effect: "Allow", revokedAt: null }, select: _SELECT });
+		const revokedIds = rows.filter(row => !plan.desiredByKey.has(__ManagedAuthorizationGrantKey(_Spec(row)))).map(row => row.id);
+		if (revokedIds.length === 0)
+		{
+			return 0;
+		}
+		await this._transaction.authorizationGrant.updateMany({ where: { id: { in: revokedIds }, siloId: command.siloId, managerId: command.managerId, revokedAt: null }, data: { revokedAt: command.now } });
+		await this._transaction.auditEntry.create({ data: { siloId: command.siloId, action: "Updated", resource: `AuthorizationGrantManager/${command.managerId}/${command.resource.kind}/${command.resource.id}`, message: `Managed authorization grants restricted: ${revokedIds.length} revoked` } });
+		return revokedIds.length;
 	}
 }

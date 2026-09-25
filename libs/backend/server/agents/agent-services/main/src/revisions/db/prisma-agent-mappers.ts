@@ -1,7 +1,6 @@
-import { ___ExecutionSubjectSchema } from "@opencrane/contracts";
-import { AgentServiceKinds, RevisionBoundaryCoverages, RevisionBoundaryKinds, type AgentBudget, type AgentRevision, type AgentRevisionState, type AgentRun, type AgentRunState, type AgentRunTerminalReason, type AgentRunTrigger, type AgentService, type AgentServiceKind, type AgentServiceState, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
+import { AgentServiceKinds, RevisionBoundaryCoverages, RevisionBoundaryKinds, type AgentBudget, type AgentRevision, type AgentRevisionState, type AgentService, type AgentServiceKind, type AgentServiceState, type RevisionBoundaryAttachment } from "@opencrane/models/agents";
 
-import type { AgentRevisionRow, AgentRunRow, AgentServiceRow } from "./prisma-agent-mappers.types";
+import type { AgentRevisionRow, AgentServiceRow } from "./prisma-agent-mappers.types";
 
 /** Maps a Prisma AgentService lifecycle identifier to the target contract value. */
 export function _serviceState(value: string): AgentServiceState
@@ -56,48 +55,6 @@ export function _revisionState(value: string): AgentRevisionState
 	}
 }
 
-/** Maps a Prisma AgentRun trigger identifier to the target contract value. */
-export function _runTrigger(value: string): AgentRunTrigger
-{
-	switch (value)
-	{
-		case "Interactive": return "interactive";
-		default: throw new Error(`unknown AgentRun trigger: ${value}`);
-	}
-}
-
-/** Maps a Prisma AgentRun lifecycle identifier to the target contract value. */
-export function _runState(value: string): AgentRunState
-{
-	switch (value)
-	{
-		case "Accepted": return "accepted";
-		case "Queued": return "queued";
-		case "Assigned": return "assigned";
-		case "Running": return "running";
-		case "WaitingForInput": return "waiting_for_input";
-		case "Completed": return "completed";
-		case "Failed": return "failed";
-		default: throw new Error(`unknown AgentRun state: ${value}`);
-	}
-}
-
-/** Maps a Prisma AgentRun terminal-reason identifier to the target contract value, or null. */
-export function _runTerminalReason(value: string | null): AgentRunTerminalReason | null
-{
-	if (value === null)
-		return null;
-	switch (value)
-	{
-		case "Success": return "success";
-		case "PolicyDenied": return "policy_denied";
-		case "BudgetExhausted": return "budget_exhausted";
-		case "RuntimeFailure": return "runtime_failure";
-		case "InvalidInput": return "invalid_input";
-		default: throw new Error(`unknown AgentRun terminal reason: ${value}`);
-	}
-}
-
 /** Maps one Prisma service row to the dependency-light target contract. */
 export function _mapService(row: AgentServiceRow): AgentService
 {
@@ -136,30 +93,5 @@ export function _mapRevision(row: AgentRevisionRow): AgentRevision
 		authoredBy: row.authoredBy,
 		createdAt: row.createdAt.toISOString(),
 		publishedAt: row.publishedAt?.toISOString() ?? null,
-	};
-}
-
-/** Maps one durable Prisma run row to the dependency-light run-history contract. */
-export function _mapRun(row: AgentRunRow): AgentRun
-{
-	const parsedSubject = ___ExecutionSubjectSchema.safeParse(row.executionSubject);
-	if (!parsedSubject.success || parsedSubject.data.agentIdentityId !== row.agentIdentityId || parsedSubject.data.principalId !== row.principalId)
-		throw new Error("invalid persisted execution subject for agent run history");
-	return {
-		id: row.id,
-		siloId: row.siloId,
-		agentServiceId: row.agentServiceId,
-		agentRevisionId: row.agentRevisionId,
-		conversationId: row.conversationId,
-		trigger: _runTrigger(row.trigger),
-		executionSubject: parsedSubject.data,
-		requestIdempotencyKey: row.requestIdempotencyKey,
-		attempt: row.attempt,
-		state: _runState(row.state),
-		inputSnapshotDigest: row.inputSnapshotDigest,
-		acceptedAt: row.acceptedAt.toISOString(),
-		startedAt: row.startedAt?.toISOString() ?? null,
-		finishedAt: row.finishedAt?.toISOString() ?? null,
-		terminalReason: _runTerminalReason(row.terminalReason),
 	};
 }

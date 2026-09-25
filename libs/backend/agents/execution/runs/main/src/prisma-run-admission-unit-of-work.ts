@@ -1,8 +1,8 @@
-import { Prisma, type PrismaClient, type RunInputSnapshot as PrismaRunInputSnapshot } from "@prisma/client";
+import { AgentRoutineFiringDisposition, AgentRoutineFiringTrigger, AgentRunTrigger, Prisma, type AgentRun, type PrismaClient, type RunInputSnapshot as PrismaRunInputSnapshot } from "@prisma/client";
 
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 import { PrismaAuthorizationAuthority, PrismaManagedAuthorizationGrantRepository, type ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
-import { RUN_INPUT_SNAPSHOT_VERSION, ___ExecutionSubjectSchema, ___ParseRunBudgetPolicy, type RunInputSnapshot } from "@opencrane/contracts";
+import { AgentRunTriggers, RUN_INPUT_SNAPSHOT_VERSION, ___ExecutionSubjectSchema, ___ParseRunBudgetPolicy, ___RunInputOriginSchema, type RunInputSnapshot } from "@opencrane/contracts";
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
@@ -170,6 +170,8 @@ class PrismaRunAdmissionRepository implements RunAdmissionPersistenceRepository
 			return null;
 		if (!_MatchesRun(run, command))
 			return { outcome: RunAdmissionOutcomes.Denied, reason: RunAdmissionDenialReasons.AuthorityConflict };
+		if (command.trigger !== AgentRunTriggers.Interactive && !await this._MatchesRoutineFiring(run.id, command))
+			return { outcome: RunAdmissionOutcomes.Denied, reason: RunAdmissionDenialReasons.AuthorityConflict };
 		const row = await this._transaction.runInputSnapshot.findUnique({ where: { runId_attempt_digest: { runId: run.id, attempt: run.attempt, digest: run.inputSnapshotDigest } } });
 		if (row === null || !_MatchesSnapshot(row, run.id, command))
 			return { outcome: RunAdmissionOutcomes.Denied, reason: RunAdmissionDenialReasons.AuthorityConflict };
@@ -180,9 +182,36 @@ class PrismaRunAdmissionRepository implements RunAdmissionPersistenceRepository
 	async persist(command: RunAdmissionCommand, value: RunAdmissionBuild, admittedAt: Date): Promise<void>
 	{
 		const subject = _ExecutionSubject(value.snapshot.executionSubject, value.snapshot.executionSubject.agentIdentityId, value.snapshot.executionSubject.principalId);
-		await this._transaction.agentRun.create({ data: { id: command.runId, siloId: command.siloId, agentServiceId: value.authority.agentServiceId, agentRevisionId: value.authority.agentRevisionId, conversationId: command.conversationId, trigger: "Interactive", agentIdentityId: subject.agentIdentityId, principalId: subject.principalId, executionSubject: _Json(subject), requestIdempotencyKey: command.requestIdempotencyKey, inputSnapshotDigest: value.snapshot.digest, acceptedAt: admittedAt } });
+		const routine = command.trigger === AgentRunTriggers.Interactive ? null : command.routineInput;
+		const data: Prisma.AgentRunUncheckedCreateInput = { id: command.runId, siloId: command.siloId, agentServiceId: value.authority.agentServiceId, agentRevisionId: value.authority.agentRevisionId, conversationId: command.conversationId, trigger: _PrismaRunTrigger(command), routineFiringId: routine?.firingId ?? null, routineId: routine?.routineId ?? null, routineRevision: routine?.routineRevision ?? null, routineScheduledSlot: routine?.scheduledSlot === null || routine === null ? null : new Date(routine.scheduledSlot), agentIdentityId: subject.agentIdentityId, principalId: subject.principalId, executionSubject: _Json(subject), requestIdempotencyKey: command.requestIdempotencyKey, inputSnapshotDigest: value.snapshot.digest, acceptedAt: admittedAt };
+		await this._transaction.agentRun.create({ data });
 		await this._transaction.runInputSnapshot.create({ data: _RunInputSnapshotData(value.snapshot) });
+		if (command.trigger !== AgentRunTriggers.Interactive)
+			await this._BindRoutineFiring(command);
 		await this._GrantPersonalOwnerRead(value, admittedAt);
+	}
+
+	/** Link one prepared firing to the run only when every stored occurrence coordinate still matches. */
+	private async _BindRoutineFiring(command: Exclude<RunAdmissionCommand, { readonly trigger: `${AgentRunTriggers.Interactive}` }>): Promise<void>
+	{
+		const routine = command.routineInput;
+		const result = await this._transaction.agentRoutineFiring.updateMany({
+			where: { id: routine.firingId, siloId: command.siloId, routineId: routine.routineId, routineRevision: routine.routineRevision, conversationId: command.conversationId!, requesterPrincipalId: routine.requesterPrincipalId, trigger: _PrismaRoutineTrigger(command), scheduledSlot: routine.scheduledSlot === null ? null : new Date(routine.scheduledSlot), runId: null, disposition: AgentRoutineFiringDisposition.Preparing, workflowTaskId: routine.workflowTaskId, workflowTaskName: routine.workflowTaskName, workflowTaskKey: routine.workflowTaskKey },
+			data: { runId: command.runId },
+		});
+		if (result.count !== 1)
+			throw new _AdmissionDenied(RunAdmissionDenialReasons.AuthorityConflict);
+	}
+
+	/** Verify a duplicate still owns the exact firing and saved occurrence workflow fence. */
+	private async _MatchesRoutineFiring(runId: string, command: Exclude<RunAdmissionCommand, { readonly trigger: `${AgentRunTriggers.Interactive}` }>): Promise<boolean>
+	{
+		const routine = command.routineInput;
+		const firing = await this._transaction.agentRoutineFiring.findUnique({ where: { id: routine.firingId } });
+		return firing !== null && _AllowsDuplicateRoutineAdmission(firing.disposition) && firing.siloId === command.siloId && firing.routineId === routine.routineId && firing.routineRevision === routine.routineRevision
+			&& firing.conversationId === command.conversationId && firing.requesterPrincipalId === routine.requesterPrincipalId && firing.trigger === _PrismaRoutineTrigger(command)
+			&& _SameInstant(firing.scheduledSlot, routine.scheduledSlot) && firing.runId === runId && firing.workflowTaskId === routine.workflowTaskId
+			&& firing.workflowTaskName === routine.workflowTaskName && firing.workflowTaskKey === routine.workflowTaskKey;
 	}
 
 	/**
@@ -208,9 +237,16 @@ class PrismaRunAdmissionRepository implements RunAdmissionPersistenceRepository
 }
 
 /** Check the immutable run coordinates selected by the user-visible idempotency key. */
-function _MatchesRun(run: { readonly id: string; readonly siloId: string; readonly agentServiceId: string; readonly conversationId: string | null; readonly trigger: string }, command: RunAdmissionCommand): boolean
+function _MatchesRun(run: AgentRun, command: RunAdmissionCommand): boolean
 {
-	return run.siloId === command.siloId && run.agentServiceId === command.agentServiceId && run.conversationId === command.conversationId && run.trigger === "Interactive";
+	if (run.siloId !== command.siloId || run.agentServiceId !== command.agentServiceId || run.conversationId !== command.conversationId || run.trigger !== _PrismaRunTrigger(command))
+		return false;
+	if (command.trigger === AgentRunTriggers.Interactive)
+		return run.routineFiringId === null && run.routineId === null && run.routineRevision === null && run.routineScheduledSlot === null;
+	return run.routineFiringId === command.routineInput.firingId
+		&& run.routineId === command.routineInput.routineId
+		&& run.routineRevision === command.routineInput.routineRevision
+		&& _SameInstant(run.routineScheduledSlot, command.routineInput.scheduledSlot);
 }
 
 /** Check the current immutable snapshot coordinates before returning stored JSON to a duplicate caller. */
@@ -219,7 +255,8 @@ function _MatchesSnapshot(snapshot: PrismaRunInputSnapshot, storedRunId: string,
 	const parsed = ___ExecutionSubjectSchema.safeParse(snapshot.executionSubject);
 	if (!parsed.success || parsed.data.principalId !== snapshot.principalId || parsed.data.agentIdentityId !== snapshot.agentIdentityId)
 		return false;
-	return snapshot.snapshotVersion === RUN_INPUT_SNAPSHOT_VERSION && snapshot.runId === storedRunId && snapshot.siloId === command.siloId && snapshot.agentServiceId === command.agentServiceId && snapshot.conversationId === command.conversationId && (command.messageInput === null || parsed.data.requester.requesterPrincipalId === command.messageInput.author.principalId) && _MatchesMessageInput(command, snapshot.messageIds);
+	return snapshot.snapshotVersion === RUN_INPUT_SNAPSHOT_VERSION && snapshot.runId === storedRunId && snapshot.siloId === command.siloId && snapshot.agentServiceId === command.agentServiceId && snapshot.conversationId === command.conversationId
+		&& _MatchesOrigin(snapshot.origin, command) && _MatchesRequester(parsed.data.requester.requesterPrincipalId, command) && _MatchesMessageInput(command, snapshot.messageIds);
 }
 
 /** Require the transaction-built authority, snapshot, and execution subject to name one first attempt. */
@@ -236,8 +273,9 @@ function _MatchesAdmission(value: RunAdmissionBuild, command: RunAdmissionComman
 		&& value.snapshot.siloId === command.siloId
 		&& value.snapshot.agentServiceId === command.agentServiceId
 		&& value.snapshot.conversationId === command.conversationId
+		&& _MatchesOrigin(value.snapshot.origin, command)
 		&& _MatchesMessageInput(command, value.snapshot.messageIds)
-		&& (command.messageInput === null || parsed.data.requester.requesterPrincipalId === command.messageInput.author.principalId)
+		&& _MatchesRequester(parsed.data.requester.requesterPrincipalId, command)
 		&& parsed.data.runScope.runId === command.runId
 		&& parsed.data.runScope.attempt === 1
 		&& parsed.data.runScope.siloId === command.siloId
@@ -249,6 +287,8 @@ function _MatchesAdmission(value: RunAdmissionBuild, command: RunAdmissionComman
 /** Require one exact final message provenance for a conversation and no message input for non-conversational work. */
 function _MatchesMessageInput(command: RunAdmissionCommand, snapshotMessageIds: readonly string[]): boolean
 {
+	if (command.trigger !== AgentRunTriggers.Interactive)
+		return command.messageInput === null && snapshotMessageIds.length > 0 && new Set(snapshotMessageIds).size === snapshotMessageIds.length;
 	if (command.conversationId === null)
 		return command.messageInput === null;
 	if (command.messageInput === null || command.messageInput.messageId.trim().length === 0 || snapshotMessageIds.at(-1) !== command.messageInput.messageId)
@@ -267,6 +307,67 @@ function _MatchesMessageInput(command: RunAdmissionCommand, snapshotMessageIds: 
 		&& command.messageInput.author.authenticatedAt === command.requester.authenticatedAt;
 }
 
+/** Match the human author for interactive work or the stored routine requester for service work. */
+function _MatchesRequester(requesterPrincipalId: string, command: RunAdmissionCommand): boolean
+{
+	if (command.trigger === AgentRunTriggers.Interactive)
+		return command.messageInput === null || requesterPrincipalId === command.messageInput.author.principalId;
+	return requesterPrincipalId === command.routineInput.requesterPrincipalId;
+}
+
+/** Match every immutable trigger coordinate before accepting or releasing a snapshot. */
+function _MatchesOrigin(value: unknown, command: RunAdmissionCommand): boolean
+{
+	const parsed = ___RunInputOriginSchema.safeParse(value);
+	if (!parsed.success || parsed.data.kind !== command.trigger)
+		return false;
+	const origin = parsed.data;
+	if (origin.kind === AgentRunTriggers.Interactive)
+		return command.trigger === AgentRunTriggers.Interactive
+			&& origin.messageId === (command.messageInput?.messageId ?? null)
+			&& origin.historyRevision === (command.messageInput?.historyRevision ?? null);
+	if (command.trigger === AgentRunTriggers.Interactive)
+		return false;
+	return origin.routineId === command.routineInput.routineId
+		&& origin.routineRevision === command.routineInput.routineRevision
+		&& origin.firingId === command.routineInput.firingId
+		&& origin.scheduledSlot === command.routineInput.scheduledSlot
+		&& origin.requesterPrincipalId === command.routineInput.requesterPrincipalId
+		&& origin.requesterIssuer === command.routineInput.requesterIssuer
+		&& origin.requesterSubjectId === command.routineInput.requesterSubjectId
+		&& origin.requesterAuthenticatedAt === command.routineInput.requesterAuthenticatedAt
+		&& origin.workflowTaskId === command.routineInput.workflowTaskId
+		&& origin.workflowTaskName === command.routineInput.workflowTaskName
+		&& origin.workflowTaskKey === command.routineInput.workflowTaskKey;
+}
+
+/** Map the public serialized trigger to Prisma's enum member name. */
+function _PrismaRunTrigger(command: RunAdmissionCommand): AgentRunTrigger
+{
+	if (command.trigger === AgentRunTriggers.Interactive)
+		return AgentRunTrigger.Interactive;
+	return command.trigger === AgentRunTriggers.Scheduled ? AgentRunTrigger.Scheduled : AgentRunTrigger.Manual;
+}
+
+/** Map scheduled run provenance to the occurrence authority's trigger vocabulary. */
+function _PrismaRoutineTrigger(command: Exclude<RunAdmissionCommand, { readonly trigger: `${AgentRunTriggers.Interactive}` }>): AgentRoutineFiringTrigger
+{
+	return command.trigger === AgentRunTriggers.Scheduled ? AgentRoutineFiringTrigger.Automatic : AgentRoutineFiringTrigger.Manual;
+}
+
+/** Deny replay after an occurrence is cancelled, refused, failed, or deliberately skipped. */
+function _AllowsDuplicateRoutineAdmission(disposition: AgentRoutineFiringDisposition): boolean
+{
+	return disposition !== AgentRoutineFiringDisposition.Cancelled && disposition !== AgentRoutineFiringDisposition.Refused
+		&& disposition !== AgentRoutineFiringDisposition.Failed && disposition !== AgentRoutineFiringDisposition.SkippedOverlap;
+}
+
+/** Compare a nullable stored DateTime with its canonical snapshot representation. */
+function _SameInstant(stored: Date | null, expected: string | null): boolean
+{
+	return stored === null ? expected === null : expected !== null && stored.toISOString() === expected;
+}
+
 /**
  * Copy every contract field into Prisma's current append-only snapshot create shape.
  *
@@ -276,7 +377,7 @@ function _MatchesMessageInput(command: RunAdmissionCommand, snapshotMessageIds: 
 function _RunInputSnapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnapshotUncheckedCreateInput
 {
 	const subject = _ExecutionSubject(snapshot.executionSubject, snapshot.executionSubject.agentIdentityId, snapshot.executionSubject.principalId);
-	return { runId: snapshot.runId, attempt: snapshot.attempt, snapshotVersion: snapshot.snapshotVersion, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, agentRevisionId: snapshot.agentRevisionId, agentIdentityId: subject.agentIdentityId, principalId: subject.principalId, executionSubject: _Json(subject), personaRevisionId: snapshot.personaRevisionId, conversationId: snapshot.conversationId, messageIds: [...snapshot.messageIds], preferenceFactIds: [...snapshot.preferenceFactIds], artifactRevisionIds: [...snapshot.artifactRevisionIds], modelRoute: _Json(snapshot.modelRoute), mcpTools: _Json(snapshot.mcpTools), skillRevisionIds: [...snapshot.skillRevisionIds], memoryQueryPolicy: _Json(snapshot.memoryQueryPolicy), budgetPolicy: _Json(snapshot.budgetPolicy), promptCompilerVersion: snapshot.promptCompilerVersion, digest: snapshot.digest, compiledAt: new Date(snapshot.compiledAt) };
+	return { runId: snapshot.runId, attempt: snapshot.attempt, snapshotVersion: snapshot.snapshotVersion, origin: _Json(snapshot.origin), siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, agentRevisionId: snapshot.agentRevisionId, agentIdentityId: subject.agentIdentityId, principalId: subject.principalId, executionSubject: _Json(subject), personaRevisionId: snapshot.personaRevisionId, conversationId: snapshot.conversationId, messageIds: [...snapshot.messageIds], preferenceFactIds: [...snapshot.preferenceFactIds], artifactRevisionIds: [...snapshot.artifactRevisionIds], modelRoute: _Json(snapshot.modelRoute), mcpTools: _Json(snapshot.mcpTools), skillRevisionIds: [...snapshot.skillRevisionIds], memoryQueryPolicy: _Json(snapshot.memoryQueryPolicy), budgetPolicy: _Json(snapshot.budgetPolicy), promptCompilerVersion: snapshot.promptCompilerVersion, digest: snapshot.digest, compiledAt: new Date(snapshot.compiledAt) };
 }
 
 /**
@@ -288,7 +389,11 @@ function _RunInputSnapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnaps
 function _RunInputSnapshot(row: PrismaRunInputSnapshot): RunInputSnapshot
 {
 	const executionSubject = _ExecutionSubject(row.executionSubject, row.agentIdentityId, row.principalId);
-	return { runId: row.runId, attempt: row.attempt, siloId: row.siloId, agentServiceId: row.agentServiceId, agentRevisionId: row.agentRevisionId, snapshotVersion: row.snapshotVersion, conversationId: row.conversationId, messageIds: row.messageIds, personaRevisionId: row.personaRevisionId, preferenceFactIds: row.preferenceFactIds, artifactRevisionIds: row.artifactRevisionIds, skillRevisionIds: row.skillRevisionIds, memoryQueryPolicy: row.memoryQueryPolicy as RunInputSnapshot["memoryQueryPolicy"], mcpTools: row.mcpTools as unknown as RunInputSnapshot["mcpTools"], modelRoute: row.modelRoute as RunInputSnapshot["modelRoute"], budgetPolicy: ___ParseRunBudgetPolicy(row.budgetPolicy), executionSubject, promptCompilerVersion: row.promptCompilerVersion, digest: row.digest, compiledAt: row.compiledAt.toISOString() };
+	const parsedOrigin = ___RunInputOriginSchema.safeParse(row.origin);
+	if (!parsedOrigin.success)
+		throw new Error("Run input snapshot origin is invalid");
+	const origin = parsedOrigin.data;
+	return { runId: row.runId, attempt: row.attempt, siloId: row.siloId, agentServiceId: row.agentServiceId, agentRevisionId: row.agentRevisionId, snapshotVersion: row.snapshotVersion, origin, conversationId: row.conversationId, messageIds: row.messageIds, personaRevisionId: row.personaRevisionId, preferenceFactIds: row.preferenceFactIds, artifactRevisionIds: row.artifactRevisionIds, skillRevisionIds: row.skillRevisionIds, memoryQueryPolicy: row.memoryQueryPolicy as RunInputSnapshot["memoryQueryPolicy"], mcpTools: row.mcpTools as unknown as RunInputSnapshot["mcpTools"], modelRoute: row.modelRoute as RunInputSnapshot["modelRoute"], budgetPolicy: ___ParseRunBudgetPolicy(row.budgetPolicy), executionSubject, promptCompilerVersion: row.promptCompilerVersion, digest: row.digest, compiledAt: row.compiledAt.toISOString() };
 }
 
 /** Parse subject evidence and reject a row whose indexed identity coordinates diverge. */

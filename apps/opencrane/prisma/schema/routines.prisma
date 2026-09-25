@@ -1,0 +1,157 @@
+/// Whether a routine may admit automatic or manual occurrences.
+enum AgentRoutineStatus {
+  Active  @map("active")
+  Paused  @map("paused")
+  Retired @map("retired")
+}
+
+/// Why one immutable occurrence was considered for execution.
+enum AgentRoutineFiringTrigger {
+  Automatic @map("automatic")
+  Manual    @map("manual")
+}
+
+/// Durable progress or terminal outcome for one immutable routine occurrence.
+enum AgentRoutineFiringDisposition {
+  Preparing      @map("preparing")
+  Running        @map("running")
+  Waiting        @map("waiting")
+  Completed      @map("completed")
+  Failed         @map("failed")
+  Cancelled      @map("cancelled")
+  SkippedOverlap @map("skipped_overlap")
+  Refused        @map("refused")
+  Uncertain      @map("uncertain")
+}
+
+/// Names the requester command whose first committed result is replayed.
+enum AgentRoutineCommandKind {
+  Create @map("create")
+  Revise @map("revise")
+  Pause  @map("pause")
+  Resume @map("resume")
+  Retire @map("retire")
+  RunNow @map("run_now")
+}
+
+/// Stores one requester-owned routine and the cursor for its automatic occurrence chain.
+model AgentRoutine {
+  id                           String             @id
+  siloId                       String             @map("silo_id")
+  originalRequesterPrincipalId String             @map("original_requester_principal_id")
+  requesterIssuer              String             @map("requester_issuer")
+  requesterSubjectId           String             @map("requester_subject_id")
+  requesterAuthenticatedAt     DateTime           @map("requester_authenticated_at")
+  destinationConversationId    String             @map("destination_conversation_id")
+  selectedManagedServiceId     String             @map("selected_managed_service_id")
+  status                       AgentRoutineStatus  @default(Active)
+  currentRevision              Int                @default(1) @map("current_revision")
+  lifecycleRevision            Int                @default(1) @map("lifecycle_revision")
+  automaticEnabledAfter        DateTime           @map("automatic_enabled_after")
+  lastAutomaticOccurrence      DateTime?          @map("last_automatic_occurrence")
+  nextAutomaticOccurrence      DateTime?          @map("next_automatic_occurrence")
+  scheduleTaskId               String?            @map("schedule_task_id")
+  scheduleTaskName             String?            @map("schedule_task_name")
+  scheduleTaskKey              String?            @map("schedule_task_key")
+  createdAt                    DateTime            @map("created_at")
+  updatedAt                    DateTime            @map("updated_at")
+  requester                    Principal           @relation("RoutineOriginalRequester", fields: [originalRequesterPrincipalId, siloId], references: [id, siloId], onDelete: Restrict)
+  selectedManagedService       AgentService        @relation("RoutineSelectedManagedService", fields: [selectedManagedServiceId, siloId], references: [id, siloId], onDelete: Restrict)
+  destinationConversation      Conversation        @relation("RoutineDestinationConversation", fields: [destinationConversationId, siloId], references: [id, siloId], onDelete: Restrict)
+  revisions                    AgentRoutineRevision[]
+  firings                      AgentRoutineFiring[]
+  commandReceipts              AgentRoutineCommandReceipt[]
+
+  @@unique([id, siloId])
+  @@unique([scheduleTaskName, scheduleTaskKey], map: "agent_routines_schedule_task_key")
+  @@index([siloId, originalRequesterPrincipalId, status])
+  @@index([siloId, nextAutomaticOccurrence, status])
+  @@index([destinationConversationId, siloId])
+  @@map("agent_routines")
+}
+
+/// Stores encrypted instructions and the frozen explicit audience for one immutable revision.
+model AgentRoutineRevision {
+  id                          String       @id
+  siloId                      String       @map("silo_id")
+  routineId                   String       @map("routine_id")
+  revision                    Int
+  scheduleExpression          String       @map("schedule_expression")
+  scheduleTimezone            String       @map("schedule_timezone")
+  instructionKeyId            String       @map("instruction_key_id")
+  instructionNonce            Bytes        @map("instruction_nonce")
+  instructionAuthTag          Bytes        @map("instruction_auth_tag")
+  instructionCiphertext       Bytes        @map("instruction_ciphertext")
+  instructionCiphertextDigest String       @map("instruction_ciphertext_digest")
+  audiencePrincipalIds        String[]     @map("audience_principal_ids")
+  createdByPrincipalId        String       @map("created_by_principal_id")
+  createdAt                   DateTime     @map("created_at")
+  routine                     AgentRoutine @relation(fields: [routineId, siloId], references: [id, siloId], onDelete: Restrict)
+  firings                     AgentRoutineFiring[]
+
+  @@unique([routineId, revision])
+  @@unique([id, siloId])
+  @@unique([routineId, revision, siloId])
+  @@index([siloId, createdByPrincipalId])
+  @@map("agent_routine_revisions")
+}
+
+/// Stores one automatic slot or manual request before any asynchronous preparation starts.
+model AgentRoutineFiring {
+  id                 String                         @id
+  siloId             String                         @map("silo_id")
+  routineId          String                         @map("routine_id")
+  routineRevision    Int                            @map("routine_revision")
+  trigger            AgentRoutineFiringTrigger
+  scheduledSlot      DateTime?                      @map("scheduled_slot")
+  requesterPrincipalId String                       @map("requester_principal_id")
+  conversationId     String                         @unique @map("conversation_id")
+  runId              String?                        @unique @map("run_id")
+  disposition        AgentRoutineFiringDisposition
+  firingKey          String                         @map("firing_key")
+  workflowTaskId     String?                        @unique @map("workflow_task_id")
+  workflowTaskName   String?                        @map("workflow_task_name")
+  workflowTaskKey    String?                        @map("workflow_task_key")
+  preparationReceipt Json?                          @map("preparation_receipt")
+  activationReceipt  Json?                          @map("activation_receipt")
+  refusalReason      String?                        @map("refusal_reason")
+  overlapFiringId    String?                        @map("overlap_firing_id")
+  resultReference    String?                        @map("result_reference")
+  resultDigest       String?                        @map("result_digest")
+  createdAt          DateTime                       @map("created_at")
+  updatedAt          DateTime                       @map("updated_at")
+  finishedAt         DateTime?                      @map("finished_at")
+  routine            AgentRoutine                   @relation(fields: [routineId, siloId], references: [id, siloId], onDelete: Restrict)
+  revision           AgentRoutineRevision           @relation(fields: [routineId, routineRevision, siloId], references: [routineId, revision, siloId], onDelete: Restrict)
+  admittedRun        AgentRun?                      @relation("ScheduledFiringRun")
+  commandReceipts    AgentRoutineCommandReceipt[]
+
+  @@unique([id, siloId, routineId, routineRevision])
+  @@unique([firingKey, siloId])
+  @@unique([routineId, routineRevision, scheduledSlot], map: "agent_routine_firings_slot_key")
+  @@unique([workflowTaskName, workflowTaskKey], map: "agent_routine_firings_workflow_task_key")
+  @@index([routineId, disposition])
+  @@index([siloId, createdAt])
+  @@map("agent_routine_firings")
+}
+
+/// Replays the first committed result for one authenticated requester command.
+model AgentRoutineCommandReceipt {
+  id                   String                  @id
+  siloId               String                  @map("silo_id")
+  routineId            String                  @map("routine_id")
+  requesterPrincipalId String                  @map("requester_principal_id")
+  kind                 AgentRoutineCommandKind
+  idempotencyKey       String                  @map("idempotency_key")
+  commandDigest        String                  @map("command_digest")
+  result               Json
+  routineRevision      Int?                    @map("routine_revision")
+  firingId             String?                 @map("firing_id")
+  createdAt            DateTime                @map("created_at")
+  routine              AgentRoutine            @relation(fields: [routineId, siloId], references: [id, siloId], onDelete: Restrict)
+  firing               AgentRoutineFiring?     @relation(fields: [firingId], references: [id], onDelete: Restrict)
+
+  @@unique([siloId, requesterPrincipalId, kind, idempotencyKey], map: "agent_routine_commands_request_key")
+  @@index([routineId, createdAt])
+  @@map("agent_routine_command_receipts")
+}

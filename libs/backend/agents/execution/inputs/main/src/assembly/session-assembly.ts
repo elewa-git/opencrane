@@ -1,6 +1,6 @@
 import { __SameMembershipBinding } from "@opencrane/backend/server/iam/membership";
 import { __DigestRunInputSnapshot, RunAdmissionBuildOutcomes, RunAdmissionExistingVerificationOutcomes, RunAdmissionMessageInputModes, RunAdmissionOutcomes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type InitialRunAuthority, type RunAdmissionCommit, type RunAdmissionPrepare } from "@opencrane/backend/agents/execution/runs";
-import { RUN_INPUT_SNAPSHOT_VERSION, ___ParseRunBudgetPolicy, type RunBudgetPolicy, type RunInputSnapshot } from "@opencrane/contracts";
+import { AgentRunTriggers, RUN_INPUT_SNAPSHOT_VERSION, ___ParseRunBudgetPolicy, type RunBudgetPolicy, type RunInputOrigin, type RunInputSnapshot } from "@opencrane/contracts";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, ___SortBy } from "@opencrane/util";
 
@@ -175,12 +175,14 @@ function _isCommandValid(command: SessionAssemblyCommand): boolean
 		&& command.siloId.trim().length > 0
 		&& (command.conversationId === null || command.conversationId.trim().length > 0)
 		&& command.requestIdempotencyKey.trim().length > 0
-		&& _isMessageInputValid(command);
+		&& _isTriggerInputValid(command);
 }
 
-/** Require no message for non-conversational work or one exact pre-persisted history boundary for a conversation. */
-function _isMessageInputValid(command: SessionAssemblyCommand): boolean
+/** Require exactly the input arm owned by the selected server trigger. */
+function _isTriggerInputValid(command: SessionAssemblyCommand): boolean
 {
+	if (command.trigger !== AgentRunTriggers.Interactive)
+		return _isRoutineInputValid(command);
 	if (command.conversationId === null)
 		return command.messageInput === null;
 	const input = command.messageInput;
@@ -198,6 +200,27 @@ function _isMessageInputValid(command: SessionAssemblyCommand): boolean
 		&& input.author.authenticatedAt === command.requester.authenticatedAt;
 }
 
+/** Validate exact routine provenance without accepting a browser identity or forged human message. */
+function _isRoutineInputValid(command: Exclude<SessionAssemblyCommand, { readonly trigger: `${AgentRunTriggers.Interactive}` }>): boolean
+{
+	const input = command.routineInput;
+	if (command.conversationId === null || command.messageInput !== null || input.routineId.trim().length === 0
+		|| !Number.isSafeInteger(input.routineRevision) || input.routineRevision <= 0 || input.firingId.trim().length === 0
+		|| input.requesterPrincipalId.trim().length === 0 || input.requesterIssuer.trim().length === 0 || input.requesterSubjectId.trim().length === 0
+		|| !_isUtcInstant(input.requesterAuthenticatedAt) || input.workflowTaskId.trim().length === 0 || input.workflowTaskName.trim().length === 0 || input.workflowTaskKey.trim().length === 0)
+		return false;
+	if (command.trigger === AgentRunTriggers.Manual)
+		return input.scheduledSlot === null;
+	return input.scheduledSlot !== null && _isUtcInstant(input.scheduledSlot);
+}
+
+/** Accept one canonical UTC instant rather than a locale-dependent date string. */
+function _isUtcInstant(value: string): boolean
+{
+	const parsed = new Date(value);
+	return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === value;
+}
+
 /** Maps the repository-internal `authority_conflict` refusal onto the public assembly vocabulary. */
 function _publicReason(reason: SessionAssemblyRefusalReason | "authority_conflict"): SessionAssemblyRefusalReason
 {
@@ -212,8 +235,9 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 		attempt: executionSubject.runScope.attempt,
 		siloId: command.siloId,
 		agentServiceId: run.agentServiceId,
-		agentRevisionId: run.agentRevisionId,
-		snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION,
+			agentRevisionId: run.agentRevisionId,
+			snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION,
+			origin: _RunInputOrigin(command),
 		conversationId: command.conversationId,
 		messageIds: [...conversation.messageIds],
 		personaRevisionId: persona.personaRevisionId,
@@ -230,6 +254,29 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 	};
 	const digest = __DigestRunInputSnapshot(withoutDigest);
 	return { ...withoutDigest, digest };
+}
+
+/** Freeze only the provenance arm that the validated admission command selected. */
+function _RunInputOrigin(command: SessionAssemblyCommand): RunInputOrigin
+{
+	if (command.trigger === AgentRunTriggers.Interactive)
+	{
+		return { kind: AgentRunTriggers.Interactive, messageId: command.messageInput?.messageId ?? null, historyRevision: command.messageInput?.historyRevision ?? null };
+	}
+	return {
+		kind: command.trigger,
+		routineId: command.routineInput.routineId,
+		routineRevision: command.routineInput.routineRevision,
+		firingId: command.routineInput.firingId,
+		scheduledSlot: command.routineInput.scheduledSlot,
+		requesterPrincipalId: command.routineInput.requesterPrincipalId,
+		requesterIssuer: command.routineInput.requesterIssuer,
+		requesterSubjectId: command.routineInput.requesterSubjectId,
+		requesterAuthenticatedAt: command.routineInput.requesterAuthenticatedAt,
+		workflowTaskId: command.routineInput.workflowTaskId,
+		workflowTaskName: command.routineInput.workflowTaskName,
+		workflowTaskKey: command.routineInput.workflowTaskKey,
+	};
 }
 
 /** Copies and canonically orders exact MCP tool revisions before sealing the run snapshot. */

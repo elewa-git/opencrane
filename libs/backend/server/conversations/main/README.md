@@ -31,7 +31,8 @@ signed-in participant ──► main ◄── HERE ──► history
 | `memory/commands/` | Validate and admit explicit Remember, Correct and Forget requests for an already Active personal dataset, and expose authorized content-free status. Never accept plaintext or caller-supplied authority. |
 | `memory/source/` | Read the selected human message through current history access and recheck its encrypted source inside the command transaction. |
 | `memory/workflow/` | Declare identifier-only memory tasks and resume each saved provider and catalog phase through one Absurd workflow owner. The command transaction retains Absurd's returned receipt. First-dataset creation remains separately unfinished. |
-| `children/` | Resolve explicitly selected parent members, admit group-child work, preserve its original audience, recover creation, and share human-reviewed text. |
+| `children/` | Resolve explicitly selected parent members, admit group-child work, preserve its original audience, write a closed group-child genesis origin, recover creation, and share human-reviewed text. |
+| `routines/` | Establish and recover an independent occurrence's service-attested instruction, closed routine origin, cold computer and private preparation receipt; bind prompt admission to that exact history. No permission or turn is admitted by these adapters. |
 | `computers/` | Separate activation, lifecycle, checkpoint, turn and review operation owners. |
 | `computers/tools/` | Proposal admission, current dispatch access and saved result consumption each have their own owner. |
 | `computers/interruptions/` | Select and admit requester-owned Stop commands, record their outcome and let Absurd recover cancellation cleanup. |
@@ -60,7 +61,9 @@ signed-in participant ──► main ◄── HERE ──► history
 - `PrismaGroupChildAuthority`, `_CreateGroupChildRouter` and `GROUP_CHILD_TASK` compose explicit child
   requests and recovery. Creation accepts only opaque membership references, includes the requester
   implicitly, and freezes only selected people who currently belong to the parent and can read the
-  source message. Recovery rechecks that saved audience without adding later parent participants.
+  source message. Its history genesis wraps the unchanged parent-request metadata with the closed
+  `group_child` origin kind. Recovery rechecks that saved audience without adding later parent
+  participants; genesis provenance does not inherit source history or grant parent access.
 - `PrismaConversationElicitationAccessRepository` applies existing child-sharing checks inside the assistant-question transaction; the browser route composition supplies it to elicitation.
 - `PrismaPersonalMemoryCommandUnitOfWork` and `_CreatePersonalMemoryCommandRouter` expose
   `POST /api/v1/me/memory/commands` and `GET /api/v1/me/memory/commands/:commandId`.
@@ -111,6 +114,32 @@ signed-in participant ──► main ◄── HERE ──► history
 - `_SelfConversationHistoryOpenapiPaths` contributes the conversation API description.
 
 History and computer snapshot classes are imported directly from their sibling packages.
+
+### Routine occurrence preparation
+
+`RoutineOccurrenceHistory` atomically creates three history streams: conversation genesis followed
+by one service-attested instruction, a cold computer, and a private content-free preparation receipt.
+The caller must first save encrypted instruction bytes and keep the relational conversation hidden
+until its current-authority and confirmed-audience transaction succeeds. History neither creates
+participants nor activates a turn. Exact retries recover the same receipt; changed ownership,
+payload or partial history is rejected. A legitimately advanced computer can still be recovered.
+
+`RoutineOccurrencePromptHistoryReader` compares the saved routine, firing, trigger, slot, requester,
+workflow task and assistant with the admission query. It exposes only the initial instruction at
+history revision 1, never destination-chat history or later participant messages. Corrupt saved
+evidence throws; missing preparation or a query mismatch returns no prompt. Current execution
+permissions remain the run-admission transaction's responsibility.
+
+`PrismaRoutineOccurrencePromptMessageRepository` rechecks that exact history and its admitted
+message selection, then checks the payload row's organisation, occurrence, OpenCrane service
+author and encrypted-byte digest before decryption. Only this attested routine path presents the
+instruction as user-level model content. Ordinary service/system message compilation is unchanged;
+this path needs neither a fabricated human author nor a refreshed browser login.
+
+These adapters use the narrow [scheduling contract](../../agents/scheduling/contract/README.md),
+not the scheduling implementation. They are preparation building blocks, not a runnable scheduling
+feature: the projection/grant unit of work, computer activation, runtime wiring and reviewed product
+controls still need integration.
 
 ### Tool progress and recovery
 

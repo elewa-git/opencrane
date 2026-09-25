@@ -354,6 +354,12 @@
       ],
       "@opencrane/backend/agents/runtime/mcp-file-generator": [
         "./libs/backend/agents/runtime/mcp-file-generator/main/src/index.ts"
+      ],
+      "@opencrane/backend/server/agents/scheduling": [
+        "./libs/backend/server/agents/scheduling/main/src/index.ts"
+      ],
+      "@opencrane/backend/server/agents/scheduling/contract": [
+        "./libs/backend/server/agents/scheduling/contract/src/index.ts"
       ]
     }
   },

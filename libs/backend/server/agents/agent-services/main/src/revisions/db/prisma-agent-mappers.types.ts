@@ -36,25 +36,3 @@ export interface AgentRevisionRow
 	readonly mcpToolAssignments: ReadonlyArray<{ toolRevisionId: string }>;
 	readonly boundaryAttachments: ReadonlyArray<{ boundaryKind: string; boundaryGroupId: string | null; boundaryPrincipalId: string | null; boundaryCoverage: string }>;
 }
-
-/** Locked Prisma run row shape consumed by the run-history mapper. */
-export interface AgentRunRow
-{
-	readonly id: string;
-	readonly siloId: string;
-	readonly agentServiceId: string;
-	readonly agentRevisionId: string;
-	readonly conversationId: string | null;
-	readonly trigger: string;
-	readonly agentIdentityId: string;
-	readonly principalId: string;
-	readonly executionSubject: JsonValue;
-	readonly requestIdempotencyKey: string;
-	readonly attempt: number;
-	readonly state: string;
-	readonly inputSnapshotDigest: string;
-	readonly acceptedAt: Date;
-	readonly startedAt: Date | null;
-	readonly finishedAt: Date | null;
-	readonly terminalReason: string | null;
-}
