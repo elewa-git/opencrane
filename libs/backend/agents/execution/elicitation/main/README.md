@@ -4,7 +4,7 @@
 
 ## What it owns
 
-This package owns every recoverable question that pauses an agent run for one selected participant.
+This package owns recoverable questions that pause an agent run for participant input.
 It gives approvals, choices, bounded text, memory permission, and reviewed A2UI actions one durable
 lifecycle while keeping the purpose-specific consequence behind a server-owned strategy.
 
@@ -17,9 +17,13 @@ lifecycle while keeping the purpose-specific consequence behind a server-owned s
 
 **In this flow:** [protocol](../../protocol/README.md) · [runs](../../runs/main/README.md)
 
-The invariant is that one exact participant may resolve one run-, attempt-, conversation-, and
-request-bound ask once. A stale run, ended participant, missing step-up, duplicate conflict, or
-expired deadline fails closed. Personal-memory permission pauses the exact `memory:recall`
+An ordinary clarification may be resolved once by any participant who passes the conversation's
+current sharing rules and central Read/Use permission checks. Parent-group membership alone is not
+enough: child access also requires inclusion in its saved audience and continuing access to the
+shared parent message. Without the injected conversation-owned sharing check, ordinary input is
+unavailable. Tool approval, personal-memory permission and reviewed A2UI actions remain restricted
+to their designated participant. A stale run, ended participation, missing step-up, conflicting
+answer or expired deadline fails closed. Personal-memory permission pauses the exact `memory:recall`
 invocation for its execution user, then binds the accepted receipt to that invocation revision,
 run attempt, query digest, frozen input snapshot, persona revision, and expiry. A parent or another
 group participant cannot answer in the execution user's place. Fact content never passes through
@@ -33,6 +37,8 @@ the generic elicitation result.
   reads a named request, and submits one typed response through session-derived ownership.
 - `PrismaRuntimeElicitationUnitOfWork` — opens runtime proposals and expires due requests on the
   dispatch transaction that already holds the run lock; it never nests another transaction.
+- `ElicitationConversationAccessFactory` — supplies the conversation owner's current sharing check
+  on the same transaction as a request read or response. It grants no invitation or approval.
 - `PersonalMemoryPermissionAuthority` — opens and verifies the exact execution-user receipt without reading or consuming remembered content.
 - `_CreateElicitationInterruptReader` — generic cursorless reconnect overlay for every body type.
 - `_CreateSelfElicitationActivityRouter` — bounded derived Activity references over canonical requests.
@@ -73,8 +79,8 @@ before and after calling the selected purpose implementation:
 | Current state and event | Guard and result | Atomic owner |
 | --- | --- | --- |
 | Running run receives a new question | Same run attempt and current participant access; pause as WaitingForInput and save the request. | Request repository |
-| Requested request receives a valid response | Assigned participant, current access, required step-up and central permission; record the response and mark Answered or Declined. | Request repository |
-| Resolved request receives the same response key and digest | Return the saved resolution without applying its purpose twice. A changed digest conflicts. | Request repository |
+| Requested request receives a valid response | Eligible shared-input participant, or designated participant for protected purposes; current access, required step-up and central permission; save the actual responder and mark Answered or Declined. | Request repository |
+| Resolved request receives the same response key and digest | Same actual responder with current access; return the saved resolution without applying its purpose twice. A different responder or digest conflicts. | Request repository |
 | Resolved request receives a new response key | Return a conflict without changing the request. | Request repository |
 | Requested request reaches its deadline | Apply purpose expiry, then mark Expired. | Request repository and selected purpose |
 | WaitingForInput run finishes a response or expiry | Resume only when both requested-input and pending-approval counts are zero. | Request repository |

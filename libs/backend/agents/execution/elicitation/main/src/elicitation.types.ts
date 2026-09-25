@@ -39,7 +39,7 @@ export interface OpenElicitationCommand
 	readonly runId: string;
 	/** Exact active attempt. */
 	readonly attempt: number;
-	/** Participant selected by server-owned conversation policy. */
+	/** Original designated participant; protected purposes restrict responses to this person. */
 	readonly assignedParticipantId: string;
 	/** Runtime caller-stable key. */
 	readonly requestKey: string;
@@ -86,7 +86,7 @@ export type RespondToElicitationResult =
 /** Read-only self projection port used by replay and direct reads. */
 export interface SelfElicitationQueryRepository
 {
-	/** Read one request only when the caller remains its active assigned participant. */
+	/** Read ordinary shared input or the caller's protected request with current conversation access. */
 	readOwned(siloId: string, conversationId: string, requestId: string, subjectId: string, now: Date): Promise<ConversationElicitation | null>;
 	/** List current cursorless overlays for one exact owned conversation. */
 	listOpenOwned(siloId: string, conversationId: string, subjectId: string, now: Date): Promise<readonly ConversationElicitation[]>;

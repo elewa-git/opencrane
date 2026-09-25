@@ -82,6 +82,7 @@ export { PrismaConversationComputerActivationUnitOfWork } from "./computers/acti
 export { PrismaConversationComputerLifecycleUnitOfWork } from "./computers/lifecycle/db/prisma-conversation-computer-lifecycle-unit-of-work";
 export { PrismaCompanyAssistantDirectory } from "./metadata/prisma-company-assistant-directory";
 export { PrismaConversationMetadataReader } from "./metadata/prisma-conversation-metadata-reader";
+export { PrismaConversationElicitationAccessRepository } from "./children/db/prisma-conversation-elicitation-access";
 export { PrismaGroupChildAgentResolver } from "./children/db/prisma-group-child-agent-resolver";
 export { _ResolveConversationCaller } from "./authorization/conversation-caller-resolver";
 export { _RegisterGroupChildWorkflow } from "./children/group-child-workflow";

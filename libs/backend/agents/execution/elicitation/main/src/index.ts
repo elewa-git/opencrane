@@ -4,4 +4,5 @@ export { _ElicitationOpenapiPaths } from "./openapi";
 export { _CreateSelfToolApprovalScopeRouter } from "./self-tool-approval-scope.router";
 export { _CreateSelfElicitationActivityRouter, _CreateSelfElicitationRouter } from "./prisma-self-elicitation.router";
 export { PersonalMemoryPermissionVerificationOutcomes } from "./elicitation.types";
+export type { ElicitationConversationAccess, ElicitationConversationAccessFactory } from "./elicitation-conversation-access.types";
 export type { ElicitationRunWakeFactory, ElicitationRunWakePort, ExpireElicitationBatchCommand, ExpireElicitationBatchResult, OpenElicitationCommand, PersonalMemoryPermissionAuthority, PersonalMemoryPermissionVerificationResult, RuntimeElicitationUnitOfWork } from "./elicitation.types";

@@ -1,5 +1,56 @@
 # OpenCrane — Active Plan
 
+## Collaborative clarification response authority — reviewed, 25 September 2026
+
+Accepted B permits any currently admitted subchat participant to answer an ordinary clarification.
+This incremental slice starts at published #908, immutable base
+`1548b6869cabd9af4ebd1cfcd55d97fbd45eaf05`, on
+`feat/collaborative-clarification-authority`. The unfinished 900-file MVP overlay remains untouched.
+The published predecessor is #908 against develop; #899 and #900 have merged. #900's merge commit
+is `10abd0ef6182f36bec13d8f1358e43b15ead7cd5`. The later parent visual repair at
+`498282c5aa8e5c1e5defbe0f93e9b79f7780ba06` is merged into this candidate without rewriting
+either history. The prior child head `994834eb26fb67a1a871160e00ea597f6c642373`, including its
+CI fixture type correction, is preserved. The only conflict was these adjacent plan sections;
+both are retained. All three incoming frontend files exactly match the reviewed parent source,
+and the child's backend, contracts, schema and baseline are unchanged by this integration.
+
+The elicitation owner requires a transaction-bound conversation-access port for RuntimeInput
+open, read, list, response and replay. Its conversations adapter reuses existing child access:
+active membership, exact current participation, Ready child, frozen audience and continuing parent
+source visibility with current child/parent Read. Existing response admission still supplies child
+Use. One response transaction records the actual respondent and resumes the run only once; replay
+must belong to that same respondent. Missing access composition fails closed. Tool approvals,
+personal-memory permission, A2UI and requester cancellation retain their existing restrictions.
+
+Implementation is frozen in a 21-file source/fixture manifest
+`2fcdba4112d638713f8b839db3f5eef10bbe91e9f547974388ba44048d37e0a7`.
+Architecture preflight and post-diff review pass with the required-port boundary. Integrated review
+found one acceptance gap: a saved ordinary response replay rechecked Read/sharing but returned before
+current Conversation/Use. The bounded repair adds a non-recording Use check and a real-database
+production-unit replay/revocation regression; protected approval receipt semantics stay unchanged.
+The repair passes all 79 elicitation unit tests, its type check and 21 focused PostgreSQL cases.
+Independent verification passes with all 21 frozen file hashes matched and no remaining finding.
+The broader test wave below preceded the repair; the server build and mechanical/Prisma checks
+also passed again after it. This is a reviewed source checkpoint, not completed U2 or MVP.
+The three affected backend test/type-check targets, server build/OpenAPI generation, boundary
+lint, baseline/release binding, workflow/authorization/app ownership and Prisma guards pass.
+Focused final-overlay checks pass 44 elicitation, 13 adapter and seven baseline-contract tests;
+mechanical style reports no errors or warnings. The module-growth candidate is the existing
+elicitation transaction owner, whose added access/replay checks are included in independent review.
+
+Fresh native PostgreSQL 17.11 in UTC passes 140 integration tests across 16 files and four SQL
+authority suites. This includes 20 collaborative guard cases and all 17 standing-consent cases.
+The original SQL fixtures establish database actor/race/visibility guards. The later production-unit
+case proves accept, exact replay, Use-only revocation and denied replay with no duplicate response,
+delivery, resume or admission; this is still not a real-account journey. The reviewed baseline and
+release manifest bind `817dd268b213580eaeea7d513739461e8c6056978d9510de267adf6dd94caa83`.
+No new capability, permission grant, database model, process or external effect is introduced.
+
+This is response authority only, not completed U2: explicit-audience selection, the model Ask loop,
+notifications and real-account acceptance remain separate. Invitation-history policy is untouched.
+Per-tool read-only classification awaits the user's choice of certifying authority and is not part
+of this slice. Publication/deployment/live-provider evidence remains separate from source checks.
+
 ## Standing approvals visual repair — 25 September 2026
 
 The isolated follow-up starts at #908 head

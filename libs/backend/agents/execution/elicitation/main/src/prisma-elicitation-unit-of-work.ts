@@ -8,6 +8,7 @@ import type { JsonValue } from "@opencrane/util";
 import { _ElicitationStateForResponse, _IsElicitationResponseValid } from "./elicitation-response";
 import { PrismaElicitationProductAuthorizationRepository } from "./elicitation-product-authorization";
 import type { ElicitationProductAuthorization } from "./elicitation-product-authorization.types";
+import type { ElicitationConversationAccess, ElicitationConversationAccessFactory } from "./elicitation-conversation-access.types";
 import { _ElicitationRequestMatchesOpenCommand } from "./elicitation-persistence-mapping";
 import type { ElicitationPurposeStrategy, ElicitationPurposeStrategies, PersonalMemoryPermissionPurpose } from "./purposes/elicitation-purpose.types";
 import { PrismaRuntimeInputPurposeAuthority } from "./purposes/runtime-input/prisma-runtime-input-purpose";
@@ -30,12 +31,15 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	private readonly _purposeStrategies: ElicitationPurposeStrategies;
 	/** Optional workflow wake owned by application composition. */
 	private readonly _wake: ElicitationRunWakePort | null;
+	/** Reuses conversation-owned sharing checks; ordinary input is unavailable without this port. */
+	private readonly _conversationAccess: ElicitationConversationAccess | null;
 
 	/** Bind all request, response, purpose, and resume operations to one transaction. */
-	constructor(transaction: Prisma.TransactionClient, wake: ElicitationRunWakePort | null = null)
+	constructor(transaction: Prisma.TransactionClient, wake: ElicitationRunWakePort | null = null, conversationAccess: ElicitationConversationAccess | null = null)
 	{
 		this._transaction = transaction;
 		this._wake = wake;
+		this._conversationAccess = conversationAccess;
 		this._memoryPermission = new PrismaPersonalMemoryPermissionPurposeAuthority(this._transaction);
 		this._productAuthorization = new PrismaElicitationProductAuthorizationRepository(this._transaction);
 		this._purposeStrategies = {
@@ -52,6 +56,8 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		const transaction = this._transaction;
 		const bodyDigest = __DigestCanonicalJson(command.body as unknown as JsonValue);
 		if (!await this._canParticipantAccess(command.siloId, command.conversationId, command.assignedParticipantId))
+			return null;
+		if (command.purpose === ElicitationPurposes.RuntimeInput && (this._conversationAccess === null || !await this._conversationAccess.canAccess(command.siloId, command.assignedParticipantId, command.conversationId)))
 			return null;
 		const existing = await transaction.elicitationRequest.findUnique({ where: { runId_attempt_requestKey: { runId: command.runId, attempt: command.attempt, requestKey: command.requestKey } } });
 		if (existing !== null)
@@ -102,7 +108,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		const request = await transaction.elicitationRequest.findUnique({ where: { id: command.requestId } });
 		if (request === null || request.siloId !== command.siloId || request.conversationId !== command.conversationId)
 			return { outcome: "not_found" };
-		if (request.assignedParticipantId !== command.subjectId)
+		if (!await this._canAccessRequest(request, command.subjectId))
 			return { outcome: "unauthorized" };
 		if (!await this._canParticipantAccess(command.siloId, command.conversationId, command.subjectId))
 			return { outcome: "unauthorized" };
@@ -110,8 +116,10 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		const prior = await transaction.elicitationResponseAttempt.findUnique({ where: { requestId_idempotencyKey: { requestId: request.id, idempotencyKey: command.submission.idempotencyKey } } });
 		if (prior !== null)
 		{
-			if (prior.responseDigest !== responseDigest || request.resolvedAt === null)
+			if (prior.respondingSubjectId !== command.subjectId || request.resolvedBy !== command.subjectId || prior.responseDigest !== responseDigest || request.resolvedAt === null || (request.state !== ElicitationRequestState.Answered && request.state !== ElicitationRequestState.Declined))
 				return { outcome: "conflict" };
+			if (request.purpose === ElicitationPurpose.RuntimeInput && !await this._productAuthorization.canUseConversation(command.siloId, command.subjectId, command.conversationId, command.now))
+				return { outcome: "unauthorized" };
 			return { outcome: "accepted", projection: { requestId: request.id, state: _PublicState(request.state), idempotent: true, resolvedAt: request.resolvedAt.toISOString() } };
 		}
 		if (request.state !== ElicitationRequestState.Requested)
@@ -162,14 +170,14 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		return { outcome: "accepted", projection: { requestId: request.id, state: publicState, idempotent: false, resolvedAt: command.now.toISOString() } };
 	}
 
-	/** Read one request only for its still-active assigned participant. */
+	/** Read shared clarification or the caller's protected request after current access checks. */
 	async readOwned(siloId: string, conversationId: string, requestId: string, subjectId: string, now: Date): Promise<ConversationElicitation | null>
 	{
 		if (!await this._canParticipantAccess(siloId, conversationId, subjectId))
 			return null;
 		if (!await this._productAuthorization.canReadConversation(siloId, subjectId, conversationId, now))
 			return null;
-		const row = await this._transaction.elicitationRequest.findFirst({ where: { id: requestId, siloId, conversationId, assignedParticipantId: subjectId, assignedParticipant: { accessEndedPosition: null } } });
+		const row = await this._transaction.elicitationRequest.findFirst({ where: { id: requestId, siloId, conversationId, ..._RequestAudienceWhere(siloId, subjectId) } });
 		if (row === null)
 			return null;
 		if ((await this._filterReadableRequests(siloId, subjectId, [row], now)).length === 0)
@@ -184,7 +192,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 			return [];
 		if (!await this._productAuthorization.canReadConversation(siloId, subjectId, conversationId, now))
 			return [];
-		const rows = await this._transaction.elicitationRequest.findMany({ where: { siloId, conversationId, assignedParticipantId: subjectId, state: ElicitationRequestState.Requested, expiresAt: { gt: now }, assignedParticipant: { accessEndedPosition: null } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 50 });
+		const rows = await this._transaction.elicitationRequest.findMany({ where: { siloId, conversationId, ..._RequestAudienceWhere(siloId, subjectId), state: ElicitationRequestState.Requested, expiresAt: { gt: now } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 50 });
 		const readableRows = await this._filterReadableRequests(siloId, subjectId, rows, now);
 		return readableRows.map(_Projection);
 	}
@@ -197,7 +205,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		const membership = await this._transaction.orgMembership.count({ where: { clusterTenant: siloId, subject: subjectId, status: OrgMemberStatus.Active } });
 		if (membership !== 1)
 			return [];
-		const rows = await this._transaction.elicitationRequest.findMany({ where: { siloId, assignedParticipantId: subjectId, assignedParticipant: { accessEndedPosition: null, conversation: _ConversationAccessWhere(siloId) } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: limit });
+		const rows = await this._transaction.elicitationRequest.findMany({ where: { siloId, ..._RequestAudienceWhere(siloId, subjectId) }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: limit });
 		const readableConversationIds = await this._productAuthorization.filterReadableConversationIds(siloId, subjectId, rows.map(row => row.conversationId), now);
 		const readableRows = await this._filterReadableRequests(siloId, subjectId, rows.filter(row => readableConversationIds.has(row.conversationId)), now);
 		return readableRows.map(function _ProjectActivity(row) { return _ProjectionAt(row, now); });
@@ -210,11 +218,25 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	 */
 	private async _filterReadableRequests(siloId: string, subjectId: string, rows: readonly ElicitationRequest[], now: Date): Promise<readonly ElicitationRequest[]>
 	{
-		const pendingApprovalIds = new Set(rows.filter(row => row.purpose === ElicitationPurpose.ToolApproval && row.state === ElicitationRequestState.Requested).map(row => row.id));
+		const eligible: ElicitationRequest[] = [];
+		for (const row of rows)
+		{
+			if (await this._canAccessRequest(row, subjectId))
+				eligible.push(row);
+		}
+		const pendingApprovalIds = new Set(eligible.filter(row => row.purpose === ElicitationPurpose.ToolApproval && row.state === ElicitationRequestState.Requested).map(row => row.id));
 		if (pendingApprovalIds.size === 0)
-			return rows;
+			return eligible;
 		const readableIds = await this._productAuthorization.filterReadableApprovalElicitationIds(siloId, subjectId, [...pendingApprovalIds], now);
-		return rows.filter(row => !pendingApprovalIds.has(row.id) || readableIds.has(row.id));
+		return eligible.filter(row => !pendingApprovalIds.has(row.id) || readableIds.has(row.id));
+	}
+
+	/** Parent membership never suffices: shared input requires the conversation owner's sharing decision. */
+	private async _canAccessRequest(request: Pick<ElicitationRequest, "purpose" | "siloId" | "conversationId" | "assignedParticipantId">, subjectId: string): Promise<boolean>
+	{
+		if (request.purpose !== ElicitationPurpose.RuntimeInput)
+			return request.assignedParticipantId === subjectId;
+		return this._conversationAccess !== null && await this._conversationAccess.canAccess(request.siloId, subjectId, request.conversationId);
 	}
 
 	/** Require active organisation membership and continuing participation in the selected conversation. */
@@ -293,6 +315,12 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	}
 }
 
+/** Shared input follows the caller's participation; protected purposes retain their assigned reader. */
+function _RequestAudienceWhere(siloId: string, subjectId: string): Prisma.ElicitationRequestWhereInput
+{
+	return { conversation: { siloId, participants: { some: { userId: subjectId, accessEndedPosition: null } } }, OR: [{ purpose: ElicitationPurpose.RuntimeInput }, { assignedParticipantId: subjectId }] };
+}
+
 /** Restrict elicitation reads to the selected silo's conversation. */
 function _ConversationAccessWhere(siloId: string): Prisma.ConversationWhereInput { return { siloId }; }
 
@@ -309,12 +337,15 @@ export class PrismaElicitationUnitOfWork implements ElicitationUnitOfWork, Perso
 	private readonly _prisma: PrismaClient;
 	/** Application-owned workflow wake factory bound inside each response transaction. */
 	private readonly _wakeFactory: ElicitationRunWakeFactory | null;
+	/** Creates sharing checks on the same transaction as the protected read or answer. */
+	private readonly _conversationAccessFactory: ElicitationConversationAccessFactory | null;
 
 	/** Bind the transaction owner to product persistence. */
-	constructor(prisma: PrismaClient, wakeFactory: ElicitationRunWakeFactory | null = null)
+	constructor(prisma: PrismaClient, wakeFactory: ElicitationRunWakeFactory | null = null, conversationAccessFactory: ElicitationConversationAccessFactory | null = null)
 	{
 		this._prisma = prisma;
 		this._wakeFactory = wakeFactory;
+		this._conversationAccessFactory = conversationAccessFactory;
 	}
 
 	/** Open one request atomically. */
@@ -372,7 +403,8 @@ export class PrismaElicitationUnitOfWork implements ElicitationUnitOfWork, Perso
 		const unit = this;
 		return this._prisma.$transaction(async function _Transaction(transaction): Promise<TResult>
 		{
-			const repository = new PrismaElicitationRepository(transaction, unit._wakeFactory === null ? null : unit._wakeFactory(transaction));
+			const conversationAccess = unit._conversationAccessFactory === null ? null : unit._conversationAccessFactory(transaction);
+			const repository = new PrismaElicitationRepository(transaction, unit._wakeFactory === null ? null : unit._wakeFactory(transaction), conversationAccess);
 			return work(repository);
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}

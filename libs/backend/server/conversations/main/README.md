@@ -58,6 +58,7 @@ signed-in participant ──► main ◄── HERE ──► history
   bytes outside SQL. Initial and restarted compilation repeat the current authority and coordinate
   checks before adding the text as untrusted user content.
 - `PrismaGroupChildAuthority`, `_CreateGroupChildRouter` and `GROUP_CHILD_TASK` compose explicit child requests and recovery.
+- `PrismaConversationElicitationAccessRepository` applies existing child-sharing checks inside the assistant-question transaction; the browser route composition supplies it to elicitation.
 - `PrismaPersonalMemoryCommandUnitOfWork` and `_CreatePersonalMemoryCommandRouter` expose
   `POST /api/v1/me/memory/commands` and `GET /api/v1/me/memory/commands/:commandId`.
   The signed-in caller selects an exact human message for Remember or Correct, or an exact fact
@@ -155,6 +156,11 @@ was denied remains bound to that command; it cannot be reused to stop a later tu
 The browser never selects trusted silo, membership, principal, agent or run authority. Every read
 rechecks active organisation membership and participant bounds; child reads also require continuing
 parent access. Revocation cannot become an empty successful history response.
+
+Ordinary assistant questions use the same child access check: current organisation membership,
+explicit conversation participation, the saved child audience and continuing parent-source access.
+This adapter does not invite people or grant permissions. Elicitation separately checks the current
+Read or Use grant; action approvals and personal-memory consent keep their assigned-person policy.
 
 Creation retries preserve the original member set, current grants and lifecycle. Message retries
 bind the UUID conversation-wide to the same author, plaintext, canonical asset set, immutable content

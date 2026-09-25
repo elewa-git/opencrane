@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const _productAuthorization = vi.hoisted(function _ProductAuthorization()
 {
-	return { canRead: vi.fn().mockResolvedValue(true), filterReadable: vi.fn(async function _All(_siloId: string, _subjectId: string, ids: readonly string[]) { return new Set(ids); }), filterApprovals: vi.fn(async function _AllApprovals(_siloId: string, _subjectId: string, ids: readonly string[]) { return new Set(ids); }), admitResponse: vi.fn().mockResolvedValue(true) };
+	return { canRead: vi.fn().mockResolvedValue(true), canUse: vi.fn().mockResolvedValue(true), filterReadable: vi.fn(async function _All(_siloId: string, _subjectId: string, ids: readonly string[]) { return new Set(ids); }), filterApprovals: vi.fn(async function _AllApprovals(_siloId: string, _subjectId: string, ids: readonly string[]) { return new Set(ids); }), admitResponse: vi.fn().mockResolvedValue(true) };
 });
 
 const _deferredAuthorization = vi.hoisted(function _DeferredAuthorization()
@@ -13,7 +13,7 @@ const _deferredAuthorization = vi.hoisted(function _DeferredAuthorization()
 
 vi.mock("../elicitation-product-authorization", function _MockProductAuthorization()
 {
-	return { PrismaElicitationProductAuthorizationRepository: class { canReadConversation = _productAuthorization.canRead; filterReadableConversationIds = _productAuthorization.filterReadable; filterReadableApprovalElicitationIds = _productAuthorization.filterApprovals; admitResponse = _productAuthorization.admitResponse; } };
+	return { PrismaElicitationProductAuthorizationRepository: class { canReadConversation = _productAuthorization.canRead; canUseConversation = _productAuthorization.canUse; filterReadableConversationIds = _productAuthorization.filterReadable; filterReadableApprovalElicitationIds = _productAuthorization.filterApprovals; admitResponse = _productAuthorization.admitResponse; } };
 });
 
 vi.mock("@opencrane/backend/server/iam/authorization", async function _MockAuthorization(importOriginal)
@@ -27,16 +27,23 @@ import { ElicitationBodyKinds, ElicitationPurposes, type RunInputSnapshot } from
 import { ExecutionSubjectMembershipKinds, PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 
 import { PrismaElicitationRepository, PrismaElicitationUnitOfWork } from "../prisma-elicitation-unit-of-work";
-import type { ElicitationRunWakePort } from "../elicitation.types";
+import type { ElicitationRunWakePort, RespondToElicitationCommand } from "../elicitation.types";
 import { PrismaRuntimeElicitationUnitOfWork } from "../prisma-runtime-elicitation-unit-of-work";
 import { _BuildMemoryPermissionPayload } from "../purposes/personal-memory/personal-memory-permission-payload";
 
 const NOW = new Date("2026-08-11T10:00:00.000Z");
+const _conversationAccess = { canAccess: vi.fn().mockResolvedValue(true) };
+
+/** Build an authenticated peer response to a question initially addressed to user-1. */
+function _PeerResponse(subjectId = "user-2"): RespondToElicitationCommand
+{
+	return { siloId: "silo-1", conversationId: "conversation-1", requestId: "request-1", subjectId, verifiedStepUpAt: null, submission: { idempotencyKey: "peer-answer-1", response: { kind: ElicitationBodyKinds.FreeText, text: "Use the Nairobi warehouse" } }, now: NOW };
+}
 
 /** Bind one transaction double to the process-owned unit-of-work boundary. */
 function _Unit(transaction: object, wake: ElicitationRunWakePort | null = null): PrismaElicitationUnitOfWork
 {
-	return new PrismaElicitationUnitOfWork({ $transaction: vi.fn(async function _Transaction(operation) { return operation(transaction); }) } as never, wake === null ? null : function _WakeFactory() { return wake; });
+	return new PrismaElicitationUnitOfWork({ $transaction: vi.fn(async function _Transaction(operation) { return operation(transaction); }) } as never, wake === null ? null : function _WakeFactory() { return wake; }, function _AccessFactory() { return _conversationAccess; });
 }
 
 /** Active membership and current parent-coupled participant access. */
@@ -116,7 +123,9 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 
 	beforeEach(function _ResetProductAuthorization()
 	{
+		_conversationAccess.canAccess.mockReset().mockResolvedValue(true);
 		_productAuthorization.canRead.mockReset().mockResolvedValue(true);
+		_productAuthorization.canUse.mockReset().mockResolvedValue(true);
 		_productAuthorization.filterReadable.mockReset().mockImplementation(async function _All(_siloId: string, _subjectId: string, ids: readonly string[]) { return new Set(ids); });
 		_productAuthorization.filterApprovals.mockReset().mockImplementation(async function _AllApprovals(_siloId: string, _subjectId: string, ids: readonly string[]) { return new Set(ids); });
 		_productAuthorization.admitResponse.mockReset().mockResolvedValue(true);
@@ -142,10 +151,20 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		const existing = _Request({ body, bodyDigest: __DigestCanonicalJson(body), purposePayloadDigest: command.purposePayloadDigest });
 		const transaction = { ..._Access(), elicitationRequest: { findUnique: vi.fn().mockResolvedValue(existing) } };
 
-		const unitOfWork = new PrismaRuntimeElicitationUnitOfWork(transaction as never);
+		const unitOfWork = new PrismaRuntimeElicitationUnitOfWork(transaction as never, _conversationAccess);
 		await expect(unitOfWork.open(command)).resolves.toMatchObject({ requestId: "request-1" });
 		await expect(unitOfWork.open({ ...command, body: { ...body, prompt: "Changed" } })).resolves.toBeNull();
 		await expect(unitOfWork.open({ ...command, requestId: "request-changed" })).resolves.toBeNull();
+	});
+
+	it("refuses RuntimeInput opening when the runtime transaction has no sharing port", async function _MissingRuntimeSharing()
+	{
+		const body = { kind: ElicitationBodyKinds.FreeText, prompt: "Answer", maximumLength: 100, allowEmpty: false } as const;
+		const transaction = { ..._Access(), elicitationRequest: { findUnique: vi.fn(), create: vi.fn() }, agentRun: { findUnique: vi.fn(), updateMany: vi.fn() } };
+		const command = { requestId: "request-1", siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 2, assignedParticipantId: "user-1", requestKey: "question-1", purpose: ElicitationPurposes.RuntimeInput, body, purposePayloadDigest: "sha256:none", requiresStepUp: false, now: NOW, expiresAt: new Date("2026-08-11T11:00:00.000Z") } as const;
+
+		await expect(new PrismaRuntimeElicitationUnitOfWork(transaction as never).open(command)).resolves.toBeNull();
+		expect(transaction.elicitationRequest.findUnique).not.toHaveBeenCalled();
 	});
 
 	it.each([ElicitationPurpose.RuntimeInput, ElicitationPurpose.A2uiAction])("expires due generic %s input with one terminal delivery before resuming", async function _ExpiresGenericRequest(purpose)
@@ -201,6 +220,82 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		expect(transaction.elicitationResultDelivery.create).toHaveBeenCalledTimes(1);
 		expect(transaction.elicitationResponseAttempt.create).toHaveBeenCalledTimes(1);
 		expect(transaction.agentRun.updateMany).toHaveBeenCalledTimes(1);
+	});
+
+	it("attributes a shared clarification to its eligible peer and resumes once", async function _PeerAnswers()
+	{
+		const transaction = _ResponseTransaction();
+		await expect(_Unit(transaction).respond(_PeerResponse())).resolves.toMatchObject({ outcome: "accepted", projection: { idempotent: false } });
+		expect(_conversationAccess.canAccess).toHaveBeenCalledExactlyOnceWith("silo-1", "user-2", "conversation-1");
+		expect(_productAuthorization.admitResponse).toHaveBeenCalledWith("silo-1", "user-2", "conversation-1", null, _PeerResponse().submission.response, NOW);
+		expect(transaction.elicitationResponseAttempt.create).toHaveBeenCalledWith({ data: expect.objectContaining({ respondingSubjectId: "user-2" }) });
+		expect(transaction.elicitationRequest.updateMany).toHaveBeenCalledWith({ where: { id: "request-1", state: ElicitationRequestState.Requested }, data: { state: ElicitationRequestState.Answered, resolvedAt: NOW, resolvedBy: "user-2" } });
+		expect(transaction.agentRun.updateMany).toHaveBeenCalledOnce();
+	});
+
+	it("denies shared clarification when the conversation sharing check is unavailable or revoked", async function _DeniedSharing()
+	{
+		const transaction = _ResponseTransaction();
+		_conversationAccess.canAccess.mockResolvedValue(false);
+		await expect(_Unit(transaction).respond(_PeerResponse())).resolves.toEqual({ outcome: "unauthorized" });
+		await expect(new PrismaElicitationRepository(transaction as never).respond(_PeerResponse())).resolves.toEqual({ outcome: "unauthorized" });
+		expect(transaction.elicitationResponseAttempt.create).not.toHaveBeenCalled();
+	});
+
+	it("builds the sharing authority from the same transaction that accepts the answer", async function _TransactionBoundSharing()
+	{
+		const transaction = _ResponseTransaction();
+		const factory = vi.fn(function _CreateSharing(received: object)
+		{
+			expect(received).toBe(transaction);
+			return _conversationAccess;
+		});
+		const prisma = { $transaction: vi.fn(async function _Transaction(operation) { return operation(transaction); }) };
+		await expect(new PrismaElicitationUnitOfWork(prisma as never, null, factory).respond(_PeerResponse())).resolves.toMatchObject({ outcome: "accepted" });
+		expect(factory).toHaveBeenCalledExactlyOnceWith(transaction);
+	});
+
+	it("reads and lists a shared clarification through current peer access", async function _PeerReads()
+	{
+		const request = _Request();
+		const transaction = { ..._Access(), elicitationRequest: { findFirst: vi.fn().mockResolvedValue(request), findMany: vi.fn().mockResolvedValue([request]) } };
+		const unit = _Unit(transaction);
+		await expect(unit.readOwned("silo-1", "conversation-1", "request-1", "user-2", NOW)).resolves.toMatchObject({ requestId: request.id, assignedParticipantId: "user-1" });
+		await expect(unit.listOpenOwned("silo-1", "conversation-1", "user-2", NOW)).resolves.toHaveLength(1);
+		await expect(unit.listActivityOwned("silo-1", "user-2", 20, NOW)).resolves.toHaveLength(1);
+		expect(_conversationAccess.canAccess).toHaveBeenCalledTimes(3);
+	});
+
+	it.each([ElicitationPurpose.ToolApproval, ElicitationPurpose.PersonalMemoryPermission, ElicitationPurpose.A2uiAction])("keeps protected %s requests assigned to their designated participant", async function _ProtectedPurpose(purpose)
+	{
+		const request = _Request({ purpose });
+		const transaction = _ResponseTransaction(request);
+		await expect(_Unit(transaction).respond(_PeerResponse())).resolves.toEqual({ outcome: "unauthorized" });
+		expect(_conversationAccess.canAccess).not.toHaveBeenCalled();
+		expect(transaction.elicitationResponseAttempt.create).not.toHaveBeenCalled();
+	});
+
+	it("allows only the actual responder to replay the winning response key", async function _PeerReplay()
+	{
+		const request = _Request({ state: ElicitationRequestState.Answered, resolvedAt: NOW, resolvedBy: "user-2" });
+		const transaction = _ResponseTransaction(request);
+		const command = _PeerResponse();
+		transaction.elicitationResponseAttempt.findUnique.mockResolvedValue({ respondingSubjectId: "user-2", responseDigest: __DigestCanonicalJson(command.submission.response) });
+		const unit = _Unit(transaction);
+		await expect(unit.respond(command)).resolves.toMatchObject({ outcome: "accepted", projection: { idempotent: true } });
+		_productAuthorization.canUse.mockResolvedValue(false);
+		await expect(unit.respond(command)).resolves.toEqual({ outcome: "unauthorized" });
+		_productAuthorization.canUse.mockResolvedValue(true);
+		_conversationAccess.canAccess.mockResolvedValue(false);
+		await expect(unit.respond(command)).resolves.toEqual({ outcome: "unauthorized" });
+		_conversationAccess.canAccess.mockResolvedValue(true);
+		await expect(unit.respond(_PeerResponse("user-1"))).resolves.toEqual({ outcome: "conflict" });
+		transaction.elicitationRequest.findUnique.mockResolvedValue({ ...request, resolvedBy: "user-1" });
+		await expect(unit.respond(command)).resolves.toEqual({ outcome: "conflict" });
+		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
+		expect(transaction.elicitationResponseAttempt.create).not.toHaveBeenCalled();
+		expect(transaction.elicitationResultDelivery.create).not.toHaveBeenCalled();
+		expect(_productAuthorization.admitResponse).not.toHaveBeenCalled();
 	});
 
 	it("resumes the saved turn after the exact owner approves a tool", async function _WakesApprovedTool()
@@ -296,9 +391,9 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 
 	it("replays only an identical accepted idempotency key", async function _Replays()
 	{
-		const request = _Request({ state: ElicitationRequestState.Answered, resolvedAt: NOW });
+		const request = _Request({ state: ElicitationRequestState.Answered, resolvedAt: NOW, resolvedBy: "user-1" });
 		const transaction = _ResponseTransaction(request);
-		transaction.elicitationResponseAttempt.findUnique.mockResolvedValueOnce({ responseDigest: __DigestCanonicalJson({ kind: ElicitationBodyKinds.FreeText, text: "Done" }) });
+		transaction.elicitationResponseAttempt.findUnique.mockResolvedValueOnce({ respondingSubjectId: "user-1", responseDigest: __DigestCanonicalJson({ kind: ElicitationBodyKinds.FreeText, text: "Done" }) });
 		await expect(_Unit(transaction).respond({ siloId: "silo-1", conversationId: "conversation-1", requestId: "request-1", subjectId: "user-1", verifiedStepUpAt: null, submission: { idempotencyKey: "retry-1", response: { kind: ElicitationBodyKinds.FreeText, text: "Done" } }, now: NOW })).resolves.toMatchObject({ outcome: "accepted", projection: { idempotent: true } });
 		expect(transaction.elicitationRequest.updateMany).not.toHaveBeenCalled();
 	});
@@ -413,13 +508,13 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		expect(transaction.conversationParticipant.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ conversation: { siloId: "silo-1" } }) }));
 	});
 
-	it("lists only current requests assigned to the admitted conversation participant", async function _ListsOpenOwned()
+	it("lists shared questions and assigned protected requests for the admitted conversation participant", async function _ListsOpenOwned()
 	{
 		const transaction = { ..._Access(), elicitationRequest: { findMany: vi.fn().mockResolvedValue([_Request()]) } };
 		await expect(_Unit(transaction).listOpenOwned("silo-1", "conversation-1", "user-1", NOW)).resolves.toEqual([expect.objectContaining({ requestId: "request-1", conversationId: "conversation-1", assignedParticipantId: "user-1", state: "requested" })]);
 		expect(_productAuthorization.canRead).toHaveBeenCalledWith("silo-1", "user-1", "conversation-1", NOW);
 		expect(transaction.elicitationRequest.findMany).toHaveBeenCalledWith({
-			where: { siloId: "silo-1", conversationId: "conversation-1", assignedParticipantId: "user-1", state: ElicitationRequestState.Requested, expiresAt: { gt: NOW }, assignedParticipant: { accessEndedPosition: null } },
+			where: { siloId: "silo-1", conversationId: "conversation-1", conversation: { siloId: "silo-1", participants: { some: { userId: "user-1", accessEndedPosition: null } } }, OR: [{ purpose: ElicitationPurpose.RuntimeInput }, { assignedParticipantId: "user-1" }], state: ElicitationRequestState.Requested, expiresAt: { gt: NOW } },
 			orderBy: [{ createdAt: "asc" }, { id: "asc" }],
 			take: 50,
 		});
@@ -482,7 +577,7 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		const activityTransaction = { ...access, elicitationRequest: { findMany: vi.fn().mockResolvedValue([]) } };
 		await expect(_Unit(activityTransaction).listOpenOwned("silo-1", "child-1", "user-1", NOW)).resolves.toEqual([]);
 		await expect(_Unit(activityTransaction).listActivityOwned("silo-1", "user-1", 20, NOW)).resolves.toEqual([]);
-		expect(activityTransaction.elicitationRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ assignedParticipant: expect.objectContaining({ conversation: { siloId: "silo-1" } }) }) }));
+		expect(activityTransaction.elicitationRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ conversation: { siloId: "silo-1", participants: { some: { userId: "user-1", accessEndedPosition: null } } } }) }));
 	});
 
 	it("denies elicitation reads and responses after organisation membership revocation", async function _DeniesRevokedMembership()
