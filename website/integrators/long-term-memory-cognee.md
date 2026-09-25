@@ -167,9 +167,10 @@ The private deployment uses several layers because each one answers a different 
 
 ### Cognee runs in its access-control mode
 
-◇ Target design. The bundled Cognee is deployed with `ENABLE_BACKEND_ACCESS_CONTROL=true` and
-`REQUIRE_AUTHENTICATION=true`. This is not a second permission layer. It is the only way Cognee
-keeps one person's memories out of another person's recall. The reasons are recorded in
+✅ Implemented and charted. The bundled Cognee is deployed with
+`ENABLE_BACKEND_ACCESS_CONTROL=true` and `REQUIRE_AUTHENTICATION=true`. This is not a second
+permission layer. It is the only way Cognee keeps one person's memories out of another person's
+recall. The reasons are recorded in
 [ADR 0017](https://github.com/elewa-git/opencrane/blob/main/docs/adr/0017-cognee-access-control-mode-and-gateway-service-user.md):
 
 - **Dataset scoping only exists in access-control mode.** With the switch off, Cognee runs one search
@@ -181,21 +182,16 @@ keeps one person's memories out of another person's recall. The reasons are reco
 - **NetworkPolicy cannot fix this.** The leak is between datasets inside one Cognee process. The
   gateway is already the only admitted caller, and it is the one asking on behalf of different people.
 
-So the memory gateway holds one Cognee **service user per silo**, mounted from an application-owned
-Secret. It registers that user on first install, logs in, and keeps the bearer token in memory only.
-Every dataset belongs to that one user, so Cognee's permission system does not separate employees.
+So the memory gateway holds one Cognee **service user per silo**, mounted from a pre-created
+Secret. It logs in, keeps the bearer token in memory only, and registers the user only when an
+explicit first-install override allows it. Every dataset belongs to that one user, so Cognee's
+permission system does not separate employees.
 Separation comes from OpenCrane: the server selects the exact dataset UUID from admitted authority,
 the gateway forwards exactly one dataset UUID per request and cannot widen it, and Cognee's
 access-control mode makes that scope hold at retrieval time.
 
 NetworkPolicy stays the transport wall: only the gateway may connect to Cognee, and Cognee may reach
 only release-local LiteLLM, DNS and optional telemetry. OpenCrane remains the product RBAC authority.
-
-::: warning Deployment state
-The chart still renders the previous setting, with both switches `false`, until the authenticated
-isolation proof from the provider contract lands with the switch change. Personal memory stays
-unavailable while that setting is deployed. See [development status](/guide/status).
-:::
 
 ## What “dreaming” means
 
@@ -389,7 +385,7 @@ derived-fact lineage or dreaming.
 - [`Authorisation grant schema`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/prisma/schema/authorization.prisma)
 - [`Personal memory admission`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/personal/memory/main/src/prisma-personal-memory-admission-repository.ts)
 - [`Managed no-memory policy`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/execution/inputs/main/src/managed-no-personal-memory-scope-source.ts)
-- [`Central authorization authority`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/iam/authorization/main/src/prisma-authorization-authority.ts)
-- [`Uncomposed server client factory`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/src/infra/memory/memory-gateway-client.factory.ts)
+- [`Central authorization authority`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/iam/authorization/main/src/authority/persistence/prisma-authorization-authority.ts)
+- [`Uncomposed server client factory`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/src/bootstrap/process/memory-gateway-client.factory.ts)
 - [`Memory gateway app`](https://github.com/elewa-git/opencrane/blob/main/apps/memory-gateway/README.md)
 - [`Cognee deployment`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/cognee/README.md)

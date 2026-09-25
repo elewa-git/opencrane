@@ -11,6 +11,7 @@ import { OrganizationMemberRoles, OrganizationMemberStatuses, type OrganizationM
 import { OrganizationInvitationStatuses, OrganizationInviteRecipientReasons, type OrganizationInviteRecipientValidation } from "./invitations.types";
 import { OrganizationMembershipError, OrganizationMembershipErrorKinds } from "./organization-members.errors";
 import type { AcceptStandaloneInvitationCommand, CreateStandaloneInvitationsCommand, CreateStandaloneInvitationsResult, OrganizationInvitationRecord, OrganizationMemberDirectoryRecords, OrganizationMemberTransactionRepository, ResendStandaloneInvitationCommand } from "./organization-member-repository.types";
+import { OrganizationMemberRemovalStates, OrganizationMemberRemovalUnavailableReasons, type OrganizationMemberRemovalCapability, type RemoveStandaloneMemberCommand } from "./removal.types";
 
 /** Selects the persisted fields used by every invitation projection. */
 const _INVITATION_SELECT = {
@@ -74,12 +75,26 @@ function _invitation(row: { id: string; siloId: string; email: string; role: Org
 }
 
 /** Maps one local membership while marking the verified caller's row. */
-function _member(row: { id: string; subject: string; email: string | null; displayName: string | null; role: OrgRole; status: OrgMemberStatus; createdAt: Date }, caller: OrganizationMembershipCaller): OrganizationMember
+function _member(row: { id: string; subject: string; email: string | null; displayName: string | null; role: OrgRole; status: OrgMemberStatus; createdAt: Date }, caller: OrganizationMembershipCaller, mayRemove = false): OrganizationMember
 {
 	const isCurrentUser = row.subject === caller.subjectId;
 	const email = row.email ?? (isCurrentUser ? caller.verifiedEmail : null) ?? row.subject;
 	const displayName = row.displayName ?? (isCurrentUser ? caller.displayName : null) ?? email;
-	return { membershipId: row.id, displayName, email, role: _role(row.role), status: _memberStatus(row.status), joinedAt: row.createdAt.toISOString(), isCurrentUser };
+	return { membershipId: row.id, displayName, email, role: _role(row.role), status: _memberStatus(row.status), joinedAt: row.createdAt.toISOString(), isCurrentUser, removal: _removalCapability(row, isCurrentUser, mayRemove) };
+}
+
+/** Explains why a directory row can offer removal without replacing the write's authority check. */
+function _removalCapability(row: { role: OrgRole; status: OrgMemberStatus }, isCurrentUser: boolean, mayRemove: boolean): OrganizationMemberRemovalCapability
+{
+	if (isCurrentUser)
+		return { state: OrganizationMemberRemovalStates.Unavailable, reason: OrganizationMemberRemovalUnavailableReasons.Self };
+	if (row.role === OrgRole.Owner)
+		return { state: OrganizationMemberRemovalStates.Unavailable, reason: OrganizationMemberRemovalUnavailableReasons.Owner };
+	if (row.status !== OrgMemberStatus.Active)
+		return { state: OrganizationMemberRemovalStates.Unavailable, reason: OrganizationMemberRemovalUnavailableReasons.Inactive };
+	if (!mayRemove)
+		return { state: OrganizationMemberRemovalStates.Unavailable, reason: OrganizationMemberRemovalUnavailableReasons.NotAuthorized };
+	return { state: OrganizationMemberRemovalStates.Available };
 }
 
 /** Parses invitation identifiers stored in an idempotency JSON field. */
@@ -120,13 +135,49 @@ export class PrismaOrganizationMemberRepository implements OrganizationMemberTra
 	{
 		await this._requireAdministrationDecision(caller);
 		const now = new Date();
+		const mayRemove = await this._mayRemove(caller, now);
 		const [members, invitations, activeCount, pendingCount] = await Promise.all([
 			this.prisma.orgMembership.findMany({ where: { clusterTenant: caller.siloId }, orderBy: [{ role: "asc" }, { createdAt: "asc" }], take: _DIRECTORY_ROW_LIMIT, select: { id: true, subject: true, email: true, displayName: true, role: true, status: true, createdAt: true } }),
 			this.prisma.organizationInvitation.findMany({ where: { siloId: caller.siloId }, orderBy: { invitedAt: "desc" }, take: _DIRECTORY_ROW_LIMIT, select: _INVITATION_SELECT }),
 			this.prisma.orgMembership.count({ where: { clusterTenant: caller.siloId, status: OrgMemberStatus.Active } }),
 			this.prisma.organizationInvitation.count({ where: { siloId: caller.siloId, status: OrganizationInvitationStatus.Pending, expiresAt: { gt: now } } }),
 		]);
-		return { members: members.map(row => _member(row, caller)), invitations: invitations.map(_invitation), activeCount, pendingCount };
+		return { members: members.map(row => _member(row, caller, mayRemove)), invitations: invitations.map(_invitation), activeCount, pendingCount };
+	}
+
+	/**
+	 * Commits access removal and its evidence in the caller's Serializable transaction.
+	 * A retry still checks the actor before reading the target. Keeping the suspended row prevents
+	 * an old invitation or unchanged login claims from creating a new membership for this subject.
+	 */
+	async remove(command: RemoveStandaloneMemberCommand): Promise<OrganizationMember>
+	{
+		const caller = command.caller;
+		if (!await this._mayRemove(caller, command.removedAt))
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Forbidden, "organization membership operation is not authorized");
+		const target = await this.prisma.orgMembership.findFirst({ where: { id: command.membershipId, clusterTenant: caller.siloId }, select: { id: true, subject: true, email: true, displayName: true, role: true, status: true, createdAt: true } });
+		if (target === null)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.NotFound, "organization member is not available");
+		if (target.subject === caller.subjectId || target.role === OrgRole.Owner)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Conflict, "self-removal and Owner removal are not available");
+		await this._requireAdministrationAdmission(caller, { operation: "remove_member", membershipId: target.id, subjectId: target.subject, previousStatus: _memberStatus(target.status), status: OrganizationMemberStatuses.Suspended }, command.removedAt);
+		if (target.status === OrgMemberStatus.Suspended)
+			return _member(target, caller);
+		const changed = await this.prisma.orgMembership.updateMany({ where: { id: target.id, clusterTenant: caller.siloId, subject: target.subject, role: target.role, status: OrgMemberStatus.Active }, data: { status: OrgMemberStatus.Suspended, updatedAt: command.removedAt } });
+		if (changed.count !== 1)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Conflict, "organization member changed during removal");
+		await this.prisma.auditEntry.create({ data: { siloId: caller.siloId, action: "organization.member.removed", resource: target.id, message: "Organization member access removed", metadata: { actorSubject: caller.subjectId, actorPrincipalId: caller.principalId, membershipId: target.id, subjectId: target.subject, previousStatus: OrganizationMemberStatuses.Active, status: OrganizationMemberStatuses.Suspended } } });
+		return _member({ ...target, status: OrgMemberStatus.Suspended }, caller);
+	}
+
+	/** Requires active local administration and a pure current permission check before target disclosure. */
+	private async _mayRemove(caller: OrganizationMembershipCaller, now: Date): Promise<boolean>
+	{
+		const membership = await this.prisma.orgMembership.findUnique({ where: { clusterTenant_subject: { clusterTenant: caller.siloId, subject: caller.subjectId } }, select: { role: true, status: true } });
+		if (membership?.status !== OrgMemberStatus.Active || (membership.role !== OrgRole.Owner && membership.role !== OrgRole.Admin))
+			return false;
+		const decision = await this.authorization.decidePrincipal({ siloId: caller.siloId, principalId: caller.principalId, resource: { kind: ProductAuthorizationResourceKinds.Organization, id: caller.siloId }, action: ProductAuthorizationActions.Administer, nowEpochMs: now.getTime() });
+		return decision.outcome === AuthorizationDecisionOutcomes.Allow;
 	}
 
 	/** @inheritdoc */

@@ -4,6 +4,27 @@
 
 ## What it owns
 
+Source follows the steps that change independently:
+
+| Folder | Owns |
+| --- | --- |
+| `src/assembly/` | Snapshot assembly, source ports and admission outcomes. |
+| `src/prompt/` | Deterministic compilation and immutable content readers. |
+| `src/subjects/` | Personal and managed execution-subject evidence. |
+| `src/sources/` | Persona, tool, skill, conversation and product-authorization source adapters. |
+| `src/memory/` | Memory scope and preference readers. |
+
+Each folder keeps its focused tests in `__tests__/`; consumers use the root public barrel.
+
+Source-loader, admission-build, duplicate-verification, and final-admission outcomes remain separate
+internal contracts even where their serialized denial value is the same.
+
+Personal and company-assistant admission share the command and lease validators in `subjects/`.
+These compare the saved run, human requester, computer, profile and lease coordinates before an
+execution subject is returned. The identity and permission readers keep their separate policies;
+the history reader still checks lease state and expiry. A matching identifier cannot replace those
+current-authority checks.
+
 This package is part of the **shared execution flow** used by both personal and managed agents.
 Before a conversation computer executes a run, the platform freezes *everything* that run is allowed to see
 and use into one immutable record — the
@@ -16,9 +37,16 @@ change — a retry, an audit, or a replay all see the exact same record, identif
 
 The current text-chat policy freezes a maximum of 4,096 generated tokens per response into the model
 route. This is OpenCrane's response limit; the revision's total run budget stays separate, including
-the initial personal assistant's 256,000-token ceiling. The runtime uses the smaller of those two
-limits. It consumes one admitted model turn and refuses the model request when the turn limit is
-absent or below one. Tool execution and loops with multiple model turns remain future work.
+the initial personal assistant's 256,000-token ceiling. The server uses the smaller of those two
+limits. Admission translates the authored turn, token, tool-invocation, loop-iteration and optional
+cost ceilings, plus one absolute deadline, into the complete saved `RunBudgetPolicy`. The snapshot
+and prompt-compiler versions are required exactly, and recovery parses and compares every saved
+ceiling without defaults or deadline renewal.
+
+The current text-turn workflow still spends the original model dispatch and, after one permitted tool
+result, at most one text-only continuation from the same frozen call and token allowance. The saved
+policy is ready to govern bounded repeated progression; further tool or model loops remain future work
+until the workflow consumes those counters.
 
 The current text-chat baseline supplies conversation history and the personal assistant's approved
 persona. It resolves that persona through the verified local Principal (OpenCrane's permission
@@ -67,9 +95,13 @@ requester's Conversation Use remains a separate human decision. These server-sid
 not claim a runtime Pod identity; workload decisions still require verified Kubernetes coordinates.
 
 MCP tools enter the snapshot as revision-selected immutable tool revisions. Each entry contains the
-saved tool identifier, name, description, input schema, and schema digest. Missing, malformed, or
-digest-mismatched schemas fail admission. The assembler never receives registry or provider
-credentials; execution consumes only the admitted OCI-backed MCP revision.
+saved tool identifier, exact runtime name, description, input schema, and schema digest. Missing,
+malformed, or digest-mismatched schemas fail admission. During compilation, the immutable revision
+identifier produces a 47-character provider-compatible `modelName`; the source name stays unchanged
+for disclosure and MCP dispatch. Different revisions may share a source name, but revision or final
+model-name collisions fail compilation. The alias grants no permission. The assembler never
+receives registry or provider credentials. It selects admitted MCP revisions; the owning MCP
+executor chooses the transport and rechecks current execution authority.
 
 Invariant: a run either commits with its one complete, digest-sealed input snapshot, or it does not
 exist — there is no partially assembled state, and no snapshot field originates from unverified
@@ -88,18 +120,19 @@ current Use on the conversation. No personal persona, memory or tool assignment 
 company revision. An explicit no-personal-memory policy returns an empty preference list without
 opening the personal-memory repository.
 
-The production conversation computer repeats this authority check during bootstrap and before
-output, including retries that return an existing run snapshot. Current service state, revision,
-identity, current human membership and required grants must still admit the operation. The frozen
+The server repeats this authority check while its durable turn workflow selects and advances saved
+progress, including retries that recover an existing run snapshot. Current service state, revision,
+identity, current human membership and required grants must still admit each effect. The frozen
 snapshot supplies evidence and input limits; it cannot restore removed access.
 Retries recover the memory policy from the saved snapshot. A valid `none` scope stays disabled;
 `personal` requires both saved dataset identifiers. Unknown or inconsistent saved scopes are denied.
 
 `__RunInputAuthorityExpiresAt` bounds model credentials by the earliest original execution-evidence
 expiry, requester-evidence expiry and absolute budget deadline. It verifies run/attempt binding and
-the compiled deadline against the snapshot. Assembly returns the currently checked subject separately
-from the unchanged snapshot. A retry intersects both subjects' trust deadlines: shorter current
-evidence reduces credential validity, while refreshed evidence never extends the original ceiling.
+all compiled budget ceilings against the saved snapshot. Assembly returns the currently checked subject
+separately from the unchanged snapshot. A retry intersects both subjects' trust deadlines: shorter
+current evidence reduces credential validity, while refreshed evidence never extends the original
+ceiling or substitutes a different allowance.
 
 - `__AssembleRunInputSnapshot(command, authorities)` — the end-to-end assembly: validate → load all
   sources inside the admission transaction → compile, digest, and persist.
@@ -142,10 +175,14 @@ It receives canonical conversation messages through `VerifiedConversationPromptM
 so it has no relational transcript path. Missing rows, changed schemas, foreign model coordinates,
 inactive parents, and unsupported generated-output capabilities fail compilation closed.
 
+Approval-gated definitions remain available to personal model selection as declarative proposals.
+Managed company runs remove them from the compiled offer until an entitled human resolver and
+connection authority are bound; the compiler never turns a tool definition into permission to run it.
+
 ## Boundary
 
-Consumed by the run-admission path in the OpenCrane app, which composes the ports with real
-authority adapters. It does not select a runtime driver, approve a persona, issue capabilities, or
+Consumed by the OpenCrane bootstrap and conversation execution path. The conversation admission owner composes
+its ports with real authority adapters. It does not select a runtime driver, approve a persona, issue capabilities, or
 read mutable workspace files — and it never touches storage directly: every read goes through a
 port, and the only write goes through the [runs](../../runs/main/README.md) package's
 `RunAdmissionRepository`. The deterministic compiler reads only non-memory content already named by

@@ -13,11 +13,203 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ## [Unreleased]
 
+### Fixed
+
+- **Memory integrations can execute and verify individual provider steps through the private gateway.**
+  Dataset lookup, document storage, indexing and deletion return typed receipts that can be checked
+  against saved operation coordinates. Add and delete reconcile existing provider state before
+  repeating a mutation; unknown delivery remains distinct from success or an empty recall. The
+  server retains its query and scoped-memory APIs. Product Remember, Correct and Forget commands,
+  first-dataset permission and live memory qualification remain unfinished.
+
+- **Run recovery cannot replace the original model, token, tool, cycle or time allowance.** New
+  revisions and admitted inputs carry explicit limits, including an optional extra revision spend
+  cap. Missing or malformed limits fail closed, and compilation preserves the original deadline.
+  The existing server spend cap still applies across repeated tool calls. Live qualification
+  remains a separate gate.
+
+- **Tool work recovers the checkpoint for its own invocation.** Approval publication and remote
+  dispatch use the exact invocation identity, so a later call cannot inherit an earlier call's
+  saved checkpoint. Retrying the same call still reuses its existing checkpoint.
+
+- **Operators can suspend test silos while retaining their data.** The app-owned command stops
+  application workloads and their shared controllers, preserves storage and credentials, and keeps
+  retained sandboxes suspended when the controller returns. Reruns accept already-removed disposable
+  Pods and reject changed ownership or persistent volumes before mutation. Already-stopped PostgreSQL
+  resources with saved ownership need no further write, so retention checks can finish while their
+  admission webhook is stopped.
+
+- **Memory deployments use the qualified provider profile through one authenticated gateway.**
+  Cognee 1.5.4 replaces the older production image and separate candidate build. The gateway uses
+  an existing service-user Secret, refreshes its private provider session after rejection, and checks
+  the exact admitted dataset on every search response. The provider's recovery and deletion fixes
+  belong to the production build; final-image and live memory journeys still require qualification.
+
+- **Fresh silo bootstrap keeps generated passwords out of process arguments.** PostgreSQL and
+  KurrentDB use private temporary password files and remove them on success or failure. Cognee's
+  separate create-only helper validates the exact immutable service-user Secret on reruns;
+  automatic provider registration remains disabled by default.
+
+- **Keyboard users can reach tool controls and scroll Computer Review output.** Tools uses the
+  shared PrimeNG controls and visible focus treatment. Computer Review includes named keyboard
+  scroll regions and standard tabs, with populated, busy, error and narrow-screen contracts.
+
+- **A repeated message remains recoverable after a new sign-in or display-name change.** The server
+  preserves its saved author metadata while checking the same authenticated person, message content
+  and current conversation permission.
+
+- **Stopping work cannot cancel a newer turn state using an older read.** Cancellation and settlement
+  use the decoded turn revision in the existing atomic history append; a race reloads current state.
+
+- **Every silo deployment checks that conversation execution can run before changing the cluster.**
+  New environments require the existing KurrentDB history store, isolated AgentSandbox profile,
+  immutable images and Secret references. The check applies to the final Helm values, including
+  overrides and reused release values, so a different test-environment name cannot skip it.
+
+- **Run status preserves an uncertain model response across server restarts.** The workflow saves
+  that recovery is required before reporting the unavailable response. A failed status write stays
+  pending; retry uses the original request and remaining allowance without another paid dispatch.
+  This applies to both the first response and the final response after a tool result. Live
+  qualification remains separate.
+
+- **Operators can render governed MCP execution with both network and admission policies.**
+  The chart keeps these as separate Kubernetes resources, and the controller test parses the
+  complete manifest to catch malformed document boundaries before deployment. Hosted execution
+  and live installation qualification remain separate.
+
 Personal and group-assistant text journeys and recent personal activity have passed integration
-CI and live testv5 checks.
+CI and earlier live testv5 checks. The old test environments are now suspended with their data
+retained. Fresh testv6 will qualify the cleaned candidate and the remaining business journeys.
 The 0.11 baseline remains under review; this is not a release or a completed MVP.
 
 ### Added
+
+- **Participants can follow requested and running hosted tool work in their conversation.**
+  The source under review saves these states in ordered history, so refresh and recovery retain
+  the same tool call. Running appears only after an execution claim, and current permission is
+  checked again before the executor receives its command. Arguments and credentials remain private;
+  a recovered status never permits another dispatch. Live qualification remains separate.
+
+- **People can configure an installed remote MCP connection without reading its credentials back.**
+  The source under review keeps connection commands tied to the observed generation, retains the
+  same command after an uncertain response, and discovers tools for that connection's owner.
+  Removal retains connection history while its existing workflow finishes cleanup. Remote replies
+  pass through the shared result checks before completion: ordinary results remain usable, while
+  embedded file resources cannot enter conversation results without supported capture authority.
+  Rejected replies preserve dispatch evidence and never cause a second provider call. Runtime
+  database fencing still awaits its reviewed source proposal; real remote execution and live
+  qualification remain unfinished.
+
+- **Operators can detect missing outbound certificate trust before starting hosted qualification.**
+  The smoke renders the actual server and checks the selected certificate mount before creating
+  a cluster or credentials. Its test client accepts only the disposable loopback origin and uses
+  public test data for synthetic-provider registration. Complete hosted execution and testv5
+  qualification remain separate; the optional production certificate support is still pending.
+
+- **People can select tools for their personal agent through the configuration API.** The source
+  under review accepts only tools the person may assign and saves one new agent revision while
+  preserving its model, persona and other settings. Removing a tool removes this personal
+  assignment's permissions; unrelated grants remain. Stale edits conflict, and a refreshed read
+  returns the saved selection after an uncertain response. The complete hosted conversation and
+  live qualification remain separate.
+
+- **MCP tools can keep their original names when offered to a model.** The compiler gives each
+  immutable revision a distinct model name, so tools with dots, long names or equal names from
+  different servers do not compete for the same declaration. The model selects that saved name;
+  permission checks and runtime calls retain the original revision and MCP name. Recovery uses
+  the same mapping and remaining allowance. Real remote and hosted integration qualification
+  remains separate.
+
+- **Integrators can build a credentialless MCP that produces CSV files from tabular values.** The
+  isolated producer and server validator share the same filename, formula-safety and serialization
+  rules. Its `opencrane_files_create_csv` discovery name remains the exact runtime identity, while
+  the compiler provides its model declaration name. Server validation rejects output that differs
+  from the admitted arguments. The encrypted
+  file codec preserves up to 1 MiB through ordered chunks without increasing ordinary message
+  limits. MCP completion now requires capture before saving metadata in place of file contents.
+  Server workflow progression rechecks current authority, and a clean scan cannot publish a file
+  whose authority ended. The complete capture-to-answer/download journey is still being assembled;
+  this does not enable generated files on testv5.
+
+- **Memory command integrations can preserve one operation across retries and restarts.** The
+  personal-memory repository retains the original source, command and provider receipts, adopts a
+  new dataset atomically, and hides a fact when Forget is admitted. Concurrent retries return the
+  saved operation; rejected transactions leave neither partial adoption nor a partial command.
+  Integrators can now bind new operation storage to the actual Absurd task admitted in the same
+  transaction. Exact replay returns the saved receipt without admitting another task. Source
+  preparation reads one caller-authored message and rechecks its encrypted coordinates under
+  current conversation access. Catalog completion now publishes the new fact, replaces a prior
+  fact for Correct, or finalizes Forget together with the operation's progress. A failed transaction
+  preserves both prior states; retries cannot publish another correction successor. The catalog
+  keeps consent, personal sensitivity and message provenance without remembered text.
+  Gateway adapters can now associate an indexing result with the saved operation and document
+  snapshot. They retain the provider's pipeline receipt and reject mismatched or unfinished
+  responses; document evidence contains identifiers, content digests and sizes without fact text.
+  Authenticated product command composition, worker/provider wiring and the complete memory
+  journey remain unfinished.
+
+- **Conversation participants can open ready uploaded files from the Files panel.** Supported
+  previews and downloads use the current authorized content read, show loading and safe retry
+  feedback, and discard pending results when the selected conversation or access changes.
+  Document-informed answers, generated files and live qualification remain unfinished.
+
+- **Personal assistant turns can receive selected scanned PDFs as reference text.** The source under
+  review binds each Ready PDF to the accepted message, loads only lineage-checked converted text,
+  rechecks current access before initial and restarted compilation, and treats the text as untrusted
+  user content. Each document is capped at 64 KiB, with at most ten PDFs and 128 KiB in total.
+  Live testv5 qualification and generated-file production remain unfinished.
+
+- **Operators can qualify the pinned Cognee image against the memory-provider contract before publication.** The uncached `cognee:memory-contract` target runs disposable synthetic datasets with a deterministic local model and embedding stub on an internal Docker network, checking isolation, source and document identity, lost-response and restart recovery, indexing and deletion; selected CI retains the evidence and gates image publication. Personal memory writes and Remember, Recall, Correct and Forget journeys remain unfinished.
+
+- **Operators can evaluate a proposed Cognee replacement independently of the deployed image.** The
+  separate 1.5.4 qualification uses fresh disposable storage and retains evidence for image identity,
+  isolation, recovery and deletion. Concurrent add/delete qualification now checks that both
+  datasets use the same owner-scoped storage lock; the candidate's public cleanup also takes that
+  lock before opening a database session. Dataset checks retain the saved name, owner and identifier across
+  concurrent creation, a lost creation response and provider restart. Indexing recovery checks that a
+  lost response returns the exact saved operation receipt, including after restart, while unfinished
+  work refuses repeat dispatch. The receipt binds the document content and processing inputs saved
+  before the first request. Explicit candidate repairs preserve the official source hashes
+  and separately verify their patch artifacts, base image and running source. It cannot publish a
+  candidate or replace the existing production provider gate. All 31 replacement-candidate cases
+  now pass on the reviewed image; production integration and personal memory journeys remain
+  unfinished.
+
+- **People can stop their own current personal-assistant turn from the conversation.** Stop checks
+  current access, saves the selected turn and prevents further model or tool work. Pending approvals
+  close when cancellation wins; an answer already committed remains successful. Work already sent
+  to a provider keeps its recovery evidence. Server restarts resume the saved cleanup without
+  creating a replacement model request or granting a fresh allowance. Shared-participant controls
+  and testv5 qualification remain unfinished.
+
+- **People can review a personal assistant's proposed tool call in the conversation.** The approval
+  card shows the saved tool and system names and reviewable arguments, then requires a separate
+  confirmation to approve or deny. Requests with hidden secret fields allow denial only. Pending
+  requests return when the conversation reopens and new requests appear through durable history
+  notifications. Switching conversations or losing access clears the private draft; reauthentication
+  and uncertain submissions reconcile with the saved server decision. The original run resumes
+  without a fresh model allowance. Company approver binding and live remote-provider/hosted-MCP
+  qualification remain unfinished.
+
+- **Conversation participants can retain a safe record of terminal tool-result status beside the
+  transcript.** Personal and company-child conversations show that a tool result was received while
+  keeping this status separate from the assistant's final answer. The durable history fact contains
+  no tool arguments, result content or credentials, and binds the exact saved result receipt. After
+  a restart, recovery publishes that fact before spending the original turn's remaining allowance
+  on the final continuation. Full work controls and live connection/provider qualification remain
+  unfinished.
+
+- **People can distinguish tool progress from an assistant's final answer in recent personal activity.**
+  The activity view shows queued, running, result-received and needs-attention tool phases while
+  preserving the separate run status. Reads check the current personal owner and run permission;
+  tool arguments, results and credentials are not returned. Refresh only reads status, and an answer
+  link still requires an authorized, loaded final message. Complete work controls remain a later
+  slice.
+
+- **Standalone administrators can remove a colleague's company access from Settings.** The member
+  remains recorded as suspended; Owner and self-removal are protected. Proven access loss clears
+  retained workspace content and invitation results, and delayed requests cannot restore them.
+  Fleet removal remains unavailable. The real-account removal journey still needs live qualification.
 
 - **People can follow recent personal-assistant work and reopen a loaded answer.** The activity
   pane shows current status and an explicit refresh control. Changing chats, signing out or losing
@@ -42,12 +234,12 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   `POST /api/v1/organization/company-assistant` selects its model and the people allowed to invoke
   it. Setup retries preserve the existing assistant and do not restore revoked grants.
 
-- **Conversation workloads can store a proposed tool call without dispatching it.** The private
-  route accepts one frozen tool revision and validated arguments, checks current permission and
-  preserves the same proposal across retries. Connecting it to model execution and durable
-  conversation results remains in development.
-  A durable reservation prevents unresolved tool work from being accepted as a final answer.
-  Exact proposal retries are supported; automatic recovery of an abandoned reservation is pending.
+- **Administrators can select the company assistant's tools through the API.** Each changed
+  selection publishes an immutable configuration and exact permissions for the assistant's own
+  identity. Stale edits conflict, unchanged selections still check current permission, and removing
+  a tool prevents later dispatch through the old revision. Edits preserve the original model
+  allowance; new assistants permit two model requests for one tool result and a final answer.
+  Credential activation, a management screen and live retrieval qualification remain unfinished.
 
 - **People can use agent-session conversations whose complete history survives server and executor
   restarts.** Immutable KurrentDB streams preserve ordered messages and computer lifecycle events,
@@ -76,6 +268,25 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Changed
 
+- **Integrators can use one pinned standard MCP contract for executor discovery and tool calls.** The
+  companion sends the required protocol metadata and schema-bound call headers, decodes valid JSON
+  and request-scoped SSE responses with progress notifications, preserves structured tool output, and
+  discovers up to 256 tools across bounded pages while rejecting duplicate names and cursor loops.
+  The duplicate executor-specific protocol surface has been removed. Remote connections remain
+  discovery-only; provider credentials, external hosted egress and live qualification are still
+  outstanding.
+
+- **Assistants can use successive tool results to choose their next permitted action in one turn.**
+  Each model request receives the earlier call/result pairs in order and spends the original run's
+  shared allowance. Another tool is offered only when a final text call can still be reserved.
+  Absurd resumes saved progress after approvals or restarts; the same attempt credential and expiry
+  remain binding. Unavailable responses are saved for recovery, and a lost paid response cannot
+  trigger another dispatch. Provider backoff and live testv6 business qualification remain pending.
+
+- **Maintainers can locate and change server behavior in functional libraries and frontend behavior in
+  focused components and stores.** Capability folders group related implementation and make its
+  ownership easier to follow. This refactor remains in progress.
+
 - **Contributors get dependency-boundary failures before the expensive CI work begins.** CI avoids
   transferring local Nx cache files that another runner cannot reuse, and implementation guidance
   assigns specialist reviews according to the changed responsibility.
@@ -91,6 +302,16 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Fixed
 
+- **Installed tools report whether they need credentials without inferring readiness from server type.**
+  The source under review requires an explicit credential requirement; credentialed installations
+  remain unavailable, and credentialless installations show “No credential required”. Dispatch checks
+  the executing person's or company assistant's own installation. Remote credential activation,
+  hosted provider access and live qualification remain unfinished.
+
+- **Completed setup can recover an unused personal assistant whose computer profile is no longer configured.**
+  The repair keeps setup answers, identity and revision history, requires current edit permission,
+  and refuses any assistant with prior conversations or runs. Live qualification remains separate.
+
 - **Browser login can survive server replacement and requests reaching different servers.** The
   follow-up stores encrypted sessions in PostgreSQL, preserves fixed expiry and prevents delayed
   saves from undoing logout. Fresh PostgreSQL CI passes. It requires the matching fresh baseline;
@@ -99,7 +320,7 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 - **People can find newly admitted personal assistant work in their activity.** Admission saves the
   owner’s run-read permission with the run and its inputs. Reads still check current membership and
   permission; retries cannot restore revoked access. CI, image publication and two-employee
-  live qualification pass on testv5.
+  live qualification pass on testv5. Earlier runs receive no backfill.
 
 - **People can start distinct personal chats and retry creation safely.** A new command starts a
   separate conversation; retrying the same command returns its existing session without reopening
@@ -129,6 +350,11 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
 
 ### Removed
 
+- **Conversation-computer Pods no longer schedule server-owned model work.** The Pod retains its
+  lease-fenced workspace bootstrap, checkpoint restore, health and review-credential interactions;
+  model-readiness polling, Pod-owned outcome branching, and the private `/model-step` route and call
+  are absent.
+
 - **Operators no longer maintain the run-owned warm-runtime lifecycle or its workload-proof
   database authority.** The replaced runtime application, reservation and assignment records,
   proof keys, compatibility routes, socket fallback, and migration scaffolding are absent from the
@@ -140,6 +366,10 @@ The 0.11 baseline remains under review; this is not a release or a completed MVP
   isolated builds, and published PreviewApps likewise remain outside 0.11.0.
 
 ### Security
+
+- **Recovered conversation work remains bound to the current Agent Sandbox lease and generation.**
+  The server derives live Pod identity at each isolated-execution boundary and rejects stale leases,
+  stale generations and ended authority before advancing work or accepting output.
 
 - **Queued run-owned tool calls recheck current access before execution.** The MCP executor
   refuses a revoked permission or stale conversation lease before contacting the tool. A definite

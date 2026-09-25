@@ -1,0 +1,53 @@
+:host {
+	display: block;
+	text-align: start;
+	white-space: normal;
+}
+
+.wo-mcp-connection {
+	display: grid;
+	gap: var(--oc-space-2);
+	min-width: min(18rem, 100%);
+
+	&__form {
+		display: grid;
+		gap: var(--oc-space-2);
+	}
+
+	&__label {
+		font-size: var(--oc-text-xs);
+		color: var(--oc-ink-strong);
+	}
+
+	&__input {
+		width: 100%;
+		font-size: var(--oc-text-sm);
+	}
+
+	&__help,
+	&__status,
+	&__error {
+		margin: 0;
+		font-size: var(--oc-text-xs);
+		line-height: 1.5;
+	}
+
+	&__help,
+	&__status {
+		color: var(--oc-ink-muted);
+	}
+
+	&__error {
+		color: var(--oc-danger);
+	}
+
+	&__error-anchor {
+		display: none;
+	}
+
+	&__actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--oc-space-3);
+	}
+}

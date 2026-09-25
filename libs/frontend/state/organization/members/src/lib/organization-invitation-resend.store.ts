@@ -1,6 +1,10 @@
-import { Injectable, inject, signal } from "@angular/core";
+import { Injectable, effect, inject, signal } from "@angular/core";
 
 import { _MergeReturnedInvitations, _NewInvitationIdempotencyKey } from "./invitation-command.utils";
+import { OrganizationMemberDirectoryStore } from "./organization-member-directory.store";
+import { OrganizationMemberDirectoryStates } from "./organization-member-directory.types";
+import { OrganizationMembersGatewayError } from "./organization-members.errors";
+import { OrganizationMembersGatewayErrorKinds } from "./organization-members-gateway.types";
 import { ORGANIZATION_MEMBERS_GATEWAY } from "./organization-members.gateway";
 import { _OrganizationMembersCommandMessage } from "./organization-members-error-mapper";
 import type { OrganizationInvitation } from "./organization-invitations.types";
@@ -15,6 +19,8 @@ export class OrganizationInvitationResendStore
 {
 	/** Ordinary user-session membership port. */
 	private readonly _gateway = inject(ORGANIZATION_MEMBERS_GATEWAY);
+	private readonly _directory = inject(OrganizationMemberDirectoryStore);
+	private _generation = this._directory.accessGeneration();
 	/** Invitation ids currently admitted for resend. */
 	private readonly _busyIds = signal<ReadonlySet<string>>(new Set());
 	/** Retry keys retained until refreshed rows arrive. */
@@ -35,10 +41,19 @@ export class OrganizationInvitationResendStore
 	/** Public latest resend failure. */
 	public readonly error = this._error.asReadonly();
 
+	/** Clears returned links, drafts and command locks when current access is lost. */
+	public constructor()
+	{
+		effect(() => { this._SyncAccess(); });
+	}
+
 	/** Resends one invitation while allowing independent rows to proceed. */
 	public async resend(invitationId: string): Promise<boolean>
 	{
-		if (invitationId.length === 0 || this._busyIds().has(invitationId)) return false;
+		this._SyncAccess();
+		if (this._directory.state() === OrganizationMemberDirectoryStates.Forbidden || invitationId.length === 0 || this._busyIds().has(invitationId))
+			return false;
+		const generation = this._generation;
 		this._SetBusy(invitationId, true);
 		this._link.set(null);
 		this._error.set(null);
@@ -47,6 +62,8 @@ export class OrganizationInvitationResendStore
 		try
 		{
 			const result = await this._gateway.resend(invitationId, key);
+			if (generation !== this._directory.accessGeneration())
+				return false;
 			this._invitations.update(current => _MergeReturnedInvitations([result.invitation], current));
 			this._link.set(result.inviteLink);
 			this._keys.delete(invitationId);
@@ -54,18 +71,45 @@ export class OrganizationInvitationResendStore
 		}
 		catch (error)
 		{
+			if (generation !== this._directory.accessGeneration())
+				return false;
+			if (error instanceof OrganizationMembersGatewayError && error.kind === OrganizationMembersGatewayErrorKinds.Forbidden)
+			{
+				this._directory.forbid();
+				this._SyncAccess();
+				return false;
+			}
 			this._error.set(_OrganizationMembersCommandMessage(error, "OpenCrane could not refresh this invitation link."));
 			return false;
 		}
-		finally { this._SetBusy(invitationId, false); }
+		finally
+		{
+			if (generation === this._directory.accessGeneration())
+				this._SetBusy(invitationId, false);
+		}
 	}
 
 	/** Adds or removes one target without clearing another target's busy state. */
 	private _SetBusy(invitationId: string, active: boolean): void
 	{
 		const next = new Set(this._busyIds());
-		if (active) next.add(invitationId);
+		if (active)
+			next.add(invitationId);
 		else next.delete(invitationId);
 		this._busyIds.set(next);
+	}
+
+	/** Invalidates in-flight callbacks before clearing private invitation state. */
+	private _SyncAccess(): void
+	{
+		const generation = this._directory.accessGeneration();
+		if (generation === this._generation)
+			return;
+		this._generation = generation;
+		this._busyIds.set(new Set());
+		this._keys.clear();
+		this._invitations.set([]);
+		this._link.set(null);
+		this._error.set(null);
 	}
 }

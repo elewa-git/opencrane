@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { OrganizationInvitationStatuses, OrganizationInviteCommandStates, OrganizationMemberDirectoryStates, OrganizationMemberRoles, OrganizationMemberStatuses, type OrganizationMemberDirectory } from "@opencrane/state/organization/members";
+import { OrganizationInvitationStatuses, OrganizationInviteCommandStates, OrganizationMemberDirectoryStates, OrganizationMemberRoles, OrganizationMemberStatuses, OrganizationMemberRemovalStates, type OrganizationMemberDirectory } from "@opencrane/state/organization/members";
 
 import { _MapMembersView } from "../members.mapper";
 
@@ -10,7 +10,7 @@ function _Directory(): OrganizationMemberDirectory
 	return {
 		activeCount: 1,
 		pendingCount: 1,
-		members: [{ membershipId: "member-1", displayName: "Alex Kim", email: "alex@example.com", role: OrganizationMemberRoles.Member, status: OrganizationMemberStatuses.Active, joinedAt: "2026-08-01T00:00:00.000Z", isCurrentUser: false }],
+		members: [{ membershipId: "member-1", displayName: "Alex Kim", email: "alex@example.com", role: OrganizationMemberRoles.Member, status: OrganizationMemberStatuses.Active, joinedAt: "2026-08-01T00:00:00.000Z", isCurrentUser: false, removal: { state: OrganizationMemberRemovalStates.Available } }],
 		invitations: [
 			{ invitationId: "invite-pending", email: "pending@example.com", role: OrganizationMemberRoles.Member, status: OrganizationInvitationStatuses.Pending, expiresAt: "2026-08-30T00:00:00.000Z", invitedAt: "2026-08-17T00:00:00.000Z", invitedByDisplayName: "Jente" },
 			{ invitationId: "invite-accepted", email: "accepted@example.com", role: OrganizationMemberRoles.Member, status: OrganizationInvitationStatuses.Accepted, expiresAt: "2026-08-20T00:00:00.000Z", invitedAt: "2026-08-10T00:00:00.000Z", invitedByDisplayName: "Jente" },
@@ -23,7 +23,7 @@ describe("members presentation mapping", function _MembersMapperSuite()
 {
 	it("excludes accepted invitation history and keeps the pending count authoritative", function _PendingProjection()
 	{
-		const view = _MapMembersView({ directory: _Directory(), directoryState: OrganizationMemberDirectoryStates.Ready, searchQuery: "", refreshError: null, inviteState: OrganizationInviteCommandStates.Editing, inviteIssues: [], inviteError: null, inviteLinks: [], resendingInvitationIds: new Set(), returnedInvitations: [], resentInviteLink: null, resendError: null });
+		const view = _MapMembersView({ directory: _Directory(), directoryState: OrganizationMemberDirectoryStates.Ready, searchQuery: "", refreshError: null, inviteState: OrganizationInviteCommandStates.Editing, inviteIssues: [], inviteError: null, inviteLinks: [], resendingInvitationIds: new Set(), removingMembershipIds: new Set(), returnedInvitations: [], resentInviteLink: null, resendError: null, removalMessage: null, removalError: null });
 		expect(view.pendingRows.map(row => row.id)).toEqual(["invite-pending", "invite-failed"]);
 		expect(view.pendingCount).toBe(1);
 		expect(view.pendingRows.find(row => row.id === "invite-failed")?.roleLabel).toBe("Failed");
@@ -32,7 +32,7 @@ describe("members presentation mapping", function _MembersMapperSuite()
 	it("counts a newly created pending row once while overlaying the returned projection", function _CreatedOverlay()
 	{
 		const created = { invitationId: "invite-new", email: "new@example.com", role: OrganizationMemberRoles.Member, status: OrganizationInvitationStatuses.Pending, expiresAt: "2026-09-01T00:00:00.000Z", invitedAt: "2026-08-17T00:00:00.000Z", invitedByDisplayName: "Jente" } as const;
-		const view = _MapMembersView({ directory: _Directory(), directoryState: OrganizationMemberDirectoryStates.Ready, searchQuery: "new@", refreshError: null, inviteState: OrganizationInviteCommandStates.Success, inviteIssues: [], inviteError: null, inviteLinks: ["https://example.com/invite"], resendingInvitationIds: new Set(), returnedInvitations: [created, created], resentInviteLink: null, resendError: null });
+		const view = _MapMembersView({ directory: _Directory(), directoryState: OrganizationMemberDirectoryStates.Ready, searchQuery: "new@", refreshError: null, inviteState: OrganizationInviteCommandStates.Success, inviteIssues: [], inviteError: null, inviteLinks: ["https://example.com/invite"], resendingInvitationIds: new Set(), removingMembershipIds: new Set(), returnedInvitations: [created, created], resentInviteLink: null, resendError: null, removalMessage: null, removalError: null });
 		expect(view.pendingRows.map(row => row.id)).toEqual(["invite-new"]);
 		expect(view.pendingCount).toBe(2);
 	});
@@ -40,7 +40,7 @@ describe("members presentation mapping", function _MembersMapperSuite()
 	it("lets a refreshed directory replace an older mutation overlay", function _AuthoritativeRefresh()
 	{
 		const stale = { invitationId: "invite-accepted", email: "accepted@example.com", role: OrganizationMemberRoles.Member, status: OrganizationInvitationStatuses.Pending, expiresAt: "2026-08-20T00:00:00.000Z", invitedAt: "2026-08-10T00:00:00.000Z", invitedByDisplayName: "Jente" } as const;
-		const view = _MapMembersView({ directory: _Directory(), directoryState: OrganizationMemberDirectoryStates.Ready, searchQuery: "accepted@", refreshError: null, inviteState: OrganizationInviteCommandStates.Success, inviteIssues: [], inviteError: null, inviteLinks: [], resendingInvitationIds: new Set(), returnedInvitations: [stale], resentInviteLink: null, resendError: null });
+		const view = _MapMembersView({ directory: _Directory(), directoryState: OrganizationMemberDirectoryStates.Ready, searchQuery: "accepted@", refreshError: null, inviteState: OrganizationInviteCommandStates.Success, inviteIssues: [], inviteError: null, inviteLinks: [], resendingInvitationIds: new Set(), removingMembershipIds: new Set(), returnedInvitations: [stale], resentInviteLink: null, resendError: null, removalMessage: null, removalError: null });
 		expect(view.pendingRows).toEqual([]);
 		expect(view.pendingCount).toBe(1);
 	});
@@ -48,9 +48,30 @@ describe("members presentation mapping", function _MembersMapperSuite()
 	it("keeps a rotated mutation row over an older directory retained after refresh failure", function _RetainedRefreshPrecedence()
 	{
 		const rotated = { invitationId: "invite-failed", email: "failed@example.com", role: OrganizationMemberRoles.Admin, status: OrganizationInvitationStatuses.Pending, expiresAt: "2026-09-08T00:00:00.000Z", invitedAt: "2026-09-01T00:00:00.000Z", invitedByDisplayName: "Jente" } as const;
-		const view = _MapMembersView({ directory: _Directory(), directoryState: OrganizationMemberDirectoryStates.RetainedRefreshError, searchQuery: "failed@", refreshError: "Members could not be refreshed.", inviteState: OrganizationInviteCommandStates.Editing, inviteIssues: [], inviteError: null, inviteLinks: [], resendingInvitationIds: new Set(), returnedInvitations: [rotated], resentInviteLink: "https://example.com/invitations/rotated", resendError: null });
+		const view = _MapMembersView({ directory: _Directory(), directoryState: OrganizationMemberDirectoryStates.RetainedRefreshError, searchQuery: "failed@", refreshError: "Members could not be refreshed.", inviteState: OrganizationInviteCommandStates.Editing, inviteIssues: [], inviteError: null, inviteLinks: [], resendingInvitationIds: new Set(), removingMembershipIds: new Set(), returnedInvitations: [rotated], resentInviteLink: "https://example.com/invitations/rotated", resendError: null, removalMessage: null, removalError: null });
 		expect(view.pendingRows).toHaveLength(1);
 		expect(view.pendingRows[0]?.roleLabel).toBe("Pending");
 		expect(view.resentInviteLink).toBe("https://example.com/invitations/rotated");
+	});
+});
+
+describe("removal presentation authority", function _RemovalMapping()
+{
+	it("renders offered removal and Suspended status without inferring authority from role", function _ServerCapability()
+	{
+		const input = { directory: _Directory(), directoryState: OrganizationMemberDirectoryStates.Ready, searchQuery: "", refreshError: null, inviteState: OrganizationInviteCommandStates.Editing, inviteIssues: [], inviteError: null, inviteLinks: [], resendingInvitationIds: new Set<string>(), removingMembershipIds: new Set(["member-1"]), returnedInvitations: [], resentInviteLink: null, resendError: null, removalMessage: null, removalError: null };
+		const member = { ...input.directory.members[0]!, role: OrganizationMemberRoles.Owner };
+		const view = _MapMembersView({ ...input, directory: { ...input.directory, members: [member] } });
+		expect(view.activeRows[0]).toMatchObject({ canRemove: true, removing: true });
+	});
+
+	it("removes retained rows and returned invitation links from a denied projection", function _ForbiddenProjection()
+	{
+		const view = _MapMembersView({ directory: _Directory(), directoryState: OrganizationMemberDirectoryStates.Forbidden, searchQuery: "", refreshError: null, inviteState: OrganizationInviteCommandStates.Success, inviteIssues: [], inviteError: null, inviteLinks: ["private-link"], resendingInvitationIds: new Set(), removingMembershipIds: new Set(), returnedInvitations: _Directory().invitations, resentInviteLink: "private-link", resendError: null, removalMessage: "previous success", removalError: null });
+		expect(view.activeRows).toEqual([]);
+		expect(view.pendingRows).toEqual([]);
+		expect(view.inviteLinks).toEqual([]);
+		expect(view.resentInviteLink).toBeNull();
+		expect(view.removalMessage).toBeNull();
 	});
 });

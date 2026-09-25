@@ -64,6 +64,11 @@ The package's index file (barrel) re-exports the components directly:
   presentation-only persona result with primary, secondary, modifier, and complete score-vector
   states.
 
+`ResourceFeedbackComponent` (`wo-resource-feedback`) presents pending reads and failure copy beside
+retained content. Its `loading`, `error` and `retryAvailable` inputs cover idle, initial loading,
+refreshing, failure and retry-pending states. `retryRequested` is a read intent; the element never
+calls gateways or repeats a mutation. The four tools routes use the same component and state stories.
+
 ## Boundary
 
 Consumed by feature packages such as `features/context`, onboarding, and conversation. It must not
@@ -86,6 +91,12 @@ package.
 - `npm run test:storybook:visual` — compare tagged canonical states with committed screenshots.
 - `npm run test:storybook:visual:update` — intentionally refresh those screenshot baselines after
   reviewing the rendered changes; committed baselines live in `tests/storybook/__screenshots__`.
+
+Visual checks discover tagged stories from the same static catalogue that Nx serves. Each story
+runs as a separate Playwright test with its own deadline and browser context, so a growing catalogue
+cannot exhaust a shared deadline or leave later states unchecked after one failure. The served index
+must match the discovered contracts before the run can pass. Screenshot names and pixel tolerances
+remain tied to the individual story.
 
 Stories tagged `visual-test-narrow` are captured at the supported 390-pixel viewport instead of the
 default desktop viewport, so responsive contracts remain explicit and reproducible.

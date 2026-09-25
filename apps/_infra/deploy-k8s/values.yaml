@@ -104,10 +104,12 @@ sharedPlatform:
       #    Required when mode=shared.
       secretStoreName: ""
 
-# -- Private KurrentDB event ledger. The testv5 deploy path enables it after the KurrentDB and
-# bootstrap image digests, TLS material, and administrator, operations, and service Secrets pass preflight.
+# -- Stores conversation history in the private KurrentDB event ledger. Every silo deploy enables
+# it after the image digests, TLS material, and administrator, operations, and service Secrets pass preflight.
 historyStore:
   kurrentdb:
+    # -- Keeps generic Helm rendering available for component checks. Supported silo installs require
+    # this value to be true; the deploy engine rejects a disabled conversation profile before installation.
     enabled: false
     # -- Exact DNS resolver hosts (/32 IPv4 or /128 IPv6) for bootstrap and snapshot Jobs.
     # Add cluster or node-local resolver addresses when the CNI cannot match kube-dns Pods.
@@ -226,6 +228,8 @@ historyStore:
 # -- Defines release-scoped profiles for the external Kubernetes Agent Sandbox v1beta1 controller.
 # The chart creates profiles and claim admission only; it never installs the controller or CRDs.
 agentSandbox:
+  # -- Keeps generic Helm rendering available for component checks. Every supported silo install
+  # enables this profile after checking its immutable image and approved controller/runtime prerequisites.
   enabled: false
   # -- Maximum lifetime of one server-issued conversation-computer lease.
   leaseTtlSeconds: 3600
@@ -254,6 +258,15 @@ memoryGateway:
   projectedTokenTtlSeconds: 600
   # -- Hard timeout applied to gateway-to-Cognee HTTP exchanges (1-300s).
   httpTimeoutSeconds: 30
+  # -- Pre-created, immutable Secret containing one Cognee service user's email and password.
+  # The app-owned deploy wrapper requires an explicit Secret name for every silo deployment.
+  providerCredential:
+    existingSecret: opencrane-cognee-service-user
+    emailKey: email
+    passwordKey: password
+    # -- Allows exactly one register-then-login attempt after an initial 401. Keep false after an
+    # approved fresh-install bootstrap so a rejected credential remains a readiness failure.
+    allowFirstInstallRegistration: false
   # -- Exact Kubernetes API Service IPs and backing endpoint IPs that the gateway needs for
   # TokenReview. Supply a /32 or /128 per address; the private gateway refuses to render without both.
   kubernetesApiServerCidrs: []
@@ -475,6 +488,10 @@ clustertenantManager:
   conversationPrivatePayloadKeyring:
     existingSecret: opencrane-conversation-private-payload
     secretKey: keyring.json
+  # -- Dedicated HMAC keyring for replaying MCP connection commands without saving bearer tokens.
+  mcpConnectionMaterialKeyring:
+    existingSecret: opencrane-mcp-connection-material
+    secretKey: keyring.json
   # -- Bound run admission before snapshot assembly can take a pooled PostgreSQL connection.
   # These apply per silo and AgentService; keep the active limit below the server's five-connection
   # Prisma budget so a hot service cannot starve unrelated control-plane work.
@@ -487,8 +504,8 @@ clustertenantManager:
     databasePoolSize: 2
     workerConcurrency: 2
     pollIntervalMilliseconds: 100
-    mcpEraProbeTimeoutMilliseconds: 5000
-    mcpEraProbeMaximumResponseBytes: 65536
+    mcpRemoteTimeoutMilliseconds: 5000
+    mcpRemoteMaximumResponseBytes: 65536
     # -- OCI Image Layout ZIP admission imports accepted MCP images into this fixed repository.
     # The reserved .invalid default is non-routable; a deployment profile must name its registry.
     ociRegistry:
@@ -572,9 +589,8 @@ clustertenantManager:
     # -- In-chart Cognee workload settings (only consumed when `install` is true).
     image:
       repository: ghcr.io/elewa-git/opencrane-cognee
-      # -- Thin OpenCrane derivative of Cognee 1.2.1 with its checksum-pinned LadybugDB
-      #    json extension already present. The app-owned deployer replaces the human-readable
-      #    chart tag with an exact digest; tags are accepted only by the disposable k3d smoke.
+      # -- Qualified Cognee 1.5.4 provider with checksum-pinned source repairs and LadybugDB json
+      #    extension. The app-owned deployer replaces this tag with an exact image digest.
       tag: "0.8.1"
       digest: ""
       pullPolicy: IfNotPresent

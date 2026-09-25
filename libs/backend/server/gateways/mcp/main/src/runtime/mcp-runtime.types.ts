@@ -1,8 +1,9 @@
 import type { McpCompanionClaimResponse, McpCompanionCompletionRequest, McpCompanionFailureRequest } from "@opencrane/backend/agents/runtime/mcp-executor/companion";
 import type { RuntimeWorkloadBinding, RuntimeWorkloadClaim } from "@opencrane/backend/agents/runtime/workloads/contract";
 import type { FixedServiceAccountTokenReviewer, RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
-import type { McpToolInvocationTransactionParticipantFactory } from "@opencrane/backend/server/iam/authorization";
+import type { McpToolInvocationTransactionParticipantFactory, ProductAuthorizationWorkloadContext, ToolInvocationClaim, ToolInvocationRequestIdentity } from "@opencrane/backend/server/iam/authorization";
 import type { Logger } from "@opencrane/backend/observability";
+import type { McpInvocationResultParticipantFactory } from "./mcp-invocation-result.types";
 
 /**
  * Names the operation admitted into a saved MCP runtime execution.
@@ -28,6 +29,48 @@ export enum McpRuntimeCompanionClaimOutcomes
 {
 	/** The companion must stop polling because no command can become available. */
 	Terminal = "terminal",
+}
+
+/**
+ * Private server receipt that permits the application composition root to publish one run-owned
+ * invocation after the MCP claim transaction commits.
+ *
+ * This envelope carries only exact authority coordinates. It deliberately excludes invocation
+ * arguments and provider results so conversation history cannot become a second execution payload.
+ */
+export interface McpRuntimeRunInvocationClaimReceipt
+{
+	/** Database identity of the claimed MCP execution. */
+	readonly executionId: string;
+	/** Fence written by the companion claim transaction. */
+	readonly companionClaimFence: string;
+	/** Database identity of the exact authorization-owned ToolInvocation row. */
+	readonly invocationId: string;
+	/** Silo in which both runtime and invocation authority are valid. */
+	readonly siloId: string;
+	/** Conversation stream selected by the exact owning AgentRun. */
+	readonly conversationId: string;
+	/** Run that owns the invocation. */
+	readonly runId: string;
+	/** Positive attempt that owns the invocation. */
+	readonly attempt: number;
+	/** Public tool call identifier shared with conversation history. */
+	readonly toolInvocationId: string;
+	/** Immutable runtime, command, and candidate identity admitted for this invocation. */
+	readonly requestIdentity: ToolInvocationRequestIdentity;
+	/** Exact IAM provider claim fence and lifecycle revision. */
+	readonly toolClaim: ToolInvocationClaim;
+	/** TokenReview-derived workload coordinates used for the claim. */
+	readonly workload: ProductAuthorizationWorkloadContext;
+}
+
+/** Internal claim result carrying the unchanged companion command and optional run history proof. */
+export interface McpRuntimeCompanionClaimResult
+{
+	/** Exact command returned on the existing companion wire. */
+	readonly command: McpCompanionClaimResponse;
+	/** Run-owned receipt, or null for discovery and caller-owned MCP task work. */
+	readonly runInvocation: McpRuntimeRunInvocationClaimReceipt | null;
 }
 
 /**
@@ -161,7 +204,7 @@ export interface McpRuntimeAuthority
 	/** Move one invocation whose companion lease expired after dispatch into manual recovery. */
 	recoverExpiredInvocation(): Promise<boolean>;
 	/** Claim at most one command for the TokenReview-confirmed Pod and projected reference. */
-	claimCompanion(identity: RuntimeWorkloadIdentity, executionReference: string): Promise<McpCompanionClaimResponse | McpRuntimeCompanionClaimOutcomes.Terminal | null>;
+	claimCompanion(identity: RuntimeWorkloadIdentity, executionReference: string): Promise<McpRuntimeCompanionClaimResult | McpRuntimeCompanionClaimOutcomes.Terminal | null>;
 	/** Save a checked completion and all paired MCP or ToolInvocation state. */
 	completeCompanion(identity: RuntimeWorkloadIdentity, request: McpCompanionCompletionRequest): Promise<"completed" | "idempotent" | "conflict">;
 	/** Save definite discovery failure or move an uncertain invocation into manual recovery. */
@@ -200,6 +243,8 @@ export interface McpRuntimeCompanionRouterDependencies
 {
 	readonly authority: McpRuntimeAuthority;
 	readonly tokenReviewer: McpRuntimeCompanionTokenReviewer;
+	/** Append/recover running history and recheck the same current claim before command release. */
+	readonly publishCurrentRunInvocation: (receipt: McpRuntimeRunInvocationClaimReceipt) => Promise<boolean>;
 	readonly logger: Logger;
 }
 
@@ -216,6 +261,8 @@ export interface PrismaMcpRuntimeAuthorityDependencies
 {
 	/** Authorization-owned participant factory bound to each MCP transaction. */
 	readonly toolInvocations: McpToolInvocationTransactionParticipantFactory;
+	/** Captures governed resources before their terminal result commits on the same transaction. */
+	readonly invocationResults: McpInvocationResultParticipantFactory;
 	/** Fixed deployment and lease policy for this silo. */
 	readonly options: McpRuntimeAuthorityOptions;
 }
@@ -284,7 +331,7 @@ export interface McpRuntimeControllerRepository
 export interface McpRuntimeCompanionRepository
 {
 	/** Claim at most one command for the authenticated Pod. */
-	claim(identity: RuntimeWorkloadIdentity, executionReference: string): Promise<McpCompanionClaimResponse | McpRuntimeCompanionClaimOutcomes.Terminal | null>;
+	claim(identity: RuntimeWorkloadIdentity, executionReference: string): Promise<McpRuntimeCompanionClaimResult | McpRuntimeCompanionClaimOutcomes.Terminal | null>;
 	/** Save one checked result and its paired authority state. */
 	complete(identity: RuntimeWorkloadIdentity, request: McpCompanionCompletionRequest): Promise<"completed" | "idempotent" | "conflict">;
 	/** Save one definite discovery failure or ambiguous invocation outcome. */
@@ -292,3 +339,6 @@ export interface McpRuntimeCompanionRepository
 	/** Move one expired invocation claim into manual recovery. */
 	recoverNextExpiredInvocation(): Promise<boolean>;
 }
+
+/** Admit or recover executor work within the caller's existing proposal transaction. */
+export type McpToolInvocationAdmission = (transaction: unknown, invocationRowId: string) => Promise<boolean>;

@@ -1,6 +1,6 @@
 import type { JsonValue } from "@opencrane/util";
 import type { Logger } from "@opencrane/backend/observability";
-import type { McpExecutorDiscoveredTool, McpExecutorToolCallResult } from "@opencrane/backend/agents/runtime/mcp-executor/protocol";
+import type { McpDiscoveredTool, McpToolCallResult } from "@opencrane/contracts";
 
 /**
  * Selects the operation that a companion may perform under one server-issued fence.
@@ -93,6 +93,8 @@ export interface McpCompanionToolCallCommand
 	readonly toolName: string;
 	/** Exact reviewed arguments admitted by ToolInvocation authority. */
 	readonly arguments: JsonValue;
+	/** Exact input schema selected from the frozen tool revision. */
+	readonly inputSchema: JsonValue;
 }
 
 /** One server-issued operation this one-shot process may execute. */
@@ -113,7 +115,7 @@ export interface McpCompanionDiscoveryCompletion
 	/** Identifies the completed exchange as discovery. */
 	readonly kind: McpCompanionCommandKinds.Discovery;
 	/** Live tool definitions checked by the pinned MCP protocol parser. */
-	readonly tools: readonly McpExecutorDiscoveredTool[];
+	readonly tools: readonly McpDiscoveredTool[];
 }
 
 /** Carries one checked MCP tool result back through the current command fence. */
@@ -122,7 +124,7 @@ export interface McpCompanionToolCallCompletion
 	/** Identifies the completed exchange as a tool call. */
 	readonly kind: McpCompanionCommandKinds.Invocation;
 	/** Validated MCP content blocks and the provider's explicit tool-error flag. */
-	readonly result: McpExecutorToolCallResult;
+	readonly result: McpToolCallResult;
 }
 
 /** One checked completion accepted by the OpenCrane authority. */
@@ -145,9 +147,9 @@ export interface McpCompanionServer
 	/** Wait under the claimed command's deadline before discovery or invocation starts. */
 	ready(signal: AbortSignal): Promise<void>;
 	/** Complete pinned protocol discovery before returning checked live tools. */
-	discover(signal: AbortSignal): Promise<readonly McpExecutorDiscoveredTool[]>;
+	discover(signal: AbortSignal): Promise<readonly McpDiscoveredTool[]>;
 	/** Execute exactly one server-authorized tool call. */
-	call(command: McpCompanionToolCallCommand, signal: AbortSignal): Promise<McpExecutorToolCallResult>;
+	call(command: McpCompanionToolCallCommand, signal: AbortSignal): Promise<McpToolCallResult>;
 }
 
 /** Fetch-compatible seam injected into HTTP adapters for focused tests. */

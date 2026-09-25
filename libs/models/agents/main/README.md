@@ -21,6 +21,10 @@ It owns two kinds of thing:
 - A **canonical revision digest** (`__DigestAgentRevisionContent`) over the complete
   `AgentRevisionContent`. Every revision-writing authority hashes the same domain value it persists,
   so managed and personal revision paths cannot silently disagree about executable content.
+- The exact `AgentBudget` stored with each revision and `__ParseAgentBudget`, its fail-closed
+  parser. The budget fixes total model calls, tokens, tool calls, elapsed time and saved tool-result
+  cycles for one run. Its nullable revision cost can add a tighter cap, while null leaves the
+  separately configured spend cap in force.
 - **Pure decision functions** over those types:
   - `state-transitions` holds the small lookup tables of which state may legally follow which (for
     example a run may go `running → completed` but never `completed → running`), and answers a plain
@@ -51,7 +55,9 @@ persistence; a wrong answer here can only refuse a legal move, never invent one.
   freezes the local membership row/version and an observation deadline without inventing a signature
   or Fleet revision.
 - Revision invariants: `__DigestAgentRevisionContent`, `__DiffAgentRevisions`, and the
-  `AgentRevisionDiff` result types.
+  `AgentRevisionDiff` result types. `__ParseAgentBudget` rejects missing, extended or invalid
+  saved budget JSON before a new revision can copy or hash it. Increasing a numeric ceiling, or
+  removing a revision cost cap, is a budget widening.
 - `__Is…TransitionAllowed` — the guard functions over the service, revision, and run transition tables.
 
 ## Boundary

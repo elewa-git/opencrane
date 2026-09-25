@@ -6,6 +6,7 @@ import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 
 import { PrismaElicitationUnitOfWork } from "./prisma-elicitation-unit-of-work";
 import { __CreateSelfElicitationActivityRouter, __CreateSelfElicitationRouter } from "./self-elicitation.router";
+import type { ElicitationRunWakeFactory } from "./elicitation.types";
 import type { SelfElicitationCaller } from "./self-elicitation.router.types";
 
 /** Map trusted browser-session facts into the elicitation caller contract. */
@@ -16,9 +17,9 @@ function _ResolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
 }
 
 /** Compose the Prisma-backed self elicitation API. */
-export function _CreateSelfElicitationRouter(prisma: PrismaClient, logger: Logger): Router
+export function _CreateSelfElicitationRouter(prisma: PrismaClient, logger: Logger, wakeFactory: ElicitationRunWakeFactory | null = null): Router
 {
-	return __CreateSelfElicitationRouter({ resolveCaller: _ResolveCaller, elicitations: new PrismaElicitationUnitOfWork(prisma), clock: { now(): Date { return new Date(); } }, logger });
+	return __CreateSelfElicitationRouter({ resolveCaller: _ResolveCaller, elicitations: new PrismaElicitationUnitOfWork(prisma, wakeFactory), clock: { now(): Date { return new Date(); } }, logger });
 }
 
 /** Compose the Prisma-backed derived Activity index. */

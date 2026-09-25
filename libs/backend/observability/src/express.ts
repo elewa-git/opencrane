@@ -37,7 +37,7 @@ interface _MinimalResponse
  *
  * The inbound header is trusted as-is and used only for correlation — never treat it as identity.
  *
- * Called by: `apps/opencrane/src/app/public-app.ts`, `apps/opencrane/src/app/internal-app.ts`.
+ * Called by: `apps/opencrane/src/bootstrap/http/public-app.ts`, `apps/opencrane/src/bootstrap/http/internal-app.ts`.
  * @returns An Express-compatible request handler.
  * @see {@link ___RunWithContext}
  * @see https://www.rfc-editor.org/rfc/rfc6648

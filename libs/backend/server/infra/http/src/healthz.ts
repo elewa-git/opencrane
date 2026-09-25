@@ -13,7 +13,7 @@ export type { DbHealthProbeRepository, DbHealthProbeUnitOfWork, PublicHealthRepo
  * as `degraded` with HTTP 200. If the reader itself rejects, the handler returns a fixed 503 report
  * and keeps the private error out of this unauthenticated response.
  *
- * Called by: apps/opencrane/src/app/public-app.ts, mounted as `GET /healthz` before authentication.
+ * Called by: apps/opencrane/src/bootstrap/http/public-app.ts, mounted as `GET /healthz` before authentication.
  *
  * @param reader - Application-owned aggregate health reader.
  * @param logger - Structured private logger for an unexpected aggregate-reader failure.

@@ -25,7 +25,7 @@ organisation ingress
                   +---- Agent Sandbox claim ---- conversation-computer Pod
                   +---- skill-authoring Job namespace
 
-conversation-computer Pods ----> LiteLLM (attempt model key)
+opencrane server ----> LiteLLM (attempt model key)
 opencrane server ----> OCI MCP executor Jobs (durable claim + Pod-bound companion)
 
 artifact-service <---- brokered bytes ---- artifact-preprocessor Job namespace
@@ -108,17 +108,19 @@ resource quota, and a dedicated zero- or least-privilege service account.
 
 ## Network direction
 
-Inbound public traffic terminates at organisation ingress. Conversation computers call the private server
-bootstrap and output routes with a projected token; their review Service stays private to the silo.
+Inbound public traffic terminates at organisation ingress. Conversation computers use the private server
+only for lease-fenced review credentials and checkpoint transport with a projected token; their review
+Service stays private to the silo.
 
 NetworkPolicy permits only the named service path required by each workload class. Network reach is
 not authorization: every sensitive server route also verifies workload identity and current durable
 assignment.
 
-Runtime model traffic reaches LiteLLM with a per-attempt virtual key. MCP discovery and tool calls
+Server-owned model traffic reaches LiteLLM with a per-attempt virtual key. Conversation-computer Pods
+have no direct model route. MCP discovery and tool calls
 instead cross a durable server-owned invocation fence: the server freezes an admitted OCI image
 digest, assigns the command to a class-specific executor Job, stores the checked result, and sends
-only that saved result to the runtime. Runtime Pods receive no registry credential or Kubernetes
+only that saved result to the server-owned continuation. Runtime Pods receive no registry credential or Kubernetes
 mutation authority.
 
 Uploaded and generated conversation files remain hidden while quarantined. The scanner authenticates

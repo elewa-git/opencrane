@@ -22,12 +22,13 @@ offers verified sign-in recovery without losing the participant's draft.
 ```
 
 In this flow: [`elements/elicitation`](../../elements/elicitation/README.md) renders draft controls;
-the parent workspace integration in issue #351 will connect emitted intents to the state store.
+the conversation workspace connects emitted intents to its component-scoped state store.
 
 ## Public surface
 
 - `ConversationElicitationCardComponent` renders one exact request, controlled draft, recovery
-  action, and separate submit intent.
+  action, separate decision confirmation, and human-facing approved, denied, expired, or cancelled
+  outcome. It restores focus after verified sign-in without exposing request coordinates.
 
 ## Boundary
 

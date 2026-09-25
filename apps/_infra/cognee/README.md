@@ -1,4 +1,4 @@
-# cognee — offline-ready organisational-memory service
+# cognee — qualified organisational-memory provider
 
 > [apps](../../README.md) › [_infra](../README.md) › cognee
 
@@ -7,99 +7,105 @@
 
 ## What it owns
 
-This app owns the release-local Cognee image and Kubernetes deployment contract. Cognee is the
-graph-based store that supplies durable organisational context to OpenCrane agents. Each customer
-**silo** — one customer's isolated namespace and workloads — gets its own Cognee Deployment,
-Service, storage, and network policy.
-
-Before this image is built, the public LadybugDB extension server provides a native json extension.
-This app downloads that exact binary once, verifies its checksum, and places it where Cognee expects
-it. After deployment, the memory gateway sends admitted requests to Cognee and receives retrieved
-context. Cognee startup never needs the public extension server.
+This app owns the release-local Cognee image and Kubernetes deployment contract. Each customer
+**silo**, meaning one customer's isolated namespace and workloads, gets one Cognee process and one
+shared persistent local volume. The memory gateway is its only network caller and logs in as one
+service user for that silo.
 
 ```text
- build: LadybugDB extension -- fixed checksum --> Cognee image  ◄── HERE
-                                                      |
- deploy: memory gateway -- admitted memory request --> Cognee
-                                                      |
-                                                      +--> durable silo storage
+ reviewed Cognee source + fixed repairs ──► qualified provider image
+                                                   │
+ OpenCrane server ──► memory gateway ── login ─────┤
+                                                   ▼
+                                      Cognee + persistent volume  ◄── HERE
 ```
 
-**In this flow:** the [memory gateway](../../memory-gateway/README.md) owns authenticated access;
-the [silo chart](../deploy-k8s/README.md) composes the deployment.
+**In this flow:** [OpenCrane](../../opencrane/README.md) ·
+[memory gateway](../../memory-gateway/README.md) ·
+[silo chart](../deploy-k8s/README.md).
 
-The invariant is that the required native extension is already present and byte-for-byte verified
-before the image can be published. A wrong download fails the build. A missing extension fails the
-offline image smoke. No runtime network exception hides either failure.
+The provider must preserve shared memberships and delete an unreferenced local source before its
+relational deletion commits. A cleanup or commit failure therefore retains the exact document and
+dataset coordinate needed for a safe retry. The same image also repairs dataset ACL creation and
+binds Cognify retries to a saved input digest and operation identifier.
 
 ## Public surface
 
-- `deploy/Dockerfile` builds the OpenCrane-owned Cognee image.
-- `helm/` provides `opencrane.cognee.resources`, the named-template library composed by the silo
-  chart.
-- `project.json` registers the container, contract-test, offline image-smoke, and Helm-lint targets.
+- `deploy/Dockerfile` builds the selected provider image from the immutable upstream base.
+- `deploy/provider-profile.json` records the upstream source, platform, native extension and every
+  patched module's reviewed hashes.
+- `deploy/patches/` contains the exact source repairs and the fail-closed patch applicator.
+- `helm/` provides `opencrane.cognee.resources` for the silo chart.
+- `project.json` exposes fast source and policy tests plus the Docker-backed
+  `cognee:memory-contract` qualification. The memory contract owns the image build and offline
+  image smoke before its provider journey, so it is the sole Cognee Docker proof in CI.
 
 There is no importable application code.
 
 ## Boundary
 
-OpenCrane owns how Cognee is built, deployed, reached, and isolated. The vendor owns Cognee's
-behaviour and data model. Only the release-local memory gateway may connect to the Cognee Service.
+OpenCrane owns how Cognee is built, deployed, authenticated and isolated. Cognee owns memory content
+and its provider data model. All product reads and writes still pass through OpenCrane's memory
+gateway port; no application calls Cognee directly.
+
 Network isolation decides who may call Cognee. It does not decide what one search may see inside
 Cognee: dataset-scoped retrieval exists only in Cognee's access-control mode, and that mode requires
 a login. The gateway therefore holds one Cognee service user per silo and forwards exactly one
 dataset UUID per request. Cognee's own permissions never separate employees; OpenCrane's dataset
 selection does. The decision and its evidence are in
 [ADR 0017](../../../docs/adr/0017-cognee-access-control-mode-and-gateway-service-user.md).
-Cognee may reach release-local LiteLLM, cluster DNS, and optional local telemetry, but not
-`extension.ladybugdb.com` at runtime.
 
-External or shared Cognee is deliberately unsupported. Disabling the private instance fails chart
-rendering rather than bypassing the gateway. Shared LiteLLM is also rejected because a standard
-Kubernetes NetworkPolicy cannot safely identify an external endpoint.
+This selected profile is intentionally narrow: one worker, one replica, Cognee's local SQLite
+relational store and one shared local file volume. Managed-file operations share an operating-system
+file lock across processes; dataset locks remain process-local. The qualification makes no safety
+claim for multiple workers, multiple replicas,
+remote storage, a shared database, or independent databases that share files.
 
 ## Dependency direction
 
-This is a deployment entrypoint (`type:app`, `layer:entrypoint`, `scope:cognee`). The silo chart
-composes it; no package imports it.
+This is a deployment entrypoint tagged `type:app`, `layer:entrypoint`, `scope:cognee`. The silo
+chart composes it; no package imports it.
 
 ## Runtime & config
 
-| Part | Pinned value |
+| Part | Selected value |
 | --- | --- |
-| OpenCrane image | `ghcr.io/elewa-git/opencrane-cognee@sha256:…` |
-| Upstream base | `cognee/cognee:1.2.1@sha256:08216665edfbfb1509f1fe866f9e3ff14c1aa930cd2d0d06e81e6549382519a1` |
-| LadybugDB extension | `json`, LadybugDB `0.17.0`, Linux AMD64 |
-| Extension SHA-256 | `8a5eb3c6c70cc86ea34aea777e9fc78687f69d1396055d878d2b9e0a79cb5114` |
-| Runtime path | `/root/.lbdb/extension/0.17.0/linux_amd64/json/libjson.lbug_extension` |
+| Upstream source | Cognee `v1.5.4`, commit `20e0bd88746de2d96e99b4b122361dfc3dad21bc` |
+| Linux AMD64 base | `sha256:a52b0c2669e28932b53d677a6adf6d6487b03886732a5db07b58f3b869647b10` |
+| Runtime identity | UID/GID `1000` (`cognee`) |
+| LadybugDB extension | `json` for LadybugDB `0.19.0` |
+| Extension SHA-256 | `39c51fa9b1915590a500eef732c76913aeb10cd942e46e1c259497e609b97426` |
+| Runtime extension path | `/app/.lbdb/extension/0.19.0/linux_amd64/json/libjson.lbug_extension` |
 
-The image is AMD64-only because the extension is a native binary. The Dockerfile fixes the platform
-and sets `HOME=/root`, because LadybugDB derives its extension path from `HOME` and Kubernetes does
-not add that variable when an image omits it. LadybugDB's download URL includes `v0.17.0`, while its
-local loader directory is `0.17.0` without the `v`; keep those distinct. The image smoke starts
-LadybugDB without networking and loads the extension, so a present-but-unusable file cannot pass
-publication.
-The app-owned deployer requires the exact published digest for every real silo and reuses the prior
-digest on upgrades. A tag is accepted only for the imported image in the disposable local k3d smoke.
-To bump Cognee or LadybugDB, update the base, extension URL, path, checksum, tests, chart dependency,
-and release manifest together. Never replace these pins with `latest` or add runtime egress as a
-fallback.
+The image copies the native extension during its networked build, verifies the checksum, and proves
+that it loads while the smoke container has no network. Each source repair checks the immutable
+upstream preimage, patch digest and resulting postimage before the image can build.
 
-- `clustertenantManager.cognee.install` must remain `true`.
-- `clustertenantManager.cognee.service.port` defaults to `8000` and feeds the gateway endpoint.
-- `clustertenantManager.cognee.persistence.enabled` keeps Cognee's relational, graph, identity, and
-  vector data under `/cognee-data` across pod restarts.
-- `clustertenantManager.cognee.image.*` selects an immutable release image or local smoke alias.
-- `sharedPlatform.litellm.mode` must remain `instance`.
-- `ENABLE_BACKEND_ACCESS_CONTROL` and `REQUIRE_AUTHENTICATION` are the decided target, `true` and
-  `true`, once the authenticated isolation proof lands with the switch change. They currently render
-  `false`. In that setting Cognee ignores the requested dataset and searches one shared store, so
-  personal memory must stay unavailable. The memory gateway is the only Cognee login, with one
-  service user per silo. See
-  [ADR 0017](../../../docs/adr/0017-cognee-access-control-mode-and-gateway-service-user.md).
+The chart fixes one Cognee replica and the SQLite relational provider, requires persistent storage,
+and enables `ENABLE_BACKEND_ACCESS_CONTROL` and `REQUIRE_AUTHENTICATION`
+([ADR 0017](../../../docs/adr/0017-cognee-access-control-mode-and-gateway-service-user.md)). The
+gateway reads the service-user email and password from a pre-created Secret mounted as files.
+First-install registration remains disabled by default and requires an explicit, reviewed deployment
+override.
+
+Cognee's chat and embedding calls use the silo's release-local LiteLLM proxy. Keep
+`LLM_MODEL=openai/auto`, `EMBEDDING_PROVIDER=openai_compatible`, and
+`EMBEDDING_MODEL=auto-embedding`; the provider sends those model strings as configured.
+
+Run `npm exec -- nx run cognee:test` for source and policy checks. CI runs
+`npm exec -- nx run cognee:memory-contract` on a Docker runner. That full journey uses synthetic
+content and fresh disposable storage to prove authentication, dataset isolation, useful recall,
+source identity, shared-reference retention, last-reference erasure, interrupted cleanup retry,
+restart recovery, concurrent add/delete, dataset ACL recovery and Cognify replay evidence.
+
+The contract retains content-free coordinates, digests, source hashes and failure receipts under
+`.nx/test-results/cognee-memory-contract`. A successful earlier image qualification does not
+qualify a later cleaned source revision; the exact image produced from the final revision must run
+this contract again before testv6 promotion.
 
 ## See also
 
 - Parent index: [_infra](../README.md)
 - Silo chart: [deploy-k8s](../deploy-k8s/README.md)
+- Memory gateway: [memory-gateway](../../memory-gateway/README.md)
 - Sibling infra: [litellm](../litellm/README.md)

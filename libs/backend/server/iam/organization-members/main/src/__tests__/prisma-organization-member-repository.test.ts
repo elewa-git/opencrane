@@ -66,7 +66,7 @@ describe("PrismaOrganizationMemberRepository concurrency", function _Suite()
 	it("uses the exact organization administer grant instead of an Owner or Admin role query", async function _CentralAdministration()
 	{
 		const transaction = {
-			orgMembership: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0), findFirst: vi.fn() },
+			orgMembership: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0), findFirst: vi.fn(), findUnique: vi.fn().mockResolvedValue({ role: OrgRole.Admin, status: OrgMemberStatus.Active }) },
 			organizationInvitation: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
 		};
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback) { return callback(transaction); }) } as unknown as PrismaClient;
@@ -126,9 +126,9 @@ describe("PrismaOrganizationMemberRepository concurrency", function _Suite()
 		expect(transaction.organizationInvitation.updateMany).toHaveBeenCalledTimes(1);
 	});
 
-	it("recovers an accepted membership after the same subject loses the first response", async function _AcceptanceRetry()
+	it.each([OrgMemberStatus.Active, OrgMemberStatus.Suspended])("recovers an accepted membership without changing current status %s", async function _AcceptanceRetry(status)
 	{
-		const membership = { id: "member-1", subject: "new-subject", email: "new@acme.test", displayName: "New", role: OrgRole.Member, status: OrgMemberStatus.Active, createdAt: new Date("2026-08-17T00:00:00.000Z") };
+		const membership = { id: "member-1", subject: "new-subject", email: "new@acme.test", displayName: "New", role: OrgRole.Member, status, createdAt: new Date("2026-08-17T00:00:00.000Z") };
 		const transaction = {
 			organizationInvitation: { findUnique: vi.fn().mockResolvedValue(_Invitation({ status: OrganizationInvitationStatus.Accepted, acceptedBySubject: "new-subject" })), updateMany: vi.fn() },
 			orgMembership: { findUnique: vi.fn().mockResolvedValue(membership), create: vi.fn() },
@@ -137,6 +137,7 @@ describe("PrismaOrganizationMemberRepository concurrency", function _Suite()
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback) { return callback(transaction); }) } as unknown as PrismaClient;
 		const result = await _UnitOfWork(prisma).accept({ caller: { siloId: "acme", principalId: "principal-new", subjectId: "new-subject", verifiedEmail: "new@acme.test", displayName: "New" }, coordinates: { invitationId: "invite-1", generation: 1, nonce: "abcdefghijklmnop" }, acceptedAt: new Date("2026-08-17T00:01:00.000Z") });
 		expect(result).toMatchObject({ membershipId: "member-1", email: "new@acme.test", isCurrentUser: true });
+		expect(result.status).toBe(status.toLowerCase());
 		expect(transaction.organizationInvitation.updateMany).not.toHaveBeenCalled();
 		expect(transaction.orgMembership.create).not.toHaveBeenCalled();
 		expect(transaction.auditEntry.create).not.toHaveBeenCalled();

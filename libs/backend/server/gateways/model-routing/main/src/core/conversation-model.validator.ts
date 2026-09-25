@@ -1,4 +1,4 @@
-import { ___ConversationModelContinuationSchema, ___ConversationModelResponseSchema, ConversationModelResponseKinds, ConversationModelToolModes, type CompiledToolDefinition, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
+import { ___ConversationModelResponseSchema, ___ConversationModelToolHistorySchema, ConversationModelResponseKinds, ConversationModelToolModes, type CompiledToolDefinition, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
 import { ___CanonicalizeJson, ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { ConversationModelError, ConversationModelFailureCodes, type PreparedConversationModelRequest } from "./conversation-model.types";
@@ -19,7 +19,7 @@ function _isRecord(value: unknown): value is Record<string, unknown>
 }
 
 /**
- * Checks the frozen offer before either dispatch or continuation. Unique names prevent the model
+ * Checks the frozen offer before either dispatch or ordered history replay. Unique model names prevent the model
  * from selecting an ambiguous revision, and the digest prevents a changed schema being offered.
  * These checks do not validate arguments or grant permission to execute a tool.
  */
@@ -31,11 +31,9 @@ function _offeredTools(tools: readonly CompiledToolDefinition[]): readonly Compi
 	const offered: CompiledToolDefinition[] = [];
 	for (const tool of tools)
 	{
-		if (!tool || typeof tool.name !== "string" || !/^[A-Za-z0-9_-]{1,64}$/u.test(tool.name) || names.has(tool.name) || typeof tool.requiresApproval !== "boolean")
+		if (!tool || typeof tool.modelName !== "string" || !/^[A-Za-z0-9_-]{1,64}$/u.test(tool.modelName) || names.has(tool.modelName) || typeof tool.requiresApproval !== "boolean")
 			throw new ConversationModelError(ConversationModelFailureCodes.InvalidRequest);
-		names.add(tool.name);
-		if (tool.requiresApproval)
-			continue;
+		names.add(tool.modelName);
 		if (typeof tool.description !== "string" || !_isRecord(tool.parametersSchema) || ___DigestCanonicalJson(tool.parametersSchema) !== tool.parametersSchemaDigest)
 			throw new ConversationModelError(ConversationModelFailureCodes.InvalidRequest);
 		offered.push(tool);
@@ -44,9 +42,9 @@ function _offeredTools(tools: readonly CompiledToolDefinition[]): readonly Compi
 }
 
 /**
- * Serializes the frozen prompt plus an optional saved tool/result pair and applies admitted limits.
+ * Serializes the frozen prompt plus the complete ordered saved tool/result history and applies admitted limits.
  * Credential coordinates come from server composition; compiled messages cannot alter transport.
- * @throws ConversationModelError before dispatch when inputs, continuation or bounds are unusable.
+ * @throws ConversationModelError before dispatch when inputs, ordered history or bounds are unusable.
  */
 export function _PrepareConversationModelRequest(input: ConversationModelRequest): PreparedConversationModelRequest
 {
@@ -60,12 +58,20 @@ export function _PrepareConversationModelRequest(input: ConversationModelRequest
 			|| typeof input.modelAlias !== "string" || input.modelAlias.trim().length === 0 || input.modelAlias !== compiled.model.modelAlias
 			|| !_isPositiveInteger(input.maxCompletionTokens) || !_isPositiveInteger(input.notAfterEpochMs)
 			|| ceilings.some(value => value !== null && !_isPositiveInteger(value)) || ceilings.every(value => value === null)
-			|| compiled.budget.maxModelTurns !== null && !_isPositiveInteger(compiled.budget.maxModelTurns)
-			|| compiled.budget.wallClockDeadlineEpochMs !== null && !_isPositiveInteger(compiled.budget.wallClockDeadlineEpochMs)
+			|| !_isPositiveInteger(compiled.budget.maxModelTurns)
+			|| !_isPositiveInteger(compiled.budget.wallClockDeadlineEpochMs)
 			|| typeof compiled.instructions !== "string" || !Array.isArray(compiled.messages)
 			|| input.tools !== ConversationModelToolModes.None && input.tools !== ConversationModelToolModes.Select
-			|| input.continuation !== null && input.tools !== ConversationModelToolModes.None)
+			|| !Array.isArray(input.history))
 			throw new ConversationModelError(ConversationModelFailureCodes.InvalidRequest);
+		const parsedHistory = ___ConversationModelToolHistorySchema.safeParse(input.history);
+		if (!parsedHistory.success)
+		{
+			if (parsedHistory.error.issues.some(issue => issue.path[0] === "__bytes"))
+				throw new ConversationModelError(ConversationModelFailureCodes.RequestTooLarge);
+			throw new ConversationModelError(ConversationModelFailureCodes.InvalidRequest);
+		}
+		const history = parsedHistory.data;
 
 		let textBytes = Buffer.byteLength(compiled.instructions) + Buffer.byteLength(input.modelAlias);
 		const messages: JsonValue[] = [{ role: "system", content: compiled.instructions }];
@@ -80,15 +86,14 @@ export function _PrepareConversationModelRequest(input: ConversationModelRequest
 		}
 		if (textBytes > _CONVERSATION_MODEL_MAX_BYTES)
 			throw new ConversationModelError(ConversationModelFailureCodes.RequestTooLarge);
-		const offered = input.tools === ConversationModelToolModes.Select || input.continuation !== null ? _offeredTools(compiled.tools) : [];
-		if (input.continuation !== null)
+		const offered = input.tools === ConversationModelToolModes.Select || history.length > 0 ? _offeredTools(compiled.tools) : [];
+		for (const exchange of history)
 		{
-			const continuation = ___ConversationModelContinuationSchema.parse(input.continuation);
-			if (!offered.some(tool => tool.name === continuation.call.name))
+			if (!offered.some(tool => tool.modelName === exchange.call.name))
 				throw new ConversationModelError(ConversationModelFailureCodes.InvalidRequest);
-			const call = continuation.call;
+			const call = exchange.call;
 			messages.push({ role: "assistant", content: call.content, tool_calls: [{ id: call.id, type: "function", function: { name: call.name, arguments: call.arguments } }] });
-			messages.push({ role: "tool", tool_call_id: call.id, content: continuation.resultContent });
+			messages.push({ role: "tool", tool_call_id: call.id, content: exchange.resultContent });
 		}
 		const maxTokens = Math.min(input.maxCompletionTokens, ...ceilings.filter(_isPositiveInteger));
 		const request: Record<string, JsonValue> = { model: input.modelAlias, messages, max_tokens: maxTokens, n: 1, stream: false };
@@ -96,7 +101,7 @@ export function _PrepareConversationModelRequest(input: ConversationModelRequest
 		{
 			if (offered.length === 0)
 				throw new ConversationModelError(ConversationModelFailureCodes.InvalidRequest);
-			request["tools"] = offered.map(tool => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.parametersSchema } }));
+			request["tools"] = offered.map(tool => ({ type: "function", function: { name: tool.modelName, description: tool.description, parameters: tool.parametersSchema } }));
 			request["tool_choice"] = "auto";
 			request["parallel_tool_calls"] = false;
 		}
@@ -104,10 +109,10 @@ export function _PrepareConversationModelRequest(input: ConversationModelRequest
 		if (Buffer.byteLength(body) > _CONVERSATION_MODEL_MAX_BYTES)
 			throw new ConversationModelError(ConversationModelFailureCodes.RequestTooLarge);
 		url.pathname = "/v1/chat/completions";
-		const deadlineEpochMs = Math.min(input.notAfterEpochMs, compiled.budget.wallClockDeadlineEpochMs ?? input.notAfterEpochMs, Date.now() + 25_000);
+		const deadlineEpochMs = Math.min(input.notAfterEpochMs, compiled.budget.wallClockDeadlineEpochMs, Date.now() + 25_000);
 		if (deadlineEpochMs <= Date.now())
 			throw new ConversationModelError(ConversationModelFailureCodes.DeadlineExceeded);
-		return { url, authorization: `Bearer ${input.key}`, body, deadlineEpochMs, offeredToolNames: input.tools === ConversationModelToolModes.Select ? offered.map(tool => tool.name) : [] };
+		return { url, authorization: `Bearer ${input.key}`, body, deadlineEpochMs, offeredToolNames: input.tools === ConversationModelToolModes.Select ? offered.map(tool => tool.modelName) : [] };
 	}
 	catch (error)
 	{

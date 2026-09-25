@@ -26,21 +26,36 @@ export interface ReserveConversationAssetRequest
 	readonly contentAddress: string;
 }
 
-/** Browser-safe asset view with no storage or scan coordinates. */
+/** Browser-safe asset view with immutable content identity and no storage or scan authority. */
 export interface ConversationAssetView
 {
+	/** Stable conversation file identifier. */
 	readonly id: string;
+	/** Conversation that owns the file. */
 	readonly conversationId: string;
+	/** Immutable message containing this file, or null before submission. */
 	readonly messageId: string | null;
+	/** Source artifact identity, present only with its revision identity. */
+	readonly artifactId: string | null;
+	/** Exact source revision used to join the immutable history block. */
+	readonly artifactRevisionId: string | null;
+	/** Indicates who supplied the file. */
 	readonly provenance: ConversationAssetProvenance;
+	/** Current upload, processing or availability state. */
 	readonly state: ConversationAssetLifecycle;
+	/** Participant-visible filename. */
 	readonly displayName: string;
+	/** Media type checked at upload. */
 	readonly mediaType: string;
+	/** Exact source length, or null for a removed reservation. */
 	readonly byteLength: number | null;
+	/** Browser action allowed for the checked media type. */
 	readonly disposition: ConversationAssetDisposition | null;
+	/** Safe processing failure code, without provider details. */
 	readonly failureCode: string | null;
 	/** Whether this exact caller may remove the unlinked server reservation now. */
 	readonly canRemove: boolean;
+	/** Creation time in ISO format. */
 	readonly createdAt: string;
 }
 

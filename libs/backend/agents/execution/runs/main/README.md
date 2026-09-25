@@ -8,8 +8,8 @@ A **run** is one request for an agent to do work. An **attempt** is one try at f
 This package admits personal and company-assistant conversation runs and freezes their fixed input in one database transaction.
 For a new personal run, that transaction also grants its verified owner permission to read its activity.
 The active conversation-computer lease and its Sandbox claim are independently proven inputs; the
-transaction does not create or claim that runtime. The conversation computer continues the turn after
-admission; this package does not create a second managed workflow task for it.
+transaction does not create or claim that runtime. Conversation activation admits one Absurd task,
+and the admitted run stores the exact task receipt allowed to advance it.
 
 ```text
  request
@@ -21,7 +21,7 @@ admission; this package does not create a second managed workflow task for it.
  └────────────────────────────────────────────────────────────┘
    │
    ▼
- independently lease-bound conversation computer continues the turn
+ Absurd resumes the server-owned turn under the saved run receipt
    │
    ▼
  agent works → server saves events → lifecycle settles the governed workload
@@ -43,26 +43,49 @@ does not grant permission to use a run.
   participation, lifecycle state, attempt fencing, and execution-subject proof remain separate safety facts;
   none of them grants product permission by itself.
 - The conversation-computer authority owns attempt-key issuance after admission. It fences the current
-  lease, caps the key to the immutable snapshot budget, and keeps encrypted custody across worker restarts.
+  lease, caps the key to the complete immutable six-field snapshot budget, and keeps encrypted custody
+  across worker restarts. Admission and recovery retain the exact policy; they do not fill missing fields,
+  replace ceilings, or renew its deadline.
 - Runtime events are accepted only for the current run, attempt, computer lease, and command. Their sequence is
   global to the durable run, while terminality is scoped to the attempt that emitted the event.
 - Competing writes use serializable database transactions and typed compare-and-set updates.
 
 ## Public surface
 
+- `PrismaConversationRunLifecycleUnitOfWork` records start, recovery and completion for the admitted
+  run attempt and computer lease. A model response that cannot be recovered moves the running
+  attempt to `RecoveryRequired`. Restart accepts that state without moving it back to running or
+  granting another allowance. Completion still requires durable assistant output.
+
 - `PrismaConversationRunLifecycleUnitOfWork` — idempotently advances an exact lease-fenced
-  conversation attempt from accepted to running after durable bootstrap, and from running to
+  conversation attempt from accepted to running after the workflow freezes its turn, and from running to
   completed only after durable assistant output. Worker restart uncertainty converges on the same state.
 
 - `PrismaRunAdmissionUnitOfWork` saves a new run and its first lease-bound input snapshot together.
 - `PrismaSelfRunStatusUnitOfWork` and `_CreatePrismaSelfRunStatusRouter` expose owner-filtered status
   only after the current exact `AgentRun/Read` grant is checked in the same database snapshot.
+- `PrismaConversationRunCancellationRepository` binds one requester-authorized Stop command,
+  its audit decision and its Absurd cleanup task to the original run attempt. KurrentDB selects
+  cancellation or final output first; SQL then converges to `Cancelled/UserCancelled` or the existing
+  successful completion without reopening the run.
+
+Personal status includes `latestTool`, either null or the latest invocation's safe phase in the
+current attempt. Reads first filter by the authenticated personal owner and current `AgentRun/Read`
+permission, then ask the invocation owner for that phase in the same transaction. The response
+contains no tool arguments, result content, credentials or provider identifiers. A received tool
+result does not mean the assistant has finished its answer. Company-child runs remain outside this
+personal activity API; canonical participant receipts belong to conversation history.
+The status projection exposes `cancelling` while durable arbitration or cleanup remains active and
+`cancelled` only after provider claims no longer hold a fence.
 
 ## Boundary
 
 This package does not choose personas, memory, tools, models, or Kubernetes settings. The input
-assembler supplies the fixed run input. The conversation-computer boundary runs the model loop
-through an Agent Sandbox lease.
+assembler supplies the fixed run input. The conversation workflow runs the server-owned model loop and rechecks the Agent Sandbox lease and
+generation before each effect. The saved budget projection supplies explicit model-turn, completion-token,
+tool-invocation, loop-iteration, optional-cost and wall-clock ceilings. The current workflow still exposes
+the one-tool text continuation baseline; repeated progression must consume those frozen counters before
+it is enabled. The Pod does not schedule or call the model loop.
 
 The current text-turn baseline uses approved personal instructions, conversation history and the
 selected model. New runs explicitly freeze memory as unavailable. Dataset provisioning and memory
@@ -79,7 +102,9 @@ shared backend libraries. It never imports an application or Kubernetes client.
 ## Data and persistence
 
 The main records are `AgentRun` and its append-only `RunInputSnapshot` rows. Initial admission saves
-the run, attempt-one snapshot and personal-owner read grant together. A failure rolls them all back.
+the run, attempt-one snapshot and personal-owner read grant together. A conversation run later binds
+one immutable Absurd task receipt before model or tool work can proceed. A failure rolls back its
+whole transaction.
 
 ## See also
 

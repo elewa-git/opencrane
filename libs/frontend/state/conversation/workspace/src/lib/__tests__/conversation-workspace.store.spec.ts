@@ -123,7 +123,58 @@ describe("ConversationWorkspaceStore", function _DescribeWorkspace()
 		const store = runInInjectionContext(injector, function _Store() { return injector.get(ConversationWorkspaceStore); });
 		await store.load();
 		store.updateDraft("Hello agent");
-		await expect(store.send()).resolves.toBe(true);
-		expect(gateway.send).toHaveBeenCalledWith(expect.objectContaining({ conversationId: "conversation-1", text: "Hello agent", activation: "start" }));
+		await expect(store.send(["asset-b", "asset-a"])).resolves.toBe(true);
+		expect(gateway.send).toHaveBeenCalledWith(expect.objectContaining({ conversationId: "conversation-1", text: "Hello agent", assetIds: ["asset-a", "asset-b"], activation: "start" }));
+	});
+
+	it("keeps the exact text, attachment set, and message key after selection changes during an ambiguous send", async function _RetriesAttachedMessage()
+	{
+		const gateway = new _Gateway();
+		gateway.send.mockRejectedValueOnce(new Error("response lost")).mockResolvedValueOnce(undefined);
+		const injector = Injector.create({ providers: [ConversationOnboardingHistoryStore, ConversationWorkspaceStore, { provide: DestroyRef, useValue: { onDestroy: vi.fn() } }, { provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: gateway }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useClass: _HistoryStream }] });
+		const store = injector.get(ConversationWorkspaceStore);
+		await store.load();
+		store.updateDraft("Read these files");
+
+		await expect(store.send(["asset-b", "asset-a"])).resolves.toBe(false);
+		const first = gateway.send.mock.calls[0]![0];
+		expect(store.messageRetryPending()).toBe(true);
+		store.updateDraft("Changed after the uncertain response");
+		expect(store.draft()).toBe("Read these files");
+		expect(store.messageAssetIdsForSend(["asset-c"])).toEqual(["asset-a", "asset-b"]);
+		await expect(store.send(["asset-c"])).resolves.toBe(true);
+
+		expect(gateway.send.mock.calls[1]![0]).toBe(first);
+		expect(first).toMatchObject({ text: "Read these files", assetIds: ["asset-a", "asset-b"], idempotencyKey: expect.any(String) });
+		expect(store.messageRetryPending()).toBe(false);
+	});
+
+	it("refuses duplicate or oversized attachment sets before sending", async function _RejectsInvalidAttachmentSet()
+	{
+		const gateway = new _Gateway();
+		const injector = Injector.create({ providers: [ConversationOnboardingHistoryStore, ConversationWorkspaceStore, { provide: DestroyRef, useValue: { onDestroy: vi.fn() } }, { provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: gateway }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useClass: _HistoryStream }] });
+		const store = injector.get(ConversationWorkspaceStore);
+		await store.load();
+		store.updateDraft("");
+
+		await expect(store.send(["asset-a", "asset-a"])).resolves.toBe(false);
+		await expect(store.send(Array.from({ length: 11 }, function _AssetId(_value, index) { return `asset-${index}`; }))).resolves.toBe(false);
+
+		expect(gateway.send).not.toHaveBeenCalled();
+	});
+
+	it("uses a fresh message key after a confirmed send completes", async function _ChangesAttachedMessage()
+	{
+		const gateway = new _Gateway();
+		const injector = Injector.create({ providers: [ConversationOnboardingHistoryStore, ConversationWorkspaceStore, { provide: DestroyRef, useValue: { onDestroy: vi.fn() } }, { provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: gateway }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useClass: _HistoryStream }] });
+		const store = injector.get(ConversationWorkspaceStore);
+		await store.load();
+		store.updateDraft("Read these files");
+
+		await store.send(["asset-a"]);
+		store.updateDraft("Read another file");
+		await store.send(["asset-b"]);
+
+		expect(gateway.send.mock.calls[1]![0].idempotencyKey).not.toBe(gateway.send.mock.calls[0]![0].idempotencyKey);
 	});
 });

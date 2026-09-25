@@ -5,7 +5,7 @@ const _CHOICE_SCHEMA = { type: "object", additionalProperties: false, required: 
 
 /** Exact four browser-safe body shapes. */
 const _BODY_SCHEMA = { oneOf: [
-	{ type: "object", additionalProperties: false, required: ["kind", "prompt", "action", "target", "dataUse", "consequence"], properties: { kind: { const: ElicitationBodyKinds.Approval }, prompt: { type: "string" }, action: { type: "string" }, target: { type: "string" }, dataUse: { type: "string" }, externalSystem: { type: "string" }, consequence: { type: "string" }, cost: { type: "string" } } },
+	{ type: "object", additionalProperties: false, required: ["kind", "prompt", "action", "target", "dataUse", "consequence"], properties: { kind: { const: ElicitationBodyKinds.Approval }, prompt: { type: "string" }, action: { type: "string" }, target: { type: "string" }, dataUse: { type: "string" }, externalSystem: { type: "string" }, consequence: { type: "string" }, cost: { type: "string" }, proposedArguments: { oneOf: [{ type: "object", additionalProperties: true }, { type: "null" }] } } },
 	{ type: "object", additionalProperties: false, required: ["kind", "prompt", "choices"], properties: { kind: { const: ElicitationBodyKinds.SingleChoice }, prompt: { type: "string" }, choices: { type: "array", items: _CHOICE_SCHEMA } } },
 	{ type: "object", additionalProperties: false, required: ["kind", "prompt", "choices", "minimumSelections", "maximumSelections"], properties: { kind: { const: ElicitationBodyKinds.MultipleChoice }, prompt: { type: "string" }, choices: { type: "array", items: _CHOICE_SCHEMA }, minimumSelections: { type: "integer" }, maximumSelections: { type: "integer" } } },
 	{ type: "object", additionalProperties: false, required: ["kind", "prompt", "maximumLength", "allowEmpty"], properties: { kind: { const: ElicitationBodyKinds.FreeText }, prompt: { type: "string" }, maximumLength: { type: "integer" }, allowEmpty: { type: "boolean" } } },
@@ -39,6 +39,21 @@ export const _ElicitationOpenapiPaths = {
 				400: _Error("The requested Activity limit is invalid."),
 				401: _Error("No authenticated browser session owns the Activity index."),
 				503: _Error("The elicitation Activity index is temporarily unavailable."),
+			},
+		},
+	},
+	"/me/conversations/{conversationId}/elicitations": {
+		get: {
+			operationId: "listMyOpenConversationElicitations",
+			summary: "List pending participant-input requests",
+			description: "Returns at most fifty unexpired requests assigned to the authenticated participant in the selected readable conversation. Protected purpose payloads, credentials, and resume material are never returned.",
+			tags: ["Conversations"],
+			parameters: _ConversationParameters(),
+			responses: {
+				200: { description: "Current owned requests in oldest-first order.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["elicitations"], properties: { elicitations: { type: "array", maxItems: 50, items: _ELICITATION_SCHEMA } } } } } },
+				400: _Error("The selected conversation coordinate is invalid."),
+				401: _Error("No authenticated browser session owns the request list."),
+				503: _Error("The elicitation authority is temporarily unavailable."),
 			},
 		},
 	},
@@ -83,9 +98,15 @@ export const _ElicitationOpenapiPaths = {
 function _Parameters()
 {
 	return [
-		{ name: "conversationId", in: "path", required: true, schema: { type: "string" }, description: "Conversation containing the request." },
+		..._ConversationParameters(),
 		{ name: "requestId", in: "path", required: true, schema: { type: "string" }, description: "Opaque elicitation identifier." },
 	] as const;
+}
+
+/** Selected conversation path coordinate shared by list, read, and response operations. */
+function _ConversationParameters()
+{
+	return [{ name: "conversationId", in: "path", required: true, schema: { type: "string" }, description: "Conversation containing the request." }] as const;
 }
 
 /** Build one bounded error response schema. */

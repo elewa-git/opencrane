@@ -1,9 +1,9 @@
 <div class="wo-admin">
 	<div class="wo-admin__inner">
-		@if (canAdminister()) {
+		@if (store.canAdminister()) {
 			<wo-section-heading
 				title="Model Keys"
-				[subtitle]="configuredCount() + ' of ' + rows().length + ' providers configured. Bring your own provider keys to power this silo\'s models.'"
+				[subtitle]="store.configuredCount() + ' of ' + store.rows().length + ' providers configured. Bring your own provider keys to power this silo\'s models.'"
 			/>
 
 			<p class="wo-keys__note">
@@ -11,9 +11,7 @@
 				Setting the first key lights up a default model.
 			</p>
 
-			@if (error(); as message) {
-				<p class="wo-keys__error">{{ message }}</p>
-			}
+			<wo-resource-feedback [loading]="store.loading()" [error]="store.error() ?? store.readError()" [retryAvailable]="store.readError() !== null" (retryRequested)="store.refresh()" />
 
 			<table class="wo-table">
 				<thead>
@@ -27,54 +25,8 @@
 					</tr>
 				</thead>
 				<tbody>
-					@for (row of rows(); track row.provider) {
-						<tr [class.wo-admin__row--off]="!row.configured">
-							<td>
-								<div class="wo-keys__name">{{ row.label }}</div>
-								<div class="wo-mono wo-admin__muted">{{ row.provider }}</div>
-							</td>
-							<td>
-								@if (row.configured) {
-									<wo-scope-chip label="configured" [tone]="chipTones.Success" />
-								} @else {
-									<wo-scope-chip label="not set" [tone]="chipTones.Neutral" />
-								}
-							</td>
-							<td><wo-scope-chip [label]="badgeStyle(row).label" [tone]="badgeStyle(row).tone" [appearance]="chipAppearances.Soft" /></td>
-							<td class="wo-admin__muted">{{ row.updatedAtLabel }}</td>
-							<td>
-								<input
-									class="wo-text-input wo-keys__input"
-									type="password"
-									autocomplete="off"
-									placeholder="Paste API key"
-									[disabled]="isBusy(row.provider)"
-									[ngModel]="draft(row.provider)"
-									(ngModelChange)="setDraft(row.provider, $event)"
-									(keyup.enter)="submit(row.provider)"
-								/>
-							</td>
-							<td class="wo-admin__actions">
-								<button
-									type="button"
-									class="wo-tools__act"
-									[disabled]="isBusy(row.provider) || draft(row.provider).trim().length === 0"
-									(click)="submit(row.provider)"
-								>
-									{{ row.configured ? "Refresh" : "Save" }}
-								</button>
-								@if (row.configured) {
-									<button
-										type="button"
-										class="wo-tools__act wo-tools__act--muted"
-										[disabled]="isBusy(row.provider)"
-										(click)="confirmRemove(row)"
-									>
-										Remove
-									</button>
-								}
-							</td>
-						</tr>
+					@for (row of store.rows(); track row.provider) {
+						<tr wo-model-key-row [row]="row" [draft]="store.draft(row.provider)" [busy]="store.isBusy(row.provider)" (draftChanged)="store.setDraft(row.provider, $event)" (submitted)="store.submit(row.provider)" (removeRequested)="confirmRemove(row)"></tr>
 					}
 				</tbody>
 			</table>

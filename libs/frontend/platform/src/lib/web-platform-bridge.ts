@@ -1,7 +1,8 @@
 import { Provider } from "@angular/core";
 
 import { PLATFORM_BRIDGE } from "./platform-bridge.token";
-import type { AuthenticationWindowObservation, BoundFolder, PlatformBridge } from "./platform-bridge.types";
+import { PreparedFileOpenModes, type AuthenticationWindowObservation, type BoundFolder, type PlatformBridge, type PreparedFileOpenReservation } from "./platform-bridge.types";
+import { _WebPreparedFileOpen } from "./web-prepared-file-open";
 
 /** Browser-owned popup observation hidden behind the platform seam. */
 class _WebAuthenticationWindowObservation implements AuthenticationWindowObservation
@@ -24,14 +25,16 @@ class _WebAuthenticationWindowObservation implements AuthenticationWindowObserva
 	/** Stop observing the popup and release the timer. */
 	public stop(): void
 	{
-		if (this._timer !== null) clearInterval(this._timer);
+		if (this._timer !== null)
+			clearInterval(this._timer);
 		this._timer = null;
 	}
 
 	/** Report closure once, after first releasing the timer. */
 	private _Observe(): void
 	{
-		if (!this._window.closed) return;
+		if (!this._window.closed)
+			return;
 		this.stop();
 		this._onClosed();
 	}
@@ -60,6 +63,30 @@ export class WebPlatformBridge implements PlatformBridge
 	{
 		const popup = globalThis.open(path, "opencrane-step-up", "popup,width=560,height=720");
 		return popup === null ? null : new _WebAuthenticationWindowObservation(popup, onClosed);
+	}
+
+	/** Reserve one browser file action before an asynchronous file read begins. */
+	public prepareFileOpen(mode: PreparedFileOpenModes): PreparedFileOpenReservation | null
+	{
+		if (mode === PreparedFileOpenModes.Download)
+			return new _WebPreparedFileOpen(mode, null);
+		if (mode !== PreparedFileOpenModes.Preview)
+			return null;
+
+		const popup = globalThis.open("about:blank", "_blank");
+		if (popup === null)
+			return null;
+		try
+		{
+			popup.opener = null;
+			return new _WebPreparedFileOpen(mode, popup);
+		}
+		catch
+		{
+			if (!popup.closed)
+				popup.close();
+			return null;
+		}
 	}
 }
 

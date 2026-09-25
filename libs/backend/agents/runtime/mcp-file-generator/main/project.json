@@ -1,0 +1,11 @@
+{
+  "name": "backend-agents-runtime-mcp-file-generator",
+  "$schema": "../../../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/backend/agents/runtime/mcp-file-generator/main/src",
+  "projectType": "library",
+  "tags": ["type:lib", "layer:backend", "scope:mcp-runtime"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/agents/runtime/mcp-file-generator/main" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/agents/runtime/mcp-file-generator/main" } }
+  }
+}

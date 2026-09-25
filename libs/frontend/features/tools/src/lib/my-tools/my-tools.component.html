@@ -1,11 +1,15 @@
 <div class="wo-tools-page wo-scrollable">
 	<div class="wo-tools-page__inner">
 		<wo-section-heading
-			title="My tools"
-			subtitle="Servers you've installed. Shared-key servers are ready to use; personal credential activation is not available yet."
-		/>
+			 title="My tools"
+			subtitle="Manage your installed tools and check their connection status."
+		>
+			<button heading-actions pButton type="button" size="small" [text]="true" severity="secondary" [disabled]="store.loading()" (click)="store.refresh()">Refresh</button>
+		</wo-section-heading>
 
-		@if (rows().length > 0) {
+		<wo-resource-feedback [loading]="store.loading()" [error]="store.error() ?? store.readError()" [retryAvailable]="store.readError() !== null" (retryRequested)="store.refresh()" />
+		@if (store.rows().length > 0) {
+			<div class="wo-mytools__table-scroll" role="region" aria-label="Installed tools" tabindex="0">
 			<table class="wo-table wo-mytools__table">
 				<thead>
 					<tr>
@@ -13,40 +17,35 @@
 						<th>Type</th>
 						<th>Status</th>
 						<th>Last used</th>
-						<th></th>
+						<th>Actions</th>
 					</tr>
 				</thead>
 				<tbody>
-					@for (row of rows(); track row.server.id) {
-						<tr>
-							<td class="wo-mono wo-mytools__name">{{ row.server.name }}</td>
-							<td><wo-scope-chip [label]="typeChips[row.server.type].label" [tone]="typeChips[row.server.type].tone" /></td>
-							<td>
-								<span
-									class="wo-tools__status"
-									[class.wo-tools__status--neutral]="connectionIndicators[row.installed.connectionStatus].tone === chipTones.Neutral"
-									[class.wo-tools__status--info]="connectionIndicators[row.installed.connectionStatus].tone === chipTones.Info"
-									[class.wo-tools__status--success]="connectionIndicators[row.installed.connectionStatus].tone === chipTones.Success"
-									[class.wo-tools__status--warning]="connectionIndicators[row.installed.connectionStatus].tone === chipTones.Warning"
-									[class.wo-tools__status--danger]="connectionIndicators[row.installed.connectionStatus].tone === chipTones.Danger"
-								>
-									<span class="wo-tools__status-dot" [class.wo-tools__status-dot--pulse]="connectionIndicators[row.installed.connectionStatus].pulse"></span>
-									{{ connectionIndicators[row.installed.connectionStatus].label }}
-								</span>
-							</td>
-							<td class="wo-mytools__muted">{{ row.installed.lastUsed ?? "—" }}</td>
-							<td class="wo-mytools__actions"><button type="button" class="wo-tools__act wo-tools__act--muted" (click)="uninstall(row.server)">Uninstall</button></td>
+					@for (row of store.rows(); track row.server.id) {
+						<tr wo-installed-tool-row [row]="row" [busy]="store.commandReserved(row.server.id)" (uninstallRequested)="store.uninstall(row.server.id)">
+							@if (connections.view(row); as connectionView) {
+								<wo-personal-mcp-connection-control
+									connection-control
+									class="wo-mytools__connection"
+									[view]="connectionView"
+									[busy]="connections.busy(row.server.id)"
+									[error]="connections.error(row.server.id)"
+									(draftChanged)="connections.setDraft(row.server.id, $event)"
+									(submitRequested)="connections.submit(row.server.id)"
+									(replaceRequested)="connections.replace(row.server.id)"
+									(revokeRequested)="connections.revoke(row.server.id)"
+									(cancelDraftRequested)="connections.cancelDraft(row.server.id)"
+								/>
+							}
 						</tr>
 					}
 				</tbody>
 			</table>
+			</div>
 		} @else {
 			<p class="wo-mytools__empty">You haven't installed any tools yet.</p>
 		}
 
-		<a class="wo-dashed-button wo-mytools__browse" [routerLink]="['/tools/catalogue']">
-			<i class="pi pi-plus"></i>
-			Browse the catalogue
-		</a>
+		<a pButton class="wo-mytools__browse" severity="secondary" [outlined]="true" icon="pi pi-plus" label="Browse the catalogue" [routerLink]="['/tools/catalogue']"></a>
 	</div>
 </div>

@@ -59,6 +59,10 @@ fresh context — do not assume the author's intent was correct.
 ## Dimension checklists
 
 ### DIMENSION: correctness
+- Frontend decomposition preserves each moved component's inputs, outputs, states, content slots,
+  keyboard/focus behaviour and consumer coverage. Flag a removed reusable contract still needed by
+  a product flow, duplicated markup replacing a shared owner, or an inherited presenter retaining
+  page/state/presentation responsibilities. Inspect the template and styles with the class.
 - Logic bugs, edge cases, off-by-one, unhandled null/undefined.
 - **Categorical contract drift:** OpenCrane-owned discriminants that select control flow, define a
   durable union, or cross a package/persistence/API boundary use elaborately documented,

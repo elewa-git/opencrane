@@ -46,6 +46,8 @@ export function __TestWorkflowEngineContract(name: string, createHarness: IWorkf
 			harness.execution.register(_Task("contract-context", async function _RunContext(context)
 			{
 				const event = await context.waitForEvent<{ readonly value: string }>("approved");
+				if (event.timedOut)
+					throw new Error("contract test expected a delivered event");
 				const child = await context.spawnChild({ taskName: "contract-child", idempotencyKey: "child-1", input: { value: event.payload.value } });
 				const childResult = await context.awaitChild<string>(child);
 				return context.checkpoint({ stepName: "persist-result" }, async function _SaveResult()

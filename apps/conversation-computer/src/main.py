@@ -1,13 +1,9 @@
-"""Run generation-fenced conversation computer turns through the private server API."""
+"""Prepare one generation-fenced conversation computer for isolated review work."""
 
 from __future__ import annotations
 
 import json
-import logging
 import os
-import threading
-import time
-import urllib.error
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -21,11 +17,6 @@ _READINESS_PATH: Final = "/readyz"
 _DEFAULT_TOKEN_PATH: Final = "/var/run/secrets/opencrane/token"
 _DEFAULT_REVIEW_CREDENTIAL_PATH: Final = "/var/run/opencrane/review/credential"
 _MAX_RESPONSE_BYTES: Final = 4 * 1024 * 1024
-_BOOTSTRAP_OUTCOMES: Final = frozenset({"ready", "pending", "response_unavailable"})
-_MODEL_STEP_OUTCOMES: Final = frozenset({"completed", "pending", "response_unavailable", "authority_ended"})
-_DEGRADED_OUTCOMES: Final = frozenset({"response_unavailable", "authority_ended"})
-_LOGGER = logging.getLogger("opencrane.conversation-computer")
-_LAST_FAILURE_TYPE: str | None = None
 
 
 def _required(name: str) -> str:
@@ -95,19 +86,6 @@ def _install_review_credential(config: dict[str, str]) -> None:
     staging.replace(target)
 
 
-def _bootstrap(config: dict[str, str]) -> dict[str, Any]:
-    """Read the current turn's status without receiving model input or credentials."""
-    token = _read_token(config["tokenPath"])
-    result = _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/bootstrap?{_lease_query(config)}", token, empty_outcome="idle")
-    if result == {"outcome": "idle"}:
-        return result
-    outcome = result.get("outcome")
-    if set(result) != {"bootstrapId", "outcome"} or not isinstance(outcome, str) or outcome not in _BOOTSTRAP_OUTCOMES:
-        raise RuntimeError("bootstrap returned an invalid turn status")
-    _bootstrap_id(result)
-    return result
-
-
 def _restore(config: dict[str, str]) -> dict[str, Any]:
     """Ask the control plane to restore the exact checkpoint bound to this Pod lease."""
     token = _read_token(config["tokenPath"])
@@ -119,66 +97,12 @@ def _restore(config: dict[str, str]) -> dict[str, Any]:
     return _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/checkpoint/restore", token, payload, empty_outcome="absent")
 
 
-def _bootstrap_id(bootstrap: dict[str, Any]) -> str:
-    """Require the server's exact non-empty idempotency coordinate."""
-    bootstrap_id = bootstrap.get("bootstrapId")
-    if not isinstance(bootstrap_id, str) or not bootstrap_id or bootstrap_id != bootstrap_id.strip():
-        raise RuntimeError("bootstrap omitted its idempotency coordinate")
-    return bootstrap_id
-
-
-def _execute_turn(config: dict[str, str], bootstrap: dict[str, Any]) -> str:
-    """Ask the server to advance or recover the conversation's reserved work."""
-    if bootstrap.get("outcome") != "ready":
-        raise RuntimeError("model step requires a ready bootstrap")
-    payload = {"bootstrapId": _bootstrap_id(bootstrap)}
-    token = _read_token(config["tokenPath"])
-    result = _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/model-step", token, payload)
-    outcome = result.get("outcome")
-    if set(result) != {"outcome"} or not isinstance(outcome, str) or outcome not in _MODEL_STEP_OUTCOMES:
-        raise RuntimeError("model step returned an invalid outcome")
-    return outcome
-
-
-def _turn_loop() -> None:
-    """Install the review secret, restore the workspace, then poll for the single pending activation."""
-    global _LAST_FAILURE_TYPE
+def _prepare_sandbox() -> None:
+    """Install the lease secret, open the review surface and restore the fenced workspace once."""
     config = _configuration()
-    credentialed = False
-    restored = False
-    stopped_bootstrap: str | None = None
-    stopped_outcome: str | None = None
-    retry_delay_seconds = 2
-    while True:
-        try:
-            if not credentialed:
-                _install_review_credential(config)
-                credentialed = True
-            if not restored:
-                _restore(config)
-                restored = True
-            bootstrap = _bootstrap(config)
-            outcome = bootstrap["outcome"]
-            if bootstrap.get("bootstrapId") == stopped_bootstrap and stopped_outcome is not None:
-                outcome = stopped_outcome
-            elif outcome == "ready":
-                outcome = _execute_turn(config, bootstrap)
-            if outcome in _DEGRADED_OUTCOMES:
-                stopped_bootstrap = _bootstrap_id(bootstrap)
-                stopped_outcome = outcome
-                if _LAST_FAILURE_TYPE != outcome:
-                    _LOGGER.warning("conversation computer turn needs recovery", extra={"errorType": outcome})
-                _LAST_FAILURE_TYPE = outcome
-            else:
-                stopped_bootstrap = None
-                stopped_outcome = None
-                _LAST_FAILURE_TYPE = None
-            retry_delay_seconds = 2
-        except (OSError, RuntimeError, ValueError, urllib.error.URLError, json.JSONDecodeError) as error:
-            _LAST_FAILURE_TYPE = stopped_outcome or type(error).__name__
-            _LOGGER.warning("conversation computer turn retry", extra={"errorType": type(error).__name__, "retryDelaySeconds": retry_delay_seconds})
-            retry_delay_seconds = min(retry_delay_seconds * 2, 30)
-        time.sleep(retry_delay_seconds)
+    _install_review_credential(config)
+    start_review_surface()
+    _restore(config)
 
 
 class _HealthHandler(BaseHTTPRequestHandler):
@@ -192,9 +116,6 @@ class _HealthHandler(BaseHTTPRequestHandler):
             self._reply(200, {"status": "alive"})
             return
         if self.path == _READINESS_PATH:
-            if _LAST_FAILURE_TYPE is not None:
-                self._reply(503, {"status": "degraded", "reason": _LAST_FAILURE_TYPE})
-                return
             try:
                 config = _configuration()
             except RuntimeError as error:
@@ -218,10 +139,8 @@ class _HealthHandler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    """Start the private turn worker beside the fixed health listener."""
-    start_review_surface()
-    worker = threading.Thread(target=_turn_loop, name="conversation-turn", daemon=True)
-    worker.start()
+    """Prepare the sandbox once, then serve process health for the lease."""
+    _prepare_sandbox()
     port = int(os.environ.get("OPENCRANE_COMPUTER_HEALTH_PORT", "8080"))
     server = ThreadingHTTPServer(("0.0.0.0", port), _HealthHandler)
     server.serve_forever()

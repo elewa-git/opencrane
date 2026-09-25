@@ -97,17 +97,24 @@ derived from their governed Global resource, so a late first POST cannot create 
   one frozen completion ceiling must exist. The request aborts by the earliest supplied deadline,
   compiled run deadline or 25 seconds, including time spent reading the body.
 
-The first request can offer the frozen tools that need no approval. Names must be unique and legal,
-with parameters matching their saved schema digests. The model may return text or propose exactly
-one offered tool. The shared declaration retains the provider call id, original argument string
-and accompanying text. Arguments must contain a bounded JSON object; the conversation and IAM
-owners still validate the actual schema and current permission before any execution.
+A request with tool selection enabled can offer every frozen tool definition, including tools that need owner approval.
+Each definition's `modelName` must be unique and legal, with parameters matching their saved schema
+digests. The compiler derives MCP model names from immutable tool revisions; this adapter sends
+that frozen name without deriving or normalizing another one. The original MCP `name` can contain
+dots or exceed the provider's name limit, and stays out of function declarations. Responses and
+continuations must use an offered `modelName`; the original runtime name is never a fallback. The model may
+return text or propose exactly one offered tool. The shared declaration retains the provider call
+id, original argument string and accompanying text. Arguments must contain a bounded JSON object;
+the conversation and IAM owners still validate the actual schema and current permission before any
+execution. Managed company runs filter approval-gated tools before model selection until an entitled
+human resolver exists; personal runs can park the exact proposal in deferred approval.
 
-A continuation supplies that saved declaration and its authorized result. The adapter appends an
-assistant tool-call message and a tool-result message with the same provider call id after the
-unchanged compiled history. It sends no tool definitions on this request and accepts only text,
-so it cannot start a third model/tool cycle. Combined declaration and result content must fit
-65,536 serialized UTF-8 bytes, with valid Unicode. These shared schemas are exported by contracts.
+Each request supplies every earlier accepted declaration and authorized result in order. The adapter
+appends an assistant tool-call message and matching tool-result message for each pair after the
+unchanged compiled history. The conversation owner chooses whether another tool may be selected
+or only a final text answer is permitted. Each pair must fit 65,536 serialized UTF-8 bytes, with valid
+Unicode; the full request must also fit the existing body limit. Oversized history is rejected as a
+whole. The adapter never drops earlier results or schedules another request.
 
 The adapter accepts HTTP(S) origins without paths, credentials, queries or fragments and sends
 one `POST /v1/chat/completions` with redirects disabled. Serialized request and response bodies are

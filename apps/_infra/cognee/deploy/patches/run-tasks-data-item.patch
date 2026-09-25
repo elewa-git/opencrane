@@ -1,0 +1,48 @@
+--- /private/tmp/cognee-patch-a/cognee/modules/pipelines/operations/run_tasks_data_item.py	2026-09-12 18:05:01
++++ /private/tmp/cognee-patch-b/cognee/modules/pipelines/operations/run_tasks_data_item.py	2026-09-12 18:05:59
+@@ -11,6 +11,7 @@
+ 
+ import cognee.modules.ingestion as ingestion
+ from cognee.infrastructure.databases.relational import get_relational_engine
++from cognee.infrastructure.locks import managed_data_file_lock
+ from cognee.infrastructure.files.utils.open_data_file import open_data_file
+ from cognee.shared.logging_utils import get_logger
+ from cognee.modules.users.models import User
+@@ -101,6 +102,20 @@
+     return result
+ 
+ 
++async def _drain_and_close_item_events(
++    events: AsyncGenerator[Any, None],
++    ctx: Optional[PipelineContext],
++    tasks: list[Task],
++    pipeline_run_id: str,
++    progress_state: Optional[Dict[str, Any]],
++) -> Optional[Dict[str, Any]]:
++    """Drain one item generator and close it before its enclosing lock is released."""
++    try:
++        return await _drain_item_events(events, ctx, tasks, pipeline_run_id, progress_state)
++    finally:
++        await events.aclose()
++
++
+ async def run_tasks_data_item_incremental(
+     data_item: Any,
+     dataset: Dataset,
+@@ -393,7 +408,15 @@
+         )
+ 
+     try:
+-        result = await _drain_item_events(events, ctx, tasks, pipeline_run_id, progress_state)
++        if pipeline_name == "add_pipeline":
++            async with managed_data_file_lock():
++                result = await _drain_and_close_item_events(
++                    events, ctx, tasks, pipeline_run_id, progress_state
++                )
++        else:
++            result = await _drain_and_close_item_events(
++                events, ctx, tasks, pipeline_run_id, progress_state
++            )
+     except Exception:
+         # Preserve the original pipeline exception if flushing already-written
+         # edge evidence also fails; rollback still has graph-native run refs.

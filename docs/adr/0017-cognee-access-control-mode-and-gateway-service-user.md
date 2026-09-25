@@ -40,9 +40,10 @@ so restricting callers further changes nothing.
    silo. The switch change lands together with the authenticated isolation, recall, identity and
    restart proofs from the provider contract in CI, not before.
 2. The memory gateway is Cognee's only login. It uses one service user per silo. The email and
-   password are mounted from an application-owned Secret into the gateway only. On first install the
-   gateway registers that user, then logs in. The bearer token lives in gateway memory, is never
-   logged, persisted or returned to a caller, and is replayed at most once after an HTTP 401.
+   password are mounted from a pre-created Secret into the gateway only. The gateway logs in with
+   them and registers the user only when an explicit first-install override allows it. The
+   bearer token lives in gateway memory, is never logged, persisted or returned to a caller, and
+   is replayed at most once after an HTTP 401.
 3. Every dataset belongs to that one service user. Cognee's permission system therefore does not
    separate employees and is not presented as doing so. Separation comes from OpenCrane: the server
    selects the exact dataset UUID from admitted authority ([ADR 0015](0015-central-durable-authorization-authority.md)),
@@ -51,8 +52,6 @@ so restricting callers further changes nothing.
 4. NetworkPolicy remains the transport perimeter. Only the gateway may connect to Cognee, and Cognee
    may reach only release-local LiteLLM, DNS and optional telemetry. The Cognee login is a condition
    Cognee imposes to unlock per-dataset storage. It is not a second authorisation layer.
-5. Until the switch change is live, documentation names the current setting as the known-leaky
-   configuration, and personal memory stays unavailable.
 
 ## Alternatives considered
 
@@ -70,9 +69,9 @@ so restricting callers further changes nothing.
 
 ## Consequences
 
-- Each silo gains one Secret for the Cognee service user, owned by the silo chart. Rotation is
-  updating the Secret and letting the gateway sign in again. First-install registration must be
-  idempotent so a restarted install does not fail on an existing user.
+- Each silo needs one pre-created, immutable Secret for the Cognee service user; the silo chart
+  only references it by name. First-install registration is off by default and needs an explicit,
+  reviewed override.
 - Gateway readiness depends on a successful Cognee login. Failure categories are secret-free and
   stable so health checks and logs can name them.
 - Access-control mode returns a dataset envelope. The gateway requires the requested dataset in that

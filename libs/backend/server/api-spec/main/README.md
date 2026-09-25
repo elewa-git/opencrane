@@ -35,6 +35,18 @@ edits. This package describes the API; it does not implement any endpoint.
 - `spec` — the composed OpenAPI 3.1 document (`openapi`, `info`, `servers`, `components`, `security`,
   and the merged `paths`).
 
+Personal run status documents `latestTool` as either null or one safe phase. The schema shares the
+contract enum and rejects extra progress properties. It distinguishes tool result receipt from the
+run's completion without exposing arguments, results or execution coordinates.
+The run states include `cancelling` while Stop cleanup is owed and `cancelled` after it finishes.
+The conversation message fragment describes Stop admission separately from that eventual result;
+clients cannot submit a run, attempt or lease as the cancellation target.
+
+MCP catalogue responses require an explicit credential requirement, and installation responses
+require their persisted connection status. A multi-user presentation does not imply a configured
+shared credential. Remote registration names the requirement; uploaded OCI promotion fixes it to
+credentialless within the server's existing execution restrictions.
+
 ## Boundary
 
 Consumed by the server's HTTP layer (served as `/openapi.json`) and by the contracts-client generator.

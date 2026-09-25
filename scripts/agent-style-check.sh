@@ -76,7 +76,7 @@ INLINE_CHECKABLE=()
 for f in ${FILES[@]+"${FILES[@]}"}; do
 	[[ -z "$f" || ! -f "$f" ]] && continue
 	case "$f" in
-		*.d.ts|*node_modules*|*dist/*|*generated*) continue ;;
+		*.d.ts|*node_modules*|*dist/*|*/generated/*|generated/*) continue ;;
 	esac
 	INLINE_CHECKABLE+=("$f")
 	case "$f" in

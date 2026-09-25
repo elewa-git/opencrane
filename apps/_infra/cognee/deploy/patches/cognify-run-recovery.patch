@@ -1,0 +1,196 @@
+--- /dev/null
++++ b/cognee/modules/pipelines/operations/cognify_run_recovery.py
+@@ -0,0 +1,193 @@
++"""Admit or replay one caller-identified Cognify pipeline run."""
++
++import re
++from dataclasses import dataclass
++from typing import Any
++from uuid import UUID
++
++from sqlalchemy import select
++
++from cognee.infrastructure.databases.relational import get_relational_engine
++from cognee.modules.pipelines.models import PipelineRun, PipelineRunStatus
++from cognee.modules.pipelines.models.PipelineRunInfo import PipelineRunCompleted, PipelineRunErrored
++from cognee.modules.pipelines.utils import generate_pipeline_run_id
++
++from .cognify_input_evidence import build_cognify_input_evidence
++
++
++_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
++_EVIDENCE_KEY = "opencrane_cognify"
++
++
++class CognifyOperationConflictError(RuntimeError):
++    """The saved command does not match the requested Cognify operation."""
++
++
++class CognifyRecoveryRequiredError(RuntimeError):
++    """The exact run may have effects but has no coherent terminal receipt."""
++
++
++@dataclass(frozen=True)
++class CognifyRunAdmission:
++    """Coordinates saved before a first provider task may start."""
++
++    pipeline_run_id: UUID
++    evidence: dict[str, str]
++
++
++@dataclass(frozen=True)
++class CognifyRunReplay:
++    """One exact terminal provider result reconstructed without dispatch."""
++
++    run_info: PipelineRunCompleted | PipelineRunErrored
++
++
++def _saved_evidence(row: PipelineRun) -> dict[str, str]:
++    value = (row.run_info or {}).get(_EVIDENCE_KEY)
++    required = {"operation_id", "request_digest", "input_evidence_digest"}
++    if not isinstance(value, dict) or set(value) != required:
++        raise CognifyRecoveryRequiredError("Cognify run evidence is incomplete")
++    if not all(isinstance(value[key], str) for key in required):
++        raise CognifyRecoveryRequiredError("Cognify run evidence is malformed")
++    if _DIGEST.fullmatch(value["request_digest"]) is None or _DIGEST.fullmatch(value["input_evidence_digest"]) is None:
++        raise CognifyRecoveryRequiredError("Cognify run digest evidence is malformed")
++    return value
++
++
++def _validate_row(
++    row: PipelineRun,
++    pipeline_id: UUID,
++    pipeline_name: str,
++    dataset: Any,
++    user: Any,
++    operation_id: UUID,
++    request_digest: str,
++    expected_input_evidence_digest: str,
++) -> dict[str, str]:
++    expected_tenant = getattr(user, "tenant_id", None)
++    if (
++        row.pipeline_id != pipeline_id
++        or row.pipeline_name != pipeline_name
++        or row.operation_name != pipeline_name
++        or row.dataset_id != dataset.id
++        or row.user_id != user.id
++        or row.tenant_id != expected_tenant
++    ):
++        raise CognifyRecoveryRequiredError("Cognify run coordinates conflict")
++    evidence = _saved_evidence(row)
++    if evidence != {
++        "operation_id": str(operation_id),
++        "request_digest": request_digest,
++        "input_evidence_digest": expected_input_evidence_digest,
++    }:
++        raise CognifyRecoveryRequiredError("Cognify operation evidence conflicts")
++    return evidence
++
++
++def _plan_saved_history(
++    rows: list[PipelineRun],
++    pipeline_id: UUID,
++    pipeline_name: str,
++    dataset: Any,
++    user: Any,
++    operation_id: UUID,
++    request_digest: str,
++    expected_input_evidence_digest: str,
++    run_id: UUID,
++) -> CognifyRunReplay | None:
++    """Validate an ordered saved history and reconstruct its terminal receipt."""
++    if not rows:
++        return None
++    for row in rows:
++        _validate_row(
++            row,
++            pipeline_id,
++            pipeline_name,
++            dataset,
++            user,
++            operation_id,
++            request_digest,
++            expected_input_evidence_digest,
++        )
++    started = [row for row in rows if row.status == PipelineRunStatus.DATASET_PROCESSING_STARTED]
++    completed = [row for row in rows if row.status == PipelineRunStatus.DATASET_PROCESSING_COMPLETED]
++    errored = [row for row in rows if row.status == PipelineRunStatus.DATASET_PROCESSING_ERRORED]
++    if (
++        len(started) != 1
++        or len(completed) + len(errored) > 1
++        or len(rows) != len(started) + len(completed) + len(errored)
++        or rows[0] is not started[0]
++        or (len(rows) == 2 and rows[1] not in completed + errored)
++    ):
++        raise CognifyRecoveryRequiredError("Cognify run history is contradictory")
++    common = {
++        "pipeline_run_id": run_id,
++        "dataset_id": dataset.id,
++        "dataset_name": dataset.name,
++        "operation_id": operation_id,
++        "input_evidence_digest": expected_input_evidence_digest,
++    }
++    if len(completed) == 1:
++        return CognifyRunReplay(PipelineRunCompleted(**common))
++    if len(errored) == 1:
++        terminal = errored[0]
++        return CognifyRunReplay(
++            PipelineRunErrored(
++                **common,
++                payload="Saved Cognify run errored",
++                error_class=terminal.error_class,
++                error_message=terminal.error_message,
++            )
++        )
++    raise CognifyRecoveryRequiredError("Cognify run has no terminal receipt")
++
++
++async def plan_cognify_run(
++    pipeline_id: UUID,
++    pipeline_name: str,
++    dataset: Any,
++    data: list[Any],
++    user: Any,
++    operation_id: UUID,
++    expected_input_evidence_digest: str,
++    request_digest: str,
++) -> CognifyRunAdmission | CognifyRunReplay:
++    """Plan one run while the caller holds the dataset lock."""
++    if _DIGEST.fullmatch(expected_input_evidence_digest) is None or _DIGEST.fullmatch(request_digest) is None:
++        raise CognifyOperationConflictError("Cognify operation digest is invalid")
++    run_id = generate_pipeline_run_id(pipeline_id, dataset.id, operation_id=operation_id)
++    engine = get_relational_engine()
++    async with engine.get_async_session() as session:
++        rows = list(
++            (
++                await session.scalars(
++                    select(PipelineRun)
++                    .where(PipelineRun.pipeline_run_id == run_id)
++                    .order_by(PipelineRun.created_at.asc(), PipelineRun.id.asc())
++                )
++            ).all()
++        )
++
++    replay = _plan_saved_history(
++        rows,
++        pipeline_id,
++        pipeline_name,
++        dataset,
++        user,
++        operation_id,
++        request_digest,
++        expected_input_evidence_digest,
++        run_id,
++    )
++    if replay is not None:
++        return replay
++
++    actual_digest, _documents = await build_cognify_input_evidence(dataset, user, data)
++    if actual_digest != expected_input_evidence_digest:
++        raise CognifyOperationConflictError("Cognify input evidence changed before admission")
++    evidence = {
++        "operation_id": str(operation_id),
++        "request_digest": request_digest,
++        "input_evidence_digest": actual_digest,
++    }
++    return CognifyRunAdmission(run_id, evidence)

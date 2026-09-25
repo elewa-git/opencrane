@@ -166,6 +166,21 @@ export interface RunAdmissionBuild
 }
 
 /**
+ * Outcomes owned by the run admission compile step inside its transaction.
+ *
+ * These values describe whether the caller produced a complete write candidate. They are distinct
+ * from source-loader, existing-verification, and final-admission outcomes.
+ * They are in-process callback results, not persisted run lifecycle states.
+ */
+export enum RunAdmissionBuildOutcomes
+{
+	/** Every required input was compiled and the run may be persisted. */
+	Ready = "ready",
+	/** The compile step refused, so the transaction must write nothing. */
+	Denied = "denied",
+}
+
+/**
  * What the caller's compile step hands back from inside the admission transaction.
  *
  * `ready` means every input re-read cleanly and the run may be written. `denied` aborts the
@@ -174,7 +189,7 @@ export interface RunAdmissionBuild
  * from an input loader — a closed conversation, a missing persona — reaches the caller without the
  * repository having to understand it.
  */
-export type RunAdmissionBuildResult<TDenial> = { readonly outcome: "ready"; readonly value: RunAdmissionBuild } | { readonly outcome: "denied"; readonly reason: TDenial };
+export type RunAdmissionBuildResult<TDenial> = { readonly outcome: `${RunAdmissionBuildOutcomes.Ready}`; readonly value: RunAdmissionBuild } | { readonly outcome: `${RunAdmissionBuildOutcomes.Denied}`; readonly reason: TDenial };
 
 /**
  * Why a run could not be created, and what the caller must do about each.
@@ -230,16 +245,35 @@ export enum RunAdmissionDenialReasons
 }
 
 /**
- * What came back from asking for a run: a new one, the one an earlier identical request already got,
- * or a refusal.
+ * Outcomes returned by the run admission transaction after its compile step and persistence work.
  *
- * `accepted` and `idempotent` both carry the same snapshot and both mean the caller may proceed, but
- * they are not the same event — `accepted` is the call that created the run, `idempotent` is a repeat
- * of a key already used. A caller that treats `idempotent` as `accepted` starts a second runtime for
- * one run. `denied` carries either the reason the caller's own compile step gave (`TDenial`) or one of
- * {@link RunAdmissionDenialReasons}, and only that enum tells the caller whether a retry can help.
+ * These values distinguish creating a run, recovering an existing idempotent run, and refusing the
+ * request. They are not interchangeable with the compile or existing-verification outcomes.
+ * They are in-process repository results, not persisted run lifecycle states; assembly maps them
+ * into its own public result contract.
  */
-export type RunAdmissionResult<TDenial> = { readonly outcome: "accepted" | "idempotent"; readonly snapshot: RunInputSnapshot } | { readonly outcome: "denied"; readonly reason: TDenial | RunAdmissionDenialReasons };
+export enum RunAdmissionOutcomes
+{
+	/** This call created and persisted the run. */
+	Accepted = "accepted",
+	/** This call recovered the snapshot already created for the same idempotency key. */
+	Idempotent = "idempotent",
+	/** Admission could not return a usable run result. */
+	Denied = "denied",
+}
+
+/**
+ * What came back from asking for a run: a new one, the one an earlier identical request already got,
+ * or a refusal. `accepted` and `idempotent` both carry the snapshot, but only `accepted` created a
+ * run. An `idempotent` result must not start a second runtime for the same run.
+ *
+ * `denied` carries the caller's compile reason or a repository-owned denial reason. When the reason
+ * is `persistence_unavailable`, retry with the same idempotency key so a committed winner can be
+ * recovered. A fresh key can admit a second run. Other refusals need the correction described by
+ * their owning reason contract.
+ * @see RunAdmissionDenialReasons
+ */
+export type RunAdmissionResult<TDenial> = { readonly outcome: `${RunAdmissionOutcomes.Accepted}` | `${RunAdmissionOutcomes.Idempotent}`; readonly snapshot: RunInputSnapshot } | { readonly outcome: `${RunAdmissionOutcomes.Denied}`; readonly reason: TDenial | RunAdmissionDenialReasons };
 
 /**
  * Extra rows the caller writes in the same transaction as the run, after the run exists.
@@ -272,8 +306,23 @@ export type RunAdmissionCommit = (transaction: RunAdmissionTransaction, value: R
  */
 export type RunAdmissionPrepare = (transaction: RunAdmissionTransaction) => Promise<void>;
 
+/**
+ * Outcomes returned by the duplicate admission verifier before an existing snapshot is released.
+ *
+ * Verification is its own authority boundary: a current denial must not be mistaken for a source
+ * load or a successful final admission.
+ * These are in-process callback results, not persisted run lifecycle states.
+ */
+export enum RunAdmissionExistingVerificationOutcomes
+{
+	/** Current authority still proves that the existing snapshot may be returned. */
+	Verified = "verified",
+	/** Current authority no longer proves that the existing snapshot may be returned. */
+	Denied = "denied",
+}
+
 /** Rechecks current authority before an existing snapshot may leave the admission transaction. */
-export type RunAdmissionExistingVerifier<TDenial> = (snapshot: RunInputSnapshot, transaction: RunAdmissionTransaction) => Promise<{ readonly outcome: "verified" } | { readonly outcome: "denied"; readonly reason: TDenial }>;
+export type RunAdmissionExistingVerifier<TDenial> = (snapshot: RunInputSnapshot, transaction: RunAdmissionTransaction) => Promise<{ readonly outcome: `${RunAdmissionExistingVerificationOutcomes.Verified}` } | { readonly outcome: `${RunAdmissionExistingVerificationOutcomes.Denied}`; readonly reason: TDenial }>;
 
 /**
  * The single transaction in which a logical run becomes real.

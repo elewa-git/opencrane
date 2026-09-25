@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 
+import { ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
 import { _ConversationAssetsOpenapiPaths } from "../openapi";
 
 describe("conversation asset OpenAPI", function _Suite()
 {
+	it("describes generated-file metadata alongside participant uploads", function _GeneratedFileProvenance()
+	{
+		const schema = _ConversationAssetsOpenapiPaths["/me/conversations/{conversationId}/assets"].get.responses[200].content["application/json"].schema.properties.assets.items;
+		expect(schema.properties.provenance.enum).toEqual([ConversationAssetProvenance.ParticipantUpload, ConversationAssetProvenance.AgentOutput]);
+	});
+
 	it("publishes list, reservation, authorized read, exact byte-upload, and removal operations", function _PublishesOperations()
 	{
 		expect(_ConversationAssetsOpenapiPaths["/me/conversations/{conversationId}/assets"].get.operationId).toBe("listMyConversationAssets");
