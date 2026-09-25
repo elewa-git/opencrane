@@ -1,4 +1,4 @@
-import { AgentRunState, ElicitationBodyKind, ElicitationPurpose, ElicitationRequestState, OrgMemberStatus, PrismaClient } from "@prisma/client";
+import { AgentRunState, ElicitationBodyKind, ElicitationPurpose, ElicitationRequestState, OrgMemberStatus, PrismaClient, type Prisma } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { PrismaElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
@@ -32,7 +32,7 @@ describe("collaborative clarification authority on PostgreSQL", function _Suite(
 	{
 		const { request, peer } = await _SeedElicitationSqlFixture(_DATABASE);
 		await _GrantElicitationSqlPeerConversationAccess(_DATABASE, request.siloId, request.conversationId, peer);
-		const unit = new PrismaElicitationUnitOfWork(_DATABASE, null, function _ConversationAccess(transaction) { return new PrismaConversationElicitationAccessRepository(transaction); });
+		const unit = new PrismaElicitationUnitOfWork(_DATABASE, null, function _ConversationAccess(transaction) { return new PrismaConversationElicitationAccessRepository(transaction as Prisma.TransactionClient); });
 		const command = { siloId: request.siloId, conversationId: request.conversationId, requestId: request.id, subjectId: peer, verifiedStepUpAt: null, submission: { idempotencyKey: "peer-production-replay", response: { kind: ElicitationBodyKinds.FreeText, text: "Nakuru" } }, now: new Date() } as const;
 		await expect(unit.respond(command)).resolves.toMatchObject({ outcome: "accepted", projection: { idempotent: false } });
 		const durableAfterWinner = {
