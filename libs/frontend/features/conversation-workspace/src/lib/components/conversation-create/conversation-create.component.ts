@@ -1,8 +1,10 @@
-import { ChangeDetectionStrategy, Component, input, output } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, input, output } from "@angular/core";
 import { ButtonModule } from "primeng/button";
 import { DialogModule } from "primeng/dialog";
 
 import { ConversationModes, ConversationPersonalAgentStatuses, type ConversationCreationDirectory } from "@opencrane/state/conversation/workspace";
+
+import { ConversationParticipantPickerComponent } from "../conversation-participant-picker/conversation-participant-picker.component";
 
 /**
  * The "New conversation" dialog: pick the mode once, pick who is in it, and ask the workspace to
@@ -12,9 +14,8 @@ import { ConversationModes, ConversationPersonalAgentStatuses, type Conversation
  * creation and can never change, so the dialog makes the choice explicit and says so in the copy;
  * an Agent session sends every message into run admission, while Direct and Group never create runs.
  *
- * Nothing here identifies anyone. The directory hands over opaque participant references with generic
- * labels, and the dialog emits those references back untouched — it never resolves them to a person,
- * and it shows no name for anyone but the personal Agent the server itself named. When the server
+ * The directory supplies member display names and opaque participant references. The dialog renders
+ * those labels and emits references back untouched; it never resolves an identity. When the server
  * cannot name exactly one personal Agent it reports `Ambiguous` or `Unavailable`, and the dialog then
  * explains the block instead of guessing an Agent: Agent sessions stay uncreatable until an
  * administrator repairs the assignment.
@@ -26,7 +27,7 @@ import { ConversationModes, ConversationPersonalAgentStatuses, type Conversation
  * @see ConversationCreationDirectory for the choices the server offers.
  * @see ConversationModes for what each mode commits the conversation to.
  */
-@Component({ selector: "wo-conversation-create", standalone: true, imports: [ButtonModule, DialogModule], templateUrl: "./conversation-create.component.html", styleUrl: "./conversation-create.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
+@Component({ selector: "wo-conversation-create", standalone: true, imports: [ButtonModule, DialogModule, ConversationParticipantPickerComponent], templateUrl: "./conversation-create.component.html", styleUrl: "./conversation-create.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
 export class ConversationCreateComponent
 {
 	/** Whether the dialog is open. The parent owns the flag, so the dialog cannot open or close itself; closing it does not reset the selection. */
@@ -77,6 +78,15 @@ export class ConversationCreateComponent
 	protected readonly modes = ConversationModes;
 	/** Gives the template the personal-Agent statuses so the ready, ambiguous, and unavailable notices are selected by member. */
 	protected readonly agentStatuses = ConversationPersonalAgentStatuses;
+	/** Keeps the existing ordinary-creation list limited to other participants. */
+	protected readonly otherParticipants = computed(this._otherParticipants.bind(this));
+	/** Adapts the store-owned set to the shared picker's read-only input. */
+	protected readonly participantSelection = computed(this._participantSelection.bind(this));
+
+	/** Leaves the self participant implicit in ordinary conversation creation. */
+	private _otherParticipants() { return this.directory()?.participants.filter(participant => !participant.isSelf) ?? []; }
+	/** Derives the displayed selection without creating a second writable selection. */
+	private _participantSelection(): readonly string[] { return [...this.selectedParticipantRefs()]; }
 
 	/**
 	 * Turns the checked radio button into a typed mode for {@link modeSelected}.

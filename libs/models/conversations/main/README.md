@@ -31,6 +31,10 @@ only checks deterministic model rules and never allocates a position itself.
 - `ConversationParticipant`, `Message`, `ConversationTimelineEntry`, and `ConversationReplayCursor`
   — canonical membership, message, ordering, and replay coordinates. A cursor may include a
   last observed position so a history reader resumes between complete immutable entries.
+- `GroupChildCreateCommand` and `___GroupChildCreateCommandSchema` require explicit additional
+  organisation membership references in `participantRefs`. An empty array selects only the requester.
+  References remain opaque and case-sensitive; unique selections are sorted for stable retries.
+  The server still checks each selected person's current membership and access to the parent message.
 - `GroupChildView`, `GroupChildOrigin`, and their `___GroupChild*Schema` validators preserve public
   child creation progress and source coordinates. Strict validation rejects extra fields, self-parenting
   views, and revisions outside the unsigned 64-bit stream range; an enclosing conversation must also

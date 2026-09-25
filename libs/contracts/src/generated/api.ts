@@ -8010,6 +8010,8 @@ export interface operations {
                     parentMessageId: string;
                     parentMessagePosition: string;
                     agentServiceId: string;
+                    /** @description Additional active parent-group members selected by opaque, case-sensitive organisation membership references. The requester is implicit and must not be repeated; an empty array is requester-only. */
+                    participantRefs: string[];
                     /** Format: uuid */
                     idempotencyKey: string;
                 };

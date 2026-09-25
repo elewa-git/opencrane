@@ -29,7 +29,7 @@ export class PrismaGroupChildRequestRepository implements GroupChildRequestRepos
 		const existing = await this.transaction.conversationChildRequest.findUnique({ where: { id } });
 		if (existing !== null)
 			return await this._canRecover(caller, existing, commandDigest) ? _GroupChildView(existing) : null;
-		const audience = await this.access.audience(caller, parentConversationId, BigInt(command.parentMessagePosition));
+		const audience = await this.access.selectedAudience(caller, parentConversationId, BigInt(command.parentMessagePosition), command.participantRefs);
 		if (audience === null)
 			return null;
 		const agent = await this.agents.resolve(this.transaction, caller, command.agentServiceId);
@@ -138,13 +138,13 @@ export class PrismaGroupChildRequestRepository implements GroupChildRequestRepos
 	public async setState(request: GroupChildRequest, state: GroupChildRequest["state"]): Promise<void> { await this.transaction.conversationChildRequest.updateMany({ where: { id: request.id, state: ConversationChildRequestState.Pending }, data: { state } }); }
 	/** Rechecks the exact admitted company, parent, audience and child permissions. */
 	public current(request: GroupChildRequest): Promise<boolean> { return this.access.stillAdmitted(request, this.agents); }
-	/** Checks an admitted retry first; only a new request derives the whole current group audience. */
+	/** Checks an admitted retry first; only a new request resolves its selected membership references. */
 	public async canCreate(caller: ConversationCaller, parentId: string, command: GroupChildCreateCommand, id: string, digest: string): Promise<boolean>
 	{
 		const existing = await this.transaction.conversationChildRequest.findUnique({ where: { id } });
 		if (existing !== null)
 			return this._canRecover(caller, existing, digest);
-		return await this.access.audience(caller, parentId, BigInt(command.parentMessagePosition)) !== null;
+		return await this.access.selectedAudience(caller, parentId, BigInt(command.parentMessagePosition), command.participantRefs) !== null;
 	}
 
 	/** Recovers only the caller's immutable command while rechecking source and ready-child access. */

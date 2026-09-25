@@ -1,9 +1,10 @@
 <p-dialog closeAriaLabel="Close assistant request" header="Ask company assistant" [modal]="true" [style]="{ width: 'min(var(--oc-journey-compact-width), calc(100vw - var(--oc-space-8)))' }" [visible]="source() !== null" [closable]="state() !== states.Submitting" [closeOnEscape]="state() !== states.Submitting" (onHide)="dismissed.emit()">
 	<div class="group-request">
-		<p>Everyone currently in this group can read the assistant chat and your follow-ups. Sharing a result posts selected text back to the group.</p>
+		<p>You and the people you select can read the entire assistant chat, including its follow-up messages. Sharing a result posts selected text back to the group.</p>
 		<blockquote aria-label="Your group message">{{ source()?.text }}</blockquote>
 		@if (assistants().length === 0) { <p-message severity="info" text="No company assistant is available to you. Ask an administrator to set one up and give you access." /> }
 		@else { <wo-choice-card-group controlId="group-company-assistant" legend="Choose a company assistant" [options]="choices()" [selectedId]="selectedId()" [disabled]="state() === states.Submitting" (selectedIdChange)="assistantSelected.emit($event)" /> }
+		<wo-conversation-participant-picker controlId="group-request-participants" legend="Who can read this assistant chat?" [participants]="participants()" [selectedParticipantRefs]="selectedParticipantRefs()" [disabled]="state() === states.Submitting" (participantToggled)="participantToggled.emit($event)" />
 		@if (error(); as message) { <p-message severity="error" [text]="message" /> }
 	</div>
 	<ng-template #footer>

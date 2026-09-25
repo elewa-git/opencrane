@@ -48,6 +48,9 @@ The same adapter implements the group-child port. Child reads and creation respo
 requested parent and source; shares forward the reviewed text and UUID unchanged and accept only a
 validated accepted/idempotent acknowledgement. Every request carries the existing session cookie
 and selection AbortSignal. Directory company assistants contain only service IDs and display names.
+Child creation sends the store's explicit additional-participant references, including an empty
+array for requester-only sharing. The adapter never fills that array from group membership or
+turns a membership reference into a login identity.
 Personal-session creation forwards the store's UUID unchanged, allowing the server to distinguish a
 retry from a request for another session.
 Completed migrated accounts with no bootstrap conversation produce `NotRecorded`, never an empty success

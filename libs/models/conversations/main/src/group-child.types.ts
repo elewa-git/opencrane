@@ -23,6 +23,8 @@ export interface GroupChildCreateCommand
 	readonly parentMessagePosition: string;
 	/** Identifies the company assistant the requester is permitted to invoke. */
 	readonly agentServiceId: string;
+	/** Selects additional organisation membership references; an empty list includes only the requester. */
+	readonly participantRefs: readonly string[];
 	/** Keeps retries of the same accepted request from creating another child. */
 	readonly idempotencyKey: string;
 }

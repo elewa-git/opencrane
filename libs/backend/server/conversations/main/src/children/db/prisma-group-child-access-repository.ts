@@ -42,15 +42,26 @@ export class PrismaGroupChildAccessRepository implements GroupChildAccessPort<Pr
 		return request === null ? null : { requestId: request.id, parentConversationId: request.parentConversationId, parentMessageId: request.parentMessageId, parentMessagePosition: request.parentMessagePosition.toString() };
 	}
 
-	/** Refuses shared copying unless every admitted recipient can currently read the exact parent revision. */
-	public async audience(caller: ConversationCaller, parentId: string, position: bigint, frozen?: readonly string[]): Promise<readonly string[] | null>
+	/** Resolves only same-organisation active membership references and keeps the requester implicit. */
+	public async selectedAudience(caller: ConversationCaller, parentId: string, position: bigint, participantRefs: readonly string[]): Promise<readonly string[] | null>
+	{
+		if (new Set(participantRefs).size !== participantRefs.length)
+			return null;
+		const members = await this.transaction.orgMembership.findMany({ where: { id: { in: [...participantRefs] }, clusterTenant: caller.siloId, status: OrgMemberStatus.Active }, select: { id: true, subject: true } });
+		if (members.length !== participantRefs.length || members.some(member => member.subject === caller.subjectId))
+			return null;
+		return this.audience(caller, parentId, position, [caller.subjectId, ...members.map(member => member.subject)]);
+	}
+
+	/** Refuses shared copying unless every selected recipient can currently read the exact parent revision. */
+	public async audience(caller: ConversationCaller, parentId: string, position: bigint, subjectIds: readonly string[]): Promise<readonly string[] | null>
 	{
 		const principal = await this.transaction.principal.findFirst({ where: { id: caller.principalId, siloId: caller.siloId, subject: caller.subjectId, issuer: caller.externalIssuer }, select: { id: true } });
 		const parent = await this.transaction.conversation.findFirst({ where: { id: parentId, siloId: caller.siloId, mode: ConversationMode.Group, lifecycle: ConversationLifecycle.Open }, select: { participants: { where: { accessEndedPosition: null }, select: { userId: true, visibleFromPosition: true } } } });
 		if (principal === null || parent === null)
 			return null;
-		const subjects = frozen ?? parent.participants.map(participant => participant.userId).sort();
-		if (!subjects.includes(caller.subjectId) || subjects.length === 0 || subjects.some(subject => !parent.participants.some(participant => participant.userId === subject && participant.visibleFromPosition <= position)))
+		const subjects = [...subjectIds].sort();
+		if (new Set(subjects).size !== subjects.length || !subjects.includes(caller.subjectId) || subjects.length === 0 || subjects.some(subject => !parent.participants.some(participant => participant.userId === subject && participant.visibleFromPosition <= position)))
 			return null;
 		const memberships = await this.transaction.orgMembership.findMany({ where: { clusterTenant: caller.siloId, subject: { in: [...subjects] }, status: OrgMemberStatus.Active }, select: { subject: true } });
 		const principals = await this.transaction.principal.findMany({ where: { siloId: caller.siloId, subject: { in: [...subjects] } }, select: { id: true, subject: true } });

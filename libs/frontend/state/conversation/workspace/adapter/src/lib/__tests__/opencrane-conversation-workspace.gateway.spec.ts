@@ -54,7 +54,7 @@ describe("OpenCraneConversationWorkspaceGateway", function _DescribeMessageGatew
 
 	it("binds a child request to the selected parent and preserves its retry command and abort signal", async function _ChildRequest()
 	{
-		const command = { parentMessageId: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", parentMessagePosition: "2", agentServiceId: "company", idempotencyKey: "c26f4e78-56ee-4ed2-a8be-06f13ef98164" };
+		const command = { parentMessageId: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", parentMessagePosition: "2", agentServiceId: "company", participantRefs: ["chosen-member"], idempotencyKey: "c26f4e78-56ee-4ed2-a8be-06f13ef98164" };
 		const child = { conversationId: "child", parentConversationId: "group", parentMessageId: command.parentMessageId, parentMessagePosition: "2", state: "pending", agentName: "Research" };
 		const signal = new AbortController().signal;
 		const post = vi.fn().mockResolvedValue({ data: { child }, response: { status: 202 } });

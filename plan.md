@@ -1,5 +1,48 @@
 # OpenCrane — Active Plan
 
+## Explicit initial subchat audience — in progress, 25 September 2026
+
+This incremental source slice starts at published #914, immutable base
+`42a88a2d6c0425f5f4bb78645f357ca12db9bb9d`, on `feat/explicit-subchat-audience`.
+Review order is #908 → #910 → #914 → this candidate. The original mixed MVP and unfinished
+Ask worktrees remain separate. Only the already-written initial-audience capability is extracted.
+
+Accepted B/C require explicit subchat sharing. Creation starts with the requester alone and lets
+that person select current parent-group members before confirming. The server resolves opaque
+membership references, checks current membership, source visibility and Read, and freezes the selected
+subjects through the existing request authority. Sorted references bind the retry identity; changing
+recipients starts a different intent. No new route, schema, baseline, grant family or live access is
+introduced. Existing child reads and recovery continue to check the frozen audience.
+
+The existing controlled participant picker is extracted for both ordinary conversation creation and
+assistant requests. The state store owns selected recipients, retry keys, submission locking and
+access/membership-change purging; the routed page only binds state and intents. Architecture preflight,
+component planning and post-diff component review pass. The 37 non-plan files are frozen in source
+manifest `8a9282ee3620795b25f47472822b660c35537562f92b6a68bb53578808fe7aac`.
+
+Validation passes 327 focused tests: 29 model, 52 backend child/access, 16 client adapter, 90 state
+and 140 workspace feature tests. All six affected TypeScript checks pass, as do the production
+Storybook build and all 42 browser interaction/accessibility suites (279 tests). Mechanical style
+has no errors; its two unchanged warnings are the existing Prisma Pending value and an external
+image MIME type. Prisma boundaries pass for 305 production files; module growth has no candidates.
+Independent integrated review and architecture post-diff pass without a source blocker on all
+37 frozen non-plan files. The live parent stack check passes unchanged snapshot
+`35e2f630c6da01920fa100572d75a39447a4feca9887c12997babc80997888d8`.
+Develop is not an ancestor of the parent, but the exact cumulative merge simulation succeeds with
+tree `e6883b36d7b14f1f476afdc59ab138771421e93a` before this overlay is committed.
+
+Fresh desktop/narrow candidate screenshots are in
+`/private/tmp/opencrane-subchat-audience-candidates/`. The component manager and lead inspected them;
+no baseline is accepted or changed. The local renderer is stopped. These are isolated component
+renders, not authenticated product screenshots.
+
+Parent #914's CI browser job failed after publication; its failure is being classified separately
+from these passing local source checks. No merge, deployment or live acceptance is claimed.
+
+This is not post-creation invitation support, an agent-prefilled creation tool, or authenticated
+multi-person acceptance. A separate question asks what prior history later invitees may see; no
+answer is assumed. The model Ask validator approval remains separate and is not retried here.
+
 ## Pending-question notifications — reviewed source candidate, 25 September 2026
 
 This frontend-only slice starts at published #910, immutable base

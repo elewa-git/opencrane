@@ -5,7 +5,7 @@ import { ConversationLifecycles, ConversationModes, GroupChildStates, type Group
 import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "./conversation-workspace-gateway.errors";
 import { CONVERSATION_GROUP_CHILD_GATEWAY } from "./conversation-workspace.gateway";
 import { ConversationGroupCommandStates, type ConversationGroupSource } from "./conversation-group-child.types";
-import type { ConversationWorkspaceDetail } from "./conversation-workspace.types";
+import type { ConversationDirectoryParticipant, ConversationWorkspaceDetail } from "./conversation-workspace.types";
 
 /**
  * Keeps company-assistant requests and reviewed shares within the selected conversation.
@@ -22,6 +22,8 @@ export class ConversationGroupChildStore
 	private readonly _destroyRef = inject(DestroyRef);
 	/** Holds the selected authorized detail without subscribing the composing effect to command state. */
 	private _selection: ConversationWorkspaceDetail | null = null;
+	/** Keeps the displayed group members available without tracking command signals in selection effects. */
+	private _participants: readonly ConversationDirectoryParticipant[] = [];
 	/** Keeps a denied selection stopped until the workspace explicitly leaves or reopens it. */
 	private _deniedConversationId: string | null = null;
 	/** Cancels work belonging to the previous selection. */
@@ -48,6 +50,10 @@ export class ConversationGroupChildStore
 	public readonly requestSource = signal<ConversationGroupSource | null>(null);
 	/** Holds the participant's explicit company assistant selection. */
 	public readonly agentServiceId = signal<string | null>(null);
+	/** Shows named directory members who also appear in the selected parent group. */
+	public readonly requestParticipants = signal<readonly ConversationDirectoryParticipant[]>([]);
+	/** Holds explicitly chosen additional recipients; the server always includes the requester. */
+	public readonly selectedParticipantRefs = signal<readonly string[]>([]);
 	/** Locks request input while its command is in flight. */
 	public readonly requestState = signal(ConversationGroupCommandStates.Idle);
 	/** Holds display copy for a failed request without discarding retry input. */
@@ -65,15 +71,24 @@ export class ConversationGroupChildStore
 	public constructor() { this._destroyRef.onDestroy(this._Reset.bind(this)); }
 
 	/** Selects a conversation and purges commands before any new child read starts. */
-	public select(detail: ConversationWorkspaceDetail | null): void
+	public select(detail: ConversationWorkspaceDetail | null, directoryParticipants: readonly ConversationDirectoryParticipant[]): void
 	{
 		if (detail !== null && this._deniedConversationId === detail.id)
 			return;
 		this._deniedConversationId = null;
-		if (this._selection?.id === detail?.id && this._selection?.lifecycle === detail?.lifecycle && this._selection?.accessEndedPosition === detail?.accessEndedPosition)
+		const participants = directoryParticipants.filter(participant => detail?.mode === ConversationModes.Group && detail.participantRefs.includes(participant.participantRef));
+		const sameAudience = this._participants.length === participants.length && this._participants.every(previous => participants.some(current => current.participantRef === previous.participantRef && current.isSelf === previous.isSelf));
+		if (this._selection?.id === detail?.id && this._selection?.lifecycle === detail?.lifecycle && this._selection?.accessEndedPosition === detail?.accessEndedPosition && sameAudience)
+		{
+			this._selection = detail;
+			this._participants = participants;
+			this.requestParticipants.set(participants);
 			return;
+		}
 		this._Reset();
 		this._selection = detail;
+		this._participants = participants;
+		this.requestParticipants.set(participants);
 		if (detail?.mode === ConversationModes.Group && detail.accessEndedPosition === null)
 			void this.refresh();
 	}
@@ -110,10 +125,11 @@ export class ConversationGroupChildStore
 	{
 		if (!this._CanRequest() || this.requestState() === ConversationGroupCommandStates.Submitting)
 			return;
-		if (this.requestSource()?.entryId !== source.entryId)
+		if (this.requestSource()?.entryId !== source.entryId || this.requestSource()?.position !== source.position)
 		{
 			this._pendingCreate = null;
 			this.agentServiceId.set(null);
+			this.selectedParticipantRefs.set([]);
 			this.requestState.set(ConversationGroupCommandStates.Idle);
 			this.requestError.set(null);
 		}
@@ -131,6 +147,22 @@ export class ConversationGroupChildStore
 		this.requestError.set(null);
 	}
 
+	/** Changes the explicit audience without allowing self-removal or an unlisted recipient. */
+	public toggleParticipant(participantRef: string): void
+	{
+		if (this.requestSource() === null || this.requestState() === ConversationGroupCommandStates.Submitting || !this._participants.some(participant => participant.participantRef === participantRef && !participant.isSelf))
+			return;
+		const selected = new Set(this.selectedParticipantRefs());
+		if (selected.has(participantRef))
+			selected.delete(participantRef);
+		else
+			selected.add(participantRef);
+		this.selectedParticipantRefs.set([...selected].sort());
+		this._pendingCreate = null;
+		this.requestState.set(ConversationGroupCommandStates.Idle);
+		this.requestError.set(null);
+	}
+
 	/** Dismisses an editable request; an in-flight command keeps its review visible. */
 	public dismissRequest(): void
 	{
@@ -138,7 +170,7 @@ export class ConversationGroupChildStore
 			this.requestSource.set(null);
 	}
 
-	/** Submits the chosen source and service, reusing an unchanged command after a lost response. */
+	/** Submits the reviewed source, service and recipients, retaining all three after a lost response. */
 	public async create(): Promise<void>
 	{
 		const selected = this._selection;
@@ -147,8 +179,9 @@ export class ConversationGroupChildStore
 		if (!this._CanRequest() || selected === null || source === null || agentServiceId === null || this.requestState() === ConversationGroupCommandStates.Submitting)
 			return;
 		const previous = this._pendingCreate;
-		const same = previous?.parentMessageId === source.entryId && previous.parentMessagePosition === source.position && previous.agentServiceId === agentServiceId;
-		const command: GroupChildCreateCommand = { parentMessageId: source.entryId, parentMessagePosition: source.position, agentServiceId, idempotencyKey: same ? previous.idempotencyKey : crypto.randomUUID() };
+		const participantRefs = [...this.selectedParticipantRefs()].sort();
+		const same = previous?.parentMessageId === source.entryId && previous.parentMessagePosition === source.position && previous.agentServiceId === agentServiceId && previous.participantRefs.length === participantRefs.length && previous.participantRefs.every((reference, index) => reference === participantRefs[index]);
+		const command: GroupChildCreateCommand = { parentMessageId: source.entryId, parentMessagePosition: source.position, agentServiceId, participantRefs, idempotencyKey: same ? previous.idempotencyKey : crypto.randomUUID() };
 		this._pendingCreate = command;
 		this.requestState.set(ConversationGroupCommandStates.Submitting);
 		this.requestError.set(null);
@@ -161,6 +194,7 @@ export class ConversationGroupChildStore
 			this._listRevision += 1;
 			this.children.update(children => [...children.filter(item => item.conversationId !== child.conversationId), child]);
 			this.requestSource.set(null);
+			this.selectedParticipantRefs.set([]);
 			this._pendingCreate = null;
 			this.requestState.set(ConversationGroupCommandStates.Idle);
 			this._refreshesRemaining = 12;
@@ -233,7 +267,7 @@ export class ConversationGroupChildStore
 	}
 
 	/** Checks presentation prerequisites without replacing server permission checks. */
-	private _CanRequest(): boolean { return this._selection?.mode === ConversationModes.Group && this._selection.lifecycle === ConversationLifecycles.Open && this._selection.accessEndedPosition === null; }
+	private _CanRequest(): boolean { return this._selection?.mode === ConversationModes.Group && this._selection.lifecycle === ConversationLifecycles.Open && this._selection.accessEndedPosition === null && this._participants.filter(participant => participant.isSelf).length === 1; }
 	/** Refuses results after an abort even if the transport resolves instead of throwing. */
 	private _Current(signal: AbortSignal): boolean { return this._abort.signal === signal && !signal.aborted; }
 	/** Stops the current timer before an explicit refresh or selection change. */
@@ -271,6 +305,7 @@ export class ConversationGroupChildStore
 		this._abort = new AbortController();
 		this._CancelTimer();
 		this._selection = null;
+		this._participants = [];
 		this._reading = false;
 		this._listRevision += 1;
 		this._refreshesRemaining = 12;
@@ -281,6 +316,8 @@ export class ConversationGroupChildStore
 		this.error.set(null);
 		this.requestSource.set(null);
 		this.agentServiceId.set(null);
+		this.requestParticipants.set([]);
+		this.selectedParticipantRefs.set([]);
 		this.requestState.set(ConversationGroupCommandStates.Idle);
 		this.requestError.set(null);
 		this.shareSource.set(null);

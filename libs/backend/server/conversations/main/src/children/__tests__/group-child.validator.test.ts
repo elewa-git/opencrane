@@ -5,14 +5,18 @@ const _UUID = "772340d2-5718-40c4-bca9-24d47d63ba9b";
 
 describe("group child command boundaries", function ()
 {
-	it("binds an exact non-genesis message and rejects browser-supplied authority or audience", function ()
+	it("binds an exact source and explicit recipient references without accepting browser authority", function ()
 	{
-		const command = { parentMessageId: _UUID, parentMessagePosition: "1", agentServiceId: "assistant-1", idempotencyKey: _UUID };
+		const command = { parentMessageId: _UUID, parentMessagePosition: "1", agentServiceId: "assistant-1", participantRefs: [], idempotencyKey: _UUID };
 		expect(_ParseGroupChildCreate(command)).toEqual(command);
 		for (const extra of [{ principalId: "admin" }, { participantIds: ["peer"] }, { siloId: "foreign" }])
 			expect(_ParseGroupChildCreate({ ...command, ...extra })).toBeNull();
 		for (const position of ["0", "01", "-1", "18446744073709551615", "1,2"])
 			expect(_ParseGroupChildCreate({ ...command, parentMessagePosition: position })).toBeNull();
+		const { participantRefs: _selection, ...missing } = command;
+		expect(_ParseGroupChildCreate(missing)).toBeNull();
+		expect(_ParseGroupChildCreate({ ...command, participantRefs: ["member-b", "member-a"] })?.participantRefs).toEqual(["member-a", "member-b"]);
+		expect(_ParseGroupChildCreate({ ...command, participantRefs: ["member-a", "member-a"] })).toBeNull();
 	});
 
 	it("preserves the exact reviewed text and bounds encoded bytes", function ()

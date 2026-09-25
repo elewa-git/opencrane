@@ -1,0 +1,21 @@
+<fieldset class="participant-picker" [disabled]="disabled()">
+	<legend>{{ legend() }}</legend>
+	@if (participants().length === 0) {
+		<p class="participant-picker__empty">No other participants are available.</p>
+	}
+	@for (participant of participants(); track participant.participantRef; let index = $index) {
+		<div class="participant-picker__row">
+			<p-checkbox
+				[binary]="true"
+				[inputId]="controlId() + '-participant-' + index"
+				[ngModel]="participant.isSelf || selectedParticipantRefs().includes(participant.participantRef)"
+				[disabled]="disabled() || participant.isSelf"
+				(ngModelChange)="toggleParticipant(participant.participantRef)"
+			/>
+			<label [for]="controlId() + '-participant-' + index">
+				<span>{{ participant.label }}</span>
+				@if (participant.isSelf) { <small>Always included</small> }
+			</label>
+		</div>
+	}
+</fieldset>
