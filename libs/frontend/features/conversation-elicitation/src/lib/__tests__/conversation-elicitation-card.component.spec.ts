@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, ElicitationPurposes, ElicitationRequestStates, McpCredentialRequirement, type ConversationElicitation } from "@opencrane/state/conversation/elicitation";
+import { CONVERSATION_ELICITATION_VERSION, ElicitationApprovalScopes, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, ElicitationPurposes, ElicitationRequestStates, McpCredentialRequirement, type ConversationElicitation } from "@opencrane/state/conversation/elicitation";
 
 import { _CanSubmitElicitation } from "../conversation-elicitation-card.component";
 
@@ -43,7 +43,15 @@ describe("conversation elicitation submit boundary", function _SubmitBoundarySui
 		const request = { ..._Request({ kind: ElicitationBodyKinds.Approval, prompt: "Proceed?", action: "Create event", target: "Calendar", dataUse: "Meeting details", proposedArguments: { title: "Planning" }, consequence: "An event is created." }), purpose: ElicitationPurposes.ToolApproval };
 		expect(_CanSubmitElicitation(request, { kind: ElicitationBodyKinds.Approval, approved: true }, false)).toBe(false);
 		expect(_CanSubmitElicitation(request, { kind: ElicitationBodyKinds.Approval, approved: false }, false)).toBe(true);
-		const complete = { ...request, body: { ...request.body, executionConnection: { ownerKind: ElicitationConnectionOwnerKinds.CompanyAssistant, ownerLabel: "Finance assistant", credentialRequirement: McpCredentialRequirement.PrincipalCredential } } };
+		const complete = { ...request, body: { ...request.body, offeredScopes: [ElicitationApprovalScopes.Once], executionConnection: { ownerKind: ElicitationConnectionOwnerKinds.CompanyAssistant, ownerLabel: "Finance assistant", credentialRequirement: McpCredentialRequirement.PrincipalCredential } } };
 		expect(_CanSubmitElicitation(complete, { kind: ElicitationBodyKinds.Approval, approved: true }, false)).toBe(true);
+	});
+
+	it("admits Always only while the current server offer keeps its complete explanation", function _StandingOfferFence()
+	{
+		const request = { ..._Request({ kind: ElicitationBodyKinds.Approval, prompt: "Proceed?", action: "Create event", target: "Calendar", dataUse: "Meeting details", proposedArguments: { title: "Planning" }, consequence: "An event is created.", offeredScopes: [ElicitationApprovalScopes.Once, ElicitationApprovalScopes.Always], standingScope: { explanation: "Future actions must match the exact reviewed binding and can be revoked." }, executionConnection: { ownerKind: ElicitationConnectionOwnerKinds.CompanyAssistant, ownerLabel: "Finance assistant", credentialRequirement: McpCredentialRequirement.PrincipalCredential } }), purpose: ElicitationPurposes.ToolApproval };
+		expect(_CanSubmitElicitation(request, { kind: ElicitationBodyKinds.Approval, approved: true, scope: ElicitationApprovalScopes.Always }, false)).toBe(true);
+		expect(_CanSubmitElicitation({ ...request, body: { ...request.body, standingScope: undefined } }, { kind: ElicitationBodyKinds.Approval, approved: true, scope: ElicitationApprovalScopes.Always }, false)).toBe(false);
+		expect(_CanSubmitElicitation({ ...request, body: { ...request.body, offeredScopes: [ElicitationApprovalScopes.Once] } }, { kind: ElicitationBodyKinds.Approval, approved: true, scope: ElicitationApprovalScopes.Always }, false)).toBe(false);
 	});
 });

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ToolInvocationState } from "@prisma/client";
 
 import { CompiledFinalOutputModes, ConversationToolProposalOutcomes } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
@@ -61,6 +62,12 @@ function _Fixture()
 
 async function _ApprovalExpiry(): Promise<void> {}
 
+/** Transaction double that reports the invocation state after the approval opener runs. */
+function _Transaction(openedState: ToolInvocationState)
+{
+	return { toolInvocation: { findUnique: vi.fn().mockResolvedValue({ state: openedState }) } } as never;
+}
+
 describe("conversation approval proposal replay", function _Suite()
 {
 	beforeEach(function _Reset()
@@ -80,12 +87,25 @@ describe("conversation approval proposal replay", function _Suite()
 		_invocation.state = "awaiting_approval";
 		const f = _Fixture();
 		const runtimeAdmission = vi.fn();
-		const repository = new PrismaConversationToolProposalRepository({} as never, {} as never, runtimeAdmission, _ApprovalExpiry);
+		const transaction = _Transaction(ToolInvocationState.AwaitingApproval);
+		const repository = new PrismaConversationToolProposalRepository(transaction, {} as never, runtimeAdmission, _ApprovalExpiry);
 
 		await expect(repository.admit(f.turn, f.candidate, f.proposal, { audience: "conversation", namespace: "computers", serviceAccountName: "computer", workloadKind: "pod", workloadUid: "pod-1", podUid: "pod-1" })).resolves.toEqual({ proposalId: "public-invocation-1", outcome: ConversationToolProposalOutcomes.Existing });
 		expect(_admitUntil).toHaveBeenCalledOnce();
-		expect(_openApproval).toHaveBeenCalledWith({}, expect.objectContaining({ invocationId: "invocation-row-1", runId: "run-1", toolRevisionId: "tool-1", arguments: { recordId: "record-1" } }));
+		expect(_openApproval).toHaveBeenCalledWith(transaction, expect.objectContaining({ invocationId: "invocation-row-1", runId: "run-1", toolRevisionId: "tool-1", arguments: { recordId: "record-1" } }));
 		expect(runtimeAdmission).not.toHaveBeenCalled();
+	});
+
+	it("admits runtime work when standing consent makes the opened invocation Ready", async function _StandingApproval()
+	{
+		_invocation.state = "awaiting_approval";
+		const f = _Fixture();
+		const runtimeAdmission = vi.fn().mockResolvedValue(true);
+		const transaction = _Transaction(ToolInvocationState.Ready);
+		const repository = new PrismaConversationToolProposalRepository(transaction, {} as never, runtimeAdmission, _ApprovalExpiry);
+
+		await expect(repository.admit(f.turn, f.candidate, f.proposal, { audience: "conversation", namespace: "computers", serviceAccountName: "computer", workloadKind: "pod", workloadUid: "pod-1", podUid: "pod-1" })).resolves.toEqual({ proposalId: "public-invocation-1", outcome: ConversationToolProposalOutcomes.Existing });
+		expect(runtimeAdmission).toHaveBeenCalledWith(transaction, "invocation-row-1");
 	});
 
 	it.each(["current permissions", "requester assignment"])("refuses a company proposal after losing %s", async function _CompanyDenial(reason)

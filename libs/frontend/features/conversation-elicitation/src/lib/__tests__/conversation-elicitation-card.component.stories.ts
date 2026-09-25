@@ -2,14 +2,14 @@ import { signal } from "@angular/core";
 import type { Meta, StoryObj } from "@storybook/angular";
 import { expect, fn, userEvent, within } from "storybook/test";
 
-import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, ElicitationPurposes, ElicitationRequestStates, McpCredentialRequirement, type ConversationElicitation, type ElicitationApprovalBody, type ElicitationExecutionConnection, type ElicitationResponseValue } from "@opencrane/state/conversation/elicitation";
+import { CONVERSATION_ELICITATION_VERSION, ElicitationApprovalScopes, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, ElicitationPurposes, ElicitationRequestStates, McpCredentialRequirement, type ConversationElicitation, type ElicitationApprovalBody, type ElicitationExecutionConnection, type ElicitationResponseValue } from "@opencrane/state/conversation/elicitation";
 
 import { ConversationElicitationCardComponent } from "../conversation-elicitation-card.component";
 
 /** Build one canonical requested card story. */
 function _Request(body: ConversationElicitation["body"], requiresStepUp = false): ConversationElicitation
 {
-	const disclosedBody = body.kind === ElicitationBodyKinds.Approval ? { ...body, executionConnection: body.executionConnection ?? _PERSONAL_CONNECTION } : body;
+	const disclosedBody = body.kind === ElicitationBodyKinds.Approval ? { ...body, offeredScopes: body.offeredScopes ?? [ElicitationApprovalScopes.Once], executionConnection: body.executionConnection ?? _PERSONAL_CONNECTION } : body;
 	return { version: CONVERSATION_ELICITATION_VERSION, requestId: `request-${body.kind}`, conversationId: "conversation-1", runId: "run-1", attempt: 1, assignedParticipantId: "user-1", purpose: body.kind === ElicitationBodyKinds.Approval ? ElicitationPurposes.ToolApproval : ElicitationPurposes.RuntimeInput, state: ElicitationRequestStates.Requested, body: disclosedBody, requiresStepUp, requestedAt: "2026-08-11T08:00:00.000Z", expiresAt: "2026-08-11T09:00:00.000Z" };
 }
 
@@ -62,10 +62,30 @@ export const ApprovalPersonalConnection: Story = { args: { elicitation: _Request
 	const approve = canvas.getByRole("radio", { name: /Approve/u });
 	expect(approve).toBeEnabled();
 	await userEvent.click(approve);
-	expect(args.draftSelected).toHaveBeenCalledWith({ kind: ElicitationBodyKinds.Approval, approved: true });
+	expect(args.draftSelected).toHaveBeenCalledWith({ kind: ElicitationBodyKinds.Approval, approved: true, scope: ElicitationApprovalScopes.Once });
 	expect(args.submitRequested).not.toHaveBeenCalled();
 	expect(approve).toBeChecked();
 	expect(canvas.getByRole("button", { name: "Confirm approval" })).toBeEnabled();
+} };
+
+/** Standing consent remains a separate choice and requires its own explicit confirmation. */
+export const ApprovalAlways: Story = { args: { elicitation: _Request({ ..._APPROVAL_BODY, offeredScopes: [ElicitationApprovalScopes.Once, ElicitationApprovalScopes.Always], standingScope: { explanation: "Future actions must use this requester, assistant revision, connection generation, tool and the exact reviewed details. Current permissions still apply, and you can revoke this in Settings." } }), draft: null, draftSelected: fn(), submitRequested: fn() }, render: _RenderApprovalWithOutputSpies, play: async function _StandingChoice({ canvasElement, args })
+{
+	const canvas = within(canvasElement);
+	expect(await canvas.findByRole("radio", { name: "Approve once" })).toBeEnabled();
+	await userEvent.click(canvas.getByRole("radio", { name: "Approve always" }));
+	expect(args.draftSelected).toHaveBeenCalledWith({ kind: ElicitationBodyKinds.Approval, approved: true, scope: ElicitationApprovalScopes.Always });
+	expect(args.submitRequested).not.toHaveBeenCalled();
+	expect(canvas.getByRole("button", { name: "Confirm Approve always" })).toBeEnabled();
+} };
+
+/** An incomplete changed standing offer disappears instead of inheriting an older Always choice. */
+export const ApprovalAlwaysUnavailable: Story = { args: { elicitation: _Request({ ..._APPROVAL_BODY, offeredScopes: [ElicitationApprovalScopes.Once, ElicitationApprovalScopes.Always] }), draft: { kind: ElicitationBodyKinds.Approval, approved: true, scope: ElicitationApprovalScopes.Always } }, play: async function _ChangedOffer({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	expect(await canvas.findByRole("radio", { name: "Approve once" })).toBeEnabled();
+	expect(canvas.queryByRole("radio", { name: "Approve always" })).not.toBeInTheDocument();
+	expect(canvas.getByRole("button", { name: "Confirm Approve always" })).toBeDisabled();
 } };
 
 /** Company execution credentials remain distinct from the requester confirming the action. */

@@ -3,6 +3,15 @@
 	"owners": {
 		"repositories": [
 			{
+				"path": "libs/backend/server/iam/authorization/main/src/approvals/prisma-tool-approval-scope.ts",
+				"adapter": "PrismaToolApprovalScopeRepository",
+				"contract": "ToolApprovalScopeAuthority",
+				"contractImportPath": "./tool-approval-scope.types",
+				"constructs": [
+					{ "adapter": "PrismaAuthorizationAuthority", "importPath": "../authority/persistence/prisma-authorization-authority" }
+				]
+			},
+			{
 				"path": "libs/backend/agents/execution/runs/main/src/tree/prisma-run-tree-repository.ts",
 				"adapter": "PrismaRunTreeRepository",
 				"contract": "RunTreeRepository",
@@ -1629,6 +1638,13 @@
 		],
 		"unitsOfWork": [
 			{
+				"path": "libs/backend/server/iam/authorization/main/src/approvals/prisma-tool-approval-scope.ts",
+				"adapter": "PrismaToolApprovalScopeUnitOfWork",
+				"contract": "ToolApprovalScopeAuthority",
+				"contractImportPath": "./tool-approval-scope.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/agents/personal/memory/main/src/operations/prisma-personal-memory-operation-unit-of-work.ts",
 				"adapter": "PrismaPersonalMemoryOperationUnitOfWork",
 				"contract": "PersonalMemoryOperationUnitOfWork",
@@ -2785,6 +2801,8 @@
 			}
 		],
 		"compositions": [
+			"libs/backend/agents/execution/elicitation/main/src/self-tool-approval-scope.router.ts",
+			"libs/backend/server/iam/authorization/main/src/approvals/prisma-tool-approval-scope.ts",
 			"libs/backend/server/agents/artifacts/main/src/service/artifact-upload.factory.ts",
 			"apps/opencrane/src/bootstrap/http/public-app.ts",
 			"libs/backend/server/conversations/main/src/admission/run-admission-composition.ts",

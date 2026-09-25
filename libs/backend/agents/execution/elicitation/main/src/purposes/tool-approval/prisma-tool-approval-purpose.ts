@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
 import { __DecideDeferredToolRequest, __ExpireDeferredToolApprovalBatch, DeferredToolDecisionKinds, DeferredToolDecisionOutcomes } from "@opencrane/backend/server/iam/authorization";
-import { ElicitationBodyKinds, type ElicitationResponseValue } from "@opencrane/contracts";
+import { ElicitationApprovalScopes, ElicitationBodyKinds, type ElicitationResponseValue } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
 import type { ElicitationPurposeRequest, ElicitationPurposeStrategy } from "../elicitation-purpose.types";
@@ -30,6 +30,7 @@ export class PrismaToolApprovalPurposeAuthority implements ElicitationPurposeStr
 			siloId: approval.siloId,
 			reviewerSubjectId: subjectId,
 			decision,
+			scope: response.approved ? response.scope ?? ElicitationApprovalScopes.Once : ElicitationApprovalScopes.Once,
 			arguments: approvedArguments,
 			decidedBy: subjectId,
 			now,

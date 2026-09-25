@@ -8,6 +8,8 @@ import { TestBed, type ComponentFixture } from "@angular/core/testing";
 import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@angular/platform-browser-dynamic/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { ElicitationApprovalScopes } from "@opencrane/contracts";
+
 import { ElicitationApprovalComponent, _ApprovalAvailable } from "../elicitation-approval.component";
 import type { ElicitationApprovalPresentation } from "../elicitation-control.types";
 
@@ -70,8 +72,8 @@ describe("ElicitationApprovalComponent", function _ApprovalSuite()
 		const component = TestBed.runInInjectionContext(function _Construct() { return new ElicitationApprovalComponent(); });
 		let emitted: unknown = null;
 		component.valueChange.subscribe(function _Capture(value) { emitted = value; });
-		component.select(false);
-		expect(emitted).toBe(false);
+		component.deny();
+		expect(emitted).toEqual({ approved: false, scope: ElicitationApprovalScopes.Once });
 	});
 
 	it("keeps denial available when hidden arguments make approval unavailable", function _HiddenArguments()
@@ -127,7 +129,7 @@ describe("ElicitationApprovalComponent", function _ApprovalSuite()
 		const [approve, deny] = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLInputElement>("input[type='radio']");
 		approve.click();
 		deny.click();
-		expect(selected.mock.calls).toEqual([[true], [false]]);
+		expect(selected.mock.calls).toEqual([[{ approved: true, scope: ElicitationApprovalScopes.Once }], [{ approved: false, scope: ElicitationApprovalScopes.Once }]]);
 		expect(fixture.componentInstance.value()).toBeNull();
 	});
 
@@ -142,7 +144,7 @@ describe("ElicitationApprovalComponent", function _ApprovalSuite()
 		expect(deny.matches(":disabled")).toBe(false);
 		approve.click();
 		deny.click();
-		expect(selected.mock.calls).toEqual([[false]]);
+		expect(selected.mock.calls).toEqual([[{ approved: false, scope: ElicitationApprovalScopes.Once }]]);
 		expect(_definition(root, "Connection owner")?.textContent).toBe(_BODY.executionConnection?.owner);
 		expect(root.querySelector("[role='note']")?.textContent).toContain("approval is unavailable");
 	});
@@ -158,11 +160,23 @@ describe("ElicitationApprovalComponent", function _ApprovalSuite()
 			expect(control.matches(":disabled")).toBe(true);
 			control.click();
 		}
-		fixture.componentInstance.select(true);
-		fixture.componentInstance.select(false);
+		fixture.componentInstance.approve(ElicitationApprovalScopes.Once);
+		fixture.componentInstance.deny();
 		expect(selected).not.toHaveBeenCalled();
 		expect(_definition(root, "Connection owner")?.textContent).toBe(_BODY.executionConnection?.owner);
 		expect(_definition(root, "Credential use")?.textContent).toBe(_BODY.executionConnection?.credentialUse);
+	});
+
+	it("offers standing approval only with the server's complete explanation", function _StandingApproval()
+	{
+		const standing = _renderApproval({ ..._BODY, offeredScopes: [ElicitationApprovalScopes.Once, ElicitationApprovalScopes.Always], standingScope: { explanation: "Future actions must match this assistant, connection, tool and the exact reviewed details. You can revoke this in Settings." } });
+		const controls = (standing.nativeElement as HTMLElement).querySelectorAll<HTMLInputElement>("input[type='radio']");
+		expect(Array.from(controls).map(control => control.parentElement?.textContent?.trim())).toEqual(["Approve once", "Approve always", "Deny"]);
+		expect((standing.nativeElement as HTMLElement).textContent).toContain("You can revoke this in Settings");
+
+		_setInput(standing.componentInstance.body, { ..._BODY, offeredScopes: [ElicitationApprovalScopes.Once, ElicitationApprovalScopes.Always] });
+		standing.detectChanges();
+		expect(Array.from((standing.nativeElement as HTMLElement).querySelectorAll("label")).map(label => label.textContent?.trim())).toEqual(["Approve once", "Deny"]);
 	});
 
 	it("retains the feature's independent approval-disabled guard", function _FeatureApprovalDisabled()

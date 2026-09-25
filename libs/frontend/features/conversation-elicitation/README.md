@@ -29,11 +29,17 @@ the conversation workspace connects emitted intents to its component-scoped stat
 - `ConversationElicitationCardComponent` renders one exact request, controlled draft, recovery
   action, separate decision confirmation, and human-facing approved, denied, expired, or cancelled
   outcome. It restores focus after verified sign-in without exposing request coordinates.
+- `TOOL_APPROVAL_SCOPE_ROUTES` mounts the requester-owned standing-approval list beneath Settings.
+  Its route composes a pure mapper, paginated store and presentational confirmation view.
 
 ## Boundary
 
 This is a presentational feature seam, not a route and not an API client. It never creates an
 approval, advances a run, or assumes that a browser selection was accepted.
+
+The standing-approval route receives safe owner summaries only. It never receives reviewed
+arguments, credentials or connection coordinates. Revocation remains available without an
+organisation administration role, a current tool Invoke grant or page-owned HTTP.
 
 A pure feature mapper turns the saved personal or company-assistant connection owner and credential
 requirement into display text for the existing approval control. The label is not inferred from the

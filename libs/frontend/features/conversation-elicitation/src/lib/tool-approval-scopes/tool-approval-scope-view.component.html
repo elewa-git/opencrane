@@ -1,0 +1,23 @@
+<wo-section-heading title="Standing approvals" subtitle="Review and revoke approvals you saved for matching external actions." [level]="headingLevels.Page">
+	<p-button heading-actions label="Refresh" icon="pi pi-refresh" [text]="true" [disabled]="view().readState === readStates.Loading || view().readState === readStates.LoadingMore" (onClick)="refreshRequested.emit()" />
+</wo-section-heading>
+
+<p class="approval-scope-intro">A standing approval applies only when the requester, assistant revision, connection generation, tool and reviewed arguments still match. Current tool permissions are still required for every action.</p>
+
+<p-confirmDialog key="standing-approval-revocation" [pt]="{ host: { role: 'presentation' }, pcCloseButton: { root: { 'aria-label': 'Cancel revocation' } } }" [style]="{ width: '30rem', maxWidth: 'calc(100vw - 2rem)' }">
+	<ng-template #message><p>Revoke the standing approval for <strong>{{ target()?.action }}</strong> on <strong>{{ target()?.target }}</strong>? Future matching actions will need a new approval.</p></ng-template>
+</p-confirmDialog>
+
+<wo-resource-feedback [loading]="view().readState === readStates.LoadingMore" loadingLabel="Loading older standing approvals…" [error]="view().error" [retryAvailable]="view().readState === readStates.Unavailable" (retryRequested)="refreshRequested.emit()" />
+
+@if (view().readState === readStates.Loading) {
+	<section class="approval-scope-loading" aria-label="Loading standing approvals"><p-skeleton height="4rem" /><p-skeleton height="4rem" /><p-skeleton height="4rem" /></section>
+} @else if (view().rows.length === 0 && view().readState === readStates.Ready) {
+	<section class="approval-scope-empty"><i class="pi pi-check-circle" aria-hidden="true"></i><h2>No standing approvals</h2><p>Actions that need approval will ask you each time.</p></section>
+} @else if (view().rows.length > 0) {
+	<p-table [value]="rows()" styleClass="approval-scope-table">
+		<ng-template #header><tr><th>Action</th><th>Assistant and connection</th><th>Created</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></ng-template>
+		<ng-template #body let-row><tr wo-tool-approval-scope-row [row]="row" (revokeRequested)="confirmRevocation($event)"></tr></ng-template>
+	</p-table>
+	@if (view().hasMore) { <div class="approval-scope-more"><p-button label="Load more" icon="pi pi-chevron-down" severity="secondary" [outlined]="true" [loading]="view().readState === readStates.LoadingMore" [disabled]="view().readState === readStates.LoadingMore" (onClick)="loadMoreRequested.emit()" /></div> }
+}

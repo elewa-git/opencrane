@@ -16,7 +16,7 @@ import { PrismaResourceShareUnitOfWork, ResourceShareService, resourceSharesRout
 import { PrismaAuthenticatedPrincipalDirectoryUnitOfWork, type AuthenticatedPrincipalDirectory } from "@opencrane/backend/server/iam/identity";
 import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
 import { spec } from "@opencrane/backend/server/api-spec";
-import { _CreateSelfElicitationActivityRouter, _CreateSelfElicitationRouter } from "@opencrane/backend/agents/execution/elicitation";
+import { _CreateSelfElicitationActivityRouter, _CreateSelfElicitationRouter, _CreateSelfToolApprovalScopeRouter } from "@opencrane/backend/agents/execution/elicitation";
 import { _CreateSelfRunStatusRouter } from "@opencrane/backend/agents/execution/runs";
 import { _CreatePersonaOnboardingRouter } from "@opencrane/backend/agents/personal/personas";
 import { _ResolveUserOnboardingOwner } from "@opencrane/backend/server/agents/onboarding";
@@ -91,6 +91,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScan
 		..._OptionalRoute("/api/v1/me/conversations", computerReview),
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfElicitationRouter(prisma, _log, transaction => new PrismaConversationComputerTurnWorkflowEventRepository(transaction as Prisma.TransactionClient, mcpWorkflows.execution)) },
 		{ method: "use", path: "/api/v1/me/activity", handler: _CreateSelfElicitationActivityRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/tool-approval-scopes", handler: _CreateSelfToolApprovalScopeRouter(prisma, _log) },
 	];
 	const gatewayRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/mcp", handler: mcpOperatorRouter(mcpWorkflows.unitOfWork, principalDirectory, mcpWorkflows.eraProbeWorkflow, mcpWorkflows.ociImageValidationWorkflow, mcpWorkflows.ociImageArtifacts, mcpRuntime.connections) },

@@ -1,7 +1,7 @@
 import { Injectable, InjectionToken, inject } from "@angular/core";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { ElicitationBodyKinds, type ConversationElicitation, type SubmitElicitationResponse } from "@opencrane/contracts";
+import { ElicitationApprovalScopes, ElicitationBodyKinds, type ConversationElicitation, type SubmitElicitationResponse } from "@opencrane/contracts";
 
 import { ElicitationGatewayError, ElicitationGatewayErrorKinds } from "./elicitation-gateway.errors";
 import type { ConversationElicitationGateway, GeneratedElicitationSubmission } from "./elicitation-gateway.types";
@@ -61,7 +61,7 @@ function _GeneratedSubmission(submission: SubmitElicitationResponse): GeneratedE
 {
 	switch (submission.response.kind)
 	{
-		case ElicitationBodyKinds.Approval: return { idempotencyKey: submission.idempotencyKey, response: { kind: submission.response.kind, approved: submission.response.approved } };
+		case ElicitationBodyKinds.Approval: return { idempotencyKey: submission.idempotencyKey, response: { kind: submission.response.kind, approved: submission.response.approved, scope: submission.response.scope ?? ElicitationApprovalScopes.Once } };
 		case ElicitationBodyKinds.SingleChoice: return { idempotencyKey: submission.idempotencyKey, response: { kind: submission.response.kind, selection: submission.response.selection } };
 		case ElicitationBodyKinds.MultipleChoice: return { idempotencyKey: submission.idempotencyKey, response: { kind: submission.response.kind, selections: [...submission.response.selections] } };
 		case ElicitationBodyKinds.FreeText: return { idempotencyKey: submission.idempotencyKey, response: { kind: submission.response.kind, text: submission.response.text } };

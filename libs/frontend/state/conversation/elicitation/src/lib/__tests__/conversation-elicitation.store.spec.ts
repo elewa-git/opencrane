@@ -4,7 +4,7 @@ import { TestBed } from "@angular/core/testing";
 import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@angular/platform-browser-dynamic/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, ElicitationPurposes, ElicitationRequestStates, McpCredentialRequirement, type ConversationElicitation, type ElicitationResponseProjection } from "@opencrane/contracts";
+import { CONVERSATION_ELICITATION_VERSION, ElicitationApprovalScopes, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, ElicitationPurposes, ElicitationRequestStates, McpCredentialRequirement, type ConversationElicitation, type ElicitationResponseProjection } from "@opencrane/contracts";
 
 import { __MapToolActivity } from "../conversation-activity.mapper";
 import { ConversationActivityKinds } from "../conversation-activity.types";
@@ -57,11 +57,11 @@ describe("ConversationElicitationStore", function _StoreSuite()
 		expect(store.canSubmit()).toBe(true);
 	});
 
-	it("rechecks a retained affirmative draft when refreshed connection disclosure disappears", async function _RefreshedConnection()
+	it("clears an affirmative draft when refreshed approval disclosure changes", async function _RefreshedConnection()
 	{
 		const gateway = _Gateway();
 		const body = { kind: ElicitationBodyKinds.Approval, prompt: "Proceed?", action: "Create event", target: "Calendar", dataUse: "Meeting details", proposedArguments: { title: "Planning" }, consequence: "An event is created." } as const;
-		const request: ConversationElicitation = { ..._Elicitation(), purpose: ElicitationPurposes.ToolApproval, body: { ...body, executionConnection: { ownerKind: ElicitationConnectionOwnerKinds.CompanyAssistant, ownerLabel: "Finance assistant", credentialRequirement: McpCredentialRequirement.PrincipalCredential } } };
+		const request: ConversationElicitation = { ..._Elicitation(), purpose: ElicitationPurposes.ToolApproval, body: { ...body, offeredScopes: [ElicitationApprovalScopes.Once], executionConnection: { ownerKind: ElicitationConnectionOwnerKinds.CompanyAssistant, ownerLabel: "Finance assistant", credentialRequirement: McpCredentialRequirement.PrincipalCredential } } };
 		vi.mocked(gateway.read).mockResolvedValueOnce(request).mockResolvedValueOnce({ ...request, body });
 		TestBed.configureTestingModule({ providers: [ConversationElicitationStore, { provide: ELICITATION_GATEWAY, useValue: gateway }] });
 		const store = TestBed.inject(ConversationElicitationStore);
@@ -69,7 +69,7 @@ describe("ConversationElicitationStore", function _StoreSuite()
 		store.select({ kind: ElicitationBodyKinds.Approval, approved: true });
 		expect(store.canSubmit()).toBe(true);
 		await store.load("conversation-1", "request-1");
-		expect(store.draft()).toEqual({ kind: ElicitationBodyKinds.Approval, approved: true });
+		expect(store.draft()).toBeNull();
 		expect(store.canSubmit()).toBe(false);
 		await expect(store.submit()).resolves.toBe(false);
 		expect(gateway.respond).not.toHaveBeenCalled();

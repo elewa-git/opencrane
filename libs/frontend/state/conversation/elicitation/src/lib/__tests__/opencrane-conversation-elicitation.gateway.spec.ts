@@ -2,7 +2,7 @@ import { Injector, runInInjectionContext } from "@angular/core";
 import { describe, expect, it, vi } from "vitest";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates } from "@opencrane/contracts";
+import { CONVERSATION_ELICITATION_VERSION, ElicitationApprovalScopes, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates } from "@opencrane/contracts";
 
 import { OpenCraneConversationElicitationGateway } from "../opencrane-conversation-elicitation.gateway";
 
@@ -30,6 +30,14 @@ function _Gateway(client: object): OpenCraneConversationElicitationGateway
 
 describe("OpenCraneConversationElicitationGateway", function _Suite()
 {
+	it("sends an explicit Once scope when an older affirmative draft omitted it", async function _ApprovalScopeDefault()
+	{
+		const response = { requestId: "request-1", state: ElicitationRequestStates.Answered, idempotent: false, resolvedAt: "2026-08-11T08:05:00.000Z" };
+		const POST = vi.fn().mockResolvedValue({ data: { response }, error: undefined, response: { ok: true, status: 200 } });
+		await expect(_Gateway({ POST }).respond("conversation-1", "request-1", { idempotencyKey: "key-1", response: { kind: ElicitationBodyKinds.Approval, approved: true } })).resolves.toEqual(response);
+		expect(POST).toHaveBeenCalledWith("/me/conversations/{conversationId}/elicitations/{requestId}/responses", { params: { path: { conversationId: "conversation-1", requestId: "request-1" } }, body: { idempotencyKey: "key-1", response: { kind: ElicitationBodyKinds.Approval, approved: true, scope: ElicitationApprovalScopes.Once } } });
+	});
+
 	it("lists validated pending requests for the selected conversation", async function _ListsOpen()
 	{
 		const GET = vi.fn().mockResolvedValue({ data: { elicitations: [_ELICITATION] }, error: undefined, response: { ok: true, status: 200 } });

@@ -13,10 +13,13 @@
 		<div><dt>What happens</dt><dd>{{ body().consequence }}</dd></div>
 		@if (body().cost; as cost) { <div><dt>Cost</dt><dd>{{ cost }}</dd></div> }
 	</dl>
+	@if (body().standingScope; as standingScope) { <p class="elicitation-control__standing" role="note">{{ standingScope.explanation }}</p> }
 	@if (!approvalAvailable()) { <p class="elicitation-control__warning" role="note">Some proposed details cannot be shown. You can deny this action, but approval is unavailable.</p> }
 	<fieldset [disabled]="disabled()">
 		<legend>Your decision</legend>
-		<label><input type="radio" name="elicitation-approval" [disabled]="!approvalAvailable()" [checked]="value() === true" (change)="select(true)" /> Approve</label>
-		<label><input type="radio" name="elicitation-approval" [checked]="value() === false" (change)="select(false)" /> Deny</label>
+		@for (option of approvalOptions(); track option.scope) {
+			<label><input type="radio" name="elicitation-approval" [disabled]="!approvalAvailable()" [checked]="approvalSelected(option.scope)" (change)="approve(option.scope)" /> {{ option.label }}</label>
+		}
+		<label><input type="radio" name="elicitation-approval" [checked]="value()?.approved === false" (change)="deny()" /> Deny</label>
 	</fieldset>
 </section>

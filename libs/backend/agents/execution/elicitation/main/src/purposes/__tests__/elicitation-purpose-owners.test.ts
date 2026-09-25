@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { __DigestCanonicalJson, DeferredToolDecisionKinds, DeferredToolDecisionOutcomes } from "@opencrane/backend/server/iam/authorization";
-import { ElicitationBodyKinds } from "@opencrane/contracts";
+import { ElicitationApprovalScopes, ElicitationBodyKinds } from "@opencrane/contracts";
 
 import { PrismaA2uiActionPurposeAuthority } from "../a2ui-action/prisma-a2ui-action-purpose";
 import type { ElicitationPurposeRequest } from "../elicitation-purpose.types";
@@ -76,6 +76,7 @@ describe("transaction-bound elicitation purposes", function _suite()
 		expect(_authorization.decide).toHaveBeenCalledWith(transaction, {
 			approvalRequestId: approval.id, siloId: approval.siloId, reviewerSubjectId: "person-1",
 			decision: approved ? DeferredToolDecisionKinds.Approved : DeferredToolDecisionKinds.Denied,
+			scope: ElicitationApprovalScopes.Once,
 			arguments: approved ? reviewedToolArguments : undefined,
 			decidedBy: "person-1", now,
 		});

@@ -28,6 +28,8 @@ export enum ProductAuthorizationResourceKinds
 	McpTask = "mcp-task",
 	/** Protects one human approval request and its decision. */
 	ApprovalRequest = "approval-request",
+	/** Protects requester-owned metadata and revocation for one standing tool consent. */
+	ToolApprovalScope = "tool-approval-scope",
 	/** Protects a stable skill identity. */
 	Skill = "skill",
 	/** Protects one immutable skill revision. */

@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 
-import { ElicitationBodyKinds, type ElicitationResponseValue, type SubmitElicitationResponse } from "@opencrane/contracts";
+import { ElicitationApprovalScopes, ElicitationBodyKinds, type ElicitationResponseValue, type SubmitElicitationResponse } from "@opencrane/contracts";
 
 import type { SelfElicitationCaller, SelfElicitationRouterDependencies } from "./self-elicitation.router.types";
 
@@ -142,7 +142,13 @@ function _Submission(body: unknown): SubmitElicitationResponse | null
 function _ResponseValue(value: unknown): ElicitationResponseValue | null
 {
 	if (!_Record(value) || typeof value["kind"] !== "string") return null;
-	if (value["kind"] === ElicitationBodyKinds.Approval && _ExactKeys(value, ["kind", "approved"]) && typeof value["approved"] === "boolean") return { kind: value["kind"], approved: value["approved"] };
+	if (value["kind"] === ElicitationBodyKinds.Approval && (_ExactKeys(value, ["kind", "approved"]) || _ExactKeys(value, ["kind", "approved", "scope"])) && typeof value["approved"] === "boolean")
+	{
+		const scope = value["scope"];
+		if (scope !== undefined && !Object.values(ElicitationApprovalScopes).includes(scope as ElicitationApprovalScopes))
+			return null;
+		return { kind: value["kind"], approved: value["approved"], ...(scope === undefined ? {} : { scope: scope as ElicitationApprovalScopes }) };
+	}
 	if (value["kind"] === ElicitationBodyKinds.SingleChoice && _ExactKeys(value, ["kind", "selection"]) && typeof value["selection"] === "string") return { kind: value["kind"], selection: value["selection"] };
 	if (value["kind"] === ElicitationBodyKinds.MultipleChoice && _ExactKeys(value, ["kind", "selections"]) && Array.isArray(value["selections"]) && value["selections"].every(_String)) return { kind: value["kind"], selections: value["selections"] };
 	if (value["kind"] === ElicitationBodyKinds.FreeText && _ExactKeys(value, ["kind", "text"]) && typeof value["text"] === "string") return { kind: value["kind"], text: value["text"] };

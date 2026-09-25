@@ -24,7 +24,9 @@ owns submission, while the server remains the decision authority.
 ## Public surface
 
 - `ElicitationApprovalComponent` discloses the exact action and display-safe proposed arguments. An
-  explicitly hidden proposal disables approval while keeping denial available.
+  explicitly hidden proposal disables approval while keeping denial available. It renders Approve
+  once first and renders Approve always only when the server supplies both that offer and its safe
+  revocable-scope explanation; choosing either remains a draft until the feature confirms it.
 - `ElicitationExecutionConnectionPresentation` supplies the connection owner and credential-use
   text through `ElicitationApprovalPresentation.executionConnection`, separate from the human decision.
 - `ElicitationSingleChoiceComponent` and `ElicitationMultipleChoiceComponent` emit bounded selections.

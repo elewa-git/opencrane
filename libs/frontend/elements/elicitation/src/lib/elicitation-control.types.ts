@@ -1,3 +1,5 @@
+import type { ElicitationApprovalScopes, ElicitationApprovalStandingScope } from "@opencrane/contracts";
+
 /** One bounded option already admitted by the server-facing feature boundary. */
 export interface ElicitationControlChoice
 {
@@ -45,6 +47,19 @@ export interface ElicitationApprovalPresentation
 	readonly consequence: string;
 	/** Optional cost disclosure. */
 	readonly cost?: string;
+	/** Server-offered approval choices, in narrowest-first order. */
+	readonly offeredScopes?: readonly ElicitationApprovalScopes[];
+	/** Server-authored explanation shown beside a standing approval choice. */
+	readonly standingScope?: ElicitationApprovalStandingScope;
+}
+
+/** One controlled approval choice that still requires the card's separate confirmation. */
+export interface ElicitationApprovalDraft
+{
+	/** Whether the participant approves the disclosed action. */
+	readonly approved: boolean;
+	/** How long an approval may apply; denial always uses the one-use value. */
+	readonly scope: ElicitationApprovalScopes;
 }
 
 /** Presentational single-choice question. */

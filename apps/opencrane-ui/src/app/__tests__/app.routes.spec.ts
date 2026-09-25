@@ -22,10 +22,12 @@ describe("OpenCrane app route composition", function _OpenCraneAppRouteCompositi
 		expect(shell.component?.name).toBe("SettingsShellComponent");
 		expect(shell.children?.find(function _Default(route) { return route.path === "" && route.redirectTo !== undefined; })).toMatchObject({ pathMatch: "full", redirectTo: "members" });
 		expect(shell.children?.find(function _Members(route) { return route.path === "members"; })?.component?.name).toBe("MembersRouteComponent");
-		const governance = shell.children?.find(function _Governance(route) { return route.loadChildren !== undefined; });
-		const children = await governance!.loadChildren!() as Routes;
-		expect(children.map(function _Path(route) { return route.path; })).toEqual(["audit", "usage"]);
-		expect(children.every(function _Context(route) { return route.providers?.length === 1; })).toBe(true);
+		const lazyMounts = shell.children!.filter(function _LazyMount(route) { return route.loadChildren !== undefined; });
+		expect(lazyMounts).toHaveLength(2);
+		const destinations = await Promise.all(lazyMounts.map(async function _LoadDestinations(route) { return await route.loadChildren!() as Routes; }));
+		expect(destinations.map(function _Paths(routes) { return routes.map(function _Path(route) { return route.path; }); })).toEqual([["approvals"], ["audit", "usage"]]);
+		expect(destinations[0][0].component?.name).toBe("ToolApprovalScopeRouteComponent");
+		expect(destinations[1].every(function _Context(route) { return route.providers?.length === 1; })).toBe(true);
 	});
 
 	it("guards settings and requests registration only for anonymous token acceptance", function _SettingsRoutes()

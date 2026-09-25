@@ -71,6 +71,27 @@ export enum ElicitationConnectionOwnerKinds
 	CompanyAssistant = "company_assistant",
 }
 
+/**
+ * Selects how long an approved tool response may cover matching future proposals.
+ *
+ * These values cross the browser and persistence boundary. `Always` never widens the reviewed
+ * action: the server still requires the same requester, assistant, connection, tool, and arguments.
+ */
+export enum ElicitationApprovalScopes
+{
+	/** Approves only the ToolInvocation linked to this response. */
+	Once = "once",
+	/** Saves revocable consent for future ToolInvocations with the same reviewed binding. */
+	Always = "always",
+}
+
+/** Browser-safe explanation of the standing consent offered by a tool approval. */
+export interface ElicitationApprovalStandingScope
+{
+	/** Explains the complete match rule and tells the requester that they can revoke consent. */
+	readonly explanation: string;
+}
+
 /** Display-safe ownership evidence saved with a tool approval; it contains no credential material. */
 export interface ElicitationExecutionConnection
 {
@@ -104,6 +125,10 @@ export interface ElicitationApprovalBody
 	readonly proposedArguments?: ConversationToolProposal["arguments"] | null;
 	/** Required for tool approvals; other approval purposes omit this connection disclosure. */
 	readonly executionConnection?: ElicitationExecutionConnection;
+	/** Choices the server permits for this request, in narrowest-first order. */
+	readonly offeredScopes?: readonly ElicitationApprovalScopes[];
+	/** Explains the saved binding when this request offers standing consent. */
+	readonly standingScope?: ElicitationApprovalStandingScope;
 	/** External system label, when an external system is involved. */
 	readonly externalSystem?: string;
 	/** Plain-language consequence of approval. */
@@ -189,7 +214,7 @@ export interface ConversationElicitation
 
 /** Participant answer carried through the sole authoritative response endpoint. */
 export type ElicitationResponseValue =
-	| { readonly kind: ElicitationBodyKinds.Approval; readonly approved: boolean }
+	| { readonly kind: ElicitationBodyKinds.Approval; readonly approved: boolean; readonly scope?: ElicitationApprovalScopes }
 	| { readonly kind: ElicitationBodyKinds.SingleChoice; readonly selection: string }
 	| { readonly kind: ElicitationBodyKinds.MultipleChoice; readonly selections: readonly string[] }
 	| { readonly kind: ElicitationBodyKinds.FreeText; readonly text: string };

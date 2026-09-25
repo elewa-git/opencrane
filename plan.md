@@ -1,5 +1,53 @@
 # OpenCrane — Active Plan
 
+## Scoped standing tool approvals — publication candidate, 25 September 2026
+
+Publish the reviewed requester-owned tool-consent capability as an incremental child of #900,
+starting from `5674b66bccb3aecfe0eb08f210103eb07dd43736`. The larger unfinished MVP worktree is
+preserved separately; this candidate does not include its paused Recall, routine, shared-budget,
+delegation or administration-design changes. Existing typed execution contexts remain intact.
+
+The accepted policy offers Approve once or revocable Approve always for an already
+approval-required tool call. A standing decision covers the exact requester, assistant revision,
+connection owner/generation, tool revision/action and reviewed arguments. Hidden arguments cannot
+create standing consent. Every later match still needs a one-use admission, current permissions,
+and a claim bound to the same invocation. Revocation closes unclaimed effects; it cannot undo an
+effect that has already been claimed or justify another dispatch after an uncertain result.
+
+The existing elicitation controls retain an explicit final submit. An authenticated Settings view
+lists the requester's own saved approvals with pagination and explicit revoke confirmation.
+Withdrawal remains available after losing permission to invoke the assistant. The state owner
+preserves uncertain-command retry identity and purges private rows when the session changes.
+The browser's session port supplies display/cache identity only, never execution authority.
+
+#903 remains a distinct memory-consent proposal: dataset-level prompt suppression, sensitivity
+and memory session scope are not tool-effect authorization and are not absorbed or enabled here.
+Its generic scope-selector interaction overlaps the shared elicitation components and must be
+reconciled against the tool disclosure/confirmation contract when that memory proposal is integrated.
+The current tool policy intentionally offers no session-wide permission and copies no memory grants.
+
+#893 has merged. #894 now targets `develop` with the same incremental patch; the open review order
+is #894 → #896 → #897 → #898 → #899 → #900 → this candidate. No predecessor was closed or rewritten.
+The clean candidate has its own generated API and baseline
+`4e050042851f1f74314cad1d6f03b7d3e6be033dae16304f03bfa1cb752267f6`. Local qualification passes:
+120 database integration tests across 15 files, including 17 standing-consent cases, plus four SQL
+authority suites on isolated PostgreSQL 17.11 in UTC; authorization 303, elicitation 70, conversations
+845, contracts 205 and authorization-model 17 unit tests; and 115 frontend/app tests. All five
+affected backend type checks, four frontend type checks, UI production build, generated API,
+release binding, workflow/authorization/ownership guards and mechanical style pass. The temporary
+database was stopped and its generated data removed. This is not the pinned PostgreSQL 17.5
+release qualification, a clean-branch browser acceptance run, or a real-provider test.
+
+The extracted source was reviewed separately from the dirty worktree. The UI review corrected
+independent Read/Revoke permission handling and fenced late authorization failures from an old
+account before they could clear a new account's state; focused regressions pass. The original
+900-file unpublished source manifest remains byte-for-byte intact. Its earlier 159-test SQL result
+is historical evidence only and is not attributed to this candidate.
+
+Remaining MVP work includes trusted per-tool first-write classification, operational delegation and
+schedules with shared budgets, connected consented recall, and real-account/provider/fresh-install
+acceptance. This source publication does not deploy, change live permissions, or claim MVP completion.
+
 ## MVP continuation — 2026-09-22
 
 Composition readability follow-up to `32872dc9`: replace the conversation workflow bootstrap's

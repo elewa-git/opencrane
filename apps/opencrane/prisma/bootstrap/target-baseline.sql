@@ -59,6 +59,15 @@ CREATE TYPE "AuthorizationEffect" AS ENUM ('allow', 'deny');
 CREATE TYPE "ApprovalRequestState" AS ENUM ('pending', 'approved', 'denied', 'expired', 'cancelled');
 
 -- CreateEnum
+CREATE TYPE "ToolApprovalDecisionScope" AS ENUM ('once', 'always');
+
+-- CreateEnum
+CREATE TYPE "ToolApprovalScopeState" AS ENUM ('active', 'revoked');
+
+-- CreateEnum
+CREATE TYPE "ToolApprovalAdmissionOrigin" AS ENUM ('standing_consent');
+
+-- CreateEnum
 CREATE TYPE "ToolInvocationState" AS ENUM ('preparing', 'awaiting_approval', 'ready', 'claimed', 'reconciling', 'succeeded', 'failed', 'recovery_required');
 
 -- CreateEnum
@@ -603,9 +612,62 @@ CREATE TABLE "approval_requests" (
     "response_schema" JSONB NOT NULL,
     "final_arguments" JSONB,
     "final_arguments_digest" TEXT,
+    "decision_scope" "ToolApprovalDecisionScope",
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "approval_requests_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tool_approval_scopes" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "requester_principal_id" TEXT NOT NULL,
+    "requester_subject_id" TEXT NOT NULL,
+    "agent_service_id" TEXT NOT NULL,
+    "agent_revision_id" TEXT NOT NULL,
+    "connection_id" TEXT,
+    "connection_owner_principal_id" TEXT NOT NULL,
+    "connection_generation" INTEGER,
+    "connection_endpoint_digest" TEXT,
+    "tool_revision_id" TEXT NOT NULL,
+    "tool_action" TEXT NOT NULL,
+    "reviewed_arguments" JSONB NOT NULL,
+    "arguments_digest" TEXT NOT NULL,
+    "routine_id" TEXT,
+    "routine_revision" INTEGER,
+    "action_label" TEXT NOT NULL,
+    "target_label" TEXT NOT NULL,
+    "external_system_label" TEXT,
+    "assistant_label" TEXT,
+    "connection_owner_label" TEXT NOT NULL,
+    "source_approval_request_id" TEXT NOT NULL,
+    "scope_identity_digest" TEXT NOT NULL,
+    "active_identity_digest" TEXT,
+    "state" "ToolApprovalScopeState" NOT NULL DEFAULT 'active',
+    "revision" INTEGER NOT NULL DEFAULT 0,
+    "revocation_idempotency_digest" TEXT,
+    "revocation_command_digest" TEXT,
+    "revoked_by_principal_id" TEXT,
+    "revoked_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "tool_approval_scopes_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tool_approval_admissions" (
+    "id" TEXT NOT NULL,
+    "scope_id" TEXT NOT NULL,
+    "scope_revision" INTEGER NOT NULL,
+    "tool_invocation_id" TEXT NOT NULL,
+    "origin" "ToolApprovalAdmissionOrigin" NOT NULL DEFAULT 'standing_consent',
+    "arguments_digest" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "consumed_at" TIMESTAMP(3),
+    "consumed_claim_fence" INTEGER,
+
+    CONSTRAINT "tool_approval_admissions_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -2358,6 +2420,27 @@ CREATE INDEX "approval_requests_agent_identity_id_principal_id_idx" ON "approval
 CREATE UNIQUE INDEX "approval_requests_run_id_attempt_action_digest_key" ON "approval_requests"("run_id", "attempt", "action_digest");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "tool_approval_scopes_source_approval_request_id_key" ON "tool_approval_scopes"("source_approval_request_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tool_approval_scopes_active_identity_digest_key" ON "tool_approval_scopes"("active_identity_digest");
+
+-- CreateIndex
+CREATE INDEX "tool_approval_scopes_silo_id_requester_principal_id_state_c_idx" ON "tool_approval_scopes"("silo_id", "requester_principal_id", "state", "created_at");
+
+-- CreateIndex
+CREATE INDEX "tool_approval_scopes_scope_identity_digest_state_idx" ON "tool_approval_scopes"("scope_identity_digest", "state");
+
+-- CreateIndex
+CREATE INDEX "tool_approval_scopes_silo_id_agent_service_id_agent_revisio_idx" ON "tool_approval_scopes"("silo_id", "agent_service_id", "agent_revision_id", "tool_revision_id", "tool_action", "arguments_digest", "state");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tool_approval_admissions_tool_invocation_id_key" ON "tool_approval_admissions"("tool_invocation_id");
+
+-- CreateIndex
+CREATE INDEX "tool_approval_admissions_scope_id_scope_revision_consumed_a_idx" ON "tool_approval_admissions"("scope_id", "scope_revision", "consumed_at");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "tool_invocations_mcp_task_id_key" ON "tool_invocations"("mcp_task_id");
 
 -- CreateIndex
@@ -3221,6 +3304,15 @@ ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_tool_invocatio
 
 -- AddForeignKey
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_elicitation_request_id_fkey" FOREIGN KEY ("elicitation_request_id") REFERENCES "elicitation_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tool_approval_scopes" ADD CONSTRAINT "tool_approval_scopes_source_approval_request_id_fkey" FOREIGN KEY ("source_approval_request_id") REFERENCES "approval_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tool_approval_admissions" ADD CONSTRAINT "tool_approval_admissions_scope_id_fkey" FOREIGN KEY ("scope_id") REFERENCES "tool_approval_scopes"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tool_approval_admissions" ADD CONSTRAINT "tool_approval_admissions_tool_invocation_id_fkey" FOREIGN KEY ("tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_run_id_agent_service_id_agent_revision_id_fkey" FOREIGN KEY ("run_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -5153,7 +5245,7 @@ BEGIN
             IF decision_time < OLD."expires_at" THEN
                 RAISE EXCEPTION 'ApprovalRequest may expire only after its deadline';
             END IF;
-            IF NEW."decided_by" IS NOT NULL OR NEW."final_arguments" IS NOT NULL OR NEW."final_arguments_digest" IS NOT NULL THEN
+            IF NEW."decided_by" IS NOT NULL OR NEW."final_arguments" IS NOT NULL OR NEW."final_arguments_digest" IS NOT NULL OR NEW."decision_scope" IS NOT NULL THEN
                 RAISE EXCEPTION 'ApprovalRequest expiry records no decider and no final arguments';
             END IF;
             NEW."decided_at" := decision_time;
@@ -5201,7 +5293,7 @@ BEGIN
         END IF;
     END IF;
     IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'pending' OR NEW."decided_at" IS NOT NULL OR NEW."decided_by" IS NOT NULL THEN
+        IF NEW."state" <> 'pending' OR NEW."decided_at" IS NOT NULL OR NEW."decided_by" IS NOT NULL OR NEW."decision_scope" IS NOT NULL THEN
             RAISE EXCEPTION 'a new ApprovalRequest must begin pending';
         END IF;
         IF NEW."created_at" > decision_time OR NEW."expires_at" <= decision_time THEN
@@ -5222,6 +5314,12 @@ BEGIN
     END IF;
     IF NEW."state" IN ('approved', 'denied') AND decision_time >= OLD."expires_at" THEN
         RAISE EXCEPTION 'ApprovalRequest decisions must be recorded before expiry';
+    END IF;
+    IF NEW."state" = 'approved' AND (NEW."decision_scope" IS NULL OR NEW."final_arguments" IS NULL OR NEW."final_arguments_digest" IS NULL) THEN
+        RAISE EXCEPTION 'approved ApprovalRequest requires final arguments and an explicit decision scope';
+    END IF;
+    IF NEW."state" = 'denied' AND (NEW."decision_scope" IS DISTINCT FROM 'once'::"ToolApprovalDecisionScope" OR NEW."final_arguments" IS NOT NULL OR NEW."final_arguments_digest" IS NOT NULL) THEN
+        RAISE EXCEPTION 'denied ApprovalRequest requires once scope and no final arguments';
     END IF;
     RETURN NEW;
 END;
@@ -8110,8 +8208,8 @@ INSERT INTO "capability_catalog_revisions" (
     'capability-catalog-opencrane-product-authorization-v1',
     'opencrane-product-authorization',
     1,
-    'sha256:7ef1b1ed025cb52c5ef5c0c918220ad4f1355f0f171a2208d02197af2c32bb53',
-    '[{"id":"organization:read","resourceKind":"organization","actions":["read"],"evidence":"read"},{"id":"organization:edit","resourceKind":"organization","actions":["edit"],"evidence":"decision"},{"id":"organization:manage","resourceKind":"organization","actions":["manage"],"evidence":"decision"},{"id":"organization:administer","resourceKind":"organization","actions":["administer"],"evidence":"decision"},{"id":"authorization-grant:read","resourceKind":"authorization-grant","actions":["read"],"evidence":"read"},{"id":"authorization-grant:create","resourceKind":"authorization-grant","actions":["create"],"evidence":"decision"},{"id":"authorization-grant:edit","resourceKind":"authorization-grant","actions":["edit"],"evidence":"decision"},{"id":"authorization-grant:revoke","resourceKind":"authorization-grant","actions":["revoke"],"evidence":"decision"},{"id":"authorization-grant:administer","resourceKind":"authorization-grant","actions":["administer"],"evidence":"decision"},{"id":"agent-service:discover","resourceKind":"agent-service","actions":["discover"],"evidence":"read"},{"id":"agent-service:read","resourceKind":"agent-service","actions":["read"],"evidence":"read"},{"id":"agent-service:create","resourceKind":"agent-service","actions":["create"],"evidence":"decision"},{"id":"agent-service:edit","resourceKind":"agent-service","actions":["edit"],"evidence":"decision"},{"id":"agent-service:publish","resourceKind":"agent-service","actions":["publish"],"evidence":"decision"},{"id":"agent-service:retire","resourceKind":"agent-service","actions":["retire"],"evidence":"decision"},{"id":"agent-service:administer","resourceKind":"agent-service","actions":["administer"],"evidence":"decision"},{"id":"agent-service:invoke","resourceKind":"agent-service","actions":["invoke"],"evidence":"effect"},{"id":"agent-service:delegate","resourceKind":"agent-service","actions":["delegate"],"evidence":"effect"},{"id":"agent-revision:read","resourceKind":"agent-revision","actions":["read"],"evidence":"read"},{"id":"agent-revision:create","resourceKind":"agent-revision","actions":["create"],"evidence":"decision"},{"id":"agent-revision:edit","resourceKind":"agent-revision","actions":["edit"],"evidence":"decision"},{"id":"agent-revision:publish","resourceKind":"agent-revision","actions":["publish"],"evidence":"decision"},{"id":"agent-revision:assign","resourceKind":"agent-revision","actions":["assign"],"evidence":"decision"},{"id":"agent-revision:revoke","resourceKind":"agent-revision","actions":["revoke"],"evidence":"decision"},{"id":"agent-run:read","resourceKind":"agent-run","actions":["read"],"evidence":"read"},{"id":"tool-invocation:read","resourceKind":"tool-invocation","actions":["read"],"evidence":"read"},{"id":"tool-invocation:invoke","resourceKind":"tool-invocation","actions":["invoke"],"evidence":"effect"},{"id":"approval-request:read","resourceKind":"approval-request","actions":["read"],"evidence":"read"},{"id":"approval-request:decide","resourceKind":"approval-request","actions":["decide"],"evidence":"decision"},{"id":"skill:discover","resourceKind":"skill","actions":["discover"],"evidence":"read"},{"id":"skill:read","resourceKind":"skill","actions":["read"],"evidence":"read"},{"id":"skill:create","resourceKind":"skill","actions":["create"],"evidence":"decision"},{"id":"skill:edit","resourceKind":"skill","actions":["edit"],"evidence":"decision"},{"id":"skill:install","resourceKind":"skill","actions":["install"],"evidence":"decision"},{"id":"skill:publish","resourceKind":"skill","actions":["publish"],"evidence":"decision"},{"id":"skill:revoke","resourceKind":"skill","actions":["revoke"],"evidence":"decision"},{"id":"skill:retire","resourceKind":"skill","actions":["retire"],"evidence":"decision"},{"id":"skill:administer","resourceKind":"skill","actions":["administer"],"evidence":"decision"},{"id":"skill-revision:discover","resourceKind":"skill-revision","actions":["discover"],"evidence":"read"},{"id":"skill-revision:read","resourceKind":"skill-revision","actions":["read"],"evidence":"read"},{"id":"skill-revision:assign","resourceKind":"skill-revision","actions":["assign"],"evidence":"decision"},{"id":"skill-revision:review","resourceKind":"skill-revision","actions":["review"],"evidence":"decision"},{"id":"skill-revision:publish","resourceKind":"skill-revision","actions":["publish"],"evidence":"decision"},{"id":"skill-revision:revoke","resourceKind":"skill-revision","actions":["revoke"],"evidence":"decision"},{"id":"skill-revision:use","resourceKind":"skill-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-server:discover","resourceKind":"mcp-server","actions":["discover"],"evidence":"read"},{"id":"mcp-server:read","resourceKind":"mcp-server","actions":["read"],"evidence":"read"},{"id":"mcp-server:create","resourceKind":"mcp-server","actions":["create"],"evidence":"decision"},{"id":"mcp-server:edit","resourceKind":"mcp-server","actions":["edit"],"evidence":"decision"},{"id":"mcp-server:install","resourceKind":"mcp-server","actions":["install"],"evidence":"decision"},{"id":"mcp-server:publish","resourceKind":"mcp-server","actions":["publish"],"evidence":"decision"},{"id":"mcp-server:revoke","resourceKind":"mcp-server","actions":["revoke"],"evidence":"decision"},{"id":"mcp-server:retire","resourceKind":"mcp-server","actions":["retire"],"evidence":"decision"},{"id":"mcp-server:administer","resourceKind":"mcp-server","actions":["administer"],"evidence":"decision"},{"id":"mcp-server-revision:discover","resourceKind":"mcp-server-revision","actions":["discover"],"evidence":"read"},{"id":"mcp-server-revision:read","resourceKind":"mcp-server-revision","actions":["read"],"evidence":"read"},{"id":"mcp-server-revision:assign","resourceKind":"mcp-server-revision","actions":["assign"],"evidence":"decision"},{"id":"mcp-server-revision:review","resourceKind":"mcp-server-revision","actions":["review"],"evidence":"decision"},{"id":"mcp-server-revision:publish","resourceKind":"mcp-server-revision","actions":["publish"],"evidence":"decision"},{"id":"mcp-server-revision:revoke","resourceKind":"mcp-server-revision","actions":["revoke"],"evidence":"decision"},{"id":"mcp-server-revision:use","resourceKind":"mcp-server-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-tool-revision:discover","resourceKind":"mcp-tool-revision","actions":["discover"],"evidence":"read"},{"id":"mcp-tool-revision:read","resourceKind":"mcp-tool-revision","actions":["read"],"evidence":"read"},{"id":"mcp-tool-revision:assign","resourceKind":"mcp-tool-revision","actions":["assign"],"evidence":"decision"},{"id":"mcp-tool-revision:use","resourceKind":"mcp-tool-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-tool-revision:invoke","resourceKind":"mcp-tool-revision","actions":["invoke"],"evidence":"effect"},{"id":"model-definition:discover","resourceKind":"model-definition","actions":["discover"],"evidence":"read"},{"id":"model-definition:read","resourceKind":"model-definition","actions":["read"],"evidence":"read"},{"id":"model-definition:assign","resourceKind":"model-definition","actions":["assign"],"evidence":"decision"},{"id":"model-definition:manage","resourceKind":"model-definition","actions":["manage"],"evidence":"decision"},{"id":"model-definition:administer","resourceKind":"model-definition","actions":["administer"],"evidence":"decision"},{"id":"model-definition:use","resourceKind":"model-definition","actions":["use"],"evidence":"effect"},{"id":"artifact:discover","resourceKind":"artifact","actions":["discover"],"evidence":"read"},{"id":"artifact:read","resourceKind":"artifact","actions":["read"],"evidence":"read"},{"id":"artifact:create","resourceKind":"artifact","actions":["create"],"evidence":"decision"},{"id":"artifact:edit","resourceKind":"artifact","actions":["edit"],"evidence":"decision"},{"id":"artifact:share","resourceKind":"artifact","actions":["share"],"evidence":"decision"},{"id":"artifact:delete","resourceKind":"artifact","actions":["delete"],"evidence":"decision"},{"id":"artifact:administer","resourceKind":"artifact","actions":["administer"],"evidence":"decision"},{"id":"artifact:use","resourceKind":"artifact","actions":["use"],"evidence":"effect"},{"id":"artifact-collection:create","resourceKind":"artifact-collection","actions":["create"],"evidence":"decision"},{"id":"artifact-revision:discover","resourceKind":"artifact-revision","actions":["discover"],"evidence":"read"},{"id":"artifact-revision:read","resourceKind":"artifact-revision","actions":["read"],"evidence":"read"},{"id":"artifact-revision:create","resourceKind":"artifact-revision","actions":["create"],"evidence":"decision"},{"id":"artifact-revision:edit","resourceKind":"artifact-revision","actions":["edit"],"evidence":"decision"},{"id":"artifact-revision:share","resourceKind":"artifact-revision","actions":["share"],"evidence":"decision"},{"id":"artifact-revision:delete","resourceKind":"artifact-revision","actions":["delete"],"evidence":"decision"},{"id":"artifact-revision:administer","resourceKind":"artifact-revision","actions":["administer"],"evidence":"decision"},{"id":"artifact-revision:use","resourceKind":"artifact-revision","actions":["use"],"evidence":"effect"},{"id":"dataset:discover","resourceKind":"dataset","actions":["discover"],"evidence":"read"},{"id":"dataset:read","resourceKind":"dataset","actions":["read"],"evidence":"read"},{"id":"dataset:create","resourceKind":"dataset","actions":["create"],"evidence":"decision"},{"id":"dataset:edit","resourceKind":"dataset","actions":["edit"],"evidence":"decision"},{"id":"dataset:share","resourceKind":"dataset","actions":["share"],"evidence":"decision"},{"id":"dataset:delete","resourceKind":"dataset","actions":["delete"],"evidence":"decision"},{"id":"dataset:administer","resourceKind":"dataset","actions":["administer"],"evidence":"decision"},{"id":"dataset:use","resourceKind":"dataset","actions":["use"],"evidence":"effect"},{"id":"memory-scope:read","resourceKind":"memory-scope","actions":["read"],"evidence":"read"},{"id":"memory-scope:share","resourceKind":"memory-scope","actions":["share"],"evidence":"decision"},{"id":"memory-scope:manage","resourceKind":"memory-scope","actions":["manage"],"evidence":"decision"},{"id":"memory-scope:forget","resourceKind":"memory-scope","actions":["forget"],"evidence":"decision"},{"id":"memory-scope:use","resourceKind":"memory-scope","actions":["use"],"evidence":"effect"},{"id":"persona:discover","resourceKind":"persona","actions":["discover"],"evidence":"read"},{"id":"persona:read","resourceKind":"persona","actions":["read"],"evidence":"read"},{"id":"persona:create","resourceKind":"persona","actions":["create"],"evidence":"decision"},{"id":"persona:edit","resourceKind":"persona","actions":["edit"],"evidence":"decision"},{"id":"persona:share","resourceKind":"persona","actions":["share"],"evidence":"decision"},{"id":"persona:delete","resourceKind":"persona","actions":["delete"],"evidence":"decision"},{"id":"persona:administer","resourceKind":"persona","actions":["administer"],"evidence":"decision"},{"id":"persona:use","resourceKind":"persona","actions":["use"],"evidence":"effect"},{"id":"conversation:discover","resourceKind":"conversation","actions":["discover"],"evidence":"read"},{"id":"conversation:read","resourceKind":"conversation","actions":["read"],"evidence":"read"},{"id":"conversation:create","resourceKind":"conversation","actions":["create"],"evidence":"decision"},{"id":"conversation:edit","resourceKind":"conversation","actions":["edit"],"evidence":"decision"},{"id":"conversation:share","resourceKind":"conversation","actions":["share"],"evidence":"decision"},{"id":"conversation:delete","resourceKind":"conversation","actions":["delete"],"evidence":"decision"},{"id":"conversation:administer","resourceKind":"conversation","actions":["administer"],"evidence":"decision"},{"id":"conversation:use","resourceKind":"conversation","actions":["use"],"evidence":"effect"},{"id":"conversation:delegate","resourceKind":"conversation","actions":["delegate"],"evidence":"effect"},{"id":"conversation-collection:create","resourceKind":"conversation-collection","actions":["create"],"evidence":"decision"},{"id":"provider-connection:discover","resourceKind":"provider-connection","actions":["discover"],"evidence":"read"},{"id":"provider-connection:read","resourceKind":"provider-connection","actions":["read"],"evidence":"read"},{"id":"provider-connection:manage","resourceKind":"provider-connection","actions":["manage"],"evidence":"decision"},{"id":"provider-connection:administer","resourceKind":"provider-connection","actions":["administer"],"evidence":"decision"},{"id":"provider-connection:use","resourceKind":"provider-connection","actions":["use"],"evidence":"effect"},{"id":"budget:read","resourceKind":"budget","actions":["read"],"evidence":"read"},{"id":"budget:manage","resourceKind":"budget","actions":["manage"],"evidence":"decision"},{"id":"budget:administer","resourceKind":"budget","actions":["administer"],"evidence":"decision"},{"id":"budget:use","resourceKind":"budget","actions":["use"],"evidence":"effect"},{"id":"audit-log:read","resourceKind":"audit-log","actions":["read"],"evidence":"read"},{"id":"token-usage:read","resourceKind":"token-usage","actions":["read"],"evidence":"read"},{"id":"third-party-source:discover","resourceKind":"third-party-source","actions":["discover"],"evidence":"read"},{"id":"third-party-source:read","resourceKind":"third-party-source","actions":["read"],"evidence":"read"},{"id":"third-party-source:create","resourceKind":"third-party-source","actions":["create"],"evidence":"decision"},{"id":"third-party-source:edit","resourceKind":"third-party-source","actions":["edit"],"evidence":"decision"},{"id":"third-party-source:share","resourceKind":"third-party-source","actions":["share"],"evidence":"decision"},{"id":"third-party-source:delete","resourceKind":"third-party-source","actions":["delete"],"evidence":"decision"},{"id":"third-party-source:administer","resourceKind":"third-party-source","actions":["administer"],"evidence":"decision"},{"id":"third-party-source:use","resourceKind":"third-party-source","actions":["use"],"evidence":"effect"},{"id":"resource-share:read","resourceKind":"resource-share","actions":["read"],"evidence":"read"},{"id":"resource-share:create","resourceKind":"resource-share","actions":["create"],"evidence":"decision"},{"id":"resource-share:edit","resourceKind":"resource-share","actions":["edit"],"evidence":"decision"},{"id":"resource-share:revoke","resourceKind":"resource-share","actions":["revoke"],"evidence":"decision"},{"id":"resource-share:administer","resourceKind":"resource-share","actions":["administer"],"evidence":"decision"},{"id":"group:discover","resourceKind":"group","actions":["discover"],"evidence":"read"},{"id":"group:read","resourceKind":"group","actions":["read"],"evidence":"read"},{"id":"group:create","resourceKind":"group","actions":["create"],"evidence":"decision"},{"id":"group:edit","resourceKind":"group","actions":["edit"],"evidence":"decision"},{"id":"group:delete","resourceKind":"group","actions":["delete"],"evidence":"decision"},{"id":"group:administer","resourceKind":"group","actions":["administer"],"evidence":"decision"},{"id":"organization-membership:read","resourceKind":"organization-membership","actions":["read"],"evidence":"read"},{"id":"organization-membership:create","resourceKind":"organization-membership","actions":["create"],"evidence":"decision"},{"id":"organization-membership:edit","resourceKind":"organization-membership","actions":["edit"],"evidence":"decision"},{"id":"organization-membership:revoke","resourceKind":"organization-membership","actions":["revoke"],"evidence":"decision"},{"id":"organization-membership:administer","resourceKind":"organization-membership","actions":["administer"],"evidence":"decision"},{"id":"mcp-task:read","resourceKind":"mcp-task","actions":["read"],"evidence":"read"},{"id":"mcp-task:edit","resourceKind":"mcp-task","actions":["edit"],"evidence":"decision"},{"id":"mcp-task:cancel","resourceKind":"mcp-task","actions":["cancel"],"evidence":"decision"},{"id":"persona-collection:create","resourceKind":"persona-collection","actions":["create"],"evidence":"decision"},{"id":"agent-service-collection:create","resourceKind":"agent-service-collection","actions":["create"],"evidence":"decision"}]'::jsonb,
+    'sha256:8cf23b55c2e5da4835c86a20373e1b2865228af1926a08c597ad6b8ee5587f43',
+    '[{"id":"organization:read","resourceKind":"organization","actions":["read"],"evidence":"read"},{"id":"organization:edit","resourceKind":"organization","actions":["edit"],"evidence":"decision"},{"id":"organization:manage","resourceKind":"organization","actions":["manage"],"evidence":"decision"},{"id":"organization:administer","resourceKind":"organization","actions":["administer"],"evidence":"decision"},{"id":"authorization-grant:read","resourceKind":"authorization-grant","actions":["read"],"evidence":"read"},{"id":"authorization-grant:create","resourceKind":"authorization-grant","actions":["create"],"evidence":"decision"},{"id":"authorization-grant:edit","resourceKind":"authorization-grant","actions":["edit"],"evidence":"decision"},{"id":"authorization-grant:revoke","resourceKind":"authorization-grant","actions":["revoke"],"evidence":"decision"},{"id":"authorization-grant:administer","resourceKind":"authorization-grant","actions":["administer"],"evidence":"decision"},{"id":"agent-service:discover","resourceKind":"agent-service","actions":["discover"],"evidence":"read"},{"id":"agent-service:read","resourceKind":"agent-service","actions":["read"],"evidence":"read"},{"id":"agent-service:create","resourceKind":"agent-service","actions":["create"],"evidence":"decision"},{"id":"agent-service:edit","resourceKind":"agent-service","actions":["edit"],"evidence":"decision"},{"id":"agent-service:publish","resourceKind":"agent-service","actions":["publish"],"evidence":"decision"},{"id":"agent-service:retire","resourceKind":"agent-service","actions":["retire"],"evidence":"decision"},{"id":"agent-service:administer","resourceKind":"agent-service","actions":["administer"],"evidence":"decision"},{"id":"agent-service:invoke","resourceKind":"agent-service","actions":["invoke"],"evidence":"effect"},{"id":"agent-service:delegate","resourceKind":"agent-service","actions":["delegate"],"evidence":"effect"},{"id":"agent-revision:read","resourceKind":"agent-revision","actions":["read"],"evidence":"read"},{"id":"agent-revision:create","resourceKind":"agent-revision","actions":["create"],"evidence":"decision"},{"id":"agent-revision:edit","resourceKind":"agent-revision","actions":["edit"],"evidence":"decision"},{"id":"agent-revision:publish","resourceKind":"agent-revision","actions":["publish"],"evidence":"decision"},{"id":"agent-revision:assign","resourceKind":"agent-revision","actions":["assign"],"evidence":"decision"},{"id":"agent-revision:revoke","resourceKind":"agent-revision","actions":["revoke"],"evidence":"decision"},{"id":"agent-run:read","resourceKind":"agent-run","actions":["read"],"evidence":"read"},{"id":"tool-invocation:read","resourceKind":"tool-invocation","actions":["read"],"evidence":"read"},{"id":"tool-invocation:invoke","resourceKind":"tool-invocation","actions":["invoke"],"evidence":"effect"},{"id":"approval-request:read","resourceKind":"approval-request","actions":["read"],"evidence":"read"},{"id":"approval-request:decide","resourceKind":"approval-request","actions":["decide"],"evidence":"decision"},{"id":"tool-approval-scope:read","resourceKind":"tool-approval-scope","actions":["read"],"evidence":"read"},{"id":"tool-approval-scope:revoke","resourceKind":"tool-approval-scope","actions":["revoke"],"evidence":"decision"},{"id":"skill:discover","resourceKind":"skill","actions":["discover"],"evidence":"read"},{"id":"skill:read","resourceKind":"skill","actions":["read"],"evidence":"read"},{"id":"skill:create","resourceKind":"skill","actions":["create"],"evidence":"decision"},{"id":"skill:edit","resourceKind":"skill","actions":["edit"],"evidence":"decision"},{"id":"skill:install","resourceKind":"skill","actions":["install"],"evidence":"decision"},{"id":"skill:publish","resourceKind":"skill","actions":["publish"],"evidence":"decision"},{"id":"skill:revoke","resourceKind":"skill","actions":["revoke"],"evidence":"decision"},{"id":"skill:retire","resourceKind":"skill","actions":["retire"],"evidence":"decision"},{"id":"skill:administer","resourceKind":"skill","actions":["administer"],"evidence":"decision"},{"id":"skill-revision:discover","resourceKind":"skill-revision","actions":["discover"],"evidence":"read"},{"id":"skill-revision:read","resourceKind":"skill-revision","actions":["read"],"evidence":"read"},{"id":"skill-revision:assign","resourceKind":"skill-revision","actions":["assign"],"evidence":"decision"},{"id":"skill-revision:review","resourceKind":"skill-revision","actions":["review"],"evidence":"decision"},{"id":"skill-revision:publish","resourceKind":"skill-revision","actions":["publish"],"evidence":"decision"},{"id":"skill-revision:revoke","resourceKind":"skill-revision","actions":["revoke"],"evidence":"decision"},{"id":"skill-revision:use","resourceKind":"skill-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-server:discover","resourceKind":"mcp-server","actions":["discover"],"evidence":"read"},{"id":"mcp-server:read","resourceKind":"mcp-server","actions":["read"],"evidence":"read"},{"id":"mcp-server:create","resourceKind":"mcp-server","actions":["create"],"evidence":"decision"},{"id":"mcp-server:edit","resourceKind":"mcp-server","actions":["edit"],"evidence":"decision"},{"id":"mcp-server:install","resourceKind":"mcp-server","actions":["install"],"evidence":"decision"},{"id":"mcp-server:publish","resourceKind":"mcp-server","actions":["publish"],"evidence":"decision"},{"id":"mcp-server:revoke","resourceKind":"mcp-server","actions":["revoke"],"evidence":"decision"},{"id":"mcp-server:retire","resourceKind":"mcp-server","actions":["retire"],"evidence":"decision"},{"id":"mcp-server:administer","resourceKind":"mcp-server","actions":["administer"],"evidence":"decision"},{"id":"mcp-server-revision:discover","resourceKind":"mcp-server-revision","actions":["discover"],"evidence":"read"},{"id":"mcp-server-revision:read","resourceKind":"mcp-server-revision","actions":["read"],"evidence":"read"},{"id":"mcp-server-revision:assign","resourceKind":"mcp-server-revision","actions":["assign"],"evidence":"decision"},{"id":"mcp-server-revision:review","resourceKind":"mcp-server-revision","actions":["review"],"evidence":"decision"},{"id":"mcp-server-revision:publish","resourceKind":"mcp-server-revision","actions":["publish"],"evidence":"decision"},{"id":"mcp-server-revision:revoke","resourceKind":"mcp-server-revision","actions":["revoke"],"evidence":"decision"},{"id":"mcp-server-revision:use","resourceKind":"mcp-server-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-tool-revision:discover","resourceKind":"mcp-tool-revision","actions":["discover"],"evidence":"read"},{"id":"mcp-tool-revision:read","resourceKind":"mcp-tool-revision","actions":["read"],"evidence":"read"},{"id":"mcp-tool-revision:assign","resourceKind":"mcp-tool-revision","actions":["assign"],"evidence":"decision"},{"id":"mcp-tool-revision:use","resourceKind":"mcp-tool-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-tool-revision:invoke","resourceKind":"mcp-tool-revision","actions":["invoke"],"evidence":"effect"},{"id":"model-definition:discover","resourceKind":"model-definition","actions":["discover"],"evidence":"read"},{"id":"model-definition:read","resourceKind":"model-definition","actions":["read"],"evidence":"read"},{"id":"model-definition:assign","resourceKind":"model-definition","actions":["assign"],"evidence":"decision"},{"id":"model-definition:manage","resourceKind":"model-definition","actions":["manage"],"evidence":"decision"},{"id":"model-definition:administer","resourceKind":"model-definition","actions":["administer"],"evidence":"decision"},{"id":"model-definition:use","resourceKind":"model-definition","actions":["use"],"evidence":"effect"},{"id":"artifact:discover","resourceKind":"artifact","actions":["discover"],"evidence":"read"},{"id":"artifact:read","resourceKind":"artifact","actions":["read"],"evidence":"read"},{"id":"artifact:create","resourceKind":"artifact","actions":["create"],"evidence":"decision"},{"id":"artifact:edit","resourceKind":"artifact","actions":["edit"],"evidence":"decision"},{"id":"artifact:share","resourceKind":"artifact","actions":["share"],"evidence":"decision"},{"id":"artifact:delete","resourceKind":"artifact","actions":["delete"],"evidence":"decision"},{"id":"artifact:administer","resourceKind":"artifact","actions":["administer"],"evidence":"decision"},{"id":"artifact:use","resourceKind":"artifact","actions":["use"],"evidence":"effect"},{"id":"artifact-collection:create","resourceKind":"artifact-collection","actions":["create"],"evidence":"decision"},{"id":"artifact-revision:discover","resourceKind":"artifact-revision","actions":["discover"],"evidence":"read"},{"id":"artifact-revision:read","resourceKind":"artifact-revision","actions":["read"],"evidence":"read"},{"id":"artifact-revision:create","resourceKind":"artifact-revision","actions":["create"],"evidence":"decision"},{"id":"artifact-revision:edit","resourceKind":"artifact-revision","actions":["edit"],"evidence":"decision"},{"id":"artifact-revision:share","resourceKind":"artifact-revision","actions":["share"],"evidence":"decision"},{"id":"artifact-revision:delete","resourceKind":"artifact-revision","actions":["delete"],"evidence":"decision"},{"id":"artifact-revision:administer","resourceKind":"artifact-revision","actions":["administer"],"evidence":"decision"},{"id":"artifact-revision:use","resourceKind":"artifact-revision","actions":["use"],"evidence":"effect"},{"id":"dataset:discover","resourceKind":"dataset","actions":["discover"],"evidence":"read"},{"id":"dataset:read","resourceKind":"dataset","actions":["read"],"evidence":"read"},{"id":"dataset:create","resourceKind":"dataset","actions":["create"],"evidence":"decision"},{"id":"dataset:edit","resourceKind":"dataset","actions":["edit"],"evidence":"decision"},{"id":"dataset:share","resourceKind":"dataset","actions":["share"],"evidence":"decision"},{"id":"dataset:delete","resourceKind":"dataset","actions":["delete"],"evidence":"decision"},{"id":"dataset:administer","resourceKind":"dataset","actions":["administer"],"evidence":"decision"},{"id":"dataset:use","resourceKind":"dataset","actions":["use"],"evidence":"effect"},{"id":"memory-scope:read","resourceKind":"memory-scope","actions":["read"],"evidence":"read"},{"id":"memory-scope:share","resourceKind":"memory-scope","actions":["share"],"evidence":"decision"},{"id":"memory-scope:manage","resourceKind":"memory-scope","actions":["manage"],"evidence":"decision"},{"id":"memory-scope:forget","resourceKind":"memory-scope","actions":["forget"],"evidence":"decision"},{"id":"memory-scope:use","resourceKind":"memory-scope","actions":["use"],"evidence":"effect"},{"id":"persona:discover","resourceKind":"persona","actions":["discover"],"evidence":"read"},{"id":"persona:read","resourceKind":"persona","actions":["read"],"evidence":"read"},{"id":"persona:create","resourceKind":"persona","actions":["create"],"evidence":"decision"},{"id":"persona:edit","resourceKind":"persona","actions":["edit"],"evidence":"decision"},{"id":"persona:share","resourceKind":"persona","actions":["share"],"evidence":"decision"},{"id":"persona:delete","resourceKind":"persona","actions":["delete"],"evidence":"decision"},{"id":"persona:administer","resourceKind":"persona","actions":["administer"],"evidence":"decision"},{"id":"persona:use","resourceKind":"persona","actions":["use"],"evidence":"effect"},{"id":"conversation:discover","resourceKind":"conversation","actions":["discover"],"evidence":"read"},{"id":"conversation:read","resourceKind":"conversation","actions":["read"],"evidence":"read"},{"id":"conversation:create","resourceKind":"conversation","actions":["create"],"evidence":"decision"},{"id":"conversation:edit","resourceKind":"conversation","actions":["edit"],"evidence":"decision"},{"id":"conversation:share","resourceKind":"conversation","actions":["share"],"evidence":"decision"},{"id":"conversation:delete","resourceKind":"conversation","actions":["delete"],"evidence":"decision"},{"id":"conversation:administer","resourceKind":"conversation","actions":["administer"],"evidence":"decision"},{"id":"conversation:use","resourceKind":"conversation","actions":["use"],"evidence":"effect"},{"id":"conversation:delegate","resourceKind":"conversation","actions":["delegate"],"evidence":"effect"},{"id":"conversation-collection:create","resourceKind":"conversation-collection","actions":["create"],"evidence":"decision"},{"id":"provider-connection:discover","resourceKind":"provider-connection","actions":["discover"],"evidence":"read"},{"id":"provider-connection:read","resourceKind":"provider-connection","actions":["read"],"evidence":"read"},{"id":"provider-connection:manage","resourceKind":"provider-connection","actions":["manage"],"evidence":"decision"},{"id":"provider-connection:administer","resourceKind":"provider-connection","actions":["administer"],"evidence":"decision"},{"id":"provider-connection:use","resourceKind":"provider-connection","actions":["use"],"evidence":"effect"},{"id":"budget:read","resourceKind":"budget","actions":["read"],"evidence":"read"},{"id":"budget:manage","resourceKind":"budget","actions":["manage"],"evidence":"decision"},{"id":"budget:administer","resourceKind":"budget","actions":["administer"],"evidence":"decision"},{"id":"budget:use","resourceKind":"budget","actions":["use"],"evidence":"effect"},{"id":"audit-log:read","resourceKind":"audit-log","actions":["read"],"evidence":"read"},{"id":"token-usage:read","resourceKind":"token-usage","actions":["read"],"evidence":"read"},{"id":"third-party-source:discover","resourceKind":"third-party-source","actions":["discover"],"evidence":"read"},{"id":"third-party-source:read","resourceKind":"third-party-source","actions":["read"],"evidence":"read"},{"id":"third-party-source:create","resourceKind":"third-party-source","actions":["create"],"evidence":"decision"},{"id":"third-party-source:edit","resourceKind":"third-party-source","actions":["edit"],"evidence":"decision"},{"id":"third-party-source:share","resourceKind":"third-party-source","actions":["share"],"evidence":"decision"},{"id":"third-party-source:delete","resourceKind":"third-party-source","actions":["delete"],"evidence":"decision"},{"id":"third-party-source:administer","resourceKind":"third-party-source","actions":["administer"],"evidence":"decision"},{"id":"third-party-source:use","resourceKind":"third-party-source","actions":["use"],"evidence":"effect"},{"id":"resource-share:read","resourceKind":"resource-share","actions":["read"],"evidence":"read"},{"id":"resource-share:create","resourceKind":"resource-share","actions":["create"],"evidence":"decision"},{"id":"resource-share:edit","resourceKind":"resource-share","actions":["edit"],"evidence":"decision"},{"id":"resource-share:revoke","resourceKind":"resource-share","actions":["revoke"],"evidence":"decision"},{"id":"resource-share:administer","resourceKind":"resource-share","actions":["administer"],"evidence":"decision"},{"id":"group:discover","resourceKind":"group","actions":["discover"],"evidence":"read"},{"id":"group:read","resourceKind":"group","actions":["read"],"evidence":"read"},{"id":"group:create","resourceKind":"group","actions":["create"],"evidence":"decision"},{"id":"group:edit","resourceKind":"group","actions":["edit"],"evidence":"decision"},{"id":"group:delete","resourceKind":"group","actions":["delete"],"evidence":"decision"},{"id":"group:administer","resourceKind":"group","actions":["administer"],"evidence":"decision"},{"id":"organization-membership:read","resourceKind":"organization-membership","actions":["read"],"evidence":"read"},{"id":"organization-membership:create","resourceKind":"organization-membership","actions":["create"],"evidence":"decision"},{"id":"organization-membership:edit","resourceKind":"organization-membership","actions":["edit"],"evidence":"decision"},{"id":"organization-membership:revoke","resourceKind":"organization-membership","actions":["revoke"],"evidence":"decision"},{"id":"organization-membership:administer","resourceKind":"organization-membership","actions":["administer"],"evidence":"decision"},{"id":"mcp-task:read","resourceKind":"mcp-task","actions":["read"],"evidence":"read"},{"id":"mcp-task:edit","resourceKind":"mcp-task","actions":["edit"],"evidence":"decision"},{"id":"mcp-task:cancel","resourceKind":"mcp-task","actions":["cancel"],"evidence":"decision"},{"id":"persona-collection:create","resourceKind":"persona-collection","actions":["create"],"evidence":"decision"},{"id":"agent-service-collection:create","resourceKind":"agent-service-collection","actions":["create"],"evidence":"decision"}]'::jsonb,
     'system:target-baseline'
 );
 
@@ -12051,3 +12149,100 @@ CREATE CONSTRAINT TRIGGER "conversation_generated_files_manifest_complete" AFTER
     DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_generated_file_manifest"();
 CREATE CONSTRAINT TRIGGER "conversation_generated_file_chunks_manifest_complete" AFTER INSERT ON "conversation_generated_file_chunks"
     DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_generated_file_manifest"();
+
+-- Standing consent is derived only from an authenticated requester decision and can only narrow to revoked.
+CREATE FUNCTION "enforce_tool_approval_scope_write"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    source_approval "approval_requests"%ROWTYPE;
+    source_request "elicitation_requests"%ROWTYPE;
+    source_run "agent_runs"%ROWTYPE;
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ToolApprovalScope rows cannot be deleted'; END IF;
+    IF TG_OP = 'UPDATE' THEN
+        IF NEW IS NOT DISTINCT FROM OLD THEN RETURN NEW; END IF;
+        IF OLD."state" <> 'active' OR NEW."state" <> 'revoked' OR NEW."revision" <> OLD."revision" + 1 THEN
+            RAISE EXCEPTION 'ToolApprovalScope may transition from active to revoked exactly once';
+        END IF;
+        IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+            OR NEW."requester_principal_id" IS DISTINCT FROM OLD."requester_principal_id" OR NEW."requester_subject_id" IS DISTINCT FROM OLD."requester_subject_id"
+            OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id" OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
+            OR NEW."connection_id" IS DISTINCT FROM OLD."connection_id" OR NEW."connection_owner_principal_id" IS DISTINCT FROM OLD."connection_owner_principal_id"
+            OR NEW."connection_generation" IS DISTINCT FROM OLD."connection_generation" OR NEW."connection_endpoint_digest" IS DISTINCT FROM OLD."connection_endpoint_digest"
+            OR NEW."tool_revision_id" IS DISTINCT FROM OLD."tool_revision_id" OR NEW."tool_action" IS DISTINCT FROM OLD."tool_action"
+            OR NEW."reviewed_arguments" IS DISTINCT FROM OLD."reviewed_arguments" OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest"
+            OR NEW."routine_id" IS DISTINCT FROM OLD."routine_id" OR NEW."routine_revision" IS DISTINCT FROM OLD."routine_revision"
+            OR NEW."action_label" IS DISTINCT FROM OLD."action_label" OR NEW."target_label" IS DISTINCT FROM OLD."target_label"
+            OR NEW."external_system_label" IS DISTINCT FROM OLD."external_system_label" OR NEW."assistant_label" IS DISTINCT FROM OLD."assistant_label"
+            OR NEW."connection_owner_label" IS DISTINCT FROM OLD."connection_owner_label" OR NEW."source_approval_request_id" IS DISTINCT FROM OLD."source_approval_request_id"
+            OR NEW."scope_identity_digest" IS DISTINCT FROM OLD."scope_identity_digest" OR NEW."created_at" IS DISTINCT FROM OLD."created_at"
+            OR OLD."active_identity_digest" IS DISTINCT FROM OLD."scope_identity_digest" OR NEW."active_identity_digest" IS NOT NULL THEN
+            RAISE EXCEPTION 'ToolApprovalScope reviewed coordinates are immutable';
+        END IF;
+        IF NEW."revocation_idempotency_digest" !~ '^sha256:[0-9a-f]{64}$' OR NEW."revocation_command_digest" !~ '^sha256:[0-9a-f]{64}$'
+            OR COALESCE(btrim(NEW."revoked_by_principal_id"), '') = '' OR NEW."revoked_at" IS NULL OR NEW."revoked_at" < OLD."created_at" THEN
+            RAISE EXCEPTION 'ToolApprovalScope revocation requires complete durable evidence';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."state" <> 'active' OR NEW."revision" <> 0 OR NEW."revoked_at" IS NOT NULL OR NEW."revoked_by_principal_id" IS NOT NULL
+        OR NEW."revocation_idempotency_digest" IS NOT NULL OR NEW."revocation_command_digest" IS NOT NULL
+        OR NEW."scope_identity_digest" !~ '^sha256:[0-9a-f]{64}$' OR NEW."active_identity_digest" IS DISTINCT FROM NEW."scope_identity_digest"
+        OR NEW."arguments_digest" !~ '^sha256:[0-9a-f]{64}$'
+        OR NEW."tool_action" <> 'invoke' OR NEW."routine_id" IS NOT NULL OR NEW."routine_revision" IS NOT NULL THEN
+        RAISE EXCEPTION 'new ToolApprovalScope requires exact active interactive consent coordinates';
+    END IF;
+    SELECT * INTO source_approval FROM "approval_requests" WHERE "id" = NEW."source_approval_request_id" FOR KEY SHARE;
+    SELECT * INTO source_request FROM "elicitation_requests" WHERE "id" = source_approval."elicitation_request_id" FOR KEY SHARE;
+    SELECT * INTO source_run FROM "agent_runs" WHERE "id" = source_approval."run_id" FOR KEY SHARE;
+    IF source_approval."state" IS DISTINCT FROM 'approved'::"ApprovalRequestState"
+        OR source_approval."decision_scope" IS DISTINCT FROM 'always'::"ToolApprovalDecisionScope"
+        OR source_approval."silo_id" IS DISTINCT FROM NEW."silo_id" OR source_approval."agent_service_id" IS DISTINCT FROM NEW."agent_service_id"
+        OR source_approval."agent_revision_id" IS DISTINCT FROM NEW."agent_revision_id" OR source_approval."resource_id" IS DISTINCT FROM NEW."tool_revision_id"
+        OR source_approval."action" IS DISTINCT FROM NEW."tool_action" OR source_approval."final_arguments" IS DISTINCT FROM NEW."reviewed_arguments"
+        OR source_approval."final_arguments_digest" IS DISTINCT FROM NEW."arguments_digest" OR source_approval."principal_id" IS DISTINCT FROM NEW."connection_owner_principal_id"
+        OR source_run."execution_subject"->'requester'->>'requesterPrincipalId' IS DISTINCT FROM NEW."requester_principal_id"
+        OR source_request."assigned_participant_id" IS DISTINCT FROM NEW."requester_subject_id" THEN
+        RAISE EXCEPTION 'ToolApprovalScope requires its exact requester-approved Always decision';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER "tool_approval_scope_write" BEFORE INSERT OR UPDATE OR DELETE ON "tool_approval_scopes"
+FOR EACH ROW EXECUTE FUNCTION "enforce_tool_approval_scope_write"();
+
+-- Each standing consent admission belongs to one invocation and becomes immutable once its claim consumes it.
+CREATE FUNCTION "enforce_tool_approval_admission_write"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    current_scope "tool_approval_scopes"%ROWTYPE;
+    current_invocation "tool_invocations"%ROWTYPE;
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ToolApprovalAdmission rows cannot be deleted'; END IF;
+    SELECT * INTO current_scope FROM "tool_approval_scopes" WHERE "id" = COALESCE(NEW."scope_id", OLD."scope_id") FOR KEY SHARE;
+    SELECT * INTO current_invocation FROM "tool_invocations" WHERE "id" = COALESCE(NEW."tool_invocation_id", OLD."tool_invocation_id") FOR UPDATE;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."origin" IS DISTINCT FROM 'standing_consent'::"ToolApprovalAdmissionOrigin" OR NEW."consumed_at" IS NOT NULL OR NEW."consumed_claim_fence" IS NOT NULL
+            OR current_scope."state" IS DISTINCT FROM 'active'::"ToolApprovalScopeState" OR NEW."scope_revision" IS DISTINCT FROM current_scope."revision"
+            OR current_invocation."approval_required" IS DISTINCT FROM TRUE OR current_invocation."state" IS DISTINCT FROM 'awaiting_approval'::"ToolInvocationState"
+            OR current_invocation."silo_id" IS DISTINCT FROM current_scope."silo_id" OR current_invocation."agent_service_id" IS DISTINCT FROM current_scope."agent_service_id"
+            OR current_invocation."agent_revision_id" IS DISTINCT FROM current_scope."agent_revision_id" OR current_invocation."tool_revision_id" IS DISTINCT FROM current_scope."tool_revision_id"
+            OR current_invocation."arguments_digest" IS DISTINCT FROM NEW."arguments_digest" OR NEW."arguments_digest" IS DISTINCT FROM current_scope."arguments_digest"
+            OR current_invocation."arguments" IS DISTINCT FROM current_scope."reviewed_arguments" THEN
+            RAISE EXCEPTION 'ToolApprovalAdmission requires an active exact scope and awaiting invocation';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."scope_id" IS DISTINCT FROM OLD."scope_id" OR NEW."scope_revision" IS DISTINCT FROM OLD."scope_revision"
+        OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id" OR NEW."origin" IS DISTINCT FROM OLD."origin"
+        OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest" OR NEW."created_at" IS DISTINCT FROM OLD."created_at"
+        OR OLD."consumed_at" IS NOT NULL OR OLD."consumed_claim_fence" IS NOT NULL OR NEW."consumed_at" IS NULL OR NEW."consumed_claim_fence" IS NULL
+        OR current_scope."state" IS DISTINCT FROM 'active'::"ToolApprovalScopeState" OR current_scope."revision" IS DISTINCT FROM OLD."scope_revision"
+        OR current_invocation."state" IS DISTINCT FROM 'claimed'::"ToolInvocationState" OR current_invocation."claim_fence" IS DISTINCT FROM NEW."consumed_claim_fence" THEN
+        RAISE EXCEPTION 'ToolApprovalAdmission may be consumed once by its exact active dispatch claim';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER "tool_approval_admission_write" BEFORE INSERT OR UPDATE OR DELETE ON "tool_approval_admissions"
+FOR EACH ROW EXECUTE FUNCTION "enforce_tool_approval_admission_write"();

@@ -1,0 +1,6 @@
+:host { display: table-row; }
+td { padding: var(--oc-space-3); vertical-align: top; border-bottom: 1px solid var(--oc-border-subtle); overflow-wrap: anywhere; }
+td > strong, td > span, td > small { display: block; }
+td > span, td > small { margin-top: var(--oc-space-1); color: var(--oc-ink-muted); }
+.approval-scope-row__action { text-align: right; }
+@media (max-width: 760px) { :host { display: grid; padding: var(--oc-space-3); border-bottom: 1px solid var(--oc-border-subtle); } td { padding: var(--oc-space-1) 0; border: 0; } .approval-scope-row__action { text-align: left; } }

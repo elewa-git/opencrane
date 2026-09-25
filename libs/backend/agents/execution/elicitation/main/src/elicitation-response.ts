@@ -1,11 +1,15 @@
-import { ElicitationBodyKinds, ElicitationRequestStates, type ElicitationBody, type ElicitationResponseValue } from "@opencrane/contracts";
+import { ElicitationApprovalScopes, ElicitationBodyKinds, ElicitationRequestStates, type ElicitationBody, type ElicitationResponseValue } from "@opencrane/contracts";
 
 /** Validate one answer against the exact persisted body without inferring authority. */
 export function _IsElicitationResponseValid(body: ElicitationBody, response: ElicitationResponseValue): boolean
 {
 	if (body.kind !== response.kind) return false;
 	if (body.kind === ElicitationBodyKinds.Approval && response.kind === ElicitationBodyKinds.Approval)
-		return typeof response.approved === "boolean" && !(response.approved && body.proposedArguments === null);
+	{
+		const scope = response.scope ?? ElicitationApprovalScopes.Once;
+		return typeof response.approved === "boolean" && !(response.approved && body.proposedArguments === null)
+			&& !(scope === ElicitationApprovalScopes.Always && (!response.approved || body.offeredScopes?.includes(ElicitationApprovalScopes.Always) !== true));
+	}
 	if (body.kind === ElicitationBodyKinds.SingleChoice && response.kind === ElicitationBodyKinds.SingleChoice) return body.choices.some(function _Matches(choice): boolean { return choice.value === response.selection; });
 	if (body.kind === ElicitationBodyKinds.MultipleChoice && response.kind === ElicitationBodyKinds.MultipleChoice)
 	{

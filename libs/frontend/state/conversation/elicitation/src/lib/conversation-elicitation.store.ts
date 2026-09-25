@@ -1,8 +1,8 @@
 import { DestroyRef, Injectable, computed, inject, signal } from "@angular/core";
 
-import { ElicitationBodyKinds, ElicitationRequestStates, type ConversationElicitation, type ElicitationResponseValue } from "@opencrane/contracts";
+import { ElicitationApprovalScopes, ElicitationBodyKinds, ElicitationRequestStates, type ConversationElicitation, type ElicitationResponseValue } from "@opencrane/contracts";
 
-import { __CanApproveElicitation } from "./elicitation-approval.guard";
+import { __CanApproveElicitation, __CanApproveElicitationScope } from "./elicitation-approval.guard";
 import { ElicitationGatewayError, ElicitationGatewayErrorKinds } from "./elicitation-gateway.errors";
 import { ELICITATION_GATEWAY } from "./opencrane-conversation-elicitation.gateway";
 
@@ -197,7 +197,7 @@ export class ConversationElicitationStore
 		const elicitation = this._elicitation();
 		if (elicitation === null || elicitation.state !== ElicitationRequestStates.Requested || response.kind !== elicitation.body.kind)
 			return;
-		if (response.kind === ElicitationBodyKinds.Approval && response.approved && !__CanApproveElicitation(elicitation))
+		if (response.kind === ElicitationBodyKinds.Approval && response.approved && (!__CanApproveElicitation(elicitation) || !__CanApproveElicitationScope(elicitation, response.scope ?? ElicitationApprovalScopes.Once)))
 			return;
 		this._draft.set(response);
 		this._error.set(null);
@@ -362,7 +362,7 @@ export class ConversationElicitationStore
 	private _Adopt(elicitation: ConversationElicitation): void
 	{
 		const previous = this._elicitation();
-		if (previous?.requestId !== elicitation.requestId || elicitation.state !== ElicitationRequestStates.Requested)
+		if (previous?.requestId !== elicitation.requestId || elicitation.state !== ElicitationRequestStates.Requested || (this._draft()?.kind === ElicitationBodyKinds.Approval && JSON.stringify(previous.body) !== JSON.stringify(elicitation.body)))
 			this._draft.set(null);
 		this._elicitation.set(elicitation);
 		this._ScheduleExpiry(elicitation);
@@ -415,7 +415,7 @@ export class ConversationElicitationStore
 		const draft = this._draft();
 		if (this._busy() || this._deadlineReached() || draft === null || elicitation?.state !== ElicitationRequestStates.Requested || draft.kind !== elicitation.body.kind)
 			return false;
-		return draft.kind !== ElicitationBodyKinds.Approval || !draft.approved || __CanApproveElicitation(elicitation);
+		return draft.kind !== ElicitationBodyKinds.Approval || !draft.approved || (__CanApproveElicitation(elicitation) && __CanApproveElicitationScope(elicitation, draft.scope ?? ElicitationApprovalScopes.Once));
 	}
 
 	/**

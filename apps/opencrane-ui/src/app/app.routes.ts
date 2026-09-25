@@ -67,6 +67,7 @@ export const APP_ROUTES: Routes =
 					children: [
 						{ path: "", pathMatch: "full" as const, redirectTo: "members" },
 						...m.SETTINGS_MEMBER_ROUTES,
+						{ path: "", loadChildren: function loadToolApprovalScopeRoutes() { return import("@opencrane/features/conversation-elicitation").then(function pickToolApprovalScopeRoutes(approvals) { return approvals.TOOL_APPROVAL_SCOPE_ROUTES; }); } },
 						{ path: "", loadChildren: function loadGovernanceRoutes() { return import("@opencrane/features/governance").then(function pickGovernanceRoutes(governance) { return governance.GOVERNANCE_ROUTES; }); } }
 					]
 				}];

@@ -5431,6 +5431,292 @@
         }
       }
     },
+    "/me/tool-approval-scopes": {
+      "get": {
+        "operationId": "listMyToolApprovalScopes",
+        "summary": "List my standing tool approvals",
+        "description": "Returns only requester-owned, currently readable standing approvals. Hidden arguments, credentials, and connection coordinates are never returned.",
+        "tags": [
+          "Conversations"
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "description": "Opaque continuation coordinate from the previous page."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requester-owned standing approvals.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "scopes"
+                  ],
+                  "properties": {
+                    "scopes": {
+                      "type": "array",
+                      "maxItems": 100,
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "id",
+                          "state",
+                          "action",
+                          "target",
+                          "connectionOwnerLabel",
+                          "createdAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "active",
+                              "revoked"
+                            ]
+                          },
+                          "action": {
+                            "type": "string"
+                          },
+                          "target": {
+                            "type": "string"
+                          },
+                          "externalSystem": {
+                            "type": "string"
+                          },
+                          "assistantLabel": {
+                            "type": "string"
+                          },
+                          "connectionOwnerLabel": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "revokedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    },
+                    "nextCursor": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No authenticated browser session owns the scope list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The standing approval catalogue is temporarily unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/tool-approval-scopes/{scopeId}/revocation": {
+      "post": {
+        "operationId": "revokeMyToolApprovalScope",
+        "summary": "Revoke my standing tool approval",
+        "description": "Fences new matching admissions. Actions already claimed remain historical facts. Exact retries return the saved revoked state without restoring authority.",
+        "tags": [
+          "Conversations"
+        ],
+        "parameters": [
+          {
+            "name": "scopeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque standing approval identifier."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotencyKey"
+                ],
+                "properties": {
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authoritative revoked state or exact idempotent replay.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "scope",
+                    "idempotent"
+                  ],
+                  "properties": {
+                    "scope": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "state",
+                        "action",
+                        "target",
+                        "connectionOwnerLabel",
+                        "createdAt"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "revoked"
+                          ]
+                        },
+                        "action": {
+                          "type": "string"
+                        },
+                        "target": {
+                          "type": "string"
+                        },
+                        "externalSystem": {
+                          "type": "string"
+                        },
+                        "assistantLabel": {
+                          "type": "string"
+                        },
+                        "connectionOwnerLabel": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "revokedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    },
+                    "idempotent": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The revocation command is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No authenticated browser session owns the revocation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current product authority does not allow revocation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The scope is absent or belongs to another requester.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The idempotency key conflicts with an earlier command.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Standing approval revocation is temporarily unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/me/activity/elicitations": {
       "get": {
         "operationId": "listMyElicitationActivity",
@@ -5602,6 +5888,32 @@
                                         "type": "null"
                                       }
                                     ]
+                                  },
+                                  "offeredScopes": {
+                                    "type": "array",
+                                    "minItems": 1,
+                                    "uniqueItems": true,
+                                    "items": {
+                                      "type": "string",
+                                      "enum": [
+                                        "once",
+                                        "always"
+                                      ]
+                                    }
+                                  },
+                                  "standingScope": {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "required": [
+                                      "explanation"
+                                    ],
+                                    "properties": {
+                                      "explanation": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 1000
+                                      }
+                                    }
                                   }
                                 }
                               },
@@ -5979,6 +6291,32 @@
                                         "type": "null"
                                       }
                                     ]
+                                  },
+                                  "offeredScopes": {
+                                    "type": "array",
+                                    "minItems": 1,
+                                    "uniqueItems": true,
+                                    "items": {
+                                      "type": "string",
+                                      "enum": [
+                                        "once",
+                                        "always"
+                                      ]
+                                    }
+                                  },
+                                  "standingScope": {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "required": [
+                                      "explanation"
+                                    ],
+                                    "properties": {
+                                      "explanation": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "maxLength": 1000
+                                      }
+                                    }
                                   }
                                 }
                               },
@@ -6362,6 +6700,32 @@
                                       "type": "null"
                                     }
                                   ]
+                                },
+                                "offeredScopes": {
+                                  "type": "array",
+                                  "minItems": 1,
+                                  "uniqueItems": true,
+                                  "items": {
+                                    "type": "string",
+                                    "enum": [
+                                      "once",
+                                      "always"
+                                    ]
+                                  }
+                                },
+                                "standingScope": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "explanation"
+                                  ],
+                                  "properties": {
+                                    "explanation": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 1000
+                                    }
+                                  }
                                 }
                               }
                             },
@@ -6628,6 +6992,13 @@
                           },
                           "approved": {
                             "type": "boolean"
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "once",
+                              "always"
+                            ]
                           }
                         }
                       },

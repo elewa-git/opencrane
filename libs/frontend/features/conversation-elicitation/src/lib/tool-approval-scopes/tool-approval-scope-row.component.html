@@ -1,0 +1,16 @@
+<td>
+	<strong>{{ row().action }}</strong>
+	<span>{{ row().target }}</span>
+	@if (row().externalSystem; as system) { <small>{{ system }}</small> }
+	@if (row().error; as error) { <p-message severity="error" [text]="error" /> }
+	@if (row().revokedNow) { <p-message severity="success" text="This standing approval was revoked." /> }
+</td>
+<td>
+	@if (row().assistantLabel; as assistant) { <span>{{ assistant }}</span> }
+	<span>{{ row().connectionOwnerLabel }}</span>
+</td>
+<td><span>{{ row().createdAtLabel }}</span>@if (row().revokedAtLabel; as revokedAt) { <small>Revoked {{ revokedAt }}</small> }</td>
+<td><wo-scope-chip [label]="row().stateLabel" [tone]="row().stateTone" /></td>
+<td class="approval-scope-row__action">
+	@if (row().canRevoke) { <p-button label="Revoke" severity="secondary" [outlined]="true" [loading]="row().busy" [disabled]="row().busy" (onClick)="revokeRequested.emit(row().id)" /> }
+</td>

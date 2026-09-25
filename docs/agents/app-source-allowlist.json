@@ -230,6 +230,11 @@
       "classification": "browser-composition"
     },
     {
+      "path": "apps/opencrane-ui/src/app/tool-approval-scope.providers.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-composition"
+    },
+    {
       "path": "apps/opencrane-ui/src/app/login/login-page.component.ts",
       "owner": "apps/opencrane-ui",
       "classification": "browser-entry-view"

@@ -150,6 +150,20 @@ Decide grants for that approval. Decisions revoke those grants. Approval never l
 tool credentials or restores removed execution permission: dispatch still checks the assistant's
 current grants, connection and run limits.
 
+An `Always` decision may create one active standing scope from that exact human-reviewed request.
+The scope binds the silo, requester Principal and subject, assistant and revision, connection owner,
+generation and endpoint, tool revision and action, canonical final arguments, and the explicitly
+null interactive routine coordinates. A later identical invocation receives a new one-use admission;
+the shared claim transaction rechecks every binding, current execution permission, and the active
+scope revision before consuming it. Changed arguments, assistant or connection details require a
+new human approval. This does not classify tools as writes or make an optional approval mandatory.
+
+The requester receives only Personal `ToolApprovalScope` Read and Revoke metadata grants. Listing
+returns safe reviewed labels through stable cursor pages and never returns hidden arguments or
+credentials. Revocation fences unclaimed admissions and removes Revoke while retaining Read for an
+exact idempotent replay; already claimed effects remain historical. A revoked scope cannot reactivate,
+but a later fresh human `Always` decision may create a new active scope with the same coordinates.
+
 The authority decides product permission; it does not authenticate a browser or Pod, own another
 domain's lifecycle, execute a provider call, or grant Kubernetes access. The caller derives the silo
 and Principal from verified identity, loads the target from trusted domain data, and treats the

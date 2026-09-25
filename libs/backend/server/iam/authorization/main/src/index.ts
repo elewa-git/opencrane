@@ -14,6 +14,8 @@ export { __ValidateDeferredToolArguments } from "./approvals/deferred-tool-appro
 export type { DeferredToolApprovalProjection } from "./approvals/deferred-tool-approval-projection.types";
 export { DeferredToolDecisionKinds, DeferredToolDecisionOutcomes } from "./approvals/deferred-tool-approval-decision.types";
 export type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, ExpireDeferredToolApprovalBatchCommand, ExpireDeferredToolApprovalBatchResult } from "./approvals/deferred-tool-approval-decision.types";
+export { PrismaToolApprovalScopeUnitOfWork } from "./approvals/prisma-tool-approval-scope";
+export type { RevokeToolApprovalScopeResult, ToolApprovalScopeAuthority, ToolApprovalScopeCaller, ToolApprovalScopePage } from "./approvals/tool-approval-scope.types";
 export { DeferToolRequestOutcomes } from "./approvals/deferred-tool-approval-open.types";
 export type { DeferToolRequestCommand, DeferToolRequestResult, OpenDeferredToolApprovalCommand } from "./approvals/deferred-tool-approval-open.types";
 export { __OpenDeferredToolApproval, __OpenDeferredToolApprovalInTransaction } from "./approvals/persistence/prisma-deferred-tool-approval-opener";

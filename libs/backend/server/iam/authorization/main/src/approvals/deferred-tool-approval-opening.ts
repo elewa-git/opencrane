@@ -1,5 +1,5 @@
 import { AgentRunState, AgentServiceKind, ApprovalRequestState, ElicitationBodyKind, ElicitationPurpose, ElicitationRequestState, McpCredentialRequirement as PrismaMcpCredentialRequirement, McpExecutionTransport, OrgMemberStatus, PrincipalProvenance, Prisma } from "@prisma/client";
-import { ElicitationBodyKinds, ElicitationConnectionOwnerKinds, McpCredentialRequirement, type ElicitationApprovalBody, type ElicitationExecutionConnection } from "@opencrane/contracts";
+import { ElicitationApprovalScopes, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, McpCredentialRequirement, type ElicitationApprovalBody } from "@opencrane/contracts";
 import { ExecutionSubjectMembershipKinds, type ExecutionSubject } from "@opencrane/models/agents";
 import { type JsonValue } from "@opencrane/util";
 import { __DigestCanonicalJson } from "../authority/canonical-json-digest";
@@ -11,6 +11,8 @@ import { __FindToolInvocationInTransaction } from "../tool-invocations/persisten
 import { __ReconcileDeferredToolApprovalGrants } from "./deferred-tool-approval-grants";
 import { _ApprovalExecutionSubject, _MatchesApprovalElicitation } from "./deferred-tool-approval-binding";
 import { type ApprovalRunBinding } from "./deferred-tool-approval-binding.types";
+import { __ApplyStandingToolApprovalInTransaction } from "./prisma-tool-approval-scope";
+import type { ToolApprovalConnectionBinding } from "./tool-approval-scope.types";
 
 const _UNSAFE_DISPLAY_TEXT = /[\u0000-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/u;
 
@@ -70,7 +72,7 @@ function _CredentialRequirement(value: PrismaMcpCredentialRequirement): McpCrede
 }
 
 /** Resolve the exact assigned tool installation and its display-safe execution owner. */
-async function _ExecutionConnection(transaction: Prisma.TransactionClient, run: ApprovalRunBinding, subject: ExecutionSubject, toolRevisionId: string): Promise<ElicitationExecutionConnection | null>
+export async function __ResolveToolApprovalConnection(transaction: Prisma.TransactionClient, run: ApprovalRunBinding, subject: ExecutionSubject, toolRevisionId: string): Promise<ToolApprovalConnectionBinding | null>
 {
 	if (run.agentRevisionId === null)
 		return null;
@@ -129,7 +131,7 @@ async function _ExecutionConnection(transaction: Prisma.TransactionClient, run: 
 			return null;
 		if (revision.transport === McpExecutionTransport.RemoteHttp && revision.connection?.agentServiceId !== null)
 			return null;
-		return { ownerKind: ElicitationConnectionOwnerKinds.Personal, ownerLabel: install.principal.displayName, credentialRequirement };
+		return { disclosure: { ownerKind: ElicitationConnectionOwnerKinds.Personal, ownerLabel: install.principal.displayName, credentialRequirement }, connectionId: revision.connectionId, connectionOwnerPrincipalId: subject.principalId, connectionGeneration: revision.connectionGeneration, connectionEndpointDigest: revision.endpointDigest, assistantLabel: null };
 	}
 
 	const service = await transaction.agentService.findUnique({
@@ -139,7 +141,7 @@ async function _ExecutionConnection(transaction: Prisma.TransactionClient, run: 
 	if (service === null || service.kind !== AgentServiceKind.Managed || service.principalId !== subject.principalId || service.principal?.provenance !== PrincipalProvenance.Internal
 		|| service.revisions.length !== 1 || (revision.transport === McpExecutionTransport.RemoteHttp && revision.connection?.agentServiceId !== run.agentServiceId) || !_IsDisplayLabel(service.name, 200))
 		return null;
-	return { ownerKind: ElicitationConnectionOwnerKinds.CompanyAssistant, ownerLabel: service.name, credentialRequirement };
+	return { disclosure: { ownerKind: ElicitationConnectionOwnerKinds.CompanyAssistant, ownerLabel: service.name, credentialRequirement }, connectionId: revision.connectionId, connectionOwnerPrincipalId: subject.principalId, connectionGeneration: revision.connectionGeneration, connectionEndpointDigest: revision.endpointDigest, assistantLabel: service.name };
 }
 
 /**
@@ -203,9 +205,25 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 			await __ReconcileDeferredToolApprovalGrants(transaction, run.siloId, existing.id, assignedPrincipal.principalId, command.now);
 		return { outcome: DeferToolRequestOutcomes.AlreadyDeferred, approvalRequestId: existing.id };
 	}
-	const executionConnection = await _ExecutionConnection(transaction, run, subject, command.toolRevisionId);
+	const executionConnection = await __ResolveToolApprovalConnection(transaction, run, subject, command.toolRevisionId);
 	if (executionConnection === null)
 		return { outcome: DeferToolRequestOutcomes.Unavailable };
+	if (run.agentRevisionId === null)
+		return { outcome: DeferToolRequestOutcomes.Unavailable };
+	if (await __ApplyStandingToolApprovalInTransaction(transaction, {
+		invocationId: invocation.id,
+		siloId: run.siloId,
+		requesterPrincipalId: assignedPrincipal.principalId,
+		requesterSubjectId: assignedPrincipal.subjectId,
+		agentServiceId: run.agentServiceId,
+		agentRevisionId: run.agentRevisionId,
+		toolRevisionId: command.toolRevisionId,
+		arguments: command.reviewedArguments,
+		argumentsDigest: command.argumentsDigest,
+		connection: executionConnection,
+		now: command.now,
+	}))
+		return { outcome: DeferToolRequestOutcomes.StandingConsentApplied };
 
 	// 3. Move the run behind its approval fence before the first row becomes visible, or join its batch.
 	const pendingCount = await transaction.approvalRequest.count({ where: { runId: command.runId, attempt: command.attempt, state: ApprovalRequestState.Pending } });
@@ -233,7 +251,9 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 			externalSystem: command.externalSystemName,
 			consequence: _ApprovalConsequence(command.toolDescription),
 			proposedArguments: command.safeProposedArguments,
-			executionConnection,
+			executionConnection: executionConnection.disclosure,
+			offeredScopes: command.safeProposedArguments === null ? [ElicitationApprovalScopes.Once] : [ElicitationApprovalScopes.Once, ElicitationApprovalScopes.Always],
+			...(command.safeProposedArguments === null ? {} : { standingScope: { explanation: "Approve always applies only to this exact assistant revision, connection owner and generation, tool revision, action, and final reviewed arguments. Any changed detail requires a fresh approval. You can revoke it later." } }),
 		};
 		const purposePayload = { approvalRequestId: command.interruptId };
 		await transaction.elicitationRequest.create({ data: {
