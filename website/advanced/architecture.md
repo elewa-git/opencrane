@@ -67,7 +67,7 @@ qualified checkpoints from work under review.
 | Conversation compute | `apps/conversation-computer` prepares its lease-fenced workspace and provides a private workspace-review gateway. `apps/_infra/agent-sandbox` owns the admitted profile; the upstream Agent Sandbox controller owns Pod lifecycle. |
 | Models | LiteLLM routes requests to configured providers and brokers scoped model credentials. Providers may be external to the organisation. |
 | Tools | The MCP catalogue, server-side action authority and `apps/mcp-executor` govern immutable tool packages and isolated execution. The atomic handoff saves a permitted conversation proposal and its executor work together, with claims bounded by the original run and current access. The continuation implementation connects one permitted model-selected tool and its result to a final answer; qualification, approvals and visible progress remain open. |
-| Memory | `apps/memory-gateway` fronts Cognee; OpenCrane owns the metadata and permission decisions. Complete personal-memory journeys remain unfinished. |
+| Memory | `apps/memory-gateway` fronts Cognee; OpenCrane owns the metadata and permission decisions. Cognee runs in its access-control mode with one gateway service user per silo, because that is the only mode in which a search stays inside the named dataset ([ADR 0017](https://github.com/elewa-git/opencrane/blob/main/docs/adr/0017-cognee-access-control-mode-and-gateway-service-user.md)). Complete personal-memory journeys remain unfinished. |
 | Files | The artifact catalogue, `apps/artifact-service`, scanner and preprocessor own stored files, validation and processing. Computer workspace checkpoints use ArtifactStore. |
 
 Source paths are relative to the repository root. The

@@ -163,11 +163,35 @@ The private deployment uses several layers because each one answers a different 
 | Kubernetes RBAC | May the gateway ask the Kubernetes API to perform `TokenReview`? It grants no memory content access. |
 | Memory-gateway validation | Is this one bounded search request well formed and tied to exactly one dataset UUID? |
 | NetworkPolicy | Can this pod establish a connection to that pod and port at all? |
-| Cognee | Can the accepted content be indexed or searched? |
+| Cognee access-control mode | Is this search confined to the one dataset the gateway named? |
 
-Cognee's own login middleware is disabled in the bundled private deployment. This is safe only
-because the authenticated memory gateway is the sole network caller admitted to Cognee. NetworkPolicy
-is a transport wall; OpenCrane remains the product RBAC authority.
+### Cognee runs in its access-control mode
+
+✅ Implemented and charted. The bundled Cognee is deployed with
+`ENABLE_BACKEND_ACCESS_CONTROL=true` and `REQUIRE_AUTHENTICATION=true`. This is not a second
+permission layer. It is the only way Cognee keeps one person's memories out of another person's
+recall. The reasons are recorded in
+[ADR 0017](https://github.com/elewa-git/opencrane/blob/main/docs/adr/0017-cognee-access-control-mode-and-gateway-service-user.md):
+
+- **Dataset scoping only exists in access-control mode.** With the switch off, Cognee runs one search
+  over a single shared store and ignores the dataset it was given. The provider contract in CI
+  reproduced a scoped search returning another dataset's chunks in that mode. With the switch on,
+  Cognee runs each search inside a per-dataset database context.
+- **Cognee will not run access control without a login.** Its start-up check treats access control on
+  with authentication off as a misconfiguration and forces authentication on.
+- **NetworkPolicy cannot fix this.** The leak is between datasets inside one Cognee process. The
+  gateway is already the only admitted caller, and it is the one asking on behalf of different people.
+
+So the memory gateway holds one Cognee **service user per silo**, mounted from a pre-created
+Secret. It logs in, keeps the bearer token in memory only, and registers the user only when an
+explicit first-install override allows it. Every dataset belongs to that one user, so Cognee's
+permission system does not separate employees.
+Separation comes from OpenCrane: the server selects the exact dataset UUID from admitted authority,
+the gateway forwards exactly one dataset UUID per request and cannot widen it, and Cognee's
+access-control mode makes that scope hold at retrieval time.
+
+NetworkPolicy stays the transport wall: only the gateway may connect to Cognee, and Cognee may reach
+only release-local LiteLLM, DNS and optional telemetry. OpenCrane remains the product RBAC authority.
 
 ## What “dreaming” means
 
