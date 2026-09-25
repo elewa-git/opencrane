@@ -52,9 +52,14 @@ grep -Fq 'application/zip' "$ROOT_DIR/apps/opencrane/src/bootstrap/conversations
 grep -Fq 'artifactScanner:' "$VALUES"
 grep -Fq 'agentController:' "$VALUES"
 grep -Fq 'opencrane-mcp-executor:' "$VALUES"
-grep -Fq 'additionalCaCertificates:' "$VALUES"
-grep -Fq 'existingSecret: hosted-generated-file-ca' "$VALUES"
-grep -Fq 'existingSecret: hosted-generated-file-registry-authorization' "$VALUES"
+# The hosted-only trust and registry settings travel as flags, only when the journey is requested.
+grep -Fq 'SMOKE_HOSTED_QUALIFICATION="${SMOKE_HOSTED_QUALIFICATION:-0}"' "$SMOKE"
+grep -Fq -- '--set-string "clustertenantManager.additionalCaCertificates.existingSecret=hosted-generated-file-ca"' "$SMOKE"
+grep -Fq -- '--set-string "clustertenantManager.workflows.ociRegistry.authorization.existingSecret=hosted-generated-file-registry-authorization"' "$SMOKE"
+if grep -Fq 'hosted-generated-file' "$VALUES"; then
+  echo "hosted generated-file settings must not reach the default smoke values" >&2
+  exit 1
+fi
 grep -Fq 'mode: instance' "$VALUES"
 grep -Fq '{ name: HOSTED_FIXTURE_UPSTREAM_MODEL, value: hosted-generated-file }' "$PROTOCOL_SERVICE"
 

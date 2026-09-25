@@ -13,15 +13,6 @@ clustertenantManager:
       pullPolicy: IfNotPresent
     persistence:
       size: 1Gi
-  additionalCaCertificates:
-    existingSecret: hosted-generated-file-ca
-    secretKey: ca.crt
-    revision: hosted-generated-file-v1
-  workflows:
-    ociRegistry:
-      authorization:
-        existingSecret: hosted-generated-file-registry-authorization
-        secretKey: authorization
 
 controlPlaneSpa:
   image:
