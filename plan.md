@@ -1,5 +1,43 @@
 # OpenCrane — Active Plan
 
+## Administration reporting contracts — source implemented
+
+This follow-up starts from the reviewed personal-memory command commit
+`2da40813b8240dd07aaf1c03bcae6d633619c4f2` on `feat/0.12-governance-reporting-contracts`.
+The administration screen preflight found a skipped-row pagination bug and public contract drift.
+Correct these existing server owners before adding the read-only governance screen.
+
+- [x] Audit pages carry both timestamp and row ID, matching their deterministic sort order. Equal
+  timestamps, unreadable candidates and empty authorized pages cannot skip later visible entries.
+  Invalid cursors fail with a bounded client error; the replaced timestamp-only path is removed.
+  A positive fractional page size cannot round down to zero and prevent cursor advancement.
+- [x] Audit response fields and pagination are accurately required in OpenAPI.
+- [x] The mounted token-usage endpoint appears in generated clients with its actual account, token,
+  currency, cost and optional ceiling fields. No monthly interval or percentage is inferred.
+- [x] Existing budget reads and writes have truthful schemas and status codes. This slice adds no
+  budget policy, permission, mutation route or form.
+- [x] Owning tests, generated API, affected checks and independent review pass before publication.
+
+Audit remains silo-bound and checks each candidate's current AuditEntry Read permission. Usage
+checks current TokenUsage Read permission for each returned row. Organization role labels are not
+substitutes for those decisions. Budget access retains current Organization Administer checks.
+No database schema, grant, credential, UI, deployment or visual baseline changes belong to this slice.
+
+Audit tests pass 16 cases, spend tests pass eight and the aggregate API spec passes six. The server
+build, OpenAPI emission, client generation, website synchronization and all 80 affected lint/type
+targets pass. Full ESLint boundaries, style/Prisma and module growth pass. Independent review passes
+after limiting cursor IDs to the database integer range, keeping page sizes above zero and correcting
+stale public-export docs. Authorization enforcement, its seven negative/contract tests and release
+versioning also pass. These checks exercise synthetic local fixtures; no live administrative action ran.
+
+The later governance UI will reuse the settings shell, section heading, resource feedback and table
+primitives, with separate screen state, transport and presentation owners. Its component preflight
+is prepared. Existing Owner/Admin bootstrap grants neither AuditEntry Read nor TokenUsage Read,
+and no public generic grant-creation route supplies them. A separate user policy choice is pending
+between organization-wide Owner/Admin access, a dedicated governance-reader role, or existing
+per-record grants only. No automatic access was added. Company approver policy and the previously
+recorded source/live approval gates remain pending.
+
 ## Consolidate, clean and qualify the MVP — 2026-09-13
 
 The delivery order is now one cumulative draft PR against `develop`, followed by a code-quality

@@ -115,17 +115,6 @@ const ClusterTenantUpdateSchema = {
   },
 };
 
-const AuditEntrySchema = {
-  type: "object" as const,
-  properties: {
-    timestamp: { type: "string", format: "date-time" },
-    tenant: { type: "string" },
-    action: { type: "string" },
-    resource: { type: "string" },
-    message: { type: "string" },
-  },
-};
-
 const ByokProviderKeyStatusSchema = {
   type: "object" as const,
   required: ["provider", "configured", "litellmRegistered"],
@@ -190,15 +179,6 @@ const ModelRoutingDefaultWriteSchema = {
 };
 
 
-const BudgetSchema = {
-  type: "object" as const,
-  properties: {
-    monthlyLimitUsd: { type: "number" },
-    currentSpendUsd: { type: "number" },
-    budgetAlertState: { type: "string", enum: ["ok", "warning", "exceeded"] },
-  },
-};
-
 const ThirdPartySourceSchema = {
   type: "object" as const,
   properties: {
@@ -208,18 +188,6 @@ const ThirdPartySourceSchema = {
     url: { type: "string" },
     syncStatus: { type: "string" },
     lastSyncedAt: { type: "string", format: "date-time" },
-  },
-};
-
-const TokenUsageSchema = {
-  type: "object" as const,
-  properties: {
-    tenant: { type: "string" },
-    model: { type: "string" },
-    inputTokens: { type: "integer" },
-    outputTokens: { type: "integer" },
-    totalCostUsd: { type: "number" },
-    recordedAt: { type: "string", format: "date-time" },
   },
 };
 
@@ -262,7 +230,6 @@ export const spec = {
       ClusterTenantWrite: ClusterTenantWriteSchema,
       ClusterTenantUpdate: ClusterTenantUpdateSchema,
       ClusterTenantResourceQuota: ClusterTenantResourceQuotaSchema,
-      AuditEntry: AuditEntrySchema,
       ByokProviderKeyStatus: ByokProviderKeyStatusSchema,
       ProviderKeySetRequest: ProviderKeySetRequestSchema,
       ModelDefinition: _ModelDefinitionSchema,
@@ -270,9 +237,7 @@ export const spec = {
       AutoRoutingConfig: AutoRoutingConfigSchema,
       ModelRoutingDefault: ModelRoutingDefaultSchema,
       ModelRoutingDefaultWrite: ModelRoutingDefaultWriteSchema,
-      Budget: BudgetSchema,
       ThirdPartySource: ThirdPartySourceSchema,
-      TokenUsage: TokenUsageSchema,
       SelfRunStatus: _SelfRunStatusSchema,
       AgentService: {
         type: "object",

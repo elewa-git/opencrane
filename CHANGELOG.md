@@ -15,6 +15,14 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Fixed
 
+- **Audit readers can continue through records that share a timestamp without losing entries.**
+  Each page now resumes after both the timestamp and row ID of its last examined record, including
+  records the caller cannot read. Malformed cursors fail clearly instead of reopening the first page.
+- **API clients receive the actual usage and budget contracts.** The generated client includes
+  authorized account token usage, its recorded currency and cost, and a same-currency ceiling when
+  available. Audit fields are required, and budget writes describe their currency/amount inputs,
+  existing defaults and empty success responses. Audit and spend now own these schemas.
+
 - **Already-admitted personal-memory work can resume from its saved step after a server restart.**
   The existing Absurd workflow advances storage, indexing and catalog updates through the private
   gateway. Saved receipts retain the original provider coordinates; uncertain delivery remains
