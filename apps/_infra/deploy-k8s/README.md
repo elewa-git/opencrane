@@ -228,10 +228,13 @@ package imports it.
   requests use fast local-path storage; storage-sensitive changes, manual k3d qualification, and
   every `develop` push also prove pinned expandable storage. Neither tier substitutes for
   backup/recovery or production qualification.
-- Hosted generated-file qualification is being connected to that same disposable smoke lifecycle.
-  Its fixtures supply two generated test identities, a login service, a synthetic model provider,
-  and an authenticated TLS registry. The existing instance LiteLLM owns model and credential
-  administration; the deployment wrapper creates its master and encryption keys. The fixtures
+- Hosted generated-file qualification runs in that same disposable smoke lifecycle only when
+  requested with `SMOKE_HOSTED_QUALIFICATION=1`. By default the smoke proves the current silo alone,
+  with a placeholder identity provider, because the journey needs optional server certificate
+  trust that is still awaiting approval. Its fixtures supply two generated test identities, a login
+  service, a synthetic model provider, and an authenticated TLS registry. The existing instance
+  LiteLLM owns model and credential administration; the deployment wrapper creates its master and
+  encryption keys. The fixtures
   use a fixed public marker for the synthetic provider and a separate random evidence key. No
   confidential upstream key is generated or accepted. The public client creates the
   requester through a real invitation and configures
@@ -244,8 +247,9 @@ package imports it.
   evidence-collection checks. The ordinary deployment test target includes the same contract.
   CI retains only named public evidence and image/byte digests under
   `.nx/test-results/hosted-generated-file`; credentials, setup state and file contents stay outside
-  that artifact. The smoke first renders the actual server certificate-trust configuration and
-  stops before creating a cluster or credentials when that support is absent. Optional server
+  that artifact. When the journey is requested, the smoke first renders the actual server
+  certificate-trust configuration and stops before creating a cluster or credentials when that
+  support is absent. Optional server
   certificate trust remains pending, and the public-marker client integration is under validation.
   Offline checks do not prove a hosted conversation or
   authorise a testv5 deployment.

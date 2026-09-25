@@ -42,6 +42,11 @@ on:
         required: false
         type: string
         default: ""
+      hosted_qualification:
+        description: Add the hosted generated-file journey to a k3d smoke run (needs server CA trust)
+        required: false
+        type: boolean
+        default: false
 
 # One live run per ref: a new push supersedes the in-flight PR validation of the stale commit.
 # Pushes to the integration branches are never cancelled mid-publish.
@@ -677,6 +682,8 @@ jobs:
           SMOKE_BASE_SHA: ${{ needs.prepare.outputs.nx_base }}
           SMOKE_REGISTRY: ${{ env.REGISTRY }}/${{ github.repository_owner }}
           SMOKE_STORAGE_MODE: ${{ needs.prepare.outputs.develop_smoke_storage_mode }}
+          # The hosted journey waits on optional server CA trust, so only a manual run requests it.
+          SMOKE_HOSTED_QUALIFICATION: ${{ github.event_name == 'workflow_dispatch' && inputs.hosted_qualification && '1' || '0' }}
           SMOKE_BUILD_CACHE: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.BUILD_CACHE_IMAGE }}
           # Only integration pushes refresh the cache; pull requests export nothing because the
           # registry export costs 40-50 seconds per image on the smoke's critical path.
