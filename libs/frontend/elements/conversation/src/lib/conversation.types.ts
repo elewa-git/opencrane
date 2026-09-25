@@ -126,25 +126,26 @@ export interface ConversationRichTextPresentation
 }
 
 /**
- * What the participant may currently do about the Agent run they are watching, and what to call its
- * state.
+ * What the participant may currently do about the Agent work they are watching, and what to call
+ * its state.
  *
  * The workspace presenter builds this from the run store's own checks and the element renders one
- * control per allowed action. The three permission flags decide whether a control is rendered at
- * all, and `busy` decides whether the rendered controls accept a click. None of them is a security
- * check: the server authorizes every run command again when the host sends it.
+ * finite status/action region. Stop is the only action in this contract. `canStop` decides whether
+ * the control exists and `busy` decides whether it accepts another click. Neither is a security
+ * check: the server authorizes the
+ * signed-in requester and current run again when the host sends the intent.
  * @see ConversationRunActionsComponent
  */
 export interface ConversationRunActionsPresentation
 {
-	/** Participant-facing name of the run state, already translated from the run lifecycle enum by the presenter — for example `Run queued` or `Run failed`. The element prints it in a `role="status"` region. */
+	/** Participant-facing name of the current work state, already translated by the feature presenter. The element prints it in a `role="status"` region. */
 	readonly statusLabel: string;
-	/** True while cancelling still makes sense, meaning the run has not completed, failed, or been cancelled. It renders the Cancel run button, whose intent asks the host to cancel the attempt the participant can see rather than whichever attempt is newest. */
-	readonly canCancel: boolean;
-	/** True only when the run ended in failure, so a fresh attempt can be started. When false the Retry run button is not rendered. */
-	readonly canRetry: boolean;
-	/** True while the run is live enough to take guidance, which renders the steering field and its Steer button. It does not promise a submission would be accepted now: the button stays disabled until the draft has text. */
-	readonly canSteer: boolean;
-	/** True while one run command — steer, cancel, or retry — is still in flight. Every rendered control is disabled meanwhile, which is what keeps a second cancel from racing the first. */
+	/** Additional bounded explanation for pending, terminal, or recovery states. */
+	readonly detail: string;
+	/** True only while the current caller-owned work is eligible for an explicit Stop request. */
+	readonly canStop: boolean;
+	/** True while the current Stop command is being submitted. It disables the control and announces progress. */
 	readonly busy: boolean;
+	/** Fixed display-safe command failure, or null when no Stop failure is retained. */
+	readonly error: string | null;
 }

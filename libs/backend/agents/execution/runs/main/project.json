@@ -7,6 +7,6 @@
   "targets": {
     "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/agents/execution/runs/main" } },
     "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/agents/execution/runs/main" } },
-    "test:sql": { "executor": "nx:run-commands", "options": { "command": "sh ../../../../../../scripts/run-postgres-authority-tests.sh tests/run-input-snapshot-admission.sql", "cwd": "libs/backend/agents/execution/runs/main" } }
+    "test:sql": { "executor": "nx:run-commands", "cache": false, "dependsOn": [{ "projects": ["opencrane"], "target": "db:generate" }], "options": { "commands": ["sh ../../../../../../scripts/run-postgres-authority-tests.sh tests/run-input-snapshot-admission.sql tests/run-tree-budget-authority.sql", "OPENCRANE_RUN_TREE_SQL_QUALIFICATION=1 vitest run src/tree/__tests__/run-tree-sql.test.ts"], "parallel": false, "cwd": "libs/backend/agents/execution/runs/main" } }
   }
 }

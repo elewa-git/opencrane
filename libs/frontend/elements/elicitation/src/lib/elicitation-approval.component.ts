@@ -24,11 +24,26 @@ const _SCOPE_LABELS: ReadonlyMap<ElicitationApprovalScopes, string> = new Map([
 const _SCOPE_ORDER: readonly ElicitationApprovalScopes[] = [ElicitationApprovalScopes.Once, ElicitationApprovalScopes.Session, ElicitationApprovalScopes.Always];
 
 /**
+ * Decide whether the complete presentational disclosure admits an affirmative draft.
+ *
+ * Called by: `ElicitationApprovalComponent.approvalAvailable` and its focused component test.
+ *
+ * @param body - Display-safe approval disclosure supplied by the feature card.
+ * @param approvalDisabled - Whether the owning approval purpose requires details that are absent.
+ * @returns True only when approval may be selected; denial remains independently available.
+ */
+export function _ApprovalAvailable(body: ElicitationApprovalPresentation, approvalDisabled: boolean): boolean
+{
+	return !approvalDisabled && body.proposedArguments !== null;
+}
+
+/**
  * Present one disclosed consequential action and emit an allow-or-deny draft with its scope.
  *
  * A question that offers no scopes renders the single "Approve" it always did, so an older body
  * keeps working. Offering more than one renders one button per scope: a person choosing "every time"
  * makes that choice in the same click as allowing, rather than allowing and then finding a setting.
+ * Every allow button stays unavailable when the proposal cannot be shown in full; deny never is.
  */
 @Component({ selector: "wo-elicitation-approval", standalone: true, templateUrl: "./elicitation-approval.component.html", styleUrl: "./elicitation-control.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
 export class ElicitationApprovalComponent
@@ -39,8 +54,14 @@ export class ElicitationApprovalComponent
 	public readonly value = input<ElicitationApprovalDraft | null>(null);
 	/** Whether the controls are unavailable. */
 	public readonly disabled = input(false);
+	/** Whether this approval purpose lacks a complete reviewable proposal. */
+	public readonly approvalDisabled = input(false);
 	/** Emits a draft without submitting it. */
 	public readonly valueChange = output<ElicitationApprovalDraft>();
+	/** Formatted display-safe arguments shown as text rather than trusted markup. */
+	protected readonly formattedArguments = computed(this._FormattedArguments.bind(this));
+	/** Whether affirmative approval is possible from the complete visible disclosure. */
+	protected readonly approvalAvailable = computed(() => _ApprovalAvailable(this.body(), this.approvalDisabled()));
 
 	/** Allow buttons for the scopes this question offers, narrowest first. */
 	public readonly options = computed<readonly _ApprovalOption[]>(() =>
@@ -66,10 +87,10 @@ export class ElicitationApprovalComponent
 		return value !== null && !value.approved;
 	}
 
-	/** Emit one allow choice at the scope its button grants. */
+	/** Emit one allow choice at the scope its button grants, only when approval is available. */
 	public allow(scope: ElicitationApprovalScopes): void
 	{
-		if (!this.disabled())
+		if (!this.disabled() && this.approvalAvailable())
 			this.valueChange.emit({ approved: true, scope });
 	}
 
@@ -78,5 +99,12 @@ export class ElicitationApprovalComponent
 	{
 		if (!this.disabled())
 			this.valueChange.emit({ approved: false, scope: ElicitationApprovalScopes.Once });
+	}
+
+	/** Format the already bounded JSON value for escaped text rendering. */
+	private _FormattedArguments(): string | null
+	{
+		const proposedArguments = this.body().proposedArguments;
+		return proposedArguments === undefined || proposedArguments === null ? null : JSON.stringify(proposedArguments, null, 2);
 	}
 }

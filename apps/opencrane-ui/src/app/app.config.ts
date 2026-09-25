@@ -15,6 +15,7 @@ import { provideWebPlatform } from "@opencrane/platform";
 
 import { APP_ROUTES } from "./app.routes";
 import { provideConversationWorkspaceComposition } from "./conversation-workspace.providers";
+import { provideGovernanceReads } from "./governance.providers";
 
 /**
  * Root application configuration for the OpenCrane frontend.
@@ -49,6 +50,7 @@ export const appConfig: ApplicationConfig =
 		// the root because the chat routes are lazily loaded and must find these bindings already in
 		// place.
 		...provideConversationWorkspaceComposition(),
+		...provideGovernanceReads(),
 		// This app is the org/customer surface — capabilities derive from the
 		// org-admin claim only (platform-operator claims grant nothing here).
 		{ provide: PLATFORM_SURFACE, useValue: "org" },

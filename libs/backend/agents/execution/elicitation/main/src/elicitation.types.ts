@@ -3,7 +3,16 @@ import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { ToolInvocationClaim, ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import type { JsonValue } from "@opencrane/util";
 
-import type { MemoryPermissionOpenOutcomes } from "./personal-memory-permission.types";
+/** What happened when a recall asked for permission. */
+export enum MemoryPermissionOpenOutcomes
+{
+	/** A question was opened and the run waits for the person to answer it. */
+	Opened = "opened",
+	/** A standing grant already answers this question, so nothing was asked. */
+	Covered = "covered",
+	/** The invocation and snapshot did not agree, so nothing was opened and the recall stays blocked. */
+	Refused = "refused",
+}
 
 /** Stable fail-closed result of checking one exact personal-memory permission receipt. */
 export enum PersonalMemoryPermissionVerificationOutcomes
@@ -110,6 +119,16 @@ export interface ElicitationUnitOfWork extends SelfElicitationQueryRepository
 	/** Attribute, apply, and resume one response in one transaction. */
 	respond(command: RespondToElicitationCommand): Promise<RespondToElicitationResult>;
 }
+
+/** Wakes the already-bound conversation turn after approval or expiry changes tool readiness. */
+export interface ElicitationRunWakePort
+{
+	/** Emit the existing approval-readiness event for the saved conversation turn task. */
+	wake(runId: string, attempt: number, toolInvocationId: string): Promise<void>;
+}
+
+/** Builds a transaction-bound wake port without letting elicitation own workflow infrastructure. */
+export type ElicitationRunWakeFactory = (transaction: object) => ElicitationRunWakePort;
 
 /** Trusted server command for expiring every due request on one waiting run attempt. */
 export interface ExpireElicitationBatchCommand

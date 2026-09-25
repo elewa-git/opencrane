@@ -1,17 +1,23 @@
-<section class="elicitation-control" aria-labelledby="elicitation-approval-prompt">
-	<h3 id="elicitation-approval-prompt">{{ body().prompt }}</h3>
+<section class="elicitation-control">
+	<h2>{{ body().prompt }}</h2>
 	<dl class="elicitation-control__disclosure">
 		<div><dt>Action</dt><dd>{{ body().action }}</dd></div>
 		<div><dt>Target</dt><dd>{{ body().target }}</dd></div>
 		<div><dt>Data used</dt><dd>{{ body().dataUse }}</dd></div>
+		@if (formattedArguments(); as arguments) { <div class="elicitation-control__arguments"><dt>Proposed details</dt><dd><pre>{{ arguments }}</pre></dd></div> }
 		@if (body().externalSystem; as externalSystem) { <div><dt>External system</dt><dd>{{ externalSystem }}</dd></div> }
+		@if (body().executionConnection; as connection) {
+			<div><dt>Connection owner</dt><dd>{{ connection.owner }}</dd></div>
+			<div><dt>Credential use</dt><dd>{{ connection.credentialUse }}</dd></div>
+		}
 		<div><dt>What happens</dt><dd>{{ body().consequence }}</dd></div>
 		@if (body().cost; as cost) { <div><dt>Cost</dt><dd>{{ cost }}</dd></div> }
 	</dl>
+	@if (!approvalAvailable()) { <p class="elicitation-control__warning" role="note">Some proposed details cannot be shown. You can deny this action, but approval is unavailable.</p> }
 	<fieldset [disabled]="disabled()">
 		<legend>Your decision</legend>
 		@for (option of options(); track option.scope) {
-			<label><input type="radio" name="elicitation-approval" [checked]="isSelected(option.scope)" (change)="allow(option.scope)" /> {{ option.label }}</label>
+			<label><input type="radio" name="elicitation-approval" [disabled]="!approvalAvailable()" [checked]="isSelected(option.scope)" (change)="allow(option.scope)" /> {{ option.label }}</label>
 		}
 		<label><input type="radio" name="elicitation-approval" [checked]="isDenied()" (change)="deny()" /> Deny</label>
 	</fieldset>

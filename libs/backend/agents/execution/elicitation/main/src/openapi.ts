@@ -1,11 +1,23 @@
-import { ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates } from "@opencrane/contracts";
+import { ElicitationBodyKinds, ElicitationConnectionOwnerKinds, ElicitationPurposes, ElicitationRequestStates, McpCredentialRequirement } from "@opencrane/contracts";
+
+/** Public ownership disclosure without the connection's private custody coordinates. */
+const _EXECUTION_CONNECTION_SCHEMA = {
+	type: "object",
+	additionalProperties: false,
+	required: ["ownerKind", "ownerLabel", "credentialRequirement"],
+	properties: {
+		ownerKind: { type: "string", enum: Object.values(ElicitationConnectionOwnerKinds) },
+		ownerLabel: { type: "string", minLength: 1, maxLength: 200, pattern: "^(?=.*\\S)[^\\u0000-\\u001F\\u007F-\\u009F\\u061C\\u200E\\u200F\\u202A-\\u202E\\u2066-\\u2069]+$" },
+		credentialRequirement: { type: "string", enum: Object.values(McpCredentialRequirement) },
+	},
+} as const;
 
 /** Shared choice schema used by both supported choice bodies. */
 const _CHOICE_SCHEMA = { type: "object", additionalProperties: false, required: ["value", "label"], properties: { value: { type: "string" }, label: { type: "string" }, description: { type: "string" } } } as const;
 
 /** Exact four browser-safe body shapes. */
 const _BODY_SCHEMA = { oneOf: [
-	{ type: "object", additionalProperties: false, required: ["kind", "prompt", "action", "target", "dataUse", "consequence"], properties: { kind: { const: ElicitationBodyKinds.Approval }, prompt: { type: "string" }, action: { type: "string" }, target: { type: "string" }, dataUse: { type: "string" }, externalSystem: { type: "string" }, consequence: { type: "string" }, cost: { type: "string" } } },
+	{ type: "object", additionalProperties: false, required: ["kind", "prompt", "action", "target", "dataUse", "consequence"], properties: { kind: { const: ElicitationBodyKinds.Approval }, prompt: { type: "string" }, action: { type: "string" }, target: { type: "string" }, dataUse: { type: "string" }, externalSystem: { type: "string" }, consequence: { type: "string" }, cost: { type: "string" }, executionConnection: _EXECUTION_CONNECTION_SCHEMA, proposedArguments: { oneOf: [{ type: "object", additionalProperties: true }, { type: "null" }] } } },
 	{ type: "object", additionalProperties: false, required: ["kind", "prompt", "choices"], properties: { kind: { const: ElicitationBodyKinds.SingleChoice }, prompt: { type: "string" }, choices: { type: "array", items: _CHOICE_SCHEMA } } },
 	{ type: "object", additionalProperties: false, required: ["kind", "prompt", "choices", "minimumSelections", "maximumSelections"], properties: { kind: { const: ElicitationBodyKinds.MultipleChoice }, prompt: { type: "string" }, choices: { type: "array", items: _CHOICE_SCHEMA }, minimumSelections: { type: "integer" }, maximumSelections: { type: "integer" } } },
 	{ type: "object", additionalProperties: false, required: ["kind", "prompt", "maximumLength", "allowEmpty"], properties: { kind: { const: ElicitationBodyKinds.FreeText }, prompt: { type: "string" }, maximumLength: { type: "integer" }, allowEmpty: { type: "boolean" } } },
@@ -20,7 +32,14 @@ const _RESPONSE_VALUE_SCHEMA = { oneOf: [
 ] } as const;
 
 /** Browser-safe canonical elicitation projection with no protected purpose payload. */
-const _ELICITATION_SCHEMA = { type: "object", additionalProperties: false, required: ["version", "requestId", "conversationId", "runId", "attempt", "assignedParticipantId", "purpose", "state", "body", "requiresStepUp", "requestedAt", "expiresAt"], properties: { version: { const: "opencrane.elicitation.v1" }, requestId: { type: "string" }, conversationId: { type: "string" }, runId: { type: "string" }, attempt: { type: "integer", minimum: 1 }, assignedParticipantId: { type: "string" }, purpose: { type: "string", enum: Object.values(ElicitationPurposes) }, state: { type: "string", enum: Object.values(ElicitationRequestStates) }, body: _BODY_SCHEMA, requiresStepUp: { type: "boolean" }, requestedAt: { type: "string", format: "date-time" }, expiresAt: { type: "string", format: "date-time" }, resolvedAt: { type: "string", format: "date-time" }, safeReason: { type: "string" } } } as const;
+const _ELICITATION_SCHEMA = {
+	type: "object", additionalProperties: false,
+	required: ["version", "requestId", "conversationId", "runId", "attempt", "assignedParticipantId", "purpose", "state", "body", "requiresStepUp", "requestedAt", "expiresAt"],
+	properties: { version: { const: "opencrane.elicitation.v1" }, requestId: { type: "string" }, conversationId: { type: "string" }, runId: { type: "string" }, attempt: { type: "integer", minimum: 1 }, assignedParticipantId: { type: "string" }, purpose: { type: "string", enum: Object.values(ElicitationPurposes) }, state: { type: "string", enum: Object.values(ElicitationRequestStates) }, body: _BODY_SCHEMA, requiresStepUp: { type: "boolean" }, requestedAt: { type: "string", format: "date-time" }, expiresAt: { type: "string", format: "date-time" }, resolvedAt: { type: "string", format: "date-time" }, safeReason: { type: "string" } },
+	if: { properties: { purpose: { const: ElicitationPurposes.ToolApproval } } },
+	then: { properties: { body: { required: ["executionConnection", "proposedArguments"], properties: { kind: { const: ElicitationBodyKinds.Approval } } } } },
+	else: { properties: { body: { not: { required: ["executionConnection"] } } } },
+} as const;
 
 /** Authoritative terminal response acknowledgement. */
 const _RESPONSE_PROJECTION_SCHEMA = { type: "object", additionalProperties: false, required: ["requestId", "state", "idempotent", "resolvedAt"], properties: { requestId: { type: "string" }, state: { type: "string", enum: Object.values(ElicitationRequestStates) }, idempotent: { type: "boolean" }, resolvedAt: { type: "string", format: "date-time" } } } as const;
@@ -39,6 +58,21 @@ export const _ElicitationOpenapiPaths = {
 				400: _Error("The requested Activity limit is invalid."),
 				401: _Error("No authenticated browser session owns the Activity index."),
 				503: _Error("The elicitation Activity index is temporarily unavailable."),
+			},
+		},
+	},
+	"/me/conversations/{conversationId}/elicitations": {
+		get: {
+			operationId: "listMyOpenConversationElicitations",
+			summary: "List pending participant-input requests",
+			description: "Returns at most fifty unexpired requests assigned to the authenticated participant in the selected readable conversation. Protected purpose payloads, credentials, and resume material are never returned.",
+			tags: ["Conversations"],
+			parameters: _ConversationParameters(),
+			responses: {
+				200: { description: "Current owned requests in oldest-first order.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["elicitations"], properties: { elicitations: { type: "array", maxItems: 50, items: _ELICITATION_SCHEMA } } } } } },
+				400: _Error("The selected conversation coordinate is invalid."),
+				401: _Error("No authenticated browser session owns the request list."),
+				503: _Error("The elicitation authority is temporarily unavailable."),
 			},
 		},
 	},
@@ -83,9 +117,15 @@ export const _ElicitationOpenapiPaths = {
 function _Parameters()
 {
 	return [
-		{ name: "conversationId", in: "path", required: true, schema: { type: "string" }, description: "Conversation containing the request." },
+		..._ConversationParameters(),
 		{ name: "requestId", in: "path", required: true, schema: { type: "string" }, description: "Opaque elicitation identifier." },
 	] as const;
+}
+
+/** Selected conversation path coordinate shared by list, read, and response operations. */
+function _ConversationParameters()
+{
+	return [{ name: "conversationId", in: "path", required: true, schema: { type: "string" }, description: "Conversation containing the request." }] as const;
 }
 
 /** Build one bounded error response schema. */

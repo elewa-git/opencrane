@@ -67,18 +67,17 @@ describe("conversation elements", function _ConversationElements()
 		expect(fixture.nativeElement.querySelector(".conversation-rich-text")?.getAttribute("data-message-id")).toBe("message-1");
 	});
 
-	it("emits run action intents only from visible controls", async function _RunActions()
+	it("emits Stop only from an enabled current-work control", async function _RunActions()
 	{
 		const fixture = await _Fixture(ConversationRunActionsComponent);
-		_SetInput(fixture.componentInstance.presentation, { statusLabel: "Run failed", canCancel: false, canRetry: true, canSteer: false, busy: false });
-		_SetInput(fixture.componentInstance.steeringDraft, "");
-		const retry = vi.fn();
-		fixture.componentInstance.retryRequested.subscribe(retry);
+		_SetInput(fixture.componentInstance.presentation, { statusLabel: "Assistant working", detail: "You can stop further work.", canStop: true, busy: false, error: null });
+		const stop = vi.fn();
+		fixture.componentInstance.stopRequested.subscribe(stop);
 		fixture.detectChanges();
 		const button = fixture.nativeElement.querySelector("button") as HTMLButtonElement;
 		button.click();
-		expect(retry).toHaveBeenCalledOnce();
-		expect(fixture.nativeElement.textContent).not.toContain("Cancel run");
+		expect(stop).toHaveBeenCalledOnce();
+		expect(button.textContent).toContain("Stop");
 	});
 	it("retains exact message and assertive status presentations", function _RetainsPresentations()
 	{
@@ -130,5 +129,52 @@ describe("conversation elements", function _ConversationElements()
 		(fixture.nativeElement as HTMLElement).querySelector<HTMLFormElement>("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
 
 		expect(submitted).toEqual([""]);
+	});
+
+	it("keeps a draft editable but refuses submit while projected content is blocked", async function _BlocksSelectedContent()
+	{
+		const fixture = await _Fixture(ConversationComposerComponent);
+		const submitted = vi.fn();
+		fixture.componentInstance.submitted.subscribe(submitted);
+		_SetInput(fixture.componentInstance.draft, "Keep this draft");
+		_SetInput(fixture.componentInstance.submissionBlocked, true);
+		fixture.detectChanges();
+
+		(fixture.nativeElement as HTMLElement).querySelector<HTMLFormElement>("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+
+		expect(submitted).not.toHaveBeenCalled();
+		expect((fixture.nativeElement as HTMLElement).querySelector<HTMLTextAreaElement>("textarea")?.disabled).toBe(false);
+	});
+
+	it("keeps an uncertain retry draft visibly read-only while leaving exact retry enabled", async function _ReadOnlyRetry()
+	{
+		const fixture = await _Fixture(ConversationComposerComponent);
+		const changed = vi.fn();
+		const submitted = vi.fn();
+		fixture.componentInstance.draftChange.subscribe(changed);
+		fixture.componentInstance.submitted.subscribe(submitted);
+		_SetInput(fixture.componentInstance.draft, "Read the selected PDF");
+		_SetInput(fixture.componentInstance.draftReadOnly, true);
+		fixture.detectChanges();
+		const textarea = (fixture.nativeElement as HTMLElement).querySelector<HTMLTextAreaElement>("textarea");
+		if (textarea === null)
+			throw new Error("Composer textarea is missing.");
+
+		textarea.value = "Hidden replacement";
+		textarea.dispatchEvent(new Event("input", { bubbles: true }));
+		(fixture.nativeElement as HTMLElement).querySelector<HTMLFormElement>("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+
+		expect(textarea.readOnly).toBe(true);
+		expect(changed).not.toHaveBeenCalled();
+		expect(submitted).toHaveBeenCalledExactlyOnceWith("Read the selected PDF");
+		expect((fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>("button")?.disabled).toBe(false);
+
+		_SetInput(fixture.componentInstance.draftReadOnly, false);
+		fixture.detectChanges();
+		textarea.value = "A confirmed-send draft";
+		textarea.dispatchEvent(new Event("input", { bubbles: true }));
+
+		expect(textarea.readOnly).toBe(false);
+		expect(changed).toHaveBeenCalledExactlyOnceWith("A confirmed-send draft");
 	});
 });

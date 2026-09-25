@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient, type AgentRun, type AuthorizationGrant, type RunInputSnapshot as StoredSnapshot } from "@prisma/client";
 
 import type { Logger } from "@opencrane/backend/observability";
-import type { RunInputSnapshot } from "@opencrane/contracts";
+import { RUN_INPUT_SNAPSHOT_VERSION, type RunInputSnapshot } from "@opencrane/contracts";
 import { ExecutionSubjectMembershipKinds, type ExecutionSubject } from "@opencrane/models/agents";
 import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
@@ -44,7 +44,7 @@ function _ManagedSubject(): ExecutionSubject
 /** Create the immutable first-attempt snapshot persisted by every successful test admission. */
 function _Snapshot(subject: ExecutionSubject = _ExecutionSubject()): RunInputSnapshot
 {
-	return { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, conversationId: "conversation-1", messageIds: ["message-1"], personaRevisionId: "persona-1", preferenceFactIds: ["preference-1"], artifactRevisionIds: ["artifact-1"], skillRevisionIds: ["skill-1"], memoryQueryPolicy: { scope: "personal" }, mcpTools: [], modelRoute: { alias: "target" }, budgetPolicy: { maxTokens: 1000 }, executionSubject: subject, promptCompilerVersion: "prompt-v1", digest: `sha256:${"e".repeat(64)}`, compiledAt: "2026-09-01T00:00:00.000Z" };
+	return { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION, conversationId: "conversation-1", messageIds: ["message-1"], personaRevisionId: "persona-1", preferenceFactIds: ["preference-1"], artifactRevisionIds: ["artifact-1"], skillRevisionIds: ["skill-1"], memoryQueryPolicy: { scope: "personal" }, mcpTools: [], modelRoute: { alias: "target" }, budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 1000, maxCostUsdMicros: null, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: 2_000_000_000_000 }, executionSubject: subject, promptCompilerVersion: "prompt-v1", digest: `sha256:${"e".repeat(64)}`, compiledAt: "2026-09-01T00:00:00.000Z" };
 }
 
 /** Create one browser-derived admission command with no caller-controlled authority evidence. */
@@ -125,6 +125,7 @@ function _ActivityFixture()
 			findMany: vi.fn(async function _List({ where }: { where: Prisma.AgentRunWhereInput }) { return runs.filter(run => run.siloId === where.siloId && run.principalId === (where.principalId as Prisma.StringFilter).equals); }),
 			findFirst: vi.fn(async function _Read({ where }: { where: Prisma.AgentRunWhereInput }) { return runs.find(run => run.id === where.id && run.siloId === where.siloId && run.principalId === (where.principalId as Prisma.StringFilter).equals) ?? null; }),
 		},
+		toolInvocation: { findFirst: vi.fn().mockResolvedValue(null) },
 		runInputSnapshot: {
 			create: vi.fn(async function _Create({ data }: { data: Prisma.RunInputSnapshotUncheckedCreateInput }) { snapshots.push(data as StoredSnapshot); return data; }),
 			findUnique: vi.fn(async function _Read({ where }: { where: Prisma.RunInputSnapshotWhereUniqueInput }) { return snapshots.find(snapshot => snapshot.runId === where.runId_attempt_digest?.runId && snapshot.attempt === where.runId_attempt_digest.attempt && snapshot.digest === where.runId_attempt_digest.digest) ?? null; }),
@@ -308,6 +309,22 @@ describe("PrismaRunAdmissionUnitOfWork", function _Suite()
 
 		await expect(repository.admit({ ..._Command(), runId: "retry-generated-run-id" }, _VerifyExisting, async function _UnexpectedBuild() { throw new Error("duplicate must not rebuild"); })).resolves.toEqual({ outcome: "idempotent", snapshot });
 		expect(transaction.runInputSnapshot.findUnique).toHaveBeenCalledWith({ where: { runId_attempt_digest: { runId: "run-1", attempt: 1, digest: snapshot.digest } } });
+	});
+
+	it.each([
+		["missing maxToolInvocations", { ..._Snapshot().budgetPolicy, maxToolInvocations: undefined }],
+		["unknown budget field", { ..._Snapshot().budgetPolicy, unexpectedBudgetField: true }],
+	] as const)("fails closed when the saved input policy is %s", async function _RejectMalformedSavedPolicy(_name, budgetPolicy)
+	{
+		const snapshot = _Snapshot();
+		const row = { ...snapshot, budgetPolicy, agentIdentityId: "identity-1", principalId: "principal-1", executionSubject: snapshot.executionSubject, compiledAt: new Date(snapshot.compiledAt), retiredMemoryFacts: [] };
+		const transaction = { agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", trigger: "Interactive", inputSnapshotDigest: snapshot.digest }) }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue(row) } };
+		const prisma = { $transaction: vi.fn(async function _Transaction(operation: (client: typeof transaction) => Promise<unknown>) { return operation(transaction); }) } as unknown as PrismaClient;
+		const repository = new PrismaRunAdmissionUnitOfWork(prisma, undefined, _Logger());
+		const verify = vi.fn(_VerifyExisting);
+
+		await expect(repository.admit({ ..._Command(), runId: "retry-generated-run-id" }, verify, async function _UnexpectedBuild() { throw new Error("malformed duplicate must not rebuild"); })).resolves.toEqual({ outcome: "denied", reason: RunAdmissionDenialReasons.PersistenceUnavailable });
+		expect(verify).not.toHaveBeenCalled();
 	});
 
 	it("refuses an idempotent snapshot when its current authority was revoked", async function _RejectsRevokedDuplicate()

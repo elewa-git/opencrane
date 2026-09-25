@@ -1,0 +1,56 @@
+--- a/cognee/modules/pipelines/operations/run_tasks.py
++++ b/cognee/modules/pipelines/operations/run_tasks.py
+@@ -34,0 +34,5 @@
++from .cognify_run_recovery import (
++    CognifyRunAdmission,
++    CognifyRunReplay,
++    plan_cognify_run,
++)
+@@ -52,0 +57,3 @@
++    operation_id: Optional[UUID] = None,
++    expected_input_evidence_digest: Optional[str] = None,
++    request_digest: Optional[str] = None,
+@@ -72,0 +80,21 @@
++    admission = None
++    if operation_id is not None:
++        if expected_input_evidence_digest is None or request_digest is None:
++            raise ValueError("Cognify recovery coordinates are incomplete")
++        planned = await plan_cognify_run(
++            pipeline_id,
++            pipeline_name,
++            dataset,
++            data,
++            user,
++            operation_id,
++            expected_input_evidence_digest,
++            request_digest,
++        )
++        if isinstance(planned, CognifyRunReplay):
++            yield planned.run_info
++            return
++        if not isinstance(planned, CognifyRunAdmission):
++            raise RuntimeError("Cognify recovery returned an unknown decision")
++        admission = planned
++
+@@ -73 +102,7 @@
+-        pipeline_id, pipeline_name, dataset.id, data, user=user
++        pipeline_id,
++        pipeline_name,
++        dataset.id,
++        data,
++        user=user,
++        pipeline_run_id=admission.pipeline_run_id if admission else None,
++        run_evidence=admission.evidence if admission else None,
+@@ -85,0 +120,2 @@
++        operation_id=operation_id,
++        input_evidence_digest=expected_input_evidence_digest,
+@@ -284,0 +321 @@
++                    run_evidence=admission.evidence if admission else None,
+@@ -291,0 +329,2 @@
++                    operation_id=operation_id,
++                    input_evidence_digest=expected_input_evidence_digest,
+@@ -335,0 +375 @@
++                    run_evidence=admission.evidence if admission else None,
+@@ -347,0 +388,2 @@
++                    operation_id=operation_id,
++                    input_evidence_digest=expected_input_evidence_digest,

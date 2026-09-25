@@ -1,4 +1,4 @@
-import { CancelledTask, SuspendTask, type TaskContext } from "absurd-sdk";
+import { CancelledTask, FailedTask, SuspendTask, TimeoutError, type TaskContext } from "absurd-sdk";
 
 import { WorkflowError, WorkflowTaskCancelledError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowCheckpointOperation, IWorkflowCheckpointStep, IWorkflowTaskContext, IWorkflowTaskEvent, IWorkflowTaskReceipt, IWorkflowTaskSpawn } from "@opencrane/backend/server/infra/workflows/contract";
@@ -56,23 +56,44 @@ export class _AbsurdTaskContext implements IWorkflowTaskContext
 	readonly attempt: number;
 	/** Child-task admissions require the adapter's engine and queue policy. */
 	private readonly execution: AbsurdWorkflowEngine;
+	/** Lease extension required before an uncached external operation can begin. */
+	private readonly checkpointOperationLeaseSeconds: number;
 
 	/** Creates a contract context around one Absurd worker invocation. */
-	constructor(context: TaskContext, task: IWorkflowTaskReceipt, attempt: number, execution: AbsurdWorkflowEngine)
+	constructor(context: TaskContext, task: IWorkflowTaskReceipt, attempt: number, execution: AbsurdWorkflowEngine, checkpointOperationLeaseSeconds = 120)
 	{
 		this.context = context;
 		this.task = task;
 		this.attempt = attempt;
 		this.execution = execution;
+		this.checkpointOperationLeaseSeconds = checkpointOperationLeaseSeconds;
 	}
 
 	/** Persist or replay one named operation result. */
 	async checkpoint<TResult>(step: IWorkflowCheckpointStep, operation: IWorkflowCheckpointOperation<TResult>): Promise<TResult>
 	{
 		const stepName = _RequiredString("step.stepName", step.stepName);
+		const context = this.context;
+		const taskId = this.task.taskId;
+		const leaseSeconds = this.checkpointOperationLeaseSeconds;
 		try
 		{
-			return await this.context.step(stepName, operation);
+			return await context.step(stepName, async function _HeartbeatBeforeOperation(): Promise<TResult>
+			{
+				try
+				{
+					await context.heartbeat(leaseSeconds);
+				}
+				catch (error)
+				{
+					if (error instanceof FailedTask)
+					{
+						throw new WorkflowTaskCancelledError(taskId);
+					}
+					throw error;
+				}
+				return await operation();
+			});
 		}
 		catch (error)
 		{
@@ -85,17 +106,22 @@ export class _AbsurdTaskContext implements IWorkflowTaskContext
 	}
 
 	/** Suspend durably until this task receives its private event name. */
-	async waitForEvent<TPayload>(eventName: string): Promise<IWorkflowTaskEvent<TPayload>>
+	async waitForEvent<TPayload>(eventName: string, options: { readonly timeoutAt?: Date } = {}): Promise<IWorkflowTaskEvent<TPayload>>
 	{
 		const acceptedName = _RequiredString("eventName", eventName);
+		const timeoutMilliseconds = options.timeoutAt === undefined ? null : options.timeoutAt.getTime() - Date.now();
+		if (timeoutMilliseconds !== null && (!Number.isFinite(timeoutMilliseconds) || timeoutMilliseconds < 0))
+			throw new WorkflowError("event wait timeout must be a future Date");
 		try
 		{
-			const payload = await this.context.awaitEvent(_AbsurdTaskEventName(this.task.taskId, acceptedName));
+			const payload = await this.context.awaitEvent(_AbsurdTaskEventName(this.task.taskId, acceptedName), timeoutMilliseconds === null ? undefined : { timeout: Math.ceil(timeoutMilliseconds / 1_000) });
 			return { eventName: acceptedName, payload: payload as unknown as TPayload };
 		}
 		catch (error)
 		{
-			return _NormalizeContextError(this.task.taskId, error);
+			if (error instanceof TimeoutError)
+				return { eventName: acceptedName, payload: null, timedOut: true };
+			throw _NormalizeContextError(this.task.taskId, error);
 		}
 	}
 

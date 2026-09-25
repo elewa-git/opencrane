@@ -1,9 +1,11 @@
 import type { ConversationModelRequest, ConversationModelResponse } from "@opencrane/contracts";
-import { ___DoWithTrace, ___DoWithoutTrace } from "@opencrane/backend/observability";
+import { ___DoWithTrace, ___DoWithoutTrace, ___MarkActiveSpanFailed } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import { ConversationModelError, ConversationModelFailureCodes, type PreparedConversationModelRequest } from "./conversation-model.types";
 import { _CONVERSATION_MODEL_MAX_BYTES, _PrepareConversationModelRequest, _ValidateConversationModelResponse } from "./conversation-model.validator";
+import { _CONVERSATION_MODEL_RECEIPT_MAX_BYTES, _ConversationModelDeliveryHeaders, _VerifyConversationModelReceipt } from "../retry/conversation-model-receipt";
+import type { ConversationModelProxyQualification } from "../retry/conversation-model-proxy.types";
 
 /** Cancels an unused response without exposing a remote stream's error or waiting for its cleanup. */
 function _discardBody(response: Response): void
@@ -12,10 +14,10 @@ function _discardBody(response: Response): void
 }
 
 /** Reads bytes incrementally so a misleading Content-Length cannot bypass the response ceiling. */
-async function _readResponse(response: Response, signal: AbortSignal): Promise<string>
+async function _readResponse(response: Response, signal: AbortSignal, maximumBytes = _CONVERSATION_MODEL_MAX_BYTES): Promise<string>
 {
 	const declaredLength = response.headers.get("content-length");
-	if (declaredLength !== null && (!/^\d+$/.test(declaredLength) || Number(declaredLength) > _CONVERSATION_MODEL_MAX_BYTES))
+	if (declaredLength !== null && (!/^\d+$/.test(declaredLength) || Number(declaredLength) > maximumBytes))
 	{
 		_discardBody(response);
 		throw new ConversationModelError(ConversationModelFailureCodes.ResponseTooLarge);
@@ -50,7 +52,7 @@ async function _readResponse(response: Response, signal: AbortSignal): Promise<s
 				}
 			}
 			length += chunk.value.byteLength;
-			if (length > _CONVERSATION_MODEL_MAX_BYTES)
+			if (length > maximumBytes)
 				throw new ConversationModelError(ConversationModelFailureCodes.ResponseTooLarge);
 			chunks.push(chunk.value);
 		}
@@ -64,17 +66,19 @@ async function _readResponse(response: Response, signal: AbortSignal): Promise<s
 }
 
 /** Sends the prepared request once and validates its complete response before returning. */
-async function _exchange(prepared: PreparedConversationModelRequest, signal: AbortSignal): Promise<ConversationModelResponse>
+async function _exchange(prepared: PreparedConversationModelRequest, signal: AbortSignal, qualification: ConversationModelProxyQualification | null): Promise<ConversationModelResponse>
 {
+	const deliveryHeaders = _ConversationModelDeliveryHeaders(prepared, qualification);
 	const response = await ___DoWithoutTrace(function _sendSensitiveRequest()
 	{
 		return fetch(prepared.url, {
 			method: "POST", redirect: "error", signal,
-			headers: { authorization: prepared.authorization, "content-type": "application/json", accept: "application/json" },
+			headers: { authorization: prepared.authorization, "content-type": "application/json", accept: "application/json", ...deliveryHeaders },
 			body: prepared.body,
 		});
 	});
-	if (!response.ok || response.redirected)
+	const proofResponse = response.status === 429 && qualification !== null && prepared.delivery !== undefined;
+	if ((!response.ok && !proofResponse) || response.redirected)
 	{
 		_discardBody(response);
 		throw new ConversationModelError(ConversationModelFailureCodes.HttpRejected);
@@ -84,11 +88,19 @@ async function _exchange(prepared: PreparedConversationModelRequest, signal: Abo
 		_discardBody(response);
 		throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);
 	}
-	const text = await _readResponse(response, signal);
+	const text = await _readResponse(response, signal, proofResponse ? _CONVERSATION_MODEL_RECEIPT_MAX_BYTES : _CONVERSATION_MODEL_MAX_BYTES);
+	if (proofResponse)
+	{
+		const result = _VerifyConversationModelReceipt(text, response.headers.get("x-opencrane-preforward-receipt"), prepared, qualification!);
+		if (signal.aborted)
+			throw new ConversationModelError(ConversationModelFailureCodes.DeadlineExceeded);
+		___MarkActiveSpanFailed();
+		return result;
+	}
 	let result: ConversationModelResponse;
 	try
 	{
-		result = ___ParseAndValidateJson(text, "Conversation model response", _ValidateConversationModelResponse, prepared.offeredToolNames);
+		result = ___ParseAndValidateJson(text, "Conversation model response", _ValidateConversationModelResponse, prepared.offeredToolNames, prepared.finalOutput);
 	}
 	catch
 	{
@@ -111,6 +123,16 @@ async function _exchange(prepared: PreparedConversationModelRequest, signal: Abo
  */
 export async function __RequestConversationModel(input: ConversationModelRequest): Promise<ConversationModelResponse>
 {
+	return _RequestConversationModel(input, null);
+}
+
+/**
+ * Executes one request with the qualification frozen by server composition. A verified rejection
+ * returns evidence to the workflow; this adapter never sends a second request or waits for a retry.
+ * @throws ConversationModelError with a fixed, non-secret category for an unusable exchange.
+ */
+export async function _RequestConversationModel(input: ConversationModelRequest, qualification: ConversationModelProxyQualification | null): Promise<ConversationModelResponse>
+{
 	return ___DoWithTrace("conversation.model.request", {}, async function _requestModel()
 	{
 		const prepared = _PrepareConversationModelRequest(input);
@@ -128,7 +150,7 @@ export async function __RequestConversationModel(input: ConversationModelRequest
 		{
 			if (Date.now() >= prepared.deadlineEpochMs)
 				throw new ConversationModelError(ConversationModelFailureCodes.DeadlineExceeded);
-			return await Promise.race([_exchange(prepared, controller.signal), deadline]);
+			return await Promise.race([_exchange(prepared, controller.signal, qualification), deadline]);
 		}
 		catch (error)
 		{

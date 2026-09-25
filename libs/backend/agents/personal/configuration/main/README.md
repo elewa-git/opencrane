@@ -58,6 +58,8 @@ Internally, the source is grouped by responsibility:
 - `_CreatePersonalConfigurationRouter` composes the production owner-only API over Prisma.
 - `_PersonalConfigurationOpenapiPaths` contributes the configuration endpoints to the server API.
 - `UPGRADE_SESSION_TOOL` and `UPGRADE_SESSION_TOOL_REVISION` describe the built-in future-change tool.
+  Its explicit provider-facing name is `upgrade_session`, while its first-party revision remains the
+  authority coordinate used when the proposal is admitted.
 - `__IsUpgradeSessionAvailable` checks whether a frozen run can receive that tool descriptor.
 - `UpgradeSessionInvocation` and `UpgradeSessionProposalRepository` form the narrow server-worker
   contract for proposing that future change after runtime admission.

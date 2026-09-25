@@ -1,17 +1,24 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input, output } from "@angular/core";
 import { ButtonModule } from "primeng/button";
 import { MessageModule } from "primeng/message";
 
 import { ElicitationApprovalComponent, ElicitationFreeTextComponent, ElicitationMultipleChoiceComponent, ElicitationSingleChoiceComponent, type ElicitationApprovalDraft } from "@opencrane/elements/elicitation";
-import { ElicitationApprovalScopes, ElicitationBodyKinds, ElicitationRequestStates, type ConversationElicitation, type ElicitationApprovalBody, type ElicitationFreeTextBody, type ElicitationMultipleChoiceBody, type ElicitationResponseValue, type ElicitationSingleChoiceBody } from "@opencrane/state/conversation/elicitation";
+import { ElicitationApprovalScopes, ElicitationBodyKinds, ElicitationRequestStates, __CanApproveElicitation, type ConversationElicitation, type ElicitationApprovalBody, type ElicitationFreeTextBody, type ElicitationMultipleChoiceBody, type ElicitationResponseValue, type ElicitationSingleChoiceBody } from "@opencrane/state/conversation/elicitation";
+
+import { _MapApprovalPresentation } from "./elicitation-approval.mapper";
 
 /** Validate the exact controlled draft against the current authoritative body and command state. */
 export function _CanSubmitElicitation(elicitation: ConversationElicitation, draft: ElicitationResponseValue | null, busy: boolean): boolean
 {
 	const body = elicitation.body;
-	if (busy || elicitation.state !== ElicitationRequestStates.Requested || draft === null || draft.kind !== body.kind) return false;
-	if (draft.kind === ElicitationBodyKinds.MultipleChoice && body.kind === ElicitationBodyKinds.MultipleChoice) return draft.selections.length >= body.minimumSelections && draft.selections.length <= body.maximumSelections;
-	if (draft.kind === ElicitationBodyKinds.FreeText && body.kind === ElicitationBodyKinds.FreeText) return draft.text.length <= body.maximumLength && (body.allowEmpty || draft.text.trim().length > 0);
+	if (busy || elicitation.state !== ElicitationRequestStates.Requested || draft === null || draft.kind !== body.kind)
+		return false;
+	if (draft.kind === ElicitationBodyKinds.Approval && draft.approved && !__CanApproveElicitation(elicitation))
+		return false;
+	if (draft.kind === ElicitationBodyKinds.MultipleChoice && body.kind === ElicitationBodyKinds.MultipleChoice)
+		return draft.selections.length >= body.minimumSelections && draft.selections.length <= body.maximumSelections;
+	if (draft.kind === ElicitationBodyKinds.FreeText && body.kind === ElicitationBodyKinds.FreeText)
+		return draft.text.length <= body.maximumLength && (body.allowEmpty || draft.text.trim().length > 0);
 	return true;
 }
 
@@ -26,12 +33,16 @@ export function _CanSubmitElicitation(elicitation: ConversationElicitation, draf
 })
 export class ConversationElicitationCardComponent
 {
+	/** Host used to restore keyboard focus after verified sign-in. */
+	private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
 	/** Exact authoritative request projection. */
 	public readonly elicitation = input.required<ConversationElicitation>();
 	/** Selected local draft retained by the parent store. */
 	public readonly draft = input<ElicitationResponseValue | null>(null);
 	/** Whether an exact response command is active. */
 	public readonly busy = input(false);
+	/** Whether authority is being rechecked and draft controls must stop admitting input. */
+	public readonly disabled = input(false);
 	/** Bounded browser-safe failure message. */
 	public readonly error = input<string | null>(null);
 	/** Fixed server-owned sign-in recovery path, when required. */
@@ -46,28 +57,59 @@ export class ConversationElicitationCardComponent
 	protected readonly states = ElicitationRequestStates;
 	/** Narrow approval body when selected by the server discriminant. */
 	protected readonly approvalBody = computed(this._ApprovalBody.bind(this));
+	/** Display text derives from the saved connection, never the participant's browser identity. */
+	protected readonly approvalPresentation = computed(this._ApprovalPresentation.bind(this));
 	/** Narrow single-choice body when selected by the server discriminant. */
 	protected readonly singleChoiceBody = computed(this._SingleChoiceBody.bind(this));
 	/** Narrow multiple-choice body when selected by the server discriminant. */
 	protected readonly multipleChoiceBody = computed(this._MultipleChoiceBody.bind(this));
 	/** Narrow free-text body when selected by the server discriminant. */
 	protected readonly freeTextBody = computed(this._FreeTextBody.bind(this));
+	/** Decision-specific confirmation text for consequential approval responses. */
+	protected readonly submitLabel = computed(this._SubmitLabel.bind(this));
+	/** Participant-facing terminal result derived exhaustively from server lifecycle. */
+	protected readonly terminalOutcome = computed(this._TerminalOutcome.bind(this));
+	/** Whether the request lacks details required for an affirmative decision. */
+	protected readonly approvalUnavailable = computed(this._ApprovalUnavailable.bind(this));
+
+	/**
+	 * Return keyboard focus to this request after the app completes verified sign-in.
+	 *
+	 * Called by: `ConversationWorkspacePageComponent._RestoreElicitationFocus` after the elicitation
+	 * store has reconciled the exact request.
+	 */
+	public restoreFocus(): void
+	{
+		this._host.nativeElement.querySelector<HTMLElement>("input:not(:disabled), textarea:not(:disabled), button:not(:disabled), [tabindex='-1']")?.focus();
+	}
 
 	/** Whether the exact draft satisfies local shape and body bounds. */
 	protected canSubmit(): boolean
 	{
-		return _CanSubmitElicitation(this.elicitation(), this.draft(), this.busy());
+		return this.stepUpPath() === null && _CanSubmitElicitation(this.elicitation(), this.draft(), this.busy() || this.disabled());
 	}
 
 	/** Emit the exact fixed recovery path. */
 	protected recover(): void
 	{
 		const path = this.stepUpPath();
-		if (path !== null) this.stepUpRequested.emit(path);
+		if (path !== null)
+			this.stepUpRequested.emit(path);
 	}
 
 	/** Wrap a presentational approval draft in the exact response discriminant. */
-	protected selectApproval(draft: ElicitationApprovalDraft): void { this.draftSelected.emit({ kind: ElicitationBodyKinds.Approval, approved: draft.approved, scope: draft.scope }); }
+	protected selectApproval(draft: ElicitationApprovalDraft): void
+	{
+		if (this.busy() || this.disabled() || this.stepUpPath() !== null || this.elicitation().state !== ElicitationRequestStates.Requested || (draft.approved && this.approvalUnavailable()))
+			return;
+		this.draftSelected.emit({ kind: ElicitationBodyKinds.Approval, approved: draft.approved, scope: draft.scope });
+	}
+	/** Recheck controlled inputs when the explicit confirmation intent is delivered. */
+	protected submit(): void
+	{
+		if (this.canSubmit())
+			this.submitRequested.emit();
+	}
 	/** Wrap a presentational single selection in the exact response discriminant. */
 	protected selectSingleChoice(selection: string): void { this.draftSelected.emit({ kind: ElicitationBodyKinds.SingleChoice, selection }); }
 	/** Wrap presentational multiple selections in the exact response discriminant. */
@@ -85,10 +127,44 @@ export class ConversationElicitationCardComponent
 	protected freeTextValue(): string { const draft = this.draft(); return draft?.kind === ElicitationBodyKinds.FreeText ? draft.text : ""; }
 	/** Narrow approval body. */
 	private _ApprovalBody(): ElicitationApprovalBody | null { const body = this.elicitation().body; return body.kind === ElicitationBodyKinds.Approval ? body : null; }
+	/** Map only the server-selected approval body into the shared element contract. */
+	private _ApprovalPresentation(): ReturnType<typeof _MapApprovalPresentation> | null
+	{
+		const body = this.approvalBody();
+		return body === null ? null : _MapApprovalPresentation(body);
+	}
+	/** Use the same reviewability boundary as the state store's command admission. */
+	private _ApprovalUnavailable(): boolean { return !__CanApproveElicitation(this.elicitation()); }
 	/** Narrow single-choice body. */
 	private _SingleChoiceBody(): ElicitationSingleChoiceBody | null { const body = this.elicitation().body; return body.kind === ElicitationBodyKinds.SingleChoice ? body : null; }
 	/** Narrow multiple-choice body. */
 	private _MultipleChoiceBody(): ElicitationMultipleChoiceBody | null { const body = this.elicitation().body; return body.kind === ElicitationBodyKinds.MultipleChoice ? body : null; }
 	/** Narrow free-text body. */
 	private _FreeTextBody(): ElicitationFreeTextBody | null { const body = this.elicitation().body; return body.kind === ElicitationBodyKinds.FreeText ? body : null; }
+	/** Name the separate confirmation after the participant has chosen approve or deny. */
+	private _SubmitLabel(): string
+	{
+		const draft = this.draft();
+		if (draft?.kind !== ElicitationBodyKinds.Approval)
+			return "Submit response";
+		return draft.approved ? "Confirm approval" : "Confirm denial";
+	}
+
+	/** Translate durable lifecycle into plain copy without exposing protocol values. */
+	private _TerminalOutcome(): { readonly heading: string; readonly detail: string }
+	{
+		const elicitation = this.elicitation();
+		const approval = elicitation.body.kind === ElicitationBodyKinds.Approval;
+		switch (elicitation.state)
+		{
+			case ElicitationRequestStates.Answered:
+				if (approval)
+					return { heading: "Action approved", detail: "OpenCrane is continuing the requested work." };
+				return { heading: "Response received", detail: "OpenCrane is continuing with your response." };
+			case ElicitationRequestStates.Declined: return { heading: approval ? "Action denied" : "Request declined", detail: "OpenCrane is continuing without this action." };
+			case ElicitationRequestStates.Expired: return { heading: approval ? "Approval expired" : "Request expired", detail: "The response window closed. OpenCrane is continuing with the recorded outcome." };
+			case ElicitationRequestStates.Cancelled: return { heading: approval ? "Approval no longer needed" : "Request no longer needed", detail: "OpenCrane is continuing with the latest request state." };
+			case ElicitationRequestStates.Requested: return { heading: "Response requested", detail: "Choose a response before continuing." };
+		}
+	}
 }

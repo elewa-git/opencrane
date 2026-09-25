@@ -26,11 +26,11 @@
     </div>
     @if (file()) {
       <h4>File</h4>
-      <pre><code>{{ file() }}</code></pre>
+      <pre tabindex="0" aria-label="File contents"><code>{{ file() }}</code></pre>
     }
     @if (diff(); as result) {
       <h4>Diff</h4>
-      <pre><code>{{ result.output }}</code></pre>
+      <pre tabindex="0" aria-label="Diff output"><code>{{ result.output }}</code></pre>
     }
   </section>
   <section>
@@ -49,7 +49,7 @@
     </div>
     @if (command(); as result) {
       <p>Outcome: {{ result.outcome }} · Exit {{ result.exitCode }}</p>
-      <pre><code>{{ result.output }}</code></pre>
+      <pre tabindex="0" aria-label="Command output"><code>{{ result.output }}</code></pre>
     }
   </section>
   <section>
@@ -102,7 +102,7 @@
     }
     @if (preview()) {
       <h4>Response source</h4>
-      <pre><code>{{ preview() }}</code></pre>
+      <pre tabindex="0" aria-label="Localhost response source"><code>{{ preview() }}</code></pre>
     }
   </section>
 </section>

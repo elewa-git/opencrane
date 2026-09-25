@@ -1,0 +1,9 @@
+@switch (hint()) {
+	@case ('h1') { <h2 data-usage-hint="h1">{{ literal() }}</h2> }
+	@case ('h2') { <h2 data-usage-hint="h2">{{ literal() }}</h2> }
+	@case ('h3') { <h2 data-usage-hint="h3">{{ literal() }}</h2> }
+	@case ('h4') { <h2 data-usage-hint="h4">{{ literal() }}</h2> }
+	@case ('h5') { <h2 data-usage-hint="h5">{{ literal() }}</h2> }
+	@case ('caption') { <p class="conversation-a2ui-text__caption">{{ literal() }}</p> }
+	@default { <p>{{ literal() }}</p> }
+}

@@ -97,7 +97,7 @@ function _SendGroupMutationError(error: unknown, response: Response, mutation: _
  * behind authentication. This prevents an accidental future mount from turning a globally unique
  * identifier into cross-silo authority.
  *
- * Called by: apps/opencrane/src/app/routes.ts at `/api/v1/groups`.
+ * Called by: apps/opencrane/src/bootstrap/http/routes.ts at `/api/v1/groups`.
  */
 export function groupsRouter(prisma: PrismaClient, resolveCaller: GroupRouteCallerResolver = _ResolveGroupCaller, createAuthorization?: GroupAuthorizationAuthorityFactory<Prisma.TransactionClient>): Router
 {

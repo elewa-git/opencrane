@@ -16,3 +16,4 @@ export * from "./lib/components/choice-card-group/choice-card-group.types";
 export * from "./lib/components/journey-progress/journey-progress.component";
 export * from "./lib/components/persona-summary/persona-summary.component";
 export * from "./lib/components/persona-summary/persona-summary.types";
+export * from "./lib/components/resource-feedback/resource-feedback.component";

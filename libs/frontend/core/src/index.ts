@@ -5,6 +5,7 @@ export * from "./lib/models/context.types";
 export * from "./lib/models/notification.types";
 export * from "./lib/models/settings.types";
 export * from "./lib/models/mcp.types";
+export * from "./lib/models/mcp.validator";
 export * from "./lib/models/plan.types";
 export * from "./lib/models/plan.util";
 export * from "./lib/data/settings.data";

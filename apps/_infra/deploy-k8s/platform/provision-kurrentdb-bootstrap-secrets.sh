@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Creates the immutable KurrentDB trust and credential Secrets consumed by one fresh testv5 silo.
+# Creates the immutable KurrentDB trust and credential Secrets consumed by one fresh silo.
 # The deployer validates these inputs and never rotates them, so reruns only verify existing state.
 set -euo pipefail
 umask 077
@@ -28,6 +28,7 @@ ADMIN_SECRET="${RELEASE}-kurrentdb-bootstrap"
 OPS_SECRET="${RELEASE}-kurrentdb-bootstrap-ops"
 SERVICE_SECRET="${RELEASE}-kurrentdb-history-service"
 secret_directory="$(mktemp -d)"
+chmod 700 "$secret_directory"
 trap 'rm -rf "$secret_directory"' EXIT
 
 _require_immutable_secret() {
@@ -36,7 +37,7 @@ _require_immutable_secret() {
   [[ "$(kubectl get secret "$secret" -n "$NAMESPACE" -o jsonpath='{.type}')" == "$type" ]] || { _err "Existing $secret has the wrong type."; exit 1; }
 }
 
-_create_immutable_literal_secret() {
+_create_immutable_secret() {
   local secret="$1" type="$2"
   shift 2
   kubectl create secret generic "$secret" -n "$NAMESPACE" --type="$type" "$@" --dry-run=client -o json \
@@ -81,7 +82,7 @@ else
   openssl x509 -req -days 825 -sha256 -in "$secret_directory/tls.csr" \
     -CA "$secret_directory/ca.crt" -CAkey "$secret_directory/ca.key" -CAcreateserial \
     -extfile "$secret_directory/extensions.cnf" -out "$secret_directory/tls.crt" >/dev/null 2>&1
-  _create_immutable_literal_secret "$TLS_SECRET" kubernetes.io/tls \
+  _create_immutable_secret "$TLS_SECRET" kubernetes.io/tls \
     --from-file="tls.crt=$secret_directory/tls.crt" \
     --from-file="tls.key=$secret_directory/tls.key" \
     --from-file="ca.crt=$secret_directory/ca.crt"
@@ -91,14 +92,18 @@ if kubectl get secret "$ADMIN_SECRET" -n "$NAMESPACE" >/dev/null 2>&1; then
   _require_immutable_secret "$ADMIN_SECRET" Opaque
   _read_secret_key "$ADMIN_SECRET" password "$secret_directory/admin-password"
 else
-  _create_immutable_literal_secret "$ADMIN_SECRET" Opaque --from-literal="password=$(openssl rand -base64 36 | tr -d '\n')"
+  openssl rand -base64 36 | tr -d '\n' >"$secret_directory/admin-password"
+  _create_immutable_secret "$ADMIN_SECRET" Opaque \
+    --from-file="password=$secret_directory/admin-password"
 fi
 
 if kubectl get secret "$OPS_SECRET" -n "$NAMESPACE" >/dev/null 2>&1; then
   _require_immutable_secret "$OPS_SECRET" Opaque
   _read_secret_key "$OPS_SECRET" password "$secret_directory/ops-password"
 else
-  _create_immutable_literal_secret "$OPS_SECRET" Opaque --from-literal="password=$(openssl rand -base64 36 | tr -d '\n')"
+  openssl rand -base64 36 | tr -d '\n' >"$secret_directory/ops-password"
+  _create_immutable_secret "$OPS_SECRET" Opaque \
+    --from-file="password=$secret_directory/ops-password"
 fi
 
 if kubectl get secret "$SERVICE_SECRET" -n "$NAMESPACE" >/dev/null 2>&1; then
@@ -107,9 +112,10 @@ if kubectl get secret "$SERVICE_SECRET" -n "$NAMESPACE" >/dev/null 2>&1; then
   _read_secret_key "$SERVICE_SECRET" password "$secret_directory/service-password"
   [[ "$(<"$secret_directory/service-username")" == "opencrane-history" ]] || { _err "Existing $SERVICE_SECRET has the wrong username."; exit 1; }
 else
-  _create_immutable_literal_secret "$SERVICE_SECRET" kubernetes.io/basic-auth \
+  openssl rand -base64 36 | tr -d '\n' >"$secret_directory/service-password"
+  _create_immutable_secret "$SERVICE_SECRET" kubernetes.io/basic-auth \
     --from-literal=username=opencrane-history \
-    --from-literal="password=$(openssl rand -base64 36 | tr -d '\n')"
+    --from-file="password=$secret_directory/service-password"
 fi
 
 echo "[kurrentdb-bootstrap] Immutable KurrentDB Secrets are ready in $NAMESPACE."

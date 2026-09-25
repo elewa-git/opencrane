@@ -27,4 +27,11 @@ describe("elicitation response validation", function _Suite()
 		expect(_IsElicitationResponseValid(body, { kind: ElicitationBodyKinds.FreeText, text: "  " })).toBe(false);
 		expect(_ElicitationStateForResponse({ kind: ElicitationBodyKinds.Approval, approved: false })).toBe("declined");
 	});
+
+	it("accepts only denial when the server cannot disclose every proposed argument", function _HiddenArguments()
+	{
+		const body = { kind: ElicitationBodyKinds.Approval, prompt: "Allow?", action: "Invoke tool", target: "records.read", dataUse: "Some values are hidden.", consequence: "Invokes once.", proposedArguments: null } as const;
+		expect(_IsElicitationResponseValid(body, { kind: ElicitationBodyKinds.Approval, approved: true })).toBe(false);
+		expect(_IsElicitationResponseValid(body, { kind: ElicitationBodyKinds.Approval, approved: false })).toBe(true);
+	});
 });

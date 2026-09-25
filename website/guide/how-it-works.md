@@ -37,6 +37,18 @@ A shared agent is intended for a repeatable company task with its own access. It
 triggered execution is not yet part of the current working product. Read
 [shared agents](/guide/first-agent) for that distinction.
 
+## Follow personal tool work
+
+Recent activity keeps the assistant's work status and its latest tool phase separate. A tool may be
+queued, running, have returned its result, or need attention while the assistant is still working.
+A received result does not mean the answer is finished: **Open answer** appears only when the saved
+final message is loaded and readable in the selected conversation.
+
+**Refresh activity** reads the current status. It does not repeat the tool call or start another run.
+Changing chats or losing access clears the previous chat's rows. This view contains no tool arguments,
+result content or connection credentials. Company-child receipts and complete action controls remain
+part of the [remaining work](/guide/status#still-to-complete).
+
 > See also: [Set up your personal assistant](/guide/persona) ·
 > [Tools](/guide/tools) · [Knowledge and memory](/guide/knowledge) ·
 > [Architecture](/advanced/architecture)

@@ -7,7 +7,7 @@ export function _IsElicitationResponseValid(body: ElicitationBody, response: Eli
 {
 	if (body.kind !== response.kind) return false;
 	if (body.kind === ElicitationBodyKinds.Approval && response.kind === ElicitationBodyKinds.Approval)
-		return typeof response.approved === "boolean" && _ApprovalScopeIsOffered(body, response);
+		return typeof response.approved === "boolean" && !(response.approved && body.proposedArguments === null) && _ApprovalScopeIsOffered(body, response);
 	if (body.kind === ElicitationBodyKinds.SingleChoice && response.kind === ElicitationBodyKinds.SingleChoice) return body.choices.some(function _Matches(choice): boolean { return choice.value === response.selection; });
 	if (body.kind === ElicitationBodyKinds.MultipleChoice && response.kind === ElicitationBodyKinds.MultipleChoice)
 	{

@@ -352,52 +352,6 @@ export interface components {
             transport?: "streamable-http" | "sse" | "websocket";
             grants?: Record<string, never>[];
         };
-        /** @description A catalogue server as exposed by the operator API (distinct from the registry McpServer). Every field beyond id is optional so the same shape serves the entitled user catalogue and the admin governance view. */
-        McpCatalogServer: {
-            id: string;
-            name?: string;
-            description?: string;
-            publisher?: string;
-            glyph?: string;
-            /**
-             * @description Consumption shape; decides the credential-connect flow.
-             * @enum {string}
-             */
-            type?: "single-user" | "multi-user" | "remote-oauth";
-            /**
-             * @description Governance lifecycle status.
-             * @enum {string}
-             */
-            approvalStatus?: "pending-review" | "approved" | "published" | "disabled";
-            credentialSchema?: components["schemas"]["CredentialField"][];
-            /** @description Human-readable summary of who is entitled (admin view). */
-            entitlementSummary?: string;
-        };
-        CredentialField: {
-            /** @description Stable key the value is submitted under. */
-            key: string;
-            /** @description Human-readable field label. */
-            label: string;
-            /** @description Whether the field must be supplied. */
-            required: boolean;
-            /** @description Whether the value is secret (masked, never echoed back). */
-            sensitive: boolean;
-            /** @description Optional input placeholder. */
-            placeholder?: string;
-            /** @description Optional helper hint. */
-            hint?: string;
-        };
-        /** @description A server installed by the calling user, with its connection state. */
-        McpInstalled: {
-            serverId: string;
-            /** @enum {string} */
-            connectionStatus?: "needs-credential" | "shared-key";
-            /**
-             * Format: date-time
-             * @description ISO-8601 timestamp of last use, or null when never used.
-             */
-            lastUsed?: string | null;
-        };
         ClusterTenant: {
             /** @description Stable cluster-scoped identifier (the customer key). */
             name: string;

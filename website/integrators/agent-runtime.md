@@ -21,41 +21,52 @@ participant message
       │ immutable entry + activation command
       ▼
 KurrentDB persistent subscription
-      │ generation-fenced claim
+      │ validates activation
       ▼
-Agent Sandbox SandboxClaim
-      │ projected Pod token
+OpenCrane activation transaction
+      │ active lease + Absurd task admitted together
       ▼
-conversation-computer
-      │ private bootstrap status + model-step request
+Absurd conversation-turn workflow
+      │ durable waits, recovery and next saved step
       ▼
 OpenCrane server
       │ reserve request → LiteLLM → retain response or tool result
       ▼
 assistant entry appended through the bound writer
+
+Agent Sandbox SandboxClaim ──► conversation-computer Pod
+                                      │ startup preparation only
+                                      └── fenced workspace + private review
 ```
 
 The server validates the activation command against the conversation stream and logical computer
-history before it creates or observes an Agent Sandbox claim. The claimed Pod exchanges its
-projected service-account token for bootstrap status. The server fixes the silo, conversation,
-computer id, generation, lease, AgentIdentity and model route; the Pod receives only `bootstrapId`
-and `ready`, `pending` or `response_unavailable`. A ready Pod sends exactly `{bootstrapId}` to the
-private `/api/internal/conversation-computer/model-step` route; the server selects the next step.
-The Pod cannot submit ordinals, tool proposals or output, and receives no prompt or model key.
+history before it creates or observes an Agent Sandbox claim. Publishing the active lease and
+spawning the existing Absurd `conversation-computer-turn` task happen in one PostgreSQL transaction,
+using the activation event as the idempotency key. Absurd then calls the server-owned turn authority,
+sleeps until fixed model deadlines, waits for the exact tool-result event when needed, and resumes
+from saved progress after restart.
+
+The Pod does not start or advance this workflow. At process start it uses its projected
+service-account token and exact lease coordinates to fetch a review credential and restore the
+fenced workspace once. It then serves health and the private review gateway. The server fixes the
+silo, conversation, computer id, generation, lease, AgentIdentity and model route; compiled input,
+model credentials, budgets, tool declarations, results and conversation output never enter the Pod.
 
 ## Authority boundaries
 
 | Component | Owns | Does not own |
 |---|---|---|
-| OpenCrane server | immutable entries, private payloads, activation admission, model request and output, computer history and lease fencing | provider-internal execution or Kubernetes reconciliation |
-| Agent Sandbox | claim-to-Pod reconciliation for the selected template and pool | users, conversations, grants or model policy |
-| Conversation computer | model-step request, status polling and workspace review | durable history, model credentials, output admission, policy or a second conversation |
+| OpenCrane server | immutable entries, private payloads, activation admission, model authority, budgets, tool permission, continuation and output, computer history and lease fencing | durable workflow scheduling, provider-internal execution or Kubernetes reconciliation |
+| Absurd | durable turn progression, saved task receipts, deadlines, tool-result waits and restart recovery | model policy, credentials, budgets, tool permission or conversation output |
+| Agent Sandbox | lease-fenced isolated execution, including claim-to-Pod reconciliation for the selected template and pool | users, conversations, grants or model policy |
+| Conversation computer | lease-fenced workspace preparation, health and private workspace review | workflow progression, durable history, model credentials, output admission, policy or a second conversation |
 
 The computer has no database credentials or Kubernetes mutation rights. Its private gateway is
 reachable through the server's authorised review proxy, not public ingress. Its scratch workspace
-can be checkpointed before cooling and restored when a later generation starts. Model work calls the
-private OpenCrane server; NetworkPolicy denies direct LiteLLM access. New output appends recheck the
-active lease, while retries recognise an already accepted, identical event.
+can be checkpointed before cooling and restored when a later generation starts. NetworkPolicy denies
+the Pod direct LiteLLM access. Before each server-owned execution boundary, OpenCrane resolves the
+current SandboxClaim, Pod UID, namespace, ServiceAccount, lease and generation. New output appends
+recheck that fence, while retries recognise an already accepted, identical event.
 
 The server reserves each request within the original run's call, token and authority limits before
 dispatch. The first may select one frozen tool requiring no approval. Its original declaration enters
@@ -64,16 +75,18 @@ exact terminal result, the server encrypts the paired messages and reserves a fi
 acknowledging delivery. That request offers no tools, reuses the saved key receipt and deducts the
 entire first token reservation. No intermediate tool entry changes the participant conversation head.
 
-Model-step returns `completed`, `pending`, `response_unavailable` or `authority_ended`. An uncertain
-response keeps its reservation, with no paid redispatch on restart. Expired or missing key custody
-cannot create a fresh allowance. LiteLLM and provider-internal retries have not been qualified as
-exactly-once execution.
+The workflow ends when the server reports `completed`, `response_unavailable` or
+`authority_ended`. A pending model request becomes a durable deadline sleep; a pending tool becomes
+a wait for that invocation's terminal event. An uncertain response keeps its reservation, with no
+paid redispatch on restart. Expired or missing key custody cannot create a fresh allowance. LiteLLM
+and provider-internal retries have not been qualified as exactly-once execution.
 
 ## Review surface
 
 The server proxies participant review calls to the computer's private gateway with a credential it
 derives under a server-only keyring key from the current lease. The computer receives that secret
-once, over its TokenReviewed bootstrap channel, and its gateway refuses every call until then; the
+once, from the TokenReviewed private review-credential route, and its gateway refuses every call
+until then; the
 lease id on the Pod label is only a name. When the server calls the gateway it presents one
 credential per key still in the keyring, newest first, and the computer accepts any match, so
 rotating the keyring while a lease is alive does not lock the server out of its own computer. A key
@@ -100,16 +113,17 @@ Activation delivery supports competing consumers, reconnect backoff and parked-m
 Lease renewal and loss handling prevent replaced compute from retaining authority. Checkpoint and
 restore code preserves workspace bytes while conversation history remains in KurrentDB.
 
-The current text path also saves the exact prepared answer before history append. A restarted
-server finishes that saved event and run bookkeeping before admitting another turn. A reservation
-without a saved answer becomes `response_unavailable` after its fixed deadline and leaves the run
-pending. The worker remains degraded without resubmitting that model step; user-facing recovery
-controls are still planned.
+The current text path atomically commits the exact private turn receipt and participant-visible answer at the checked current history head. A restarted
+Absurd worker resumes the same task and the server finishes the saved run bookkeeping
+before admitting another turn. A reservation without a saved answer becomes
+`response_unavailable` after its fixed deadline and leaves the run pending. Recovery does not
+resubmit the paid request or replenish the continuation allowance; user-facing recovery controls
+are still planned.
 
 Text checkpoint `378a755b6` has passed full CI, including seven conversation and 17 adapter cases
 against real KurrentDB and all seven fresh PostgreSQL targets. The later continuation implementation
-in PR #830 awaits CI and live qualification. Neither replacement is installed on testv5, and a
-permitted integration fixture is still needed. Company tools, approvals and visible
+and its Absurd-owned orchestration follow-up await live qualification. Neither replacement is
+installed on testv5, and a permitted integration fixture is still needed. Company tools, approvals and visible
 recovery remain unfinished. The completed file-copy restore and remaining snapshot-restore drill
 are recorded in [development status](/guide/status). Follow the
 [operator runbook](/operators/runbook) for those procedures and the
@@ -120,3 +134,5 @@ are recorded in [development status](/guide/status). Follow the
 - [`apps/conversation-computer`](https://github.com/elewa-git/opencrane/blob/main/apps/conversation-computer/README.md)
 - [`apps/_infra/agent-sandbox`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/agent-sandbox/README.md)
 - [`libs/backend/server/conversations`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/conversations/main/README.md)
+- [`conversation-computer-turn-workflow.ts`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/conversations/main/src/computers/turns/workflow/conversation-computer-turn-workflow.ts)
+- [`prisma-conversation-computer-activation-unit-of-work.ts`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/conversations/main/src/computers/activation/db/prisma-conversation-computer-activation-unit-of-work.ts)

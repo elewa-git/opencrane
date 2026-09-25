@@ -1,0 +1,8 @@
+:host { display: block; min-inline-size: 0; max-inline-size: 100%; }
+p, h2 { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--oc-ink-strong); }
+p { font-size: var(--oc-text-md); }
+h2 { font-weight: var(--oc-font-weight-medium); font-size: var(--oc-text-lg); }
+h2[data-usage-hint='h1'] { font-size: var(--oc-text-xl); }
+h2[data-usage-hint='h3'] { font-size: var(--oc-text-md); }
+h2[data-usage-hint='h4'], h2[data-usage-hint='h5'] { font-size: var(--oc-text-sm); }
+.conversation-a2ui-text__caption { color: var(--oc-ink-muted); font-size: var(--oc-text-sm); }

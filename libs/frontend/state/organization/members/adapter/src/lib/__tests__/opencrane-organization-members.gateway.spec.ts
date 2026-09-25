@@ -59,3 +59,36 @@ describe("OpenCrane organization-members gateway", function _OrganizationMembers
 		expect(post).toHaveBeenNthCalledWith(2, "/organization/members/invitations/{invitationId}/resend", { params: { header: { "Idempotency-Key": "refresh-key" }, path: { invitationId: "invite-1" } } });
 	});
 });
+
+describe("exact member removal adapter", function _RemovalSuite()
+{
+	it.each([[401, OrganizationMembersGatewayErrorKinds.Forbidden], [403, OrganizationMembersGatewayErrorKinds.Forbidden], [404, OrganizationMembersGatewayErrorKinds.NotFound], [503, OrganizationMembersGatewayErrorKinds.Unavailable]] as const)("preserves status %s without requiring a response body", async function _Failure(status, kind)
+	{
+		const gateway = _Gateway(vi.fn().mockResolvedValue({ response: { status } }));
+		await expect(gateway.remove("membership-1")).rejects.toMatchObject({ kind });
+	});
+
+	it("sends only the exact membership path and empty body and adopts server Suspended state", async function _ExactPath()
+	{
+		const member = { membershipId: "membership-1", displayName: "Alex", email: "alex@example.com", role: "member", status: "suspended", isCurrentUser: false, joinedAt: "2026-09-01T00:00:00Z", removal: { state: "unavailable", reason: "inactive" } };
+		const post = vi.fn().mockResolvedValue({ data: { member }, response: { status: 200 } });
+		await expect(_Gateway(post).remove("membership-1")).resolves.toEqual(member);
+		expect(post).toHaveBeenCalledExactlyOnceWith("/organization/members/{membershipId}/remove", { params: { path: { membershipId: "membership-1" } }, body: {} });
+	});
+
+	it.each([undefined, { state: "future" }, { state: "available", reason: "self" }, { state: "unavailable", reason: "future" }])("rejects an unknown removal projection %#", async function _UnknownCapability(removal)
+	{
+		const member = { membershipId: "membership-1", displayName: "Alex", email: "alex@example.com", role: "member", status: "active", isCurrentUser: false, joinedAt: "2026-09-01T00:00:00Z", removal };
+		await expect(_Gateway(vi.fn().mockResolvedValue({ data: { member }, response: { status: 200 } })).remove("membership-1")).rejects.toMatchObject({ kind: OrganizationMembersGatewayErrorKinds.Unknown });
+	});
+});
+
+
+describe("removal response status integrity", function _StatusIntegrity()
+{
+	it.each(["active", "future", null, undefined])("does not confirm access removal from status %s", async function _InvalidStatus(status)
+	{
+		const member = { membershipId: "membership-1", displayName: "Alex", email: "alex@example.com", role: "member", status, isCurrentUser: false, joinedAt: "2026-09-01T00:00:00Z", removal: { state: "unavailable", reason: "inactive" } };
+		await expect(_Gateway(vi.fn().mockResolvedValue({ data: { member }, response: { status: 200 } })).remove("membership-1")).rejects.toMatchObject({ kind: OrganizationMembersGatewayErrorKinds.Unknown });
+	});
+});

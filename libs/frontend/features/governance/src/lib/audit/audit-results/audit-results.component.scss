@@ -1,0 +1,7 @@
+/* Allow the report to shrink as a grid child while only its table scrolls. */
+:host { display: block; min-width: 0; }
+.audit-results { overflow-x: auto; }
+/* Keep headers and timestamps intact. Other text wraps at words instead of shrinking to letters. */
+th, td { overflow-wrap: normal; vertical-align: top; }
+th, td:first-child { white-space: nowrap; }
+.audit-results__more { display: inline-block; margin-block-start: var(--oc-space-4); }

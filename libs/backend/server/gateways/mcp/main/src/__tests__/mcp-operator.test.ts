@@ -101,7 +101,7 @@ function _mockPrisma(overrides: Record<string, (...args: unknown[]) => unknown> 
 }
 
 /** Mount the operator router, optionally seeding a session user. */
-function _buildApp(prisma: PrismaClient, user?: _SessionUser, eraProbeWorkflow: McpEraProbeWorkflow = _EraProbeWorkflow()): Express
+function _buildApp(prisma: PrismaClient, user?: _SessionUser, eraProbeWorkflow: McpEraProbeWorkflow = _EraProbeWorkflow(), principalId = "principal-1", uninstall = vi.fn().mockResolvedValue({ outcome: "removed" })): Express
 {
   const app = express();
   app.use(express.json());
@@ -110,13 +110,13 @@ function _buildApp(prisma: PrismaClient, user?: _SessionUser, eraProbeWorkflow: 
     app.use(function _seedAuthenticatedPrincipal(req, _res, next)
     {
       req.session = { authUser: { ...user, sub: user.sub ?? "subject-1", issuer: user.issuer ?? "https://issuer.example.test", groups: user.groups ?? [], isPlatformOperator: false, authenticatedAt: "2026-08-21T00:00:00.000Z" } } as typeof req.session;
-      req.authenticatedPrincipal = { principalId: "principal-1", siloId: "silo-1", issuer: "https://issuer.example.test", subject: user.sub ?? "subject-1" };
+		req.authenticatedPrincipal = { principalId, siloId: "silo-1", issuer: "https://issuer.example.test", subject: user.sub ?? "subject-1" };
       req.headers["x-forwarded-host"] = "silo-1.opencrane.test";
       next();
     });
   }
-  const directory: AuthenticatedPrincipalDirectory = { resolveAuthenticatedPrincipal: vi.fn().mockResolvedValue({ siloId: "silo-1", principalId: "principal-1" }) };
-  app.use("/api/v1/mcp", mcpOperatorRouter(new PrismaMcpOperatorUnitOfWork(prisma), directory, eraProbeWorkflow, _OciImageWorkflow(), _OciImageArtifacts()));
+	const directory: AuthenticatedPrincipalDirectory = { resolveAuthenticatedPrincipal: vi.fn().mockResolvedValue({ siloId: "silo-1", principalId }) };
+  app.use("/api/v1/mcp", mcpOperatorRouter(new PrismaMcpOperatorUnitOfWork(prisma), directory, eraProbeWorkflow, _OciImageWorkflow(), _OciImageArtifacts(), { uninstall } as never));
   return app;
 }
 
@@ -198,7 +198,7 @@ describe("mcp-operator router", function _suite()
 	it("shows an administrator a Ready tool without presenting a disabled server as assignable", async function _ShowsBlockedTool()
 	{
 		_enableOidc();
-		const server = { id: "srv-disabled", name: "Disabled", description: "", publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "Disabled", status: "Active", revisions: [_ReadyRevision("revision-ready", "tool-ready")], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.Accepted };
+		const server = { id: "srv-disabled", name: "Disabled", description: "", publisher: null, glyph: null, serverType: "MultiUser", credentialRequirement: "Credentialless", approvalStatus: "Disabled", status: "Active", revisions: [_ReadyRevision("revision-ready", "tool-ready")], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.Accepted };
 		const { prisma } = _mockPrisma({ "mcpServer.findMany": function _FindMany() { return Promise.resolve([server]); } });
 
 		const response = await request(_buildApp(prisma, { sub: "admin" })).get("/api/v1/mcp/servers");
@@ -222,7 +222,7 @@ describe("mcp-operator router", function _suite()
     it("restores a disabled server when its saved protocol evidence remains accepted", async function _RestoresDisabledServer()
     {
       _enableOidc();
-      const server = { id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", status: "Active", revisions: [_ReadyRevision("revision-1", "tool-1")], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.Accepted };
+      const server = { id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType: "SingleUser", credentialRequirement: "PrincipalCredential", approvalStatus: "Published", status: "Active", revisions: [_ReadyRevision("revision-1", "tool-1")], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.Accepted };
       const { prisma, spies } = _mockPrisma({
         "mcpServer.updateMany": function _Update() { return Promise.resolve({ count: 1 }); },
         "mcpServer.findFirst": function _Find() { return Promise.resolve(server); },
@@ -250,9 +250,39 @@ describe("mcp-operator router", function _suite()
   {
 	/** Two published servers filtered by the central transaction-bound authority. */
     const _servers = [
-      { id: "srv-open", name: "Open", description: "", publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "Published", status: "Active", revisions: [_ReadyRevision("revision-open", "tool-open")], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.NotRequired, createdAt: new Date() },
-      { id: "srv-closed", name: "Closed", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", status: "Active", revisions: [_ReadyRevision("revision-closed", "tool-closed")], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.NotRequired, createdAt: new Date() },
-    ];
+	  { id: "srv-open", name: "Open", description: "", publisher: null, glyph: null, serverType: "MultiUser", transport: "OciImage", credentialRequirement: "Credentialless", approvalStatus: "Published", status: "Active", revisions: [_ReadyRevision("revision-open", "tool-open")], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.NotRequired, createdAt: new Date() },
+	  { id: "srv-closed", name: "Closed", description: "", publisher: null, glyph: null, serverType: "SingleUser", transport: "OciImage", credentialRequirement: "PrincipalCredential", approvalStatus: "Published", status: "Active", revisions: [_ReadyRevision("revision-closed", "tool-closed")], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.NotRequired, createdAt: new Date() },
+	];
+
+	it("keeps an accepted remote server visible before its first connection discovers tools", async function _ShowsUndiscoveredRemote()
+	{
+		_enableOidc();
+		const server = { id: "srv-remote", name: "Remote", description: "", publisher: null, glyph: null, serverType: "SingleUser", transport: "StreamableHttp", credentialRequirement: "PrincipalCredential", approvalStatus: "Published", status: "Active", revisions: [], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.Accepted };
+		const { prisma } = _mockPrisma({ "mcpServer.findMany": function _FindMany() { return Promise.resolve([server]); } });
+
+		const response = await request(_buildApp(prisma, { sub: "user-1" })).get("/api/v1/mcp/catalog");
+
+		expect(response.status).toBe(200);
+		expect(response.body).toEqual([expect.objectContaining({ id: "srv-remote", tools: [] })]);
+	});
+
+	it("returns only the remote tool revision owned by each caller's active connection", async function _ScopesRemoteTools()
+	{
+		_enableOidc();
+		const findMany = vi.fn().mockImplementation(function _FindMany(input: unknown)
+		{
+			const query = input as { select: { revisions: { where: { OR: readonly [{ transport: string }, { connectionOwnerPrincipalId: string }] } } } };
+			const ownerPrincipalId = query.select.revisions.where.OR[1].connectionOwnerPrincipalId;
+			return Promise.resolve([{ id: "srv-remote", name: "Remote", description: "", publisher: null, glyph: null, serverType: "SingleUser", transport: "StreamableHttp", credentialRequirement: "PrincipalCredential", approvalStatus: "Published", status: "Active", revisions: [_ReadyRevision(`revision-${ownerPrincipalId}`, `tool-${ownerPrincipalId}`)], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.Accepted }]);
+		});
+		const { prisma } = _mockPrisma({ "mcpServer.findMany": findMany });
+
+		const first = await request(_buildApp(prisma, { sub: "user-1" }, _EraProbeWorkflow(), "principal-1")).get("/api/v1/mcp/catalog");
+		const second = await request(_buildApp(prisma, { sub: "user-2" }, _EraProbeWorkflow(), "principal-2")).get("/api/v1/mcp/catalog");
+
+		expect(first.body[0].tools).toEqual([expect.objectContaining({ toolRevisionId: "tool-principal-1" })]);
+		expect(second.body[0].tools).toEqual([expect.objectContaining({ toolRevisionId: "tool-principal-2" })]);
+	});
 
     it("returns only the servers the caller is entitled to", async function _filters()
     {
@@ -263,7 +293,7 @@ describe("mcp-operator router", function _suite()
 
       expect(res.status).toBe(200);
       expect(res.body.map(function _id(s: { id: string }) { return s.id; })).toEqual(["srv-open"]);
-      expect(res.body[0]).toMatchObject({ id: "srv-open", type: "multi-user", approvalStatus: "published" });
+      expect(res.body[0]).toMatchObject({ id: "srv-open", type: "multi-user", credentialRequirement: "credentialless", approvalStatus: "published" });
 		expect(res.body[0].tools).toEqual([{
 			toolRevisionId: "tool-open",
 			serverRevisionId: "revision-open",
@@ -296,7 +326,52 @@ describe("mcp-operator router", function _suite()
       expect(res.body.map(function _id(s: { id: string }) { return s.id; }).sort()).toEqual(["srv-closed", "srv-open"]);
 		expect(_authorizationAuthority.listPrincipalEntitled.mock.calls.every(function _NoClaims(call) { return !("groups" in call[0]); })).toBe(true);
     });
+
+	it.each(["constructor", "toString", "__proto__"])("rejects inherited credential requirement key %s", async function _RejectsInheritedRequirement(credentialRequirement)
+	{
+		_enableOidc();
+		const server = { ..._servers[0], credentialRequirement };
+		const { prisma } = _mockPrisma({ "mcpServer.findMany": function _FindMany() { return Promise.resolve([server]); } });
+
+		const response = await request(_buildApp(prisma, { sub: "user-1", groups: [] })).get("/api/v1/mcp/catalog");
+
+		expect(response.status).toBe(500);
+	});
   });
+
+	describe("GET /installed — persisted connection state", function _InstalledProjection()
+	{
+		it.each(["constructor", "toString", "__proto__"])("rejects inherited connection status key %s", async function _RejectsInheritedStatus(connectionStatus)
+		{
+			_enableOidc();
+			const { prisma } = _mockPrisma({ "mcpServerInstall.findMany": function _FindMany() { return Promise.resolve([{ mcpServerId: "srv-1", lifecycleState: "Installed", connectionStatus, lastUsedAt: null, connections: [] }]); } });
+
+			const response = await request(_buildApp(prisma, { sub: "user-1" })).get("/api/v1/mcp/installed");
+
+			expect(response.status).toBe(500);
+		});
+
+		it.each(["constructor", "toString", "__proto__", "Unknown"])("rejects unknown install lifecycle key %s", async function _RejectsInheritedLifecycle(lifecycleState)
+		{
+			_enableOidc();
+			const { prisma } = _mockPrisma({ "mcpServerInstall.findMany": function _FindMany() { return Promise.resolve([{ mcpServerId: "srv-1", lifecycleState, connectionStatus: "NeedsCredential", lastUsedAt: null, connections: [] }]); } });
+
+			const response = await request(_buildApp(prisma, { sub: "user-1" })).get("/api/v1/mcp/installed");
+
+			expect(response.status).toBe(500);
+		});
+
+		it("keeps a Removing install visible without exposing a historical connection", async function _ShowsRemoval()
+		{
+			_enableOidc();
+			const { prisma } = _mockPrisma({ "mcpServerInstall.findMany": function _FindMany() { return Promise.resolve([{ mcpServerId: "srv-1", lifecycleState: "Removing", connectionStatus: "NeedsCredential", lastUsedAt: null, connections: [] }]); } });
+
+			const response = await request(_buildApp(prisma, { sub: "user-1" })).get("/api/v1/mcp/installed");
+
+			expect(response.status).toBe(200);
+			expect(response.body).toEqual([{ serverId: "srv-1", lifecycleState: "removing", connectionStatus: "needs-credential", connectionGeneration: null, credentialUpdatedAt: null, failureCode: null, lastUsed: null }]);
+		});
+	});
 
   describe("POST /servers — remote registration", function _Registration()
   {
@@ -304,7 +379,7 @@ describe("mcp-operator router", function _suite()
     {
       _enableOidc();
       const workflow = _EraProbeWorkflow();
-      const server = { id: "srv-new", name: "Example MCP", description: "Public tools", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "PendingReview", status: "Draft", revisions: [], credentialSchema: [], entitlementSummary: null, endpoint: "https://mcp.example.test/", registrationKeyDigest: `sha256:${"a".repeat(64)}`, registrationDigest: `sha256:${"b".repeat(64)}`, eraProbeStatus: "Pending", eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 };
+      const server = { id: "srv-new", name: "Example MCP", description: "Public tools", publisher: null, glyph: null, serverType: "SingleUser", credentialRequirement: "PrincipalCredential", approvalStatus: "PendingReview", status: "Draft", revisions: [], credentialSchema: [], entitlementSummary: null, endpoint: "https://mcp.example.test/", registrationKeyDigest: `sha256:${"a".repeat(64)}`, registrationDigest: `sha256:${"b".repeat(64)}`, eraProbeStatus: "Pending", eraProtocolVersion: null, eraProbeEvidenceDigest: null, eraProbeFailureCode: null, eraProbeAttempts: 0 };
       const { prisma, spies } = _mockPrisma({
         "mcpRegistrationClaim.upsert": function _Claim(input: unknown) { return Promise.resolve((input as { create: unknown }).create); },
         "mcpServer.findUnique": function _FindUnique() { return Promise.resolve(null); },
@@ -314,7 +389,7 @@ describe("mcp-operator router", function _suite()
 
       const response = await request(_buildApp(prisma, { sub: "admin" }, workflow))
         .post("/api/v1/mcp/servers")
-        .send({ idempotencyKey: "registration-1", name: "Example MCP", description: "Public tools", endpoint: "https://mcp.example.test/" });
+        .send({ idempotencyKey: "registration-1", name: "Example MCP", description: "Public tools", endpoint: "https://mcp.example.test/", credentialRequirement: "principal-credential" });
 
       expect(response.status).toBe(201);
       expect(response.body).toEqual({ id: "srv-new", name: "Example MCP", endpoint: "https://mcp.example.test/", eraProbeStatus: "Pending" });
@@ -330,8 +405,8 @@ describe("mcp-operator router", function _suite()
 		{
 			_enableOidc();
 			const workflow = _EraProbeWorkflow();
-			const registrationDigest = `sha256:${createHash("sha256").update(JSON.stringify(["Example MCP", "Public tools", "https://mcp.example.test/"])).digest("hex")}`;
-			const server = { id: "srv-new", name: "Example MCP", description: "Public tools", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "PendingReview", status: "Active", revisions: [], credentialSchema: [], entitlementSummary: null, endpoint: "https://mcp.example.test/", registrationKeyDigest: `sha256:${"a".repeat(64)}`, registrationDigest, eraProbeStatus: "Accepted", eraProtocolVersion: "2026-07-28", eraProbeEvidenceDigest: `sha256:${"c".repeat(64)}`, eraProbeFailureCode: null, eraProbeAttempts: 1 };
+			const registrationDigest = `sha256:${createHash("sha256").update(JSON.stringify(["Example MCP", "Public tools", "https://mcp.example.test/", "principal-credential"])).digest("hex")}`;
+			const server = { id: "srv-new", name: "Example MCP", description: "Public tools", publisher: null, glyph: null, serverType: "SingleUser", credentialRequirement: "PrincipalCredential", approvalStatus: "PendingReview", status: "Active", revisions: [], credentialSchema: [], entitlementSummary: null, endpoint: "https://mcp.example.test/", registrationKeyDigest: `sha256:${"a".repeat(64)}`, registrationDigest, eraProbeStatus: "Accepted", eraProtocolVersion: "2026-07-28", eraProbeEvidenceDigest: `sha256:${"c".repeat(64)}`, eraProbeFailureCode: null, eraProbeAttempts: 1 };
 			const { prisma, spies } = _mockPrisma({
 				"mcpRegistrationClaim.upsert": function _Claim(input: unknown) { return Promise.resolve((input as { create: unknown }).create); },
 				"mcpServer.findUnique": function _FindUnique() { return Promise.resolve(server); },
@@ -339,7 +414,7 @@ describe("mcp-operator router", function _suite()
 
 			const response = await request(_buildApp(prisma, { sub: "admin" }, workflow))
 				.post("/api/v1/mcp/servers")
-				.send({ idempotencyKey: "registration-1", name: "Example MCP", description: "Public tools", endpoint: "https://mcp.example.test/" });
+				.send({ idempotencyKey: "registration-1", name: "Example MCP", description: "Public tools", endpoint: "https://mcp.example.test/", credentialRequirement: "principal-credential" });
 
 			expect(response.status).toBe(201);
 			expect(response.body).toEqual({ id: "srv-new", name: "Example MCP", endpoint: "https://mcp.example.test/", eraProbeStatus: "Accepted" });
@@ -353,52 +428,90 @@ describe("mcp-operator router", function _suite()
     /**
      * Stateful single-install store backing install requests.
      */
-    function _statefulPrisma(serverType: string): { prisma: PrismaClient; store: { install: Record<string, unknown> | null } }
-    {
-      const store: { install: Record<string, unknown> | null } = { install: null };
-      const overrides: Record<string, (...args: unknown[]) => unknown> = {
-        "mcpServer.findFirst": function _serverFind() { return Promise.resolve({ id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType, approvalStatus: "Published", status: "Active", revisions: [_ReadyRevision("revision-1", "tool-1")], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.NotRequired }); },
+	function _statefulPrisma(serverType: string, credentialRequirement: string, transport = "StreamableHttp", revisions: readonly ReturnType<typeof _ReadyRevision>[] = [_ReadyRevision("revision-1", "tool-1")]): { prisma: PrismaClient; store: { install: Record<string, unknown> | null } }
+	{
+	  const store: { install: Record<string, unknown> | null } = { install: null };
+	  const overrides: Record<string, (...args: unknown[]) => unknown> = {
+		"mcpServer.findFirst": function _serverFind() { return Promise.resolve({ id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType, transport, credentialRequirement, approvalStatus: "Published", status: "Active", revisions, credentialSchema: [], entitlementSummary: null, eraProbeStatus: transport === "OciImage" ? McpEraProbeStates.NotRequired : McpEraProbeStates.Accepted }); },
         "mcpServerInstall.upsert": function _upsert(arg: unknown) {
           const create = (arg as { create: Record<string, unknown> }).create;
-          store.install ??= { mcpServerId: create.mcpServerId, principalId: create.principalId, connectionStatus: create.connectionStatus ?? "NeedsCredential", lastUsedAt: null };
+		  store.install ??= { id: "install-1", mcpServerId: create.mcpServerId, principalId: create.principalId, lifecycleState: create.lifecycleState ?? "Installed", connectionStatus: create.connectionStatus ?? "NeedsCredential", lastUsedAt: null, connections: [] };
           return Promise.resolve(store.install);
         },
+		"mcpServerInstall.updateMany": function _UpdateInstall(arg: unknown) {
+			if (!store.install)
+				return Promise.resolve({ count: 0 });
+			Object.assign(store.install, (arg as { data: Record<string, unknown> }).data);
+			return Promise.resolve({ count: 1 });
+		},
         "auditEntry.create": function _audit() { return Promise.resolve({}); },
       };
       const { prisma } = _mockPrisma(overrides);
       return { prisma, store };
     }
 
-    it("installs a single-user server as needs-credential", async function _install()
+	it.each([
+	  ["SingleUser", "Credentialless", "needs-credential"],
+	  ["SingleUser", "PrincipalCredential", "needs-credential"],
+	  ["SingleUser", "SharedCredential", "needs-credential"],
+	  ["MultiUser", "Credentialless", "needs-credential"],
+	  ["MultiUser", "PrincipalCredential", "needs-credential"],
+	  ["MultiUser", "SharedCredential", "needs-credential"],
+	  ["RemoteOauth", "Credentialless", "needs-credential"],
+	  ["RemoteOauth", "PrincipalCredential", "needs-credential"],
+	  ["RemoteOauth", "SharedCredential", "needs-credential"],
+	])("installs remote %s with %s as %s", async function _InstallMatrix(serverType, credentialRequirement, expectedStatus)
     {
-      const { prisma } = _statefulPrisma("SingleUser");
+      const { prisma } = _statefulPrisma(serverType, credentialRequirement);
       const res = await request(_buildApp(prisma, { sub: "user-1" })).post("/api/v1/mcp/installed").send({ serverId: "srv-1" });
 
       expect(res.status).toBe(201);
-      expect(res.body).toMatchObject({ serverId: "srv-1", connectionStatus: "needs-credential" });
+		expect(res.body).toMatchObject({ serverId: "srv-1", lifecycleState: "installed", connectionStatus: expectedStatus });
 		expect(_authorizationAuthority.constructedWith).toHaveBeenCalledTimes(1);
-		expect(_authorizationAuthority.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({
+	  expect(_authorizationAuthority.admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({
 			action: ProductAuthorizationActions.Install,
 			resource: { kind: ProductAuthorizationResourceKinds.McpServer, id: "srv-1" },
 			actorKind: "user",
 			actorId: "principal-1",
 			argumentsDigest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
-		}));
-    });
+	  }));
+	});
 
-    it("installs a multi-user server as shared-key", async function _installShared()
-    {
-      const { prisma } = _statefulPrisma("MultiUser");
-      const res = await request(_buildApp(prisma, { sub: "user-1" })).post("/api/v1/mcp/installed").send({ serverId: "srv-1" });
+	it("installs an accepted remote server before any connection revision exists", async function _InstallsBeforeDiscovery()
+	{
+		const { prisma, store } = _statefulPrisma("SingleUser", "Credentialless", "StreamableHttp", []);
 
-      expect(res.status).toBe(201);
-      expect(res.body.connectionStatus).toBe("shared-key");
-    });
+		const response = await request(_buildApp(prisma, { sub: "user-1" })).post("/api/v1/mcp/installed").send({ serverId: "srv-1" });
+
+		expect(response.status).toBe(201);
+		expect(response.body).toMatchObject({ serverId: "srv-1", lifecycleState: "installed", connectionStatus: "needs-credential" });
+		expect(store.install).toMatchObject({ mcpServerId: "srv-1", principalId: "principal-1", connectionStatus: "NeedsCredential" });
+	});
+
+	it("installs a credentialless OCI image only after its Ready revision exists", async function _InstallsReadyOci()
+	{
+		const { prisma } = _statefulPrisma("SingleUser", "Credentialless", "OciImage");
+
+		const response = await request(_buildApp(prisma, { sub: "user-1" })).post("/api/v1/mcp/installed").send({ serverId: "srv-1" });
+
+		expect(response.status).toBe(201);
+		expect(response.body).toMatchObject({ serverId: "srv-1", lifecycleState: "installed", connectionStatus: "credentialless" });
+	});
+
+	it("refuses an OCI install before image validation creates a Ready revision", async function _RejectsUnreadyOci()
+	{
+		const { prisma, store } = _statefulPrisma("SingleUser", "Credentialless", "OciImage", []);
+
+		const response = await request(_buildApp(prisma, { sub: "user-1" })).post("/api/v1/mcp/installed").send({ serverId: "srv-1" });
+
+		expect(response.status).toBe(404);
+		expect(store.install).toBeNull();
+	});
 
 	it("refuses a stale server identifier after the server becomes inactive", async function _RejectsInactiveServer()
 	{
 		const { prisma, spies } = _mockPrisma({
-			"mcpServer.findFirst": function _FindServer() { return Promise.resolve({ id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "Published", status: "Degraded", revisions: [_ReadyRevision("revision-1", "tool-1")], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.Accepted }); },
+			"mcpServer.findFirst": function _FindServer() { return Promise.resolve({ id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType: "MultiUser", credentialRequirement: "Credentialless", approvalStatus: "Published", status: "Degraded", revisions: [_ReadyRevision("revision-1", "tool-1")], credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.Accepted }); },
 		});
 
 		const response = await request(_buildApp(prisma, { sub: "user-1" })).post("/api/v1/mcp/installed").send({ serverId: "srv-1" });
@@ -411,12 +524,37 @@ describe("mcp-operator router", function _suite()
 	it("refuses installation when the central authority removes current access", async function _RejectsDeniedInstall()
 	{
 		_authorizationAuthority.admitPrincipal.mockResolvedValue({ outcome: "deny", reason: "no_matching_grant", grantIds: [], evidence: null });
-		const { prisma, store } = _statefulPrisma("MultiUser");
+		const { prisma, store } = _statefulPrisma("MultiUser", "Credentialless");
 
 		const response = await request(_buildApp(prisma, { sub: "user-1" })).post("/api/v1/mcp/installed").send({ serverId: "srv-1" });
 
 		expect(response.status).toBe(404);
 		expect(store.install).toBeNull();
+	});
+
+	it("returns a conflict while the retained install is still being removed", async function _RejectsReinstallDuringRemoval()
+	{
+		const { prisma, store } = _statefulPrisma("SingleUser", "Credentialless");
+		await request(_buildApp(prisma, { sub: "user-1" })).post("/api/v1/mcp/installed").send({ serverId: "srv-1" });
+		store.install!.lifecycleState = "Removing";
+
+		const response = await request(_buildApp(prisma, { sub: "user-1" })).post("/api/v1/mcp/installed").send({ serverId: "srv-1" });
+
+		expect(response.status).toBe(409);
+		expect(response.body).toMatchObject({ code: "MCP_INSTALL_REMOVAL_IN_PROGRESS" });
+	});
+
+	it("reactivates a Removed install while retaining its prior generation evidence", async function _ReinstallsRemoved()
+	{
+		const { prisma, store } = _statefulPrisma("SingleUser", "Credentialless");
+		await request(_buildApp(prisma, { sub: "user-1" })).post("/api/v1/mcp/installed").send({ serverId: "srv-1" });
+		Object.assign(store.install!, { lifecycleState: "Removed", connectionStatus: "Active", lastUsedAt: new Date(), connections: [{ generation: 7, credentialCustodiedAt: new Date("2026-09-12T12:00:00.000Z"), failureCode: "credential-conflict" }] });
+
+		const response = await request(_buildApp(prisma, { sub: "user-1" })).post("/api/v1/mcp/installed").send({ serverId: "srv-1" });
+
+		expect(response.status).toBe(201);
+		expect(response.body).toEqual({ serverId: "srv-1", lifecycleState: "installed", connectionStatus: "needs-credential", connectionGeneration: 7, credentialUpdatedAt: "2026-09-12T12:00:00.000Z", failureCode: "credential-conflict", lastUsed: null });
+		expect(store.install).toMatchObject({ lifecycleState: "Installed", connectionStatus: "NeedsCredential", lastUsedAt: null });
 	});
 
   });
@@ -428,20 +566,33 @@ describe("mcp-operator router", function _suite()
       const { prisma, spies } = _mockPrisma({ "mcpServerInstall.findMany": function _f() { return Promise.resolve([]); } });
       await request(_buildApp(prisma, { sub: "caller-9" })).get("/api/v1/mcp/installed");
 
-      expect(spies["mcpServerInstall.findMany"]).toHaveBeenCalledWith(expect.objectContaining({ where: { principalId: "principal-1" } }));
+	  expect(spies["mcpServerInstall.findMany"]).toHaveBeenCalledWith(expect.objectContaining({ where: { principalId: "principal-1", lifecycleState: { not: "Removed" } } }));
     });
 
     it("scopes DELETE /installed/:serverId to the calling user's id", async function _deleteScoped()
     {
-      const { prisma, spies } = _mockPrisma({
-        "mcpServerInstall.deleteMany": function _d() { return Promise.resolve({ count: 1 }); },
-        "auditEntry.create": function _a() { return Promise.resolve({}); },
-      });
-      const res = await request(_buildApp(prisma, { sub: "caller-9" })).delete("/api/v1/mcp/installed/srv-1");
+      const { prisma, spies } = _mockPrisma();
+	  const uninstall = vi.fn().mockResolvedValue({ outcome: "removed" });
+	  const res = await request(_buildApp(prisma, { sub: "caller-9" }, _EraProbeWorkflow(), "principal-1", uninstall)).delete("/api/v1/mcp/installed/srv-1");
 
-      expect(res.status).toBe(204);
-      expect(spies["mcpServerInstall.deleteMany"]).toHaveBeenCalledWith({ where: { mcpServerId: "srv-1", principalId: "principal-1" } });
+	  expect(res.status).toBe(204);
+	  expect(uninstall).toHaveBeenCalledWith({ siloId: "silo-1", actorPrincipalId: "principal-1", serverId: "srv-1" });
+	  expect(spies["mcpServerInstall.deleteMany"]).toBeUndefined();
     });
+
+	it.each([
+		["not-found", 404],
+		["removing", 202],
+		["removed", 204],
+	])("maps uninstall outcome %s to HTTP %i", async function _MapsUninstallOutcome(outcome, status)
+	{
+		const { prisma } = _mockPrisma();
+		const uninstall = vi.fn().mockResolvedValue({ outcome });
+
+		const response = await request(_buildApp(prisma, { sub: "caller-9" }, _EraProbeWorkflow(), "principal-1", uninstall)).delete("/api/v1/mcp/installed/srv-1");
+
+		expect(response.status).toBe(status);
+	});
 
   });
 });

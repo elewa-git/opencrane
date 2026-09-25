@@ -16,6 +16,8 @@ import { ConversationAssetActionKinds, ConversationAssetPresentationStates, type
 export class ConversationAttachmentChipComponent
 {
 	public readonly item = input.required<ConversationAssetPresentation>();
+	/** Whether this tray is the editable next-message selection. */
+	public readonly canDeselect = input(false);
 	public readonly actionRequested = output<ConversationAssetActionIntent>();
 	public readonly states = ConversationAssetPresentationStates;
 
@@ -27,6 +29,9 @@ export class ConversationAttachmentChipComponent
 
 	/** Emit one pre-admission or server-authorized removal intent. */
 	public remove(): void { this._emit(ConversationAssetActionKinds.Remove); }
+
+	/** Remove the file from the next message without deleting a server-held upload. */
+	public deselect(): void { this._emit(ConversationAssetActionKinds.Deselect); }
 
 	/** Emit one typed parent-owned action. */
 	private _emit(kind: ConversationAssetActionKinds): void { this.actionRequested.emit({ kind, assetId: this.item().id }); }

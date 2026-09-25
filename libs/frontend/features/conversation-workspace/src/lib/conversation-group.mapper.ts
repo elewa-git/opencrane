@@ -1,4 +1,4 @@
-import type { ConversationEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryAudiences, ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates, type ConversationEntry } from "@opencrane/contracts";
 import { ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
 import type { ConversationGroupSource, ConversationWorkspaceDetail } from "@opencrane/state/conversation/workspace";
 
@@ -9,7 +9,7 @@ import type { ConversationGroupSource, ConversationWorkspaceDetail } from "@open
  */
 export function _GroupRequestSource(entry: ConversationEntry, payloads: Readonly<Record<string, string>>, selected: ConversationWorkspaceDetail, subject: string | undefined): ConversationGroupSource | null
 {
-	if (selected.mode !== ConversationModes.Group || selected.lifecycle !== ConversationLifecycles.Open || selected.accessEndedPosition !== null || entry.conversationId !== selected.id || entry.author.kind !== "human" || subject === undefined || entry.author.participantId !== subject)
+	if (selected.mode !== ConversationModes.Group || selected.lifecycle !== ConversationLifecycles.Open || selected.accessEndedPosition !== null || entry.conversationId !== selected.id || entry.author.kind !== ConversationAuthorKinds.Human || subject === undefined || entry.author.participantId !== subject)
 		return null;
 	return _textSource(entry, payloads);
 }
@@ -17,7 +17,7 @@ export function _GroupRequestSource(entry: ConversationEntry, payloads: Readonly
 /** Selects a completed assistant response for an edited human share to its immediate group. */
 export function _GroupShareSource(entry: ConversationEntry, payloads: Readonly<Record<string, string>>, selected: ConversationWorkspaceDetail): ConversationGroupSource | null
 {
-	if (selected.parent === null || selected.accessEndedPosition !== null || entry.conversationId !== selected.id || entry.author.kind !== "agent")
+	if (selected.parent === null || selected.accessEndedPosition !== null || entry.conversationId !== selected.id || entry.author.kind !== ConversationAuthorKinds.Agent)
 		return null;
 	return _textSource(entry, payloads);
 }
@@ -25,12 +25,12 @@ export function _GroupShareSource(entry: ConversationEntry, payloads: Readonly<R
 /** Refuses private, partial, missing, or mixed-content sources instead of silently dropping content. */
 function _textSource(entry: ConversationEntry, payloads: Readonly<Record<string, string>>): ConversationGroupSource | null
 {
-	if (entry.kind !== "message" || entry.state !== "completed" || entry.visibility.audience !== "conversation" || entry.blocks.length === 0)
+	if (entry.kind !== ConversationEntryKinds.Message || entry.state !== MessageStates.Completed || entry.visibility.audience !== ConversationEntryAudiences.Conversation || entry.blocks.length === 0)
 		return null;
 	const texts: string[] = [];
 	for (const block of entry.blocks)
 	{
-		if (block.kind !== "text" || typeof payloads[block.payloadRef] !== "string")
+		if (block.kind !== ConversationMessageContentBlockKinds.Text || typeof payloads[block.payloadRef] !== "string")
 			return null;
 		texts.push(payloads[block.payloadRef]!);
 	}

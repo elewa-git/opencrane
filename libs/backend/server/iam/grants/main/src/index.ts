@@ -7,3 +7,5 @@ export * from "./resource-share.types";
 export * from "./resource-share-service";
 export * from "./prisma-resource-share-unit-of-work";
 export * from "./openapi";
+
+export { _CreateResourceShareCallerResolver } from "./resource-share-caller-resolver";

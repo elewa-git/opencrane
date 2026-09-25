@@ -72,4 +72,13 @@ expect_failure "source anchor is stale" env WORKLOAD_OWNERSHIP_REGISTRY="$regist
 app_source_registry="$(mutate_app_source_registry)"
 expect_failure "classification is not an app-composition class" env APP_COMPOSITION_SOURCE_REGISTRY="$app_source_registry" "$GUARD"
 
+node --input-type=module - "$APP_SOURCE_REGISTRY" "$TMP_DIR/app-source-outside-bootstrap.json" <<'NODE'
+import { readFileSync, writeFileSync } from "node:fs";
+const [, , input, output] = process.argv;
+const registry = JSON.parse(readFileSync(input, "utf8"));
+registry.allowedFiles.push({ path: "apps/opencrane/src/domain.ts", owner: "apps/opencrane", classification: "process-composition" });
+writeFileSync(output, `${JSON.stringify(registry, null, 2)}\n`);
+NODE
+expect_failure "server production source must be bootstrap composition" env APP_COMPOSITION_SOURCE_REGISTRY="$TMP_DIR/app-source-outside-bootstrap.json" "$GUARD"
+
 printf 'Workload-ownership and app-composition boundary negative tests passed.\n'

@@ -2,9 +2,9 @@ import { Injectable, inject } from "@angular/core";
 
 import { ___ParseApiErrorEnvelope } from "@opencrane/contracts";
 import { ControlPlaneApiService } from "@opencrane/core";
-import { OrganizationMembersGatewayError, OrganizationMembersGatewayErrorKinds, type AcceptOrganizationInvitationResult, type CreateOrganizationInvitationsCommand, type CreateOrganizationInvitationsResult, type OrganizationInviteValidationResult, type OrganizationMembersGateway, type OrganizationMemberDirectory, type ResendOrganizationInvitationResult } from "@opencrane/state/organization/members";
+import { OrganizationMembersGatewayError, OrganizationMembersGatewayErrorKinds, type AcceptOrganizationInvitationResult, type CreateOrganizationInvitationsCommand, type CreateOrganizationInvitationsResult, type OrganizationInviteValidationResult, type OrganizationMembersGateway, type OrganizationMemberDirectory, type OrganizationMember, type ResendOrganizationInvitationResult } from "@opencrane/state/organization/members";
 
-import { _MapOrganizationInviteAcceptance, _MapOrganizationInviteCreate, _MapOrganizationInviteResend, _MapOrganizationInviteValidation, _MapOrganizationMemberDirectory } from "./organization-members-wire.mapper";
+import { _MapOrganizationInviteAcceptance, _MapOrganizationInviteCreate, _MapOrganizationInviteResend, _MapOrganizationInviteValidation, _MapOrganizationMemberDirectory, _MapOrganizationMemberRemoval } from "./organization-members-wire.mapper";
 
 /**
  * Adapts the generated organization-members endpoints to the browser port used by Settings.
@@ -21,15 +21,26 @@ export class OpenCraneOrganizationMembersGateway implements OrganizationMembersG
 	public async load(): Promise<OrganizationMemberDirectory>
 	{
 		const result = await this._api.client.GET("/organization/members");
-		if (!result.data) throw _GatewayError(result.error, result.response.status);
+		if (!result.data)
+			throw _GatewayError(result.error, result.response.status);
 		return _MapOrganizationMemberDirectory(result.data);
+	}
+
+	/** @inheritdoc */
+	public async remove(membershipId: string): Promise<OrganizationMember>
+	{
+		const result = await this._api.client.POST("/organization/members/{membershipId}/remove", { params: { path: { membershipId } }, body: {} });
+		if (!result.data)
+			throw _GatewayError(result.error, result.response.status);
+		return _MapOrganizationMemberRemoval(result.data);
 	}
 
 	/** @inheritdoc */
 	public async validate(emails: readonly string[]): Promise<OrganizationInviteValidationResult>
 	{
 		const result = await this._api.client.POST("/organization/members/invitations/validate", { body: { emails: [...emails] } });
-		if (!result.data) throw _GatewayError(result.error, result.response.status);
+		if (!result.data)
+			throw _GatewayError(result.error, result.response.status);
 		return _MapOrganizationInviteValidation(result.data);
 	}
 
@@ -37,7 +48,8 @@ export class OpenCraneOrganizationMembersGateway implements OrganizationMembersG
 	public async invite(command: CreateOrganizationInvitationsCommand): Promise<CreateOrganizationInvitationsResult>
 	{
 		const result = await this._api.client.POST("/organization/members/invitations", { params: { header: { "Idempotency-Key": command.idempotencyKey } }, body: { emails: [...command.emails], role: command.role } });
-		if (!result.data) throw _GatewayError(result.error, result.response.status);
+		if (!result.data)
+			throw _GatewayError(result.error, result.response.status);
 		return _MapOrganizationInviteCreate(result.data);
 	}
 
@@ -45,7 +57,8 @@ export class OpenCraneOrganizationMembersGateway implements OrganizationMembersG
 	public async resend(invitationId: string, idempotencyKey: string): Promise<ResendOrganizationInvitationResult>
 	{
 		const result = await this._api.client.POST("/organization/members/invitations/{invitationId}/resend", { params: { header: { "Idempotency-Key": idempotencyKey }, path: { invitationId } } });
-		if (!result.data) throw _GatewayError(result.error, result.response.status);
+		if (!result.data)
+			throw _GatewayError(result.error, result.response.status);
 		return _MapOrganizationInviteResend(result.data);
 	}
 
@@ -53,7 +66,8 @@ export class OpenCraneOrganizationMembersGateway implements OrganizationMembersG
 	public async accept(token: string): Promise<AcceptOrganizationInvitationResult>
 	{
 		const result = await this._api.client.POST("/organization/members/invitations/accept", { body: { token } });
-		if (!result.data) throw _GatewayError(result.error, result.response.status);
+		if (!result.data)
+			throw _GatewayError(result.error, result.response.status);
 		return _MapOrganizationInviteAcceptance(result.data);
 	}
 }
@@ -71,17 +85,24 @@ function _GatewayError(value: unknown, status: number): OrganizationMembersGatew
 		invalid: OrganizationMembersGatewayErrorKinds.Invalid,
 		conflict: OrganizationMembersGatewayErrorKinds.Conflict
 	};
-	const kind = codeKinds[code] ?? _StatusKind(status);
+	const kind = status === 401 || status === 403 ? OrganizationMembersGatewayErrorKinds.Forbidden : codeKinds[code] ?? _StatusKind(status);
 	return new OrganizationMembersGatewayError(kind, error?.error ?? "Organization membership authority could not complete this request.");
 }
 
 /** Map transport status only after a stable public code had no more precise category. */
 function _StatusKind(status: number): OrganizationMembersGatewayErrorKinds
 {
-	if (status === 402) return OrganizationMembersGatewayErrorKinds.PaymentRequired;
-	if (status === 403) return OrganizationMembersGatewayErrorKinds.Forbidden;
-	if (status === 409) return OrganizationMembersGatewayErrorKinds.Conflict;
-	if (status === 410) return OrganizationMembersGatewayErrorKinds.Expired;
-	if (status === 503) return OrganizationMembersGatewayErrorKinds.Unavailable;
+	if (status === 402)
+		return OrganizationMembersGatewayErrorKinds.PaymentRequired;
+	if (status === 401 || status === 403)
+		return OrganizationMembersGatewayErrorKinds.Forbidden;
+	if (status === 404)
+		return OrganizationMembersGatewayErrorKinds.NotFound;
+	if (status === 409)
+		return OrganizationMembersGatewayErrorKinds.Conflict;
+	if (status === 410)
+		return OrganizationMembersGatewayErrorKinds.Expired;
+	if (status === 503)
+		return OrganizationMembersGatewayErrorKinds.Unavailable;
 	return OrganizationMembersGatewayErrorKinds.Unknown;
 }

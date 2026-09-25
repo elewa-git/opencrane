@@ -7,6 +7,7 @@
 {{- $ociRegistryAuthorization := $ociRegistry.authorization -}}
 {{- $history := .Values.historyStore.kurrentdb -}}
 {{- $conversationPayloadKeyring := .Values.clustertenantManager.conversationPrivatePayloadKeyring -}}
+{{- $mcpMaterialKeyring := .Values.clustertenantManager.mcpConnectionMaterialKeyring -}}
 {{- $skillAuthoring := (index .Values "opencrane-skill-authoring").skillAuthoring -}}
 {{- $mcpExecutor := (index .Values "opencrane-mcp-executor").mcpExecutor -}}
 {{- $controlPlaneHost := .Values.ingress.controlPlaneHost | default (printf "platform.%s" .Values.ingress.domain) -}}
@@ -52,6 +53,12 @@
 {{- end -}}
 {{- if or (empty $conversationPayloadKeyring.existingSecret) (empty $conversationPayloadKeyring.secretKey) -}}
 {{- fail "clustertenantManager.conversationPrivatePayloadKeyring existingSecret and secretKey are required" -}}
+{{- end -}}
+{{- if or (empty $mcpMaterialKeyring.existingSecret) (empty $mcpMaterialKeyring.secretKey) -}}
+{{- fail "clustertenantManager.mcpConnectionMaterialKeyring existingSecret and secretKey are required" -}}
+{{- end -}}
+{{- if eq $mcpMaterialKeyring.existingSecret $conversationPayloadKeyring.existingSecret -}}
+{{- fail "MCP material and conversation payload keyrings must use separate Secrets" -}}
 {{- end -}}
 apiVersion: apps/v1
 kind: Deployment
@@ -125,6 +132,18 @@ spec:
             - name: OPENCRANE_COMPUTER_MAX_TURN_COST_USD_MICROS
               value: {{ .Values.agentSandbox.maximumTurnCostUsdMicros | quote }}
             {{- end }}
+            - name: MCP_CONNECTION_CREDENTIAL_NAMESPACE
+              value: {{ include "opencrane.server.mcpCredentialNamespace" . | quote }}
+            - name: MCP_CONNECTION_MATERIAL_KEYRING_PATH
+              value: /var/run/opencrane/mcp-connection-material/keyring.json
+            - name: MCP_SERVER_TOKEN_PATH
+              value: /var/run/opencrane/mcp-server/token
+            - name: MCP_SERVER_SERVICE_ACCOUNT_NAME
+              value: {{ printf "%s-opencrane-server" (include "opencrane.fullname" .) | quote }}
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
             - name: CONVERSATION_PRIVATE_PAYLOAD_KEYRING_PATH
               value: /var/run/opencrane/conversation-payload/keyring.json
             - name: OPENCRANE_WORKFLOW_DATABASE_POOL_SIZE
@@ -133,10 +152,10 @@ spec:
               value: {{ .Values.clustertenantManager.workflows.workerConcurrency | quote }}
             - name: OPENCRANE_WORKFLOW_POLL_INTERVAL_MS
               value: {{ .Values.clustertenantManager.workflows.pollIntervalMilliseconds | quote }}
-            - name: OPENCRANE_MCP_ERA_PROBE_TIMEOUT_MS
-              value: {{ .Values.clustertenantManager.workflows.mcpEraProbeTimeoutMilliseconds | quote }}
-            - name: OPENCRANE_MCP_ERA_PROBE_MAX_RESPONSE_BYTES
-              value: {{ .Values.clustertenantManager.workflows.mcpEraProbeMaximumResponseBytes | quote }}
+            - name: OPENCRANE_MCP_REMOTE_TIMEOUT_MS
+              value: {{ .Values.clustertenantManager.workflows.mcpRemoteTimeoutMilliseconds | quote }}
+            - name: OPENCRANE_MCP_REMOTE_MAX_RESPONSE_BYTES
+              value: {{ .Values.clustertenantManager.workflows.mcpRemoteMaximumResponseBytes | quote }}
             - name: OPENCRANE_OCI_REGISTRY_BASE_URL
               value: {{ $ociRegistry.baseUrl | quote }}
             - name: OPENCRANE_OCI_REGISTRY_REPOSITORY
@@ -262,6 +281,13 @@ spec:
             # LiteLLM remains a target model-routing dependency.
             - name: LITELLM_ENDPOINT
               value: {{ include "opencrane.litellmEndpoint" . | quote }}
+            {{- $litellmPreforward := include "opencrane.litellm.preforward" . | fromJson }}
+            {{- if $litellmPreforward }}
+            - name: LITELLM_PREFORWARD_CONTRACT
+              value: {{ $litellmPreforward.contract | quote }}
+            - name: LITELLM_PREFORWARD_ENDPOINT
+              value: {{ $litellmPreforward.origin | quote }}
+            {{- end }}
             - name: LITELLM_SPEND_PATH_TEMPLATE
               value: {{ .Values.litellm.spendPathTemplate | quote }}
             {{- if .Values.litellm.enabled }}
@@ -308,6 +334,12 @@ spec:
               value: /var/run/opencrane/history-store/credentials/password
             {{- end }}
           volumeMounts:
+            - name: mcp-connection-material-keyring
+              mountPath: /var/run/opencrane/mcp-connection-material
+              readOnly: true
+            - name: mcp-server-token
+              mountPath: /var/run/opencrane/mcp-server
+              readOnly: true
             - name: conversation-private-payload-keyring
               mountPath: /var/run/opencrane/conversation-payload
               readOnly: true
@@ -361,6 +393,21 @@ spec:
           resources:
             {{- toYaml .Values.clustertenantManager.resources | nindent 12 }}
       volumes:
+        - name: mcp-connection-material-keyring
+          secret:
+            secretName: {{ $mcpMaterialKeyring.existingSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ $mcpMaterialKeyring.secretKey | quote }}
+                path: keyring.json
+        - name: mcp-server-token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  audience: opencrane-server-mcp
+                  expirationSeconds: 600
+                  path: token
         - name: conversation-private-payload-keyring
           secret:
             secretName: {{ $conversationPayloadKeyring.existingSecret | quote }}

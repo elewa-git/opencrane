@@ -8,3 +8,6 @@ export { __UserOnboardingChatAuthority } from "./user-onboarding-chat-authority"
 export { __CreateUserOnboardingRouter, UserOnboardingPersonaWorkflowCoordinator } from "./user-onboarding.http";
 export type { UserOnboardingOwnerResolver, UserOnboardingPersonaWorkflowPort, UserOnboardingRouterDependencies } from "./user-onboarding.http.types";
 export { _UserOnboardingOpenapiPaths } from "./openapi";
+export { _CreateUserOnboardingComposition, _CreatePersonaOnboardingWorkflow } from "./composition/user-onboarding-composition";
+export type { UserOnboardingRouteComposition } from "./composition/user-onboarding-composition.types";
+export { _ResolveUserOnboardingOwner } from "./http/user-onboarding-owner-resolver";

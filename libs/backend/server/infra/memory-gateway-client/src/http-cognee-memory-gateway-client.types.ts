@@ -1,50 +1,62 @@
-/**
- * Why one memory-gateway exchange failed, with no detail that could leak a body or a fact.
- *
- * `timeout`  - the per-exchange deadline fired.
- * `network`  - fetch itself rejected: DNS, connection refused, or a refused redirect.
- * `oversize` - the response was larger than the 256 KiB ceiling and was cancelled unread.
- * `http_<status>` - the gateway answered non-2xx; the body was cancelled, never read.
- *
- * This code is the only thing that leaves the transport, which is why it is safe to log or store as
- * an invocation's failure code.
- */
-export type MemoryGatewayTransportFailureCode = "timeout" | "network" | "oversize" | `http_${number}`;
+import type { MemoryMutationDeliveryStates } from "@opencrane/contracts";
 
-/** Fetch-compatible function injected into the HTTP adapter. */
+/** Why one private gateway exchange failed, without a body, URL, token, or original cause. */
+export type MemoryGatewayTransportFailureCode = "token_unavailable" | "timeout" | "aborted" | "network" | "response_too_large";
+
+/** Fetch-compatible request function injected by focused tests. */
 export type CogneeFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
-/**
- * The single authenticated, read-only call allowed against Cognee.
- *
- * There is deliberately just one method: the memory gateway exposes search and nothing else, so no
- * code path in OpenCrane can write to Cognee through this session.
- *
- * Called by: cognee-http.ts (`__CreateCogneeSession` builds it) and
- * http-cognee-memory-gateway-client.ts, which is its only consumer.
- */
+/** Classifies whether one stable gateway route can mutate provider state. */
+export enum MemoryGatewayRequestKinds
+{
+	/** A read failure carries no delivery state. */
+	Read = "read",
+	/** A mutation failure proves no dispatch or records ambiguity. */
+	Mutation = "mutation",
+}
+
+/** One validated private gateway request issued by the public client. */
+export interface MemoryGatewayHttpCommand
+{
+	/** Stable path beneath the configured gateway origin. */
+	readonly path: string;
+	/** HTTP method fixed by the selected gateway operation. */
+	readonly method: "POST" | "DELETE";
+	/** Read or mutation classification used to attach delivery evidence. */
+	readonly kind: MemoryGatewayRequestKinds;
+	/** Strict shared DTO for JSON requests; DELETE carries no duplicate body coordinates. */
+	readonly body?: unknown;
+}
+
+/** Parsed successful JSON returned only after transport status and byte checks pass. */
+export interface MemoryGatewayHttpResponse
+{
+	/** Untrusted parsed body that the public client must validate with its shared response schema. */
+	readonly body: unknown;
+}
+
+/** Authenticated transport for one stable memory-gateway exchange at a time. */
 export interface CogneeSession
 {
 	/**
-	 * Sends one search request and returns the parsed response body.
+	 * Sends one request, rereading the projected token and consuming one bounded JSON response.
 	 *
-	 * @param body - The search request; the client fills in query, `search_type`, `dataset_ids`, and
-	 *   `top_k`.
-	 * @returns The parsed body, or null when the gateway answered 2xx with nothing. Untrusted — the
-	 *   caller converts it with `__ParseSearchFacts` or `__ParseScopedFacts`.
-	 * @throws MemoryGatewayTransportError When the gateway cannot be reached, times out, answers
-	 *   non-2xx, or exceeds the response ceiling.
-	 * @throws MemoryGatewayProtocolError When the body is not valid JSON.
+	 * @param command - Fixed route, method, mutation class, and validated request body.
+	 * @returns Parsed but untrusted JSON for the operation-specific shared validator.
+	 * @throws MemoryGatewayReadFailure When a read receives a valid gateway refusal.
+	 * @throws MemoryGatewayMutationFailure When a mutation receives a refusal with delivery evidence.
+	 * @throws MemoryGatewayTransportError When the exchange cannot complete.
+	 * @throws MemoryGatewayProtocolError When status, media type, or JSON violates the wire contract.
 	 */
-	search(body: unknown): Promise<unknown>;
+	send(command: MemoryGatewayHttpCommand): Promise<MemoryGatewayHttpResponse>;
 }
 
-/** Configuration for the Cognee-backed memory gateway adapter. */
+/** Configuration for the authenticated private memory-gateway adapter. */
 export interface CogneeMemoryGatewayHttpOptions
 {
 	/** In-cluster memory-gateway origin with no path, query, or credentials. */
 	readonly baseUrl: string;
-	/** Hard timeout independently applied to every HTTP exchange. */
+	/** Hard timeout independently applied through response-body consumption. */
 	readonly requestTimeoutMilliseconds: number;
 	/** Absolute path to the rotating projected token accepted by the memory gateway. */
 	readonly serverTokenFile: string;
@@ -53,3 +65,6 @@ export interface CogneeMemoryGatewayHttpOptions
 	/** Optional projected-token reader seam used by focused tests. */
 	readonly readServerToken?: () => Promise<string>;
 }
+
+/** Delivery evidence carried only by failures from mutation routes. */
+export type MemoryGatewayFailureDelivery = MemoryMutationDeliveryStates | undefined;

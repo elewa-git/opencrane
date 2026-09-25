@@ -14,7 +14,6 @@
  * (admission, inputs, protocol), libs/backend/server/conversations, and
  * libs/backend/server/api-spec for the OpenAPI fragments.
  */
-export * from "./attempt-model-key.types";
 export * from "./openapi";
 export * from "./prisma-run-admission-unit-of-work";
 export * from "./prisma-conversation-run-lifecycle-authority";
@@ -32,3 +31,11 @@ export type { RunAdmissionConcurrencyPolicy, RunAdmissionConcurrencyResult } fro
 export * from "./run-admission.types";
 export type { RunAdmissionPersistenceRepository } from "./run-admission-persistence.types";
 export * from "./run-input-snapshot-digest";
+
+export * from "./conversation-run-cancellation.types";
+export { ConversationRunCancellationDenied } from "./conversation-run-cancellation-denied";
+export { PrismaConversationRunCancellationRepository } from "./prisma-conversation-run-cancellation";
+export { SelfRunStates } from "./self-run-status.router.types";
+export { PrismaRunTreeRepository } from "./tree/prisma-run-tree-repository";
+export { RunTreeClosureReasons } from "./tree/run-tree.types";
+export type { RunTreeAccount, RunTreeChildCommand, RunTreeCloseCommand, RunTreeRepository, RunTreeReservation, RunTreeReservationCommand, RunTreeResources, RunTreeRootCommand } from "./tree/run-tree.types";

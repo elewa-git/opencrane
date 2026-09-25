@@ -8,6 +8,7 @@ import type { ArtifactPreprocessCompletion, ArtifactPreprocessControllerAuthorit
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import { __CreateArtifactPreprocessBootstrapReference, __HashArtifactPreprocessBootstrapReference, __IsArtifactPreprocessBootstrapReference, type ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
 
+import type { ConversationAssetPreprocessLifecycleRepository } from "./artifact-preprocess-conversation-lifecycle.types";
 import { _ArtifactPreprocessFailureTransition } from "./artifact-preprocess-retry-policy";
 
 /** Selects the one isolated Job profile allowed to process published PDFs. */
@@ -133,7 +134,7 @@ export class PrismaArtifactPreprocessControllerRepository implements ArtifactPre
 	/** Holds the caller-owned transaction for exactly one authority operation. */
 	private readonly transaction: Prisma.TransactionClient;
 	/** Uses the transaction opened by the artifact preprocessing unit of work. */
-	constructor(transaction: Prisma.TransactionClient)
+	constructor(transaction: Prisma.TransactionClient, private readonly conversationAssets: ConversationAssetPreprocessLifecycleRepository)
 	{
 		this.transaction = transaction;
 	}
@@ -262,6 +263,7 @@ export class PrismaArtifactPreprocessControllerRepository implements ArtifactPre
 		const signal = { preprocessJobId: job.id, deliveryCount: job.deliveryCount };
 		if (transition.terminal)
 		{
+			await this.conversationAssets.fail(job.sourceRevisionId);
 			return { kind: ArtifactPreprocessOutcomeKinds.TerminalFailed, ...signal };
 		}
 		if (transition.nextAttemptAt === null)
@@ -348,7 +350,10 @@ export class PrismaArtifactPreprocessControllerRepository implements ArtifactPre
 			where: { id: job.id, state: ArtifactPreprocessJobState.Claimed, taskId: job.taskId, completionDigest: job.completionDigest, completionConsumedAt: null, workloadUid: job.workloadUid, firstPodUid: job.firstPodUid },
 			data: { state: ArtifactPreprocessJobState.Completed, completionConsumedAt: now, completedAt: now },
 		});
-		return changed.count === 1 ? "completed" : "conflict";
+		if (changed.count !== 1)
+			return "conflict";
+		await this.conversationAssets.complete(job.sourceRevisionId);
+		return "completed";
 	}
 
 	/** Loads the task and delivery projection inside this transaction. */

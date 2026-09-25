@@ -1,8 +1,11 @@
 import type { Pool } from "pg";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ___IsRolledBackConflict } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import { WorkflowTaskRetryBackoffKinds } from "@opencrane/backend/server/infra/workflows/contract";
 import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
+import { AbsurdWorkflowEngine } from "../absurd-workflow-engine";
+import { WorkflowTaskAdmission } from "../workflow-task-admission";
 
 const _SDK = vi.hoisted(function _SdkHarness()
 {
@@ -26,13 +29,10 @@ vi.mock("absurd-sdk", function _MockAbsurdSdk()
 	return { Absurd, FailedTask };
 });
 
-import { AbsurdWorkflowEngine } from "../absurd-workflow-engine";
-import { WorkflowTaskAdmission } from "../workflow-task-admission";
-
 /** Build an adapter with one retrying task and no live database connection. */
 function _Execution(): AbsurdWorkflowEngine
 {
-	const execution = new AbsurdWorkflowEngine({ databaseUrl: "postgresql://unused", databasePoolSize: 1, databasePool: {} as Pool, queueAuthority: { queueForTask: function _Queue(): string { return "control-plane"; } } });
+	const execution = new AbsurdWorkflowEngine({ isRolledBackConflict: ___IsRolledBackConflict, databaseUrl: "postgresql://unused", databasePoolSize: 1, databasePool: {} as Pool, queueAuthority: { queueForTask: function _Queue(): string { return "control-plane"; } } });
 	execution.register({ taskName: "test.task", retryPolicy: { maximumAttempts: 5, backoff: { kind: WorkflowTaskRetryBackoffKinds.Exponential, initialDelaySeconds: 30, multiplier: 2, maximumDelaySeconds: 300 } }, run: async function _Run(): Promise<void> {} });
 	return execution;
 }
@@ -40,7 +40,7 @@ function _Execution(): AbsurdWorkflowEngine
 /** Build an engine that may admit a task whose controller registers the handler elsewhere. */
 function _RemoteExecution(): AbsurdWorkflowEngine
 {
-	const execution = new AbsurdWorkflowEngine({ databaseUrl: "postgresql://unused", databasePoolSize: 1, databasePool: {} as Pool, queueAuthority: { queueForTask: function _Queue(): string { return "control-plane"; } } });
+	const execution = new AbsurdWorkflowEngine({ isRolledBackConflict: ___IsRolledBackConflict, databaseUrl: "postgresql://unused", databasePoolSize: 1, databasePool: {} as Pool, queueAuthority: { queueForTask: function _Queue(): string { return "control-plane"; } } });
 	execution.declare({ taskName: "remote.task", retryPolicy: { maximumAttempts: 3, backoff: { kind: WorkflowTaskRetryBackoffKinds.Fixed, initialDelaySeconds: 30 } } });
 	return execution;
 }

@@ -19,8 +19,9 @@ class PrismaAuditCatalogueRepository implements AuditCatalogueTransactionReposit
 	/** Lists one lifecycle-eligible candidate batch before item authorization is applied. */
 	listCandidates(siloId: string, query: AuditPageQuery): Promise<readonly AuditCatalogueCandidate[]>
 	{
+		const cursorWhere = query.before === null ? {} : { OR: [{ timestamp: { lt: query.before.timestamp } }, { timestamp: query.before.timestamp, id: { lt: query.before.id } }] };
 		return this.transaction.auditEntry.findMany({
-			where: { siloId, ...(query.before === null ? {} : { timestamp: { lt: query.before } }) },
+			where: { siloId, ...cursorWhere },
 			select: { id: true, timestamp: true, action: true, resource: true, message: true },
 			orderBy: [{ timestamp: "desc" }, { id: "desc" }],
 			take: query.limit + 1,
@@ -67,8 +68,9 @@ export class PrismaAuditCatalogueUnitOfWork implements AuditCatalogue
 			{
 				return { timestamp: entry.timestamp.toISOString(), action: entry.action, resource: entry.resource, message: entry.message };
 			});
-			const nextCursorAt = hasMore ? candidatePage.at(-1)?.timestamp ?? null : null;
-			return { data, hasMore, nextCursorAt };
+			const lastExamined = candidatePage.at(-1);
+			const nextCursor = hasMore && lastExamined !== undefined ? { timestamp: lastExamined.timestamp, id: lastExamined.id } : null;
+			return { data, hasMore, nextCursor };
 		});
 	}
 }

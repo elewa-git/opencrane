@@ -142,6 +142,10 @@ model ConversationPrivatePayload {
 /// Holds an encrypted, short-lived LiteLLM attempt key for bootstrap response-loss recovery.
 model ConversationComputerAttemptCredential {
   bootstrapId      String   @id @map("bootstrap_id")
+  /// Binds every issuance or cleanup record to the run that owns its allowance.
+  runId            String   @map("run_id")
+  /// Remains attached to the original attempt after revocation or an uncertain provider response.
+  attempt          Int
   keyAlias         String   @map("key_alias")
   modelAlias       String   @map("model_alias")
   siloId           String   @map("silo_id")
@@ -157,7 +161,9 @@ model ConversationComputerAttemptCredential {
   credentialDigest  String? @map("credential_digest")
   expiresAt         DateTime @map("expires_at")
   createdAt         DateTime @default(now()) @map("created_at")
+  run               AgentRun @relation(fields: [runId, attempt], references: [id, attempt], onDelete: Restrict)
 
+  @@unique([runId, attempt], map: "conversation_attempt_credentials_run_attempt_key")
   @@index([expiresAt])
   @@map("conversation_computer_attempt_credentials")
 }

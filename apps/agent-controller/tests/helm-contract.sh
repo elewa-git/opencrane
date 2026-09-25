@@ -19,6 +19,22 @@ helm template oc "$CHART_DIR" \
   --set memoryGateway.kubernetesApiServerEndpointCidrs[0]=10.0.0.1/32 \
   > "$MANIFEST"
 
+node - "$MANIFEST" <<'NODE'
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const yaml = require('js-yaml');
+const resources = yaml.loadAll(fs.readFileSync(process.argv[2], 'utf8')).filter(Boolean);
+for (const [kind, component] of [
+  ['NetworkPolicy', 'agent-controller'],
+  ['ValidatingAdmissionPolicy', 'mcp-executor'],
+  ['ValidatingAdmissionPolicyBinding', 'mcp-executor'],
+]) {
+  assert.ok(resources.some((resource) => resource.kind === kind
+    && resource.metadata?.labels?.['app.kubernetes.io/component'] === component),
+  `${kind} for ${component} must be a separate rendered resource`);
+}
+NODE
+
 grep -Fq 'app.kubernetes.io/component: agent-controller' "$MANIFEST"
 if grep -Eqi 'warm[-_ ]runtime|warmruntime|runtime-release|personal-warm|managed-warm' "$MANIFEST"; then
   echo 'agent-controller chart still renders the deleted warm-runtime authority' >&2

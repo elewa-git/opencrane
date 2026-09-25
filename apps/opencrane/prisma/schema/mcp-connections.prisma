@@ -1,0 +1,100 @@
+/// Selects the execution environment frozen with a discovered revision and every admitted call.
+enum McpExecutionTransport {
+  /// An immutable image runs in an isolated executor Job under its workload and Pod fences.
+  OciImage   @map("oci-image")
+  /// The server calls an exact remote connection generation without creating an executor workload.
+  RemoteHttp @map("remote-http")
+}
+
+/// Records whether one immutable connection generation may acquire custody, discover, or execute.
+enum McpConnectionState {
+  /// The exact admitted command needs its material resubmitted before discovery can continue.
+  AwaitingMaterial @map("awaiting-material")
+  /// Custody is established and the saved workflow owns authenticated tool discovery.
+  Activating       @map("activating")
+  /// Discovery completed; current authorization is still required before every tool claim.
+  Active           @map("active")
+  /// New claims are forbidden while admitted cleanup preserves already claimed execution.
+  Revoked          @map("revoked")
+  /// A definite activation failure ended this generation without making it usable.
+  Failed           @map("failed")
+  /// Custody cannot be proved; replacement remains blocked until an authorized revocation.
+  RecoveryRequired @map("recovery-required")
+}
+
+/// Selects the material contract independently of personal versus shared credential ownership.
+enum McpConnectionCredentialKind {
+  /// The registered server requires no credential and this generation owns no Secret.
+  None   @map("none")
+  /// The generation uses one write-only bearer token in its exact immutable Secret.
+  Bearer @map("bearer")
+}
+
+/// Serializes commands for one install without retaining request material.
+model McpConnectionAdmissionClaim {
+  siloId         String   @map("silo_id")
+  identityDigest String   @map("identity_digest")
+  touchedAt      DateTime @updatedAt @map("touched_at")
+
+  @@id([siloId, identityDigest])
+  @@map("mcp_connection_admission_claims")
+}
+
+/// One admitted connection generation; PostgreSQL holds coordinates and evidence, never its token.
+model McpConnection {
+  id                              String                      @id @default(cuid())
+  siloId                          String                      @map("silo_id")
+  mcpServerInstallId               String                      @map("mcp_server_install_id")
+  mcpServerId                      String                      @map("mcp_server_id")
+  ownerPrincipalId                String                      @map("owner_principal_id")
+  actorPrincipalId                String                      @map("actor_principal_id")
+  agentServiceId                  String?                     @map("agent_service_id")
+  generation                      Int
+  credentialRequirement           McpCredentialRequirement    @map("credential_requirement")
+  credentialKind                  McpConnectionCredentialKind @map("credential_kind")
+  endpointDigest                  String                      @map("endpoint_digest")
+  state                           McpConnectionState          @default(AwaitingMaterial)
+  requestKeyDigest                String                      @map("request_key_digest")
+  commandDigest                   String                      @map("command_digest")
+  materialVerifier                String?                     @map("material_verifier")
+  materialVerifierKeyId           String?                     @map("material_verifier_key_id")
+  authorizationDecisionDigest     String                      @map("authorization_decision_digest")
+  custodyClaimFence               Int                         @default(0) @map("custody_claim_fence")
+  custodyClaimExpiresAt           DateTime?                   @map("custody_claim_expires_at")
+  custodyAttempts                 Int                         @default(0) @map("custody_attempts")
+  credentialSecretRef             String?                     @map("credential_secret_ref")
+  credentialSecretUid             String?                     @map("credential_secret_uid")
+  credentialSecretResourceVersion String?                     @map("credential_secret_resource_version")
+  credentialCustodiedAt           DateTime?                   @map("credential_custodied_at")
+  taskId                          String                      @unique @map("task_id")
+  taskName                        String                      @map("task_name")
+  taskKey                         String                      @map("task_key")
+  revokeKeyDigest                 String?                     @map("revoke_key_digest")
+  revokeDecisionDigest            String?                     @map("revoke_decision_digest")
+  revokeTaskId                    String?                     @unique @map("revoke_task_id")
+  revokeTaskName                  String?                     @map("revoke_task_name")
+  revokeTaskKey                   String?                     @map("revoke_task_key")
+  revokedByPrincipalId            String?                     @map("revoked_by_principal_id")
+  failureCode                     String?                     @map("failure_code")
+  activatedAt                     DateTime?                   @map("activated_at")
+  revokedAt                       DateTime?                   @map("revoked_at")
+  completedAt                     DateTime?                   @map("completed_at")
+  cleanupCompletedAt              DateTime?                   @map("cleanup_completed_at")
+  createdAt                       DateTime                    @default(now()) @map("created_at")
+  updatedAt                       DateTime                    @updatedAt @map("updated_at")
+  install                         McpServerInstall            @relation(fields: [mcpServerInstallId, mcpServerId, ownerPrincipalId], references: [id, mcpServerId, principalId], onDelete: Restrict)
+  server                          McpServer                   @relation(fields: [mcpServerId, siloId], references: [id, siloId], onDelete: Restrict)
+  revisions                       McpServerRevision[]
+  executions                      McpRuntimeExecution[]
+  tasks                           McpTask[]
+
+  @@unique([id, siloId])
+  @@unique([id, siloId, generation, ownerPrincipalId, endpointDigest], map: "mcp_connections_execution_coordinates_key")
+  @@unique([mcpServerInstallId, generation])
+  @@unique([siloId, mcpServerInstallId, requestKeyDigest])
+  @@unique([siloId, mcpServerInstallId, revokeKeyDigest])
+  @@unique([siloId, taskKey])
+  @@unique([siloId, revokeTaskKey])
+  @@index([siloId, state, createdAt])
+  @@map("mcp_connections")
+}

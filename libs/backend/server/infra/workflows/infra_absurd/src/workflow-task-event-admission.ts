@@ -27,14 +27,20 @@ export class WorkflowTaskEventAdmission implements IWorkflowTaskEventAdmission
 {
 	/** Queue selected by the same reviewed authority used by task admission and workers. */
 	private readonly queueName: string;
+	/** Uses the caller's database-aware checker without importing an ORM into worker processes. */
+	private readonly isRolledBackConflict: (error: unknown) => boolean;
 
 	/** Binds transactional event delivery to one reviewed Absurd queue. */
-	constructor(queueName: string)
+	constructor(queueName: string, isRolledBackConflict: (error: unknown) => boolean)
 	{
 		this.queueName = _RequiredString("queueName", queueName);
+		this.isRolledBackConflict = isRolledBackConflict;
 	}
 
-	/** Delivers one JSON-compatible event without leaving the caller's transaction. */
+	/**
+	 * Delivers one JSON-compatible event without leaving the caller's transaction.
+	 * Proven database rollbacks remain unchanged for whole-transaction retry; other failures are wrapped.
+	 */
 	async emit(transactionClient: unknown, eventName: string, payload: unknown): Promise<void>
 	{
 		_RequireWorkflowTransactionClient(transactionClient);
@@ -51,12 +57,17 @@ export class WorkflowTaskEventAdmission implements IWorkflowTaskEventAdmission
 		}
 		try
 		{
-			await client.$queryRaw<readonly unknown[]>`
-				SELECT absurd.emit_event(${this.queueName}, ${acceptedEventName}, ${serializedPayload}::jsonb)
+			await client.$queryRaw<readonly { acknowledged: number }[]>`
+				SELECT 1 AS acknowledged
+				FROM (
+					SELECT absurd.emit_event(${this.queueName}, ${acceptedEventName}, ${serializedPayload}::jsonb) AS invoked
+				) AS emitted
 			`;
 		}
 		catch (cause)
 		{
+			if (this.isRolledBackConflict(cause))
+				throw cause;
 			throw new AbsurdWorkflowError("emit task event", cause);
 		}
 	}

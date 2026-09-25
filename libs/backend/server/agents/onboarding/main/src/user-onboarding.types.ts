@@ -88,7 +88,7 @@ export interface ApprovedPersonaEvidence
  * answer always means "refuse" - never "assume yes".
  *
  * Called by: __UserOnboardingAuthority and __UserOnboardingChatAuthority in this package;
- * implemented in apps/opencrane/src/app/user-onboarding-composition.ts over
+ * implemented in libs/backend/server/agents/onboarding/main/src/composition/user-onboarding-composition.ts over
  * PersonaWorkflowEvidenceRepository.
  */
 export interface UserOnboardingPersonaEvidencePort
@@ -114,7 +114,7 @@ export interface UserOnboardingPersonaEvidencePort
  *
  * Called by: __UserOnboardingAuthority and the state objects in user-onboarding-lifecycle-state.ts;
  * implemented by PrismaUserOnboardingRepository, composed by _CreateUserOnboardingRepository in
- * apps/opencrane/src/app/user-onboarding-composition.ts.
+ * libs/backend/server/agents/onboarding/main/src/composition/user-onboarding-composition.ts.
  *
  * @see {@link UserOnboardingChatRepository} for the guided-chat half of persistence.
  */

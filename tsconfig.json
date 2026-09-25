@@ -10,11 +10,20 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "paths": {
+      "@opencrane/state/governance": ["./libs/frontend/state/governance/src/index.ts"],
+      "@opencrane/state/governance/adapter": ["./libs/frontend/state/governance/adapter/src/index.ts"],
+      "@opencrane/features/governance": ["./libs/frontend/features/governance/src/index.ts"],
       "@opencrane/backend/server/utils": [
         "./libs/backend/server/utils/src/index.ts"
       ],
       "@opencrane/backend/server/agents/agent-services": [
         "./libs/backend/server/agents/agent-services/main/src/index.ts"
+      ],
+      "@opencrane/backend/server/conversations/history": [
+        "./libs/backend/server/conversations/history/src/index.ts"
+      ],
+      "@opencrane/backend/server/conversations/computers": [
+        "./libs/backend/server/conversations/computers/src/index.ts"
       ],
       "@opencrane/backend/server/conversations": [
         "./libs/backend/server/conversations/main/src/index.ts"
@@ -184,9 +193,6 @@
       "@opencrane/backend/agents/runtime/mcp-executor/controller": [
         "./libs/backend/agents/runtime/mcp-executor/controller/src/index.ts"
       ],
-      "@opencrane/backend/agents/runtime/mcp-executor/protocol": [
-        "./libs/backend/agents/runtime/mcp-executor/protocol/src/index.ts"
-      ],
       "@opencrane/backend/agents/runtime/mcp-executor/companion": [
         "./libs/backend/agents/runtime/mcp-executor/companion/src/index.ts"
       ],
@@ -211,8 +217,8 @@
       "@opencrane/backend/server/infra/memory-gateway-client": [
         "./libs/backend/server/infra/memory-gateway-client/src/index.ts"
       ],
-      "@opencrane/backend/server/infra/mcp-era-probe": [
-        "./libs/backend/server/infra/mcp-era-probe/src/index.ts"
+      "@opencrane/backend/server/infra/mcp-remote-client": [
+        "./libs/backend/server/infra/mcp-remote-client/src/index.ts"
       ],
       "@opencrane/backend/server/infra/oci-registry": [
         "./libs/backend/server/infra/oci-registry/src/index.ts"
@@ -319,8 +325,12 @@
       "@opencrane/state/provider-key/adapter": [
         "./libs/frontend/state/provider-key/adapter/src/index.ts"
       ],
-		"@opencrane/state/assets/adapter": ["./libs/frontend/state/assets/adapter/src/index.ts"],
-		"@opencrane/state/skills/adapter": ["./libs/frontend/state/skills/adapter/src/index.ts"],
+      "@opencrane/state/assets/adapter": [
+        "./libs/frontend/state/assets/adapter/src/index.ts"
+      ],
+      "@opencrane/state/skills/adapter": [
+        "./libs/frontend/state/skills/adapter/src/index.ts"
+      ],
       "@opencrane/state/onboarding": [
         "./libs/frontend/state/onboarding/src/index.ts"
       ],
@@ -338,6 +348,12 @@
       ],
       "@opencrane/backend/server/infra/agent-sandbox": [
         "./libs/backend/server/infra/agent-sandbox/src/index.ts"
+      ],
+      "@opencrane/backend/memory-gateway": [
+        "./libs/backend/memory-gateway/main/src/index.ts"
+      ],
+      "@opencrane/backend/agents/runtime/mcp-file-generator": [
+        "./libs/backend/agents/runtime/mcp-file-generator/main/src/index.ts"
       ]
     }
   },

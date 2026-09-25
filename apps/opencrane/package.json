@@ -115,9 +115,20 @@
         "options": {
           "cwd": "apps/opencrane",
           "commands": [
-            "sh ../../scripts/run-postgres-authority-tests.sh prisma/tests/authorization-active-grant-uniqueness.sql prisma/tests/phase-d-authority-integration.sql prisma/tests/skill-authoring-validation-authority.sql",
-            "vitest run src/__tests__/conversation-tool-proposal.sql.test.ts",
-            "vitest run src/__tests__/conversation-tool-result.sql.test.ts"
+            "sh ../../scripts/run-postgres-authority-tests.sh prisma/tests/authorization-active-grant-uniqueness.sql prisma/tests/phase-d-authority-integration.sql prisma/tests/skill-authoring-validation-authority.sql prisma/tests/personal-memory-operations.sql",
+            "vitest run src/bootstrap/conversations/__tests__/conversation-tool-proposal.sql.test.ts",
+            "vitest run src/bootstrap/conversations/__tests__/conversation-remote-mcp-claim.sql.test.ts",
+            "vitest run src/bootstrap/conversations/__tests__/conversation-run-lifecycle.sql.test.ts",
+            "vitest run src/bootstrap/conversations/__tests__/conversation-tool-approval.sql.test.ts",
+            "vitest run src/bootstrap/conversations/__tests__/conversation-tool-result.sql.test.ts",
+            "vitest run src/bootstrap/conversations/__tests__/conversation-tool-progress.sql.test.ts",
+            "vitest run src/bootstrap/conversations/__tests__/conversation-output-payload.sql.test.ts",
+            "vitest run src/bootstrap/conversations/__tests__/conversation-generated-file-authority.sql.test.ts",
+            "vitest run src/bootstrap/conversations/__tests__/conversation-generated-file-capture.sql.test.ts",
+            "vitest run src/bootstrap/conversations/__tests__/conversation-generated-file-quarantine.sql.test.ts",
+            "vitest run src/bootstrap/conversations/__tests__/conversation-stop*.sql.test.ts",
+            "vitest run src/bootstrap/conversations/__tests__/personal-memory-task-admission.sql.test.ts",
+            "vitest run src/bootstrap/onboarding/__tests__/personal-agent-profile-repair.sql.test.ts"
           ],
           "parallel": false
         },
@@ -127,6 +138,61 @@
         "outputs": [
           "{workspaceRoot}/dist/apps/opencrane/openapi.json"
         ]
+      },
+      "test:stop-sql": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run src/bootstrap/conversations/__tests__/conversation-stop*.sql.test.ts",
+          "cwd": "apps/opencrane",
+          "env": { "TZ": "UTC" }
+        },
+        "cache": false
+      },
+      "test:output-payload-sql": {
+        "executor": "nx:run-commands",
+        "dependsOn": ["db:generate"],
+        "options": {
+          "command": "vitest run src/bootstrap/conversations/__tests__/conversation-output-payload.sql.test.ts",
+          "cwd": "apps/opencrane",
+          "env": { "TZ": "UTC" }
+        },
+        "cache": false
+      },
+      "test:generated-file-integration": {
+        "executor": "nx:run-commands",
+        "dependsOn": ["db:generate"],
+        "options": {
+          "command": "vitest run src/bootstrap/conversations/__tests__/conversation-generated-file-output.integration.sql.test.ts",
+          "cwd": "apps/opencrane",
+          "env": { "TZ": "UTC" }
+        },
+        "cache": false
+      },
+      "test:mcp-model-tool-name-integration": {
+        "executor": "nx:run-commands",
+        "dependsOn": ["db:generate"],
+        "options": {
+          "command": "vitest run src/bootstrap/conversations/__tests__/conversation-mcp-model-tool-name.integration.sql.test.ts",
+          "cwd": "apps/opencrane",
+          "env": { "TZ": "UTC" }
+        },
+        "cache": false
+      },
+      "test:hosted-generated-file-qualification": {
+        "executor": "nx:run-commands",
+        "options": {
+          "cwd": "apps/opencrane",
+          "commands": [
+            "vitest run src/bootstrap/conversations/__tests__/hosted-generated-file/hosted-generated-file.test.ts",
+            "esbuild src/bootstrap/conversations/__tests__/hosted-generated-file/hosted-generated-file-cli.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=../../dist/apps/opencrane/hosted-generated-file/hosted-generated-file-cli.js"
+          ],
+          "parallel": false,
+          "env": { "TZ": "UTC" }
+        },
+        "outputs": [
+          "{workspaceRoot}/dist/apps/opencrane/hosted-generated-file"
+        ],
+        "cache": false
       }
     }
   }

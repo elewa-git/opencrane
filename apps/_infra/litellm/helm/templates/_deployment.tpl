@@ -26,11 +26,13 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      serviceAccountName: {{ include "opencrane.fullname" . }}-litellm
+      automountServiceAccountToken: false
       securityContext:
         {{- toYaml .Values.litellm.podSecurityContext | nindent 8 }}
       containers:
         - name: litellm
-          image: "{{ .Values.litellm.image.repository }}:{{ .Values.litellm.image.tag }}"
+          image: {{ include "opencrane.litellm.image" . | quote }}
           imagePullPolicy: {{ .Values.litellm.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.litellm.securityContext | nindent 12 }}

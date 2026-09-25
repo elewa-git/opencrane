@@ -4,7 +4,7 @@ set -euo pipefail
 # Blocking current-silo smoke for develop. This deliberately stays smaller than the retired
 # backup/recovery qualification: it proves Nx-affected app images plus digest-validated baseline
 # images, the production deploy entrypoint, database authority, TLS, and required service readiness.
-# The disposable runc profile does not qualify gVisor isolation or an authenticated assistant turn.
+# The disposable runc profile does not qualify gVisor isolation or external identity/model providers.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 CLUSTER_NAME="${CLUSTER_NAME:-opencrane-develop-smoke}"
@@ -12,6 +12,7 @@ NAMESPACE="${NAMESPACE:-opencrane-develop-smoke}"
 CLUSTER_TENANT="${CLUSTER_TENANT:-smoke}"
 RELEASE_NAME="${RELEASE_NAME:-opencrane-${CLUSTER_TENANT}}"
 ARTIFACT_NAMESPACE="${RELEASE_NAME}-artifacts"
+ARTIFACT_SCANNER_NAMESPACE="${RELEASE_NAME}-artifact-scanning"
 BASE_DOMAIN="${BASE_DOMAIN:-develop-smoke.opencrane.test}"
 CONTROL_PLANE_HOST="${CLUSTER_TENANT}.${BASE_DOMAIN}"
 SMOKE_ACME_EMAIL="${SMOKE_ACME_EMAIL:-develop-smoke@opencrane.test}"
@@ -27,6 +28,8 @@ SMOKE_REGISTRY="${SMOKE_REGISTRY:-ghcr.io/elewa-git}"
 SMOKE_STORAGE_MODE="${SMOKE_STORAGE_MODE:-full}"
 SMOKE_LOCAL_REGISTRY_NAME="${CLUSTER_NAME}-registry"
 SMOKE_LOCAL_REGISTRY_ADDRESS=""
+HOSTED_RUN_DIR=""
+HOSTED_FIXTURE_DIR="$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/fixtures/hosted-generated-file"
 KEY_DIR=""
 CSI_DIR=""
 IMAGE_PREPARATION_PID=""
@@ -37,6 +40,10 @@ SMOKE_IMAGES=(
   opencrane/memory-gateway:develop-smoke
   opencrane/artifact-service:develop-smoke
   opencrane/cognee:develop-smoke
+  opencrane/agent-controller:develop-smoke
+  opencrane/artifact-scanner:develop-smoke
+  opencrane/mcp-executor:develop-smoke
+  opencrane/skill-authoring:develop-smoke
 )
 
 # Every image this script builds carries this label so teardown can prune exactly the run's
@@ -77,7 +84,7 @@ _diagnostics()
   kubectl get events -A --sort-by=.lastTimestamp 2>/dev/null | tail -80 || true
   local diagnostic_namespace
   local pod
-  for diagnostic_namespace in "$NAMESPACE" "$ARTIFACT_NAMESPACE"; do
+  for diagnostic_namespace in "$NAMESPACE" "$ARTIFACT_NAMESPACE" "$ARTIFACT_SCANNER_NAMESPACE" "${RELEASE_NAME}-mcp-executors"; do
     while IFS= read -r pod; do
       [[ -z "$pod" ]] && continue
       echo "[develop-smoke] --- $diagnostic_namespace/$pod ---"
@@ -141,12 +148,20 @@ _cleanup()
   if [[ -n "$CSI_DIR" ]]; then
     rm -rf -- "$CSI_DIR"
   fi
+  if [[ -n "$HOSTED_RUN_DIR" ]]; then
+    if ! node "$HOSTED_FIXTURE_DIR/collect-evidence.mjs" "$HOSTED_RUN_DIR" "$ROOT_DIR/.nx/test-results/hosted-generated-file"; then
+      echo "[develop-smoke] Failed to retain hosted qualification evidence" >&2
+      exit_code=1
+    fi
+    bash "$HOSTED_FIXTURE_DIR/hosted-services.sh" stop "$HOSTED_RUN_DIR" "$CLUSTER_NAME" "$ROOT_DIR" || true
+    rm -rf -- "$HOSTED_RUN_DIR"
+  fi
   if [[ "$KEEP_CLUSTER" == "1" ]]; then
     echo "[develop-smoke] KEEP_CLUSTER=1; leaving '$CLUSTER_NAME' running"
   else
     _teardown_cluster_storage
   fi
-  return "$exit_code"
+  exit "$exit_code"
 }
 
 _build_image()
@@ -218,6 +233,10 @@ SMOKE_IMAGE_SPECS=(
   "cognee|opencrane/cognee:develop-smoke|opencrane-cognee|apps/_infra/cognee/deploy/Dockerfile"
   "kurrentdb|opencrane/kurrentdb-bootstrap:develop-smoke|opencrane-kurrentdb-bootstrap|apps/_infra/kurrentdb/deploy/Dockerfile"
   "conversation-computer|opencrane/conversation-computer:develop-smoke|opencrane-conversation-computer|apps/conversation-computer/deploy/Dockerfile"
+  "agent-controller|opencrane/agent-controller:develop-smoke|opencrane-agent-controller|apps/agent-controller/deploy/Dockerfile"
+  "artifact-scanner|opencrane/artifact-scanner:develop-smoke|opencrane-artifact-scanner|apps/artifact-scanner/deploy/Dockerfile"
+  "mcp-executor|opencrane/mcp-executor:develop-smoke|opencrane-mcp-executor|apps/mcp-executor/deploy/Dockerfile"
+  "skill-authoring|opencrane/skill-authoring:develop-smoke|opencrane-skill-authoring|apps/skill-authoring/deploy/Dockerfile"
 )
 
 _prepare_images()
@@ -246,7 +265,7 @@ _prepare_images()
   return "$failed"
 }
 
-# Only this disposable registry receives the two images whose charts require immutable digests.
+# This disposable build registry receives only the workloads whose charts require immutable digests.
 # Hash its stored manifest bytes so the in-cluster repository names select exactly what we pushed.
 _publish_smoke_image()
 {
@@ -523,12 +542,21 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-for command in curl docker git helm jq k3d kubectl openssl; do _require_command "$command"; done
+for command in curl docker git helm jq k3d kubectl node openssl tar zip; do _require_command "$command"; done
+bash "$HOSTED_FIXTURE_DIR/require-server-trust.sh" "$ROOT_DIR"
 docker info >/dev/null 2>&1 || { echo "[develop-smoke] Docker daemon is not reachable." >&2; exit 1; }
 if [[ "$SMOKE_STORAGE_MODE" != "fast" && "$SMOKE_STORAGE_MODE" != "full" ]]; then
   echo "[develop-smoke] SMOKE_STORAGE_MODE must be 'fast' or 'full', got '$SMOKE_STORAGE_MODE'." >&2
   exit 1
 fi
+
+HOSTED_RUN_DIR="$(mktemp -d)"
+npx nx run opencrane:test:hosted-generated-file-qualification --excludeTaskDependencies
+bash "$HOSTED_FIXTURE_DIR/hosted-services.sh" prepare "$HOSTED_RUN_DIR" "$CLUSTER_NAME" "$ROOT_DIR" \
+  "$CONTROL_PLANE_HOST" "$SMOKE_FIRST_USER_EMAIL" "$NAMESPACE"
+# The helper writes only shell-escaped generated paths and synthetic fixture values.
+# shellcheck disable=SC1090
+source "$HOSTED_RUN_DIR/hosted-services.env"
 
 # Image preparation is the longest independent lane. Start it before k3d so cluster creation and
 # external-controller readiness consume the same wall-clock time without serialising all builds
@@ -544,7 +572,12 @@ registry_port="$(docker inspect --format '{{(index (index .NetworkSettings.Ports
 [[ "$registry_port" =~ ^[0-9]+$ ]] || { echo "[develop-smoke] Registry has no loopback host port" >&2; exit 1; }
 SMOKE_LOCAL_REGISTRY_ADDRESS="127.0.0.1:${registry_port}"
 k3d cluster create "$CLUSTER_NAME" --image "$K3S_IMAGE" --port "8443:443@loadbalancer" \
-  --registry-use "k3d-${SMOKE_LOCAL_REGISTRY_NAME}:5000" --wait
+  --registry-use "k3d-${SMOKE_LOCAL_REGISTRY_NAME}:5000" \
+  --registry-config "$HOSTED_K3S_REGISTRY_CONFIG_PATH" \
+  --host-alias "${HOSTED_REGISTRY_SERVICE_IP}:hosted-generated-file-registry.${NAMESPACE}.svc,hosted-generated-file-registry.${NAMESPACE}.svc.cluster.local" \
+  --volume "${HOSTED_CA_PATH}:/etc/rancher/k3s/hosted-generated-file/ca.crt@all" \
+  --wait
+bash "$HOSTED_FIXTURE_DIR/hosted-services.sh" start-registry "$HOSTED_RUN_DIR" "$CLUSTER_NAME" "$ROOT_DIR"
 
 echo "[develop-smoke] Installing external cluster prerequisites"
 if [[ "$SMOKE_STORAGE_MODE" == "full" ]]; then
@@ -589,8 +622,17 @@ fi
 IMAGE_PREPARATION_PID=""
 echo "[develop-smoke] Importing the tag-based service images in one k3d transfer"
 _retry 3 k3d image import "${SMOKE_IMAGES[@]}" --cluster "$CLUSTER_NAME" --mode direct
+bash "$HOSTED_FIXTURE_DIR/hosted-services.sh" start-protocol "$HOSTED_RUN_DIR" "$CLUSTER_NAME" "$ROOT_DIR"
+# start-protocol appends the canonical issuer and loopback-only provider transport.
+# shellcheck disable=SC1090
+source "$HOSTED_RUN_DIR/hosted-services.env"
+bash "$HOSTED_FIXTURE_DIR/prepare-oci-archive.sh" "$ROOT_DIR" "$HOSTED_RUN_DIR"
 bootstrap_digest="$(_publish_smoke_image opencrane/kurrentdb-bootstrap:develop-smoke opencrane-kurrentdb-bootstrap)"
 computer_digest="$(_publish_smoke_image opencrane/conversation-computer:develop-smoke opencrane-conversation-computer)"
+controller_digest="$(_publish_smoke_image opencrane/agent-controller:develop-smoke opencrane-agent-controller)"
+scanner_digest="$(_publish_smoke_image opencrane/artifact-scanner:develop-smoke opencrane-artifact-scanner)"
+executor_digest="$(_publish_smoke_image opencrane/mcp-executor:develop-smoke opencrane-mcp-executor)"
+authoring_digest="$(_publish_smoke_image opencrane/skill-authoring:develop-smoke opencrane-skill-authoring)"
 registry_repository="k3d-${SMOKE_LOCAL_REGISTRY_NAME}:5000"
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
@@ -601,6 +643,12 @@ echo "[develop-smoke] Creating isolated database and fleet-verification inputs"
 _create_database_credentials "$POSTGRES_CREDENTIALS_SECRET" opencrane "$(_random_secret)"
 _create_database_credentials "$LITELLM_POSTGRES_CREDENTIALS_SECRET" litellm "$(_random_secret)"
 _create_database_credentials "$POSTGRES_ADMIN_CREDENTIALS_SECRET" opencrane_database_admin "$(_random_secret)"
+kubectl create secret generic hosted-generated-file-ca \
+  --namespace "$NAMESPACE" --from-file=ca.crt="$HOSTED_CA_PATH" \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic hosted-generated-file-registry-authorization \
+  --namespace "$NAMESPACE" --from-file=authorization="$HOSTED_REGISTRY_AUTHORIZATION_PATH" \
+  --dry-run=client -o yaml | kubectl apply -f -
 
 KEY_DIR="$(mktemp -d)"
 openssl genpkey -algorithm ED25519 -out "$KEY_DIR/private-key.pem"
@@ -611,10 +659,11 @@ kubectl create secret generic opencrane-fleet-membership-verification \
   --dry-run=client -o yaml | kubectl apply -f -
 
 echo "[develop-smoke] Installing the current silo through its app-owned deploy entrypoint"
-export OIDC_ISSUER_URL="https://issuer.opencrane.test"
-export OIDC_CLIENT_ID="develop-smoke"
-export OPENCRANE_OIDC_CLIENT_SECRET="$(_random_secret)"
-export OPENCRANE_OIDC_SESSION_SECRET="$(_random_secret)"
+export OIDC_ISSUER_URL="$HOSTED_PROTOCOL_URL"
+export OIDC_CLIENT_ID="$HOSTED_OIDC_CLIENT_ID"
+export OIDC_REDIRECT_URI="$HOSTED_OIDC_REDIRECT_URI"
+export OPENCRANE_OIDC_CLIENT_SECRET="$(<"$HOSTED_OIDC_CLIENT_SECRET_PATH")"
+export OPENCRANE_OIDC_SESSION_SECRET="$(<"$HOSTED_OIDC_SESSION_SECRET_PATH")"
 # The disposable k3d image is imported by a local tag, not published to an OCI registry. The
 # production deploy path still requires a UI digest; this explicit escape keeps the smoke honest.
 export OPENCRANE_ALLOW_TAG_FLOAT=1
@@ -647,17 +696,36 @@ export TIMEOUT_SECONDS
   --set-string "agentSandbox.serviceAccountName=${RELEASE_NAME}-agent-sandbox" \
   --set-string "agentSandbox.profiles[0].image.repository=${registry_repository}/opencrane-conversation-computer" \
   --set-string "agentSandbox.profiles[0].image.digest=${computer_digest}" \
+  --set-string "clustertenantManager.workflows.ociRegistry.baseUrl=${HOSTED_REGISTRY_URL}" \
+  --set-string "clustertenantManager.workflows.ociRegistry.repository=${HOSTED_REGISTRY_REPOSITORY}" \
+  --set-string "artifactScanner.namespace=${ARTIFACT_SCANNER_NAMESPACE}" \
+  --set-string "artifactScanner.image.repository=${registry_repository}/opencrane-artifact-scanner" \
+  --set-string "artifactScanner.image.digest=${scanner_digest}" \
+  --set-string "agentController.image.repository=${registry_repository}/opencrane-agent-controller" \
+  --set-string "agentController.image.digest=${controller_digest}" \
+  --set-string "agentController.skillAuthoringValidation.image.repository=${registry_repository}/opencrane-skill-authoring" \
+  --set-string "agentController.skillAuthoringValidation.image.digest=${authoring_digest}" \
+  --set-string "opencrane-mcp-executor.mcpExecutor.namespace=${RELEASE_NAME}-mcp-executors" \
+  --set-string "opencrane-mcp-executor.mcpExecutor.image.repository=${registry_repository}/opencrane-mcp-executor" \
+  --set-string "opencrane-mcp-executor.mcpExecutor.image.digest=${executor_digest}" \
+  --set-string "agentController.kubernetesApiServerCidrs[0]=$(kubectl get service kubernetes -o jsonpath='{.spec.clusterIP}')/32" \
+  --set-string "agentController.kubernetesApiServerEndpointCidrs[0]=$(kubectl get endpoints kubernetes -o jsonpath='{.subsets[0].addresses[0].ip}')/32" \
+  --set-string "agentController.kubernetesApiServerEndpointPort=$(kubectl get endpoints kubernetes -o jsonpath='{.subsets[0].ports[0].port}')" \
   --set "certManager.mode=selfSigned" \
   --set "certManager.issuerName=opencrane-develop-smoke-issuer"
 
 echo "[develop-smoke] Waiting for every enabled workload and certificate"
 kubectl wait --for=condition=available deployment --all -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
 kubectl wait --for=condition=available deployment --all -n "$ARTIFACT_NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
+kubectl wait --for=condition=available deployment --all -n "$ARTIFACT_SCANNER_NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
 kubectl wait --for=condition=Ready "certificate/${RELEASE_NAME}-clustertenant-tls" \
   -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
 
 _assert_database_isolation
 _assert_current_history_and_sandbox
 _assert_ingress_health
+OPENCRANE_HOSTED_QUALIFICATION_SILO_ID="$CLUSTER_TENANT" \
+bash "$HOSTED_FIXTURE_DIR/run-qualification.sh" "$ROOT_DIR" "$HOSTED_RUN_DIR" "$NAMESPACE" \
+  "$RELEASE_NAME" "$CONTROL_PLANE_HOST" "$TIMEOUT_SECONDS" "$CLUSTER_NAME"
 
-echo "[develop-smoke] PASS: current service readiness, database isolation, authenticated KurrentDB TLS, anonymous health/read boundaries, Agent Sandbox claim reconciliation and cleanup with its runc profile, TLS ingress, and $SMOKE_STORAGE_MODE storage qualification"
+echo "[develop-smoke] PASS: current service readiness and the governed hosted generated-file journey through public OCI upload, authenticated TLS registry import, real runtime execution, scanning, restart, replay, authorized download, and revocation"

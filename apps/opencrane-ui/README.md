@@ -10,7 +10,8 @@ A **deployable app** composes shared code and ships as one container. This one i
 workspace where people set up their personal assistant, talk with colleagues and ask company
 assistants to help. Administrators also manage members and tools here. It is a single-page app
 (SPA — the UI loads once, then updates without full page reloads), built with Angular.
-The browser composition binds personal activity reads to the existing generated API adapter.
+The browser composition binds personal activity and selected-conversation approval reads to the
+existing generated API adapters.
 The conversation feature owns recent status and loaded-answer links; the app adds no run authority.
 
 ## What it owns
@@ -57,7 +58,8 @@ If the backend is unreachable the app refuses authenticated actions.
 `Entrypoint: src/main.ts` (bootstraps `AppComponent` with `appConfig` from `src/app/app.config.ts`).
 Route table `src/app/app.routes.ts`: `login`, `onboarding` (the server-authoritative persona state
 shell and first chat), `chats` and `chats/:conversationId` (direct, group, and Agent-session
-workspace), `settings/members` (organisation directory and invitations), `invite` (public token
+workspace), `settings/members` (organisation directory and invitations), `settings/audit` (permitted
+audit records), `settings/usage` (recorded usage and independently protected budget reads), `invite` (public token
 acceptance), and `admin` (MCP tool administration). The root route redirects to
 `/onboarding`; protected routes use `OperatorAccessGuard`. Conversation history and computer state
 remain on the ordinary chat route; the retired relational Agent-thread projection has no child URL.
@@ -67,11 +69,14 @@ remain on the ordinary chat route; the retired relational Agent-thread projectio
 Browser-only presentation. It holds no server secrets and no database; onboarding progress, persona
 answers, score evidence, bootstrap transcript, invitation policy, membership, and completion remain server-owned. It does not implement authorization
 — it renders what the backend permits and gates screens on backend-supplied capability claims.
+Reporting links grant nothing. The app supplies authenticated reader identity to the governance
+feature, which clears retained results after identity changes or explicit access denial. The current
+usage API provides no reporting period or freshness timestamp; these screens do not claim live spend.
 
 ## Dependency direction
 
 Tagged `type:app`, `layer:entrypoint`, `scope:opencrane-ui`. As an entrypoint it composes
-`scope:web` frontend libraries (`@opencrane/features/*`, `@opencrane/state/*`, `@opencrane/core`,
+the explicitly allowed frontend scopes, including `scope:governance` (`@opencrane/features/*`, `@opencrane/state/*`, `@opencrane/core`,
 `@opencrane/platform`); it may not import backend or app code, and nothing imports it.
 
 ## Runtime & config

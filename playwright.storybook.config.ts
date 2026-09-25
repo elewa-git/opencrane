@@ -3,8 +3,8 @@ import { defineConfig, devices } from "@playwright/test";
 /** Fixed Storybook origin shared by the Nx static server and visual tests. */
 const STORYBOOK_BASE_URL = "http://127.0.0.1:4400";
 
-/** Catalogue-wide budget for rendering every tagged visual contract serially. */
-const STORYBOOK_VISUAL_TEST_TIMEOUT_MS = 180_000;
+/** Each component contract has its own render and screenshot deadline. */
+const STORYBOOK_VISUAL_TEST_TIMEOUT_MS = 60_000;
 
 /** Deterministic Chromium configuration for committed component screenshots. */
 export default defineConfig(
@@ -31,7 +31,7 @@ export default defineConfig(
 	{
 		baseURL: STORYBOOK_BASE_URL,
 		colorScheme: "light",
-		// A single broken iframe still fails quickly inside the larger catalogue-wide test budget.
+		// A broken iframe fails before the component's screenshot deadline.
 		navigationTimeout: 15_000,
 		contextOptions:
 		{
