@@ -1,5 +1,24 @@
 # OpenCrane — Active Plan
 
+## Personal-memory SQL qualification — source repair validated
+
+This follow-up starts at `8cd036502c5488848e3211850962ce9edcdd63e7` above the reporting
+contract repair. CI on personal-memory command PR #896 found three failing SQL cases alongside
+the separately tracked remote-MCP and visual failures. A fresh local database reproduced two
+command failures with 11 of the 13 combined memory SQL cases passing.
+
+The two memory suites share database tables. Running them separately removes unrelated fixture
+writes that can exhaust a command's bounded Serializable retries; the explicit concurrent-command
+race remains. A new case forces a retry after real task and operation writes, verifies that the
+aborted task is absent, and proves one committed operation, audit and task survive a client restart.
+An in-memory spawn receipt alone does not prove that its transaction committed.
+
+The isolation-only experiment passes all 13 existing cases. The final combined 14-case SQL suite
+then passes on three fresh PostgreSQL 17 databases, including actual Absurd admission and the
+unchanged group-child SQL checks. Production retry limits, authority and the baseline are unchanged.
+Independent review is required before publication. Remote-MCP SQL, human visual acceptance,
+provider and testv6 qualification remain open.
+
 ## Administration reporting contracts — source implemented
 
 This follow-up starts from the reviewed personal-memory command commit
