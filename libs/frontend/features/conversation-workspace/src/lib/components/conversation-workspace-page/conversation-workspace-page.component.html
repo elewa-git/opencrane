@@ -1,11 +1,11 @@
 <main
   class="conversation-workspace"
   [class.conversation-workspace--context-hidden]="
-    vm.store.selected() === null || !contextPanelOpen()
+    !contextPanelVisible()
   "
   [attr.data-route-state]="vm.store.routeState()"
   [attr.data-context-panel-open]="
-    vm.store.selected() !== null && contextPanelOpen()
+    contextPanelVisible()
   "
 >
   <p class="sr-only" role="status" aria-live="polite">{{ activityAnnouncement() }}</p>
@@ -44,6 +44,9 @@
         [items]="vm.sessionRailItems()"
         [selectedKey]="vm.selectedSessionKey()"
         [identity]="vm.railIdentity()"
+        [activityAvailable]="vm.activityAvailable()"
+        [pendingQuestionCount]="vm.elicitationActivity.pendingCount()"
+        (activityRequested)="openActivity()"
         (createRequested)="vm.showCreate()"
         (itemSelected)="selectSession($event)"
       />
@@ -65,6 +68,7 @@
             [hasParent]="selected.parent !== null" [busy]="vm.store.conversationCommandBusy()"
             [closed]="selected.lifecycle === vm.lifecycles.Closed" [contextPanelOpen]="contextPanelOpen()"
             [contextPanelLabel]="vm.contextPanelLabel()" (backRequested)="backToGroup()"
+            [pendingQuestionCount]="vm.elicitationActivity.pendingCount()"
             (archiveRequested)="archiveConversation()" (closeRequested)="vm.store.close()" (contextRequested)="openContextPanel()" />
                   <div class="conversation-workspace__body">
                     <wo-conversation-workspace-transcript [entries]="vm.messages()" (assetActionRequested)="vm.assetAction($event)" (askRequested)="vm.askAssistant($event)" (shareRequested)="vm.reviewGroupShare($event)" (childRequested)="openChild($event)" />
@@ -96,15 +100,15 @@
           </section>
         }
       </section>
-      @if (vm.store.selected(); as selected) {
-        @if (contextPanelOpen()) {
+      @if (contextPanelVisible()) {
           <wo-conversation-workspace-context-panel
-            [activityVisible]="vm.personalRuns.eligible()"
+            [activityVisible]="vm.activityAvailable()"
+            [filesVisible]="vm.store.selected() !== null"
             [activityRows]="vm.activityRows()"
             [activityReadState]="vm.activityReadState()"
-            [activityError]="vm.personalRuns.error()"
-            [activityRefreshAvailable]="!vm.personalRuns.accessChanged()"
-            (activityRefreshRequested)="vm.personalRuns.refresh()"
+            [activityError]="vm.activityError()"
+            [activityRefreshAvailable]="vm.activityRefreshAvailable()"
+            (activityRefreshRequested)="vm.refreshActivity()"
             [assets]="vm.assets()"
             [computerReviewVisible]="vm.computerReviewVisible()"
             [computerReviewBusy]="vm.reviewStore.busy()"
@@ -131,7 +135,6 @@
               vm.reviewStore.loadPreview($event.port, $event.path)
             "
           />
-        }
       }
     }
   }

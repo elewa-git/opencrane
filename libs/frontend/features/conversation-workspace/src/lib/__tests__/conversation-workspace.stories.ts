@@ -1,5 +1,5 @@
 import { type Meta, moduleMetadata, type StoryObj } from "@storybook/angular";
-import { expect, within } from "storybook/test";
+import { expect, userEvent, within } from "storybook/test";
 
 import { ConversationSessionRailIconStates, ConversationSessionRailItemKinds, type ConversationRailIdentityPresentation, type ConversationSessionRailItemPresentation } from "../conversation-workspace-feature.types";
 import { ConversationListComponent } from "../components/conversation-list/conversation-list.component";
@@ -31,6 +31,12 @@ const meta: Meta<ConversationListComponent> =
 export default meta;
 type Story = StoryObj<ConversationListComponent>;
 
+/** Bind the Angular output explicitly so the interaction observes the Activity request. */
+function _RenderWithActivitySpy(args: NonNullable<Story["args"]>)
+{
+	return { props: { ...args, activityRequestCount: 0 }, template: '<wo-conversation-list [items]="items" [selectedKey]="selectedKey" [identity]="identity" [activityAvailable]="activityAvailable" [pendingQuestionCount]="pendingQuestionCount" (activityRequested)="activityRequestCount = activityRequestCount + 1" /><output data-testid="activity-request-count" [attr.data-count]="activityRequestCount"></output>' };
+}
+
 /** Desktop rail shows the completed Welcome session beside ordinary sessions. */
 export const DesktopModes: Story = { tags: ["visual-test"], args: { items: _ITEMS, selectedKey: "agent-session", identity: _IDENTITY }, parameters: { viewport: { defaultViewport: "responsive" } } };
 
@@ -45,3 +51,15 @@ export const CompactModes: Story = { tags: ["visual-test", "visual-test-narrow"]
 
 /** Empty state gives the participant a clear next action without mentioning missing onboarding history. */
 export const Empty: Story = { tags: ["visual-test"], args: { items: [], selectedKey: null, identity: _IDENTITY } };
+
+/** Persistent Activity remains discoverable with an authority-backed pending-question count. */
+export const PendingQuestions: Story = { tags: ["visual-test"], args: { items: _ITEMS, selectedKey: null, identity: _IDENTITY, activityAvailable: true, pendingQuestionCount: 2 }, render: _RenderWithActivitySpy, play: async function _OpenActivity({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	expect(canvas.getByText("2 questions need your response", { exact: true })).toBeInTheDocument();
+	await userEvent.click(canvas.getByRole("button", { name: "Activity, 2 questions need your response" }));
+	expect(canvas.getByTestId("activity-request-count")).toHaveAttribute("data-count", "1");
+} };
+
+/** The counted Activity action shares the compact rail header without adding another layout row. */
+export const PendingQuestionsNarrow: Story = { ...PendingQuestions, tags: ["visual-test", "visual-test-narrow"] };

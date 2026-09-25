@@ -1,5 +1,11 @@
 <aside class="conversation-list" aria-labelledby="conversation-list-title">
-	<header class="conversation-list__brand"><wo-opencrane-brand [appearance]="brandAppearance" /></header>
+	<header class="conversation-list__brand">
+		<wo-opencrane-brand [appearance]="brandAppearance" />
+		@if (activityAvailable()) {
+			<p-button #activityToggle [ariaLabel]="activityLabel()" icon="pi pi-question-circle" [badge]="activityBadge()" badgeSeverity="warn" [rounded]="true" [text]="true" size="small" (onClick)="activityRequested.emit()" />
+			<span class="sr-only" aria-live="polite">{{ activityNotice() }}</span>
+		}
+	</header>
 	<p-button styleClass="conversation-list__create" label="New session" icon="pi pi-plus" [text]="true" (onClick)="createRequested.emit()" />
 	<nav aria-label="Conversation sessions">
 		<section aria-labelledby="conversation-list-title">

@@ -20,8 +20,8 @@ warnings explain unavailable Agent setup without inventing provisioning state in
 
 An ordinary selected conversation may compose one feature-local context panel from the existing Activity,
 Files, and Computer review components. The page owns whether that panel is open and restores keyboard focus
-to the header trigger when it closes. Direct and group conversations can expose Files but never adopt stale
-Agent-run Activity or an unavailable computer generation. PrimeNG tabs own Files and Computer review
+to the header trigger when it closes. Direct and group conversations show current-readable questions and
+Files but never adopt stale personal-run Activity or an unavailable computer generation. PrimeNG tabs own Files and Computer review
 selection and keyboard movement while the context component keeps that visual selection local.
 Ready file intents pass through a feature-local coordinator: it reserves the platform-owned Preview
 or Download action during the click, then asks the component-scoped asset state for authorized bytes.
@@ -33,12 +33,21 @@ selection, and command key; while that exact retry is pending, the picker and se
 locked so the visible files remain the files that will be sent. Only a confirmed save clears that captured asset set. Processing files
 remain visible and block submission until the bounded asset-state refresh observes Ready or Failed.
 
-Personal chats show **Recent activity** with readable work statuses and a **Refresh activity**
-control. The presenter maps the personal-run store without exposing execution identifiers. **Open
+The rail's **Activity** action shows the number of current-readable questions awaiting a response.
+It remains available on the chat index and completed onboarding history; those views open Activity
+without Files. New questions update the count without opening the panel. The component-scoped
+elicitation Activity store refreshes while the page is visible, immediately removes expired rows,
+and clears private content on identity or access loss. The API decides which participant may read
+or answer a question; the browser does not filter ordinary questions by their original assignee.
+
+Personal chats also show recent work with readable statuses and a **Refresh activity**
+control. The presenter merges both sources newest-first without exposing execution identifiers. **Open
 answer** appears only when a completed agent answer for that run is rendered in the selected
 transcript. The page checks that link again before focusing it, closes the narrow overlay and
-respects reduced-motion preferences. Company-assistant children keep their existing shared-chat
-surface; this personal index does not claim complete tool history or run controls.
+respects reduced-motion preferences. **Answer** opens the authorized conversation and reads the exact
+conversation/run/request from that Activity row before focusing its card. An unavailable target never
+falls back to an unrelated older question. Company-assistant children use the same question navigation;
+the personal-run index still does not claim complete shared tool history or run controls.
 
 The newest caller-owned run in a personal chat appears above the controlled composer through the
 existing conversation run-action element. Active work offers **Stop**. Submission keeps a pending
@@ -132,10 +141,12 @@ covers the choice, empty, pending, retry, ready-child, and accepted-share states
 request dialog. None of these presentation hints replace server source or permission checks.
 
 The page injects its presenter through composition. A separate selection coordinator starts initial
-reads, clears file and elicitation state before changing conversations, and selects the current computer generation.
+reads, clears file state before changing conversations, and selects the current computer generation.
+The elicitation coordinator owns selected-question discovery, global Activity activation, and exact-target
+navigation. It clears the selected draft on identity or selection changes and cancels overtaken reads.
 An approval log position invalidates the selected conversation's elicitation read; its approval id
 is never treated as a request id. The coordinator re-lists current requests through the signed-in
-API without polling, while the existing card keeps disclosure, decision, and terminal states out of
+API, while the independent Activity store owns visible-page refresh. The existing card keeps disclosure, decision, and terminal states out of
 the routed page markup.
 Pure status mappers derive composer and connection states. Each service is provided on the page,
 so navigating away destroys its effects and all selected-conversation state with it.

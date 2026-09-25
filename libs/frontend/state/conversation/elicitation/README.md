@@ -10,6 +10,10 @@ time, restores that draft after verified sign-in, and adopts only the server's r
 It discovers the oldest current request when a conversation is selected, preserves a draft across
 harmless refreshes, and performs one exact authority read when the request deadline arrives.
 
+The component-scoped Activity store reads pending requests for the signed-in participant while its
+page is visible. It partitions private rows by the verified session identity, drops expired rows at
+their server deadline, and stops recurring reads when access changes until an explicit retry.
+
 It also maps canonical request references and safe tool histories into Activity rows. It never
 creates a run, chooses the respondent, interprets protected A2UI actions, or reads personal memory.
 Its shared `ConversationActivityRow` accepts a personal-run status row with an optional answer
@@ -22,6 +26,8 @@ grants no access and does not copy an answer into this state package.
 
 - `ConversationElicitationStore` — component-scoped discovery, cancellable reads, command, draft,
   deadline, step-up, and authoritative reconciliation state.
+- `ConversationElicitationActivityStore` and `ConversationElicitationActivityReadStates` —
+  component-scoped visible-page refresh, identity fencing, pending badge count, and read feedback.
 - `OpenCraneConversationElicitationGateway` — generated-client adapter for selected-conversation
   pending lists, named request reads, responses, and Activity reads.
 - `__MapElicitationActivity` and `__MapToolActivity` — pure canonical-reference mappers.

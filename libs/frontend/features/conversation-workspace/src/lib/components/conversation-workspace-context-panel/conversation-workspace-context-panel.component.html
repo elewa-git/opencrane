@@ -6,7 +6,8 @@
   @if (activityVisible()) {
     <wo-conversation-activity
       [rows]="activityRows()"
-      title="Recent activity"
+      title="Activity"
+      emptyLabel="No activity needs your attention."
       [readState]="activityReadState()"
       [error]="activityError()"
       [refreshAvailable]="activityRefreshAvailable()"
@@ -35,6 +36,7 @@
       />
     </div>
   }
+  @if (filesVisible()) {
   <ng-template #filesPanel>
     <wo-conversation-files-panel
       [items]="assets()"
@@ -73,5 +75,6 @@
     </p-tabs>
   } @else {
     <ng-container [ngTemplateOutlet]="filesPanel" />
+  }
   }
 </aside>

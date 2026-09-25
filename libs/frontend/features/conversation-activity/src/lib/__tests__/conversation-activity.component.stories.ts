@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/angular";
 import { expect, userEvent, within } from "storybook/test";
 
-import { RunToolProgressPhases, ConversationActivityKinds, ElicitationRequestStates, type ConversationActivityRow, type ConversationActivityRunState } from "@opencrane/state/conversation/elicitation";
+import { RunToolProgressPhases, ConversationActivityKinds, ElicitationRequestStates, type ConversationActivityRow, type ConversationActivityRunState, type ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
 
 import { ConversationActivityComponent } from "../conversation-activity.component";
 import { ConversationActivityReadStates } from "../conversation-activity.types";
@@ -22,8 +22,26 @@ export default meta;
 /** Local story type. */
 type Story = StoryObj<ConversationActivityComponent>;
 
+/** Bind the Angular output explicitly so the interaction observes the emitted target. */
+function _RenderWithTargetSpy(args: NonNullable<Story["args"]>)
+{
+	return { props: { ...args, capturedTarget: null as ConversationActivityTarget | null }, template: '<wo-conversation-activity [rows]="rows" (targetRequested)="capturedTarget = $event" /><output data-testid="captured-target" [attr.data-conversation-id]="capturedTarget?.conversationId" [attr.data-run-id]="capturedTarget?.runId" [attr.data-request-id]="capturedTarget?.requestId"></output>' };
+}
+
 /** Mixed activity with a still-visible failed tool attempt during retry. */
 export const RequestsAndRetryingFailure: Story = { args: { rows: _ROWS } };
+
+/** Pending questions use participant-facing state and emit their exact canonical target. */
+export const PendingQuestions: Story = { args: { rows: [_ROWS[0]!] }, render: _RenderWithTargetSpy, play: async function _Answer({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	expect(canvas.getByText("Needs response", { exact: true })).toBeVisible();
+	await userEvent.click(canvas.getByRole("button", { name: "Answer" }));
+	expect(canvas.getByTestId("captured-target")).toHaveAttribute("data-request-id", "request-1");
+} };
+
+/** A long pending question remains readable in the narrow Activity surface. */
+export const PendingQuestionsNarrow: Story = { ...PendingQuestions, tags: ["visual-test-narrow"], args: { ...PendingQuestions.args, rows: [{ ..._ROWS[0], label: "Which multilingual supplier reconciliation report should I use for the Nairobi operations review?" }] } };
 
 /** Empty derived index. */
 export const Empty: Story = { args: { rows: [] } };

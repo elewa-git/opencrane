@@ -1,4 +1,6 @@
 export { ConversationElicitationStore } from "./lib/conversation-elicitation.store";
+export { ConversationElicitationActivityStore } from "./lib/conversation-elicitation-activity.store";
+export { ConversationElicitationActivityReadStates } from "./lib/conversation-elicitation-activity.types";
 export { __CanApproveElicitation, __CanApproveElicitationScope } from "./lib/elicitation-approval.guard";
 export { ELICITATION_GATEWAY, OpenCraneConversationElicitationGateway } from "./lib/opencrane-conversation-elicitation.gateway";
 export { TOOL_APPROVAL_SCOPE_GATEWAY, OpenCraneToolApprovalScopeGateway } from "./lib/opencrane-tool-approval-scope.gateway";

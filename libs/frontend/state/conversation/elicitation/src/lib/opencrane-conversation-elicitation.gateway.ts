@@ -35,23 +35,33 @@ export class OpenCraneConversationElicitationGateway implements ConversationElic
 	public async read(conversationId: string, requestId: string, signal?: AbortSignal): Promise<ConversationElicitation>
 	{
 		const { data, error, response } = await this._api.client.GET("/me/conversations/{conversationId}/elicitations/{requestId}", { params: { path: { conversationId, requestId } }, signal });
-		if (error !== undefined || !response.ok || data === undefined) throw _Error(response.status, error);
-		return __ParseConversationElicitation(data.elicitation);
+		if (error !== undefined || !response.ok || data === undefined)
+			throw _Error(response.status, error);
+		const elicitation = __ParseConversationElicitation(data.elicitation);
+		if (elicitation.conversationId !== conversationId || elicitation.requestId !== requestId)
+			throw new TypeError("elicitation read does not match its requested coordinate");
+		return elicitation;
 	}
 
 	/** @inheritdoc */
 	public async respond(conversationId: string, requestId: string, submission: SubmitElicitationResponse)
 	{
 		const { data, error, response } = await this._api.client.POST("/me/conversations/{conversationId}/elicitations/{requestId}/responses", { params: { path: { conversationId, requestId } }, body: _GeneratedSubmission(submission) });
-		if (error !== undefined || !response.ok || data === undefined) throw _Error(response.status, error);
+		if (error !== undefined || !response.ok || data === undefined)
+			throw _Error(response.status, error);
 		return __ParseElicitationResponseProjection(data.response);
 	}
 
 	/** @inheritdoc */
-	public async listActivity(limit = 50): Promise<readonly ConversationElicitation[]>
+	public async listActivity(limit = 50, signal?: AbortSignal): Promise<readonly ConversationElicitation[]>
 	{
-		const { data, error, response } = await this._api.client.GET("/me/activity/elicitations", { params: { query: { limit } } });
-		if (error !== undefined || !response.ok || data === undefined) throw _Error(response.status, error);
+		if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+			throw new TypeError("elicitation activity limit is invalid");
+		const { data, error, response } = await this._api.client.GET("/me/activity/elicitations", { params: { query: { limit } }, signal });
+		if (error !== undefined || !response.ok || data === undefined)
+			throw _Error(response.status, error);
+		if (!Array.isArray(data.elicitations) || data.elicitations.length > limit)
+			throw new TypeError("elicitation activity list exceeds its response bound");
 		return data.elicitations.map(__ParseConversationElicitation);
 	}
 }
@@ -71,15 +81,19 @@ function _GeneratedSubmission(submission: SubmitElicitationResponse): GeneratedE
 /** Convert HTTP status and only the fixed step-up path into bounded browser state. */
 function _Error(status: number, payload: unknown): ElicitationGatewayError
 {
-	if (status === 428) return new ElicitationGatewayError(ElicitationGatewayErrorKinds.StepUpRequired, _StepUpPath(payload));
-	if (status === 403) return new ElicitationGatewayError(ElicitationGatewayErrorKinds.Forbidden);
-	if (status === 409) return new ElicitationGatewayError(ElicitationGatewayErrorKinds.Conflict);
+	if (status === 428)
+		return new ElicitationGatewayError(ElicitationGatewayErrorKinds.StepUpRequired, _StepUpPath(payload));
+	if (status === 401 || status === 403 || status === 404)
+		return new ElicitationGatewayError(ElicitationGatewayErrorKinds.Forbidden);
+	if (status === 409)
+		return new ElicitationGatewayError(ElicitationGatewayErrorKinds.Conflict);
 	return new ElicitationGatewayError(ElicitationGatewayErrorKinds.Unavailable);
 }
 
 /** Admit only the server's fixed same-origin reauthentication path. */
 function _StepUpPath(payload: unknown): string
 {
-	if (payload !== null && typeof payload === "object" && !Array.isArray(payload) && (payload as Record<string, unknown>)["reauthenticatePath"] === "/api/v1/auth/reauthenticate") return "/api/v1/auth/reauthenticate";
+	if (payload !== null && typeof payload === "object" && !Array.isArray(payload) && (payload as Record<string, unknown>)["reauthenticatePath"] === "/api/v1/auth/reauthenticate")
+		return "/api/v1/auth/reauthenticate";
 	return "/api/v1/auth/reauthenticate";
 }

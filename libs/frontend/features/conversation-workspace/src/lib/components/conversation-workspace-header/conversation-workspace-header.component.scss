@@ -7,4 +7,5 @@
 .conversation-workspace__header-actions { display: flex; align-items: center; gap: var(--oc-space-1); }
 .conversation-workspace__context-toggle { display: inline-flex; align-items: center; gap: var(--oc-space-2); padding: var(--oc-space-2) var(--oc-space-3); border-radius: var(--oc-radius-card); color: var(--oc-ink-muted); }
 .conversation-workspace__context-toggle:hover { background: var(--oc-surface-subtle); color: var(--oc-ink-strong); }
+.conversation-workspace__question-count { padding: var(--oc-space-1) var(--oc-space-2); border-radius: var(--oc-radius-chip); background: var(--oc-warning-soft); color: var(--oc-warning); font-family: var(--oc-font-mono); font-size: var(--oc-text-xs); }
 @media (max-width: 52rem) { .conversation-workspace__header { align-items: flex-start; padding: var(--oc-conversation-content-gap); } .conversation-workspace__header-actions { align-items: flex-end; flex-direction: column; } }

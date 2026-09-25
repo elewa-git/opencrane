@@ -4,7 +4,7 @@
 	@if (readState() === readStates.Loading) { <p role="status">Loading recent activity…</p> }
 	@if (readState() === readStates.Refreshing) { <p role="status">Refreshing activity. Previous status is shown.</p> }
 	@if (readState() === readStates.Error) { <p-message severity="error" [text]="error() ?? 'Activity could not be loaded.'" /> }
-	@if (readState() === readStates.Ready && rows().length === 0) { <p class="activity__empty">No recent work is visible in this chat.</p> }
+	@if (readState() === readStates.Ready && rows().length === 0) { <p class="activity__empty">{{ emptyLabel() }}</p> }
 	<ul>
 		@for (row of rows(); track row.id) {
 			<li>
@@ -15,9 +15,9 @@
 						@if (row.kind === kinds.Run) { @if (row.latestTool; as tool) { <wo-scope-chip [label]="toolPhase(tool.phase).label" [tone]="toolPhase(tool.phase).tone" /> } }
 					</div>
 					@if (row.kind === kinds.ToolFailure && row.retrying) { <span class="activity__retrying">Retrying</span> }
-					@if (row.kind === kinds.Elicitation) { <span class="activity__state">{{ row.status }}</span> }
+					@if (row.kind === kinds.Elicitation) { <wo-scope-chip [label]="elicitationStatus(row.status).label" [tone]="elicitationStatus(row.status).tone" /> }
 					@if (row.kind === kinds.Run) { <wo-scope-chip [label]="runStatus(row.status).label" [tone]="runStatus(row.status).tone" /> }
-					@if (row.target; as target) { <p-button [label]="row.kind === kinds.Run ? 'Open answer' : 'Open'" [text]="true" size="small" (onClick)="targetRequested.emit(target)" /> }
+					@if (row.target; as target) { <p-button [label]="targetLabel(row)" [text]="true" size="small" (onClick)="targetRequested.emit(target)" /> }
 				</div>
 				@if (row.kind === kinds.ToolFailure) {
 					<details>

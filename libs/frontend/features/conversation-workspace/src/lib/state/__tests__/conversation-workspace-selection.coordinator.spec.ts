@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { ConversationEntryKinds, type ApprovalLogEntry } from "@opencrane/contracts";
 
-import { _ApprovalInvalidationSequence } from "../conversation-workspace-selection.coordinator";
+import { _ApprovalInvalidationSequence } from "../conversation-workspace-elicitation.coordinator";
 
 /** Build one participant-visible approval log without equating its approval id to an elicitation. */
 function _Approval(position: string, approvalId: string): ApprovalLogEntry

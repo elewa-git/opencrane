@@ -1,5 +1,55 @@
 # OpenCrane — Active Plan
 
+## Pending-question notifications — reviewed source candidate, 25 September 2026
+
+This frontend-only slice starts at published #910, immutable base
+`12e7f82b9a78e186d586221e1a3f949cb9bd056b`, on `feat/pending-question-activity`.
+Review order is #908 → #910 → this draft. The unfinished Ask backend and original 900-file
+MVP overlay remain separate; the 37 extracted frontend files match their reviewed source hashes.
+
+The existing Activity view now reads current-readable pending questions from the signed-in API.
+A persistent rail action announces the pending count, including on the chat index and completed
+onboarding history. Those views open Activity without Files; selected conversations keep their
+existing context panel. New questions never open the panel automatically. Visible-page reads
+repeat every five seconds without overlap or a time/count cutoff, stop while hidden, and refresh
+on return. Expired rows disappear immediately. Identity changes and denied reads clear private
+rows; a denied index requires an explicit retry. The browser never filters ordinary questions by
+their original assignee and introduces no authority, grant, schema or external action.
+
+A focused elicitation coordinator replaces the generic selection coordinator's question work.
+Activity navigation rechecks the current row, opens its authorized conversation, reads the exact
+request and verifies conversation/run/request before after-render focus. A stale or denied target
+does not open the oldest unrelated question. New navigation cancels the earlier request read.
+The presenter merges question notices with existing personal-run Activity; existing answer links,
+file controls and requester-only protected-purpose decisions remain with their current owners.
+
+Independent integrated review passes the 37-file source manifest
+`e08b2a0b2722fbc55e57d78fecc3840e085e9957482bf9b70f9ed4a028b03987`.
+The corrected review finding was a stale caller-assigned gateway comment; the API contract now
+accurately describes caller-readable requests. The extracted branch independently passes all
+210 focused unit tests (64 state, 136 workspace, 10 Activity) and all three type-check targets.
+Mechanical style and Prisma boundaries pass; growth review inventories the Activity read owner
+and exact-question coordinator without a remaining responsibility finding. Browser fixtures
+exercise shared peer-readable questions, index navigation on desktop/narrow, exact focus and an
+unavailable target. The final Storybook build and all 269 Chromium interactions across 40 suites
+pass. Candidate renders exposed a cramped desktop Activity column; changing the existing 640px
+breakpoint to a container query fixes that layout without new values or anatomy. The independent
+reviewer rechecked this final style delta and all 37 hashes. Desktop/narrow candidate screenshots
+are saved in `/private/tmp/opencrane-question-activity-candidates/`; the narrow document and body
+are both 390px wide with no horizontal overflow. The local renderer has been stopped.
+
+Remaining acceptance: no authenticated multi-person browser or provider journey is proved here,
+and no screenshot baseline is accepted. If a peer answers an already displayed ordinary question,
+the Activity poll removes its notice but the open card is not proactively reconciled by a stream
+event; submission still receives the server conflict and exact authority reread. This remains a
+follow-up UI freshness check. Explicit audience selection and model Ask routing are separate work.
+
+Parent CI on #908 head `498282c5aa8e5c1e5defbe0f93e9b79f7780ba06` passes code/database
+checks and 257 Storybook interactions. Its visual run has 130 passes, 48 missing baselines and
+20 changed comparisons; the previous interaction timeout is fixed. #910's current code/database
+and image-publication checks pass, but its Storybook execution was skipped as unaffected.
+None of those results is a merge, deployment or MVP acceptance.
+
 ## Collaborative clarification response authority — reviewed, 25 September 2026
 
 Accepted B permits any currently admitted subchat participant to answer an ordinary clarification.

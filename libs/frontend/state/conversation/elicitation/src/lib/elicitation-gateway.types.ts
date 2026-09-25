@@ -6,12 +6,12 @@ export type GeneratedElicitationSubmission = paths["/me/conversations/{conversat
 /** Signed-in browser port for generic participant input. */
 export interface ConversationElicitationGateway
 {
-	/** List at most fifty current requests assigned to the caller in one readable conversation. */
+	/** List at most fifty current requests readable by the caller in one conversation. */
 	listOpen(conversationId: string, signal?: AbortSignal): Promise<readonly ConversationElicitation[]>;
 	/** Read one exact active-participant request. */
 	read(conversationId: string, requestId: string, signal?: AbortSignal): Promise<ConversationElicitation>;
 	/** Submit one typed idempotent response. */
 	respond(conversationId: string, requestId: string, submission: SubmitElicitationResponse): Promise<ElicitationResponseProjection>;
-	/** Read bounded canonical request references for Activity. */
-	listActivity(limit?: number): Promise<readonly ConversationElicitation[]>;
+	/** Read bounded canonical request references for Activity and support lifecycle cancellation. */
+	listActivity(limit?: number, signal?: AbortSignal): Promise<readonly ConversationElicitation[]>;
 }
