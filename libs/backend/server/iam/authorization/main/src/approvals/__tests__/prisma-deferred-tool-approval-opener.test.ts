@@ -1,5 +1,5 @@
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
-import { AgentRunState, ExternalActionRecoveryMode, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState } from "@prisma/client";
+import { AgentRunState, ExternalActionRecoveryMode, McpCredentialRequirement, McpExecutionTransport, PrincipalProvenance, Prisma, ToolInvocationAuthorizationActorKind, ToolInvocationState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../../grants/persistence/prisma-managed-authorization-grant-repository", function _MockManagedGrants()
@@ -52,7 +52,11 @@ function _LiveTransaction()
 		conversationComputerActiveLease: { findUnique: vi.fn(async function _lease() { return { expiresAt: new Date("2026-07-29T00:01:00.000Z") }; }) },
 		elicitationRequest: { create: vi.fn(async function _createElicitation() { return { id: "interrupt-1" }; }) },
 		approvalRequest: { create: vi.fn(async function _create() { return { id: "approval-1" }; }), findFirst: vi.fn(async function _existing() { return null; }), count: vi.fn(async function _pending() { return 0; }) },
-		principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1" }) },
+		principal: { findUnique: vi.fn().mockResolvedValue({ id: "principal-1", subject: "user-1", provenance: PrincipalProvenance.External }), count: vi.fn().mockResolvedValue(1) },
+		orgMembership: { findFirst: vi.fn().mockResolvedValue({ id: "membership-1" }) },
+		conversationParticipant: { findUnique: vi.fn().mockResolvedValue({ accessEndedPosition: null }) },
+		agentRevisionMcpToolAssignment: { findUnique: vi.fn().mockResolvedValue({ agentServiceId: "service-1", siloId: "silo-1", toolRevision: { siloId: "silo-1", serverRevision: { siloId: "silo-1", mcpServerId: "server-1", transport: McpExecutionTransport.OciImage, connectionId: null, connectionGeneration: null, connectionOwnerPrincipalId: null, endpointDigest: null, server: { credentialRequirement: McpCredentialRequirement.Credentialless }, connection: null } } }) },
+		mcpServerInstall: { findUnique: vi.fn().mockResolvedValue({ id: "install-1", mcpServerId: "server-1", principalId: "principal-1", principal: { siloId: "silo-1", provenance: PrincipalProvenance.External, displayName: "Personal owner" } }) },
 		toolInvocation: { findUnique: vi.fn(async function _invocation() { return _Invocation(); }), updateMany: vi.fn() },
 		toolResultDelivery: { create: vi.fn(async function _delivery() { return { id: "delivery-1" }; }) },
 	};

@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "contract": "opencrane.preforward-rate-limit.v1",
+  "repository": "ghcr.io/berriai/litellm-non_root",
+  "tag": "main-v1.81.0-stable",
+  "indexDigest": "sha256:39718a9cc9138c99ec812bcde24896411cf54502967a36b19897c539b796fdc7",
+  "platformDigest": "sha256:69db33cbce0d122f931ab98c3eb30217b434ffe982f39606e800940d7ba3f2b3",
+  "configDigest": "sha256:8e5ba2561ad0252918a6a71c773e09feb932f8a259d32c5974f63785feb22418",
+  "runtimeUser": "nobody",
+  "workingDirectory": "/app",
+  "entrypoint": ["/app/docker/prod_entrypoint.sh"],
+  "command": ["--port", "4000"]
+}

@@ -1,14 +1,15 @@
 import { randomUUID } from "node:crypto";
 
-import { AgentRunState, ToolInvocationState, ToolResultDeliveryState, PrismaClient } from "@prisma/client";
+import { AgentRunState, AgentServiceKind, McpExecutionTransport, OrgRole, PrincipalProvenance, ToolInvocationState, ToolResultDeliveryState, PrismaClient } from "@prisma/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { PrismaElicitationRepository, PrismaElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
-import { ConversationModelToolModes, ElicitationBodyKinds, CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
+import { ConversationModelToolModes, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, McpCredentialRequirement, CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import { __FakeWorkflowEngine } from "@opencrane/backend/server/infra/workflows/testing";
 import { ConversationGeneratedFileResultStates, ConversationApprovalNotificationOutcomes, PrismaConversationComputerTurnWorkflowEventRepository, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, _RegisterConversationComputerTurnWorkflow, CONVERSATION_COMPUTER_TURN_TASK } from "@opencrane/backend/server/conversations";
-import { ToolInvocationEventTypes } from "@opencrane/backend/server/iam/authorization";
+import { PrismaManagedAuthorizationGrantRepository, ToolInvocationEventTypes } from "@opencrane/backend/server/iam/authorization";
 import type { IWorkflowTaskReceipt, IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { _ToolHandoffSqlRuntime, _WaitPastSqlDeadline } from "./conversation-tool-handoff.sql-fixture";
@@ -20,7 +21,7 @@ const _Runtimes = new Set<ReturnType<typeof _ToolHandoffSqlRuntime>>();
 const _WORKLOAD = { subject: "system:serviceaccount:computers:computer", audience: CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, namespace: "computers", serviceAccountName: "computer", workloadKind: "pod", workloadUid: "computer-pod-1", podUid: "computer-pod-1" } as const;
 const _APPROVAL_NOTIFICATIONS = { publishRequested: async function _PublishRequested() { return ConversationApprovalNotificationOutcomes.Published; } } as const;
 
-describe("saved personal approval through the conversation workflow on PostgreSQL", function _Suite()
+describe("requester approval through the conversation workflow on PostgreSQL", function _Suite()
 {
 	beforeAll(async function _Connect()
 	{
@@ -31,9 +32,9 @@ describe("saved personal approval through the conversation workflow on PostgreSQ
 	afterEach(async function _FinishControllers() { for (const runtime of _Runtimes) await runtime.register(); _Runtimes.clear(); });
 	afterAll(async function _Disconnect() { await _First.$disconnect(); });
 
-	it("waits for the exact owner, dispatches once, saves the result and consumes one continuation", async function _ApprovedJourney()
+	it.each([AgentServiceKind.Personal, AgentServiceKind.Managed])("%s approval waits for the requester, dispatches once and consumes one continuation", async function _ApprovedJourney(agentKind)
 	{
-		const f = await _SeedConversationToolProposalSqlFixture({ approvalRequired: true });
+		const f = await _SeedConversationToolProposalSqlFixture({ agentKind, approvalRequired: true });
 		const runtime = _ToolHandoffSqlRuntime(_First, f);
 		_Runtimes.add(runtime);
 		const workflows = new __FakeWorkflowEngine();
@@ -87,6 +88,15 @@ describe("saved personal approval through the conversation workflow on PostgreSQ
 		expect(await _First.mcpRuntimeExecution.count({ where: { siloId: f.siloId } })).toBe(0);
 		const approval = await _First.approvalRequest.findFirstOrThrow({ where: { runId: f.runId } });
 		const approvalRequest = await _First.elicitationRequest.findUniqueOrThrow({ where: { id: approval.elicitationRequestId! } });
+		expect(approval.principalId).toBe(f.principalId);
+		expect(approvalRequest.assignedParticipantId).toBe(f.requesterPrincipalId);
+		if (agentKind === AgentServiceKind.Managed)
+			expect(f.principalId).not.toBe(f.requesterPrincipalId);
+		const approvalGrants = await _First.authorizationGrant.findMany({ where: { siloId: f.siloId, resourceKind: ProductAuthorizationResourceKinds.ApprovalRequest, resourceId: approval.id, revokedAt: null } });
+		expect(approvalGrants).toHaveLength(2);
+		expect(approvalGrants.map(grant => grant.capabilityId).sort()).toEqual([ProductAuthorizationActions.Read, ProductAuthorizationActions.Decide].map(action => __ProductAuthorizationCapability(ProductAuthorizationResourceKinds.ApprovalRequest, action)!.capabilityId).sort());
+		for (const grant of approvalGrants)
+			expect(grant).toMatchObject({ subjectPrincipalId: f.requesterPrincipalId, boundaryPrincipalId: f.requesterPrincipalId, managerId: "deferred-tool-approval-assignee" });
 		const disclosure = {
 			kind: ElicitationBodyKinds.Approval,
 			prompt: "Allow this agent to invoke the reviewed tool?",
@@ -96,14 +106,31 @@ describe("saved personal approval through the conversation workflow on PostgreSQ
 			externalSystem: f.serverName,
 			consequence: `This invokes the external tool once. Its saved description says: ${f.tool.description}`,
 			proposedArguments: f.proposal.arguments,
+			executionConnection: {
+				ownerKind: agentKind === AgentServiceKind.Managed ? ElicitationConnectionOwnerKinds.CompanyAssistant : ElicitationConnectionOwnerKinds.Personal,
+				ownerLabel: f.executionOwnerLabel,
+				credentialRequirement: McpCredentialRequirement.Credentialless,
+			},
 		};
 		expect(approvalRequest.body).toEqual(disclosure);
 		expect(approvalRequest.bodyDigest).toBe(___DigestCanonicalJson(disclosure));
 		const elicitation = new PrismaElicitationUnitOfWork(_First, function _WakeFactory(transaction) { return new PrismaConversationComputerTurnWorkflowEventRepository(transaction as never, eventPort); });
-		const browserRequest = await elicitation.readOwned(f.siloId, f.turn.binding.conversationId, approval.elicitationRequestId!, f.principalId, new Date());
+		const browserRequest = await elicitation.readOwned(f.siloId, f.turn.binding.conversationId, approval.elicitationRequestId!, f.requesterPrincipalId, new Date());
 		expect(browserRequest?.body).toEqual(disclosure);
 		expect(JSON.stringify(browserRequest)).not.toMatch(/purposePayload|bodyDigest|requestKey|toolRevisionId|profileId|secretName|secretKey/);
-		await expect(elicitation.respond({ siloId: f.siloId, conversationId: f.turn.binding.conversationId, requestId: approval.elicitationRequestId!, subjectId: f.principalId, verifiedStepUpAt: new Date(), submission: { idempotencyKey: `approve-${f.runId}`, response: { kind: ElicitationBodyKinds.Approval, approved: true } }, now: new Date() })).resolves.toMatchObject({ outcome: "accepted" });
+		const response = { kind: ElicitationBodyKinds.Approval, approved: true } as const;
+		const respond = { siloId: f.siloId, conversationId: f.turn.binding.conversationId, requestId: approval.elicitationRequestId!, subjectId: f.requesterPrincipalId, verifiedStepUpAt: new Date(), submission: { idempotencyKey: `approve-${f.runId}`, response }, now: new Date() };
+		await expect(elicitation.respond(respond)).resolves.toMatchObject({ outcome: "accepted", projection: { idempotent: false } });
+		await expect(elicitation.respond({ ...respond, now: new Date() })).resolves.toMatchObject({ outcome: "accepted", projection: { idempotent: true } });
+		await expect(_First.approvalRequest.findUniqueOrThrow({ where: { id: approval.id } })).resolves.toMatchObject({ principalId: f.principalId, decidedBy: f.requesterPrincipalId, state: "Approved" });
+		expect(await _First.elicitationResponseAttempt.count({ where: { requestId: approvalRequest.id } })).toBe(1);
+		expect(await _First.authorizationGrant.count({ where: { siloId: f.siloId, resourceKind: ProductAuthorizationResourceKinds.ApprovalRequest, resourceId: approval.id, revokedAt: null } })).toBe(0);
+		const decisionAudits = await _First.auditDecision.findMany({ where: { siloId: f.siloId, actorId: f.requesterPrincipalId, argumentsDigest: ___DigestCanonicalJson(response) }, orderBy: { resourceKind: "asc" } });
+		expect(decisionAudits).toEqual(expect.arrayContaining([
+			expect.objectContaining({ actorKind: "User", actorId: f.requesterPrincipalId, resourceKind: ProductAuthorizationResourceKinds.Conversation, resourceId: f.turn.binding.conversationId, action: ProductAuthorizationActions.Use, outcome: "Allow" }),
+			expect.objectContaining({ actorKind: "User", actorId: f.requesterPrincipalId, resourceKind: ProductAuthorizationResourceKinds.ApprovalRequest, resourceId: approval.id, action: ProductAuthorizationActions.Decide, outcome: "Allow" }),
+		]));
+		expect(decisionAudits).toHaveLength(2);
 		await _Eventually(async function _Ready() { return (await _First.toolInvocation.findFirstOrThrow({ where: { runId: f.runId } })).state === ToolInvocationState.Ready; });
 		expect(await _First.mcpRuntimeExecution.count({ where: { siloId: f.siloId } })).toBe(0);
 		const registered = await _EventuallyValue(async function _Registered() { return runtime.register(); });
@@ -140,9 +167,54 @@ describe("saved personal approval through the conversation workflow on PostgreSQ
 		expect((await _First.runInputSnapshot.findFirstOrThrow({ where: { runId: f.runId } })).budgetPolicy).toMatchObject({ maxToolInvocations: 1 });
 	});
 
-	it("expires an unanswered approval into one saved terminal result without dispatch", async function _ExpiredJourney()
+	it.each([AgentServiceKind.Personal, AgentServiceKind.Managed])("%s RemoteHttp approval saves its execution owner and one continuation without calling the provider", async function _RemoteApproval(agentKind)
 	{
-		const f = await _SeedConversationToolProposalSqlFixture({ approvalRequired: true, runLifetimeMs: 1_500 });
+		const f = await _SeedConversationToolProposalSqlFixture({ agentKind, approvalRequired: true, transport: McpExecutionTransport.RemoteHttp });
+		const runtime = _ToolHandoffSqlRuntime(_First, f);
+		_Runtimes.add(runtime);
+		const owner = new PrismaConversationToolProposalUnitOfWork(_First, f.dependencies, runtime.admission, async function _ApprovalExpiry(transaction, command) { await new PrismaElicitationRepository(transaction as never).expireDue(command); });
+		const workflows = new __FakeWorkflowEngine();
+		workflows.declare(CONVERSATION_COMPUTER_TURN_TASK);
+		const task = await workflows.spawn({ client: {} }, { taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: randomUUID(), input: {} });
+		const persistedTask = { ...task, taskId: randomUUID() };
+		await _First.agentRun.update({ where: { id: f.runId }, data: { workflowTaskId: persistedTask.taskId, workflowTaskName: persistedTask.taskName, workflowTaskKey: persistedTask.idempotencyKey } });
+		await owner.admit(f.turn, f.candidate, f.proposal, _WORKLOAD);
+		const approval = await _First.approvalRequest.findFirstOrThrow({ where: { runId: f.runId } });
+		const request = await _First.elicitationRequest.findUniqueOrThrow({ where: { id: approval.elicitationRequestId! } });
+		const invocation = await _First.toolInvocation.findFirstOrThrow({ where: { runId: f.runId } });
+		const expectedOwnerKind = agentKind === AgentServiceKind.Managed ? ElicitationConnectionOwnerKinds.CompanyAssistant : ElicitationConnectionOwnerKinds.Personal;
+		expect(request.body).toMatchObject({ executionConnection: { ownerKind: expectedOwnerKind, ownerLabel: f.executionOwnerLabel, credentialRequirement: McpCredentialRequirement.Credentialless } });
+		expect(request.bodyDigest).toBe(___DigestCanonicalJson(request.body as never));
+		expect(approval).toMatchObject({ principalId: f.principalId, state: "Pending" });
+		expect(request.assignedParticipantId).toBe(f.requesterPrincipalId);
+		expect(invocation.state).toBe(ToolInvocationState.AwaitingApproval);
+		const connection = await _First.mcpConnection.findFirstOrThrow({ where: { siloId: f.siloId } });
+		expect(connection).toMatchObject({ ownerPrincipalId: f.principalId, actorPrincipalId: f.requesterPrincipalId });
+		if (agentKind === AgentServiceKind.Managed)
+			expect(f.principalId).not.toBe(f.requesterPrincipalId);
+		const grants = await _First.authorizationGrant.findMany({ where: { siloId: f.siloId, resourceKind: ProductAuthorizationResourceKinds.ApprovalRequest, resourceId: approval.id, revokedAt: null } });
+		expect(grants).toHaveLength(2);
+		expect(grants.every(function _RequesterGrant(grant) { return grant.subjectPrincipalId === f.requesterPrincipalId && grant.boundaryPrincipalId === f.requesterPrincipalId; })).toBe(true);
+
+		const emitted: string[] = [];
+		const taskAliases = new Map([[persistedTask.taskId, task]]);
+		const eventPort = _EventPort(workflows, emitted, taskAliases);
+		const elicitation = new PrismaElicitationUnitOfWork(_First, function _WakeFactory(transaction) { return new PrismaConversationComputerTurnWorkflowEventRepository(transaction as never, eventPort); });
+		const response = { kind: ElicitationBodyKinds.Approval, approved: true } as const;
+		const command = { siloId: f.siloId, conversationId: f.turn.binding.conversationId, requestId: request.id, subjectId: f.requesterPrincipalId, verifiedStepUpAt: new Date(), submission: { idempotencyKey: `approve-remote-${f.runId}`, response }, now: new Date() };
+		await expect(elicitation.respond(command)).resolves.toMatchObject({ outcome: "accepted", projection: { idempotent: false } });
+		await expect(elicitation.respond({ ...command, now: new Date() })).resolves.toMatchObject({ outcome: "accepted", projection: { idempotent: true } });
+		expect(await _First.toolInvocation.findUniqueOrThrow({ where: { id: invocation.id } })).toMatchObject({ state: ToolInvocationState.Ready });
+		expect(await _First.approvalRequest.findUniqueOrThrow({ where: { id: approval.id } })).toMatchObject({ state: "Approved", decidedBy: f.requesterPrincipalId });
+		expect(await _First.authorizationGrant.count({ where: { siloId: f.siloId, resourceKind: ProductAuthorizationResourceKinds.ApprovalRequest, resourceId: approval.id, revokedAt: null } })).toBe(0);
+		expect(await _First.elicitationResponseAttempt.count({ where: { requestId: request.id } })).toBe(1);
+		expect(await _First.mcpRuntimeExecution.count({ where: { siloId: f.siloId } })).toBe(0);
+		expect(emitted).toEqual([`tool-approval:${invocation.toolInvocationId}`]);
+	});
+
+	it.each([AgentServiceKind.Personal, AgentServiceKind.Managed])("%s unanswered approval expires into one terminal result without dispatch", async function _ExpiredJourney(agentKind)
+	{
+		const f = await _SeedConversationToolProposalSqlFixture({ agentKind, approvalRequired: true, runLifetimeMs: 1_500 });
 		const runtime = _ToolHandoffSqlRuntime(_First, f);
 		_Runtimes.add(runtime);
 		const owner = new PrismaConversationToolProposalUnitOfWork(_First, f.dependencies, runtime.admission, async function _ApprovalExpiry(transaction, command) { await new PrismaElicitationRepository(transaction as never).expireDue(command); });
@@ -163,9 +235,9 @@ describe("saved personal approval through the conversation workflow on PostgreSQ
 		expect(await _First.toolResultDelivery.count({ where: { toolInvocationId: pending.id, state: ToolResultDeliveryState.Pending } })).toBe(1);
 	});
 
-	it("denies the saved approval before runtime admission", async function _DeniedJourney()
+	it.each([AgentServiceKind.Personal, AgentServiceKind.Managed])("%s requester can deny the saved approval before runtime admission", async function _DeniedJourney(agentKind)
 	{
-		const f = await _SeedConversationToolProposalSqlFixture({ approvalRequired: true, secretArguments: true });
+		const f = await _SeedConversationToolProposalSqlFixture({ agentKind, approvalRequired: true, secretArguments: true });
 		const runtime = _ToolHandoffSqlRuntime(_First, f);
 		_Runtimes.add(runtime);
 		const owner = new PrismaConversationToolProposalUnitOfWork(_First, f.dependencies, runtime.admission, async function _ApprovalExpiry(transaction, command) { await new PrismaElicitationRepository(transaction as never).expireDue(command); });
@@ -177,14 +249,114 @@ describe("saved personal approval through the conversation workflow on PostgreSQ
 		expect(JSON.stringify(request.body)).not.toContain("sql-secret-never-visible");
 		expect(approval.safeProposedArguments).toBeNull();
 		const elicitation = new PrismaElicitationUnitOfWork(_First);
-		await expect(elicitation.respond({ siloId: f.siloId, conversationId: f.turn.binding.conversationId, requestId: approval.elicitationRequestId!, subjectId: f.principalId, verifiedStepUpAt: new Date(), submission: { idempotencyKey: `approve-hidden-${f.runId}`, response: { kind: ElicitationBodyKinds.Approval, approved: true } }, now: new Date() })).resolves.toEqual({ outcome: "invalid_response" });
-		await expect(elicitation.respond({ siloId: f.siloId, conversationId: f.turn.binding.conversationId, requestId: approval.elicitationRequestId!, subjectId: f.principalId, verifiedStepUpAt: new Date(), submission: { idempotencyKey: `deny-${f.runId}`, response: { kind: ElicitationBodyKinds.Approval, approved: false } }, now: new Date() })).resolves.toMatchObject({ outcome: "accepted" });
+		await expect(elicitation.respond({ siloId: f.siloId, conversationId: f.turn.binding.conversationId, requestId: approval.elicitationRequestId!, subjectId: f.requesterPrincipalId, verifiedStepUpAt: new Date(), submission: { idempotencyKey: `approve-hidden-${f.runId}`, response: { kind: ElicitationBodyKinds.Approval, approved: true } }, now: new Date() })).resolves.toEqual({ outcome: "invalid_response" });
+		await expect(elicitation.respond({ siloId: f.siloId, conversationId: f.turn.binding.conversationId, requestId: approval.elicitationRequestId!, subjectId: f.requesterPrincipalId, verifiedStepUpAt: new Date(), submission: { idempotencyKey: `deny-${f.runId}`, response: { kind: ElicitationBodyKinds.Approval, approved: false } }, now: new Date() })).resolves.toMatchObject({ outcome: "accepted" });
 		const denied = await _First.toolInvocation.findUniqueOrThrow({ where: { id: pending.id } });
 		expect(denied).toMatchObject({ state: ToolInvocationState.Failed, failureCode: "approval_denied" });
 		expect(await _First.mcpRuntimeExecution.count({ where: { siloId: f.siloId } })).toBe(0);
 		expect(await _First.toolResultDelivery.count({ where: { toolInvocationId: pending.id, state: ToolResultDeliveryState.Pending } })).toBe(1);
 	});
+
+	it("refuses another active participant's company approval without changing protected state", async function _WrongRequester()
+	{
+		const { fixture, approval, elicitation, wakes } = await _PendingManagedApproval();
+		const otherPrincipalId = await _OtherParticipant(fixture);
+		const before = await _ApprovalState(fixture, approval.id, approval.elicitationRequestId!);
+		await expect(elicitation.readOwned(fixture.siloId, fixture.turn.binding.conversationId, approval.elicitationRequestId!, otherPrincipalId, new Date())).resolves.toBeNull();
+		await expect(elicitation.respond({ siloId: fixture.siloId, conversationId: fixture.turn.binding.conversationId, requestId: approval.elicitationRequestId!, subjectId: otherPrincipalId, verifiedStepUpAt: new Date(), submission: { idempotencyKey: `wrong-requester-${fixture.runId}`, response: { kind: ElicitationBodyKinds.Approval, approved: true } }, now: new Date() })).resolves.toEqual({ outcome: "unauthorized" });
+		expect(await _ApprovalState(fixture, approval.id, approval.elicitationRequestId!)).toEqual(before);
+		expect(wakes).toEqual([]);
+	});
+
+	it("refuses the company requester's response after its exact Decide grant is revoked", async function _RevokedDecision()
+	{
+		const { fixture, approval, elicitation, wakes } = await _PendingManagedApproval();
+		await _RevokeApprovalCapability(fixture, approval.id, ProductAuthorizationActions.Decide);
+		const before = await _ApprovalState(fixture, approval.id, approval.elicitationRequestId!);
+		await expect(elicitation.readOwned(fixture.siloId, fixture.turn.binding.conversationId, approval.elicitationRequestId!, fixture.requesterPrincipalId, new Date())).resolves.not.toBeNull();
+		await expect(elicitation.respond({ siloId: fixture.siloId, conversationId: fixture.turn.binding.conversationId, requestId: approval.elicitationRequestId!, subjectId: fixture.requesterPrincipalId, verifiedStepUpAt: new Date(), submission: { idempotencyKey: `revoked-decide-${fixture.runId}`, response: { kind: ElicitationBodyKinds.Approval, approved: true } }, now: new Date() })).resolves.toEqual({ outcome: "unauthorized" });
+		expect(await _ApprovalState(fixture, approval.id, approval.elicitationRequestId!)).toEqual(before);
+		expect(wakes).toEqual([]);
+	});
+
+	it("hides a pending company approval from detail, open list and activity after Read revocation", async function _RevokedRead()
+	{
+		const { fixture, approval, elicitation, wakes } = await _PendingManagedApproval();
+		const conversationId = fixture.turn.binding.conversationId;
+		await expect(elicitation.readOwned(fixture.siloId, conversationId, approval.elicitationRequestId!, fixture.requesterPrincipalId, new Date())).resolves.not.toBeNull();
+		await expect(elicitation.listOpenOwned(fixture.siloId, conversationId, fixture.requesterPrincipalId, new Date())).resolves.toHaveLength(1);
+		await expect(elicitation.listActivityOwned(fixture.siloId, fixture.requesterPrincipalId, 20, new Date())).resolves.toHaveLength(1);
+		await _RevokeApprovalCapability(fixture, approval.id, ProductAuthorizationActions.Read);
+		const before = await _ApprovalState(fixture, approval.id, approval.elicitationRequestId!);
+		await expect(elicitation.readOwned(fixture.siloId, conversationId, approval.elicitationRequestId!, fixture.requesterPrincipalId, new Date())).resolves.toBeNull();
+		await expect(elicitation.listOpenOwned(fixture.siloId, conversationId, fixture.requesterPrincipalId, new Date())).resolves.toEqual([]);
+		await expect(elicitation.listActivityOwned(fixture.siloId, fixture.requesterPrincipalId, 20, new Date())).resolves.toEqual([]);
+		expect(await _ApprovalState(fixture, approval.id, approval.elicitationRequestId!)).toEqual(before);
+		expect(wakes).toEqual([]);
+	});
 });
+
+/** Open a real company approval while recording any attempted workflow resume. */
+async function _PendingManagedApproval()
+{
+	const fixture = await _SeedConversationToolProposalSqlFixture({ agentKind: AgentServiceKind.Managed, approvalRequired: true });
+	const runtime = _ToolHandoffSqlRuntime(_First, fixture);
+	_Runtimes.add(runtime);
+	const owner = new PrismaConversationToolProposalUnitOfWork(_First, fixture.dependencies, runtime.admission, async function _ApprovalExpiry(transaction, command) { await new PrismaElicitationRepository(transaction as never).expireDue(command); });
+	await owner.admit(fixture.turn, fixture.candidate, fixture.proposal, _WORKLOAD);
+	const approval = await _First.approvalRequest.findFirstOrThrow({ where: { runId: fixture.runId } });
+	expect(approval).toMatchObject({ principalId: fixture.principalId, state: "Pending" });
+	expect(fixture.principalId).not.toBe(fixture.requesterPrincipalId);
+	const wakes: string[] = [];
+	const elicitation = new PrismaElicitationUnitOfWork(_First, function _WakeFactory()
+	{
+		return { async wake(runId, attempt, toolInvocationId) { wakes.push(`${runId}:${attempt}:${toolInvocationId}`); } };
+	});
+	return { fixture, approval, elicitation, wakes };
+}
+
+/** Give another human normal conversation access without changing the frozen requester. */
+async function _OtherParticipant(fixture: Awaited<ReturnType<typeof _SeedConversationToolProposalSqlFixture>>): Promise<string>
+{
+	const principalId = randomUUID();
+	await _First.$transaction(async function _SeedOtherParticipant(transaction)
+	{
+		await transaction.principal.create({ data: { id: principalId, siloId: fixture.siloId, issuer: "https://identity.example.test", subject: principalId, provenance: PrincipalProvenance.External } });
+		await transaction.orgMembership.create({ data: { clusterTenant: fixture.siloId, subject: principalId, role: OrgRole.Member } });
+		await transaction.conversationParticipant.create({ data: { conversationId: fixture.turn.binding.conversationId, userId: principalId, visibleFromPosition: 1n, readThroughPosition: 0n } });
+		const resource = { kind: ProductAuthorizationResourceKinds.Conversation, id: fixture.turn.binding.conversationId } as const;
+		const grants = [ProductAuthorizationActions.Read, ProductAuthorizationActions.Use].map(function _Grant(action)
+		{
+			const capability = __ProductAuthorizationCapability(resource.kind, action)!;
+			return { subject: { kind: AuthorizationSubjectKinds.Principal, principalId }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, capability, resource, priority: 0, createdByPrincipalId: principalId } as const;
+		});
+		await new PrismaManagedAuthorizationGrantRepository(transaction).reconcileManagedResourceGrants({ siloId: fixture.siloId, managerId: `approval-sql-peer-${principalId}`, resource, grants, now: new Date() });
+	});
+	return principalId;
+}
+
+/** Revoke only one temporary approval capability, preserving the requester's other rights. */
+async function _RevokeApprovalCapability(fixture: Awaited<ReturnType<typeof _SeedConversationToolProposalSqlFixture>>, approvalRequestId: string, action: ProductAuthorizationActions.Read | ProductAuthorizationActions.Decide): Promise<void>
+{
+	const capability = __ProductAuthorizationCapability(ProductAuthorizationResourceKinds.ApprovalRequest, action)!;
+	const revoked = await _First.authorizationGrant.updateMany({ where: { siloId: fixture.siloId, subjectPrincipalId: fixture.requesterPrincipalId, resourceKind: ProductAuthorizationResourceKinds.ApprovalRequest, resourceId: approvalRequestId, capabilityId: capability.capabilityId, revokedAt: null }, data: { revokedAt: new Date() } });
+	expect(revoked.count).toBe(1);
+}
+
+/** Read every durable projection that a rejected browser action must leave unchanged. */
+async function _ApprovalState(fixture: Awaited<ReturnType<typeof _SeedConversationToolProposalSqlFixture>>, approvalRequestId: string, requestId: string)
+{
+	return {
+		run: await _First.agentRun.findUniqueOrThrow({ where: { id: fixture.runId } }),
+		approval: await _First.approvalRequest.findUniqueOrThrow({ where: { id: approvalRequestId } }),
+		request: await _First.elicitationRequest.findUniqueOrThrow({ where: { id: requestId } }),
+		invocations: await _First.toolInvocation.findMany({ where: { runId: fixture.runId }, orderBy: { id: "asc" } }),
+		executions: await _First.mcpRuntimeExecution.findMany({ where: { siloId: fixture.siloId }, orderBy: { id: "asc" } }),
+		responses: await _First.elicitationResponseAttempt.findMany({ where: { requestId }, orderBy: { id: "asc" } }),
+		audits: await _First.auditDecision.findMany({ where: { siloId: fixture.siloId }, orderBy: { id: "asc" } }),
+		grants: await _First.authorizationGrant.findMany({ where: { siloId: fixture.siloId, resourceKind: ProductAuthorizationResourceKinds.ApprovalRequest, resourceId: approvalRequestId }, orderBy: { id: "asc" } }),
+	};
+}
 
 async function _Eventually(check: () => Promise<boolean>): Promise<void>
 {

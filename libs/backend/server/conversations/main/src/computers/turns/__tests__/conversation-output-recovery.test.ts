@@ -22,7 +22,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		f.history.afterAppend = async function _LoseResponse(command)
 		{
 			const type = command.events[0].type;
-			if (!lost && ((step === "intent" && type.endsWith("turn-output.v3")) || (step === "history" && command.streamName === f.stream) || (step === "settle" && type.endsWith("turn-settled.v1"))))
+			if (!lost && ((step === "intent" && type.endsWith("turn-output.v4")) || (step === "history" && command.streamName === f.stream) || (step === "settle" && type.endsWith("turn-settled.v1"))))
 			{
 				lost = true;
 				throw new Error("response lost");
@@ -88,7 +88,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		let arrived = 0;
 		f.history.beforeAppend = async function _BothPrepared(command)
 		{
-			if (!command.events[0].type.endsWith("turn-output.v3"))
+			if (!command.events[0].type.endsWith("turn-output.v4"))
 				return;
 			if (++arrived === 2)
 				ready.release();
@@ -126,7 +126,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		const f = await _OutputRecoveryHarness();
 		f.history.afterAppend = async function _StopAfterIntent(command)
 		{
-			if (command.events[0].type.endsWith("turn-output.v3"))
+			if (command.events[0].type.endsWith("turn-output.v4"))
 				throw new Error("intent saved");
 		};
 		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("intent saved");

@@ -1,11 +1,10 @@
-import { PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION } from "@opencrane/contracts";
-import { ___ParseRunBudgetPolicy, type CompiledRunInput, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, ___ParseRunBudgetPolicy, type CompiledRunInput, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _IsModelToolNameValid } from "./mcp-model-tool-name";
 import type { PromptCompilerRepositories } from "./prompt-compiler.types";
+import { _CONVERSATION_FINAL_OUTPUT_INSTRUCTIONS } from "./conversation-final-output-instructions";
 
 /**
  * Turn an immutable {@link RunInputSnapshot} into the {@link CompiledRunInput} the runtime consumes
@@ -90,18 +89,16 @@ async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, rep
 	// 2. Look up every record the compiled input needs.
 	const personaInstructions = await repositories.loadPersonaInstructions(snapshot.personaRevisionId);
 	const messages = await repositories.loadMessages(snapshot.messageIds);
-	const resolvedTools = _orderTools(await repositories.loadToolDefinitions(snapshot.mcpTools));
-	const tools = snapshot.executionSubject.membership.kind === ExecutionSubjectMembershipKinds.Managed
-		? resolvedTools.filter(tool => !tool.requiresApproval)
-		: resolvedTools;
+	const tools = _orderTools(await repositories.loadToolDefinitions(snapshot.mcpTools));
 	const artifactSummaries = await repositories.loadArtifactSummaries([...snapshot.artifactRevisionIds].sort());
 	const skillSummaries = await repositories.loadSkillSummaries([...snapshot.skillRevisionIds].sort());
 	const model = await repositories.resolveModelRoute(snapshot.siloId, snapshot.modelRoute);
 
 	// 3. Assemble instructions and budget deterministically, then seal the payload with its digest.
-	const instructions = _assembleInstructions(personaInstructions, artifactSummaries, skillSummaries);
+	const finalOutput = snapshot.conversationId === null ? CompiledFinalOutputModes.Text : CompiledFinalOutputModes.Conversation;
+	const instructions = _assembleInstructions(personaInstructions, artifactSummaries, skillSummaries, finalOutput);
 	const budget = ___ParseRunBudgetPolicy(snapshot.budgetPolicy);
-	const unsealed = { promptCompilerVersion: PROMPT_COMPILER_VERSION, runId: snapshot.runId, attempt: snapshot.attempt, instructions, messages, tools, model, budget };
+	const unsealed = { promptCompilerVersion: PROMPT_COMPILER_VERSION, runId: snapshot.runId, attempt: snapshot.attempt, instructions, finalOutput, messages, tools, model, budget };
 	return { ...unsealed, digest: _digest(unsealed) };
 }
 
@@ -140,7 +137,7 @@ function _compareText(left: string, right: string): number
 }
 
 /** Build the single instructions block from persona text and canonically ordered context sections. */
-function _assembleInstructions(personaInstructions: string, artifactSummaries: readonly string[], skillSummaries: readonly string[]): string
+function _assembleInstructions(personaInstructions: string, artifactSummaries: readonly string[], skillSummaries: readonly string[], finalOutput: CompiledFinalOutputModes): string
 {
 	const sections: string[] = [];
 	if (personaInstructions.trim().length > 0)
@@ -149,6 +146,8 @@ function _assembleInstructions(personaInstructions: string, artifactSummaries: r
 		sections.push(`Artifacts available for this run:\n${_bullets(artifactSummaries)}`);
 	if (skillSummaries.length > 0)
 		sections.push(`Skills available for this run:\n${_bullets(skillSummaries)}`);
+	if (finalOutput === CompiledFinalOutputModes.Conversation)
+		sections.push(_CONVERSATION_FINAL_OUTPUT_INSTRUCTIONS);
 	return sections.join("\n\n");
 }
 

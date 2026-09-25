@@ -9,7 +9,7 @@ const _EXPIRES_AT = new Date(_NOW + 300_000).toISOString();
 beforeEach(() => { vi.spyOn(Date, "now").mockReturnValue(_NOW); });
 afterEach(() => { vi.restoreAllMocks(); });
 
-const _INPUT = { bootstrapId: "bootstrap-1", keyAlias: "attempt-1", modelAlias: "model-1", computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" }, lease: { leaseId: "lease-1", leaseGeneration: 1 }, expirySeconds: 300, notAfter: new Date(_NOW + 600_000).toISOString(), maxBudgetUsd: 0.1 };
+const _INPUT = { bootstrapId: "bootstrap-1", runId: "run-1", attempt: 1, keyAlias: "attempt-1", modelAlias: "model-1", computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" }, lease: { leaseId: "lease-1", leaseGeneration: 1 }, expirySeconds: 300, notAfter: new Date(_NOW + 600_000).toISOString(), maxBudgetUsd: 0.1 };
 
 function _Cipher()
 {
@@ -21,7 +21,7 @@ function _Cipher()
 
 function _UnitOfWork(repository: object, raw: { readonly issue: ReturnType<typeof vi.fn>; readonly revoke: ReturnType<typeof vi.fn> }, cipher = _Cipher())
 {
-	const transaction = { conversationComputerActiveLease: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, ...repository };
+	const transaction = { agentRun: { findFirst: vi.fn().mockResolvedValue({ id: _INPUT.runId }) }, conversationComputerActiveLease: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, ...repository };
 	const prisma = { $transaction: vi.fn(async (operation: (transaction: object) => Promise<unknown>) => await operation(transaction)) };
 	return new PrismaConversationComputerCredentialUnitOfWork(prisma as never, cipher as never, raw as never, "silo-1");
 }
@@ -89,7 +89,7 @@ describe("PrismaConversationComputerCredentialUnitOfWork", function _PrismaConve
 				return { count: 1 };
 			}),
 		};
-		const transaction = { conversationComputerActiveLease: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, conversationComputerAttemptCredential: credential };
+		const transaction = { agentRun: { findFirst: vi.fn().mockResolvedValue({ id: _INPUT.runId }) }, conversationComputerActiveLease: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, conversationComputerAttemptCredential: credential };
 		const prisma = { $transaction: vi.fn(async (operation: (value: object) => Promise<unknown>) => await operation(transaction)) };
 		const raw = { issue: vi.fn().mockResolvedValue({ key: "secret", expiresAt: _EXPIRES_AT }), revoke: vi.fn().mockRejectedValue(new Error("gateway unavailable")), revokeByAlias: vi.fn() };
 		const authority = new PrismaConversationComputerCredentialUnitOfWork(prisma as never, _Cipher() as never, raw, "silo-1");
@@ -118,7 +118,7 @@ describe("PrismaConversationComputerCredentialUnitOfWork", function _PrismaConve
 		const cipher = _Cipher();
 		if (failure === "encryption")
 			cipher.encrypt.mockImplementationOnce(function _Fail() { fail = false; throw new Error("cipher unavailable"); });
-		const transaction = { conversationComputerActiveLease: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, conversationComputerAttemptCredential: credential };
+		const transaction = { agentRun: { findFirst: vi.fn().mockResolvedValue({ id: _INPUT.runId }) }, conversationComputerActiveLease: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, conversationComputerAttemptCredential: credential };
 		const prisma = { $transaction: vi.fn(async (operation: (value: object) => Promise<unknown>) => await operation(transaction)) };
 		const raw = { issue: vi.fn().mockResolvedValue({ key: "lost-secret", expiresAt: _EXPIRES_AT }), revoke: vi.fn().mockRejectedValueOnce(new Error("gateway unavailable")), revokeByAlias: vi.fn().mockResolvedValue(undefined) };
 		const authority = new PrismaConversationComputerCredentialUnitOfWork(prisma as never, cipher as never, raw, "silo-1");
@@ -156,7 +156,7 @@ describe("PrismaConversationComputerCredentialUnitOfWork", function _PrismaConve
 			updateMany: vi.fn(async ({ data }: { readonly data: Record<string, unknown> }) => { row = { ...row, ...data }; return { count: 1 }; }),
 		};
 		const lease = { updateMany: vi.fn().mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 }) };
-		const prisma = { $transaction: vi.fn(async (operation: (value: object) => Promise<unknown>) => await operation({ conversationComputerActiveLease: lease, conversationComputerAttemptCredential: credential })) };
+		const prisma = { $transaction: vi.fn(async (operation: (value: object) => Promise<unknown>) => await operation({ agentRun: { findFirst: vi.fn().mockResolvedValue({ id: _INPUT.runId }) }, conversationComputerActiveLease: lease, conversationComputerAttemptCredential: credential })) };
 		const raw = { issue: vi.fn().mockResolvedValue({ key: "secret", expiresAt: _EXPIRES_AT }), revoke: vi.fn().mockResolvedValue(undefined), revokeByAlias: vi.fn() };
 		await expect(new PrismaConversationComputerCredentialUnitOfWork(prisma as never, _Cipher() as never, raw, "silo-1").issueOnce(_INPUT)).rejects.toThrow("finalization requires the current active lease");
 		expect(raw.revoke).toHaveBeenCalledWith({ keyAlias: "attempt-1", key: "secret" });
@@ -164,9 +164,9 @@ describe("PrismaConversationComputerCredentialUnitOfWork", function _PrismaConve
 
 	it("expires custodied keys and fences ready promotion against elapsed expiry", async function _ExpiredCustody()
 	{
-		const row = { bootstrapId: "bootstrap-1", siloId: "silo-1", conversationId: "conversation-1", keyAlias: "attempt-1", modelAlias: "model-1", state: "custodied", claimFence: "fence-1", expiresAt: new Date(0), claimExpiresAt: new Date(0), keyId: "key-1", nonce: Buffer.from("nonce"), authTag: Buffer.from("tag"), ciphertext: Buffer.from("secret"), ciphertextDigest: `sha256:${createHash("sha256").update("secret").digest("hex")}`, credentialDigest: `sha256:${createHash("sha256").update("secret").digest("hex")}` };
+		const row = { bootstrapId: "bootstrap-1", runId: "run-1", attempt: 1, siloId: "silo-1", conversationId: "conversation-1", keyAlias: "attempt-1", modelAlias: "model-1", state: "custodied", claimFence: "fence-1", expiresAt: new Date(0), claimExpiresAt: new Date(0), keyId: "key-1", nonce: Buffer.from("nonce"), authTag: Buffer.from("tag"), ciphertext: Buffer.from("secret"), ciphertextDigest: `sha256:${createHash("sha256").update("secret").digest("hex")}`, credentialDigest: `sha256:${createHash("sha256").update("secret").digest("hex")}` };
 		const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-		const repository = new PrismaConversationComputerCredentialRepository({ conversationComputerActiveLease: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, conversationComputerAttemptCredential: { findUnique: vi.fn().mockResolvedValue(row), updateMany } } as never, "silo-1");
+		const repository = new PrismaConversationComputerCredentialRepository({ agentRun: { findFirst: vi.fn().mockResolvedValue({ id: _INPUT.runId }) }, conversationComputerActiveLease: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, conversationComputerAttemptCredential: { findUnique: vi.fn().mockResolvedValue(row), updateMany } } as never, "silo-1");
 		await expect(repository.prepare(_INPUT)).resolves.toEqual({ outcome: "expired", row });
 		await repository.finalize(_INPUT, "fence-1");
 		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ expiresAt: { gt: expect.any(Date), lte: new Date(_INPUT.notAfter) } }) }));
@@ -174,7 +174,7 @@ describe("PrismaConversationComputerCredentialUnitOfWork", function _PrismaConve
 
 	it("makes concurrent credential revocation idempotent", async function _ConcurrentRevoke()
 	{
-		const row = { bootstrapId: "bootstrap-1", siloId: "silo-1", conversationId: "conversation-1", keyAlias: "attempt-1", modelAlias: "model-1", state: "ready", claimFence: "old", expiresAt: new Date(Date.now() + 60_000), claimExpiresAt: new Date(0), keyId: "key-1", nonce: Buffer.from("nonce"), authTag: Buffer.from("tag"), ciphertext: Buffer.from("secret"), ciphertextDigest: `sha256:${createHash("sha256").update("secret").digest("hex")}`, credentialDigest: `sha256:${createHash("sha256").update("secret").digest("hex")}` };
+		const row = { bootstrapId: "bootstrap-1", runId: "run-1", attempt: 1, siloId: "silo-1", conversationId: "conversation-1", keyAlias: "attempt-1", modelAlias: "model-1", state: "ready", claimFence: "old", expiresAt: new Date(Date.now() + 60_000), claimExpiresAt: new Date(0), keyId: "key-1", nonce: Buffer.from("nonce"), authTag: Buffer.from("tag"), ciphertext: Buffer.from("secret"), ciphertextDigest: `sha256:${createHash("sha256").update("secret").digest("hex")}`, credentialDigest: `sha256:${createHash("sha256").update("secret").digest("hex")}` };
 		let claimed = false;
 		const repository = { conversationComputerAttemptCredential: {
 			findUnique: vi.fn().mockResolvedValue(row),
@@ -205,7 +205,7 @@ describe("PrismaConversationComputerCredentialUnitOfWork", function _PrismaConve
 	it("revokes custody that outlives shortened authority without replacing its spent budget", async function ()
 	{
 		const secret = "old-secret";
-		let row: any = { bootstrapId: "bootstrap-1", siloId: "silo-1", conversationId: "conversation-1", keyAlias: "attempt-1", modelAlias: "model-1", state: "ready", claimFence: "old", expiresAt: new Date(_NOW + 120_000), claimExpiresAt: new Date(0), keyId: "key-1", nonce: Buffer.from("nonce"), authTag: Buffer.from("tag"), ciphertext: Buffer.from(secret), ciphertextDigest: `sha256:${createHash("sha256").update(secret).digest("hex")}`, credentialDigest: `sha256:${createHash("sha256").update(secret).digest("hex")}` };
+		let row: any = { bootstrapId: "bootstrap-1", runId: "run-1", attempt: 1, siloId: "silo-1", conversationId: "conversation-1", keyAlias: "attempt-1", modelAlias: "model-1", state: "ready", claimFence: "old", expiresAt: new Date(_NOW + 120_000), claimExpiresAt: new Date(0), keyId: "key-1", nonce: Buffer.from("nonce"), authTag: Buffer.from("tag"), ciphertext: Buffer.from(secret), ciphertextDigest: `sha256:${createHash("sha256").update(secret).digest("hex")}`, credentialDigest: `sha256:${createHash("sha256").update(secret).digest("hex")}` };
 		const credential = { findUnique: vi.fn(async () => row), create: vi.fn(async ({ data }) => { row = { ...data }; return row; }), updateMany: vi.fn(async ({ data }) => { row = { ...row, ...data }; return { count: 1 }; }) };
 		const raw = { issue: vi.fn(), revoke: vi.fn().mockResolvedValue(undefined) };
 		const authority = _UnitOfWork({ conversationComputerAttemptCredential: credential }, raw);

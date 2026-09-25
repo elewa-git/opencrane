@@ -251,6 +251,9 @@ CREATE TYPE "AgentRunCancellationDecision" AS ENUM ('cancellation_won', 'output_
 CREATE TYPE "WorkloadKind" AS ENUM ('pod', 'job', 'deployment');
 
 -- CreateEnum
+CREATE TYPE "AgentRunTreeClosureReason" AS ENUM ('authorized_stop', 'terminal_run', 'deadline');
+
+-- CreateEnum
 CREATE TYPE "SkillState" AS ENUM ('active', 'retired');
 
 -- CreateEnum
@@ -820,6 +823,8 @@ CREATE TABLE "conversation_private_payloads" (
 -- CreateTable
 CREATE TABLE "conversation_computer_attempt_credentials" (
     "bootstrap_id" TEXT NOT NULL,
+    "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
     "key_alias" TEXT NOT NULL,
     "model_alias" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -1888,21 +1893,45 @@ CREATE TABLE "run_input_snapshots" (
 );
 
 -- CreateTable
-CREATE TABLE "run_model_credential_mint_authorizations" (
+CREATE TABLE "agent_run_tree_accounts" (
+    "run_id" TEXT NOT NULL,
+    "root_run_id" TEXT NOT NULL,
+    "parent_run_id" TEXT,
+    "admission_key" TEXT NOT NULL,
+    "admission_digest" TEXT NOT NULL,
+    "deadline_at" TIMESTAMP(3) NOT NULL,
+    "allocated_model_calls" INTEGER NOT NULL,
+    "allocated_completion_tokens" INTEGER NOT NULL,
+    "allocated_tool_invocations" INTEGER NOT NULL,
+    "allocated_loop_iterations" INTEGER NOT NULL,
+    "allocated_cost_micros" BIGINT NOT NULL,
+    "available_model_calls" INTEGER NOT NULL,
+    "available_completion_tokens" INTEGER NOT NULL,
+    "available_tool_invocations" INTEGER NOT NULL,
+    "available_loop_iterations" INTEGER NOT NULL,
+    "available_cost_micros" BIGINT NOT NULL,
+    "revision" INTEGER NOT NULL DEFAULT 0,
+    "closed_at" TIMESTAMP(3),
+    "closure_source_run_id" TEXT,
+    "closure_reason" "AgentRunTreeClosureReason",
+
+    CONSTRAINT "agent_run_tree_accounts_pkey" PRIMARY KEY ("run_id")
+);
+
+-- CreateTable
+CREATE TABLE "agent_run_tree_reservations" (
     "id" TEXT NOT NULL,
     "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "generation" INTEGER NOT NULL,
-    "principal_id" TEXT NOT NULL,
-    "model_definition_id" TEXT NOT NULL,
-    "provider_connection_id" TEXT,
-    "authorization_digest" TEXT NOT NULL,
-    "key_alias" TEXT NOT NULL,
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "claimed_at" TIMESTAMP(3),
+    "idempotency_key" TEXT NOT NULL,
+    "command_digest" TEXT NOT NULL,
+    "model_calls" INTEGER NOT NULL,
+    "completion_tokens" INTEGER NOT NULL,
+    "tool_invocations" INTEGER NOT NULL,
+    "loop_iterations" INTEGER NOT NULL,
+    "cost_micros" BIGINT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "run_model_credential_mint_authorizations_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "agent_run_tree_reservations_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -2466,6 +2495,9 @@ CREATE UNIQUE INDEX "conversation_private_payloads_conversation_id_author_subjec
 CREATE INDEX "conversation_computer_attempt_credentials_expires_at_idx" ON "conversation_computer_attempt_credentials"("expires_at");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "conversation_attempt_credentials_run_attempt_key" ON "conversation_computer_attempt_credentials"("run_id", "attempt");
+
+-- CreateIndex
 CREATE INDEX "conversation_participants_user_id_archived_at_conversation__idx" ON "conversation_participants"("user_id", "archived_at", "conversation_id");
 
 -- CreateIndex
@@ -2975,13 +3007,13 @@ CREATE UNIQUE INDEX "run_input_snapshots_run_id_attempt_input_digest_key" ON "ru
 CREATE UNIQUE INDEX "run_input_snapshot_run_identity_key" ON "run_input_snapshots"("run_id", "attempt", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "run_model_credential_mint_authorizations_key_alias_key" ON "run_model_credential_mint_authorizations"("key_alias");
+CREATE INDEX "agent_run_tree_accounts_parent_run_id_run_id_idx" ON "agent_run_tree_accounts"("parent_run_id", "run_id");
 
 -- CreateIndex
-CREATE INDEX "run_model_credential_mint_authorizations_expires_at_idx" ON "run_model_credential_mint_authorizations"("expires_at");
+CREATE UNIQUE INDEX "agent_run_tree_accounts_admission_key" ON "agent_run_tree_accounts"("root_run_id", "admission_key");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "run_model_credential_mint_authorizations_run_id_attempt_gen_key" ON "run_model_credential_mint_authorizations"("run_id", "attempt", "generation");
+CREATE UNIQUE INDEX "agent_run_tree_reservations_idempotency_key" ON "agent_run_tree_reservations"("run_id", "idempotency_key");
 
 -- CreateIndex
 CREATE INDEX "skills_silo_id_state_idx" ON "skills"("silo_id", "state");
@@ -3230,6 +3262,9 @@ ALTER TABLE "conversation_computer_active_leases" ADD CONSTRAINT "conversation_c
 ALTER TABLE "conversation_private_payloads" ADD CONSTRAINT "conversation_private_payloads_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "conversation_computer_attempt_credentials" ADD CONSTRAINT "conversation_computer_attempt_credentials_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "agent_runs"("id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -3437,7 +3472,19 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_conversation_id_fkey" FOREIG
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "run_model_credential_mint_authorizations" ADD CONSTRAINT "run_model_credential_mint_authorizations_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agent_run_tree_accounts" ADD CONSTRAINT "agent_run_tree_accounts_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_run_tree_accounts" ADD CONSTRAINT "agent_run_tree_accounts_root_run_id_fkey" FOREIGN KEY ("root_run_id") REFERENCES "agent_run_tree_accounts"("run_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_run_tree_accounts" ADD CONSTRAINT "agent_run_tree_accounts_parent_run_id_fkey" FOREIGN KEY ("parent_run_id") REFERENCES "agent_run_tree_accounts"("run_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_run_tree_accounts" ADD CONSTRAINT "agent_run_tree_accounts_closure_source_run_id_fkey" FOREIGN KEY ("closure_source_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_run_tree_reservations" ADD CONSTRAINT "agent_run_tree_reservations_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_run_tree_accounts"("run_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "skills" ADD CONSTRAINT "skills_id_current_revision_id_fkey" FOREIGN KEY ("id", "current_revision_id") REFERENCES "skill_revisions"("skill_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3519,7 +3566,7 @@ ALTER TABLE "oci_image_validations" ADD CONSTRAINT "oci_image_validations_result
 
 -- A revision belongs to one execution transport. Remote revisions retain the authenticated
 -- connection and both discovery digests; OCI revisions retain only imported-image evidence.
-ALTER TABLE "mcp_server_revisions" ADD CONSTRAINT "mcp_server_revisions_transport_identity_check" CHECK (
+ALTER TABLE "mcp_server_revisions" ADD CONSTRAINT "mcp_server_revisions_transport_identity_check" CHECK ((
     (
         "transport" = 'oci-image'
         AND "oci_image_validation_id" IS NOT NULL
@@ -3542,7 +3589,67 @@ ALTER TABLE "mcp_server_revisions" ADD CONSTRAINT "mcp_server_revisions_transpor
         AND "discovery_evidence_digest" ~ '^sha256:[0-9a-f]{64}$'
         AND "discovery_digest" ~ '^sha256:[0-9a-f]{64}$'
     )
-);
+) IS TRUE);
+
+-- Tasks retain the transport and connection selected at admission, even after that connection is revoked.
+ALTER TABLE "mcp_tasks" ADD CONSTRAINT "mcp_tasks_transport_identity_check" CHECK ((
+    ("transport" = 'oci-image' AND "connection_id" IS NULL AND "connection_generation" IS NULL
+        AND "connection_owner_principal_id" IS NULL AND "endpoint_digest" IS NULL)
+    OR ("transport" = 'remote-http' AND btrim("connection_id") <> '' AND "connection_generation" > 0
+        AND btrim("connection_owner_principal_id") <> '' AND "connection_owner_principal_id" = "principal_id"
+        AND "endpoint_digest" ~ '^sha256:[0-9a-f]{64}$')
+) IS TRUE);
+
+CREATE FUNCTION "enforce_mcp_task_transport_identity"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+            OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id"
+            OR NEW."server_revision_id" IS DISTINCT FROM OLD."server_revision_id"
+            OR NEW."tool_revision_id" IS DISTINCT FROM OLD."tool_revision_id"
+            OR NEW."protocol_version" IS DISTINCT FROM OLD."protocol_version"
+            OR NEW."transport" IS DISTINCT FROM OLD."transport"
+            OR NEW."connection_id" IS DISTINCT FROM OLD."connection_id"
+            OR NEW."connection_generation" IS DISTINCT FROM OLD."connection_generation"
+            OR NEW."connection_owner_principal_id" IS DISTINCT FROM OLD."connection_owner_principal_id"
+            OR NEW."endpoint_digest" IS DISTINCT FROM OLD."endpoint_digest" THEN
+            RAISE EXCEPTION 'McpTask transport and selected tool identity are immutable';
+        END IF;
+    ELSIF NEW."transport" = 'oci-image' THEN
+        PERFORM 1
+        FROM "mcp_server_revisions" revision
+        JOIN "mcp_tool_revisions" tool ON tool."server_revision_id" = revision."id" AND tool."silo_id" = revision."silo_id"
+        WHERE revision."id" = NEW."server_revision_id" AND revision."silo_id" = NEW."silo_id"
+          AND tool."id" = NEW."tool_revision_id" AND revision."transport" = NEW."transport";
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'OCI McpTask requires its selected OCI server and tool revision';
+        END IF;
+    ELSIF NEW."transport" = 'remote-http' THEN
+        PERFORM 1
+        FROM "mcp_server_revisions" revision
+        JOIN "mcp_tool_revisions" tool ON tool."server_revision_id" = revision."id" AND tool."silo_id" = revision."silo_id"
+        JOIN "mcp_connections" connection ON connection."id" = revision."connection_id" AND connection."silo_id" = revision."silo_id"
+        JOIN "mcp_server_installs" install ON install."id" = connection."mcp_server_install_id"
+        JOIN "mcp_servers" server ON server."id" = connection."mcp_server_id" AND server."silo_id" = connection."silo_id"
+        WHERE revision."id" = NEW."server_revision_id" AND revision."silo_id" = NEW."silo_id"
+          AND tool."id" = NEW."tool_revision_id" AND revision."state" = 'ready'
+          AND revision."protocol_version" = NEW."protocol_version" AND revision."transport" = NEW."transport"
+          AND revision."connection_id" = NEW."connection_id" AND revision."connection_generation" = NEW."connection_generation"
+          AND revision."connection_owner_principal_id" = NEW."connection_owner_principal_id" AND revision."endpoint_digest" = NEW."endpoint_digest"
+          AND connection."generation" = NEW."connection_generation" AND connection."owner_principal_id" = NEW."principal_id"
+          AND connection."endpoint_digest" = NEW."endpoint_digest" AND connection."mcp_server_id" = revision."mcp_server_id"
+          AND connection."state" = 'active' AND install."principal_id" = NEW."principal_id"
+          AND install."mcp_server_id" = connection."mcp_server_id" AND install."lifecycle_state" = 'installed'
+          AND server."status" = 'active' AND server."approval_status" = 'published' AND server."transport" = 'streamable-http'
+        FOR UPDATE OF connection, install, server;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'Remote McpTask requires its exact Active connection, installed owner, and selected Ready tool';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "mcp_tasks_transport_identity" BEFORE INSERT OR UPDATE ON "mcp_tasks" FOR EACH ROW EXECUTE FUNCTION "enforce_mcp_task_transport_identity"();
 
 -- Insert after the generated mcp_connections table and indexes, before grants/triggers that reference it.
 ALTER TABLE public.mcp_connections
@@ -3757,6 +3864,271 @@ CREATE TRIGGER "org_memberships_last_owner_guard"
     FOR EACH ROW EXECUTE FUNCTION "protect_org_membership_last_owner"();
 
 -- Database-native authority guards omitted by Prisma schema diff.
+
+-- Tree accounts divide existing allowance. These guards do not admit a child workflow or grant delegation.
+ALTER TABLE "agent_run_tree_accounts" ADD CONSTRAINT "agent_run_tree_accounts_material_check" CHECK (
+    btrim("run_id") <> '' AND btrim("root_run_id") <> '' AND btrim("admission_key") <> ''
+    AND "admission_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND (("parent_run_id" IS NULL AND "root_run_id" = "run_id")
+        OR ("parent_run_id" IS NOT NULL AND "parent_run_id" <> "run_id" AND "root_run_id" <> "run_id"))
+    AND "allocated_model_calls" >= 0 AND "allocated_completion_tokens" >= 0
+    AND "allocated_tool_invocations" >= 0 AND "allocated_loop_iterations" >= 0
+    AND "allocated_cost_micros" >= 0
+    AND "available_model_calls" BETWEEN 0 AND "allocated_model_calls"
+    AND "available_completion_tokens" BETWEEN 0 AND "allocated_completion_tokens"
+    AND "available_tool_invocations" BETWEEN 0 AND "allocated_tool_invocations"
+    AND "available_loop_iterations" BETWEEN 0 AND "allocated_loop_iterations"
+    AND "available_cost_micros" BETWEEN 0 AND "allocated_cost_micros"
+    AND "revision" >= 0
+    AND num_nonnulls("closed_at", "closure_source_run_id", "closure_reason") IN (0, 3)
+);
+ALTER TABLE "agent_run_tree_reservations" ADD CONSTRAINT "agent_run_tree_reservations_material_check" CHECK (
+    btrim("id") <> '' AND btrim("idempotency_key") <> '' AND "command_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND "model_calls" >= 0 AND "completion_tokens" >= 0 AND "tool_invocations" >= 0
+    AND "loop_iterations" >= 0 AND "cost_micros" >= 0
+    AND ("model_calls" > 0 OR "completion_tokens" > 0 OR "tool_invocations" > 0 OR "loop_iterations" > 0 OR "cost_micros" > 0)
+);
+
+-- Locking the root orders sibling admissions against Stop; walking parents has no depth limit.
+CREATE FUNCTION "require_agent_run_tree_open"(target_run_id TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
+DECLARE
+    cursor_run_id TEXT := target_run_id;
+    tree_root_id TEXT;
+    account "agent_run_tree_accounts"%ROWTYPE;
+    current_run "agent_runs"%ROWTYPE;
+BEGIN
+    SELECT "root_run_id" INTO tree_root_id FROM "agent_run_tree_accounts" WHERE "run_id" = target_run_id;
+    IF tree_root_id IS NULL THEN RAISE EXCEPTION 'Run tree account is missing'; END IF;
+    UPDATE "agent_run_tree_accounts" SET "revision" = "revision" + 1 WHERE "run_id" = tree_root_id;
+    LOOP
+        SELECT * INTO account FROM "agent_run_tree_accounts" WHERE "run_id" = cursor_run_id FOR UPDATE;
+        SELECT * INTO current_run FROM "agent_runs" WHERE "id" = cursor_run_id FOR UPDATE;
+        IF account."run_id" IS NULL OR current_run."id" IS NULL OR account."root_run_id" <> tree_root_id THEN
+            RAISE EXCEPTION 'Run tree ancestor authority is missing';
+        END IF;
+        IF account."closed_at" IS NOT NULL OR account."deadline_at" <= clock_timestamp()
+            OR current_run."cancellation_command_id" IS NOT NULL
+            OR current_run."state" IN ('cancelling', 'completed', 'cancelled', 'failed') THEN
+            RAISE EXCEPTION 'Run tree ancestor no longer accepts work';
+        END IF;
+        EXIT WHEN account."parent_run_id" IS NULL;
+        cursor_run_id := account."parent_run_id";
+    END LOOP;
+END;
+$$;
+
+CREATE FUNCTION "enforce_agent_run_tree_account_insert"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    current_run "agent_runs"%ROWTYPE;
+    parent_run "agent_runs"%ROWTYPE;
+    parent_account "agent_run_tree_accounts"%ROWTYPE;
+    frozen_budget JSONB;
+BEGIN
+    SELECT * INTO current_run FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
+    SELECT "budget_policy" INTO frozen_budget FROM "run_input_snapshots"
+        WHERE "run_id" = NEW."run_id" AND "attempt" = current_run."attempt" AND "input_digest" = current_run."input_snapshot_digest";
+    IF current_run."id" IS NULL OR current_run."state" <> 'accepted' OR current_run."cancellation_command_id" IS NOT NULL THEN
+        RAISE EXCEPTION 'Run tree account requires an accepted run before execution';
+    END IF;
+    IF EXISTS (SELECT 1 FROM "conversation_computer_attempt_credentials" WHERE "run_id" = NEW."run_id")
+        OR EXISTS (SELECT 1 FROM "tool_invocations" WHERE "run_id" = NEW."run_id") THEN
+        RAISE EXCEPTION 'Run tree account cannot adopt existing spending authority';
+    END IF;
+    IF frozen_budget IS NULL OR NOT frozen_budget ?& ARRAY['maxModelTurns', 'maxCompletionTokens', 'maxToolInvocations', 'maxLoopIterations', 'maxCostUsdMicros', 'wallClockDeadlineEpochMs']
+        OR jsonb_typeof(frozen_budget->'maxModelTurns') IS DISTINCT FROM 'number'
+        OR jsonb_typeof(frozen_budget->'maxCompletionTokens') IS DISTINCT FROM 'number'
+        OR jsonb_typeof(frozen_budget->'maxToolInvocations') IS DISTINCT FROM 'number'
+        OR jsonb_typeof(frozen_budget->'maxLoopIterations') IS DISTINCT FROM 'number'
+        OR jsonb_typeof(frozen_budget->'wallClockDeadlineEpochMs') IS DISTINCT FROM 'number'
+        OR jsonb_typeof(frozen_budget->'maxCostUsdMicros') NOT IN ('number', 'null')
+        OR (frozen_budget->>'maxModelTurns') !~ '^[1-9][0-9]*$'
+        OR (frozen_budget->>'maxCompletionTokens') !~ '^[1-9][0-9]*$'
+        OR (frozen_budget->>'maxToolInvocations') !~ '^(0|[1-9][0-9]*)$'
+        OR (frozen_budget->>'maxLoopIterations') !~ '^(0|[1-9][0-9]*)$'
+        OR (frozen_budget->>'wallClockDeadlineEpochMs') !~ '^[1-9][0-9]*$'
+        OR (jsonb_typeof(frozen_budget->'maxCostUsdMicros') = 'number' AND (frozen_budget->>'maxCostUsdMicros') !~ '^[1-9][0-9]*$') THEN
+        RAISE EXCEPTION 'Run tree account requires its frozen budget and future deadline';
+    END IF;
+    IF NEW."deadline_at" IS DISTINCT FROM to_timestamp((frozen_budget->>'wallClockDeadlineEpochMs')::NUMERIC / 1000)
+        OR NEW."deadline_at" <= clock_timestamp() THEN
+        RAISE EXCEPTION 'Run tree account requires its frozen budget and future deadline';
+    END IF;
+    IF NEW."revision" <> 0 OR NEW."closed_at" IS NOT NULL OR NEW."closure_source_run_id" IS NOT NULL OR NEW."closure_reason" IS NOT NULL
+        OR NEW."available_model_calls" <> NEW."allocated_model_calls"
+        OR NEW."available_completion_tokens" <> NEW."allocated_completion_tokens"
+        OR NEW."available_tool_invocations" <> NEW."allocated_tool_invocations"
+        OR NEW."available_loop_iterations" <> NEW."allocated_loop_iterations"
+        OR NEW."available_cost_micros" <> NEW."allocated_cost_micros" THEN
+        RAISE EXCEPTION 'Run tree account must begin open with its complete allocation';
+    END IF;
+    IF NEW."allocated_model_calls" > (frozen_budget->>'maxModelTurns')::INTEGER
+        OR NEW."allocated_completion_tokens" > (frozen_budget->>'maxCompletionTokens')::INTEGER
+        OR NEW."allocated_tool_invocations" > (frozen_budget->>'maxToolInvocations')::INTEGER
+        OR NEW."allocated_loop_iterations" > (frozen_budget->>'maxLoopIterations')::INTEGER
+        OR (jsonb_typeof(frozen_budget->'maxCostUsdMicros') <> 'null'
+            AND NEW."allocated_cost_micros" > (frozen_budget->>'maxCostUsdMicros')::BIGINT) THEN
+        RAISE EXCEPTION 'Run tree allocation exceeds its frozen run budget';
+    END IF;
+    IF NEW."parent_run_id" IS NULL THEN
+        IF NEW."root_run_id" <> NEW."run_id" OR NEW."allocated_cost_micros" <= 0
+            OR NEW."allocated_model_calls" <> (frozen_budget->>'maxModelTurns')::INTEGER
+            OR NEW."allocated_completion_tokens" <> (frozen_budget->>'maxCompletionTokens')::INTEGER
+            OR NEW."allocated_tool_invocations" <> (frozen_budget->>'maxToolInvocations')::INTEGER
+            OR NEW."allocated_loop_iterations" <> (frozen_budget->>'maxLoopIterations')::INTEGER THEN
+            RAISE EXCEPTION 'Run tree root must freeze its original allowance';
+        END IF;
+        RETURN NEW;
+    END IF;
+    PERFORM "require_agent_run_tree_open"(NEW."parent_run_id");
+    SELECT * INTO parent_account FROM "agent_run_tree_accounts" WHERE "run_id" = NEW."parent_run_id";
+    SELECT * INTO parent_run FROM "agent_runs" WHERE "id" = NEW."parent_run_id";
+    IF NEW."root_run_id" <> parent_account."root_run_id" OR current_run."silo_id" <> parent_run."silo_id"
+        OR NEW."deadline_at" > parent_account."deadline_at" OR NEW."run_id" = NEW."parent_run_id"
+        OR NEW."run_id" = NEW."root_run_id" THEN
+        RAISE EXCEPTION 'Run tree child must preserve its parent root, silo and deadline';
+    END IF;
+    UPDATE "agent_run_tree_accounts" SET
+        "available_model_calls" = "available_model_calls" - NEW."allocated_model_calls",
+        "available_completion_tokens" = "available_completion_tokens" - NEW."allocated_completion_tokens",
+        "available_tool_invocations" = "available_tool_invocations" - NEW."allocated_tool_invocations",
+        "available_loop_iterations" = "available_loop_iterations" - NEW."allocated_loop_iterations",
+        "available_cost_micros" = "available_cost_micros" - NEW."allocated_cost_micros",
+        "revision" = "revision" + 1
+    WHERE "run_id" = NEW."parent_run_id"
+        AND "available_model_calls" >= NEW."allocated_model_calls" AND "available_completion_tokens" >= NEW."allocated_completion_tokens"
+        AND "available_tool_invocations" >= NEW."allocated_tool_invocations" AND "available_loop_iterations" >= NEW."allocated_loop_iterations"
+        AND "available_cost_micros" >= NEW."allocated_cost_micros";
+    IF NOT FOUND THEN RAISE EXCEPTION 'Run tree parent has insufficient unreserved allowance'; END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION "enforce_agent_run_tree_account_update"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    cursor_run_id TEXT;
+    source_account "agent_run_tree_accounts"%ROWTYPE;
+    source_run "agent_runs"%ROWTYPE;
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Run tree accounts cannot be deleted'; END IF;
+    IF (to_jsonb(NEW) - ARRAY['available_model_calls', 'available_completion_tokens', 'available_tool_invocations', 'available_loop_iterations', 'available_cost_micros', 'revision', 'closed_at', 'closure_source_run_id', 'closure_reason'])
+        IS DISTINCT FROM (to_jsonb(OLD) - ARRAY['available_model_calls', 'available_completion_tokens', 'available_tool_invocations', 'available_loop_iterations', 'available_cost_micros', 'revision', 'closed_at', 'closure_source_run_id', 'closure_reason']) THEN
+        RAISE EXCEPTION 'Run tree lineage and allocated allowance are immutable';
+    END IF;
+    IF NEW."revision" NOT IN (OLD."revision", OLD."revision" + 1) THEN
+        RAISE EXCEPTION 'Run tree revision must advance one step';
+    END IF;
+    IF ROW(NEW."available_model_calls", NEW."available_completion_tokens", NEW."available_tool_invocations", NEW."available_loop_iterations", NEW."available_cost_micros")
+        IS DISTINCT FROM ROW(OLD."available_model_calls", OLD."available_completion_tokens", OLD."available_tool_invocations", OLD."available_loop_iterations", OLD."available_cost_micros") THEN
+        IF pg_trigger_depth() < 2 OR NEW."available_model_calls" > OLD."available_model_calls"
+            OR NEW."available_completion_tokens" > OLD."available_completion_tokens" OR NEW."available_tool_invocations" > OLD."available_tool_invocations"
+            OR NEW."available_loop_iterations" > OLD."available_loop_iterations" OR NEW."available_cost_micros" > OLD."available_cost_micros" THEN
+            RAISE EXCEPTION 'Run tree available allowance is debited only by admission';
+        END IF;
+        IF NEW."revision" <> OLD."revision" + 1 THEN
+            RAISE EXCEPTION 'Run tree debit must advance its account revision';
+        END IF;
+    END IF;
+    IF ROW(NEW."closed_at", NEW."closure_source_run_id", NEW."closure_reason")
+        IS NOT DISTINCT FROM ROW(OLD."closed_at", OLD."closure_source_run_id", OLD."closure_reason") THEN
+        IF pg_trigger_depth() < 2 AND OLD."run_id" <> OLD."root_run_id" AND NEW."revision" <> OLD."revision" THEN
+            RAISE EXCEPTION 'Only the root account exposes the tree serialization revision';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF OLD."closed_at" IS NOT NULL OR NEW."closed_at" IS NULL OR NEW."closure_source_run_id" IS NULL OR NEW."closure_reason" IS NULL THEN
+        RAISE EXCEPTION 'Run tree closure cannot be replaced or reopened';
+    END IF;
+    IF OLD."root_run_id" <> OLD."run_id" THEN
+        UPDATE "agent_run_tree_accounts" SET "revision" = "revision" + 1 WHERE "run_id" = OLD."root_run_id";
+    END IF;
+    cursor_run_id := OLD."run_id";
+    LOOP
+        SELECT * INTO source_account FROM "agent_run_tree_accounts" WHERE "run_id" = cursor_run_id;
+        EXIT WHEN cursor_run_id = NEW."closure_source_run_id";
+        IF source_account."parent_run_id" IS NULL THEN RAISE EXCEPTION 'Run tree closure source must be this run or an ancestor'; END IF;
+        cursor_run_id := source_account."parent_run_id";
+    END LOOP;
+    SELECT * INTO source_run FROM "agent_runs" WHERE "id" = NEW."closure_source_run_id" FOR UPDATE;
+    IF (NEW."closure_reason" = 'authorized_stop' AND source_run."cancellation_command_id" IS NULL)
+        OR (NEW."closure_reason" = 'terminal_run' AND source_run."state" NOT IN ('completed', 'cancelled', 'failed'))
+        OR (NEW."closure_reason" = 'deadline' AND source_account."deadline_at" > clock_timestamp()) THEN
+        RAISE EXCEPTION 'Run tree closure requires saved ancestor Stop, terminal state or elapsed deadline';
+    END IF;
+    NEW."closed_at" := clock_timestamp();
+    NEW."revision" := OLD."revision" + 1;
+    RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION "enforce_agent_run_tree_reservation"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'Run tree spending reservations are immutable'; END IF;
+    PERFORM "require_agent_run_tree_open"(NEW."run_id");
+    UPDATE "agent_run_tree_accounts" SET
+        "available_model_calls" = "available_model_calls" - NEW."model_calls",
+        "available_completion_tokens" = "available_completion_tokens" - NEW."completion_tokens",
+        "available_tool_invocations" = "available_tool_invocations" - NEW."tool_invocations",
+        "available_loop_iterations" = "available_loop_iterations" - NEW."loop_iterations",
+        "available_cost_micros" = "available_cost_micros" - NEW."cost_micros",
+        "revision" = "revision" + 1
+    WHERE "run_id" = NEW."run_id"
+        AND "available_model_calls" >= NEW."model_calls" AND "available_completion_tokens" >= NEW."completion_tokens"
+        AND "available_tool_invocations" >= NEW."tool_invocations" AND "available_loop_iterations" >= NEW."loop_iterations"
+        AND "available_cost_micros" >= NEW."cost_micros";
+    IF NOT FOUND THEN RAISE EXCEPTION 'Run tree account has insufficient unreserved allowance'; END IF;
+    NEW."created_at" := clock_timestamp();
+    RETURN NEW;
+END;
+$$;
+
+-- An account cannot coexist with the old credential that exposes a complete attempt's allowance.
+CREATE FUNCTION "enforce_conversation_attempt_credential_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    current_run "agent_runs"%ROWTYPE;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'Attempt credential custody records cannot be deleted';
+    END IF;
+    IF TG_OP = 'UPDATE' THEN
+        IF ROW(NEW."bootstrap_id", NEW."run_id", NEW."attempt", NEW."silo_id", NEW."conversation_id", NEW."key_alias", NEW."model_alias")
+            IS DISTINCT FROM ROW(OLD."bootstrap_id", OLD."run_id", OLD."attempt", OLD."silo_id", OLD."conversation_id", OLD."key_alias", OLD."model_alias") THEN
+            RAISE EXCEPTION 'Attempt credential run, bootstrap and alias bindings are immutable';
+        END IF;
+        -- Cleanup must still record revocation after Stop, expiry or a lost provider response.
+        RETURN NEW;
+    END IF;
+    SELECT * INTO current_run FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
+    IF current_run."id" IS NULL OR current_run."attempt" IS DISTINCT FROM NEW."attempt"
+        OR current_run."silo_id" IS DISTINCT FROM NEW."silo_id"
+        OR current_run."conversation_id" IS DISTINCT FROM NEW."conversation_id" THEN
+        RAISE EXCEPTION 'Attempt credential requires its exact run, attempt, silo and conversation';
+    END IF;
+    IF EXISTS (SELECT 1 FROM "agent_run_tree_accounts" WHERE "run_id" = NEW."run_id") THEN
+        RAISE EXCEPTION 'Run tree model credentials require reservation-scoped authority';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "conversation_attempt_credentials_authority" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_computer_attempt_credentials"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_attempt_credential_authority"();
+CREATE FUNCTION "reject_legacy_tool_work_for_run_tree"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW."run_id" IS NULL THEN RETURN NEW; END IF;
+    PERFORM 1 FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
+    IF EXISTS (SELECT 1 FROM "agent_run_tree_accounts" WHERE "run_id" = NEW."run_id") THEN
+        RAISE EXCEPTION 'Run tree tool work requires reservation-scoped authority';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "agent_run_tree_accounts_insert" BEFORE INSERT ON "agent_run_tree_accounts"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_run_tree_account_insert"();
+CREATE TRIGGER "agent_run_tree_accounts_update" BEFORE UPDATE OR DELETE ON "agent_run_tree_accounts"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_run_tree_account_update"();
+CREATE TRIGGER "agent_run_tree_reservations_authority" BEFORE INSERT OR UPDATE OR DELETE ON "agent_run_tree_reservations"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_run_tree_reservation"();
+CREATE TRIGGER "tool_invocations_run_tree_authority" BEFORE INSERT OR UPDATE ON "tool_invocations"
+    FOR EACH ROW EXECUTE FUNCTION "reject_legacy_tool_work_for_run_tree"();
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_identity_check" CHECK (
     btrim("id") <> ''
     AND btrim("silo_id") <> ''
@@ -3862,7 +4234,8 @@ BEGIN
     RETURN QUERY
     SELECT execution."id", execution."silo_id", execution."profile_name"
       FROM "mcp_runtime_executions" execution
-     WHERE execution."workload_state" = 'pending'
+     WHERE execution."transport" = 'oci-image'
+       AND execution."workload_state" = 'pending'
        AND (execution."claim_expires_at" IS NULL OR execution."claim_expires_at" <= clock_timestamp())
      ORDER BY execution."created_at", execution."id"
      FOR UPDATE OF execution SKIP LOCKED
@@ -3880,7 +4253,8 @@ BEGIN
     RETURN QUERY
     SELECT execution."id", execution."silo_id", execution."profile_name"
       FROM "mcp_runtime_executions" execution
-     WHERE execution."workload_state" IN ('assigned', 'released')
+     WHERE execution."transport" = 'oci-image'
+       AND execution."workload_state" IN ('assigned', 'released')
        AND execution."workload_uid" IS NOT NULL
        AND execution."pod_uid" IS NULL
        AND (execution."release_expires_at" IS NULL OR execution."release_expires_at" <= clock_timestamp())
@@ -3893,7 +4267,7 @@ CREATE VIEW "mcp_runtime_release_claim_candidates" AS SELECT * FROM "select_mcp_
 
 ALTER TABLE "mcp_runtime_executions" ADD CONSTRAINT "mcp_runtime_executions_identity_check" CHECK (
     btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("server_revision_id") <> ''
-    AND btrim("idempotency_key") <> '' AND btrim("execution_reference") <> '' AND btrim("profile_name") <> ''
+    AND btrim("idempotency_key") <> '' AND btrim("execution_reference") <> ''
     AND "delivery_count" >= 0 AND "release_delivery_count" >= 0 AND "cleanup_delivery_count" >= 0
     AND (("claimed_at" IS NULL) = ("claim_expires_at" IS NULL))
     AND (("release_claimed_at" IS NULL) = ("release_expires_at" IS NULL))
@@ -3904,6 +4278,55 @@ ALTER TABLE "mcp_runtime_executions" ADD CONSTRAINT "mcp_runtime_executions_iden
     AND ("terminal_outcome" IS NULL OR btrim("terminal_outcome") <> '')
     AND ("terminal_payload_digest" IS NULL OR "terminal_payload_digest" ~ '^sha256:[0-9a-f]{64}$')
 );
+
+-- Remote calls run in the server, so they must never acquire controller, Pod, companion, or cleanup authority.
+ALTER TABLE "mcp_runtime_executions" ADD CONSTRAINT "mcp_runtime_executions_transport_identity_check" CHECK ((
+    ("transport" = 'oci-image' AND "workload_state" IS NOT NULL AND btrim("profile_name") <> ''
+        AND "connection_id" IS NULL AND "connection_generation" IS NULL AND "connection_owner_principal_id" IS NULL
+        AND "endpoint_digest" IS NULL AND "credential_secret_uid" IS NULL AND "credential_secret_resource_version" IS NULL
+        AND "remote_claim_fence" IS NULL AND "remote_claim_expires_at" IS NULL)
+    OR ("transport" = 'remote-http' AND "kind" = 'invocation' AND btrim("tool_invocation_id") <> ''
+        AND btrim("connection_id") <> '' AND "connection_generation" > 0 AND btrim("connection_owner_principal_id") <> ''
+        AND "endpoint_digest" ~ '^sha256:[0-9a-f]{64}$'
+        AND (("credential_secret_uid" IS NULL AND "credential_secret_resource_version" IS NULL)
+            OR (btrim("credential_secret_uid") <> '' AND btrim("credential_secret_resource_version") <> ''))
+        AND "workload_state" IS NULL AND "profile_name" IS NULL
+        AND "claimed_at" IS NULL AND "claim_expires_at" IS NULL AND "delivery_count" = 0
+        AND "workload_uid" IS NULL AND "assigned_at" IS NULL
+        AND "release_claimed_at" IS NULL AND "release_expires_at" IS NULL AND "release_delivery_count" = 0 AND "released_at" IS NULL
+        AND "pod_uid" IS NULL AND "companion_claim_fence" IS NULL AND "companion_claim_expires_at" IS NULL
+        AND "cleanup_claimed_at" IS NULL AND "cleanup_expires_at" IS NULL AND "cleanup_delivery_count" = 0 AND "cleanup_completed_at" IS NULL
+        AND (("remote_claim_fence" IS NULL AND "remote_claim_expires_at" IS NULL
+                AND "tool_invocation_claim_fence" IS NULL AND "tool_invocation_claim_revision" IS NULL)
+            OR (btrim("remote_claim_fence") <> '' AND "remote_claim_expires_at" IS NOT NULL
+                AND "tool_invocation_claim_fence" > 0 AND "tool_invocation_claim_revision" > 0)))
+) IS TRUE);
+
+-- Recheck current connection authority at admission and dispatch, not when recording a result after revocation.
+CREATE FUNCTION "require_remote_mcp_execution_connection"(execution "mcp_runtime_executions") RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM 1
+    FROM "mcp_server_revisions" revision
+    JOIN "mcp_connections" connection ON connection."id" = revision."connection_id" AND connection."silo_id" = revision."silo_id"
+    JOIN "mcp_server_installs" install ON install."id" = connection."mcp_server_install_id"
+    JOIN "mcp_servers" server ON server."id" = connection."mcp_server_id" AND server."silo_id" = connection."silo_id"
+    WHERE revision."id" = execution."server_revision_id" AND revision."silo_id" = execution."silo_id"
+      AND revision."transport" = 'remote-http' AND revision."state" = 'ready' AND revision."protocol_version" = '2026-07-28'
+      AND revision."connection_id" = execution."connection_id" AND revision."connection_generation" = execution."connection_generation"
+      AND revision."connection_owner_principal_id" = execution."connection_owner_principal_id" AND revision."endpoint_digest" = execution."endpoint_digest"
+      AND connection."generation" = execution."connection_generation" AND connection."owner_principal_id" = execution."connection_owner_principal_id"
+      AND connection."endpoint_digest" = execution."endpoint_digest" AND connection."mcp_server_id" = revision."mcp_server_id"
+      AND connection."credential_secret_uid" IS NOT DISTINCT FROM execution."credential_secret_uid"
+      AND connection."credential_secret_resource_version" IS NOT DISTINCT FROM execution."credential_secret_resource_version"
+      AND connection."state" = 'active' AND install."principal_id" = connection."owner_principal_id"
+      AND install."mcp_server_id" = connection."mcp_server_id" AND install."lifecycle_state" = 'installed'
+      AND server."status" = 'active' AND server."approval_status" = 'published' AND server."transport" = 'streamable-http'
+    FOR UPDATE OF connection, install, server;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Remote McpRuntimeExecution requires its exact Active connection, installed owner, and Ready revision';
+    END IF;
+END;
+$$;
 
 CREATE FUNCTION "enforce_mcp_runtime_execution_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
@@ -3916,7 +4339,101 @@ BEGIN
         RAISE EXCEPTION 'McpRuntimeExecution rows cannot be deleted';
     END IF;
 
+    IF TG_OP = 'UPDATE' AND (
+        NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."server_revision_id" IS DISTINCT FROM OLD."server_revision_id" OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id"
+        OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."idempotency_key" IS DISTINCT FROM OLD."idempotency_key"
+        OR NEW."execution_reference" IS DISTINCT FROM OLD."execution_reference" OR NEW."profile_name" IS DISTINCT FROM OLD."profile_name"
+        OR NEW."transport" IS DISTINCT FROM OLD."transport" OR NEW."connection_id" IS DISTINCT FROM OLD."connection_id"
+        OR NEW."connection_generation" IS DISTINCT FROM OLD."connection_generation"
+        OR NEW."connection_owner_principal_id" IS DISTINCT FROM OLD."connection_owner_principal_id"
+        OR NEW."endpoint_digest" IS DISTINCT FROM OLD."endpoint_digest"
+        OR NEW."credential_secret_uid" IS DISTINCT FROM OLD."credential_secret_uid"
+        OR NEW."credential_secret_resource_version" IS DISTINCT FROM OLD."credential_secret_resource_version"
+        OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN
+        RAISE EXCEPTION 'McpRuntimeExecution source and transport identity is immutable';
+    END IF;
+
+    IF NEW."transport" = 'remote-http' THEN
+        SELECT invocation.* INTO bounded_invocation
+        FROM "tool_invocations" invocation
+        JOIN "mcp_tool_revisions" tool ON tool."id" = invocation."tool_revision_id" AND tool."silo_id" = invocation."silo_id"
+        WHERE invocation."id" = NEW."tool_invocation_id" AND invocation."silo_id" = NEW."silo_id"
+          AND invocation."principal_id" = NEW."connection_owner_principal_id"
+          AND invocation."recovery_mode" = 'manual' AND tool."server_revision_id" = NEW."server_revision_id"
+        FOR UPDATE OF invocation;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'Remote McpRuntimeExecution requires its selected tool and same-owner invocation';
+        END IF;
+
+        IF TG_OP = 'INSERT' THEN
+            PERFORM "require_remote_mcp_execution_connection"(NEW);
+            IF NEW."command_state" <> 'pending' OR NEW."remote_claim_fence" IS NOT NULL OR NEW."remote_claim_expires_at" IS NOT NULL
+                OR NEW."tool_invocation_claim_fence" IS NOT NULL OR NEW."tool_invocation_claim_revision" IS NOT NULL
+                OR NEW."terminal_outcome" IS NOT NULL OR NEW."terminal_payload_digest" IS NOT NULL OR NEW."completed_at" IS NOT NULL
+                OR bounded_invocation."state" <> 'ready' OR bounded_invocation."claim_kind" IS NOT NULL
+                OR bounded_invocation."claim_fence" <> 0 OR bounded_invocation."claim_expires_at" IS NOT NULL THEN
+                RAISE EXCEPTION 'Remote McpRuntimeExecution must begin pending with an unused Ready invocation';
+            END IF;
+            RETURN NEW;
+        END IF;
+
+        IF OLD."command_state" IN ('succeeded', 'failed', 'recovery_required') THEN
+            RAISE EXCEPTION 'terminal Remote McpRuntimeExecution authority is immutable';
+        END IF;
+
+        IF OLD."command_state" = 'pending' AND NEW."command_state" = 'claimed' THEN
+            PERFORM "require_remote_mcp_execution_connection"(NEW);
+            transition_time := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+            requested_lease := NEW."remote_claim_expires_at" - TIMESTAMP '1970-01-01 00:00:00';
+            IF OLD."remote_claim_fence" IS NOT NULL OR OLD."remote_claim_expires_at" IS NOT NULL
+                OR NEW."remote_claim_fence" IS NULL OR btrim(NEW."remote_claim_fence") = ''
+                OR requested_lease IS NULL OR requested_lease < interval '1 second' OR requested_lease > interval '5 minutes'
+                OR bounded_invocation."state" <> 'claimed' OR bounded_invocation."claim_kind" IS DISTINCT FROM 'dispatch'
+                OR bounded_invocation."claim_fence" IS DISTINCT FROM NEW."tool_invocation_claim_fence"
+                OR bounded_invocation."revision" IS DISTINCT FROM NEW."tool_invocation_claim_revision"
+                OR bounded_invocation."claim_expires_at" IS NULL OR bounded_invocation."claim_expires_at" <= transition_time THEN
+                RAISE EXCEPTION 'Remote McpRuntimeExecution claim requires the exact invocation dispatch fence and a bounded lease proposal';
+            END IF;
+            NEW."remote_claim_expires_at" := LEAST(transition_time + requested_lease, bounded_invocation."claim_expires_at");
+        ELSIF NEW."remote_claim_fence" IS DISTINCT FROM OLD."remote_claim_fence"
+            OR NEW."remote_claim_expires_at" IS DISTINCT FROM OLD."remote_claim_expires_at"
+            OR NEW."tool_invocation_claim_fence" IS DISTINCT FROM OLD."tool_invocation_claim_fence"
+            OR NEW."tool_invocation_claim_revision" IS DISTINCT FROM OLD."tool_invocation_claim_revision" THEN
+            RAISE EXCEPTION 'Remote McpRuntimeExecution dispatch fence cannot be reset or replaced';
+        END IF;
+
+        IF NEW."command_state" IN ('succeeded', 'failed', 'recovery_required') THEN
+            transition_time := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+            IF OLD."command_state" = 'claimed' AND NEW."command_state" IN ('succeeded', 'failed')
+                AND (OLD."remote_claim_expires_at" IS NULL OR OLD."remote_claim_expires_at" <= transition_time) THEN
+                RAISE EXCEPTION 'Remote McpRuntimeExecution completion requires its unexpired dispatch lease';
+            END IF;
+            IF NEW."terminal_outcome" IS NULL OR btrim(NEW."terminal_outcome") = ''
+                OR NEW."terminal_payload_digest" IS NULL OR NEW."completed_at" IS NULL
+                OR bounded_invocation."state"::TEXT IS DISTINCT FROM NEW."command_state"::TEXT
+                OR bounded_invocation."claim_kind" IS NOT NULL OR bounded_invocation."claim_expires_at" IS NOT NULL
+                OR (OLD."command_state" = 'pending' AND (NEW."command_state" <> 'failed' OR bounded_invocation."claim_fence" <> 0))
+                OR (OLD."command_state" = 'claimed' AND (
+                    bounded_invocation."claim_fence" IS DISTINCT FROM OLD."tool_invocation_claim_fence"
+                    OR bounded_invocation."revision" IS DISTINCT FROM OLD."tool_invocation_claim_revision" + 1)) THEN
+                RAISE EXCEPTION 'Remote McpRuntimeExecution terminal evidence requires the matching invocation terminal state and saved dispatch fence';
+            END IF;
+            NEW."completed_at" := transition_time;
+        ELSIF NEW."terminal_outcome" IS NOT NULL OR NEW."terminal_payload_digest" IS NOT NULL OR NEW."completed_at" IS NOT NULL
+            OR (NEW."command_state" IS DISTINCT FROM OLD."command_state"
+                AND NOT (OLD."command_state" = 'pending' AND NEW."command_state" = 'claimed')) THEN
+            RAISE EXCEPTION 'invalid Remote McpRuntimeExecution command transition or terminal evidence';
+        END IF;
+        RETURN NEW;
+    END IF;
+
     IF TG_OP = 'INSERT' THEN
+        PERFORM 1 FROM "mcp_server_revisions" revision
+        WHERE revision."id" = NEW."server_revision_id" AND revision."silo_id" = NEW."silo_id" AND revision."transport" = NEW."transport";
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'OCI McpRuntimeExecution requires its selected OCI server revision';
+        END IF;
         IF NEW."workload_state" <> 'pending' OR NEW."command_state" <> 'pending'
             OR NEW."claimed_at" IS NOT NULL OR NEW."claim_expires_at" IS NOT NULL OR NEW."delivery_count" <> 0
             OR NEW."workload_uid" IS NOT NULL OR NEW."assigned_at" IS NOT NULL
@@ -3928,14 +4445,6 @@ BEGIN
             RAISE EXCEPTION 'McpRuntimeExecution must begin pending without delivery, assignment, command, terminal, or cleanup evidence';
         END IF;
         RETURN NEW;
-    END IF;
-
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-        OR NEW."server_revision_id" IS DISTINCT FROM OLD."server_revision_id" OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id"
-        OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."idempotency_key" IS DISTINCT FROM OLD."idempotency_key"
-        OR NEW."execution_reference" IS DISTINCT FROM OLD."execution_reference" OR NEW."profile_name" IS DISTINCT FROM OLD."profile_name"
-        OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'McpRuntimeExecution source identity is immutable';
     END IF;
 
     IF OLD."workload_uid" IS NOT NULL AND NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" THEN

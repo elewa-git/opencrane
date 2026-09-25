@@ -13,6 +13,8 @@ owns the client-side stores and caches that hold fetched data.
 | Package | What it owns |
 | --- | --- |
 | [`core`](./core/README.md) | Frontend state-layer hub. |
+| [`governance`](./governance/README.md) | Protected reporting read port, generated models and validation. |
+| [`governance/adapter`](./governance/adapter/README.md) | Generated-client audit, usage and budget reads; no write or grant operations. |
 | [`gateways`](./gateways/README.md) | Gateway dependency-injection composition root. |
 | [`conversation/stream`](./conversation/stream/README.md) | Transport-neutral browser stream port and connection states. |
 | [`conversation/adapter`](./conversation/adapter/README.md) | Signed-in HTTP implementation of the conversation stream port. |

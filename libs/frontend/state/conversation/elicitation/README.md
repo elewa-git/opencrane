@@ -26,6 +26,16 @@ grants no access and does not copy an answer into this state package.
   pending lists, named request reads, responses, and Activity reads.
 - `__MapElicitationActivity` and `__MapToolActivity` — pure canonical-reference mappers.
 - `ConversationActivityKinds`, `ConversationActivityRow`, and `RunToolProgressPhases` — the derived row vocabulary and public tool-phase categories used by the Activity feature.
+- `__CanApproveElicitation` — checks that affirmative drafts have reviewable arguments and valid tool-connection disclosure; this never grants server permission.
+- `ElicitationExecutionConnection`, `ElicitationConnectionOwnerKinds`, `McpCredentialRequirement`, and `___ElicitationExecutionConnectionSchema` — re-export the shared disclosure model and validator for feature mapping without bypassing the state package's public API.
+
+## Boundary
+
+Tool approvals must include the saved connection owner and credential requirement. The browser
+uses the shared strict validator, rejects unknown disclosure fields, and preserves the reviewed
+labels unchanged. Other approval purposes omit this disclosure. The store checks it again when
+choosing and submitting, including when a refresh retains an older draft. Denial remains available
+when tool details are incomplete; the server still decides whether to accept any response.
 
 ## Dependency direction
 

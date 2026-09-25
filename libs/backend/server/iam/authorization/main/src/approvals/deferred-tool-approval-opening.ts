@@ -1,5 +1,6 @@
-import { AgentRunState, ApprovalRequestState, ElicitationBodyKind, ElicitationPurpose, ElicitationRequestState, Prisma } from "@prisma/client";
-import { ElicitationBodyKinds, ___ExecutionSubjectSchema, type ElicitationApprovalBody } from "@opencrane/contracts";
+import { AgentRunState, AgentServiceKind, ApprovalRequestState, ElicitationBodyKind, ElicitationPurpose, ElicitationRequestState, McpCredentialRequirement as PrismaMcpCredentialRequirement, McpExecutionTransport, OrgMemberStatus, PrincipalProvenance, Prisma } from "@prisma/client";
+import { ElicitationBodyKinds, ElicitationConnectionOwnerKinds, McpCredentialRequirement, type ElicitationApprovalBody, type ElicitationExecutionConnection } from "@opencrane/contracts";
+import { ExecutionSubjectMembershipKinds, type ExecutionSubject } from "@opencrane/models/agents";
 import { type JsonValue } from "@opencrane/util";
 import { __DigestCanonicalJson } from "../authority/canonical-json-digest";
 import { __PlanDeferredToolApprovalLifecycle } from "./deferred-tool-approval-lifecycle";
@@ -8,8 +9,10 @@ import { DeferToolRequestOutcomes, type DeferToolRequestCommand, type DeferToolR
 import { ToolInvocationStates } from "../tool-invocations/tool-invocation-lifecycle.types";
 import { __FindToolInvocationInTransaction } from "../tool-invocations/persistence/tool-invocation-transaction";
 import { __ReconcileDeferredToolApprovalGrants } from "./deferred-tool-approval-grants";
+import { _ApprovalExecutionSubject, _MatchesApprovalElicitation } from "./deferred-tool-approval-binding";
+import { type ApprovalRunBinding } from "./deferred-tool-approval-binding.types";
 
-const _UNSAFE_DISPLAY_TEXT = /[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/u;
+const _UNSAFE_DISPLAY_TEXT = /[\u0000-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/u;
 
 /** Return whether a persisted label can be shown without terminal or direction-control characters. */
 function _IsDisplayLabel(value: string, maximumLength: number): boolean
@@ -29,10 +32,17 @@ function _ApprovalConsequence(description: string | null): string
 }
 
 /** Resolves the exact assignment principal and its authenticated participant subject. */
-async function _ResolveAssignedPrincipal(transaction: Prisma.TransactionClient, siloId: string, principalId: string): Promise<{ readonly principalId: string; readonly subjectId: string } | null>
+async function _resolveAssignedPrincipal(transaction: Prisma.TransactionClient, siloId: string, principalId: string, conversationId: string): Promise<{ readonly principalId: string; readonly subjectId: string } | null>
 {
-	const principal = await transaction.principal.findUnique({ where: { id_siloId: { id: principalId, siloId } }, select: { id: true, subject: true } });
-	return principal === null ? null : { principalId: principal.id, subjectId: principal.subject };
+	const principal = await transaction.principal.findUnique({ where: { id_siloId: { id: principalId, siloId } }, select: { id: true, subject: true, provenance: true } });
+	if (principal === null || principal.provenance !== PrincipalProvenance.External)
+		return null;
+	const identities = await transaction.principal.count({ where: { siloId, subject: principal.subject, provenance: PrincipalProvenance.External } });
+	const membership = await transaction.orgMembership.findFirst({ where: { clusterTenant: siloId, subject: principal.subject, status: OrgMemberStatus.Active }, select: { id: true } });
+	const participant = await transaction.conversationParticipant.findUnique({ where: { conversationId_userId: { conversationId, userId: principal.subject } }, select: { accessEndedPosition: true } });
+	if (identities !== 1 || membership === null || participant === null || participant.accessEndedPosition !== null)
+		return null;
+	return { principalId: principal.id, subjectId: principal.subject };
 }
 
 /** Converts the only two run states that can have open approvals into the lifecycle enum; anything else gives null. */
@@ -43,6 +53,93 @@ function _approvalRunState(state: AgentRunState): DeferredToolApprovalRunStates 
 	if (state === AgentRunState.WaitingForInput)
 		return DeferredToolApprovalRunStates.WaitingForInput;
 	return null;
+}
+
+/** Convert the database enum into the frozen participant-facing contract enum. */
+function _CredentialRequirement(value: PrismaMcpCredentialRequirement): McpCredentialRequirement
+{
+	switch (value)
+	{
+		case PrismaMcpCredentialRequirement.Credentialless:
+			return McpCredentialRequirement.Credentialless;
+		case PrismaMcpCredentialRequirement.PrincipalCredential:
+			return McpCredentialRequirement.PrincipalCredential;
+		case PrismaMcpCredentialRequirement.SharedCredential:
+			return McpCredentialRequirement.SharedCredential;
+	}
+}
+
+/** Resolve the exact assigned tool installation and its display-safe execution owner. */
+async function _ExecutionConnection(transaction: Prisma.TransactionClient, run: ApprovalRunBinding, subject: ExecutionSubject, toolRevisionId: string): Promise<ElicitationExecutionConnection | null>
+{
+	if (run.agentRevisionId === null)
+		return null;
+	const assignment = await transaction.agentRevisionMcpToolAssignment.findUnique({
+		where: { agentRevisionId_toolRevisionId: { agentRevisionId: run.agentRevisionId, toolRevisionId } },
+		select: {
+			agentServiceId: true,
+			siloId: true,
+			toolRevision: { select: { siloId: true, serverRevision: { select: {
+				siloId: true,
+				mcpServerId: true,
+				transport: true,
+				connectionId: true,
+				connectionGeneration: true,
+				connectionOwnerPrincipalId: true,
+				endpointDigest: true,
+				server: { select: { credentialRequirement: true } },
+				connection: { select: { id: true, siloId: true, mcpServerInstallId: true, mcpServerId: true, ownerPrincipalId: true, agentServiceId: true, generation: true, endpointDigest: true, credentialRequirement: true } },
+			} } } },
+		},
+	});
+	if (assignment === null || assignment.agentServiceId !== run.agentServiceId || assignment.siloId !== run.siloId || assignment.toolRevision.siloId !== run.siloId)
+		return null;
+	const revision = assignment.toolRevision.serverRevision;
+	if (revision.siloId !== run.siloId)
+		return null;
+	const install = await transaction.mcpServerInstall.findUnique({
+		where: { mcpServerId_principalId: { mcpServerId: revision.mcpServerId, principalId: subject.principalId } },
+		select: { id: true, mcpServerId: true, principalId: true, principal: { select: { siloId: true, provenance: true, displayName: true } } },
+	});
+	if (install === null || install.mcpServerId !== revision.mcpServerId || install.principalId !== subject.principalId || install.principal.siloId !== run.siloId)
+		return null;
+
+	let credentialRequirement: McpCredentialRequirement;
+	if (revision.transport === McpExecutionTransport.OciImage)
+	{
+		if (revision.server.credentialRequirement !== PrismaMcpCredentialRequirement.Credentialless || revision.connectionId !== null || revision.connectionGeneration !== null || revision.connectionOwnerPrincipalId !== null || revision.endpointDigest !== null || revision.connection !== null)
+			return null;
+		credentialRequirement = McpCredentialRequirement.Credentialless;
+	}
+	else
+	{
+		const connection = revision.connection;
+		if (revision.transport !== McpExecutionTransport.RemoteHttp || connection === null
+			|| revision.connectionId !== connection.id || revision.connectionGeneration !== connection.generation
+			|| revision.connectionOwnerPrincipalId !== connection.ownerPrincipalId || revision.endpointDigest !== connection.endpointDigest
+			|| connection.siloId !== run.siloId || connection.mcpServerInstallId !== install.id || connection.mcpServerId !== revision.mcpServerId
+			|| connection.ownerPrincipalId !== subject.principalId)
+			return null;
+		credentialRequirement = _CredentialRequirement(connection.credentialRequirement);
+	}
+
+	if (subject.membership.kind !== ExecutionSubjectMembershipKinds.Managed)
+	{
+		if (install.principal.provenance !== PrincipalProvenance.External || install.principal.displayName === null || !_IsDisplayLabel(install.principal.displayName, 200))
+			return null;
+		if (revision.transport === McpExecutionTransport.RemoteHttp && revision.connection?.agentServiceId !== null)
+			return null;
+		return { ownerKind: ElicitationConnectionOwnerKinds.Personal, ownerLabel: install.principal.displayName, credentialRequirement };
+	}
+
+	const service = await transaction.agentService.findUnique({
+		where: { id_siloId: { id: run.agentServiceId, siloId: run.siloId } },
+		select: { kind: true, name: true, principalId: true, principal: { select: { provenance: true } }, revisions: { where: { id: run.agentRevisionId }, select: { id: true } } },
+	});
+	if (service === null || service.kind !== AgentServiceKind.Managed || service.principalId !== subject.principalId || service.principal?.provenance !== PrincipalProvenance.Internal
+		|| service.revisions.length !== 1 || (revision.transport === McpExecutionTransport.RemoteHttp && revision.connection?.agentServiceId !== run.agentServiceId) || !_IsDisplayLabel(service.name, 200))
+		return null;
+	return { ownerKind: ElicitationConnectionOwnerKinds.CompanyAssistant, ownerLabel: service.name, credentialRequirement };
 }
 
 /**
@@ -71,24 +168,19 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 		return { outcome: DeferToolRequestOutcomes.Unavailable };
 	// 1. Bind the approval to the run's immutable execution subject and the invocation admitted for that exact computer lease.
 	const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
-	const runSubject = run === null ? null : ___ExecutionSubjectSchema.safeParse(run.executionSubject);
 	const invocation = await __FindToolInvocationInTransaction(transaction, command.toolInvocationRowId);
-	const invocationSubject = invocation?.authorizationEvidence !== null && invocation?.authorizationEvidence !== undefined && "executionSubject" in invocation.authorizationEvidence
-		? ___ExecutionSubjectSchema.safeParse(invocation.authorizationEvidence.executionSubject)
-		: null;
-	if (run === null || runSubject === null || !runSubject.success || invocationSubject === null || !invocationSubject.success
+	const subject = _ApprovalExecutionSubject(run, invocation);
+	if (run === null || subject === null
 		|| run.attempt !== command.attempt || run.conversationId === null
-		|| runSubject.data.runScope.runId !== command.runId || runSubject.data.runScope.attempt !== command.attempt
-		|| Date.parse(runSubject.data.membership.trustedUntil) <= command.now.getTime()
-		|| Date.parse(runSubject.data.requester.membership.trustedUntil) <= command.now.getTime()
-		|| __DigestCanonicalJson(runSubject.data as unknown as JsonValue) !== __DigestCanonicalJson(invocationSubject.data as unknown as JsonValue))
+		|| Date.parse(subject.membership.trustedUntil) <= command.now.getTime()
+		|| Date.parse(subject.requester.membership.trustedUntil) <= command.now.getTime())
 		return { outcome: DeferToolRequestOutcomes.Unavailable };
-	const assignedPrincipal = await _ResolveAssignedPrincipal(transaction, run.siloId, run.principalId);
+	const assignedPrincipal = await _resolveAssignedPrincipal(transaction, run.siloId, subject.requester.requesterPrincipalId, run.conversationId);
 	if (assignedPrincipal === null)
 		return { outcome: DeferToolRequestOutcomes.Unavailable };
 	// The lease row is read only for its expiry, which caps the approval deadline; the trigger validates the lease itself when the row is created.
-	const activeLease = await transaction.conversationComputerActiveLease.findUnique({ where: { computerId: runSubject.data.computerScope.computerId }, select: { expiresAt: true } });
-	const expiresAt = new Date(Math.min(command.expiresAt.getTime(), Date.parse(runSubject.data.membership.trustedUntil), Date.parse(runSubject.data.requester.membership.trustedUntil), activeLease?.expiresAt.getTime() ?? Number.POSITIVE_INFINITY));
+	const activeLease = await transaction.conversationComputerActiveLease.findUnique({ where: { computerId: subject.computerScope.computerId }, select: { expiresAt: true } });
+	const expiresAt = new Date(Math.min(command.expiresAt.getTime(), Date.parse(subject.membership.trustedUntil), Date.parse(subject.requester.membership.trustedUntil), activeLease?.expiresAt.getTime() ?? Number.POSITIVE_INFINITY));
 	if (expiresAt.getTime() <= command.now.getTime())
 		return { outcome: DeferToolRequestOutcomes.Unavailable };
 	if (invocation === null || invocation.runId !== command.runId || invocation.attempt !== command.attempt || invocation.toolRevisionId !== command.toolRevisionId || invocation.argumentsDigest !== command.argumentsDigest || invocation.state !== ToolInvocationStates.AwaitingApproval)
@@ -101,12 +193,19 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 	const existing = await transaction.approvalRequest.findFirst({ where: { runId: command.runId, attempt: command.attempt, actionDigest: command.actionDigest } });
 	if (existing !== null)
 	{
-		if (existing.id !== command.interruptId || existing.elicitationRequestId !== command.interruptId || existing.argumentsDigest !== command.argumentsDigest || existing.reviewedToolSchemaDigest !== command.reviewedParametersSchemaDigest)
+		const request = existing.elicitationRequestId === null ? null : await transaction.elicitationRequest.findUnique({ where: { id: existing.elicitationRequestId } });
+		const isToolApproval = request !== null && request.purpose === ElicitationPurpose.ToolApproval && request.bodyKind === ElicitationBodyKind.Approval;
+		if (existing.id !== command.interruptId || existing.principalId !== run.principalId || existing.toolInvocationRowId !== invocation.id
+			|| existing.argumentsDigest !== command.argumentsDigest || existing.reviewedToolSchemaDigest !== command.reviewedParametersSchemaDigest
+			|| !_MatchesApprovalElicitation(existing, request, run, assignedPrincipal.subjectId, isToolApproval))
 			throw new Error("deferred approval action digest collision");
 		if (existing.state === ApprovalRequestState.Pending)
 			await __ReconcileDeferredToolApprovalGrants(transaction, run.siloId, existing.id, assignedPrincipal.principalId, command.now);
 		return { outcome: DeferToolRequestOutcomes.AlreadyDeferred, approvalRequestId: existing.id };
 	}
+	const executionConnection = await _ExecutionConnection(transaction, run, subject, command.toolRevisionId);
+	if (executionConnection === null)
+		return { outcome: DeferToolRequestOutcomes.Unavailable };
 
 	// 3. Move the run behind its approval fence before the first row becomes visible, or join its batch.
 	const pendingCount = await transaction.approvalRequest.count({ where: { runId: command.runId, attempt: command.attempt, state: ApprovalRequestState.Pending } });
@@ -134,6 +233,7 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 			externalSystem: command.externalSystemName,
 			consequence: _ApprovalConsequence(command.toolDescription),
 			proposedArguments: command.safeProposedArguments,
+			executionConnection,
 		};
 		const purposePayload = { approvalRequestId: command.interruptId };
 		await transaction.elicitationRequest.create({ data: {
@@ -193,7 +293,11 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 		const raced = await transaction.approvalRequest.findFirst({ where: { runId: command.runId, attempt: command.attempt, actionDigest: command.actionDigest } });
 		if (raced === null)
 			throw error;
-		if (raced.id !== command.interruptId || raced.elicitationRequestId !== command.interruptId || raced.argumentsDigest !== command.argumentsDigest || raced.reviewedToolSchemaDigest !== command.reviewedParametersSchemaDigest)
+		const request = raced.elicitationRequestId === null ? null : await transaction.elicitationRequest.findUnique({ where: { id: raced.elicitationRequestId } });
+		const isToolApproval = request !== null && request.purpose === ElicitationPurpose.ToolApproval && request.bodyKind === ElicitationBodyKind.Approval;
+		if (raced.id !== command.interruptId || raced.principalId !== run.principalId || raced.toolInvocationRowId !== invocation.id
+			|| raced.argumentsDigest !== command.argumentsDigest || raced.reviewedToolSchemaDigest !== command.reviewedParametersSchemaDigest
+			|| !_MatchesApprovalElicitation(raced, request, run, assignedPrincipal.subjectId, isToolApproval))
 			throw error;
 		if (raced.state === ApprovalRequestState.Pending)
 			await __ReconcileDeferredToolApprovalGrants(transaction, run.siloId, raced.id, assignedPrincipal.principalId, command.now);

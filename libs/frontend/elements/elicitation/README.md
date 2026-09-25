@@ -1,4 +1,4 @@
-# Elicitation elements
+# @opencrane/elements/elicitation — participant input controls
 
 > [frontend](../../README.md) › [elements](../README.md) › elicitation
 
@@ -18,12 +18,15 @@ server state.
  conversation-elicitation feature
 ```
 
-In this flow: the feature owns submission, while the server remains the decision authority.
+In this flow: the [conversation elicitation feature](../../features/conversation-elicitation/README.md)
+owns submission, while the server remains the decision authority.
 
 ## Public surface
 
 - `ElicitationApprovalComponent` discloses the exact action and display-safe proposed arguments. An
   explicitly hidden proposal disables approval while keeping denial available.
+- `ElicitationExecutionConnectionPresentation` supplies the connection owner and credential-use
+  text through `ElicitationApprovalPresentation.executionConnection`, separate from the human decision.
 - `ElicitationSingleChoiceComponent` and `ElicitationMultipleChoiceComponent` emit bounded selections.
 - `ElicitationFreeTextComponent` emits text within the server-owned browser limit.
 
@@ -34,6 +37,11 @@ application, or a backend package. Prompts and disclosed consequences are render
 as trusted markup. Tool proposal arguments render as escaped, bounded JSON and never as editable
 fields or provider-specific change summaries.
 
+Connection ownership and credential-use text come from the feature's reviewed server projection;
+the element never guesses them from the current participant. Both rows render together when supplied
+and remain visible while arguments are hidden or controls are disabled. Omission adds no placeholder
+or ownership claim. These labels do not change approval availability or make credentials editable.
+
 ## Dependency direction
 
 Features may import this package; it depends only on Angular.
@@ -42,6 +50,11 @@ Features may import this package; it depends only on Angular.
 
 [`features/conversation-elicitation`](../../features/conversation-elicitation/README.md) composes
 these controls inside the recoverable conversation card.
+
+The element specs cover supplied, omitted, escaped and long connection labels, controlled selection,
+hidden-argument denial and disabled controls. Personal/company, narrow and sign-in-recovery
+compositions belong in the feature's existing Storybook card catalogue; these element specs do not
+provide visual acceptance.
 
 ## See also
 

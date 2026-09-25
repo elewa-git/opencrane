@@ -2,6 +2,7 @@ import { WorkflowTaskRetryableError, type IWorkflowEngine, type IWorkflowTaskCon
 import { ___GeneratedFileEventName } from "@opencrane/contracts";
 
 import { ConversationComputerToolResultOutcomes } from "../conversation-computer-continuation.types";
+import { ConversationComputerModelProgressOutcomes } from "../conversation-computer-model.types";
 import { CONVERSATION_COMPUTER_TURN_MAXIMUM_ATTEMPTS, CONVERSATION_COMPUTER_TURN_TASK } from "./conversation-computer-turn-task";
 import type { ConversationComputerTurnTaskInput, ConversationComputerTurnWorkflowDependencies, ConversationComputerTurnWorkflowResult } from "./conversation-computer-turn-workflow.types";
 
@@ -46,19 +47,22 @@ export function _RegisterConversationComputerTurnWorkflow(workflows: IWorkflowEn
 				const progress = await dependencies.authority.advance(turn.bootstrapId);
 				switch (progress.outcome)
 				{
-					case "completed":
-					case "response_unavailable":
-					case "authority_ended":
+					case ConversationComputerModelProgressOutcomes.Completed:
+					case ConversationComputerModelProgressOutcomes.ResponseUnavailable:
+					case ConversationComputerModelProgressOutcomes.AuthorityEnded:
 						return { outcome: progress.outcome, turnId: turn.bootstrapId };
-					case "model_pending":
+					case ConversationComputerModelProgressOutcomes.ModelPending:
 						await context.sleepUntil(new Date(progress.notBeforeEpochMs), `model-${progress.ordinal}-deadline`);
+						break;
+					case ConversationComputerModelProgressOutcomes.ModelRetryWaiting:
+						await context.sleepUntil(new Date(progress.notBeforeEpochMs), `model-${progress.ordinal}-retry-${progress.retryOrdinal}`);
 						break;
 					case ConversationComputerToolResultOutcomes.GeneratedFilePending:
 						if (!Number.isSafeInteger(progress.notAfterEpochMs) || progress.notAfterEpochMs <= 0)
 							throw new Error("Generated file wait requires the original authority deadline");
 						await context.waitForEvent(___GeneratedFileEventName(progress.operationId), { timeoutAt: new Date(progress.notAfterEpochMs) });
 						break;
-					case "tool_pending":
+					case ConversationComputerModelProgressOutcomes.ToolPending:
 					{
 						if (progress.waitFor === "approval")
 						{
@@ -98,7 +102,7 @@ export function _RegisterConversationComputerTurnWorkflow(workflows: IWorkflowEn
 							await context.waitForEvent(eventName, approvalWait);
 						break;
 					}
-					case "retry":
+					case ConversationComputerModelProgressOutcomes.Retry:
 						recoveryCycle += 1;
 						await context.sleepUntil(new Date(Date.now() + _TURN_RETRY_MILLISECONDS), `recovery-${recoveryCycle}`);
 				}

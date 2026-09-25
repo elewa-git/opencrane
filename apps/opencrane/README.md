@@ -58,6 +58,8 @@ an uncached workflow effect, the Absurd adapter verifies and renews its claim be
 configured memory, remote-tool or registry call, with a minute for completion evidence. Memory
 pre-reads finish before the mutation checkpoint renews its lease. Catalog permission checks and
 writes share one product transaction.
+Workflow composition supplies the shared Prisma rollback checker, preserving genuine rollback
+errors for whole-transaction retry without loading Prisma in the separate controller worker.
 
 The route registry is deliberately a catalogue rather than a second application layer:
 
@@ -182,6 +184,12 @@ They verify that an operation and its task commit or roll back together, and tha
 restarted callers recover the same receipt. These fixtures run no memory worker or provider call;
 authenticated product memory commands still require their separate integration.
 
+`test:output-payload-sql` exercises encrypted answer/display storage against a disposable
+`DATABASE_URL`, using the real transaction owner and independent Prisma clients. It checks complete
+content identity, exact retry, concurrent writers and rollback of both payload rows and list-order
+timestamps. The same suite runs in `test:sql`, which the database CI job owns. It needs no KurrentDB
+or provider; passing it does not prove paired history publication or a signed-in browser journey.
+
 The uncached `test:generated-file-integration` target uses PostgreSQL and KurrentDB together to
 exercise captured and scanned file results, atomic answer attachments, and recovery of the exact
 asset/message link. The history-store CI job supplies both services. Local runs without both
@@ -207,6 +215,7 @@ are:
 | `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
 | `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
+| `LITELLM_PREFORWARD_CONTRACT`, `LITELLM_PREFORWARD_ENDPOINT` | Paired, startup-frozen qualification for the model-routing library's authenticated pre-provider rejection contract; only the qualified managed proxy may supply retry evidence | disabled; exact-image qualification is still pending |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
 | `AGENT_RUN_ADMISSION_*` | Active and queued personal-conversation admission limits | bounded defaults |
 | `OPENCRANE_MEMBERSHIP_*` | Explicit issuer model; `fleet` mounts its verifier, `standalone` reads current local membership using the deployment silo and OIDC issuer | required |

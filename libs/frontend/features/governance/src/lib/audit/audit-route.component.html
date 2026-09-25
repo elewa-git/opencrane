@@ -1,0 +1,1 @@
+<wo-audit-results [rows]="rows()" [feedback]="store.snapshot.feedback()" [hasMore]="store.snapshot.value()?.pagination?.hasMore ?? false" [loadingMore]="store.loadingMore()" [loadMoreError]="store.loadMoreError()" (refreshRequested)="store.refresh()" (loadMoreRequested)="store.loadMore()" />

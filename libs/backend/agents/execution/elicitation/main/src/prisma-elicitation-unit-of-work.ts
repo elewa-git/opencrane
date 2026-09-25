@@ -1,4 +1,4 @@
-import { AgentRunState, ApprovalRequestState, ElicitationBodyKind, ElicitationPurpose, ElicitationRequestState, OrgMemberStatus, Prisma, type PrismaClient } from "@prisma/client";
+import { AgentRunState, ApprovalRequestState, ElicitationBodyKind, ElicitationPurpose, ElicitationRequestState, OrgMemberStatus, Prisma, type ElicitationRequest, type PrismaClient } from "@prisma/client";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { __DigestCanonicalJson, __FindToolInvocationInTransaction, type ToolInvocationClaim, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
@@ -172,6 +172,8 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		const row = await this._transaction.elicitationRequest.findFirst({ where: { id: requestId, siloId, conversationId, assignedParticipantId: subjectId, assignedParticipant: { accessEndedPosition: null } } });
 		if (row === null)
 			return null;
+		if ((await this._filterReadableRequests(siloId, subjectId, [row], now)).length === 0)
+			return null;
 		return _ProjectionAt(row, now);
 	}
 
@@ -183,7 +185,8 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		if (!await this._productAuthorization.canReadConversation(siloId, subjectId, conversationId, now))
 			return [];
 		const rows = await this._transaction.elicitationRequest.findMany({ where: { siloId, conversationId, assignedParticipantId: subjectId, state: ElicitationRequestState.Requested, expiresAt: { gt: now }, assignedParticipant: { accessEndedPosition: null } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 50 });
-		return rows.map(_Projection);
+		const readableRows = await this._filterReadableRequests(siloId, subjectId, rows, now);
+		return readableRows.map(_Projection);
 	}
 
 	/** List recent requests as references to canonical conversation/run authority. */
@@ -196,7 +199,22 @@ export class PrismaElicitationRepository implements ElicitationRepository
 			return [];
 		const rows = await this._transaction.elicitationRequest.findMany({ where: { siloId, assignedParticipantId: subjectId, assignedParticipant: { accessEndedPosition: null, conversation: _ConversationAccessWhere(siloId) } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: limit });
 		const readableConversationIds = await this._productAuthorization.filterReadableConversationIds(siloId, subjectId, rows.map(row => row.conversationId), now);
-		return rows.filter(row => readableConversationIds.has(row.conversationId)).map(function _ProjectActivity(row) { return _ProjectionAt(row, now); });
+		const readableRows = await this._filterReadableRequests(siloId, subjectId, rows.filter(row => readableConversationIds.has(row.conversationId)), now);
+		return readableRows.map(function _ProjectActivity(row) { return _ProjectionAt(row, now); });
+	}
+
+	/**
+	 * Pending tool approvals need their temporary per-action Read grant on every browser read.
+	 * Resolved requests retain the existing conversation history policy because resolving an approval
+	 * deliberately revokes that grant. An expired but unresolved request still needs its grant.
+	 */
+	private async _filterReadableRequests(siloId: string, subjectId: string, rows: readonly ElicitationRequest[], now: Date): Promise<readonly ElicitationRequest[]>
+	{
+		const pendingApprovalIds = new Set(rows.filter(row => row.purpose === ElicitationPurpose.ToolApproval && row.state === ElicitationRequestState.Requested).map(row => row.id));
+		if (pendingApprovalIds.size === 0)
+			return rows;
+		const readableIds = await this._productAuthorization.filterReadableApprovalElicitationIds(siloId, subjectId, [...pendingApprovalIds], now);
+		return rows.filter(row => !pendingApprovalIds.has(row.id) || readableIds.has(row.id));
 	}
 
 	/** Require active organisation membership and continuing participation in the selected conversation. */

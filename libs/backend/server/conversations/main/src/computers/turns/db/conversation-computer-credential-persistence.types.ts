@@ -53,6 +53,10 @@ export interface ConversationComputerCredentialCustody
 {
 	/** Identifies the spent-or-recoverable attempt independently of key cleanup. */
 	readonly bootstrapId: string;
+	/** Identifies the admitted run that owns this key and its spent allowance. */
+	readonly runId: string;
+	/** Retains the run attempt even after credential cleanup removes its secret. */
+	readonly attempt: number;
 	/** Binds custody to the configured silo. */
 	readonly siloId: string;
 	/** Binds custody to its conversation. */

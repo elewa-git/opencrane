@@ -2,6 +2,9 @@ import { z } from "zod";
 import { ___CanonicalizeJson, ___ParseAndValidateJson, type JsonValue } from "@opencrane/util";
 
 import { ConversationModelResponseKinds, type ConversationModelResponse, type ConversationModelToolCall, type ConversationModelToolExchange } from "./conversation-model.types";
+import { ___ConversationModelPreForwardReceiptSchema } from "./conversation-model-retry.validator";
+import { ___ConversationFinalTextSchema } from "./conversation-final-output.validator";
+import { ___ConversationA2uiDisplaySchema } from "./conversation-a2ui.validator";
 
 /**
  * These schemas turn remote declarations and saved tool history into the shared models.
@@ -76,19 +79,9 @@ export const ___ConversationModelToolHistorySchema: z.ZodType<readonly Conversat
 	}
 });
 
-/** Checks completed text using the existing answer byte limit without changing whitespace. */
-function _validText(value: string): boolean
-{
-	try
-	{
-		___CanonicalizeJson(value);
-		return value.trim().length > 0 && new TextEncoder().encode(value).byteLength <= 65_536;
-	}
-	catch { return false; }
-}
-
 /** Validates the accepted result kind and its complete payload; provider envelopes remain transport-owned. */
 export const ___ConversationModelResponseSchema: z.ZodType<ConversationModelResponse> = z.discriminatedUnion("kind", [
-	z.object({ kind: z.literal(ConversationModelResponseKinds.Text), text: z.string().max(65_536).refine(_validText) }).strict(),
+	z.object({ kind: z.literal(ConversationModelResponseKinds.Text), text: ___ConversationFinalTextSchema, display: ___ConversationA2uiDisplaySchema.optional() }).strict(),
 	z.object({ kind: z.literal(ConversationModelResponseKinds.Tool), call: ___ConversationModelToolCallSchema }).strict(),
+	z.object({ kind: z.literal(ConversationModelResponseKinds.PreForwardRejected), receipt: ___ConversationModelPreForwardReceiptSchema }).strict(),
 ]);

@@ -1,9 +1,10 @@
 import type { ConversationGeneratedFileOutputLinker } from "./generated-output/conversation-generated-file-output.types";
 import type { ConversationComputerModelCustody, ConversationComputerToolResults } from "./conversation-computer-continuation.types";
 import type { ConversationComputerModelProgress, ConversationComputerModelTransport } from "./conversation-computer-model.types";
+import type { ConversationComputerModelRejection, ConversationComputerModelRetryClaim } from "./conversation-computer-model-retry.types";
 import type { ConversationComputerTurnBudget, ConversationComputerTurnCancellationReceipt, ConversationComputerTurnModelReservation, ConversationComputerTurnOutputReceipt, ConversationComputerTurnProtocolProjection, ConversationComputerTurnToolResult, ConversationComputerTurnToolSelection, ConversationComputerTurnUnavailableReceipt } from "./conversation-computer-turn-protocol.types";
 import type { ConversationToolProposalAdmission } from "../tools/proposal/conversation-tool-proposal.types";
-import type { AgentScope, ClaimedLeaseScope, CompiledRunInput, ComputerScope, LeaseScope } from "@opencrane/contracts";
+import type { AgentScope, ClaimedLeaseScope, CompiledRunInput, ComputerScope, ConversationA2uiDisplay, LeaseScope } from "@opencrane/contracts";
 import type { PersonalConversationExecutionSubjectCoordinates } from "@opencrane/backend/agents/execution/inputs";
 import type { Logger } from "@opencrane/backend/observability";
 import type { RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
@@ -13,6 +14,7 @@ import type { ConversationComputerLeaseCoordinates } from "@opencrane/backend/se
 import type { ConversationComputerReviewCredentialDeriver } from "../review/conversation-computer-review.types";
 import type { ConversationToolResultNotificationPort } from "./tool-result-notifications/conversation-tool-result-notification.types";
 import type { ConversationToolRequestedNotificationPort } from "./tool-progress-notifications/conversation-tool-progress-notification.types";
+import type { ConversationComputerOutputPayload } from "./output/conversation-computer-output.types";
 
 /** Coordinates a sandbox Pod must prove before receiving its review credential. */
 export interface ConversationComputerPodLeaseCommand
@@ -71,6 +73,8 @@ export interface ConversationComputerOutputCommand
 	readonly modelNotAfterEpochMs: number;
 	/** Plain assistant text accepted only into encrypted private payload storage. */
 	readonly text: string;
+	/** Holds one participant-facing display from the same model response, never raw tool result data. */
+	readonly display?: ConversationA2uiDisplay;
 }
 
 /** Product authority shared by the lease-fenced review credential route and durable server workflow. */
@@ -253,6 +257,10 @@ export interface ConversationComputerTurnStore
 	recordToolResult(bootstrapId: string, result: ConversationComputerTurnToolResult): Promise<void>;
 	/** Return true only when this call stored and read back its fresh model fence; false never permits dispatch. */
 	reserveModel(bootstrapId: string, reservation: ConversationComputerTurnModelReservation): Promise<boolean>;
+	/** Saves authenticated no-forward evidence, or recovers the same evidence without dispatch authority. */
+	recordModelRejection(bootstrapId: string, rejection: ConversationComputerModelRejection): Promise<void>;
+	/** Returns true only after this call's acknowledged fresh claim and matching current readback. */
+	claimModelRetry(bootstrapId: string, claim: ConversationComputerModelRetryClaim): Promise<boolean>;
 	/** Records one bounded unavailable result without clearing spent reservations. */
 	markResponseUnavailable(bootstrapId: string, receipt: ConversationComputerTurnUnavailableReceipt): Promise<void>;
 	/** Releases the lease's active-turn pointer after run completion and credential revocation. */
@@ -264,6 +272,10 @@ export interface ConversationComputerCredentialIssueCommand
 {
 	/** Binds the credential to one admitted bootstrap so a retry returns the same key. */
 	readonly bootstrapId: string;
+	/** Identifies the admitted run saved in the frozen turn, not a caller-selected conversation run. */
+	readonly runId: string;
+	/** Binds custody to the frozen run attempt; another attempt cannot reuse this key. */
+	readonly attempt: number;
 	/** Names the computer and conversation whose active-lease row must still exist. */
 	readonly computer: ComputerScope;
 	/** Names the lease the active-lease row must still carry. */
@@ -318,7 +330,8 @@ export interface ConversationComputerCredentialIssuer
 /** Persists assistant text as an encrypted payload and returns its non-secret message block reference. */
 export interface ConversationComputerOutputPayloadStore
 {
-	store(turn: FrozenConversationComputerTurn, sourceCommandId: string, text: string): Promise<{ readonly blockId: string; readonly payloadRef: string; readonly ciphertextDigest: string }>;
+	/** Saves the complete output identity and encrypted content together; changed retries are refused. */
+	store(turn: FrozenConversationComputerTurn, sourceCommandId: string, text: string, display?: string | null): Promise<ConversationComputerOutputPayload>;
 }
 
 /** Creates the single-use writer whose binding was frozen with the bootstrap. */

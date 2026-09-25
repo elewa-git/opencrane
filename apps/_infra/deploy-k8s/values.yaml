@@ -741,7 +741,11 @@ litellm:
     #    supply-chain integrity + reproducible deploys. Do NOT use a rolling
     #    `main-latest` tag in production — bump deliberately after re-auditing.
     tag: main-v1.81.0-stable
+    # -- Optional published image digest; when set, it replaces the tag in the image reference.
+    digest: ""
     pullPolicy: IfNotPresent
+  # -- Enable only after the owned image passes qualification and its published digest is selected.
+  preforwardRejectionContract: ""
   service:
     port: 4000
   # -- Persist model/router config in Postgres (LiteLLM STORE_MODEL_IN_DB). Lets

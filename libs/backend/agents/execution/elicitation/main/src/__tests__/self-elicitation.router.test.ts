@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates } from "@opencrane/contracts";
+import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, ElicitationPurposes, ElicitationRequestStates, McpCredentialRequirement } from "@opencrane/contracts";
 
 import { __CreateSelfElicitationActivityRouter, __CreateSelfElicitationRouter } from "../self-elicitation.router";
 import type { SelfElicitationRouterDependencies } from "../self-elicitation.router.types";
@@ -84,7 +84,7 @@ describe("__CreateSelfElicitationRouter", function _Suite()
 			assignedParticipantId: "user-1",
 			purpose: ElicitationPurposes.ToolApproval,
 			state: ElicitationRequestStates.Requested,
-			body: { kind: ElicitationBodyKinds.Approval, prompt: "Allow this tool?", action: "Invoke tool", target: "records.update", dataUse: "The displayed arguments will be sent.", externalSystem: "Records", consequence: "This invokes the tool once.", proposedArguments: { recordId: "record-1" } },
+			body: { kind: ElicitationBodyKinds.Approval, prompt: "Allow this tool?", action: "Invoke tool", target: "records.update", dataUse: "The displayed arguments will be sent.", externalSystem: "Records", consequence: "This invokes the tool once.", proposedArguments: { recordId: "record-1" }, executionConnection: { ownerKind: ElicitationConnectionOwnerKinds.CompanyAssistant, ownerLabel: "Inventory assistant", credentialRequirement: McpCredentialRequirement.PrincipalCredential } },
 			requiresStepUp: true,
 			requestedAt: "2026-08-11T10:00:00.000Z",
 			expiresAt: "2026-08-11T10:05:00.000Z",

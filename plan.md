@@ -1,5 +1,629 @@
 # OpenCrane — Active Plan
 
+## MVP continuation — 2026-09-22
+
+### Current checkpoint — actual credential custody joined to delegation fences; MVP acceptance open
+
+On 23 September the user superseded the proposed two-level, four-child, two-active defaults:
+recursive delegation must have **no fixed nesting, total-child or concurrent-child cap**. Stopping
+the top task must close further spawning and stop all descendants, including children racing with
+the Stop and children recovered after restart. Stopping a subtree must not affect unrelated work.
+The original shared budget and absolute deadline, selected readable context and narrower current
+permissions still apply. This authorizes the source-only delegation implementation and its reviewed
+fresh-install baseline; it grants no live access and authorizes no provider call or deployment.
+
+The cancellation contract distinguishes a durable stop request from confirmed cleanup. Once an
+ancestor stops, descendants may admit no new model/tool effects or children. Existing provider
+claims must be cancelled where supported or retained as uncertain until reconciled; a Stop cannot
+undo an external write. Parent completion must not leave detached running descendants. Root state,
+lineage, reservations and workflow receipts must survive process replacement. Tests must cover
+more than two levels, four children and two active children to detect accidental policy caps, plus
+concurrent spawn/stop, restart, repeated Stop, subtree isolation and shared allowance conservation.
+
+Implementation starts from `39432f27351b1193092dabc553520291481d9729`. The live 18-PR graph passed
+at snapshot `857508056f1eef4fda716758ed565fd4c4c7b4e42e2bf49f84cebebf68790a62` before this slice.
+The decision alone did not implement recursive delegation or its cancellation. The next source
+slice, reviewed against `4dfaea9e6fd8a470d5030941dc0186f9ee19a6ff`, now adds the accounting foundation
+described below; the complete delegation journey remains open.
+
+The source preflight confirms three required replacements: single-run cancellation lacks lineage;
+one full-attempt model key cannot safely finance concurrent child keys; and human-only turn admission
+cannot stand in for a delegated trigger. The accepted State × Event contract and implementation waves
+are recorded in [the delivery design](docs/design/mvp-delivery-plan.md#recursive-delegation-decision--23-september-2026).
+Spawning must return a durable handle before waiting for the child, with a separate join/read path,
+so parallelism is real. Parent completion/failure also starts descendant cleanup and cannot leave
+orphan work. The design commit changed no production code, baseline, provider or deployment.
+
+The source slice adds immutable parent/root accounts, child allowance transfers, local spending
+receipts and saved closure causes under `execution/runs`. SQL serializes admission at the root and
+checks every ancestor without a depth cap. Stop, terminal state or deadline prevents new spending
+and child allocations; a closed branch does not close siblings. Matching saved receipts remain
+readable after closure but do not authorize another effect, and uncertain spending is not refunded.
+Account-owned runs reject unreserved tool paths. The first accounting slice guarded an unused model
+mint authorization table rather than the product's actual key custody; the correction below replaces
+that guard. The foundation remains dormant until reservation-scoped credentials and tool admissions
+are joined.
+
+All 127 execution-run unit tests and the package type check pass. Ten two-connection PostgreSQL race
+tests are registered with the fresh-baseline SQL target but deliberately skipped in ordinary tests,
+including when a database URL is present. The SQL target explicitly opts in and requires a fresh
+test database; local runs left `DATABASE_URL` unset. The fixtures use actual repositories and Serializable retries; synthetic
+Stop evidence tests database ordering, not requester IAM or the product Stop workflow. Static
+baseline-preservation, release binding, style and Prisma ownership checks pass. These results do not
+prove child execution, restart or recursive cleanup; those require later integrated acceptance.
+The ten database race cases subsequently executed and passed in CI on `a3cb0f839ee94fdb53509c875a59dc451a85ffa8`
+([database authority job](https://github.com/elewa-git/opencrane/actions/runs/35839314907/job/107110606123)).
+Its model-mint exclusion cases covered the unused table and do not qualify the actual custody repair.
+No local VM, container, provider call or live database was started or changed.
+
+Architecture and independent integrated review pass for this dormant slice. Review caught and
+fixed SQL tests accidentally following the ordinary CI job's database URL: a regression with an
+unreachable URL confirms that ordinary tests skip them, while `test:sql` refuses missing database
+configuration. Workload ownership/render checks pass across three Helm profiles, 18 workload owners,
+four runtime constructs and 11 templates. No package move or new workload was needed. Live stack
+integrity passed again at `a4407614cbf85e6a9a1104760803496241e5aad59eb2cbf4f8ca58a8d9ce3325`.
+
+The current repair, based on `a3cb0f839ee94fdb53509c875a59dc451a85ffa8`, binds the live
+`ConversationComputerAttemptCredential` to the frozen run and attempt. Its creation and account
+creation lock the same run, rejecting either admission order. Pending, uncertain and revoked custody
+all retain the spending exclusion; cleanup may still clear the secret after Stop or expiry. Repository
+reads, writes and authenticated ciphertext use the same immutable identity. The unused mint table,
+port and mock-only test are removed, not kept as a parallel authority. The revised SQL fixtures use
+the production custody table and require their own fresh-baseline CI proof.
+
+Per-call key activation has a further engineering requirement: trusted deployment pricing and
+bounded input/output cost must support a worst-case reservation before each send. Current model
+definitions lack these bounds, and pinned LiteLLM checks recorded spending rather than an upcoming
+request's worst-case cost. Fresh child keys would otherwise multiply first-request overshoot. Keep
+the existing key mode unchanged until the shared ceiling is enforceable; this does not reintroduce
+a depth, spawn or parallelism cap.
+
+Local checks for this custody repair pass: 844 conversation tests, 121 execution-run tests, 251
+unchanged model-routing regression tests and all three package type checks plus the server type check.
+Thirteen opt-in SQL cases are skipped locally, not qualified; their updated
+fixtures require fresh-baseline CI. Static baseline preservation, release binding, style and Prisma
+ownership checks pass. Architecture, direct-replacement and independent integrated reviews pass,
+with no verified findings. The type-contract growth
+candidate adds run/attempt identity to the existing issuance command, not a new responsibility.
+Live PR ancestry passes at snapshot `00e4b8f139193380fc57f11426a71c8419f4de2b58f1138383da1ba93a298690`.
+The local context-index doctor cannot open its database; source inspection used repository files.
+
+Remaining source work is reservation-scoped credential/effect admission, current delegation
+permissions and selected context, independent trusted child activation, non-blocking spawn plus
+join/read, durable return to the parent, and restartable descendant cancellation. Parent completion
+must retain its output while descendant cleanup converges. D1 is not complete.
+
+Published source is `a3cb0f839ee94fdb53509c875a59dc451a85ffa8` on draft #899, directly above
+#898 at `830243b766d9ccb5f4719b511b082e3843b030db` before publication of the custody correction. That
+published CI result does not qualify the new custody baseline. The live 18-PR review chain remains
+#888 → #891 → #892 → #893 → #894 → #896 → #897 → #898 → #899. No predecessor was absorbed or closed.
+
+[Run 35774552213](https://github.com/elewa-git/opencrane/actions/runs/35774552213) tested merge
+`ecece17e841bcf1c98b49ccddfaa2df939a65fe1` and completed by 19:47:52 UTC, verified at 19:49:52 UTC.
+Twelve jobs pass: affected build/test/lint, database authority, KurrentDB, Cognee, API generation,
+affected selection and all six image smokes. The controller startup repair therefore has rebuilt-image
+proof. Storybook alone fails: all 39 interaction/accessibility suites and 247 tests pass, while 130
+visual comparisons pass and 58 fail on missing or changed references. The distinct failing-ID set
+and screenshot byte equality with earlier captures were not established in this inspection. Human
+baseline approval remains required. k3d and both image-publication jobs were skipped, not passed.
+
+The earlier approved source repairs are published, with no new functional CI failure to repair.
+Assistant questions, private schedules, first-memory-dataset creation, the generated-file
+message-link guard, governance access and usage attribution/pricing retain their separate pending
+decisions. Publication approval does not authorize those changes. Delegation source is now accepted
+under the no-count-cap and top-down cancellation decision above, replacing the earlier proposal.
+
+The full MVP is not complete. Fresh-install deployment and identity setup, image publication,
+hosted credential/trust setup, live Odoo/model/browser journeys and real-account restart/revocation/
+isolation acceptance also retain their separate authorization and evidence gates. Proceed with the
+accepted delegation source work; resume the other decision-gated tracks after their pending decisions.
+Do not substitute more characterization tests,
+automatic screenshot acceptance or repeated status-only checks for those required capabilities.
+
+### Published rollback correction — database CI passes; controller repair locally verified
+
+The reviewed correction is published as `e48886ce7427affb89e2801b32327e84c3c78067` on draft #899.
+[Run 35770853615](https://github.com/elewa-git/opencrane/actions/runs/35770853615) confirms that
+source SHA and now passes database authority and KurrentDB. The full run is still in progress at
+this inspection. Agent-controller image job `106892268141` has failed: its image builds, but Node
+cannot import `@prisma/client` when starting `/app/dist/apps/agent-controller/index.js`.
+That job checked out merge SHA `fe0e06de459ba78f081208b2113adb112cafc1fb`.
+
+The new transaction adapters import the shared Prisma classifier through Absurd's existing static
+imports. The controller bundles workspace libraries but leaves third-party packages external, and
+its runtime dependency installation has no Prisma package. Its fixed import-list check did not
+catch the new dependency. This is a source-induced deployable-image failure, not a network error,
+and passing local transaction tests did not prove controller startup. Architecture preflight passes
+a bounded correction through the existing engine options: the server supplies the unchanged genuine
+Prisma rollback classifier, while worker-only controller composition omits it. Both transactional
+paths must require the classifier before executing SQL. The adapters preserve errors; the caller's
+existing unit-of-work policy still decides whether and how many times to retry. No new dependency,
+package, alias, SQL or permission is needed. The source correction now removes Prisma from the
+controller import closure. A regression bundles the actual controller entrypoint without writing
+files, rejects Prisma inputs/imports and undeclared runtime dependencies, and failed before the
+repair. The actual server-composition test also failed before the classifier binding was supplied.
+Both are now green. Production server composition, separate SQL qualification and all six actual
+SQL fixture factories supply the unchanged classifier; worker-only compositions do not need it.
+
+Local checks pass: controller build and six tests, 14 server-composition tests, 54 workflow tests
+(one opt-in SQL qualification case skipped), 13 shared-transaction tests, ten existing real
+PostgreSQL memory-admission tests, five type targets, full dependency-boundary lint and 26 source-pin
+enforcement tests. Prisma boundaries pass against the repair base and actual PR base. Module growth
+has no errors; the engine's 473-to-483-line growth requires review of its existing orchestration
+responsibility. The new validation method checks process composition before SQL-adapter delegation;
+it does not acquire retry, classification or persistence ownership. Architecture post-review and
+independent integrated review pass with no findings. Repository context doctor could not open its local
+context database; this does not establish a source defect and no unrelated repair was attempted.
+Remote controller-image startup must still pass on the next published source revision.
+No replacement image publication or deployment has been authorized.
+
+The multi-step acceptance audit also identified an uncovered local case: successful continuation
+tests use a different tool revision for each ordinal. A new controlled-port test covers
+discovery followed by two pages from the same inventory tool revision, distinct call identities,
+saved-result-derived arguments and totals, and restart after the first page. The focused run passes
+57 tests across four continuation/recovery files, including the new three-record, 31-unit example.
+The scripted model stops on the saved page's null next cursor while tool selection remains allowed:
+four of six model calls, 400 of 600 completion tokens and three of five tool/cycle allowances are
+used. The original deadline and allowance survive restart. Type checking, style and independent
+review pass. The real turn-store code uses in-memory history and mocked SQL custody here; restart
+recreates the authority/store, not a process or database. This qualifies pagination identity and
+recovery plumbing only. Real Odoo discovery, inventory reconciliation,
+a separately authorized test write and authenticated user-journey acceptance remain open.
+
+The current 18-PR stack still passes at snapshot
+`4aa8e88dfbc81e8abf3c2f795248278411f6647a08c2d6d7f513df247cf47c16`; no predecessor was absorbed
+or closed. The source approvals and outstanding product/live-system decisions are unchanged.
+
+### Repaired candidate — history proof passed; SQL rollback handling and visuals open
+
+The reviewed repair is published as `a3de26943f0233edc384aba35e31d506bdeade68` on draft #899.
+[Run 35766901540](https://github.com/elewa-git/opencrane/actions/runs/35766901540) finished with two
+failed jobs: database authority and Storybook visuals. Affected build/test/lint, Cognee, API,
+Kurrent and all six image smokes passed. Completed Kurrent and LiteLLM jobs confirm tested merge SHA
+`029cd320a97740e63e8c6d21a3cc1d881426b31c`, above unchanged base
+`830243b766d9ccb5f4719b511b082e3843b030db`. These completed jobs are not evidence that the whole
+run or MVP passed. This local evidence note is not part of that tested revision.
+
+Kurrent job `106879030318` ran real KurrentDB 26.1.1 and PostgreSQL: 46 tests pass across five
+targets; nine configuration sentinels are skipped. All ten real saved-output recovery cases pass,
+including the five paired answer/display cases and the corrected older text-only cases. The later
+model-name/dispatch test passes, and all four generated-file integration cases pass: exact link
+and restart, lost first-link acknowledgement, completion failure after tool authority ends, and
+substituted Artifact/revoked-authority refusal. The earlier run's skipped steps are not reused as
+evidence. Live Odoo/model-to-browser and fresh-silo acceptance remain separate.
+
+LiteLLM job `106879030358` passes both offline contracts against built image ID
+`sha256:7d0b56b6f8f7567ade17e09a95eb6806ab8ed4b41c0607cc53bc81b82271c26f`: 17 router receipt cases
+and 18 pre-forward receipt cases, each reporting zero network attempts. Only the genuine local
+limiter produces a verified rejection receipt with zero provider calls. This closes the earlier
+built-image/startup proof gap; it does not identify a published registry digest or prove a live
+proxy/provider journey. Saved retries remain disabled by default. Enabling requires separately
+authorized publication and selection of the qualified derived image, managed same-release proxy
+configuration, and the explicit pre-forward contract value. No such setting or live system changed.
+
+The human visual review document inventories all 58 original Linux candidate states, with verified
+links to every actual image and before/diff pairs for all 20 changed states. Source history explains
+17 inherited Tools differences through the earlier PrimeNG migration `c66303d66`; this is not visual
+approval. No frontend source or screenshots changed between the captured `cbfb06b27` and repaired
+`a3de26943`. Human baseline acceptance, requester-only assistant-question source, private scheduling
+defaults and the previously recorded authority/live-environment decisions remain pending.
+
+Live stack integrity still passes for 18 PRs, with review chain #888 → #891 → #892 → #893 → #894 →
+#896 → #897 → #898 → #899 at snapshot
+`117c8733d52dd3a7fe5331929d415999373ad721ce96d89fcf5030b88e0e7b54`.
+
+### Proven PostgreSQL rollback — local regression and review pass; CI open
+
+The repair starts at `a3de26943f0233edc384aba35e31d506bdeade68`. Database job `106879030422`
+exposed an actual concurrency failure in the existing two-principal memory-command test.
+`absurd.spawn_task` raised Prisma `P2010` with PostgreSQL SQLSTATE `40001`; transactional workflow
+admission wrapped it as `AbsurdWorkflowError`, and the shared retry classifier recognized neither
+the wrapped error nor that raw-query serialization shape. The original three-attempt memory
+transaction policy therefore could not retry a proven rollback. The encrypted-output ten-case
+suite and all five workload-profile repair cases passed in that same job.
+
+The correction in the shared Prisma classifier treats genuine `P2010`/`40001` errors as retryable
+only when the caller's existing policy admits `P2034` serialization conflicts. Both transactional
+workflow adapters preserve recognized rollback errors unchanged. Arbitrary raw-query errors,
+message text, wrapped causes, external/provider failures and nontransactional workflow operations
+remain outside this change. No schema, baseline, grant, consent, credential, provider or deployment
+setting changed.
+
+The regression failed before the correction at the raw task-admission error wrapper. Afterward,
+the shared unit-of-work suite passes 13 tests; the workflow adapter suite passes 52 tests with one
+unrelated SQL qualification case skipped. The existing disposable PostgreSQL memory-command suite
+passes all ten cases, including concurrent principals. Its deterministic new case injects a real
+Prisma `P2010`/`40001` error object after an actual raw task insertion; it does not claim PostgreSQL
+raised that injected error. Before the second attempt, an independent client sees no failed task,
+operation or audit and the fact remains Active at revision 1. The retry commits one matching task,
+operation and audit, with the fact ForgetPending at revision 2. Restarted replay adds nothing.
+Together with CI's observed driver error, this establishes the local regression, not new remote CI
+acceptance. No new database, VM, container or persistent service was started.
+
+Adapter source pins are updated without changing their SQL templates. The diff checker recognizes
+exactly the previous two pins only when loading an immutable Git base, and rejects them in current
+policy. All 26 enforcement tests pass, including changed-history and current-policy rejection.
+Style reports zero errors or warnings across the three changed production TypeScript files. Prisma
+boundaries pass against both the repair base (288 files) and actual PR base (395 files); all three
+affected package type checks pass. Module growth checks four production files with no errors or
+review candidates. Independent integrated review passes with no findings: whole-transaction retry,
+error identity and historical-only source-pin recognition retain their intended boundaries.
+Remote CI on the committed correction remains open; the earlier failed run is not reused as a pass.
+
+Storybook repeats the exact reviewed decision set: 247 interaction/accessibility tests pass, and
+visuals have 130 passes plus the same 38 missing and 20 changed references. No new functional
+failure or state ID appeared. The existing review document remains the decision inventory, but
+matching IDs do not establish that screenshots from different runs are byte-identical.
+
+The remaining-work audit also confirms that actual usage collection is not a safe placeholder
+writer: model responses currently omit usage, the reporting repository has no writer, and storage
+requires non-null cost/currency. Attribution for managed runs, trusted pricing and unknown-cost
+semantics need a product/accounting decision. Do not write zero cost as a substitute for unknown.
+
+### Draft publication — approved candidate published; CI acceptance open
+
+The user approved draft publication and CI. Draft [#899](https://github.com/elewa-git/opencrane/pull/899)
+now publishes the 13 reviewed commits through `cbfb06b27fb952c315ed865c9ff80d324f777808`, directly
+above #898 at `830243b766d9ccb5f4719b511b082e3843b030db`. Earlier statements that these checkpoints
+were unpublished describe their local verification stage. The affected-project job's checkout log
+confirms tested merge SHA `991b5beb62abb128a17a8c16c41446e2767fc6aa`; evidence retains both source
+and tested revisions.
+
+[Validation run 35763299494](https://github.com/elewa-git/opencrane/actions/runs/35763299494) finished with four failed jobs.
+The first topology run rejected the PR description's heading and omitted self reference. A
+description-only correction restores the complete review order; the post-edit live stack check
+passes for all 18 open PRs at snapshot `c0ad7b59d1e6a2835b4942469463cef65ee736dc30f7e767ef2f63ee2907578d`.
+Database authority, Cognee, API generation, stack integrity and five non-LiteLLM image smokes passed.
+The affected-project job found two obsolete asset test fixtures; Kurrent found three obsolete
+single-entry confirmation calls in older text-only tests; LiteLLM's offline harness counted socket
+allocation as a network attempt. Storybook build, interaction and accessibility checks passed, but
+its visual suite had 130 passes, 38 missing baselines and 20 changed images. Seventeen changed Tools
+images have unchanged component source and baselines in this PR's range and require a controlled
+base-versus-head comparison. The 38 new and three feature-related changed images need human review;
+no visual baseline is accepted by this publication approval. Later Kurrent job steps were skipped,
+not passed. These results belong to the original published candidate, not the local repair overlay.
+
+This publication note and the following repair are not part of the approved 13-commit candidate.
+No merge, tag, image publication, deployment or live provider action ran.
+The separately pending product and authority decisions remain unchanged.
+
+### CI harness repair — local checks; remote qualification and visual review open
+
+The immutable repair base is `cbfb06b27fb952c315ed865c9ff80d324f777808`. Test-only changes restore
+explicit empty retry/display fields in two asset fixtures and remove a fixture cast, so the compiler
+checks the full current contract. Three older history tests now split the saved output receipt with
+the production helper and assert exactly one text intent before confirmation. Existing recovery,
+identity and no-restamp assertions remain. Both LiteLLM harnesses now distinguish harmless socket
+allocation from attempted DNS, connection or transmission without clearing recorded violations.
+A standard-library regression exercises each actual hook in a separate process, permits allocation,
+and checks eight denied outbound calls and retained evidence. An independent hook prevents real I/O
+if a denial regresses; hook installation before vendor imports is also checked.
+No production behavior, permission, schema, baseline, dependency or provider setting changes.
+
+Asset type checking and all 161 asset tests pass. The initial sandboxed test run could not open its
+temporary HTTP ports; the unchanged suite passed outside that restriction. Conversation type checks
+and 45 focused output tests pass. LiteLLM lint, 119 Node tests and 12 Python tests pass. Style and
+Prisma boundaries pass; module growth finds no production source change. Corrected real-Kurrent
+and pinned-image proofs still require CI. Independent integrated review passes with no findings;
+it confirms that recovery assertions and outbound-attempt detection remain intact. The live 18-PR
+review chain still passes at snapshot `c0ad7b59d1e6a2835b4942469463cef65ee736dc30f7e767ef2f63ee2907578d`.
+No VM, container, persistent service or dependency installation was started; disk retains 19 GiB free.
+
+### Paired answer/display history recovery — test source complete; real-service run open
+
+This test-only slice starts from `d33d340c0553bc5879e71fd8c952e07cb97abd75`. Rechecking the
+real-service suites found that their saved answers always omitted the optional display. Five new
+Kurrent cases now exercise the complete pair through the production turn store and history writer:
+adjacent Message/Display commit and fresh-client retry, recovery after a real append commits but its
+acknowledgement is lost, stale-position refusal without a partial pair, and refusal of either a
+changed or removed display on retry. Fixtures reuse the production display-identity helper.
+
+The existing uncached `backend-server-conversations:test:integration` target and its GitHub Actions
+job own execution. The local Kurrent URL is unset and no service listens on the usual test port.
+No local service, VM or container was started. Package type checking passes; focused collection
+loads the suite, passes its missing-configuration check and skips all ten real-service cases. Those
+skips do not establish recovery or MVP acceptance. All 66 tests across the five existing consumers
+of the shared fixture pass. Style and Prisma boundaries report no errors; module growth finds no
+production change. Independent review passes with no findings. Production code, schema, permissions,
+provider calls and the pending product decisions remain unchanged.
+
+### Real PostgreSQL output custody — verification and review passed
+
+This verification slice starts from reviewed producer checkpoint
+`73f0ad4865125e886f718478cef437bec0a65dba`. The existing disposable PostgreSQL 17.11 instance
+is reachable through its local socket; no new VM, container, server, role or database is needed.
+A PostgreSQL-only suite now uses the real encrypted-payload unit of work and independent Prisma
+clients. All ten cases pass: complete manifest/text/display storage, explicit absence, restarted
+exact retry, changed-output refusal, concurrent writers and rollback after a later encryption
+failure. Assertions inspect committed rows and PostgreSQL's full-precision list-order timestamp.
+The schema and trigger protections are unchanged. The uncached `test:output-payload-sql` target
+is also included in the normal `test:sql` suite that the existing database CI job runs.
+
+Read-only catalog comparison confirms both enabled output-protection function bodies match the
+current source: `enforce_conversation_lifecycle` and `reject_conversation_private_payload_mutation`.
+The reused database has no protected baseline-origin marker, so this is not proof of an exact
+fresh installation. The source baseline digest remains
+`a9e8cd6e529c1ca9108e2811f5f08b47657b11e44d76811ddd62a20d17517d1f`.
+App type checking, release coherence, workload/app and agent-domain guards and their negative
+checks pass. Style finds no production TypeScript change; the 288-file Prisma floor passes and
+module growth has no candidates. Independent test-evidence review passes with no findings.
+An invocation without `DATABASE_URL` fails explicitly rather than returning a green skipped suite.
+
+Only isolated synthetic fixture rows were added to the existing disposable database. No schema,
+production permission, live account, provider, VM or service changed. Local execution is not
+exact-SHA CI. Paired Kurrent output and authenticated model/browser/Odoo acceptance remain separate
+gates. The next product steps still await scoped decisions for assistant questions and private
+scheduled routines; no source approval is inferred from the unanswered requests.
+
+### Production structured results — reviewed source; live qualification open
+
+This U2 slice starts at immutable local base
+`58cddfe5d3214fa155c1a24eed9936409d435326`. Architecture preflight permits one optional complete,
+literal-only A2UI result alongside the ordinary answer. Shared contracts own dependency-neutral
+wire shapes; execution inputs own the frozen output mode and instructions; the model gateway
+decodes only that requested format. Conversation output owns graph checks, encrypted payloads,
+the ordered answer/display receipt and recovery. Existing history writers still stamp each entry;
+the turn store commits both entries and its decision in one atomic append. The frontend retains
+its existing replay, component and SDK owners. No permission, schema, provider setting or live
+environment change is part of this slice.
+
+The 496-line turn store delegates output receipt validation/equality to `computers/turns/output/`;
+it retains stream transactions and protocol replay. This separates output shape from lifecycle
+ordering without creating another state machine or a generic history abstraction.
+
+| Saved state | Event or observation | Outcome and owner |
+| --- | --- | --- |
+| ModelReserved | Valid final answer, optional complete display, current authority | SQL stores the complete output identity and encrypted content; Kurrent atomically records the output decision and adjacent participant entries. |
+| ModelReserved | Payload storage succeeds but history is unavailable | No participant output is accepted; an exact retry must match the saved complete output shape. No new model call is authorised. |
+| ModelReserved | Conversation head changes | Reload current authority and prepare the whole output at the new position; never append only its display. |
+| ModelReserved | Cancellation wins the checked turn revision | Refuse the complete output through the existing reducer and atomic revision check. |
+| OutputRecorded | Lost acknowledgement, restart or same response | Confirm both saved entries exactly, then finish file linking, run completion, credential cleanup and settlement. |
+| OutputRecorded | Different text, display, identity or content reference | Refuse; neither append a replacement nor admit another model call. |
+
+Source implementation and checks are complete; independent integrated review and architecture
+postflight pass with no findings. Contracts pass
+205 tests, execution inputs 157, model routing 251 and conversations 820, including optional displays
+after eight company tool exchanges and generated-file completion/restart recovery. The conversation
+workspace passes 127 tests. These package type checks pass; both production UI and server builds
+pass. A joined diagnostic feeds the actual 528-byte producer payload into the existing SDK replay
+owner and obtains the expected Ready Card, Column and two literal Text nodes. Its history is a
+fixture, not an authenticated browser session.
+
+Output tests cover complete-pair recovery, concurrent responses, cancellation winning the atomic
+turn revision, permission loss during preparation and changed text/display/presence after payload
+storage. Initial custody tests use real AES-GCM encryption and a controlled SQL transaction; the
+follow-up above adds real PostgreSQL proof. Paired-output recovery against real KurrentDB remains open; the
+existing real-service integration suite was not run or counted as passing. No new service was
+started to fill that gap. Live Odoo/model and signed-in browser acceptance also remain open.
+
+Style reports zero errors or warnings across 32 production files, and Prisma boundaries pass across
+307. Module growth reports one responsibility-review candidate: the existing turn port types gain
+the optional model display and complete encrypted-output return type (418 to 422 lines), without
+adding implementation or another authority owner. The live 17-PR graph still passes at snapshot
+`78eb529231b682b688534ad072103c28bc4461f780e9a17ab56b322e9f083efc`.
+This is a local, unpublished partial U2 checkpoint, not completed U2 or MVP acceptance. Disk has
+about 14 GiB free; no VM, container, dependency installation or live environment change was made.
+
+### Previous source checkpoint: read-only result rendering
+
+The active goal remains the complete ten-track MVP, including delegation and scheduled agent work.
+The preceding source slice adds read-only saved A2UI display replay on top of local checkpoint
+`6118a3dd233775d2b3d0e9fb639f68ea505063e6`. It reuses authorized conversation history and the installed
+SDK, with a strict finite catalogue, literal text, SDK-reference collision protection, bounded graph
+and UTF-8 replay work, and no actions/media/network requests. Replace, Patch, Remove, incomplete
+updates, access/selection clearing and cross-author isolation are covered by focused tests. The
+feature-local display host owns its states and stories; the existing mapper/presenter/transcript
+compose it without granting message or action authority. Independent source review passes after
+repairing UTF-8 accounting, sticky replay exhaustion, invalid-row limits, overflow-notice semantics
+and transcript heading levels. That checkpoint does not wire a production assistant A2UI producer, and no runtime-question approval,
+private tool result exposure, permission change, install, VM, live account or deployment is involved.
+This is partial U2 source work, not U2 or MVP acceptance. Delegation remains paused: the user's
+"why limit?" asks for an explanation and is not approval of the proposed configurable defaults.
+
+The complete workspace suite passes 127 tests in 14 files; type checks and the production UI build
+pass. Style checks pass across 15 production files, Prisma boundaries across 303, and module growth
+reports no errors or review candidates. Five real-Chromium story interaction/accessibility checks
+pass. Five synthetic candidate captures also confirm no external requests, action/media elements
+or page overflow at 1280/390 pixels. These are fixture renders, not a live producer/history/reload
+journey. Screenshot comparison fails only because the five new Darwin references do not exist;
+baseline updates were explicitly disabled. Human visual review and Linux qualification remain open.
+The evidence gallery is `/private/tmp/opencrane-a2ui-evidence.5iObTq/REVIEW.md`.
+Live PR ancestry remains green at snapshot
+`78eb529231b682b688534ad072103c28bc4461f780e9a17ab56b322e9f083efc` (17 open PRs).
+This source slice is local and unpublished. Disk remains about 15 GiB free; no VM was recreated.
+
+The earlier reporting slice adds read-only `/settings/audit` and `/settings/usage` on top of local
+checkpoint `63e163d03f11b234c53ad571ad0d87fc5314866a`. It uses three narrow governance libraries:
+generated read contracts and validators, their HTTP adapter, and a feature that composes separate
+audit, recorded-usage and budget components. The browser app owns the existing Settings shell,
+member children, new reporting children and adapter/reader-identity bindings. No grant, budget edit,
+backend schema, live request or deployment is added. The access-policy decision remains open.
+
+Audit traversal advances through permission-filtered empty pages. New tests caught and fixed a
+cursor surviving a reader change, and pending reads surviving session loss; queries now reset with
+the reader and all sibling reads cancel after a 401. A 403 clears only the denied endpoint, while
+temporary read failures retain explicitly stale values. The usage endpoint has no sampling writer,
+period or freshness evidence in this candidate, so this UI says recorded usage rather than live
+spending. A returned global USD zero still cannot distinguish a default from a configured zero.
+
+Current checks pass 25 contract, 17 adapter, 50 feature/store/mapper and 15 existing Settings tests,
+plus 19 app-composition tests and all four library type checks. The production UI build and
+Storybook build pass. A real Chromium run against the production-configured local app, with all API
+requests intercepted as synthetic responses, passes at 1280 and 390 pixels: audit continuation,
+Settings navigation, independent budget access, usage-denial purge, member default and anonymous
+redirect. It issued GETs only. This is browser integration evidence, not a real-account journey.
+
+The final full Storybook run passes all 242 interaction/accessibility checks in 38 suites. All 33
+governance states render without browser errors or page overflow; 21 are tagged visual contracts
+awaiting human baseline review. The new continuation button contrast, story-output bindings and
+narrow grid sizing are repaired. Narrow fixtures and the routed app now assert that heading and
+limitation text fit the viewport while tables retain their keyboard-reachable horizontal scroll.
+The final production build, app-ownership guard and negative tests pass. Independent source review
+finds no defects; style checks report zero errors/warnings and module growth reports zero candidates
+across 37 production files. The live PR graph passes at snapshot
+`22b08e644b960e17b26fb5d03822f761f6a82ee0e9289b4be19935a221a6851b`.
+Local synthetic screenshots and their evidence limits are collected in
+`/private/tmp/opencrane-governance-evidence.UlNM8e/REVIEW.md`. No shared permission rule or visual
+baseline changed. This source slice remains local and unpublished.
+Human visual review, publication/exact-SHA CI, deployment, actual usage collection and live
+administration acceptance remain open; this is partial A2, not MVP completion.
+
+Continue from reviewed candidate `830243b766d9ccb5f4719b511b082e3843b030db` (#898), with
+`develop` at `d4bd0213c38e4fa70cbc3d93535857da9e381a32`. The live PR graph still places #898
+after #888 → #891 → #892 → #893 → #894 → #896 → #897. Implementation uses the isolated
+`feat/0.12-mvp-remote-authority` worktree; the older checkout and its unrelated edits are preserved.
+
+The user explicitly approved two source changes on 22 September:
+
+- Repair the remote-MCP database rules, retain hosted-tool safeguards, and update the fresh-install
+  baseline. This supersedes the older pending source approval recorded below. It does not authorize
+  changing a live database or calling a provider.
+- Enable company-assistant approvals for the original requester only, while preserving the
+  assistant's and connection's current explicit permissions. This supersedes the older company
+  approver-policy/source block below. It does not authorize an actual external write.
+
+Remote-MCP architecture preflight passes for separate, fully checked remote and OCI lifecycles.
+New structural regression cases against the unchanged disposable PostgreSQL baseline reproduce
+accepted null discovery digests and a null task connection, alongside the existing OCI-only claim
+failure. The repair now passes all 361 MCP unit tests and 43 fresh-PostgreSQL remote authority
+checks. Independent review reproduced a delayed completion accepted after its dispatch deadline;
+the new regression fails against the first repair and passes after a database-clock completion
+guard. All thirteen database test projects then pass on final baseline
+`a9e8cd6e529c1ca9108e2811f5f08b47657b11e44d76811ddd62a20d17517d1f`, including three new
+run-owned remote cases and the unchanged eighteen-case OCI proposal suite. The run-owned cases
+prove original-run and current-computer lease caps, plus rollback of both claims and audits when
+authority expires between writes. Independent integrated review and architecture post-review pass
+for the scoped remote repair; the additional run-owned test delta also passes independent review.
+MCP type checks, package boundaries, baseline regeneration and release binding pass. These are
+disposable local PostgreSQL proofs, not authenticated Odoo or deployed-candidate acceptance.
+No cluster, identity-provider, credential, visual-baseline, release or merge change has run.
+
+The remote repair is committed locally as `b402f728f8869fb9d1029133f3e1f07919778286`; publication
+is separately requested, with no push or new PR yet. Live stack integrity passes after that commit.
+
+Requester-only company approval source is implemented above that checkpoint. Approval and
+invocation rows keep the assistant's execution principal. Opening and deciding an approval resolve
+the original human from the matching frozen run/invocation requester, then require a unique external
+identity, current organization membership, active conversation participation and the linked
+elicitation. Existing per-action Read/Decide grants remain temporary; no role-wide access or provider
+credential borrowing is added. Pending detail, reconnect and Activity reads now check the exact
+approval Read grant; resolved history retains its conversation-read policy.
+
+The source checks pass 283 IAM, 155 execution-input, 737 conversation and 59 elicitation tests, plus
+their type checks and the shared boundary/style checks. All nine approval PostgreSQL cases pass:
+personal and company approve/restart with one continuation, hidden-value denial, expiry, wrong
+requester refusal, revoked Decide, and revoked Read across detail, reconnect and Activity. The full
+application database target passes 91 tests and four authority scripts on the disposable final
+baseline. Independent integrated review and architecture post-review pass for the backend source;
+the managed-assistant SQL test delta also passes independent review. No provider was called.
+This backend slice is committed locally as `a78d05f607db1d56c2fac533119ae1580bb1d29a`; live
+stack integrity still passes, and no push has run.
+
+Connection-owner disclosure source is implemented through the existing approval body and card.
+The IAM transaction resolves the selected execution owner's assignment, installation and immutable
+remote connection before pausing the run. It freezes only the owner kind, display name and
+credential requirement with the approval digest; the human requester is not treated as the company
+connection owner. Hosted tools disclose credentialless execution. Replay preserves the saved
+disclosure, and malformed or missing disclosure prevents affirmative decisions.
+
+Validation passes 298 IAM, 187 contract, 70 elicitation API, 16 feature, 42 state and nine element
+tests. All 93 application SQL tests and four authority scripts pass on the disposable baseline,
+including eleven approval cases. The two new RemoteHttp cases prove real database disclosure,
+requester-only decisions and one continuation request through the transaction-bound workflow port;
+they do not prove a committed real Absurd event or execute a provider. Existing OCI handoff tests
+remain intact. Generated client/API documentation, server and production UI builds, package type
+checks, full dependency-boundary lint, style/Prisma checks and release coherence pass. The production
+UI build succeeds with two workers outside the sandbox after two silent sandbox exits; no build
+configuration was changed.
+
+All 209 browser interaction/accessibility checks pass after correcting the stories' output bindings
+and controlled draft feedback, with their event assertions preserved. Fifteen approval visual
+comparisons have six unchanged states, two intended disclosure-row changes and seven new states
+without baselines. Candidate screenshots are captured separately; no visual baseline is accepted
+or updated. Source architecture and independent review cover the implemented responsibilities;
+rendered correctness and component reuse pass review, while human visual acceptance stays open. This local
+source checkpoint does not finish T2, qualify a deployed journey or authorize an external write.
+
+The older #891 screenshot artifact expired on 20 September. Fresh local macOS Tools and Computer
+Review/context candidates were captured from unchanged component source; they are not a
+replacement for exact-head Linux CI evidence or human baseline approval. First-use private-memory
+creation remains pending a separately requested source-only permission decision.
+
+New company assistants now receive nine model calls, eight tool invocations and eight saved-result
+cycles, replacing the remaining one-tool creation default. The aggregate 32,000 completion-token
+allowance, two-minute deadline and null revision cost cap are unchanged; the existing server spend
+cap still applies. Existing assistants and immutable revisions are not rewritten. Setup retries
+leave their choices unchanged, and successive tool edits copy their saved budget.
+
+The initial-budget regression failed against the old default and passes after this correction.
+Five new controlled-provider tests use the actual company limits and 4,096-token route cap with the
+real turn store and encrypted model custody. Later tool arguments are derived from saved result
+contents. Eight calls feed a final answer, restart before model calls five and nine does not repeat
+prior calls, a ninth tool response is refused, and expiry of the original deadline prevents further
+model dispatch. Final model-token reservations are 4,096 for each of the first six calls, then 3,712,
+1,856 and 1,856. This proves a positive final-answer reservation, not enough time or answer quality
+for every business request. Provider execution, database and history-service transports remain test
+doubles in these cases; they do not qualify real Odoo reasoning or a deployed company assistant.
+Validation passes 167 agent-service and 742 conversation tests. Unit tests and type checks pass
+across all nine affected backend projects; the server build, full dependency-boundary lint,
+style/Prisma ownership, module-growth and release-coherence checks pass. The build's API generator
+required permission to open its local IPC socket; no source or build configuration workaround was
+needed. Independent integrated review passes with no findings. This source-only slice remains local
+and does not close the live multi-step acceptance gate.
+
+### Delegation restart and authority preflight
+
+The current source checkpoint is `f4281ee6c0c8464de3eda6757f71198e424ebd21`. The live stack
+check passes with the same seventeen open PRs and unchanged #898 head. A read-only inventory on
+22 September found no source to port from `/private/tmp/opencrane-bounded-assistant-delegation`:
+zero regular files remain, and its branch is still the old `8b20275` baseline, already ancestral to
+the current candidate. The three old proposal/review directories are also empty. Rebuild against
+the current owners; do not repair the old worktree metadata or treat its directory names as work.
+
+| Existing owner | Required delegation extension |
+| --- | --- |
+| `execution/runs` | Root/parent lineage, shared allowances, reservation receipts and descendant cancellation. |
+| `execution/inputs` | Current target identity, selected readable context and narrower frozen capabilities. |
+| `server/conversations` | Model-owned delegation request, independent child history/activation and one terminal return into the parent's saved result sequence. |
+| `iam/authorization` | Explicit current AgentService/Conversation Delegate decisions; declared actions are not grants. |
+| `infra/workflows` | Reuse transaction-bound Absurd task admission and recovery; no new scheduler or peer messaging service. |
+
+Architecture preflight blocks delegation activation, not reuse of these owners. Current Kurrent
+counters and the model key limit belong to one run. A child cannot receive a fresh copy of that
+allowance. In particular, a database debit cannot shrink a parent key that was already issued with
+the full spending cap. Reserve disjoint parent-local and child/subtree spending allowances before
+issuing credentials, and never reuse the parent's key for a child. Nested reservations must remain
+inside the original root budget and deadline. Uncertain issued allowances cannot be refunded merely
+because a worker restarted. The current model-key port has no shared-provider-budget contract.
+
+Historical source reviews did not authorize the rejected reservation writer, Delegate grants,
+delegation SQL or Prisma-owner registrations. The user's 23 September decision now accepts scoped
+source work for lineage and baseline changes, reservation/credential gates, explicit delegation
+permissions, recursive cancellation and parent return. There must be no fixed depth, child-count
+or concurrency caps; the old two/four/two proposal is superseded. No automatic organisation-wide
+grant, provider call, live database or deployment is authorized. Existing draft-publication approval
+remains separate from deployment and live qualification.
+
+Before that decision, work was limited to documenting the boundary and characterization tests.
+Five new conversation cases cover the null revision cost cap, a lower revision cap, a higher
+revision cap, restart after the server configuration increases, and refusal of a changed frozen cost
+cap. They run the real turn store and encrypted custody against controlled model/provider ports.
+Three new run-cancellation cases keep two run rows in the same conversation: cancellation and its
+replays leave the unrelated run untouched, and neither retargeting the saved Stop nor replacing it
+with a second command is allowed. The IAM cleanup port is observed, not executed against providers.
+All 747 conversation tests and 80 execution-run tests pass, with both package type checks. The first
+restricted full run could not open test HTTP listeners; the unchanged rerun with local-socket
+permission passed. No test or production configuration was relaxed. Style, Prisma ownership,
+module growth and release coherence pass; these are local test/doc checks, not delegation proof.
+The current-head rendered deployment inventory is not requalified by this source preflight. Actual
+parent/child execution beyond the rejected caps, sibling isolation, shared-cost enforcement, revocation,
+restart and cascading cancellation remain required before D1 can be marked complete.
+
+Keep the remaining memory, interaction, files, delegation,
+schedules, administration and recovery journeys in scope; source completion never closes their live
+acceptance gates. First-dataset memory authorization, governance-reader policy, visual acceptance
+and testv6 identity/bootstrap still need their separately scoped decisions or approvals.
+
 ## Personal-memory SQL qualification — source repair validated
 
 This follow-up starts at `8cd036502c5488848e3211850962ce9edcdd63e7` above the reporting
@@ -66,9 +690,10 @@ incremental publication order below; historical entries remain evidence for thei
 The cumulative candidate starts at #887 (`8b20275b692563b763e7e096262bd9586e2bcd2d`), includes
 remote MCP #886 (`2b3876edd981cb8762fe8b533987fe6f84c4f586`) and the reviewed model-response
 recovery change, and is checked against develop `d4bd0213c38e4fa70cbc3d93535857da9e381a32`.
-Original branches and local source are preserved. The delegation worktree still contains unfinished
-source and unapplied reservation, grant and database proposals; those are not a working feature.
-The consolidation inventory must account for that work before this can be called a complete MVP.
+Original branches were retained. The 22 September inventory found that the old delegation worktree
+and proposal directories no longer contain source files; its branch has no delegation commits.
+Historical reservation, grant and database proposals were not applied. Rebuild delegation from the
+current candidate as described above before this can be called a complete MVP.
 
 ### Delivery checklist
 
@@ -280,6 +905,11 @@ boundaries pass. Final independent review and architecture post-review pass with
 findings. The source is published in #892 at `c737beca00f9b9fdb156ab6d438a7a583f8fc523`;
 provider backoff and live qualification remain.
 
+The 22 September continuation removes the separate one-tool default from newly provisioned company
+assistants while retaining their existing aggregate token, time and spend limits. Its focused
+content-dependent eight-tool/restart proofs are recorded above; existing company revisions remain
+unchanged and live business qualification stays open.
+
 The one-tool result and text-only continuation was an earlier delivery slice. The complete
 MVP must support a repeated model → MCP call → persisted result → model cycle within one run.
 Absurd continues to select the next saved step and own waiting and recovery. The server owns model
@@ -313,6 +943,70 @@ retries. Generic effectful `callTool` responses, including HTTP 429, remain `May
 enter recovery without another call. `Retry-After` supplies a delay, not proof that no effect
 occurred. Automatic effectful backoff needs a trusted adapter contract proving rejection before
 tool admission; that contract is absent from the current generic remote MCP registration.
+
+The pinned LiteLLM model-proxy preflight found a separate hidden-retry gap: one server HTTP request
+can enter the router's default retry loop. The model adapter now sends fixed `num_retries: 0`,
+`max_retries: 0` and `disable_fallbacks: true` for initial, continuing and final requests. These
+settings cannot come from compiled input. Deployment-level and named proxy retry policies can
+override request controls; the current model registration supplies neither, and modified/shared
+proxies remain unqualified. A network-disabled local proof against LiteLLM source commit
+`790a5ce0b323c1eefa70c2df25b2780097aa3f80` and OpenAI SDK 2.9.0 exercises the real router, provider
+adapter and SDK through an in-memory HTTP transport. All 17 cases pass: defaults make three provider
+attempts for 429, 500, timeout and connection loss, while the fixed request controls make one.
+A deployment retry override still produces four attempts; named policies also override some
+request controls. The proof is retained under the existing LiteLLM app, whose affected image-smoke
+target resolves and tests the configured image by digest through the existing GitHub Actions job.
+Local request serialization tests and 27 saved-result/restart cases pass. Exact-image CI execution
+and full HTTP-proxy/live-provider qualification remain pending; local source evidence is not a
+deployed-image claim.
+This correction does not complete backoff. A generic HTTP 429, `Retry-After`, rate-limit description
+or zero reported response cost is not evidence that provider dispatch never began. Safe model
+backoff still needs a qualified pre-forward rejection bound to the physical request, saved through
+the existing turn store before Absurd waits, then consumed by a single dispatch claimant using
+the original credential, accounting and deadline. First-request rejection must save credential
+coordinates because no earlier tool declaration exists yet. Lost rejection/claim acknowledgements
+must not permit another paid request.
+
+The next trust-boundary check found that the managed LiteLLM chart inherited the namespace's
+default Kubernetes service account. The source now gives the proxy a release-local account,
+disables API-token automount on both account and Pod, and grants it no Kubernetes API permissions.
+The rendered network boundary and model credentials are unchanged. The new render assertion first
+failed against the old chart's missing account, then passed for local and multi-instance silo
+renders. App-only renders also prove the account and Deployment disappear in shared and disabled
+modes; these tests do not bypass the full silo's existing rejection of shared LiteLLM with private
+Cognee. All 76 LiteLLM tests, syntax checks, Helm lint, workload ownership and release-manifest
+checks pass. Existing cluster grants and deployed workloads were not inspected or changed by this
+source correction. Automatic backoff, a qualified rejection producer and its saved retry consumer
+remain open.
+
+The next source slice adds the closed pre-forward receipt contract, managed-origin transport
+verification, and saved rejection/wait/claim transitions in the existing turn protocol. A physical
+retry keeps the same logical reservation, request bytes, credential, accounting and deadline;
+at most two fresh claims are allowed. Claims use a per-append identity so identical requests cannot
+both obtain dispatch through Kurrent's idempotent acknowledgement. Restart, Stop, revocation,
+lost acknowledgements and lost paid responses are covered by controlled-port tests. The new
+consumer/protocol/store/workflow selection passes 76 tests, receipt verification passes 40 (including a
+Python-produced wire vector), and observability passes 32 tests. Conversation type-checking and
+the diff-scoped style/Prisma checks pass. Independent TypeScript review found no issues; shared
+contracts also pass 187 tests, all four changed TypeScript projects type-check, and boundary lint
+passes. Full local regressions pass 782 conversation tests and 237 model-routing tests. The first
+conversation run was blocked from opening local HTTP fixture sockets; the permitted rerun passes
+all 90 files. App tests pass 119 Node contracts plus 10 Python installer contracts, with syntax,
+Helm lint, workload ownership and release-manifest checks green. No VM was used.
+
+The app now contains a digest-pinned derived image and three checked bindings for the owned Python
+producer. The contract is disabled by default. The real-startup harness exposed import-time
+callback ordering that map order alone did not fix; the registration helper now moves the existing
+limiter first, but six callback-preservation assertions still failed in the last local assembly
+run. Reading the pinned callback manager confirmed that it de-duplicates equivalent logger
+instances. The harness now checks its registration keys while preserving the explicit instance/order
+check for earlier callbacks; independent source review accepts the correction, but it has not run
+in the full proxy. No new qualification
+receipt was emitted. Prove that correction and run the exact-image
+GitHub Actions smoke before enabling the contract. Current production model registration does
+not set explicit local RPM/TPM limits; tests supply a synthetic threshold, and ordinary provider
+429s remain uncertain. On 2026-09-22 disk cleanup removed the disposable vendor/proof environments;
+do not recreate a local VM for this gate. Source changes and evidence remain preserved.
 
 The source loop builds above the completed quality fixes. Provider backoff and live qualification
 remain functional gates alongside memory, delegation, scheduling and administration before the
@@ -356,8 +1050,9 @@ and administration remain subsequent MVP requirements. The pending remote-MCP SQ
 and scoped Zitadel callback approvals are unchanged; they do not prevent independent source work.
 
 The first slice keeps the current authored model-call, completion-token and duration limits and
-adds explicit tool and cycle limits. Personal revisions allow eight tool-result cycles; company
-revisions retain one. A cycle means one distinct saved tool result that may feed a later model
+adds explicit tool and cycle limits. That slice allowed eight personal tool-result cycles and one
+company cycle; the 22 September follow-up permits eight cycles for newly created company assistants.
+A cycle means one distinct saved tool result that may feed a later model
 step, not an Absurd delivery attempt, sleep or retry. The ordered-step wave above now removes
 the earlier one-tool runtime ceiling. An explicit null revision spend cap means the existing
 frozen server spend cap applies; no new dollar default or unbounded spending mode is introduced.
@@ -464,9 +1159,9 @@ Failure to save that state keeps the workflow pending. Restart accepts the same 
 lease without resuming it or replenishing the original or final-call allowance.
 
 The change reuses the conversation workflow and execution/runs lifecycle. It adds no endpoint,
-scheduler, schema, grant or recovery action. Bounded assistant delegation remains unfinished in
-its separate worktree and will build on this fix; its reservation and grant proposals are not part
-of this patch. Runs (74), conversations (651), the full application SQL target and application tests/type check/build
+scheduler, schema, grant or recovery action. Bounded assistant delegation remained unfinished in
+its separate worktree at that checkpoint; the 22 September inventory now requires rebuilding it.
+Its reservation and grant proposals were not part of this patch. Runs (74), conversations (651), the full application SQL target and application tests/type check/build
 pass locally. Independent source review passes. This fix is included in the cumulative candidate;
 testv6 and live provider qualification remain pending.
 
@@ -1638,9 +2333,9 @@ remain separate gates.
 | 2 | T2 — approved external actions | A person reviews an exact action and arguments; one approval permits that effect once. Denial, expiry, changed arguments and revoked authority prevent it. | IN PROGRESS: personal approval, expiry, durable resume and visible decision controls are implemented in draft #857. Company approver/connection binding and real action qualification remain. |
 | 3 | M1 — long-term memory | Explicit remember, cross-conversation recall, correction and forget work with consent and isolated datasets. | IN PROGRESS: durable persistence, Absurd admission and catalog completion pass CI in #876–#878. The reviewed candidate shared-file repair passes all 31 image-qualification cases in #881. The production provider is still unqualified. Authenticated composition, gateway/client wiring and product Remember, recall, Correct and Forget remain unfinished. |
 | 4 | U1 — visible work controls | People can follow waiting, running and terminal work, make supported decisions and cancel eligible work after refresh. | IN PROGRESS: requester-only personal Stop and durable cleanup pass review and CI in draft #862. Requested/running history producers pass source validation and independent review above #885; the existing transcript and status components are reused. Live qualification and other-participant controls remain separate. |
-| 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | PAUSED: runtime-question source work awaits its separate explicit approval; partial implementation is not validated delivery. Structured results and A2UI remain. |
+| 5 | U2 — rich interaction | Durable choices, free text, structured results and A2UI remain usable and accessible after refresh. | The production structured-result producer and replay pass source review at `73f0ad486`; ten real PostgreSQL custody cases pass in the follow-up above. Paired Kurrent recovery, approved visual baselines and live acceptance remain. Runtime-question source is separately PAUSED pending approval. |
 | 6 | F1 — documents and generated files | A scanned document can inform an answer, and a generated file remains downloadable by its authorized audience. | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV production, encrypted capture, scanning and answer-link recovery are implemented in #879; all four combined recovery cases pass again in #880. The pending message-link SQL guard and governed hosted execution through authorized download remain to qualify. |
-| 7 | D1 — autonomous delegation | A bounded child works with explicit context and narrower authority, then returns one durable result. | Follow [#845](https://github.com/elewa-git/opencrane/issues/845): root budgets, depth/fan-out, cancellation and result brokering. |
+| 7 | D1 — autonomous delegation | Recursive children work with selected context and narrower authority, return durable results and stop with their ancestor. | Source accepted 23 September: shared root budget/deadline and no fixed depth, fan-out or concurrency caps. This supersedes the cap clauses in [#845](https://github.com/elewa-git/opencrane/issues/845); cancellation, isolation and result brokering remain required. |
 | 8 | S1 — scheduled work | A reviewed routine fires under current authority with explicit overlap, retry and missed-run policy. | Follow [#848](https://github.com/elewa-git/opencrane/issues/848) through Absurd and existing admission. |
 | 9 | A2 — complete administration | Operators configure agents, connections, models, permissions and budgets, and inspect effective access and actual usage. | Complete and qualify connection activation, agent/tool/model settings, effective permissions, budgets, actual usage/cost and audit screens over the existing protected owners. |
 | 10 | T3 — action recovery | People and operators can reconcile uncertain effects, inspect cancellation races and perform supported safe retries. | Add provider-specific reconciliation and repair controls over durable invocation evidence. |
@@ -1670,8 +2365,9 @@ Architecture preflight passes for the existing agent-services, revision and exec
 An administrator reads and replaces the assistant's exact tool selection through the API. One
 transaction publishes an immutable successor revision and its service-owned grants, with current
 Administer/Assign checks and a comparison against the expected active revision. Tool edits preserve
-the saved model budget. New company assistants receive the two-call limit needed for one tool result
-and one final answer. Dispatch continues to use the company identity; a person's private permissions
+the saved model budget. The initial two-call default supported one tool result and a final answer;
+the 22 September follow-up changes new company assistants to eight tool steps and a final answer.
+Dispatch continues to use the company identity; a person's private permissions
 or credentials cannot substitute for it.
 
 Source work can proceed independently of live setup. Credential activation is absent from the current
@@ -1955,13 +2651,16 @@ their own completion track; they are not silently bundled into the first tool PR
 | R2 — visible personal activity | ✅ COMPLETE in [#829](https://github.com/elewa-git/opencrane/pull/829). UI `6692b2e59` and server `e50cdcc5b` are installed on testv5. Linux CI and publication pass. Two employees see their completed work, open its saved answer by keyboard, refresh without starting work, and recover activity after reload. Narrow-screen focus and cross-employee API isolation pass. See [completed work](plan-done.md) and the [deploy ledger](docs/agents/deploy-ledger.md). |
 | R1 — reliable login | IMPLEMENTED, CI GREEN at `44fd8f328` — encrypted PostgreSQL sessions, fixed deadlines, revision-checked saves and logout markers. All 52 auth tests and [CI](https://github.com/elewa-git/opencrane/actions/runs/34274625541) pass, including all seven SQL targets on fresh PostgreSQL and six real-client session proofs. Fresh-install live qualification remains pending; testv5 retains the earlier database baseline. |
 | A1 — membership revocation and closed-work proof | IMPLEMENTED, IN REVIEW — standalone administrators can remove another non-Owner member through Settings. The server suspends the existing membership, protects Owner/self removal and rechecks current authority on retries. Workspace access loss clears retained private content and rejects delayed results. Focused unit checks and all 123 browser checks pass; five real PostgreSQL cases join the CI gate. The real-account removal and closed-work journey remains to qualify live. Fleet removal remains unsupported. |
-| T1 — first permitted tool retrieval | IN PROGRESS — the server's one-tool continuation is implemented and now progresses through Absurd in #849. Company tool assignment is the first active follow-up. Connection activation, a real integration and participant result evidence remain required. |
-| T2 | IN PROGRESS: personal approval and durable resume pass local integration; company approval and real external-action qualification remain. |
+| T1 — first permitted tool retrieval | IN PROGRESS — repeated tool continuation, remote database authority and the larger new-company-assistant budget are implemented in the current #899 stack. Controlled dependent-call/restart tests and database authority checks pass; real integration use and participant result evidence remain required. |
+| T2 | IN PROGRESS: personal and requester-only company approval/resume are implemented with PostgreSQL proof. Real requester accounts, provider execution and recovery/cancellation acceptance remain. |
 | U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
-| M1 | IN PROGRESS: persistence, transaction-bound Absurd admission and catalog completion pass CI in #876–#878. The reviewed candidate shared-file repair passes all 31 image-qualification cases in #881. Authenticated composition, gateway/client integration and product memory journeys remain. The separate production-provider qualification still fails. Cognee runs in access-control mode with one gateway service user per silo ([ADR 0017](docs/adr/0017-cognee-access-control-mode-and-gateway-service-user.md)). |
-| U2 | PAUSED: partial runtime-question source awaits its separate explicit approval. |
+| M1 | IN PROGRESS: persistence, transaction-bound Absurd admission and catalog completion are implemented, and the current #899 run passes the Cognee provider contract and database-authority suites. First-dataset permission, fresh authenticated composition and complete isolated Remember/Recall/Correct/Forget journeys remain; provider CI is not live product-memory acceptance. Cognee runs in access-control mode with one gateway service user per silo ([ADR 0017](docs/adr/0017-cognee-access-control-mode-and-gateway-service-user.md)). |
+| U2 | Structured-result production/replay passes source review, controlled checks and real-Kurrent paired-output recovery. Visual approval and authenticated live proof remain. Runtime-question source is separately PAUSED pending explicit approval. |
 | F1 | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV capture, scanning and answer-link recovery are implemented in #879 and pass four real-store cases in #880. The pending SQL guard and complete hosted execution/download qualification remain. |
-| D1, S1, A2, T3 | PLANNED in the exact priority order above, with separate acceptance for each journey. |
+| D1 | IN PROGRESS; recursive source accepted 23 September with no fixed depth, child-count or concurrency caps. Run-tree accounting is published; its ten initial SQL cases passed CI. The actual credential-custody correction passes 121 run and 844 conversation tests locally; thirteen revised SQL cases await fresh-baseline CI. Per-call cost authority, spawn/join, narrowed context/permissions and recursive cleanup remain unjoined. This is not a working or qualified delegation journey. |
+| S1 | REQUIRED FOR MVP; source activation remains paused for the private-scheduling decisions. |
+| A2 | PARTIAL: protected audit/usage read screens and their controlled tests are implemented. Governance-reader policy, actual usage collection/pricing/attribution and real-account administration acceptance remain open. |
+| T3 | PLANNED, with separate acceptance for its journey. |
 | Q1 — operational acceptance | CONTINUOUS — source checks and CI do not replace fresh-install or real-account acceptance. |
 
 The 10 September priority order supersedes the earlier overnight sequencing and morning handoff.

@@ -92,10 +92,12 @@ model AgentRun {
   service                           AgentService                          @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
   conversation                      Conversation?                         @relation(fields: [conversationId], references: [id], onDelete: Restrict)
   inputSnapshots                    RunInputSnapshot[]
-  modelCredentialMintAuthorizations RunModelCredentialMintAuthorization[]
+  attemptCredentials                ConversationComputerAttemptCredential[]
   approvalRequests                  ApprovalRequest[]
   elicitationRequests               ElicitationRequest[]
   toolInvocations                   ToolInvocation[]
+  treeAccount                       AgentRunTreeAccount?                  @relation("RunTreeAccountRun")
+  closedTreeAccounts                AgentRunTreeAccount[]                 @relation("RunTreeClosureSource")
 
   @@unique([siloId, requestIdempotencyKey])
   @@unique([id, agentServiceId, agentRevisionId])
@@ -148,31 +150,75 @@ model RunInputSnapshot {
   @@map("run_input_snapshots")
 }
 
-/// One durable, single-consumption authorization for the post-commit LiteLLM key mint.
-model RunModelCredentialMintAuthorization {
-  id                   String    @id @default(cuid())
-  runId                String    @map("run_id")
-  attempt              Int
-  generation           Int
-  principalId          String    @map("principal_id")
-  modelDefinitionId    String    @map("model_definition_id")
-  providerConnectionId String?   @map("provider_connection_id")
-  authorizationDigest  String    @map("authorization_digest")
-  keyAlias             String    @unique @map("key_alias")
-  expiresAt            DateTime  @map("expires_at")
-  claimedAt            DateTime? @map("claimed_at")
-  createdAt            DateTime  @default(now()) @map("created_at")
-  run                  AgentRun  @relation(fields: [runId], references: [id], onDelete: Restrict)
-
-  @@unique([runId, attempt, generation])
-  @@index([expiresAt])
-  @@map("run_model_credential_mint_authorizations")
-}
-
 /// Reads the database clock used to admit and finish run work.
 view AgentRunAuthorityClock {
   singleton Int      @unique
   now       DateTime
 
   @@map("agent_run_authority_clock")
+}
+
+/// Records why an account stopped accepting work. It never means physical cleanup has finished.
+enum AgentRunTreeClosureReason {
+  /// An existing requester-authorized Stop on this run or an ancestor closes this account.
+  AuthorizedStop @map("authorized_stop")
+  /// This run or an ancestor already has a saved terminal state.
+  TerminalRun    @map("terminal_run")
+  /// The database clock reached this account's immutable deadline.
+  Deadline       @map("deadline")
+}
+
+/// Partitions a root run's frozen allowance without creating extra spending authority for children.
+model AgentRunTreeAccount {
+  runId                     String                     @id @map("run_id")
+  rootRunId                 String                     @map("root_run_id")
+  parentRunId               String?                    @map("parent_run_id")
+  admissionKey              String                     @map("admission_key")
+  admissionDigest           String                     @map("admission_digest")
+  deadlineAt                DateTime                   @map("deadline_at")
+  allocatedModelCalls       Int                        @map("allocated_model_calls")
+  allocatedCompletionTokens Int                        @map("allocated_completion_tokens")
+  allocatedToolInvocations  Int                        @map("allocated_tool_invocations")
+  allocatedLoopIterations   Int                        @map("allocated_loop_iterations")
+  allocatedCostMicros       BigInt                     @map("allocated_cost_micros")
+  availableModelCalls       Int                        @map("available_model_calls")
+  availableCompletionTokens Int                        @map("available_completion_tokens")
+  availableToolInvocations  Int                        @map("available_tool_invocations")
+  availableLoopIterations   Int                        @map("available_loop_iterations")
+  availableCostMicros       BigInt                     @map("available_cost_micros")
+  /// Serializes every account mutation against the root; it is not a child or concurrency limit.
+  revision                  Int                        @default(0)
+  /// Records that admission is closed, not that descendants or external effects have stopped.
+  closedAt                  DateTime?                  @map("closed_at")
+  closureSourceRunId        String?                    @map("closure_source_run_id")
+  closureReason             AgentRunTreeClosureReason? @map("closure_reason")
+  run                       AgentRun                   @relation("RunTreeAccountRun", fields: [runId], references: [id], onDelete: Restrict)
+  root                      AgentRunTreeAccount        @relation("RunTreeRoot", fields: [rootRunId], references: [runId], onDelete: Restrict)
+  rootAccounts              AgentRunTreeAccount[]      @relation("RunTreeRoot")
+  parent                    AgentRunTreeAccount?       @relation("RunTreeParent", fields: [parentRunId], references: [runId], onDelete: Restrict)
+  children                  AgentRunTreeAccount[]      @relation("RunTreeParent")
+  closureSource             AgentRun?                  @relation("RunTreeClosureSource", fields: [closureSourceRunId], references: [id], onDelete: Restrict)
+  reservations              AgentRunTreeReservation[]
+
+  @@unique([rootRunId, admissionKey], map: "agent_run_tree_accounts_admission_key")
+  @@index([parentRunId, runId])
+  @@map("agent_run_tree_accounts")
+}
+
+/// Holds allowance for one local operation; retries reuse this row and no uncertain spend is refunded.
+model AgentRunTreeReservation {
+  id               String              @id
+  runId            String              @map("run_id")
+  idempotencyKey    String              @map("idempotency_key")
+  commandDigest     String              @map("command_digest")
+  modelCalls       Int                 @map("model_calls")
+  completionTokens Int                 @map("completion_tokens")
+  toolInvocations  Int                 @map("tool_invocations")
+  loopIterations   Int                 @map("loop_iterations")
+  costMicros       BigInt              @map("cost_micros")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  account          AgentRunTreeAccount @relation(fields: [runId], references: [runId], onDelete: Restrict)
+
+  @@unique([runId, idempotencyKey], map: "agent_run_tree_reservations_idempotency_key")
+  @@map("agent_run_tree_reservations")
 }

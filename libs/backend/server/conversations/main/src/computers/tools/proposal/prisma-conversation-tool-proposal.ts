@@ -3,7 +3,6 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { ConversationToolProposalOutcomes, type ConversationToolProposal, type ConversationToolProposalReceipt } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { __OpenDeferredToolApprovalInTransaction, __PrepareToolInvocationInTransaction, ToolInvocationAdmissionOutcomes, ToolInvocationStates, type ProductAuthorizationWorkloadContext } from "@opencrane/backend/server/iam/authorization";
-import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 
 import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "../../turns/conversation-computer-turn.types";
@@ -35,8 +34,6 @@ export class PrismaConversationToolProposalRepository implements ConversationToo
 			await this.approvalExpiry(this.transaction, { runId: turn.compile.runId, attempt: turn.compile.attempt, now });
 		const reader = new PrismaConversationToolProposalRunRepository(this.transaction);
 		const run = await reader.load(turn, candidate, proposal);
-		if (proposal.tool.requiresApproval && run.subject.membership.kind === ExecutionSubjectMembershipKinds.Managed)
-			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
 		const preparation = new PrismaConversationToolProposalPreparationAuthority(this.transaction);
 		const result = await preparation.admit(turn, run, proposal, workload);
 		if (proposal.tool.requiresApproval && (result.invocation.state === ToolInvocationStates.Failed || result.invocation.state === ToolInvocationStates.Succeeded))

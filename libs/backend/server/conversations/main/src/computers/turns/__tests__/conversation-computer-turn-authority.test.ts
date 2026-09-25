@@ -1,3 +1,4 @@
+import { CompiledFinalOutputModes } from "@opencrane/contracts";
 import { _ReserveConversationOutputFixture } from "./conversation-output-intent.fixture";
 import { _PrepareBoundDraft } from "./conversation-output-intent.fixture";
 import type { BoundConversationWriterAppend } from "@opencrane/backend/server/conversations/history";
@@ -9,6 +10,7 @@ import type { FrozenConversationComputerTurn } from "../conversation-computer-tu
 import { _ReduceConversationComputerTurnProtocol } from "../conversation-computer-turn-protocol";
 import { ConversationComputerTurnProtocolEvents } from "../conversation-computer-turn-protocol.types";
 import type { ConversationComputerTurnModelReservation, ConversationComputerTurnOutputReceipt, ConversationComputerTurnToolResult, ConversationComputerTurnToolSelection, ConversationComputerTurnUnavailableReceipt } from "../conversation-computer-turn-protocol.types";
+import type { ConversationComputerModelRejection, ConversationComputerModelRetryClaim } from "../conversation-computer-model-retry.types";
 
 const _WORKLOAD = {
   subject: "system:serviceaccount:testv5:conversation-computer",
@@ -29,7 +31,7 @@ const _BINDING = {
   expectedRevision: 1n,
   maximumEntryBytes: 65_536,
 };
-const _COMPILED = {
+const _COMPILED = { finalOutput: CompiledFinalOutputModes.Text,
   promptCompilerVersion: "conversation-computer-v1",
   runId: "run-1",
   attempt: 1,
@@ -103,6 +105,7 @@ function _Harness() {
           blockId: "block-1",
           payloadRef: "payload-1",
           ciphertextDigest: "sha256:ciphertext",
+          display: null,
         }),
     },
     runLifecycle: {
@@ -111,6 +114,15 @@ function _Harness() {
       complete: vi.fn().mockResolvedValue(undefined),
     },
     store: {
+	  recordModelRejection: vi.fn(async function _Reject(_id: string, rejection: ConversationComputerModelRejection)
+	  {
+		stored = { ...stored!, protocol: _ReduceConversationComputerTurnProtocol(stored!.protocol, { kind: ConversationComputerTurnProtocolEvents.ModelRejected, rejection }, stored!.budget) };
+	  }),
+	  claimModelRetry: vi.fn(async function _Claim(_id: string, claim: ConversationComputerModelRetryClaim)
+	  {
+		stored = { ...stored!, protocol: _ReduceConversationComputerTurnProtocol(stored!.protocol, { kind: ConversationComputerTurnProtocolEvents.ModelRetryClaimed, claim }, stored!.budget) };
+		return true;
+	  }),
       reserveModel: vi.fn(async function _ReserveModel(_id: string, reservation: ConversationComputerTurnModelReservation)
       {
         if (stored === null)

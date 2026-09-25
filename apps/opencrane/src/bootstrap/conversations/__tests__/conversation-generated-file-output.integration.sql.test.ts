@@ -6,6 +6,7 @@ import pg from "pg";
 import { AgentRunState, PrismaClient } from "@prisma/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { ___IsRolledBackConflict } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import { PrismaConversationRunLifecycleUnitOfWork } from "@opencrane/backend/agents/execution/runs";
 import { _RegisterConversationGeneratedFileWorkflow, type GeneratedFileWorkflowPersistenceDependencies } from "@opencrane/backend/server/conversation-assets";
 import { type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
@@ -154,7 +155,7 @@ function _Prisma(): PrismaClient
 /** Register only the task needed for transactional capture; this test drives promotion and scanning explicitly. */
 function _CreateWorkflows()
 {
-	const workflows = _CreateAbsurdWorkflowEngine({ databaseUrl: _DATABASE_URL!, databasePool: _Pool, databasePoolSize: 2, queueAuthority: { queueForTask: function _QueueForTask() { return _QUEUE; } } });
+	const workflows = _CreateAbsurdWorkflowEngine({ isRolledBackConflict: ___IsRolledBackConflict, databaseUrl: _DATABASE_URL!, databasePool: _Pool, databasePoolSize: 2, queueAuthority: { queueForTask: function _QueueForTask() { return _QUEUE; } } });
 	_RegisterConversationGeneratedFileWorkflow(workflows, {
 		persistence: {
 			async loadCurrent() { throw new Error("Output integration drives generated persistence explicitly"); },

@@ -1,10 +1,10 @@
-import { _AssertSameConversationGeneratedFile, _ConversationComputerAnswerBlocks, __ReadConversationGeneratedFileOutput } from "./generated-output/conversation-generated-file-output";
-import { _AdvanceConversationComputerModel, _ConversationModelReservationStatus } from "./conversation-computer-model-flow";
+import { _AssertSameConversationGeneratedFile, __ReadConversationGeneratedFileOutput } from "./generated-output/conversation-generated-file-output";
+import { _AdvanceConversationComputerModel, _ConversationModelReservationStatus, _ConversationModelRetryStatus } from "./conversation-computer-model-flow";
 import { _ConversationFailureDiagnostic } from "../../messages/conversation-failure-diagnostic";
 import { ConversationComputerModelProgressOutcomes, type ConversationComputerModelProgress } from "./conversation-computer-model.types";
 import { __AssertConversationComputerAnswerAuthority } from "./conversation-computer-answer-authority";
 import { createHash } from "node:crypto";
-import { ConversationEntryAudiences, ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates, type CompiledRunInput } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ___ConversationFinalTextSchema, type CompiledRunInput } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { ConversationComputerOutputCommand, ConversationComputerPodLeaseCommand, ConversationComputerReviewCredentialGrant, ConversationComputerRunLifecycleCommand, ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityPort, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, ConversationComputerTurnWorkflowCommand, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
@@ -13,6 +13,9 @@ import { ConversationComputerTurnProtocolStates, ConversationComputerTurnUnavail
 import type { ConversationComputerTurnUnavailableReceipt } from "./conversation-computer-turn-protocol.types";
 import { ConversationComputerOutputPositionConflictError } from "./conversation-computer-turn-store";
 import { _ConversationComputerTurnAuthorityEndedError } from "./conversation-computer-turn-errors";
+import { _PrepareConversationStructuredOutput } from "./output/conversation-structured-output.validator";
+import { _AssertConversationComputerOutputPayload, _PrepareConversationComputerOutput } from "./output/conversation-computer-output";
+import { _ConversationComputerOutputIntents } from "./output/conversation-computer-output-receipt";
 
 /** Coordinates one durable, lease-fenced conversation turn for a bound sandbox Pod. */
 export class ConversationComputerTurnAuthority implements ConversationComputerTurnAuthorityPort
@@ -121,6 +124,8 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 				progress = { outcome: ConversationComputerModelProgressOutcomes.Retry };
 			else if (saved.protocol.state === ConversationComputerTurnProtocolStates.ModelReserved)
 				progress = _ConversationModelReservationStatus(saved.protocol.steps.at(-1)!.reservation);
+			else if (saved.protocol.state === ConversationComputerTurnProtocolStates.ModelRetryWaiting)
+				progress = _ConversationModelRetryStatus(saved);
 			else if (saved.protocol.state === ConversationComputerTurnProtocolStates.ResponseUnavailable)
 				progress = { outcome: ConversationComputerModelProgressOutcomes.ResponseUnavailable };
 			else if (saved.protocol.state === ConversationComputerTurnProtocolStates.Cancelled)
@@ -166,6 +171,8 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 	/** Save only the winning server model response; the Pod has no output-submission route. */
 	public async appendOutput(command: ConversationComputerOutputCommand): Promise<"accepted" | "idempotent">
 	{
+		const text = ___ConversationFinalTextSchema.parse(command.text);
+		const display = _PrepareConversationStructuredOutput(command.display, command.sourceCommandId);
 		const turn = await this.dependencies.store.load(command.bootstrapId);
 		if (turn === null)
 			throw new Error("Conversation computer output requires an admitted bootstrap");
@@ -174,11 +181,8 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		{
 			if (output.sourceCommandId !== command.sourceCommandId || command.modelInvocationFence !== command.sourceCommandId)
 				throw new Error("Conversation computer turn already has a different output");
-			const payload = await this.dependencies.outputPayloads.store(turn, command.sourceCommandId, command.text);
-			const entry = output.receipt.event.data.entry;
-			if (entry.kind !== ConversationEntryKinds.Message || entry.blocks[0].kind !== ConversationMessageContentBlockKinds.Text
-				|| entry.blocks[0].id !== payload.blockId || entry.blocks[0].payloadRef !== payload.payloadRef || entry.blocks[0].ciphertextDigest !== payload.ciphertextDigest)
-				throw new Error("Conversation computer output retry has a different saved payload");
+			const payload = await this.dependencies.outputPayloads.store(turn, command.sourceCommandId, text, display);
+			_AssertConversationComputerOutputPayload(output.receipt, payload);
 			await this._FinishOutput(turn);
 			return "idempotent";
 		}
@@ -191,13 +195,14 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		while (true)
 		{
 			const execution = await this.dependencies.candidates.assertCurrentForWorkflow(turn);
+			if (display !== null && execution.candidate.compiledInput.finalOutput !== CompiledFinalOutputModes.Conversation)
+				throw new Error("Conversation computer display was not requested by its frozen input");
 			const outputTurn = { ...turn, binding: execution.candidate.binding };
-			const payload = await this.dependencies.outputPayloads.store(outputTurn, command.sourceCommandId, command.text);
+			const payload = await this.dependencies.outputPayloads.store(outputTurn, command.sourceCommandId, text, display);
 			const authority = await __AssertConversationComputerAnswerAuthority(turn, execution.workload, this.dependencies);
 			const notAfter = Math.min(command.modelNotAfterEpochMs, authority.notAfterEpochMs);
 			const commitTurn = { ...turn, binding: authority.candidate.binding };
-			const writer = this.dependencies.writers.create(commitTurn, execution.workload);
-			const receipt = await writer.prepare({ sourceCommandId: command.sourceCommandId, entry: { kind: ConversationEntryKinds.Message, state: MessageStates.Completed, blocks: _ConversationComputerAnswerBlocks({ id: payload.blockId, kind: ConversationMessageContentBlockKinds.Text, payloadRef: payload.payloadRef, ciphertextDigest: payload.ciphertextDigest }, authority.generatedFile), replyToEntryId: turn.latestPendingEntryId, addressedAgentIdentityId: null, activation: "none", visibility: { audience: ConversationEntryAudiences.Conversation }, causationId: turn.latestPendingEntryId, correlationId: turn.latestPendingEntryId } });
+			const receipt = await _PrepareConversationComputerOutput(commitTurn, execution.workload, this.dependencies.writers, command.sourceCommandId, payload, authority.generatedFile);
 			const finalExecution = await this.dependencies.candidates.assertCurrentForWorkflow(turn);
 			const finalAuthority = await __AssertConversationComputerAnswerAuthority(turn, finalExecution.workload, this.dependencies);
 			_AssertSameConversationGeneratedFile(authority.generatedFile, finalAuthority.generatedFile);
@@ -236,8 +241,11 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		else
 		{
 			const workload = await this.dependencies.candidates.assertLeaseForWorkflow(turn);
-			const writer = this.dependencies.writers.create(_TurnAtOutputPosition(turn), workload);
-			await writer.confirm(output.receipt);
+			for (const intent of _ConversationComputerOutputIntents(output.receipt))
+			{
+				const writer = this.dependencies.writers.create({ ...turn, binding: { ...turn.binding, expectedRevision: BigInt(intent.expectedRevision) } }, workload);
+				await writer.confirm(intent);
+			}
 		}
 		await this.dependencies.runLifecycle.complete(_RunLifecycleCommand(turn));
 		await this.dependencies.credentials.revoke(turn.bootstrapId);
@@ -250,18 +258,6 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 function _RunLifecycleCommand(turn: FrozenConversationComputerTurn): ConversationComputerRunLifecycleCommand
 {
 	return { runId: turn.compile.runId, siloId: turn.siloId, attempt: turn.compile.attempt, computerId: turn.computerId, lease: { leaseId: turn.lease.leaseId, leaseGeneration: turn.lease.leaseGeneration } };
-}
-
-/** Rebuild the exact append binding selected by the atomically saved output receipt. */
-function _TurnAtOutputPosition(turn: FrozenConversationComputerTurn): FrozenConversationComputerTurn
-{
-	const output = turn.protocol.output;
-	if (output === null)
-		throw new Error("Conversation computer output receipt is missing");
-	const expectedRevision = BigInt(output.receipt.expectedRevision);
-	if (expectedRevision < turn.binding.expectedRevision)
-		throw new Error("Conversation computer output position precedes its frozen input");
-	return { ...turn, binding: { ...turn.binding, expectedRevision } };
 }
 
 /**
@@ -311,7 +307,7 @@ function _Uuid(domain: string, coordinates: readonly string[]): string
 function _UnavailableReceipt(turn: FrozenConversationComputerTurn): ConversationComputerTurnUnavailableReceipt
 {
 	const step = turn.protocol.steps.at(-1);
-	if (turn.protocol.state === ConversationComputerTurnProtocolStates.ModelReserved && step?.state === ConversationComputerTurnProtocolStates.ModelReserved)
+	if ((turn.protocol.state === ConversationComputerTurnProtocolStates.ModelReserved || turn.protocol.state === ConversationComputerTurnProtocolStates.ModelRetryWaiting) && step?.state === ConversationComputerTurnProtocolStates.ModelReserved)
 		return { ordinal: step.reservation.ordinal, sourceCommandId: step.reservation.invocationFence, reason: ConversationComputerTurnUnavailableReasons.ModelResponseUnavailable };
 	if (turn.protocol.state === ConversationComputerTurnProtocolStates.ToolPending && step?.state === ConversationComputerTurnProtocolStates.ToolPending)
 		return { ordinal: step.reservation.ordinal, sourceCommandId: step.selection.toolInvocationId, reason: ConversationComputerTurnUnavailableReasons.ToolResultUnavailable };

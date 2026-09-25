@@ -1,5 +1,5 @@
-import { createHash, randomUUID } from "node:crypto";
-import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, ConversationModelResponseKinds, ConversationModelToolModes, ___ConversationModelToolExchangeSchema, ___ConversationToolProposalSchema, ___ParseRunBudgetPolicy, type ConversationModelToolCall } from "@opencrane/contracts";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, ConversationModelResponseKinds, ConversationModelToolModes, ___ConversationModelToolExchangeSchema, ___ConversationToolProposalSchema, ___ParseRunBudgetPolicy, type ConversationModelDelivery, type ConversationModelToolCall } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, ___ParseAndValidateJson, type JsonValue } from "@opencrane/util";
 
 import { _ConversationToolResultContent } from "./conversation-tool-result-content";
@@ -14,6 +14,8 @@ import { _PrepareConversationToolProposal } from "../tools/proposal/conversation
 import { ConversationToolResultNotificationOutcomes } from "./tool-result-notifications/conversation-tool-result-notification.types";
 import { ConversationToolProgressNotificationOutcomes } from "./tool-progress-notifications/conversation-tool-progress-notification.types";
 import { ConversationToolProposalRefusal } from "../tools/proposal/conversation-tool-proposal-refusal";
+import { _CONVERSATION_MODEL_MAX_RETRIES, _ConversationModelInitialNonce, _ConversationModelLogicalFence } from "./conversation-computer-model-retry";
+import type { ConversationComputerModelRetryClaim } from "./conversation-computer-model-retry.types";
 
 /**
  * Advances bounded model/tool cycles and a final text answer within the original attempt.
@@ -24,6 +26,8 @@ import { ConversationToolProposalRefusal } from "../tools/proposal/conversation-
 export async function _AdvanceConversationComputerModel(turn: FrozenConversationComputerTurn, dependencies: ConversationComputerTurnAuthorityDependencies, appendOutput: (command: ConversationComputerOutputCommand) => Promise<unknown>): Promise<ConversationComputerModelProgress>
 {
 	const step = turn.protocol.steps.at(-1);
+	if (turn.protocol.state === ConversationComputerTurnProtocolStates.ModelRetryWaiting)
+		return _continueModelRetry(turn, dependencies, appendOutput);
 	if (turn.protocol.state === ConversationComputerTurnProtocolStates.ModelReserved && step !== undefined)
 	{
 		const saved = await dependencies.modelCustody.loadDeclaration(turn);
@@ -76,15 +80,28 @@ async function _ContinueResultReady(turn: FrozenConversationComputerTurn, step: 
 }
 
 /** Dispatch one already reserved request and persist either its final text or its private tool declaration. */
-async function _DispatchReservedModel(turn: FrozenConversationComputerTurn, reservation: ConversationComputerTurnModelReservation, credential: ConversationComputerCredentialReceipt, dependencies: ConversationComputerTurnAuthorityDependencies, appendOutput: (command: ConversationComputerOutputCommand) => Promise<unknown>): Promise<ConversationComputerModelProgress>
+async function _DispatchReservedModel(turn: FrozenConversationComputerTurn, reservation: ConversationComputerTurnModelReservation, credential: ConversationComputerCredentialReceipt, dependencies: ConversationComputerTurnAuthorityDependencies, appendOutput: (command: ConversationComputerOutputCommand) => Promise<unknown>, delivery: ConversationModelDelivery = { physicalNonce: _ConversationModelInitialNonce(reservation), logicalFence: _ConversationModelLogicalFence(reservation) }): Promise<ConversationComputerModelProgress>
 {
 	const history = await _LoadHistory(turn, dependencies);
 	const current = await _Current(turn, dependencies);
+	const saved = await dependencies.store.load(turn.bootstrapId);
+	if (saved === null || saved.protocol.state !== ConversationComputerTurnProtocolStates.ModelReserved
+		|| saved.protocol.steps.at(-1)?.reservation.invocationFence !== reservation.invocationFence
+		|| (saved.protocol.modelRetry?.claim?.physicalNonce ?? _ConversationModelInitialNonce(reservation)) !== delivery.physicalNonce)
+		return { outcome: ConversationComputerModelProgressOutcomes.Retry };
 	const notAfter = _RequestDeadline(reservation, current.candidate, credential);
-	const response = await dependencies.model.request({ compiledInput: current.candidate.compiledInput, endpoint: dependencies.endpoint, key: credential.key, modelAlias: turn.modelAlias, maxCompletionTokens: reservation.maxCompletionTokens, notAfterEpochMs: notAfter, tools: reservation.tools, history });
+	const response = await dependencies.model.request({ compiledInput: current.candidate.compiledInput, endpoint: dependencies.endpoint, key: credential.key, modelAlias: turn.modelAlias, maxCompletionTokens: reservation.maxCompletionTokens, notAfterEpochMs: notAfter, tools: reservation.tools, history, delivery });
+	if (response.kind === ConversationModelResponseKinds.PreForwardRejected)
+	{
+		const receivedAtEpochMs = Date.now();
+		await _Current(turn, dependencies);
+		await dependencies.store.recordModelRejection(turn.bootstrapId, { receipt: response.receipt, credentialDigest: credential.credentialDigest, credentialExpiresAt: credential.expiresAt, receivedAtEpochMs });
+		const rejected = await dependencies.store.load(turn.bootstrapId);
+		return rejected === null ? { outcome: ConversationComputerModelProgressOutcomes.Retry } : _ConversationModelRetryStatus(rejected);
+	}
 	if (response.kind === ConversationModelResponseKinds.Text)
 	{
-		await appendOutput({ bootstrapId: turn.bootstrapId, sourceCommandId: reservation.invocationFence, modelInvocationFence: reservation.invocationFence, modelNotAfterEpochMs: notAfter, text: response.text });
+		await appendOutput({ bootstrapId: turn.bootstrapId, sourceCommandId: reservation.invocationFence, modelInvocationFence: reservation.invocationFence, modelNotAfterEpochMs: notAfter, text: response.text, ...(response.display === undefined ? {} : { display: response.display }) });
 		return { outcome: ConversationComputerModelProgressOutcomes.Completed };
 	}
 	if (reservation.tools !== ConversationModelToolModes.Select || response.kind !== ConversationModelResponseKinds.Tool)
@@ -99,6 +116,51 @@ async function _DispatchReservedModel(turn: FrozenConversationComputerTurn, rese
 	const declaration: ConversationComputerToolDeclaration = { bootstrapId: turn.bootstrapId, runId: turn.compile.runId, attempt: turn.compile.attempt, compiledInputDigest: turn.compile.digest, ordinal: reservation.ordinal, modelInvocationFence: reservation.invocationFence, acceptedAtEpochMs, requestNotAfterEpochMs: notAfter, credentialDigest: credential.credentialDigest, credentialExpiresAt: credential.expiresAt, call: response.call };
 	const reference = await dependencies.modelCustody.storeDeclaration(turn, declaration);
 	return _ContinueTool(turn, declaration, reference, dependencies, appendOutput);
+}
+
+/**
+ * Claims a physical retry only after saved proof permits it and the original credential is usable.
+ * Reading another worker's claim, or losing the acknowledgement for our own, never dispatches.
+ * The final send repeats the current-authority and saved-claim checks after these awaited operations.
+ */
+async function _continueModelRetry(turn: FrozenConversationComputerTurn, dependencies: ConversationComputerTurnAuthorityDependencies, appendOutput: (command: ConversationComputerOutputCommand) => Promise<unknown>): Promise<ConversationComputerModelProgress>
+{
+	const status = _ConversationModelRetryStatus(turn);
+	if (status.outcome !== ConversationComputerModelProgressOutcomes.Retry)
+		return status;
+	const retry = turn.protocol.modelRetry!;
+	const rejection = retry.rejections.at(-1)!;
+	const reservation = turn.protocol.steps.at(-1)!.reservation;
+	const current = await _Current(turn, dependencies);
+	const credential = await dependencies.credentials.reuseExact({ ..._CredentialCommand(turn, current.candidate), expectedCredentialDigest: rejection.credentialDigest, expectedExpiresAt: rejection.credentialExpiresAt });
+	if (credential.credentialDigest !== rejection.credentialDigest || credential.expiresAt !== rejection.credentialExpiresAt)
+		throw new Error("Conversation model retry credential differs from its saved rejection");
+	if (_RequestDeadline(reservation, current.candidate, credential) !== rejection.receipt.deadlineEpochMs)
+		return { outcome: ConversationComputerModelProgressOutcomes.ResponseUnavailable };
+	const claim: ConversationComputerModelRetryClaim = { ordinal: reservation.ordinal, modelInvocationFence: reservation.invocationFence, retryOrdinal: retry.rejections.length, physicalNonce: randomBytes(32).toString("hex"), claimedAtEpochMs: Date.now() };
+	if (!await dependencies.store.claimModelRetry(turn.bootstrapId, claim))
+		return { outcome: ConversationComputerModelProgressOutcomes.Retry };
+	const claimed = await dependencies.store.load(turn.bootstrapId);
+	if (claimed === null)
+		return { outcome: ConversationComputerModelProgressOutcomes.Retry };
+	return _DispatchReservedModel(claimed, reservation, credential, dependencies, appendOutput, { physicalNonce: claim.physicalNonce, logicalFence: rejection.receipt.logicalFence, expectedRequestBodySha256: rejection.receipt.requestBodySha256 });
+}
+
+/** Reports a saved wait or exhausted retry without granting physical dispatch. */
+export function _ConversationModelRetryStatus(turn: FrozenConversationComputerTurn): ConversationComputerModelProgress
+{
+	if (turn.protocol.state !== ConversationComputerTurnProtocolStates.ModelRetryWaiting)
+		return { outcome: ConversationComputerModelProgressOutcomes.Retry };
+	const retry = turn.protocol.modelRetry;
+	const rejection = retry?.rejections.at(-1);
+	const reservation = turn.protocol.steps.at(-1)?.reservation;
+	if (retry === null || rejection === undefined || reservation === undefined)
+		throw new Error("Conversation model retry wait lacks its saved rejection");
+	if (Date.now() >= rejection.receipt.deadlineEpochMs || retry.rejections.length > _CONVERSATION_MODEL_MAX_RETRIES)
+		return { outcome: ConversationComputerModelProgressOutcomes.ResponseUnavailable };
+	if (Date.now() >= rejection.receipt.retryAtEpochMs)
+		return { outcome: ConversationComputerModelProgressOutcomes.Retry };
+	return { outcome: ConversationComputerModelProgressOutcomes.ModelRetryWaiting, notBeforeEpochMs: rejection.receipt.retryAtEpochMs, ordinal: reservation.ordinal, retryOrdinal: retry.rejections.length };
 }
 
 /** Recover the saved tool declaration, its existing executor and one exact terminal result. */
@@ -241,7 +303,7 @@ function _CredentialCommand(turn: FrozenConversationComputerTurn, candidate: Con
 	const budget = candidate.compiledInput.budget.maxCostUsdMicros;
 	const firstReservation = turn.protocol.steps[0]?.reservation;
 	const authorityExpiresAtEpochMs = Math.min(firstReservation?.authorityExpiresAtEpochMs ?? turn.budget.wallClockDeadlineEpochMs, Date.parse(candidate.credentialExpiresAt));
-	return { bootstrapId: turn.bootstrapId, computer: { siloId: turn.siloId, conversationId: turn.binding.conversationId, computerId: turn.computerId, agentIdentityId: turn.binding.agentIdentityId }, lease: turn.lease, keyAlias: `attempt-${createHash("sha256").update(turn.bootstrapId).digest("hex").slice(0, 40)}`, modelAlias: turn.modelAlias, maxBudgetUsd: budget === null ? turn.maximumBudgetUsd : Math.min(turn.maximumBudgetUsd, budget / 1_000_000), expirySeconds: Math.min(turn.credentialLifetimeSeconds, candidate.credentialLifetimeSeconds), notAfter: new Date(authorityExpiresAtEpochMs).toISOString() };
+	return { bootstrapId: turn.bootstrapId, runId: turn.compile.runId, attempt: turn.compile.attempt, computer: { siloId: turn.siloId, conversationId: turn.binding.conversationId, computerId: turn.computerId, agentIdentityId: turn.binding.agentIdentityId }, lease: turn.lease, keyAlias: `attempt-${createHash("sha256").update(turn.bootstrapId).digest("hex").slice(0, 40)}`, modelAlias: turn.modelAlias, maxBudgetUsd: budget === null ? turn.maximumBudgetUsd : Math.min(turn.maximumBudgetUsd, budget / 1_000_000), expirySeconds: Math.min(turn.credentialLifetimeSeconds, candidate.credentialLifetimeSeconds), notAfter: new Date(authorityExpiresAtEpochMs).toISOString() };
 }
 
 /** Narrow response acceptance to every current bound without renewing a saved request. */

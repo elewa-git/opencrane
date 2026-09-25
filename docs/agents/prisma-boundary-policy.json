@@ -3,6 +3,13 @@
 	"owners": {
 		"repositories": [
 			{
+				"path": "libs/backend/agents/execution/runs/main/src/tree/prisma-run-tree-repository.ts",
+				"adapter": "PrismaRunTreeRepository",
+				"contract": "RunTreeRepository",
+				"contractImportPath": "./run-tree.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/memory/source/prisma-personal-memory-message-source-repository.ts",
 				"adapter": "PrismaPersonalMemoryMessageSourceRepository",
 				"contract": "PersonalMemoryMessageSourceRevalidator",
@@ -2860,7 +2867,7 @@
 			"contractImportPath": "./workflow-task-admission.types",
 			"method": "$queryRaw",
 			"sqlTemplate": "SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${admissionOptions}::jsonb)",
-			"sourceSha256": "eaaec9a78dc51cae458385b93640e85888a3032da656632022f3e6e892833acf",
+			"sourceSha256": "43ccbb4f46162d88ae7a949a72c936e2ed24e0b28e5d525e1098b3d0d3394143",
 			"reason": "Task admission owns the one parameterized vendor procedure call that shares the caller's product transaction."
 		},
 		{
@@ -2870,7 +2877,7 @@
 			"contractImportPath": "./workflow-task-event-admission.types",
 			"method": "$queryRaw",
 			"sqlTemplate": "SELECT 1 AS acknowledged FROM ( SELECT absurd.emit_event(${this.queueName}, ${acceptedEventName}, ${serializedPayload}::jsonb) AS invoked ) AS emitted",
-			"sourceSha256": "12e9a4db34f7ff277e535cd260a9bd3f7765026293ece5768499b56e99b7293e",
+			"sourceSha256": "2a05d784125cdba92ccc6a7ab9ae485fed8c68a8d235543ca41a6d04a1cfb17e",
 			"reason": "Task event admission owns the one parameterized vendor procedure call that shares a persisted product outcome's transaction."
 		}
 	],

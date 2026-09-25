@@ -4821,6 +4821,13 @@ export interface operations {
                                 externalSystem?: string;
                                 consequence: string;
                                 cost?: string;
+                                executionConnection?: {
+                                    /** @enum {string} */
+                                    ownerKind: "personal" | "company_assistant";
+                                    ownerLabel: string;
+                                    /** @enum {string} */
+                                    credentialRequirement: "credentialless" | "principal-credential" | "shared-credential";
+                                };
                                 proposedArguments?: {
                                     [key: string]: unknown;
                                 } | null;
@@ -4933,6 +4940,13 @@ export interface operations {
                                 externalSystem?: string;
                                 consequence: string;
                                 cost?: string;
+                                executionConnection?: {
+                                    /** @enum {string} */
+                                    ownerKind: "personal" | "company_assistant";
+                                    ownerLabel: string;
+                                    /** @enum {string} */
+                                    credentialRequirement: "credentialless" | "principal-credential" | "shared-credential";
+                                };
                                 proposedArguments?: {
                                     [key: string]: unknown;
                                 } | null;
@@ -5047,6 +5061,13 @@ export interface operations {
                                 externalSystem?: string;
                                 consequence: string;
                                 cost?: string;
+                                executionConnection?: {
+                                    /** @enum {string} */
+                                    ownerKind: "personal" | "company_assistant";
+                                    ownerLabel: string;
+                                    /** @enum {string} */
+                                    credentialRequirement: "credentialless" | "principal-credential" | "shared-credential";
+                                };
                                 proposedArguments?: {
                                     [key: string]: unknown;
                                 } | null;

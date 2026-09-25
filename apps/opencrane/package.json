@@ -117,10 +117,12 @@
           "commands": [
             "sh ../../scripts/run-postgres-authority-tests.sh prisma/tests/authorization-active-grant-uniqueness.sql prisma/tests/phase-d-authority-integration.sql prisma/tests/skill-authoring-validation-authority.sql prisma/tests/personal-memory-operations.sql",
             "vitest run src/bootstrap/conversations/__tests__/conversation-tool-proposal.sql.test.ts",
+            "vitest run src/bootstrap/conversations/__tests__/conversation-remote-mcp-claim.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-run-lifecycle.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-tool-approval.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-tool-result.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-tool-progress.sql.test.ts",
+            "vitest run src/bootstrap/conversations/__tests__/conversation-output-payload.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-generated-file-authority.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-generated-file-capture.sql.test.ts",
             "vitest run src/bootstrap/conversations/__tests__/conversation-generated-file-quarantine.sql.test.ts",
@@ -141,6 +143,16 @@
         "executor": "nx:run-commands",
         "options": {
           "command": "vitest run src/bootstrap/conversations/__tests__/conversation-stop*.sql.test.ts",
+          "cwd": "apps/opencrane",
+          "env": { "TZ": "UTC" }
+        },
+        "cache": false
+      },
+      "test:output-payload-sql": {
+        "executor": "nx:run-commands",
+        "dependsOn": ["db:generate"],
+        "options": {
+          "command": "vitest run src/bootstrap/conversations/__tests__/conversation-output-payload.sql.test.ts",
           "cwd": "apps/opencrane",
           "env": { "TZ": "UTC" }
         },

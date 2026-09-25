@@ -132,8 +132,23 @@ retry loop, or network call.
 
 Tool approval saves the display-safe argument projection with the participant request. The body
 also freezes the admitted tool name, its provider-authored description, and the operator-authored
-server name before the participant decides. If the schema marks any proposed value as sensitive,
+server name before the participant decides. It also freezes the selected installation owner's safe
+display name, whether that owner is a person or company assistant, and the immutable connection's
+credential requirement. IAM resolves that evidence through the run revision's exact tool assignment:
+OCI revisions must be credentialless and have no remote coordinates, while remote revisions must
+match the complete saved connection generation and endpoint digest. Missing, cross-silo, wrong-owner,
+or unsafe evidence refuses the approval before the run is paused. A replay uses the saved body and
+digest instead of re-reading a renamed profile. If the schema marks any proposed value as sensitive,
 the body contains no arguments and IAM accepts denial only.
+
+For personal and company assistants, only the original human requester saved identically on the
+run and invocation can decide. They must still have one external Principal in the silo, active
+organisation membership and active participation in that conversation. The linked participant
+request cannot be swapped on opening, decision or replay. A company approval keeps the company's
+Principal as execution owner; the human receives only the existing manager's temporary Read and
+Decide grants for that approval. Decisions revoke those grants. Approval never lends the human's
+tool credentials or restores removed execution permission: dispatch still checks the assistant's
+current grants, connection and run limits.
 
 The authority decides product permission; it does not authenticate a browser or Pod, own another
 domain's lifecycle, execute a provider call, or grant Kubernetes access. The caller derives the silo

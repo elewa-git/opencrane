@@ -23,8 +23,8 @@ Complete administration, rich interaction and action recovery keep their later p
 | 4 / U1 | Follow and control assistant work. Existing conversation events, workspace stores and reusable components own the experience. | Durable activity/result events and the supported decision/cancellation contracts from T1/T2. | Proposed, running, waiting, failed, cancelled and completed work survives reload and SSE resume. Relevant decisions, result links and cancellation are accessible on desktop and narrow screens. Current access governs every read; projections never authorize work. |
 | 5 / U2 | Use rich choices, forms and results in a conversation. Existing elicitation, A2UI and approved presenters own interaction. | Server-issued interaction identity, permitted audience, expiry and durable accepted responses. | Single/multiple choice, free text and structured results remain accessible after refresh. Stale, duplicate, modified and unauthorized submissions fail safely. Reuse component states, behavioural tests and visual fixtures rather than embedding complex interaction in routed pages. |
 | 6 / F1 | Read documents and receive generated files. Artifact upload, quarantine/scan, input compilation and finalisation retain their owners. | Current artifact grants and scan result; model-readable content and lease-bound output finalisation. | Upload an allowed document, answer from its content, produce a downloadable file and reopen it after reload/closure. Unscanned/infected content stays unavailable. Other users and stale workers cannot read or finalise the artifact. |
-| 7 / D1 | Delegate a bounded task to another assistant. Existing child admission, lineage, reservations and completion own the work. | T1 tool dispatch, current delegation grants, narrowed context/capabilities, root budget and cancellation. Memory/files are prerequisites only when selected context uses them. | A selected authorized child returns one terminal result or explicit failure. Prove depth/fan-out/concurrency/spend limits, sibling isolation, cancellation propagation, restart and target revocation. The child never implicitly inherits private tools, memory, files or credentials. |
-| 8 / S1 | Create and manage scheduled work from a conversation. Existing managed definitions, admission and Absurd own durable firing. | Reviewed immutable routine, timezone/destination, current authority for each firing, overlap/missed-run policy and bounded retry. | Confirm a routine and its next firing; prove scheduled execution, run now, pause/resume, revision and retirement. Duplicate sweeps/restarts cannot repeat a firing. Revocation prevents the next protected effect; results/refusals remain linked to the exact routine. |
+| 7 / D1 | Delegate recursively to other assistants. Extend execution-runs for lineage and shared allowances, execution-inputs for selected context, and conversations for child orchestration and result return. Human-created group children are not autonomous delegation. | T1 tool dispatch, current delegation grants, narrowed context/capabilities, shared root budget/deadline and ancestor cancellation. No fixed nesting, child-count or parallel-execution caps. Memory/files are prerequisites only when selected context uses them. | Authorized children can run in parallel and return durable terminal results or explicit failures. Prove operation beyond the rejected two-level/four-child/two-active defaults, aggregate budget conservation, sibling isolation, cancellation/spawn races, restart and target revocation. The child never implicitly inherits private tools, memory, files or credentials. |
+| 8 / S1 | Create and manage scheduled work from a conversation. Product routine records, revisions and firing admission still need implementation; reuse Absurd for durable waits and execution. | Reviewed immutable routine, timezone/destination, current authority for each firing, overlap/missed-run policy and bounded retry. | Confirm a routine and its next firing; prove scheduled execution, run now, pause/resume, revision and retirement. Duplicate sweeps/restarts cannot repeat a firing. Revocation prevents the next protected effect; results/refusals remain linked to the exact routine. |
 | 9 / A2 | Administer the company through the product. Existing protected APIs and settings owners remain authoritative. | The capability contracts introduced by T1/T2/M1/S1 and current membership/permission checks. | Configure one agent, connection, provider/model, tool selection and budget; inspect effective access/audit and actual recorded usage; revoke access. Employees cannot make admin changes or inspect secrets. Unknown costs are stated as unknown. |
 | 10 / T3 | Resolve interrupted or uncertain actions. The invocation owner preserves receipts; protected user/operator controls request reconciliation and supported repair. | Durable exact effect identity, provider receipts/status lookup and a provider-specific safe retry contract. | Reconcile an uncertain effect without duplicating it, explain cancellation races, preserve every attempt and resolution, and expose supported safe retry or explicit manual resolution. Reload/restart does not erase uncertainty or invent success. |
 
@@ -37,6 +37,90 @@ including its controls and eventual recovery. Its full acceptance spans T1, T2, 
 [#845](https://github.com/elewa-git/opencrane/issues/845) owns delegation completion, building on the
 child-run foundations in #320. [#848](https://github.com/elewa-git/opencrane/issues/848) owns
 conversational routines, superseding removed scheduling routes from #332.
+
+### Recursive delegation decision — 23 September 2026
+
+The user's latest decision supersedes the numerical depth, fan-out and concurrency clauses in #845
+and #320. The architecture must support arbitrary-depth recursion and parallel children without an
+application-level child-count or active-child ceiling. Available infrastructure and provider capacity
+still determine how much work can physically run; those constraints are not a replacement product
+policy cap. All work retains the original root budget and absolute deadline, with no new allowance
+merely because a child is created or restarted.
+
+Spawning returns a durable child handle without waiting for that child's final result. Collecting or
+waiting for results is a separate step, so the parent can start siblings concurrently. Every child
+still owes one durable terminal result or explicit failure; this is not detached fire-and-forget work.
+
+Stopping the root must stop the entire tree. Stopping an intermediate task must stop its descendants
+without touching unrelated branches. The durable ancestor Stop closes new spawning, credential
+issuance and model/tool admission before asynchronous cleanup starts. A concurrent child admission
+must either commit before that fence and be included in cleanup, or be refused. Restart must resume
+the same cleanup rather than admit replacement work. Root completion cannot leave children running.
+
+The user-facing status distinguishes Stop requested from confirmed stopped. Existing external calls
+are interrupted where supported; uncertain or already-completed writes remain visible and cannot be
+undone by cancellation. Confirmed stopped requires descendants and owned work to have settled, not
+merely delivery of a cancellation signal.
+
+Implementation must partition spending authority before issuing model credentials. The current
+full-attempt key cannot safely remain valid while a child receives a second copy of its allowance.
+Reservations must conserve the root allowance across concurrent children, retries and lost responses;
+uncertain issued spending cannot be refunded on restart. Current requester and target permissions,
+explicitly selected readable context and narrowing capability ceilings remain independent gates.
+
+This decision authorizes source changes and their reviewed clean baseline only. It does not create
+live delegation grants, approve an external action, deploy a silo, or establish completed MVP proof.
+
+#### State and event ownership
+
+The following are the proposed tree lifecycle outcomes, not new grants or a claim that the current
+single-run lifecycle implements them. The runs domain owns their atomic transitions. History owns
+the race between already-saved output and cancellation; Absurd resumes admitted cleanup.
+
+| Observed tree/subtree state | Event | Required outcome and guard |
+| --- | --- | --- |
+| Accepting work; every ancestor still eligible | Spawn | Recheck target, selected context and Delegate authority; reserve within the original budget; commit immutable lineage and the child task receipt under the same tree fence. No depth or child-count check. |
+| Accepting work | Model or external-tool admission | Reserve from the shared pool and check every ancestor's eligibility. Issue only the credential allowed by that saved reservation. |
+| Accepting work | Authorized Stop | Atomically close new admissions for the selected subtree and persist recoverable cleanup. Root Stop selects the entire tree; a branch Stop leaves siblings eligible. |
+| Accepting work | Parent final output, terminal failure or deadline | Close the subtree to new admissions and start descendant cleanup. Preserve committed output; do not expose terminal tree completion while owned descendants still run. |
+| Stopping or finishing | Concurrent/replayed spawn or new effect | Refuse new work. A child committed before the closing fence belongs to cleanup; one losing that race cannot escape it. |
+| Stopping or finishing | Descendant output or provider completion arrives | Retain its exact outcome/recovery evidence without restarting its parent or refunding uncertain spend. Cancel pending approvals and provider-free work through their existing owners. |
+| Stopping or finishing | Worker replacement or repeated Stop | Resume the saved task and per-descendant receipts. Do not create another stop decision, credential, allowance or child. |
+| Stopping or finishing | All descendant workflows, credentials and active claims settle | Finalize once. Report any uncertain external outcome separately from the fact that no further owned work may run. |
+| Terminal | Replayed spawn, Stop or terminal result | Return the saved outcome or refuse a new command; never reopen the tree. |
+
+A losing atomic update reloads the durable state and uses the same state owner to decide what to do
+next. Traversal uses recoverable iteration rather than a recursive language call stack or a capped
+ancestor array. Batching may bound the size of an individual transaction but may not reject extra
+children or truncate cleanup.
+
+#### Implementation waves and evidence
+
+At source `39432f27351b1193092dabc553520291481d9729`, runs have no parent/root fields, Stop owns one
+run only, credentials cover a complete attempt, and turn admission requires a human-authored
+trigger. Therefore removing settings or adding a Stop button would not deliver this capability.
+
+1. **Tree and reservation authority:** extend `execution/runs` contracts, schema, reviewed baseline
+   and repositories with immutable lineage, conserved reservations and inherited cancellation
+   evidence. A child references its ancestor's authorized Stop; it must not pretend to have received
+   a separate browser command. Register actual transaction-bound repositories in Prisma policy.
+2. **Independent owners, in parallel after those contracts:** extend reservation-scoped credential
+   custody and per-effect fences; extend the existing Stop workflow and terminal finalization to
+   settle descendants; extend `execution/inputs` with delegated provenance, selected context and
+   narrowing permissions. No branch may mint keys against both the old full-attempt allowance and
+   a fresh child allocation. No child message may impersonate a human author.
+3. **Complete the product path:** offer first-party spawn and join/read tools through focused
+   capability types, admit independent child history/activation through existing Absurd ownership,
+   and return each durable terminal result once. Keep delegation operations distinct from MCP
+   invocation accounting so an MCP-specific counter does not impose a hidden child-count limit.
+4. **Prove and review the joined slice:** exercise concurrent spawn/Stop and budget races in real
+   SQL CI, ordered result/cancellation recovery in Kurrent CI, credentials and current-permission
+   denial checks, plus controlled operation beyond all three rejected caps. Follow with separately
+   authorized fresh-install and real-account journeys. Source foundations alone do not complete D1.
+
+The existing admission gate is not an active-child execution policy. Do not introduce it as one.
+Temporary capacity shortages must retain admitted work for recovery under its original deadline,
+not discard children or silently reduce a requested parallel tree to serial execution.
 
 ## First execution wave: real tool retrieval
 

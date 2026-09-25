@@ -1,3 +1,4 @@
+import type { McpCredentialRequirement } from "../mcp/mcp-operator.types";
 import type { ConversationToolProposal } from "./conversation-tool-proposal.types";
 
 /** Version of the browser-safe, replayable conversation elicitation envelope. */
@@ -55,6 +56,32 @@ export interface ElicitationChoice
 	readonly description?: string;
 }
 
+/**
+ * Identifies whose selected tool installation is disclosed in an approval.
+ *
+ * The server saves these values in the approval body and clients use them for display, never
+ * permission. The set is closed; an unknown value must be rejected rather than inferred from the
+ * current user or conversation. Renaming a value changes both the saved and public contracts.
+ */
+export enum ElicitationConnectionOwnerKinds
+{
+	/** The selected installation belongs to a person, not necessarily the person viewing the card. */
+	Personal = "personal",
+	/** The selected installation belongs to the company assistant executing the action. */
+	CompanyAssistant = "company_assistant",
+}
+
+/** Display-safe ownership evidence saved with a tool approval; it contains no credential material. */
+export interface ElicitationExecutionConnection
+{
+	/** Kind of the actual selected installation owner, checked by the server. */
+	readonly ownerKind: ElicitationConnectionOwnerKinds;
+	/** Display-safe name of that owner, without identifiers or an inferred upstream account. */
+	readonly ownerLabel: string;
+	/** Credential requirement frozen from the selected remote connection; hosted tools are credentialless. */
+	readonly credentialRequirement: McpCredentialRequirement;
+}
+
 /** Approval body with the exact consequential action disclosed. */
 export interface ElicitationApprovalBody
 {
@@ -75,6 +102,8 @@ export interface ElicitationApprovalBody
 	 * this field. A browser sends only its decision; it cannot replace these saved arguments.
 	 */
 	readonly proposedArguments?: ConversationToolProposal["arguments"] | null;
+	/** Required for tool approvals; other approval purposes omit this connection disclosure. */
+	readonly executionConnection?: ElicitationExecutionConnection;
 	/** External system label, when an external system is involved. */
 	readonly externalSystem?: string;
 	/** Plain-language consequence of approval. */

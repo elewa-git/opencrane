@@ -267,7 +267,7 @@ export class ConversationWorkspacePresenter
 		const children = this.groupStore.children();
 		return _ConversationEntryViews(history.entries, history.payloads, this.assets()).map(function _GroupActions(view)
 		{
-			if (view.kind === ConversationWorkspaceTranscriptEntryKinds.ToolActivity)
+			if (view.kind !== ConversationWorkspaceTranscriptEntryKinds.Message)
 				return view;
 			const entry = entries.get(view.id)!;
 			return { ...view, requestSource: _GroupRequestSource(entry, history.payloads, selected, subject), shareSource: _GroupShareSource(entry, history.payloads, selected), children: children.filter(child => child.parentMessageId === entry.id) };

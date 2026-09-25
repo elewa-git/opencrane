@@ -1,7 +1,9 @@
-import { ___ConversationModelResponseSchema, ___ConversationModelToolHistorySchema, ConversationModelResponseKinds, ConversationModelToolModes, type CompiledToolDefinition, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
+import { createHash } from "node:crypto";
+import { CompiledFinalOutputModes, ___ConversationModelDeliverySchema, ___ConversationModelResponseSchema, ___ConversationModelToolHistorySchema, ConversationModelResponseKinds, ConversationModelToolModes, type CompiledToolDefinition, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
 import { ___CanonicalizeJson, ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { ConversationModelError, ConversationModelFailureCodes, type PreparedConversationModelRequest } from "./conversation-model.types";
+import { _DecodeConversationModelFinalOutput } from "./conversation-model-final-output";
 
 /** Limits serialized request and response bodies independently to one mebibyte. */
 export const _CONVERSATION_MODEL_MAX_BYTES = 1024 * 1024;
@@ -44,7 +46,10 @@ function _offeredTools(tools: readonly CompiledToolDefinition[]): readonly Compi
 /**
  * Serializes the frozen prompt plus the complete ordered saved tool/result history and applies admitted limits.
  * Credential coordinates come from server composition; compiled messages cannot alter transport.
+ * Disables proxy retries and fallbacks so their defaults do not repeat a reserved request. Proxy-level
+ * deployment and retry policies can override these controls and need separate qualification.
  * @throws ConversationModelError before dispatch when inputs, ordered history or bounds are unusable.
+ * @see https://github.com/BerriAI/litellm/blob/790a5ce0b323c1eefa70c2df25b2780097aa3f80/litellm/router.py — the pinned proxy's request and deployment retry precedence.
  */
 export function _PrepareConversationModelRequest(input: ConversationModelRequest): PreparedConversationModelRequest
 {
@@ -61,6 +66,7 @@ export function _PrepareConversationModelRequest(input: ConversationModelRequest
 			|| !_isPositiveInteger(compiled.budget.maxModelTurns)
 			|| !_isPositiveInteger(compiled.budget.wallClockDeadlineEpochMs)
 			|| typeof compiled.instructions !== "string" || !Array.isArray(compiled.messages)
+			|| compiled.finalOutput !== CompiledFinalOutputModes.Text && compiled.finalOutput !== CompiledFinalOutputModes.Conversation
 			|| input.tools !== ConversationModelToolModes.None && input.tools !== ConversationModelToolModes.Select
 			|| !Array.isArray(input.history))
 			throw new ConversationModelError(ConversationModelFailureCodes.InvalidRequest);
@@ -96,7 +102,10 @@ export function _PrepareConversationModelRequest(input: ConversationModelRequest
 			messages.push({ role: "tool", tool_call_id: call.id, content: exchange.resultContent });
 		}
 		const maxTokens = Math.min(input.maxCompletionTokens, ...ceilings.filter(_isPositiveInteger));
-		const request: Record<string, JsonValue> = { model: input.modelAlias, messages, max_tokens: maxTokens, n: 1, stream: false };
+		const request: Record<string, JsonValue> = {
+			model: input.modelAlias, messages, max_tokens: maxTokens, n: 1, stream: false,
+			num_retries: 0, max_retries: 0, disable_fallbacks: true,
+		};
 		if (input.tools === ConversationModelToolModes.Select)
 		{
 			if (offered.length === 0)
@@ -108,11 +117,15 @@ export function _PrepareConversationModelRequest(input: ConversationModelRequest
 		const body = ___CanonicalizeJson(request);
 		if (Buffer.byteLength(body) > _CONVERSATION_MODEL_MAX_BYTES)
 			throw new ConversationModelError(ConversationModelFailureCodes.RequestTooLarge);
+		const delivery = input.delivery === undefined ? undefined : ___ConversationModelDeliverySchema.parse(input.delivery);
+		if (delivery?.expectedRequestBodySha256 !== undefined && delivery.expectedRequestBodySha256 !== createHash("sha256").update(body).digest("hex"))
+			throw new ConversationModelError(ConversationModelFailureCodes.InvalidRequest);
 		url.pathname = "/v1/chat/completions";
-		const deadlineEpochMs = Math.min(input.notAfterEpochMs, compiled.budget.wallClockDeadlineEpochMs, Date.now() + 25_000);
+		const preparedAtEpochMs = Date.now();
+		const deadlineEpochMs = Math.min(input.notAfterEpochMs, compiled.budget.wallClockDeadlineEpochMs, preparedAtEpochMs + 25_000);
 		if (deadlineEpochMs <= Date.now())
 			throw new ConversationModelError(ConversationModelFailureCodes.DeadlineExceeded);
-		return { url, authorization: `Bearer ${input.key}`, body, deadlineEpochMs, offeredToolNames: input.tools === ConversationModelToolModes.Select ? offered.map(tool => tool.modelName) : [] };
+		return { url, authorization: `Bearer ${input.key}`, body, deadlineEpochMs, preparedAtEpochMs, delivery, finalOutput: compiled.finalOutput, offeredToolNames: input.tools === ConversationModelToolModes.Select ? offered.map(tool => tool.modelName) : [] };
 	}
 	catch (error)
 	{
@@ -128,7 +141,7 @@ export function _PrepareConversationModelRequest(input: ConversationModelRequest
  * Extra top-level usage fields carry no authority and are discarded.
  * @throws ConversationModelError when the upstream body cannot be accepted for this request.
  */
-export function _ValidateConversationModelResponse(candidate: unknown, offeredToolNames: readonly string[]): ConversationModelResponse
+export function _ValidateConversationModelResponse(candidate: unknown, offeredToolNames: readonly string[], finalOutput: CompiledFinalOutputModes): ConversationModelResponse
 {
 	if (!_isRecord(candidate) || candidate["error"] != null || !Array.isArray(candidate["choices"]) || candidate["choices"].length !== 1)
 		throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);
@@ -140,7 +153,7 @@ export function _ValidateConversationModelResponse(candidate: unknown, offeredTo
 	if (message["role"] !== "assistant" || Object.keys(message).some(key => !supportedFields.includes(key)) || supportedFields.slice(3).some(key => message[key] != null))
 		throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);
 	if (choice["finish_reason"] === "stop" && message["tool_calls"] == null)
-		return ___ConversationModelResponseSchema.parse({ kind: ConversationModelResponseKinds.Text, text: message["content"] });
+		return _DecodeConversationModelFinalOutput(message["content"], finalOutput);
 	const calls = message["tool_calls"];
 	if (choice["finish_reason"] !== "tool_calls" || !Array.isArray(calls) || calls.length !== 1 || offeredToolNames.length === 0)
 		throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);

@@ -1,4 +1,6 @@
 import type { CompiledRunInput } from "../inputs/compiled-run-input.types";
+import type { ConversationModelDelivery, ConversationModelPreForwardReceipt } from "./conversation-model-retry.types";
+import type { ConversationA2uiDisplay } from "./conversation-a2ui.types";
 
 /**
  * Selects whether an admitted model request may propose a tool. The conversation owner and model
@@ -14,9 +16,10 @@ export enum ConversationModelToolModes
 }
 
 /**
- * Distinguishes accepted text from a proposed tool in the server's model-response contract.
- * The caller must retain either result before continuing. A Tool result is a proposal, not
- * permission to execute it. Unknown values are rejected by the shared response validator.
+ * Distinguishes accepted text, a proposed tool and authenticated pre-provider rejection.
+ * The server's transport and conversation owner share these in-process values. The caller must
+ * save a result before continuing; neither a proposal nor rejection grants dispatch permission.
+ * Unknown values are rejected by the shared response validator, which checks shape, not proof.
  */
 export enum ConversationModelResponseKinds
 {
@@ -24,6 +27,8 @@ export enum ConversationModelResponseKinds
 	Text = "text",
 	/** Contains one assistant declaration that still needs tool admission. */
 	Tool = "tool",
+	/** Contains authenticated rejection evidence; save it and claim any retry before dispatch. */
+	PreForwardRejected = "pre_forward_rejected",
 }
 
 /** Preserves the assistant declaration required to pair a later tool result with this call. */
@@ -48,19 +53,27 @@ export interface ConversationModelToolExchange
 	readonly resultContent: string;
 }
 
-/** Contains a validated assistant answer or one tool proposal, with no provider usage metadata. */
+/** Contains an answer, tool proposal or authenticated no-forward proof, without provider usage metadata. */
 export type ConversationModelResponse =
 	| {
 		/** Distinguishes a completed text response from a proposed tool. */
 		readonly kind: ConversationModelResponseKinds.Text;
 		/** Preserves the accepted answer exactly, including surrounding whitespace. */
 		readonly text: string;
+		/** Carries an optional complete display decoded only when the frozen output mode permits it. */
+		readonly display?: ConversationA2uiDisplay;
 	}
 	| {
 		/** Requires the caller to retain and admit the proposal before executing it. */
 		readonly kind: ConversationModelResponseKinds.Tool;
 		/** Supplies the declaration needed to pair a later result with this proposal. */
 		readonly call: ConversationModelToolCall;
+	}
+	| {
+		/** Indicates that the transport verified no provider dispatch for this physical request. */
+		readonly kind: ConversationModelResponseKinds.PreForwardRejected;
+		/** Supplies non-secret evidence, not permission to renew credentials or allowances. */
+		readonly receipt: ConversationModelPreForwardReceipt;
 	};
 
 /**
@@ -86,4 +99,6 @@ export interface ConversationModelRequest
 	readonly tools: ConversationModelToolModes;
 	/** Supplies every saved assistant/tool pair in ordinal order; an empty array starts the exchange. */
 	readonly history: readonly ConversationModelToolExchange[];
+	/** Enables receipt verification on a qualified proxy; it never enables transport-owned retries. */
+	readonly delivery?: ConversationModelDelivery;
 }

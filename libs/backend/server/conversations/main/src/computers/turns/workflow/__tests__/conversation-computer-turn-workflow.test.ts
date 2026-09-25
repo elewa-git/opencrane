@@ -78,6 +78,23 @@ describe("conversation computer turn workflow", function _Suite()
 		expect(fixture.authority.advance).toHaveBeenCalledTimes(2);
 	});
 
+	it("keeps each saved model retry wait distinct from an uncertain-response deadline", async function _RetryWaitNames()
+	{
+		const now = Date.now();
+		const fixture = _Fixture([
+			{ outcome: "model_retry_waiting", ordinal: 1, retryOrdinal: 1, notBeforeEpochMs: now + 1_000 },
+			{ outcome: "model_retry_waiting", ordinal: 1, retryOrdinal: 2, notBeforeEpochMs: now + 2_000 },
+			{ outcome: "model_pending", ordinal: 1, notBeforeEpochMs: now + 25_000 },
+			{ outcome: "response_unavailable" },
+		]);
+		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "response_unavailable", turnId: "turn-1" });
+		expect(fixture.context.sleepUntil).toHaveBeenNthCalledWith(1, new Date(now + 1_000), "model-1-retry-1");
+		expect(fixture.context.sleepUntil).toHaveBeenNthCalledWith(2, new Date(now + 2_000), "model-1-retry-2");
+		expect(fixture.context.sleepUntil).toHaveBeenNthCalledWith(3, new Date(now + 25_000), "model-1-deadline");
+		expect(fixture.context.checkpoint).not.toHaveBeenCalled();
+		expect(fixture.toolDispatch.tryExecute).not.toHaveBeenCalled();
+	});
+
 	it("reads a saved remote result immediately after server dispatch completes", async function _RemoteToolCompletion()
 	{
 		const fixture = _Fixture([{ outcome: "tool_pending", toolInvocationId: "tool-1" }, { outcome: "completed" }]);

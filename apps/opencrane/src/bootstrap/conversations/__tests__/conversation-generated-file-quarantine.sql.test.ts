@@ -5,6 +5,7 @@ import pg from "pg";
 import { ArtifactRevisionState, ArtifactScanJobState, ArtifactUploadLeaseState, ConversationAssetState, PrismaClient, type Prisma, type ConversationGeneratedFile } from "@prisma/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { ___IsRolledBackConflict } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import { ArtifactQuarantineOutcomes, PrismaArtifactQuarantineRepository, PrismaArtifactScanUnitOfWork, type QuarantineArtifactRevisionCommand } from "@opencrane/backend/server/agents/artifacts";
 import { _RegisterConversationGeneratedFileWorkflow, PrismaConversationAssetScanRepository } from "@opencrane/backend/server/conversation-assets";
 import { AesGcmConversationPrivatePayloadCipher } from "@opencrane/backend/server/conversations/history";
@@ -87,7 +88,7 @@ async function _Claim(operation: ConversationGeneratedFile)
 /** Register the production generated-file task without starting its external promotion worker. */
 function _CreateWorkflows()
 {
-	const workflows = _CreateAbsurdWorkflowEngine({ databaseUrl: process.env.DATABASE_URL!, databasePool: _Pool, databasePoolSize: 2, queueAuthority: { queueForTask: function _QueueForTask() { return _Queue; } } });
+	const workflows = _CreateAbsurdWorkflowEngine({ isRolledBackConflict: ___IsRolledBackConflict, databaseUrl: process.env.DATABASE_URL!, databasePool: _Pool, databasePoolSize: 2, queueAuthority: { queueForTask: function _QueueForTask() { return _Queue; } } });
 	_RegisterConversationGeneratedFileWorkflow(workflows, {
 		persistence: {
 			async loadCurrent() { throw new Error("Quarantine SQL proof drives persistence directly"); },

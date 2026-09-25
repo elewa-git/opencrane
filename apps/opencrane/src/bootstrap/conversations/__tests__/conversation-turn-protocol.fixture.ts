@@ -7,7 +7,7 @@ export function _OpenConversationTurnProtocol(): ConversationComputerTurnProtoco
 	return {
 		state: ConversationComputerTurnProtocolStates.Open, revision: 0n, steps: [],
 		accounting: { reservedModelCalls: 0, reservedCompletionTokens: 0, reservedToolInvocations: 0, toolResultCyclesFed: 0 },
-		output: null, unavailable: null, cancellation: null,
+		modelRetry: null, output: null, unavailable: null, cancellation: null,
 	};
 }
 

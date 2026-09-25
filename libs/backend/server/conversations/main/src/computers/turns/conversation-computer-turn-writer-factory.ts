@@ -6,6 +6,7 @@ import { ConversationEntryAudiences } from "@opencrane/contracts";
 import { __AssertConversationComputerAnswerAuthority } from "./conversation-computer-answer-authority";
 import type { ConversationComputerToolResults } from "./conversation-computer-continuation.types";
 import type { ConversationComputerBoundWriterFactory, ConversationComputerTurnCandidateResolver, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
+import { _ConversationComputerOutputIntents } from "./output/conversation-computer-output-receipt";
 
 /** Binds output preparation and exact atomic-commit confirmation to the admitted turn. */
 export class ConversationComputerTurnWriterFactory implements ConversationComputerBoundWriterFactory
@@ -19,7 +20,8 @@ export class ConversationComputerTurnWriterFactory implements ConversationComput
 		const output = turn.protocol.output;
 		if (output === null)
 			throw new Error("Conversation computer output receipt is missing");
-		await _ConfirmBoundConversationWriterIntent(this.history, { ...turn.binding, expectedRevision: BigInt(output.receipt.expectedRevision) }, output.receipt);
+		for (const intent of _ConversationComputerOutputIntents(output.receipt))
+			await _ConfirmBoundConversationWriterIntent(this.history, { ...turn.binding, expectedRevision: BigInt(intent.expectedRevision) }, intent);
 	}
 
 	/** Builds a writer that prepares an answer and can confirm its exact participant event. */

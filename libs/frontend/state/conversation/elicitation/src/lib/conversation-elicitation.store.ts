@@ -1,7 +1,8 @@
 import { DestroyRef, Injectable, computed, inject, signal } from "@angular/core";
 
-import { ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation, type ElicitationResponseValue } from "@opencrane/contracts";
+import { ElicitationBodyKinds, ElicitationRequestStates, type ConversationElicitation, type ElicitationResponseValue } from "@opencrane/contracts";
 
+import { __CanApproveElicitation } from "./elicitation-approval.guard";
 import { ElicitationGatewayError, ElicitationGatewayErrorKinds } from "./elicitation-gateway.errors";
 import { ELICITATION_GATEWAY } from "./opencrane-conversation-elicitation.gateway";
 
@@ -196,7 +197,7 @@ export class ConversationElicitationStore
 		const elicitation = this._elicitation();
 		if (elicitation === null || elicitation.state !== ElicitationRequestStates.Requested || response.kind !== elicitation.body.kind)
 			return;
-		if (response.kind === ElicitationBodyKinds.Approval && elicitation.body.kind === ElicitationBodyKinds.Approval && response.approved && (elicitation.body.proposedArguments === null || (elicitation.purpose === ElicitationPurposes.ToolApproval && elicitation.body.proposedArguments === undefined)))
+		if (response.kind === ElicitationBodyKinds.Approval && response.approved && !__CanApproveElicitation(elicitation))
 			return;
 		this._draft.set(response);
 		this._error.set(null);
@@ -408,7 +409,14 @@ export class ConversationElicitationStore
 	 * Decides whether the answer can be sent: nothing in flight, an answer chosen, and the request still
 	 * in `Requested` state — so a question the server has already resolved cannot be answered again.
 	 */
-	private _CanSubmit(): boolean { return !this._busy() && !this._deadlineReached() && this._draft() !== null && this._elicitation()?.state === ElicitationRequestStates.Requested; }
+	private _CanSubmit(): boolean
+	{
+		const elicitation = this._elicitation();
+		const draft = this._draft();
+		if (this._busy() || this._deadlineReached() || draft === null || elicitation?.state !== ElicitationRequestStates.Requested || draft.kind !== elicitation.body.kind)
+			return false;
+		return draft.kind !== ElicitationBodyKinds.Approval || !draft.approved || __CanApproveElicitation(elicitation);
+	}
 
 	/**
 	 * Re-reads the request after a submit failed, to find out whether it landed anyway.

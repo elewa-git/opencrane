@@ -9,6 +9,7 @@ import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentSta
 
 import { ConversationOnboardingDialogueSpeakers, ConversationSessionRailIconStates, ConversationSessionRailItemKinds, type ConversationOnboardingContinuationPresentation, type ConversationOnboardingDialogueEntryPresentation, type ConversationOnboardingHistoryPresentation, type ConversationRailIdentityPresentation, type ConversationSessionRailItemPresentation, type ConversationSummaryPresentation } from "./conversation-workspace-feature.types";
 import { ConversationWorkspaceTranscriptEntryKinds, type ConversationWorkspaceTranscriptEntry } from "./presentation/conversation-workspace-presentation.types";
+import { _ConversationA2uiDisplays } from "./a2ui/conversation-a2ui-replay";
 
 /**
  * Uses the current directory to name conversations in both the rail and selected header.
@@ -175,15 +176,21 @@ export function _ConversationOnboardingDialogueEntries(history: ConversationOnbo
 	});
 }
 
-/** Map immutable Kurrent messages and the latest fact for each tool call in canonical order. */
+/** Map saved messages, read-only displays and the latest tool facts in history order. */
 export function _ConversationEntryViews(entries: readonly ConversationEntry[], payloads: Readonly<Record<string, string>>, assets: readonly ConversationAssetPresentation[] = []): readonly ConversationWorkspaceTranscriptEntry[]
 {
+	const displays = _ConversationA2uiDisplays(entries, payloads);
 	const latestTools = new Map<string, ToolCallLogEntry>();
 	for (const entry of entries)
 		if (entry.kind === ConversationEntryKinds.Log && entry.logKind === ConversationLogKinds.ToolCall)
 			latestTools.set(entry.toolCallId, entry);
 	return entries.flatMap(function _Entry(entry): readonly ConversationWorkspaceTranscriptEntry[]
 	{
+		if (entry.kind === ConversationEntryKinds.A2UI)
+		{
+			const display = displays.get(entry.id);
+			return display ? [{ kind: ConversationWorkspaceTranscriptEntryKinds.A2uiDisplay, id: entry.id, display }] : [];
+		}
 		if (entry.kind === ConversationEntryKinds.Log && entry.logKind === ConversationLogKinds.ToolCall)
 			return latestTools.get(entry.toolCallId)?.id === entry.id ? [{ kind: ConversationWorkspaceTranscriptEntryKinds.ToolActivity, id: entry.id, status: _ConversationToolStatus(entry) }] : [];
 		if (entry.kind !== ConversationEntryKinds.Message)

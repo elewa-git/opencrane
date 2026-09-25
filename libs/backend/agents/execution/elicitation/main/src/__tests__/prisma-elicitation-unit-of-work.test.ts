@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const _productAuthorization = vi.hoisted(function _ProductAuthorization()
 {
-	return { canRead: vi.fn().mockResolvedValue(true), filterReadable: vi.fn(async function _All(_siloId: string, _subjectId: string, ids: readonly string[]) { return new Set(ids); }), admitResponse: vi.fn().mockResolvedValue(true) };
+	return { canRead: vi.fn().mockResolvedValue(true), filterReadable: vi.fn(async function _All(_siloId: string, _subjectId: string, ids: readonly string[]) { return new Set(ids); }), filterApprovals: vi.fn(async function _AllApprovals(_siloId: string, _subjectId: string, ids: readonly string[]) { return new Set(ids); }), admitResponse: vi.fn().mockResolvedValue(true) };
 });
 
 const _deferredAuthorization = vi.hoisted(function _DeferredAuthorization()
@@ -13,7 +13,7 @@ const _deferredAuthorization = vi.hoisted(function _DeferredAuthorization()
 
 vi.mock("../elicitation-product-authorization", function _MockProductAuthorization()
 {
-	return { PrismaElicitationProductAuthorizationRepository: class { canReadConversation = _productAuthorization.canRead; filterReadableConversationIds = _productAuthorization.filterReadable; admitResponse = _productAuthorization.admitResponse; } };
+	return { PrismaElicitationProductAuthorizationRepository: class { canReadConversation = _productAuthorization.canRead; filterReadableConversationIds = _productAuthorization.filterReadable; filterReadableApprovalElicitationIds = _productAuthorization.filterApprovals; admitResponse = _productAuthorization.admitResponse; } };
 });
 
 vi.mock("@opencrane/backend/server/iam/authorization", async function _MockAuthorization(importOriginal)
@@ -118,6 +118,7 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 	{
 		_productAuthorization.canRead.mockReset().mockResolvedValue(true);
 		_productAuthorization.filterReadable.mockReset().mockImplementation(async function _All(_siloId: string, _subjectId: string, ids: readonly string[]) { return new Set(ids); });
+		_productAuthorization.filterApprovals.mockReset().mockImplementation(async function _AllApprovals(_siloId: string, _subjectId: string, ids: readonly string[]) { return new Set(ids); });
 		_productAuthorization.admitResponse.mockReset().mockResolvedValue(true);
 	});
 
@@ -430,6 +431,36 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		const transaction = { ..._Access(), elicitationRequest: { findMany: vi.fn() } };
 		await expect(_Unit(transaction).listOpenOwned("silo-1", "conversation-1", "user-1", NOW)).resolves.toEqual([]);
 		expect(transaction.elicitationRequest.findMany).not.toHaveBeenCalled();
+	});
+
+	it.each([false, true])("hides a pending approval after its Read grant is revoked, including expired=%s", async function _DeniesApprovalRead(expired)
+	{
+		_productAuthorization.filterApprovals.mockResolvedValue(new Set());
+		const request = _Request({ purpose: ElicitationPurpose.ToolApproval, expiresAt: expired ? new Date(NOW.getTime() - 1) : new Date(NOW.getTime() + 60_000) });
+		const transaction = { ..._Access(), elicitationRequest: { findFirst: vi.fn().mockResolvedValue(request), findMany: vi.fn().mockResolvedValue([request]) } };
+		const unit = _Unit(transaction);
+
+		await expect(unit.readOwned("silo-1", "conversation-1", "request-1", "user-1", NOW)).resolves.toBeNull();
+		await expect(unit.listOpenOwned("silo-1", "conversation-1", "user-1", NOW)).resolves.toEqual([]);
+		await expect(unit.listActivityOwned("silo-1", "user-1", 20, NOW)).resolves.toEqual([]);
+		expect(_productAuthorization.filterApprovals).toHaveBeenCalledTimes(3);
+		expect(_productAuthorization.filterApprovals).toHaveBeenCalledWith("silo-1", "user-1", ["request-1"], NOW);
+	});
+
+	it("keeps readable pending approvals, ordinary input and resolved approval history distinct", async function _FiltersOnlyPendingApprovalReads()
+	{
+		_productAuthorization.filterApprovals.mockResolvedValue(new Set(["approval-readable"]));
+		const rows = [
+			_Request({ id: "ordinary-input" }),
+			_Request({ id: "approval-readable", purpose: ElicitationPurpose.ToolApproval }),
+			_Request({ id: "approval-revoked", purpose: ElicitationPurpose.ToolApproval }),
+			_Request({ id: "approval-resolved", purpose: ElicitationPurpose.ToolApproval, state: ElicitationRequestState.Answered, resolvedAt: NOW }),
+		];
+		const transaction = { ..._Access(), elicitationRequest: { findMany: vi.fn().mockResolvedValue(rows) } };
+		const result = await _Unit(transaction).listActivityOwned("silo-1", "user-1", 20, NOW);
+
+		expect(result.map(request => request.requestId)).toEqual(["ordinary-input", "approval-readable", "approval-resolved"]);
+		expect(_productAuthorization.filterApprovals).toHaveBeenCalledWith("silo-1", "user-1", ["approval-readable", "approval-revoked"], NOW);
 	});
 
 	it("denies child open, response, and activity after immediate-parent access ends", async function _DeniesRevokedParent()

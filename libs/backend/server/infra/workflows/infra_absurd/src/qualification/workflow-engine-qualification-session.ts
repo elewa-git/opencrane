@@ -2,6 +2,7 @@ import { Absurd } from "absurd-sdk";
 import pg, { type Pool as PgPool } from "pg";
 
 import type { IWorkflowTaskReceipt, IWorkflowWorkers } from "@opencrane/backend/server/infra/workflows/contract";
+import { ___IsRolledBackConflict } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 
 import { AbsurdWorkflowEngine } from "../absurd-workflow-engine";
 import type { IWorkflowEngineQualificationUnitOfWork } from "./workflow-engine-qualification-unit-of-work.types";
@@ -175,7 +176,7 @@ export function _CreateWorkflowEngineQualificationSession(options: IWorkflowEngi
 			return options.queueName;
 		},
 	});
-	const execution = new AbsurdWorkflowEngine({ databaseUrl, databasePool, databasePoolSize: options.databasePoolSize, queueAuthority, workerConcurrency: 1, pollIntervalMs: options.pollIntervalMs });
+	const execution = new AbsurdWorkflowEngine({ databaseUrl, databasePool, databasePoolSize: options.databasePoolSize, isRolledBackConflict: ___IsRolledBackConflict, queueAuthority, workerConcurrency: 1, pollIntervalMs: options.pollIntervalMs });
 	return new _AbsurdWorkflowEngineQualificationSession(options, {
 		databasePool,
 		execution,

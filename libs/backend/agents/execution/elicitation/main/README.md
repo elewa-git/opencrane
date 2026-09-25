@@ -43,6 +43,10 @@ The package owns request, response-attempt, result-delivery, and one-use memory-
 Tool approval keeps its own audit row, and runtime, browser, and A2UI payloads cannot select the
 respondent, dataset, or protected action.
 
+Tool-approval projections retain IAM's saved connection-owner and credential-use disclosure.
+The public schema requires this disclosure for tool approvals, while other input purposes omit it.
+It exposes the owner's display name, never credentials or connection custody coordinates.
+
 For a personal approval, the assigned participant answers the server-issued request. IAM changes
 the invocation to ready or failed inside that response transaction, and an injected wake port emits
 the existing saved-turn event only after the final pending input is gone. The wake port belongs to
@@ -94,6 +98,10 @@ Ordinary input answers are delivered to the exact runtime attempt once. Protecte
 A2UI payloads remain server-side. The authorization package owns every ToolInvocation transition
 inside the elicitation transaction; this package owns only the response and exact memory receipt.
 Tool-approval bodies carry the frozen display-safe argument projection, tool name, and server label.
+Pending tool approvals also require the assigned participant's current `ApprovalRequest/Read` grant
+for detail, reconnect and Activity reads. Conversation access alone cannot disclose a pending action.
+Resolved approval history keeps the conversation-read policy, because resolution revokes the
+temporary approval grants. An expired request that has not yet been resolved still needs its grant.
 When IAM cannot disclose every proposed value, the body carries `proposedArguments: null` and the
 request can only be denied. Reviewed arguments, schemas, purpose payloads, and provider credentials
 remain outside the browser projection.

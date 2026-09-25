@@ -5,13 +5,13 @@ import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { ConversationComputerToolResultOutcomes, type ConversationComputerToolResult } from "../conversation-computer-continuation.types";
 import { ConversationComputerTurnProtocolStates } from "../conversation-computer-turn-protocol.types";
-import type { ConversationComputerTurnAuthorityDependencies, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
+import type { ConversationComputerTurnCandidate, ConversationComputerTurnAuthorityDependencies, FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 import { AesGcmConversationPrivatePayloadCipher } from "@opencrane/backend/server/conversations/history";
 import { PrismaConversationModelCustodyUnitOfWork } from "../db/prisma-conversation-model-custody";
 import { _OutputRecoveryHarness } from "./conversation-output-recovery.fixture";
 
 /** Combine real turn CAS, current-Pod checks and encrypted custody with controlled ordered tools. */
-export async function _ToolContinuationHarness(toolCount = 1, maxCompletionTokens = 100)
+export async function _ToolContinuationHarness(toolCount = 1, maxCompletionTokens = 100, prepareCandidate?: (candidate: ConversationComputerTurnCandidate) => void)
 {
 	const overrides: Partial<ConversationComputerTurnAuthorityDependencies> = {};
 	const schema = { type: "object", required: ["query"], additionalProperties: false, properties: { query: { type: "string" } } };
@@ -31,6 +31,7 @@ export async function _ToolContinuationHarness(toolCount = 1, maxCompletionToken
 	const f = await _OutputRecoveryHarness(false, overrides, candidate =>
 	{
 		Object.assign(candidate, { compiledInput: { ...candidate.compiledInput, tools, budget: { ...candidate.compiledInput.budget, maxCompletionTokens, maxModelTurns: toolCount + 1, maxToolInvocations: toolCount, maxLoopIterations: toolCount, wallClockDeadlineEpochMs: Date.now() + 240_000 } } });
+		prepareCandidate?.(candidate);
 	});
 	const call = calls[0]!;
 	f.model.request.mockImplementation(async function _Model(input)

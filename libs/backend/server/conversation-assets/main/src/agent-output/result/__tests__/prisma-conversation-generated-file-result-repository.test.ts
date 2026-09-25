@@ -73,7 +73,7 @@ function _Command(patch: Partial<ConversationGeneratedFileResultCommand> = {}): 
 			credentialLifetimeSeconds: 60,
 			budget: { maxModelTurns: 2, maxCompletionTokens: 200, maxCostUsdMicros: null, maxToolInvocations: 1, maxLoopIterations: 1, wallClockDeadlineEpochMs: _NOW.getTime() + 60_000 },
 			protocol: {
-				state: ConversationComputerTurnProtocolStates.ToolPending, revision: 2n, output: null, cancellation: null, unavailable: null,
+				state: ConversationComputerTurnProtocolStates.ToolPending, revision: 2n, output: null, cancellation: null, unavailable: null, modelRetry: null,
 				accounting: { reservedModelCalls: 1, reservedCompletionTokens: 100, reservedToolInvocations: 1, toolResultCyclesFed: 0 },
 				steps: [{ state: ConversationComputerTurnProtocolStates.ToolPending,
 					reservation: { ordinal: 1, invocationFence: "first-fence", tools: ConversationModelToolModes.Select, compiledInputDigest: `sha256:${"d".repeat(64)}`, historyDigest: "sha256:history", requestDigest: "sha256:request", maxCompletionTokens: 100, authorityExpiresAtEpochMs: _NOW.getTime() + 60_000, dispatchDeadlineEpochMs: _NOW.getTime() + 30_000 },

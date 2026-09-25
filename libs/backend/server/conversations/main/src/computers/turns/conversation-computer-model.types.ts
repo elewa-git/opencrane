@@ -17,6 +17,8 @@ export enum ConversationComputerModelProgressOutcomes
 	Retry = "retry",
 	/** A reserved model request has not reached its fixed deadline. */
 	ModelPending = "model_pending",
+	/** A verified rejection is saved; the workflow must wait before attempting a fresh retry claim. */
+	ModelRetryWaiting = "model_retry_waiting",
 	/** The saved tool proposal still needs a decision or result. */
 	ToolPending = "tool_pending",
 }
@@ -25,6 +27,7 @@ export enum ConversationComputerModelProgressOutcomes
 export type ConversationComputerModelProgress =
 	| { readonly outcome: `${ConversationComputerModelProgressOutcomes.Completed | ConversationComputerModelProgressOutcomes.ResponseUnavailable | ConversationComputerModelProgressOutcomes.AuthorityEnded | ConversationComputerModelProgressOutcomes.Retry}` }
 	| { readonly outcome: `${ConversationComputerModelProgressOutcomes.ModelPending}`; readonly notBeforeEpochMs: number; readonly ordinal: number }
+	| { readonly outcome: `${ConversationComputerModelProgressOutcomes.ModelRetryWaiting}`; readonly notBeforeEpochMs: number; readonly ordinal: number; readonly retryOrdinal: number }
 	| { readonly outcome: ConversationComputerToolResultOutcomes.GeneratedFilePending; readonly operationId: string; readonly notAfterEpochMs: number }
 	| { readonly outcome: `${ConversationComputerModelProgressOutcomes.ToolPending}`; readonly toolInvocationId: string; readonly waitFor?: "approval" | "result"; readonly waitUntilEpochMs?: number };
 

@@ -1,3 +1,4 @@
+import { CompiledFinalOutputModes } from "@opencrane/contracts";
 import type { CompiledRunInput, ConversationEntry, MessageEntry } from "@opencrane/contracts";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -201,15 +202,8 @@ function _PayloadRow(id: string) {
   };
 }
 
-function _Turn() {
-  return {
-    siloId: "silo-1",
-    binding: { conversationId: "conversation-1", agentIdentityId: "identity-1" },
-  } as never;
-}
-
 function _CompiledInput(): CompiledRunInput {
-  return {
+  return { finalOutput: CompiledFinalOutputModes.Text,
     promptCompilerVersion: "compiler-v1",
     runId: "96c97e9c-839f-481c-80bc-f2cdd6e4603b",
     attempt: 1,
@@ -302,29 +296,6 @@ describe("PrismaConversationComputerTurnUnitOfWork", function _PrismaConversatio
     await expect(
       _Harness(undefined, admission).authority.compile(_COMMAND),
     ).rejects.toThrow("run admission denied");
-  });
-
-  it("moves the conversation to the top of every list in the same transaction that stores new agent output", async function _BumpsOnStoredOutput() {
-    const harness = _Harness();
-    const receipt = await harness.authority.store(_Turn(), "command-1", "Hello");
-    expect(receipt.payloadRef).toBe("payload-created");
-    expect(harness.transaction.conversationPrivatePayload.create).toHaveBeenCalledTimes(1);
-    expect(harness.transaction.conversation.update).toHaveBeenCalledWith({
-      where: { id_siloId: { id: "conversation-1", siloId: "silo-1" } },
-      data: { updatedAt: expect.any(Date) },
-      select: { id: true },
-    });
-    expect(harness.transaction.conversation.update.mock.invocationCallOrder[0]).toBeGreaterThan(
-      harness.transaction.conversationPrivatePayload.create.mock.invocationCallOrder[0]!,
-    );
-  });
-
-  it("leaves the conversation ordering alone when the output payload was already stored", async function _NoBumpOnStoredRetry() {
-    const harness = _Harness(undefined, undefined, _PayloadRow("payload-existing"));
-    const receipt = await harness.authority.store(_Turn(), "command-1", "Hello");
-    expect(receipt.payloadRef).toBe("payload-existing");
-    expect(harness.transaction.conversationPrivatePayload.create).not.toHaveBeenCalled();
-    expect(harness.transaction.conversation.update).not.toHaveBeenCalled();
   });
 
   it("rejects compiled input for another run attempt", async function _MismatchedCompiledInput() {

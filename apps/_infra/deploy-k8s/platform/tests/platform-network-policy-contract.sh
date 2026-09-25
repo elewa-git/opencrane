@@ -18,6 +18,8 @@ helm template opencrane-silo "$CHART_DIR" \
   --set networkPolicy.mainNetworkDefaultDeny.enabled=true \
   --set-string networkPolicy.postgresPoolerName=opencrane-postgres-restored-pooler >"$OUTPUT"
 
+node "$ROOT_DIR/apps/_infra/litellm/tests/workload-identity.mjs" "$OUTPUT" opencrane-silo-litellm default managed
+
 PLATFORM_POLICY="$(awk '
   BEGIN { RS="---" }
   /kind: NetworkPolicy/ && /name: opencrane-silo-platform-default-deny/ { print }
@@ -111,6 +113,8 @@ helm template oc-acme "$CHART_DIR" \
   --set multiCt.enabled=true \
   --set networkPolicy.mainNetworkDefaultDeny.enabled=true \
   >"$MULTI_OUTPUT"
+
+node "$ROOT_DIR/apps/_infra/litellm/tests/workload-identity.mjs" "$MULTI_OUTPUT" oc-acme-opencrane-litellm oc-acme managed
 
 CROSS_INSTANCE_POLICY="$(awk '
   BEGIN { RS="---" }

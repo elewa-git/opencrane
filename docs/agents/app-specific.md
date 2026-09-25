@@ -106,6 +106,12 @@ Recoverable conversation input follows the same ownership direction:
 composer, and status presentations. The 0.11 workspace renders immutable conversation history
 directly; the retired relational Agent-thread projection has no separate child route.
 
+Read-only reporting follows the same dependency direction:
+
+- [`features/governance`](../../libs/frontend/features/governance/README.md) owns audit and usage child routes, route-local read state and separate result components;
+- [`state/governance`](../../libs/frontend/state/governance/README.md) owns generated read contracts, validation and a narrow port; and
+- [`state/governance/adapter`](../../libs/frontend/state/governance/adapter/README.md) implements the existing protected reads. The app binds the adapter and reader identity and composes the Settings shell, member routes and reporting routes. No browser role hint grants read authority.
+
 The normal conversation workspace keeps transport, state, and presentation separate:
 
 - [`features/conversation-workspace`](../../libs/frontend/features/conversation-workspace/README.md) owns chat child routes, route coordination, and browser-safe presentation composition;

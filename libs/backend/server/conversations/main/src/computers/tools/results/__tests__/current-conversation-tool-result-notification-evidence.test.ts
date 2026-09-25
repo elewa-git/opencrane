@@ -1,3 +1,4 @@
+import { CompiledFinalOutputModes } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import { ___DigestCanonicalJson } from "@opencrane/util";
@@ -17,10 +18,10 @@ const _WORKLOAD = { subject: "system:serviceaccount:computers:computer", namespa
 function _Fixture()
 {
 	const tool = { name: "records.read", modelName: "records_read", toolRevisionId: "tool-revision-1", description: "Read one record", requiresApproval: false, parametersSchema: { type: "object" }, parametersSchemaDigest: `sha256:${"b".repeat(64)}` };
-	const compiledInput = { promptCompilerVersion: "compiler-v1", runId: "run-1", attempt: 1, instructions: "help", messages: [], tools: [tool], model: { modelAlias: "model-1", maxOutputTokens: 100, generatedOutputCapabilities: [] }, budget: { maxModelTurns: 2, maxCompletionTokens: 200, maxCostUsdMicros: 10, maxToolInvocations: 1, maxLoopIterations: 1, wallClockDeadlineEpochMs: Date.parse("2026-09-12T00:00:00.000Z") }, digest: `sha256:${"a".repeat(64)}` };
+	const compiledInput = { finalOutput: CompiledFinalOutputModes.Text,  promptCompilerVersion: "compiler-v1", runId: "run-1", attempt: 1, instructions: "help", messages: [], tools: [tool], model: { modelAlias: "model-1", maxOutputTokens: 100, generatedOutputCapabilities: [] }, budget: { maxModelTurns: 2, maxCompletionTokens: 200, maxCostUsdMicros: 10, maxToolInvocations: 1, maxLoopIterations: 1, wallClockDeadlineEpochMs: Date.parse("2026-09-12T00:00:00.000Z") }, digest: `sha256:${"a".repeat(64)}` };
 	const reservation = { ordinal: 1, invocationFence: "model-1", tools: "select", compiledInputDigest: compiledInput.digest, historyDigest: `sha256:${"c".repeat(64)}`, requestDigest: `sha256:${"d".repeat(64)}`, maxCompletionTokens: 100, authorityExpiresAtEpochMs: compiledInput.budget.wallClockDeadlineEpochMs, dispatchDeadlineEpochMs: compiledInput.budget.wallClockDeadlineEpochMs };
 	const selection = { ordinal: 1, modelInvocationFence: reservation.invocationFence, declaration: { payloadRef: "payload", ciphertextDigest: `sha256:${"e".repeat(64)}` }, proposalId: "invoke-1", toolInvocationId: "invoke-1", requestFingerprint: `sha256:${"f".repeat(64)}` };
-	const protocol = { state: ConversationComputerTurnProtocolStates.ToolPending, revision: 2n, steps: [{ state: ConversationComputerTurnProtocolStates.ToolPending, reservation, selection, result: null }], accounting: { reservedModelCalls: 1, reservedCompletionTokens: 100, reservedToolInvocations: 1, toolResultCyclesFed: 0 }, output: null, unavailable: null, cancellation: null };
+	const protocol = { state: ConversationComputerTurnProtocolStates.ToolPending, revision: 2n, steps: [{ state: ConversationComputerTurnProtocolStates.ToolPending, reservation, selection, result: null }], accounting: { reservedModelCalls: 1, reservedCompletionTokens: 100, reservedToolInvocations: 1, toolResultCyclesFed: 0 }, modelRetry: null, output: null, unavailable: null, cancellation: null };
 	const turn = { bootstrapId: "turn-1", siloId: "silo-1", computerId: "computer-1", binding: { siloId: "silo-1", conversationId: "conversation-1", runId: "run-1" }, compile: { runId: compiledInput.runId, attempt: compiledInput.attempt, promptCompilerVersion: compiledInput.promptCompilerVersion, digest: compiledInput.digest }, budget: compiledInput.budget, protocol } as unknown as FrozenConversationComputerTurn;
 	const load = vi.fn().mockResolvedValue(turn);
 	const assertCurrentForWorkflow = vi.fn().mockResolvedValue({ candidate: { ...turn, compiledInput }, workload: _WORKLOAD });

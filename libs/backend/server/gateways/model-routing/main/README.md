@@ -96,6 +96,9 @@ derived from their governed Global resource, so a late first POST cannot create 
   tokens are capped by the smallest reservation, frozen route and frozen run ceiling; at least
   one frozen completion ceiling must exist. The request aborts by the earliest supplied deadline,
   compiled run deadline or 25 seconds, including time spent reading the body.
+- `__CreateConversationModelTransport` — capture the server's managed-proxy qualification at
+  startup and expose the same single-exchange request port. Only this configured instance may
+  return authenticated pre-provider rejection evidence; the direct request function does not.
 
 A request with tool selection enabled can offer every frozen tool definition, including tools that need owner approval.
 Each definition's `modelName` must be unique and legal, with parameters matching their saved schema
@@ -123,12 +126,45 @@ calls, refusals, partial answers and unsupported output formats. `ConversationMo
 a fixed category without the provider body or original exception. Request fields never enter its
 operation span, and automatic child tracing is suppressed around the HTTP call.
 
+The required `CompiledRunInput.finalOutput` mode is captured before dispatch. Text mode preserves
+literal answers, including JSON-looking text. Conversation mode requires a strict final JSON object
+with nonblank `text` and optional `display`; the shared validators accept a complete pair of A2UI 0.8
+operations with literal text and static layout components. Missing modes, malformed displays,
+unknown fields and invalid Unicode fail with a fixed error category. Ordinary text is preserved
+exactly and limited to 65,536 UTF-8 bytes; the optional display has its own 65,536-byte limit.
+The conversation owner checks graph completeness and assigns display ownership before storage.
+Tool calls remain separate provider declarations. This transport does not infer a format from text
+or require provider-specific structured-response support.
+
+Every request fixes LiteLLM's `num_retries` and `max_retries` to zero and `disable_fallbacks` to
+true. These settings apply to initial requests, later tool selections and final answers; input
+fields cannot replace them. They prevent the proxy's default retry and fallback behaviour from
+repeating a request outside the saved conversation steps. The pinned router lets deployment-level
+and named retry policies override request retry counts, so an operator-modified or shared proxy
+still needs its own qualification. The current model registration supplies neither override.
+See the [pinned router implementation](https://github.com/BerriAI/litellm/blob/790a5ce0b323c1eefa70c2df25b2780097aa3f80/litellm/router.py).
+
 This adapter has no durable retry state. Its caller must reserve dispatch before calling, retain
 the accepted response before acknowledging it, and treat a lost response as uncertain: a failure
 does not prove that the provider did not charge the request. The caller also reserves the total
 call and completion budget, keeps one nonrenewed attempt key, admits the proposed action and
 rechecks authority before using its result. Adapter tests alone do not qualify the public tool
 flow or a live provider.
+
+Pre-provider rejection is disabled unless both `LITELLM_PREFORWARD_CONTRACT` and
+`LITELLM_PREFORWARD_ENDPOINT` identify the supported contract and the same configured managed
+LiteLLM origin. A response cannot enable it. The adapter authenticates a small, strict HTTP 429
+receipt against the attempt key, physical request nonce, logical reservation, actual request bytes
+and original deadline. An ordinary provider 429, forged receipt or changed request remains an error,
+not permission to retry. The conversation owner saves valid evidence and decides whether to claim
+another send; this adapter never waits, repeats a request or renews a credential.
+
+The library's `src/proxy/` Python modules implement the producer inside the owned LiteLLM image.
+They issue proof only for the selected local limiter's rejection before later callbacks or provider
+dispatch. App-owned, hash-checked bindings install the processor, limiter and startup registration.
+The derived image and its real startup sequence still need qualification before enabling this
+contract. Current model registration sets no explicit RPM/TPM rate limit; the positive producer
+test supplies a synthetic local threshold. This is not generic recovery from provider rate limits.
 
 The pinned LiteLLM v1.81.0-stable implementation creates `expires` from a UTC clock and serializes
 it as an ISO timestamp. The adapter checks that evidence instead of storing a locally guessed
@@ -166,7 +202,9 @@ unverified alias; this package's catalogue is therefore the allowlist source for
 Run `npx nx run backend-server-model-routing:test` and
 `npx nx run backend-server-model-routing:lint`. The conversation transport tests use an in-memory fetch
 double: they prove limits, cancellation, response validation and absence of retries without making
-a paid model request. These checks do not qualify a live provider or the complete conversation flow.
+a paid model request. They also check the serialized proxy retry controls in every request mode;
+they do not prove that the proxy honours them. These checks do not qualify a live provider or the
+complete conversation flow.
 
 ## See also
 

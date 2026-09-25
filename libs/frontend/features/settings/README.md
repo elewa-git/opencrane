@@ -33,13 +33,16 @@ confirmation and removes private links and controls; Refresh explicitly rechecks
 
 ## Public surface
 
-- `SETTINGS_ROUTES` — lazy child routes for the settings shell and member directory.
+- `SettingsShellComponent` — responsive frame reused by the app's Settings composition.
+- `SETTINGS_MEMBER_ROUTES` — member-directory children; the app owns the shell and default redirect.
 - `OrganizationInviteAcceptanceComponent` — public token-acceptance route component.
 
 ## Boundary
 
 Consumed by `opencrane-ui`. It owns routing and presentation only; the backend remains the authority
 for roles, invitations, membership, expiry, identity matching, and host payment policy.
+The Audit and Usage navigation links target the separately composed governance feature. This package
+does not import that feature, load its data, or grant access to those destinations.
 
 ## Dependency direction
 

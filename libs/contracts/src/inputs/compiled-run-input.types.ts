@@ -1,6 +1,7 @@
 import type { JsonValue } from "@opencrane/util";
 import type { GeneratedOutputCapability } from "../model-routing/model-routing.types";
 import type { RunBudgetPolicy } from "./run-budget-policy.types";
+import type { CompiledFinalOutputModes } from "./compiled-final-output.types";
 
 /**
  * Agent input with every reference already resolved to a literal value, built in the control plane.
@@ -21,6 +22,8 @@ export interface CompiledRunInput
 	readonly attempt: number;
 	/** The complete system prompt: persona text plus the memory and resource context already looked up for this run. */
 	readonly instructions: string;
+	/** Freezes how the gateway must decode the final answer; it is included in this input's digest. */
+	readonly finalOutput: CompiledFinalOutputModes;
 	/** Ordered conversation turns compiled from the snapshot's message references. */
 	readonly messages: readonly CompiledMessage[];
 	/** Tool schemas the model loop may call, sorted by their provider-facing model name. */

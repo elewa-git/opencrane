@@ -48,11 +48,27 @@ with HTTP 202 while current work and credential cleanup finish; removed rows are
 installation lists, and reinstall cannot proceed while removal is pending.
 Neither catalogue visibility nor an installation grants permission to execute a tool.
 
+Tool approvals disclose the selected installation's owner and credential requirement through
+`ElicitationExecutionConnection`. The server saves this display-safe evidence with the approval;
+the browser validates it with `___ElicitationExecutionConnectionSchema` and never substitutes the
+approver's identity. Credentialless tools explicitly require no credential. The disclosure carries
+no account identifiers, credential coordinates or secrets, and grants no execution permission.
+
 The private run input contract carries a complete `RunBudgetPolicy`: total model calls, generated
 tokens, tool invocations, tool-result cycles, an optional extra revision spend cap and the original
 absolute deadline. Its validator rejects missing, unknown or malformed limits. A null revision
 spend cap leaves the existing frozen server cap in force. Compilation and recovery preserve every
 saved value; these contracts do not implement repeated tool execution or grant tool permission.
+
+`CompiledRunInput.finalOutput` is required and sealed into the input digest. `CompiledFinalOutputModes`
+selects literal Text or a Conversation JSON answer containing required ordinary text and an optional
+static display. `ConversationFinalOutput` and its strict validator preserve the text, reject unknown
+fields and bound Unicode and byte size. `ConversationA2uiDisplay` contains the two standard A2UI 0.8
+operations needed for a complete display, using a reserved identifier until the conversation owner
+assigns ownership. Its producer schema accepts literal text and read-only layout components; the
+shared component schema also keeps bindings available to existing history consumers. These wire
+models depend on no renderer SDK. Graph completeness, current permission and persistence belong
+to the conversation owner; shape validation grants no authority.
 
 Connection setup commands carry the generation observed before the request, or `null` before
 any connection generation exists. Disconnect commands carry the generation to revoke. Retries
@@ -166,6 +182,10 @@ personal-memory dataset or adopts a fact.
   from requests that must return text; either may carry earlier results. These types grant no tool
   permission; endpoint and credential fields stay in server memory and must never become workload
   or browser payloads.
+- `ConversationModelDelivery`, `ConversationModelPreForwardReceipt` and their adjacent strict
+  schemas — bind a server-only pre-provider rejection to its request and deadline. Structural
+  validation does not authenticate a receipt. The model transport verifies it; the conversation
+  owner then saves it and conditionally claims a retry without renewing budgets or credentials.
 - `PROMPT_COMPILER_VERSION` — the immutable compiler-version pin every executable agent revision
   must name before it can admit a run.
 - `AgentConfigPatchKinds` — the durable `persona_refresh` and `model_alias` vocabulary shared by

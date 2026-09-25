@@ -9,6 +9,21 @@ export interface ElicitationControlChoice
 	readonly description?: string;
 }
 
+/**
+ * Shows who owns the execution connection and how its credentials are used.
+ *
+ * The feature supplies reviewed display text; this element cannot infer either value from the
+ * participant making the decision. These labels grant no permission and contain no credentials.
+ * Called by: `ElicitationApprovalComponent` through `ElicitationApprovalPresentation`.
+ */
+export interface ElicitationExecutionConnectionPresentation
+{
+	/** Names the connection owner without exposing identity or credential coordinates. */
+	readonly owner: string;
+	/** Explains whether execution uses credentials and whose credential policy applies. */
+	readonly credentialUse: string;
+}
+
 /** Presentational disclosure for one consequential action. */
 export interface ElicitationApprovalPresentation
 {
@@ -24,6 +39,8 @@ export interface ElicitationApprovalPresentation
 	readonly proposedArguments?: Readonly<Record<string, unknown>> | null;
 	/** Optional external system label. */
 	readonly externalSystem?: string;
+	/** Shows connection ownership separately from the participant choosing a response. */
+	readonly executionConnection?: ElicitationExecutionConnectionPresentation;
 	/** Plain-language consequence. */
 	readonly consequence: string;
 	/** Optional cost disclosure. */

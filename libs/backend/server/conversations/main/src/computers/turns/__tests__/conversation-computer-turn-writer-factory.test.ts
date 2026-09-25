@@ -55,7 +55,7 @@ function _ToolTurn(): FrozenConversationComputerTurn
 	const final = { ...first, ordinal: 2, invocationFence: _COMMAND.sourceCommandId, tools: ConversationModelToolModes.None, authorityExpiresAtEpochMs: 4_070_908_500_000, dispatchDeadlineEpochMs: 4_070_908_400_000 };
 	return {
 		..._TURN,
-		protocol: { state: ConversationComputerTurnProtocolStates.ModelReserved, revision: 4n, steps: [{ state: ConversationComputerTurnProtocolStates.ResultReady, reservation: first, selection, result }, { state: ConversationComputerTurnProtocolStates.ModelReserved, reservation: final, selection: null, result: null }], accounting: { reservedModelCalls: 2, reservedCompletionTokens: 200, reservedToolInvocations: 1, toolResultCyclesFed: 1 }, output: null, unavailable: null, cancellation: null },
+		protocol: { state: ConversationComputerTurnProtocolStates.ModelReserved, revision: 4n, steps: [{ state: ConversationComputerTurnProtocolStates.ResultReady, reservation: first, selection, result }, { state: ConversationComputerTurnProtocolStates.ModelReserved, reservation: final, selection: null, result: null }], accounting: { reservedModelCalls: 2, reservedCompletionTokens: 200, reservedToolInvocations: 1, toolResultCyclesFed: 1 }, modelRetry: null, output: null, unavailable: null, cancellation: null },
 	};
 }
 
@@ -72,7 +72,7 @@ describe("conversation computer output policy", function _Suite()
 		const intent = await f.writer.prepare(_COMMAND);
 		await f.writer.append(intent);
 		f.assertCurrent.mockClear().mockRejectedValue(new Error("lease expired"));
-		await expect(f.factory.confirmSaved(_WithOutput(_TURN, intent))).resolves.toBeUndefined();
+		await expect(f.factory.confirmSaved(_WithOutput(_TURN, { ...intent, display: null }))).resolves.toBeUndefined();
 		expect(f.assertCurrent).not.toHaveBeenCalled();
 		expect(f.append).toHaveBeenCalledOnce();
 	});
@@ -81,7 +81,7 @@ describe("conversation computer output policy", function _Suite()
 	{
 		const f = _Fixture();
 		const intent = await f.writer.prepare(_COMMAND);
-		await expect(f.factory.confirmSaved(_WithOutput(_TURN, intent))).rejects.toThrow("cannot confirm");
+		await expect(f.factory.confirmSaved(_WithOutput(_TURN, { ...intent, display: null }))).rejects.toThrow("cannot confirm");
 		expect(f.append).not.toHaveBeenCalled();
 	});
 
@@ -90,7 +90,7 @@ describe("conversation computer output policy", function _Suite()
 		const f = _Fixture();
 		const intent = await f.writer.prepare(_COMMAND);
 		await f.append({ streamName: intent.streamName, events: [{ ...intent.event, metadata: { changed: "evidence" } }] });
-		await expect(f.factory.confirmSaved(_WithOutput(_TURN, intent))).rejects.toThrow("different history");
+		await expect(f.factory.confirmSaved(_WithOutput(_TURN, { ...intent, display: null }))).rejects.toThrow("different history");
 	});
 
 	it("checks the admitted output and current workload lease before appending to its bound stream", async function _Allowed()

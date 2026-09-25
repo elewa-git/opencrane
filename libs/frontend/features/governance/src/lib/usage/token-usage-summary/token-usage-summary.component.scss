@@ -1,0 +1,6 @@
+/* Keep the heading within its grid column even when the table needs more width. */
+:host { display: block; min-width: 0; }
+.token-usage { overflow-x: auto; }
+/* Intrinsic column widths preserve labels and numbers; the focusable table container owns overflow. */
+th, td { overflow-wrap: normal; white-space: nowrap; vertical-align: top; }
+td[colspan] { white-space: normal; }

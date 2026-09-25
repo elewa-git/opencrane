@@ -6,7 +6,7 @@ import { PrismaConversationComputerCredentialUnitOfWork } from "../db/prisma-con
 const _NOW = Date.parse("2026-09-07T00:00:00.000Z");
 const _EXPIRES = new Date(_NOW + 300_000).toISOString();
 const _DIGEST = `sha256:${createHash("sha256").update("original-key").digest("hex")}`;
-const _COMMAND = { bootstrapId: "bootstrap-1", keyAlias: "attempt-1", modelAlias: "model-1", computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" }, lease: { leaseId: "lease-1", leaseGeneration: 1 }, expirySeconds: 300, notAfter: new Date(_NOW + 600_000).toISOString(), maxBudgetUsd: 0.1 };
+const _COMMAND = { bootstrapId: "bootstrap-1", runId: "run-1", attempt: 1, keyAlias: "attempt-1", modelAlias: "model-1", computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" }, lease: { leaseId: "lease-1", leaseGeneration: 1 }, expirySeconds: 300, notAfter: new Date(_NOW + 600_000).toISOString(), maxBudgetUsd: 0.1 };
 const _REUSE = { ..._COMMAND, expectedCredentialDigest: _DIGEST, expectedExpiresAt: _EXPIRES };
 
 beforeEach(() => { vi.spyOn(Date, "now").mockReturnValue(_NOW); });
@@ -14,7 +14,7 @@ afterEach(() => { vi.restoreAllMocks(); });
 
 function _Ready()
 {
-	return { bootstrapId: "bootstrap-1", siloId: "silo-1", conversationId: "conversation-1", keyAlias: "attempt-1", modelAlias: "model-1", state: "ready", claimFence: "original-fence", claimExpiresAt: new Date(0), expiresAt: new Date(_EXPIRES), keyId: "key-1", nonce: Buffer.from("nonce"), authTag: Buffer.from("tag"), ciphertext: Buffer.from("original-key"), ciphertextDigest: _DIGEST, credentialDigest: _DIGEST };
+	return { bootstrapId: "bootstrap-1", runId: "run-1", attempt: 1, siloId: "silo-1", conversationId: "conversation-1", keyAlias: "attempt-1", modelAlias: "model-1", state: "ready", claimFence: "original-fence", claimExpiresAt: new Date(0), expiresAt: new Date(_EXPIRES), keyId: "key-1", nonce: Buffer.from("nonce"), authTag: Buffer.from("tag"), ciphertext: Buffer.from("original-key"), ciphertextDigest: _DIGEST, credentialDigest: _DIGEST };
 }
 
 function _Fixture(initial: Record<string, any> | null = _Ready())
@@ -51,7 +51,7 @@ function _Fixture(initial: Record<string, any> | null = _Ready())
 		transactionDepth += 1;
 		try
 		{
-			const result = await operation({ conversationComputerActiveLease: lease, conversationComputerAttemptCredential: credential });
+			const result = await operation({ agentRun: { findFirst: vi.fn().mockResolvedValue({ id: _COMMAND.runId }) }, conversationComputerActiveLease: lease, conversationComputerAttemptCredential: credential });
 			events.push("transaction:commit");
 			return result;
 		}
@@ -120,9 +120,13 @@ function _Fixture(initial: Record<string, any> | null = _Ready())
 		expect(f.credential.updateMany).not.toHaveBeenCalled();
 	});
 
-	it.each(["missing", "expired", "changed-digest", "changed-expiry", "foreign-silo", "foreign-conversation", "foreign-alias", "foreign-model", "missing-ciphertext", "corrupt-ciphertext", "wrong-key-digest"])("refuses %s custody without replacing it", async function _Mismatch(kind)
+	it.each(["missing", "expired", "changed-digest", "changed-expiry", "foreign-run", "foreign-attempt", "foreign-silo", "foreign-conversation", "foreign-alias", "foreign-model", "missing-ciphertext", "corrupt-ciphertext", "wrong-key-digest"])("refuses %s custody without replacing it", async function _Mismatch(kind)
 	{
 		const row: Record<string, any> = _Ready();
+		if (kind === "foreign-run")
+			row.runId = "run-2";
+		if (kind === "foreign-attempt")
+			row.attempt = 2;
 		if (kind === "expired")
 			row.expiresAt = new Date(_NOW);
 		if (kind === "changed-digest")

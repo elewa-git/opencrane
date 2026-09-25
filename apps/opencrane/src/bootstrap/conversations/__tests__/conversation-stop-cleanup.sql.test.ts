@@ -4,6 +4,7 @@ import pg from "pg";
 import { AgentRunState, ExternalActionClaimKind, ExternalActionRecoveryMode, OrgMemberStatus, Prisma, PrismaClient, ToolInvocationState } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { ___IsRolledBackConflict } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import { _CreateAbsurdWorkflowEngine } from "@opencrane/backend/server/infra/workflows/infra_absurd";
 import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
@@ -26,7 +27,7 @@ let _QueueOwner: Absurd;
 /** Creates a fresh engine facade to prove admission recovery without process-local state. */
 function _Engine()
 {
-	return _CreateAbsurdWorkflowEngine({ databaseUrl: process.env.DATABASE_URL!, databasePool: _Pool, databasePoolSize: 2, queueAuthority: { queueForTask: function _QueueForTask() { return _Queue; } } });
+	return _CreateAbsurdWorkflowEngine({ isRolledBackConflict: ___IsRolledBackConflict, databaseUrl: process.env.DATABASE_URL!, databasePool: _Pool, databasePoolSize: 2, queueAuthority: { queueForTask: function _QueueForTask() { return _Queue; } } });
 }
 
 /** Registers declarations without running a model or tool worker. */

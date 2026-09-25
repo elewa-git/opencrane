@@ -8,6 +8,8 @@ import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentSta
 import { _ConversationEntryViews, _ConversationOnboardingContinuationPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation, _ConversationToolStatus } from "../conversation-workspace.mapper";
 import { ConversationSessionRailIconStates } from "../conversation-workspace-feature.types";
 import { ConversationWorkspaceTranscriptEntryKinds } from "../presentation/conversation-workspace-presentation.types";
+import { ConversationA2uiDisplayStates } from "../a2ui/conversation-a2ui-display.types";
+import { _DisplayEntry, _DisplayMessages, _RemoveEntry, _TextComponent } from "../a2ui/__tests__/conversation-a2ui.fixtures";
 
 /** Builds a direct-conversation summary without introducing display names. */
 function _Summary(): ConversationSummary
@@ -47,6 +49,21 @@ function _Tool(phase: ToolCallLogEntry["phase"], position: string, toolName = "C
 
 describe("Conversation workspace presentation", function _ConversationWorkspacePresentation()
 {
+	it("places the latest read-only display between saved messages and tool facts without granting actions", function _StructuredHistory()
+	{
+		const first = _DisplayEntry(2);
+		const patch = _DisplayEntry(4, { operation: "patch" });
+		const payloads = { "payload-1": "Saved message", "payload-2": JSON.stringify(_DisplayMessages()), "payload-4": JSON.stringify(_DisplayMessages([_TextComponent("body", "42 units")])) };
+		const entries = [_Message(), first, _Tool("completed", "3"), patch];
+		const views = _ConversationEntryViews(entries, payloads);
+		expect(views.map(view => view.kind)).toEqual([ConversationWorkspaceTranscriptEntryKinds.Message, ConversationWorkspaceTranscriptEntryKinds.ToolActivity, ConversationWorkspaceTranscriptEntryKinds.A2uiDisplay]);
+		expect(views[2]).toMatchObject({ id: patch.id, display: { state: ConversationA2uiDisplayStates.Ready } });
+		expect(views[2]).not.toHaveProperty("requestSource");
+		expect(views[2]).not.toHaveProperty("shareSource");
+		expect(_ConversationEntryViews([...entries, _RemoveEntry(5)], payloads)).toHaveLength(2);
+		expect(_ConversationEntryViews([], {})).toEqual([]);
+	});
+
 	it("uses generic participant labels without exposing opaque references", function _GenericLabels()
 	{
 		const summary = _ConversationSummaryPresentation(_Summary(), null);

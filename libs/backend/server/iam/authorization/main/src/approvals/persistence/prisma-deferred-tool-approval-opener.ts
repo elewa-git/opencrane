@@ -93,7 +93,7 @@ export async function __OpenDeferredToolApprovalInTransaction(transaction: Prism
 		responseSchema: projection.responseSchema,
 		actionDigest: __DigestCanonicalJson({ runId: command.runId, attempt: command.attempt, toolInvocationId: command.toolInvocationId, toolRevisionId: command.toolRevisionId, argumentsDigest: command.argumentsDigest }),
 		effectivePolicyDigest: command.capabilitySetDigest,
-		approverPolicyRevision: "mcp-server-requires-approval",
+		approverPolicyRevision: "mcp-requester-only/2026-09-22.1",
 		now: command.now,
 		expiresAt: command.expiresAt,
 	});
@@ -182,7 +182,7 @@ async function _openDeferredToolApproval(command: OpenDeferredToolApprovalComman
 				responseSchema: projection.responseSchema,
 				actionDigest: __DigestCanonicalJson({ runId: command.runId, attempt: command.attempt, toolInvocationId: command.toolInvocationId, toolRevisionId: command.toolRevisionId, argumentsDigest: command.argumentsDigest }),
 				effectivePolicyDigest: command.capabilitySetDigest,
-				approverPolicyRevision: "mcp-server-requires-approval",
+				approverPolicyRevision: "mcp-requester-only/2026-09-22.1",
 				now: command.now,
 				expiresAt: command.expiresAt,
 			});
