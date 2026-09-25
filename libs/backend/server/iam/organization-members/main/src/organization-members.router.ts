@@ -81,7 +81,8 @@ function _handle(handler: RequestHandler): RequestHandler
  * or deployment mode. The injected authority is already either standalone or Fleet, so a request
  * cannot select the billing owner and no failed Fleet call can reach local persistence.
  *
- * Called by: apps/opencrane/src/bootstrap/http/routes.ts at `/api/v1/organization/members`.
+ * Called by: apps/opencrane/src/bootstrap/http/organization-members-composition.ts. The router is mounted
+ * at `/api/v1/organization/members` by apps/opencrane/src/bootstrap/http/route-areas/identity-access-routes.ts.
  * @param authority - Startup-selected standalone or Fleet authority.
  * @param resolveCaller - Maps the verified OIDC session and trusted request host.
 	 * @returns Router serving directory, removal, validation, create, resend, and acceptance.

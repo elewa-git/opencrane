@@ -25,7 +25,7 @@ function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
  * Wires the three routes to their repositories and to a clock, so no route ever takes an owner
  * id or a timestamp from the request. Mounted at `/api/v1/me/configuration`.
  *
- * Called by: `routes.ts` in apps/opencrane/src/app.
+ * Called by: apps/opencrane/src/bootstrap/http/route-areas/personal-workspace-routes.ts, which mounts the result at /api/v1/me/configuration.
  *
  * @param prisma - Product database client.
  * @param logger - Process logger supplied by the app composition root.

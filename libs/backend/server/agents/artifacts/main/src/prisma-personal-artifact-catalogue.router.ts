@@ -21,7 +21,7 @@ function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
  * The app only has to supply the database client and a logger; the caller resolver and the
  * read-only repository are chosen here.
  *
- * Called by: apps/opencrane/src/bootstrap/http/routes.ts, which mounts the result at `/api/v1/me/assets`.
+ * Called by: apps/opencrane/src/bootstrap/http/route-areas/personal-workspace-routes.ts, which mounts the result at `/api/v1/me/assets`.
  *
  * @param prisma - The product database client.
  * @param logger - Process logger supplied by the app composition root.

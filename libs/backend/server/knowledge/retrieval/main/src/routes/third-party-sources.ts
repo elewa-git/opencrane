@@ -50,7 +50,7 @@ function _SendNotFoundError(error: unknown, response: Response): boolean
 /**
  * Serves source governance after binding every operation to the verified Principal and central authority.
  *
- * Called by: apps/opencrane/src/bootstrap/http/routes.ts at `/api/v1/third-party-sources`.
+ * Called by: apps/opencrane/src/bootstrap/http/route-areas/platform-routes.ts at `/api/v1/third-party-sources`.
  */
 export function thirdPartySourcesRouter(prisma: PrismaClient, resolveCaller: ThirdPartySourceRouteCallerResolver = _ResolveThirdPartySourceCaller, createAuthorization?: ThirdPartySourceAuthorizationAuthorityFactory<Prisma.TransactionClient>): Router
 {

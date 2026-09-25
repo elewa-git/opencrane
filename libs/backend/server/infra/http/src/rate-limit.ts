@@ -18,7 +18,7 @@ export type { RateLimitOptions } from "./rate-limit.types";
  * replicas behind the ingress, one client can reach N times the configured limit overall.
  *
  * Called by: apps/opencrane/src/bootstrap/http/public-app.ts (once, for the whole app) and
- * apps/opencrane/src/bootstrap/http/routes.ts (per-router, with the caller's overrides).
+ * apps/opencrane/src/bootstrap/http/route-areas/identity-access-routes.ts (per-router, with the caller's overrides).
  *
  * @param opts - Optional window/max overrides.
  * @returns An Express middleware enforcing the per-IP limit.

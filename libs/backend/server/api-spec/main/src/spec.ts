@@ -200,7 +200,7 @@ const ThirdPartySourceSchema = {
  * and meta routes.
  *
  * This one object has two consumers, which is why edits here are not cosmetic. It is served at
- * `/api/v1/openapi.json` (apps/opencrane/src/bootstrap/http/routes.ts), and it is emitted to a file that
+ * `/api/v1/openapi.json` (apps/opencrane/src/bootstrap/http/route-areas/platform-routes.ts), and it is emitted to a file that
  * generates the typed frontend client — so renaming a component or changing a required field
  * changes compiled frontend code, not just documentation. Regenerate the client in the same
  * change; see the note at the top of this file for the commands.

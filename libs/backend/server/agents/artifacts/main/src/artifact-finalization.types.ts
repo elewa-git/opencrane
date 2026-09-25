@@ -142,7 +142,7 @@ export interface PersonalArtifactEntry
  * `PrismaArtifactCatalogueRepository`, built through `_CreateArtifactCatalogueRepository`.
  *
  * Called by: the `GET /` handler in personal-artifact-catalogue.router.ts, mounted at
- * `/api/v1/me/assets` by apps/opencrane/src/app/routes.ts.
+ * `/api/v1/me/assets` by apps/opencrane/src/bootstrap/http/route-areas/personal-workspace-routes.ts.
  */
 export interface PersonalArtifactCatalogueRepository
 {

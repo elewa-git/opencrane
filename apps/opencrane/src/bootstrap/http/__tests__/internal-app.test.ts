@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ___GetContext } from "@opencrane/backend/observability";
 
 import { _CreateInternalApp } from "../internal-app";
+import type { InternalRouteDependencies } from "../routes.types";
 import type { InternalRuntimeConfig } from "../../configuration/config.types";
 import type { McpRuntimeComposition } from "../../workflows/mcp-runtime-composition.types";
 
@@ -56,11 +57,32 @@ function _McpRuntime(): McpRuntimeComposition
 	return { connections: { connect: vi.fn(), revoke: vi.fn(), uninstall: vi.fn() }, toolDispatch: { tryExecute: vi.fn(), settleExhausted: vi.fn() }, authority: {} as McpRuntimeComposition["authority"], invocationParticipants: {} as McpRuntimeComposition["invocationParticipants"], admitToolInvocationInTransaction: vi.fn(), promotion: Router(), controller: Router(), companion: Router(), taskWorkflow: {} as McpRuntimeComposition["taskWorkflow"] };
 }
 
+/** Fails if a parser test unexpectedly reaches workflow admission. */
+function _UnavailableWorkflowExecution(): InternalRouteDependencies["workflowExecution"]
+{
+	return {
+		async spawn(): Promise<never>
+		{
+			throw new Error("workflow task admission is outside this parser test");
+		},
+		async emitEventInTransaction(): Promise<never>
+		{
+			throw new Error("workflow event admission is outside this parser test");
+		},
+	};
+}
+
+/** Build the listener's shared services from the inert parts above. */
+function _Dependencies(): InternalRouteDependencies
+{
+	return { prisma: {} as PrismaClient, authApi: {} as AuthenticationV1Api, config: _RuntimeConfig(), mcpRuntime: _McpRuntime(), generatedFiles: _GeneratedFiles(), workflowExecution: _UnavailableWorkflowExecution() };
+}
+
 describe("internal workload app", function _Suite()
 {
 	it("rejects scanner JSON above the private command ceiling before route dispatch", async function _RejectsLargeScannerCommand()
 	{
-		const app = _CreateInternalApp({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig(), _McpRuntime(), _GeneratedFiles());
+		const app = _CreateInternalApp(_Dependencies());
 		const response = await request(app).put("/api/internal/artifact-scanner/jobs/job-1/result").set("x-request-id", "scanner-parser-request").set("content-type", "application/json").send({ scannerVersion: "x".repeat(20 * 1_024) });
 
 		expect(response.status).toBe(413);
@@ -81,7 +103,7 @@ describe("internal workload app", function _Suite()
 		}
 		turn.get("/review-credential", _ObservedRequest);
 		checkpoint.post("/export", _ObservedRequest);
-		const app = _CreateInternalApp({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig(), _McpRuntime(), _GeneratedFiles(), undefined, turn, checkpoint);
+		const app = _CreateInternalApp(_Dependencies(), turn, checkpoint);
 		const pending = method === "GET"
 			? request(app).get(`/api/internal/conversation-computer${path}`)
 			: request(app).post(`/api/internal/conversation-computer${path}`).send({ text: "private-output" });

@@ -139,7 +139,7 @@ function _readStandaloneFirstUserAdmission(): StandaloneFirstUserAdmissionConfig
  * membership-and-billing gateway and projected-token coordinates. Invalid or incomplete settings
  * stop startup so a Fleet failure can never fall back to local membership writes.
  *
- * Called by: apps/opencrane/src/bootstrap/http/routes.ts while mounting the organisation-member router.
+ * Called by: apps/opencrane/src/bootstrap/http/public-app.ts while composing the organisation-member router.
  * @returns The complete configuration for exactly one deployment mode.
  * @throws When the mode, origin, mounted path, key, timeout, or required coordinate is invalid.
  */

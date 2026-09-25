@@ -160,6 +160,36 @@
       "classification": "route-composition"
     },
     {
+      "path": "apps/opencrane/src/bootstrap/http/route-areas/agent-routes.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/http/route-areas/conversation-routes.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/http/route-areas/gateway-routes.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/http/route-areas/identity-access-routes.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/http/route-areas/personal-workspace-routes.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/http/route-areas/platform-routes.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
       "path": "apps/opencrane/src/bootstrap/process/runtime-composition.ts",
       "owner": "apps/opencrane",
       "classification": "route-composition"

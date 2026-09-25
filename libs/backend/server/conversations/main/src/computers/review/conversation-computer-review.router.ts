@@ -19,8 +19,7 @@ const _DNS_LABEL = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
  * localhost responses request `Use`. Every route resolves its upstream host and derived review
  * credential on the server, so public request fields cannot select a sandbox or its Service address.
  *
- * Called by: `_RegisterRoutes` in `apps/opencrane/src/bootstrap/http/routes.ts` when computer history and the Agent
- * Sandbox release profile are configured.
+ * Called by: `_CreateConversationRoutes` in `apps/opencrane/src/bootstrap/http/route-areas/conversation-routes.ts`.
  *
  * @param options - Supplies admission, the allowed sandbox namespace, structured failure logging, and an optional test transport.
  * @param resolvePrincipal - Resolves identity from the authenticated Express request.
