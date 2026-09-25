@@ -1373,8 +1373,9 @@ existing databases remain outside the slice.
 
 The actual server-trust render now fails before cluster or credential creation when the proposed
 certificate bundle has no production consumer. The default develop smoke therefore no longer runs
-the hosted journey; `SMOKE_HOSTED_QUALIFICATION=1` runs it, and it stops at this render until the
-optional outbound CA support is approved. The independently reviewed shared-LiteLLM fixture
+the hosted journey; `SMOKE_HOSTED_QUALIFICATION=1` runs it. The optional outbound CA support
+(`clustertenantManager.additionalCaCertificates`) now renders the reviewed shape, so that run passes
+this render; the journey itself has not yet completed a k3d run. The independently reviewed shared-LiteLLM fixture
 was replaced with the required instance mode; fake model/key administration and its unused master
 Secret were removed. Automatic approval review also rejected the public synthetic-provider setup
 source patch because it forwards a key into provider configuration. The exact rejected proposal is
