@@ -28,9 +28,9 @@ signed-in participant ──► main ◄── HERE ──► history
 | `metadata/` | Directory, reads, creation and participant lifecycle each own their queries and transaction sequencing. The metadata facade only delegates. |
 | `sessions/` | Establish personal-session history and its recoverable projection without reopening retries. |
 | `messages/` | Authorise, encrypt and admit participant messages; read authorised history and stream events. |
-| `memory/commands/` | Validate explicit Remember, Correct and Forget requests without accepting plaintext or caller-supplied authority. |
+| `memory/commands/` | Validate and admit explicit Remember, Correct and Forget requests for an already Active personal dataset, and expose authorized content-free status. Never accept plaintext or caller-supplied authority. |
 | `memory/source/` | Read the selected human message through current history access and recheck its encrypted source inside the command transaction. |
-| `memory/workflow/` | Declare identifier-only memory tasks and resume each saved provider and catalog phase through one Absurd workflow owner. The command transaction must retain Absurd's returned receipt. Product command admission remains unavailable until its explicit grant and route work are approved. |
+| `memory/workflow/` | Declare identifier-only memory tasks and resume each saved provider and catalog phase through one Absurd workflow owner. The command transaction retains Absurd's returned receipt. First-dataset creation remains separately unfinished. |
 | `children/` | Admit group-child work, preserve its original audience, recover creation, and share human-reviewed text. |
 | `computers/` | Separate activation, lifecycle, checkpoint, turn and review operation owners. |
 | `computers/tools/` | Proposal admission, current dispatch access and saved result consumption each have their own owner. |
@@ -57,6 +57,15 @@ signed-in participant ──► main ◄── HERE ──► history
   bytes outside SQL. Initial and restarted compilation repeat the current authority and coordinate
   checks before adding the text as untrusted user content.
 - `PrismaGroupChildAuthority`, `_CreateGroupChildRouter` and `GROUP_CHILD_TASK` compose explicit child requests and recovery.
+- `PrismaPersonalMemoryCommandUnitOfWork` and `_CreatePersonalMemoryCommandRouter` expose
+  `POST /api/v1/me/memory/commands` and `GET /api/v1/me/memory/commands/:commandId`.
+  The signed-in caller selects an exact human message for Remember or Correct, or an exact fact
+  revision for Forget. The server selects the caller's existing Active dataset and records current
+  MemoryScope Manage or Forget authorization with the operation and its Absurd task in one
+  transaction. An exact retry retains the first operation and task, including after the target
+  changes through correction or forgetting. Status reads require current membership, ownership and
+  MemoryScope Read; they expose only command/operation identity, kind, progress, revision and a
+  completed local result fact ID. Missing or inactive datasets never trigger creation or new grants.
 - `PERSONAL_MEMORY_OPERATION_TASK` and `_CreatePersonalMemoryOperationTask` share identifier-only
   memory task admission. Absurd assigns the task ID; command composition must save its returned
   receipt and the memory operation in one transaction. The task declaration alone does not admit
@@ -68,10 +77,10 @@ signed-in participant ──► main ◄── HERE ──► history
   provider mutation runs inside a renewed Absurd checkpoint lease and parses its shared strict receipt.
   Every mutation rechecks the actor and permission before the call; Add also rereads the selected
   source. Replayed receipts skip the provider call and are checked again before the catalog advances. The gateway owns Add and Delete
-  provider reconciliation; this workflow owns their durable order. No public command route or new
-  MemoryScope grant is part of this package surface.
-  A future product command owner must use `admitPrincipal` and bind its recorded authorization
-  evidence to the command digest in the same transaction that admits the operation and workflow task.
+  provider reconciliation; this workflow owns their durable order. No new MemoryScope grant is
+  part of this package surface. The product command owner uses `admitPrincipal` and binds its
+  recorded authorization evidence to the command digest in the same transaction that admits the
+  operation and workflow task.
   The saved-phase worker consumes that one admitted operation; it does not admit a new command,
   allowance or audit receipt on retries. Its `decidePrincipal` checks only whether the original
   principal still holds the current action before a new provider or catalog effect.

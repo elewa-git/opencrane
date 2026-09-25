@@ -91,6 +91,50 @@ baseline cases and 22 screenshot candidates fail; 133 unchanged visuals pass. No
 published, and the dedicated Cognee image contract was skipped. Its live stack and corrected stack
 CI pass for #888 → #891 → #892 → #893.
 
+### Existing personal-memory commands — source implemented
+
+This slice starts directly above draft #894 at
+`5599c88a4a632ee414644e19d713cb77c0b31eb4`, on
+`feat/0.12-personal-memory-product-commands`. It completes the authenticated command transaction
+for an already Active personal dataset with an adopted provider identity and current explicit
+MemoryScope grants. It does not create a dataset or grant, and therefore cannot provide the first
+Remember journey until the separate first-dataset authorization work is approved and implemented.
+
+Conversations owns caller resolution, exact human-message preparation, the command transaction and
+the content-free operation response. Personal-memory retains dataset/fact metadata and operation
+persistence. Central `admitPrincipal` must record the concrete Manage or Forget decision bound to
+the command digest in the same transaction as operation admission and the Absurd task. Worker
+revocation checks cannot stand in for this admission evidence. Read access must be checked before
+returning a saved operation to its authenticated owner.
+
+- [x] Architecture and memory-boundary preflight confirm the existing-grant admission contract.
+- [x] Remember, Correct and Forget admit one exact operation and task; retries cannot create another.
+- [x] Missing, Provisioning or Retired datasets fail closed with no creation or permission fallback.
+- [x] Current principal, membership, dataset, target revision and selected-source authority are checked.
+- [x] An authorized content-free status read survives command-response loss without dispatching work.
+- [x] Focused Nx and real PostgreSQL tests prove authorization, replay, concurrency and rollback.
+- [x] Owning documentation, generated API, applicable checks and independent review are complete.
+
+The conversations suite passes 730 tests, personal-memory passes 60 and the server passes 169.
+A disposable PostgreSQL 17 installation of the unchanged baseline passes eight command-admission
+tests and five catalog tests, plus the existing child-authority suite. The admission proofs use the
+real Absurd task API: concurrent and restart retries retain one operation, task and audit decision;
+an exception after task creation rolls all three back. Current grants and membership are required,
+and status reads separately require Read. The disposable database is stopped. Server build, OpenAPI
+emission, client generation and website API synchronization pass. All 80 affected projects pass
+lint/type checks; full ESLint boundaries, style/Prisma and the relevant ownership guards pass.
+The expanded HTTP suite passes nine cases and API contracts pass four. Independent review found
+and corrected an impossible conflict response in the GET documentation, removed a superseded denial
+class and corrected stale package claims. Integrated review and architecture post-review pass; the
+command transaction's responsibilities remain cohesive, with catalog writes and workflow effects
+owned by their existing packages.
+These source proofs do not qualify a live Cognee or testv6 journey.
+
+Company-action approval also needs a policy choice for its human approver. The existing requester,
+organization role and connection ownership do not supply that entitlement. Its implementation
+handoff is prepared separately while this existing-grant memory slice proceeds. The pending remote
+MCP SQL, first-dataset grant, visual review and testv6 identity/bootstrap approvals remain unchanged.
+
 ### Personal-memory saved-phase worker — source implemented
 
 The next slice starts from gateway PR #893 at
