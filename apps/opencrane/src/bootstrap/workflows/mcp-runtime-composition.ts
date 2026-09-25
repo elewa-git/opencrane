@@ -1,5 +1,5 @@
 import { ConversationComputerHistory } from "@opencrane/backend/server/conversations/computers";
-import type { Prisma, PrismaClient } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 import { MCP_EXECUTOR_PROFILE_NAME, MCP_EXECUTOR_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
 import { PrismaToolInvocationLifecycleEventUnitOfWork, PrismaToolInvocationRunRecoveryAuthority, PrismaToolRecoveryEventReporter } from "@opencrane/backend/agents/execution/runs";
@@ -14,24 +14,24 @@ import type { HistoryStore } from "@opencrane/backend/server/infra/history-store
 import { __CreatePrismaMcpToolInvocationParticipantFactory } from "@opencrane/backend/server/iam/authorization";
 import { _CreateMcpServerTokenReviewer, _CreateAgentControllerTokenReviewer, _CreateMcpExecutorTokenReviewer, _ValidateIsolatedWorkloadNamespace } from "@opencrane/backend/server/infra/workload-identity";
 
-import type { OpenCraneProcessConfig } from "../configuration/config.types";
 import { _log } from "../process/log";
-import type { OpenCraneKubernetesClients } from "../process/kubernetes-clients.types";
 import { _CreateMcpConnectionComposition } from "./mcp-connection-composition";
-import type { McpRuntimeComposition } from "./mcp-runtime-composition.types";
-import type { McpWorkflowComposition } from "./mcp-workflow-composition.types";
+import type { McpExecutionContext, McpRuntimeComposition } from "./mcp-runtime-composition.types";
 
 /** Polling cadence for durable public task completion after runtime admission. */
 const _MCP_TASK_STATUS_POLL_MILLISECONDS = 250;
 
 /** Connects OCI and remote MCP execution to the same ToolInvocation authority and Absurd engine. */
-export function _CreateMcpRuntimeComposition(prisma: PrismaClient, kubernetes: Pick<OpenCraneKubernetesClients, "authApi" | "coreApi">, processConfig: Pick<OpenCraneProcessConfig, "runtime" | "mcpConnections" | "workflows" | "conversationPrivatePayloadKeyringPath">, workflows: McpWorkflowComposition, history: HistoryStore): McpRuntimeComposition
+export function _CreateMcpRuntimeComposition(executionContext: McpExecutionContext): McpRuntimeComposition
 {
+	const { prisma, kubernetes, processConfig, workflows, history } = executionContext;
 	const { runtime: config, mcpConnections } = processConfig;
 	const { authApi, coreApi } = kubernetes;
+	// Executors must use a different namespace from the server before their workload identities are accepted.
 	const executorNamespace = _ValidateIsolatedWorkloadNamespace(config.mcpExecutorNamespace, config.serverNamespace);
 	const dispatchDependencies = _CreateConversationToolDispatchDependencies(history, _CreateHumanMembershipEvidenceConfig());
 	const cipher = AesGcmConversationPrivatePayloadCipher.fromDocument(_ReadConversationPrivatePayloadKeyring(processConfig.conversationPrivatePayloadKeyringPath));
+	// Both execution paths bind invocation admission, recovery and turn wake-ups to the caller's transaction through this factory.
 	const participantFactory = __CreatePrismaMcpToolInvocationParticipantFactory(
 		new PrismaToolInvocationLifecycleEventUnitOfWork(prisma, async function _EmitTurnEvent(transaction, event)
 		{
@@ -56,6 +56,7 @@ export function _CreateMcpRuntimeComposition(prisma: PrismaClient, kubernetes: P
 		companionClaimLeaseMilliseconds: config.mcpCompanionClaimLeaseMilliseconds,
 		log: _log,
 	};
+	// Generated-file capture joins the result-completion transaction and reuses the conversation dispatch checks.
 	const invocationResults = { __ForTransaction: function _Results(transactionValue: unknown)
 	{
 		const transaction = transactionValue as Prisma.TransactionClient;
@@ -63,13 +64,16 @@ export function _CreateMcpRuntimeComposition(prisma: PrismaClient, kubernetes: P
 		return _CreateConversationGeneratedFileResultParticipant(transaction, cipher, workflows.execution, dispatch, config.artifactScannerEnabled);
 	} };
 	const authority = new PrismaMcpRuntimeUnitOfWork(prisma, { toolInvocations: participantFactory, invocationResults, options });
+	// The companion route publishes running progress before returning a conversation invocation's command.
 	const runningEvidence = new PrismaConversationToolRunningNotificationEvidenceReader(prisma, dispatchDependencies);
 	const runningHistory = new KurrentConversationToolRunningNotificationPublisher(runningEvidence, new ConversationHistoryAuthority(history), new ConversationHistoryReader(history), history);
+	// Remote calls combine connection credentials with this server's verified Pod identity and the shared invocation participants.
 	const settlement = new PrismaMcpConnectionExecutionSettlementUnitOfWork(prisma, participantFactory);
 	const connections = _CreateMcpConnectionComposition(prisma, { coreApi, config: mcpConnections, workflows, settlement });
 	const serverIdentity = _CreateMcpServerWorkloadIdentityReader({ tokenPath: mcpConnections.tokenPath, expectedPodUid: mcpConnections.serverPodUid, reviewer: _CreateMcpServerTokenReviewer(authApi, mcpConnections.serverNamespace, mcpConnections.serverServiceAccountName) });
 	const remoteAuthority = new PrismaRemoteMcpDispatchUnitOfWork(prisma, participantFactory, invocationResults, processConfig.workflows.mcpRemoteTimeoutMilliseconds);
 	const invocationExecutor = new RemoteMcpInvocationExecutor({ authority: remoteAuthority, serverIdentity, credentials: connections.credentials, client: workflows.remoteClient, timeoutMilliseconds: processConfig.workflows.mcpRemoteTimeoutMilliseconds });
+	// Public tasks and conversation turns share the executor; controller and companion routes share the runtime authority.
 	const taskWorkflow = __CreateMcpTaskWorkflow({ invocationExecutor, execution: workflows.execution, unitOfWork: workflows.unitOfWork, runtime: authority, statusPollMilliseconds: _MCP_TASK_STATUS_POLL_MILLISECONDS });
 	return {
 		authority,

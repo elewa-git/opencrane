@@ -17,7 +17,7 @@ import type { AgentSandboxReleaseProfileConfig } from "../configuration/config.t
 import { _ProcessShutdownSignal } from "../process/process-shutdown";
 import { _log } from "../process/log";
 
-/** Composes participant history from the sole KurrentDB port and mounted payload keyring. */
+/** Builds conversation and memory routers that share participant history access checks and payload decryption. */
 export function _CreateConversationHistoryComposition(
   prisma: PrismaClient,
   historyStore: HistoryStore,
@@ -30,12 +30,14 @@ export function _CreateConversationHistoryComposition(
   const cipher = AesGcmConversationPrivatePayloadCipher.fromDocument(
     _ReadConversationPrivatePayloadKeyring(keyringPath),
   );
+  // Messages, child work and memory reads share this participant history authority.
   const authority = new PrismaSelfConversationHistoryUnitOfWork(prisma, historyStore, {
     cipher,
     computerReader: new ConversationComputerHistory(historyStore),
   }, new ConversationHistoryAuthority(historyStore), function _CreateAttachmentAdmission(transaction) { return new PrismaConversationMessageAttachmentRepository(transaction); });
   _CreatePersonalMemoryOperationWorkflowComposition(prisma, authority, workflows, memoryWorkflow);
   const resolveCaller = _ResolveConversationCaller;
+  // Session creation and managed-agent resolution use the profile revision selected by this server's release configuration.
   const creation = new PrismaAgentSessionCreationUnitOfWork(
     prisma,
     historyStore,
@@ -51,10 +53,12 @@ export function _CreateConversationHistoryComposition(
     membershipConfig: _CreateHumanMembershipEvidenceConfig(),
     profiles: [{ workloadProfile: releaseProfile.profileName, profileRevisionId: releaseProfile.profileRevisionId }],
   };
+  // The directory and child admission use the same identity, membership and profile evidence to resolve assistants.
   const directory = new PrismaCompanyAssistantDirectory(prisma, managedDependencies);
   const metadata = new PrismaConversationMetadataUnitOfWork(prisma, creation, directory.list.bind(directory));
   const children = new PrismaGroupChildAuthority(prisma, historyStore, cipher, new PrismaGroupChildAgentResolver(managedDependencies), workflows, authority, _log);
   _RegisterGroupChildWorkflow(workflows, children);
+  // Combine metadata, child-work and message routes; memory commands get a separate router backed by the same authority.
   const router = _CreateConversationMetadataRouter(metadata, resolveCaller, _log);
   router.use(_CreateGroupChildRouter(children, resolveCaller, _log));
   router.use(

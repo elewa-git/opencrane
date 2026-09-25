@@ -60,6 +60,11 @@
       "classification": "process-composition"
     },
     {
+      "path": "apps/opencrane/src/bootstrap/conversations/conversation-computer-workflow-composition.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
       "path": "apps/opencrane/src/bootstrap/conversations/conversation-computer-workflow-composition.ts",
       "owner": "apps/opencrane",
       "classification": "route-composition"

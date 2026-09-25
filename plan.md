@@ -2,6 +2,13 @@
 
 ## MVP continuation — 2026-09-22
 
+Composition readability follow-up to `32872dc9`: replace the conversation workflow bootstrap's
+14 positional arguments with `ConversationExecutionContext`, group Kubernetes
+clients, and explain shared services, approval transactions and workflow registration in place.
+The MCP runtime bootstrap also takes a named `McpExecutionContext`; comments explain the shared
+invocation participants, transaction factories and runtime routes.
+Implementation complete; type-check, style, ownership guards and negative tests pass.
+
 ### Current checkpoint — actual credential custody joined to delegation fences; MVP acceptance open
 
 On 23 September the user superseded the proposed two-level, four-child, two-active defaults:
