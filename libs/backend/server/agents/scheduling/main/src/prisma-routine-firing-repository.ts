@@ -10,6 +10,7 @@ import type { CurrentRoutineRows, RoutineFactsRepository, RoutineFiringActor } f
 import { _MODEL_FIRING_DISPOSITION, _MODEL_FIRING_TRIGGER, _PRISMA_FIRING_DISPOSITION, _PRISMA_FIRING_TRIGGER } from "./routine-prisma-mapping";
 import { ROUTINE_SCHEDULE_TASK_NAME } from "./routine-workflow-contract";
 import { RoutineOccurrenceStage, type RoutineFiringProgressCommand, type RoutineOccurrencePreparationInput, type RoutineOccurrenceTaskInput, type RoutineScheduleTaskInput, type RoutineTaskAdmissionPort, type RoutineWorkflowPersistence } from "./routine-workflow.types";
+import type { RoutineScheduleRepairPage, RoutineScheduleRepairPageResult } from "./routine-schedule-repair.types";
 
 /** Selects the firing facts required by preparation, activation, and run binding. */
 const _FIRING_SELECT = {
@@ -54,13 +55,13 @@ export class PrismaRoutineFiringRepository implements RoutineWorkflowPersistence
 	}
 
 	/** @inheritdoc */
-	async repairActiveSchedules(limit: number): Promise<number>
+	async repairActiveSchedulesPage(page: RoutineScheduleRepairPage): Promise<RoutineScheduleRepairPageResult>
 	{
-		if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+		if (page.siloId.trim().length === 0 || !Number.isSafeInteger(page.limit) || page.limit < 1 || page.limit > 100 || page.afterRoutineId !== null && page.afterRoutineId.trim().length === 0)
 		{
-			throw new Error("routine schedule repair limit must be between 1 and 100");
+			throw new Error("routine schedule repair page requires a valid silo, limit and cursor");
 		}
-		const routines = await this.transaction.agentRoutine.findMany({ where: { status: AgentRoutineStatus.Active, nextAutomaticOccurrence: { not: null }, scheduleTaskName: ROUTINE_SCHEDULE_TASK_NAME, scheduleTaskKey: { not: null } }, select: { id: true, siloId: true, currentRevision: true, nextAutomaticOccurrence: true }, orderBy: { id: "asc" }, take: limit });
+		const routines = await this.transaction.agentRoutine.findMany({ where: { siloId: page.siloId, status: AgentRoutineStatus.Active, nextAutomaticOccurrence: { not: null }, scheduleTaskName: ROUTINE_SCHEDULE_TASK_NAME, scheduleTaskKey: { not: null }, ...(page.afterRoutineId === null ? {} : { id: { gt: page.afterRoutineId } }) }, select: { id: true, siloId: true, currentRevision: true, nextAutomaticOccurrence: true }, orderBy: { id: "asc" }, take: page.limit });
 		for (const routine of routines)
 		{
 			if (routine.nextAutomaticOccurrence === null)
@@ -70,7 +71,7 @@ export class PrismaRoutineFiringRepository implements RoutineWorkflowPersistence
 			const receipt = await this._spawnSchedule(routine.siloId, routine.id, routine.currentRevision, routine.nextAutomaticOccurrence.getTime());
 			await this.transaction.agentRoutine.update({ where: { id: routine.id }, data: { scheduleTaskId: receipt.taskId, scheduleTaskName: receipt.taskName, scheduleTaskKey: receipt.idempotencyKey } });
 		}
-		return routines.length;
+		return { checked: routines.length, nextCursor: routines.length === page.limit ? routines[routines.length - 1]!.id : null };
 	}
 
 	/** @inheritdoc */

@@ -1,4 +1,5 @@
 export { PrismaRoutineUnitOfWork } from "./prisma-routine-unit-of-work";
+export { RoutineScheduleStartupRecovery } from "./routine-schedule-startup-recovery";
 export { PrismaRoutineOccurrenceActivationRepository } from "./prisma-routine-occurrence-activation-repository";
 export { PrismaRoutineOccurrencePreparationRepository } from "./prisma-routine-occurrence-preparation-repository";
 export { RoutineAuthority } from "./routine-authority";
@@ -16,4 +17,5 @@ export type { RoutineLifecycleDecision } from "./routine-lifecycle.types";
 export type { PrismaRoutineUnitOfWorkDependencies } from "./routine-unit-of-work.types";
 export { RoutineOccurrenceStage } from "./routine-workflow.types";
 export type { RoutineFiringProgressCommand, RoutineOccurrencePreparationInput, RoutineOccurrenceTaskInput, RoutineOccurrenceTaskResult, RoutineScheduleTaskInput, RoutineScheduleTaskResult, RoutineTaskAdmissionPort, RoutineWorkflowDefinitions, RoutineWorkflowDependencies, RoutineWorkflowPersistence } from "./routine-workflow.types";
+export type { RoutineScheduleRepairPage, RoutineScheduleRepairPageResult } from "./routine-schedule-repair.types";
 export { PrismaRoutineOccurrenceRunAdmissionRepository } from "./prisma-routine-occurrence-run-admission-repository";

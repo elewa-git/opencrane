@@ -76,6 +76,9 @@ actor from the persisted trigger rather than accepting it from a worker request.
   persistence. Authorized reads decrypt only after their read transaction completes.
 - `PrismaRoutineUnitOfWork` opens bounded Serializable transactions and constructs the facts,
   command and firing repositories from the exact transaction callback.
+- `RoutineScheduleStartupRecovery` consumes the typed `RoutineScheduleRepairPage` contract to
+  repair all active schedule heads through stable cursor pages; each page returns `{checked,
+  nextCursor}` and a full page must provide continuation.
 - `PrismaRoutineOccurrencePreparationRepository` adopts the conversation owner's transaction so
   authority, final audience grants and the immutable preparation marker commit together. App
   composition injects it through the narrow scheduling-contract factory.
@@ -145,7 +148,9 @@ the workflow engine keeps the two task names separate. Admission failures propag
 transaction; the adapter never retries after that transaction ends.
 
 Schedule and occurrence tasks are admitted inside the product transaction. Restart repair re-admits
-bounded active schedule heads with their existing keys. Occurrence preparation and computer
+silo-scoped active schedule heads in stable, bounded cursor pages, with one serializable transaction
+per page and their existing keys; an empty page after a full page is a normal exhausted result.
+Occurrence preparation and computer
 activation each save an immutable receipt before the next external step. Computer activation may
 return a bounded pending result; the workflow uses a deterministic checkpoint for each poll, repeats
 current activation authority outside that checkpoint and sleeps no later than the reported expiry.

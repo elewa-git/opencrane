@@ -1,4 +1,4 @@
-import { AgentRoutineFiringDisposition, AgentRoutineFiringTrigger, Prisma } from "@prisma/client";
+import { AgentRoutineFiringDisposition, AgentRoutineFiringTrigger, AgentRoutineStatus, Prisma } from "@prisma/client";
 import type { Prisma as PrismaTypes } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
@@ -7,6 +7,7 @@ import { RoutineFiringDisposition, RoutineFiringTrigger } from "@opencrane/model
 import { PrismaRoutineFiringRepository } from "../prisma-routine-firing-repository";
 import type { RoutineFactsRepository } from "../routine-prisma-facts.types";
 import { RoutineOccurrenceStage, type RoutineTaskAdmissionPort } from "../routine-workflow.types";
+import type { RoutineScheduleRepairPage } from "../routine-schedule-repair.types";
 import { _Current, _Facts, _FiringRow, _IDENTITY, _NOW, _SCHEDULE_TASK, _TaskAdmission } from "./prisma-routine-test-fixtures";
 
 /** Composes the real firing repository from inspectable transaction doubles. */
@@ -185,6 +186,34 @@ describe("PrismaRoutineFiringRepository stage and receipt fences", function _Sta
 		await expect(f.repository.bindAdmittedRun(_IDENTITY, "run-1")).resolves.toBeUndefined();
 		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ disposition: AgentRoutineFiringDisposition.Preparing, runId: "run-1" }), data: { disposition: AgentRoutineFiringDisposition.Running } }));
 		expect(f.tasks.admitOccurrence).not.toHaveBeenCalled();
+	});
+});
+
+describe("PrismaRoutineFiringRepository schedule repair pages", function _RepairSuite()
+{
+	it("repairs one silo-scoped active page in stable id order", async function _Page()
+	{
+		const rows = [{ id: "routine-1", siloId: "silo-1", currentRevision: 2, nextAutomaticOccurrence: new Date("2026-09-25T12:00:00.000Z") }, { id: "routine-2", siloId: "silo-1", currentRevision: 3, nextAutomaticOccurrence: new Date("2026-09-25T13:00:00.000Z") }];
+		const findMany = vi.fn().mockResolvedValue(rows);
+		const transaction = { agentRoutine: { findMany, update: vi.fn() } };
+		const tasks = _TaskAdmission();
+		const f = _Repository(transaction, _Facts(), tasks);
+		const page: RoutineScheduleRepairPage = { siloId: "silo-1", limit: 2, afterRoutineId: null };
+
+		await expect(f.repository.repairActiveSchedulesPage(page)).resolves.toEqual({ checked: 2, nextCursor: "routine-2" });
+		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ siloId: "silo-1", status: AgentRoutineStatus.Active }), orderBy: { id: "asc" }, take: 2 }));
+		expect(tasks.admitSchedule).toHaveBeenCalledTimes(2);
+		expect(transaction.agentRoutine.update).toHaveBeenCalledTimes(2);
+	});
+
+	it.each([
+		{ siloId: " ", limit: 1, afterRoutineId: null },
+		{ siloId: "silo-1", limit: 0, afterRoutineId: null },
+		{ siloId: "silo-1", limit: 101, afterRoutineId: null },
+		{ siloId: "silo-1", limit: 1, afterRoutineId: " " },
+	] as const)("rejects an invalid repair page %j", async function _Invalid(page)
+	{
+		await expect(_Repository({ agentRoutine: { findMany: vi.fn() } }).repository.repairActiveSchedulesPage(page)).rejects.toThrow();
 	});
 });
 

@@ -3,9 +3,8 @@ import { PrismaElicitationRepository } from "@opencrane/backend/agents/execution
 import { PrismaConversationRunLifecycleUnitOfWork } from "@opencrane/backend/agents/execution/runs";
 import { CurrentConversationToolRequestedNotificationEvidenceReader, KurrentConversationToolRequestedNotificationPublisher, _ConversationComputerStopAuthority, _RegisterConversationComputerStopWorkflow, PrismaConversationComputerStopAdmissionUnitOfWork, PrismaConversationComputerStopLifecycleUnitOfWork, PrismaConversationComputerStopTargetUnitOfWork, KurrentConversationComputerStopActiveTurnReader, KurrentConversationComputerStopPublisher, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, PrismaConversationModelCustodyUnitOfWork, ConversationComputerTurnWriterFactory, ActiveConversationComputerTurnCandidateResolver, ConversationComputerTurnAuthorityService, KeyedConversationComputerReviewCredentialDeriver, CurrentConversationToolResultNotificationEvidenceReader, KurrentConversationToolResultNotificationPublisher, KurrentConversationApprovalNotificationPublisher, KurrentConversationComputerTurnStore, PrismaConversationApprovalNotificationUnitOfWork, PrismaConversationComputerCredentialUnitOfWork, PrismaConversationComputerTurnUnitOfWork, PrismaConversationComputerTurnWorkflowReceiptBinder, PrismaConversationComputerTurnWorkflowEventRepository, _CreateConversationComputerReviewCredentialRouter, _RegisterConversationComputerTurnWorkflow } from "@opencrane/backend/server/conversations";
 import { ConversationComputerHistory } from "@opencrane/backend/server/conversations/computers";
-import { AesGcmConversationPrivatePayloadCipher, ConversationHistoryAuthority, ConversationHistoryReader, _ReadConversationPrivatePayloadKeyring } from "@opencrane/backend/server/conversations/history";
+import { ConversationHistoryAuthority, ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
 import { __CreateConversationModelTransport, _IssueAttemptLiteLlmKey, _RevokeAttemptLiteLlmKey, _RevokeAttemptLiteLlmKeyByAlias } from "@opencrane/backend/server/gateways/model-routing";
-import { _CreateHumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { AgentSandboxPodBindingAdapter } from "@opencrane/backend/server/infra/agent-sandbox";
 import { _CreateConversationComputerTokenReviewer } from "@opencrane/backend/server/infra/workload-identity";
 import { _log } from "../process/log";
@@ -18,15 +17,12 @@ import type { ConversationExecutionContext } from "./conversation-computer-workf
  */
 export function _CreateConversationComputerWorkflowComposition(executionContext: ConversationExecutionContext)
 {
-	const { prisma, history, kubernetes: { authApi, coreApi, customApi }, siloId, profile, keyringPath, runAdmission, runtimeAdmission, toolDispatch, workflows, generatedFiles, generatedOutput } = executionContext;
-	// Turn payloads, credentials and model custody share the cipher loaded from this keyring.
-	const keyring = _ReadConversationPrivatePayloadKeyring(keyringPath);
-	const cipher = AesGcmConversationPrivatePayloadCipher.fromDocument(keyring);
-	const unitOfWork = new PrismaConversationComputerTurnUnitOfWork(prisma, history, cipher, profile.maximumTurnCostUsdMicros, runAdmission);
+	const { prisma, history, kubernetes: { authApi, coreApi, customApi }, siloId, profile, keyring, cipher, membership, runAdmission, routineTurns, runtimeAdmission, toolDispatch, workflows, generatedFiles, generatedOutput } = executionContext;
+	const unitOfWork = new PrismaConversationComputerTurnUnitOfWork(prisma, history, cipher, profile.maximumTurnCostUsdMicros, runAdmission, routineTurns);
 	const candidates = new ActiveConversationComputerTurnCandidateResolver(siloId, unitOfWork, new ConversationComputerHistory(history), new AgentSandboxPodBindingAdapter(coreApi, customApi), unitOfWork, { namespace: profile.namespace, serviceAccountName: profile.serviceAccountName });
 	const credentials = new PrismaConversationComputerCredentialUnitOfWork(prisma, cipher, { issue: _IssueAttemptLiteLlmKey, revoke: _RevokeAttemptLiteLlmKey, revokeByAlias: _RevokeAttemptLiteLlmKeyByAlias }, siloId);
 	const turnStore = new KurrentConversationComputerTurnStore(history);
-	const toolDependencies = _CreateConversationToolDispatchDependencies(history, _CreateHumanMembershipEvidenceConfig());
+	const toolDependencies = _CreateConversationToolDispatchDependencies(history, membership);
 	/** Expires approvals and records workflow wake-ups in the proposal caller's transaction so they commit together. */
 	async function _ExpireApproval(transaction: unknown, command: { readonly runId: string; readonly attempt: number; readonly now: Date }): Promise<void>
 	{

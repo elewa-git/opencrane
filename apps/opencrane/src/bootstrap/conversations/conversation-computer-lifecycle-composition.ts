@@ -16,8 +16,8 @@ import { _CreateArtifactUploadGateway, _CreatePublishedArtifactReader } from "@o
 const _IDLE_POLICY = { staleAfterMilliseconds: 300_000, retireAfterMilliseconds: 1_200_000 };
 const _CHECKPOINT_POLICY = { format: "opencrane-workspace-tar-v1", maximumBytes: 64 * 1024 * 1024, uploadLeaseSeconds: 300 };
 
-/** Compose checkpoint transport, exact Pod fencing, restore route, and bounded lifecycle scheduler. */
-export function _CreateConversationComputerLifecycleComposition(prisma: PrismaClient, historyStore: HistoryStore, authApi: k8s.AuthenticationV1Api, coreApi: k8s.CoreV1Api, customApi: k8s.CustomObjectsApi, siloId: string, profile: AgentSandboxReleaseProfileConfig, keyringPath: string, workflow: Parameters<typeof _CreateArtifactUploadGateway>[1]): { readonly router: import("express").Router; readonly worker: ConversationComputerActivationWorker }
+/** Compose checkpoint transport, exact Pod fencing, restore route, and deferred lifecycle worker. */
+export function _CreateConversationComputerLifecycleComposition(prisma: PrismaClient, historyStore: HistoryStore, authApi: k8s.AuthenticationV1Api, coreApi: k8s.CoreV1Api, customApi: k8s.CustomObjectsApi, siloId: string, profile: AgentSandboxReleaseProfileConfig, keyringPath: string, workflow: Parameters<typeof _CreateArtifactUploadGateway>[1]): { readonly router: import("express").Router; readonly startWorker: () => ConversationComputerActivationWorker }
 {
 	const history = new ConversationComputerHistory(historyStore);
 	const projections = new PrismaConversationComputerLifecycleProjectionRepository(prisma);
@@ -32,5 +32,5 @@ export function _CreateConversationComputerLifecycleComposition(prisma: PrismaCl
 	const authority = new ConversationComputerLifecycleAuthority(history, checkpoints, attempts, claims, activity, profile.namespace, policy);
 	const enumerator = new ConversationComputerLifecycleDueEnumerator(projections, history, activity, claims, siloId, profile.namespace, policy);
 	const scheduler = new ConversationComputerLifecycleScheduler(enumerator, authority, 50);
-	return { router: _CreateConversationComputerCheckpointRouter({ authority: checkpoints, siloId, tokenReviewer: _CreateConversationComputerTokenReviewer(authApi, profile.namespace, profile.serviceAccountName) }), worker: new ConversationComputerLifecycleWorker(scheduler, _log) };
+	return { router: _CreateConversationComputerCheckpointRouter({ authority: checkpoints, siloId, tokenReviewer: _CreateConversationComputerTokenReviewer(authApi, profile.namespace, profile.serviceAccountName) }), startWorker: function _StartLifecycleWorker() { return new ConversationComputerLifecycleWorker(scheduler, _log); } };
 }

@@ -10,6 +10,7 @@ import { PrismaRoutineFactsRepository } from "./routine-prisma-facts";
 import { PrismaRoutineFiringRepository } from "./prisma-routine-firing-repository";
 import type { ChangeRoutineStatusPersistenceCommand, CreateRoutinePersistenceCommand, ReviseRoutinePersistenceCommand, RoutineCommandPersistence, RunRoutineNowPersistenceCommand } from "./routine-persistence.types";
 import type { PrismaRoutineUnitOfWorkDependencies } from "./routine-unit-of-work.types";
+import type { RoutineScheduleRepairPage, RoutineScheduleRepairPageResult } from "./routine-schedule-repair.types";
 import { RoutineOccurrenceStage, type RoutineFiringProgressCommand, type RoutineOccurrencePreparationInput, type RoutineWorkflowPersistence } from "./routine-workflow.types";
 
 /** Opens one serializable, bounded-retry transaction for every routine authority operation. */
@@ -58,9 +59,9 @@ export class PrismaRoutineUnitOfWork implements RoutineCommandPersistence, Routi
 	}
 
 	/** @inheritdoc */
-	async repairActiveSchedules(limit: number): Promise<number>
+	async repairActiveSchedulesPage(page: RoutineScheduleRepairPage): Promise<RoutineScheduleRepairPageResult>
 	{
-		return await this._RunFiring("routine.schedule_repair", { limit }, async function _Repair(repository) { return await repository.repairActiveSchedules(limit); });
+		return await this._RunFiring("routine.schedule_repair", { siloId: page.siloId, limit: page.limit, afterRoutineId: page.afterRoutineId }, async function _Repair(repository) { return await repository.repairActiveSchedulesPage(page); });
 	}
 
 	/** @inheritdoc */

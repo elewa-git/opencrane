@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
+import { RoutineOccurrenceTaskDeclaration, RoutineScheduleTaskDeclaration } from "@opencrane/backend/server/agents/scheduling";
 import { CONVERSATION_COMPUTER_STOP_TASK, CONVERSATION_COMPUTER_TURN_TASK, GROUP_CHILD_TASK, PERSONAL_MEMORY_OPERATION_TASK } from "@opencrane/backend/server/conversations";
 import { _CreateArtifactCatalogueRepository, _CreatePublishedArtifactReader } from "@opencrane/backend/server/agents/artifacts";
 import { _CreateMcpEraProbeAdapter, _CreateOciImageArtifactResolver, __CreateOciImageLayoutImporter, __CreateOciImageLayoutVerifier, __CreateOciImageValidationWorkflow, __CreateMcpEraProbeWorkflow, McpConnectionTaskNames, McpEraProbeTaskNames, McpTaskTaskNames, OciImageValidationTaskNames, PrismaMcpOperatorUnitOfWork } from "@opencrane/backend/server/gateways/mcp";
@@ -9,7 +10,7 @@ import { __CreateHttpsMcpRemoteClient } from "@opencrane/backend/server/infra/mc
 import { _CreateOciRegistryAuthorizationReader, __CreateOciRegistryClient } from "@opencrane/backend/server/infra/oci-registry";
 import { ___IsRolledBackConflict } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import { _CreateAbsurdWorkflowEngine } from "@opencrane/backend/server/infra/workflows/infra_absurd";
-import { __CreateWorkflowGuard, __CreateWorkflowTaskQueueAuthority } from "@opencrane/backend/server/infra/workflows/guard";
+import { __CreateWorkflowGuard, __CreateWorkflowTaskQueueAuthority, type IWorkflowTaskPolicy } from "@opencrane/backend/server/infra/workflows/guard";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { OpenCraneWorkflowConfig } from "../configuration/config.types";
@@ -47,6 +48,26 @@ export function __DeclareArtifactPreprocessTask(execution: Pick<IWorkflowEngine,
 	execution.declare(ArtifactPreprocessTaskDeclaration);
 }
 
+/** Lists every durable task and the process queue allowed to claim it. */
+export function _OpenCraneWorkflowTaskPolicies(): readonly IWorkflowTaskPolicy[]
+{
+	return [
+		{ taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, queue: "control-plane" },
+		{ taskName: CONVERSATION_COMPUTER_STOP_TASK.taskName, queue: "control-plane" },
+		{ taskName: GROUP_CHILD_TASK.taskName, queue: "control-plane" },
+		{ taskName: PERSONAL_MEMORY_OPERATION_TASK.taskName, queue: "control-plane" },
+		{ taskName: RoutineScheduleTaskDeclaration.taskName, queue: "control-plane" },
+		{ taskName: RoutineOccurrenceTaskDeclaration.taskName, queue: "control-plane" },
+		{ taskName: McpEraProbeTaskNames.Probe, queue: "control-plane" },
+		{ taskName: McpConnectionTaskNames.Activate, queue: "control-plane" },
+		{ taskName: McpConnectionTaskNames.Revoke, queue: "control-plane" },
+		{ taskName: OciImageValidationTaskNames.Import, queue: "control-plane" },
+		{ taskName: McpTaskTaskNames.Call, queue: "control-plane" },
+		{ taskName: SkillAuthoringValidationTaskDeclaration.taskName, queue: "skill-authoring" },
+		{ taskName: ArtifactPreprocessTaskDeclaration.taskName, queue: "artifact-preprocessing" },
+	];
+}
+
 /**
  * Creates the guarded Absurd engine shared by server jobs and declared controller tasks.
  *
@@ -58,19 +79,7 @@ export function __DeclareArtifactPreprocessTask(execution: Pick<IWorkflowEngine,
  */
 export function _CreateMcpWorkflowComposition(prisma: PrismaClient, config: OpenCraneWorkflowConfig, memoryGatewayTimeoutMilliseconds: number): McpWorkflowComposition
 {
-	const queueAuthority = __CreateWorkflowTaskQueueAuthority([
-		{ taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, queue: "control-plane" },
-		{ taskName: CONVERSATION_COMPUTER_STOP_TASK.taskName, queue: "control-plane" },
-		{ taskName: GROUP_CHILD_TASK.taskName, queue: "control-plane" },
-		{ taskName: PERSONAL_MEMORY_OPERATION_TASK.taskName, queue: "control-plane" },
-		{ taskName: McpEraProbeTaskNames.Probe, queue: "control-plane" },
-		{ taskName: McpConnectionTaskNames.Activate, queue: "control-plane" },
-		{ taskName: McpConnectionTaskNames.Revoke, queue: "control-plane" },
-		{ taskName: OciImageValidationTaskNames.Import, queue: "control-plane" },
-		{ taskName: McpTaskTaskNames.Call, queue: "control-plane" },
-		{ taskName: SkillAuthoringValidationTaskDeclaration.taskName, queue: "skill-authoring" },
-		{ taskName: ArtifactPreprocessTaskDeclaration.taskName, queue: "artifact-preprocessing" },
-	]);
+	const queueAuthority = __CreateWorkflowTaskQueueAuthority(_OpenCraneWorkflowTaskPolicies());
 	const checkpointOperationLeaseSeconds = _ServerCheckpointOperationLeaseSeconds(config, memoryGatewayTimeoutMilliseconds);
 	const runtime = _CreateAbsurdWorkflowEngine({ checkpointOperationLeaseSeconds, databasePoolSize: config.databasePoolSize, databaseUrl: config.databaseUrl, isRolledBackConflict: ___IsRolledBackConflict, log: _log, pollIntervalMs: config.pollIntervalMilliseconds, queueAuthority, workerConcurrency: config.workerConcurrency });
 	const execution = __CreateWorkflowGuard({ execution: runtime, log: _log, queueAuthority, siloId: config.siloId });

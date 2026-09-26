@@ -3,6 +3,7 @@ import type { RoutineComputerActivationPort, RoutineComputerActivationReceipt, R
 import type { RoutineFiringDisposition } from "@opencrane/models/agents";
 
 import type { RoutineIdFactory } from "./routine-authority.types";
+import type { RoutineScheduleRepairPage, RoutineScheduleRepairPageResult } from "./routine-schedule-repair.types";
 import type { RoutineInstructionCipher } from "./routine-instruction.types";
 import type { RoutineInstructionEnvelope } from "./routine-instruction.types";
 
@@ -83,8 +84,8 @@ export interface RoutineTaskAdmissionPort<Transaction>
 /** Persistence operations used by workflow handlers without importing runtime implementations. */
 export interface RoutineWorkflowPersistence
 {
-	/** Re-admits bounded active schedule heads after a process restart and returns the number checked. */
-	repairActiveSchedules(limit: number): Promise<number>;
+	/** Re-admits one silo-scoped page of active schedule heads and returns its checked count plus continuation cursor; a full page must continue. */
+	repairActiveSchedulesPage(page: RoutineScheduleRepairPage): Promise<RoutineScheduleRepairPageResult>;
 	/** Selects the latest due automatic occurrence and admits its next durable tasks atomically. */
 	fireAutomatic(command: import("./routine-authority.types").AutomaticRoutineFiringCommand): Promise<import("./routine-authority.types").RoutineFiringResult | null>;
 	/** Rechecks current authority under the task fence or durably refuses the not-yet-admitted firing. */

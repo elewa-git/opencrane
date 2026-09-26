@@ -16,8 +16,8 @@ states, not the publication status of this draft.
 This is a source foundation, not usable schedules or MVP acceptance. It includes the routine
 schema and lifecycle, current-authority checks, revision-bound approval, root-run input contracts,
 encrypted instruction adapters, and recoverable occurrence history. The follow-ups below add
-preparation, activation, atomic run admission and recovery-only turn compilation. Production
-routes, frontend, worker registration and result propagation remain open before real-account
+preparation, activation, atomic run admission, recovery-only turn compilation and runtime/startup
+wiring. Production routes, frontend and result propagation remain open before real-account
 qualification.
 
 The publication validation passes 892 tests (13 skipped) across seven selected projects and all
@@ -174,6 +174,63 @@ was started. No schema, workload, route or frontend changed. Remaining schedule 
 - Add authenticated creation/control APIs, reviewed screens and the preconfigured agent form tool.
 - Qualify scheduled/manual runs, current-permission revocation, approval, overlap and restart with
   real accounts and databases. Global/group/agent aggregate budgets remain a separate MVP item.
+
+### Routine runtime and restart recovery — source implemented, 26 September 2026
+
+The next wave starts from published draft #916 head
+`3ecef49d367c8a6b04bc499d0d5234364e2e8957`. Live stack snapshot
+`9303abc7163fe009b71f35c37561bf0150ec67b4006281fa6b8d5ac8faa63a33` preserves
+#908 → #910 → #914 → #915 → #916. The previous wave is published and reviewed;
+this wave has no deployment, provider action, new grant or release-tag authority.
+
+The outcome is executable routine workflow composition and recovery of all active schedule heads
+on restart. Independent lanes are app composition and silo-scoped keyset repair. Existing libraries
+remain the authority; apps only wire dependencies and start/stop process resources. No new workload,
+queue, schema, generic scheduler or process timer is planned.
+
+| Current state | Event | Required outcome |
+| --- | --- | --- |
+| Process starting | Existing active schedules | Page through this silo's active heads before workers start; retain task keys, without a first-100 ceiling. |
+| Runtime assembled | Routine or occurrence task claimed | Registered library handlers use the existing queue policy and shared conversation recovery dispatcher. |
+| Registration or startup repair fails | Process start | Close process resources without starting workers or accepting connections. |
+
+Result tracking is the next source slice, not part of the current runtime publication. Its
+architecture preflight requires execution/conversation-owned evidence, a final comparison with
+the linked run's current state before scheduling saves progress, and bounded durable workflow
+continuations instead of an indefinitely growing polling history. Scheduling preserves its own
+first evidence pair; an observer may not manufacture evidence from that projection. Source
+acknowledgement and retry must leave a durable repair path when saving progress fails.
+
+| Current state | Event | Required outcome |
+| --- | --- | --- |
+| Run admitted | Repeated progress observation | Derive coordinates from the saved run/firing link; never treat a task return as completed output. |
+| Durable answer or terminal failure/cancellation | Progress observation | Save the matching outcome with verifiable result evidence and preserve its first evidence pair. |
+| Effect or response uncertain | Recovery | Keep the firing unfinished until its linked run supplies a resolved outcome. |
+| Progress saved but acknowledgement lost | Retry | Recover the same evidence without repeating model/tool work. |
+
+Runtime source now registers both routine handlers on the existing control-plane queue and injects
+recovery-only routine dispatch alongside ordinary conversation admission. The shared typed context
+supplies the same instruction cipher, membership authority and history to preparation and recovery.
+Startup pages through active heads within the configured silo, using serializable transactions and
+the saved deterministic task keys. It rejects malformed or non-advancing page results. All computer
+and durable workers remain stopped until recovery succeeds. One pre-lifecycle assembly boundary
+owns failure cleanup; lifecycle takes over afterward, with a ten-second hard-exit bound if dependency
+cleanup cannot finish. No business policy was moved into the app.
+
+Validation passes 58 relevant tests: 34 scheduling repair/repository/unit-of-work checks and 24 app
+routine, conversation, lifecycle, background-worker and queue-composition checks. The final
+corrections rerun all eight startup-recovery tests and all seven lifecycle tests. Both affected
+TypeScript targets pass. Style checks 15 production files with zero errors/warnings, Prisma
+ownership checks 319 files with zero errors, and workload/app and agent-domain guards and their
+negative tests pass. Module growth has one reviewed firing-repository candidate and no errors.
+Independent review corrected premature full-page exhaustion, activation starting before repair,
+and incomplete or hanging startup cleanup. Listener-order tests observe actual listener-open calls,
+not merely cleanup calls. These checks use controlled ports, not running services or databases.
+
+Authenticated routine commands, reviewed creation/control screens, their agent form tool and
+result tracking still need implementation, followed by complete candidate qualification. No live
+service or VM was started, and no dependency installation, schema change or deployment occurred.
+Schedules are not yet user-ready.
 
 ## Conversational routines — source implementation in progress, 25 September 2026
 

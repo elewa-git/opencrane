@@ -2,10 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ArtifactPreprocessTaskDeclaration } from "@opencrane/backend/artifacts/preprocessor/workflows/contract";
 import { SkillAuthoringValidationTaskDeclaration } from "@opencrane/backend/agents/skills/workflows/contract";
+import { RoutineOccurrenceTaskDeclaration, RoutineScheduleTaskDeclaration } from "@opencrane/backend/server/agents/scheduling";
 import { McpEraProbeFailureCodes } from "@opencrane/backend/server/gateways/mcp";
 import { McpRemoteDeliveryStates, McpRemoteConfigurationError, McpRemoteProtocolError, McpRemoteTransportError } from "@opencrane/backend/server/infra/mcp-remote-client";
+import { __CreateWorkflowTaskQueueAuthority } from "@opencrane/backend/server/infra/workflows/guard";
 
-import { __DeclareArtifactPreprocessTask, __DeclareSkillAuthoringValidation } from "../mcp-workflow-composition";
+import { __DeclareArtifactPreprocessTask, __DeclareSkillAuthoringValidation, _OpenCraneWorkflowTaskPolicies } from "../mcp-workflow-composition";
 import { _McpEraProbeFailure } from "@opencrane/backend/server/gateways/mcp";
 
 describe("MCP workflow application translation", function _McpWorkflowTranslationSuite()
@@ -22,6 +24,13 @@ describe("MCP workflow application translation", function _McpWorkflowTranslatio
 		const declare = vi.fn();
 		__DeclareArtifactPreprocessTask({ declare });
 		expect(declare).toHaveBeenCalledWith(ArtifactPreprocessTaskDeclaration);
+	});
+
+	it("routes both routine tasks through the control-plane queue", function _RoutineQueues()
+	{
+		const queues = __CreateWorkflowTaskQueueAuthority(_OpenCraneWorkflowTaskPolicies());
+		expect(queues.queueForTask(RoutineScheduleTaskDeclaration.taskName)).toBe("control-plane");
+		expect(queues.queueForTask(RoutineOccurrenceTaskDeclaration.taskName)).toBe("control-plane");
 	});
 
 	it.each([

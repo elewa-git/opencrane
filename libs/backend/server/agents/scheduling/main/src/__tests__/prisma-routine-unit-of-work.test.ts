@@ -25,7 +25,7 @@ describe("PrismaRoutineUnitOfWork", function _Suite()
 		});
 
 		await expect(unit.read({ caller: _CALLER, routineId: "missing-routine" })).resolves.toBeNull();
-		await expect(unit.repairActiveSchedules(10)).resolves.toBe(0);
+		await expect(unit.repairActiveSchedulesPage({ siloId: "silo-1", limit: 10, afterRoutineId: null })).resolves.toEqual({ checked: 0, nextCursor: null });
 		expect(transact).toHaveBeenCalledTimes(2);
 		for (const call of transact.mock.calls)
 		{
