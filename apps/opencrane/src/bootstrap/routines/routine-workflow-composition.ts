@@ -80,5 +80,5 @@ export function _CreateRoutineWorkflowComposition(context: RoutineWorkflowExecut
 	workflows.register(definitions.occurrence);
 	const dispatcher = new PrismaRoutineTurnCompilerUnitOfWork(prisma, { routines: runRoutines, occurrences: occurrenceHistory, history, cipher, membership, maximumTurnCostUsdMicros: profile.maximumTurnCostUsdMicros });
 	const startup = new RoutineScheduleStartupRecovery(persistence, siloId);
-	return { dispatcher, startup };
+	return { dispatcher, progress: persistence, startup };
 }

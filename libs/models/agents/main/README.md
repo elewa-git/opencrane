@@ -53,7 +53,9 @@ persistence; a wrong answer here can only refuse a legal move, never invent one.
   `PERSONAL_MEMORY_RECALL_TOOL_REVISION` is the dependency-neutral identity used by admission,
   elicitation, and execution for the built-in personal-memory recall tool.
 - `AgentRunStates` is the documented string-backed run lifecycle vocabulary used by runtime
-  admission instead of repeated categorical literals. `AgentRunTriggers` distinguishes an
+  admission instead of repeated categorical literals. It includes the persisted Stop fence
+  (`cancelling`) and terminal requester-stop state (`cancelled`); `AgentRunTerminalReasons` records
+  the matching `user_cancelled` terminal classification. `AgentRunTriggers` distinguishes an
   interactive request from an automatic or manual routine occurrence.
 - `ExecutionSubjectMembershipKinds` distinguishes signed human Fleet membership, local Standalone
   human membership and current managed service authority. `ExecutionSubject` always carries the requester's separate human membership

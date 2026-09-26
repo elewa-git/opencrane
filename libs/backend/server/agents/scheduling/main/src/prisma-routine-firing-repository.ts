@@ -5,11 +5,10 @@ import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workf
 import { RoutineFiringDisposition, RoutineFiringTrigger, RoutineStatus, __PlanRoutineFiring, __RoutineFiringAuditActor } from "@opencrane/models/agents";
 
 import { RoutineCommandOutcome, type AutomaticRoutineFiringCommand, type RoutineFiringResult } from "./routine-authority.types";
-import { __MayTransitionRoutineFiringProgress } from "./routine-firing-lifecycle";
 import type { CurrentRoutineRows, RoutineFactsRepository, RoutineFiringActor } from "./routine-prisma-facts.types";
 import { _MODEL_FIRING_DISPOSITION, _MODEL_FIRING_TRIGGER, _PRISMA_FIRING_DISPOSITION, _PRISMA_FIRING_TRIGGER } from "./routine-prisma-mapping";
 import { ROUTINE_SCHEDULE_TASK_NAME } from "./routine-workflow-contract";
-import { RoutineOccurrenceStage, type RoutineFiringProgressCommand, type RoutineOccurrencePreparationInput, type RoutineOccurrenceTaskInput, type RoutineScheduleTaskInput, type RoutineTaskAdmissionPort, type RoutineWorkflowPersistence } from "./routine-workflow.types";
+import { RoutineOccurrenceStage, type RoutineOccurrencePreparationInput, type RoutineOccurrenceTaskInput, type RoutineScheduleTaskInput, type RoutineTaskAdmissionPort, type RoutineWorkflowPersistence } from "./routine-workflow.types";
 import type { RoutineScheduleRepairPage, RoutineScheduleRepairPageResult } from "./routine-schedule-repair.types";
 
 /** Selects the firing facts required by preparation, activation, and run binding. */
@@ -36,7 +35,7 @@ const _FIRING_SELECT = {
 /** Exact firing projection used by every stage-boundary authority check. */
 type RoutineFiringStageRow = Prisma.AgentRoutineFiringGetPayload<{ readonly select: typeof _FIRING_SELECT }>;
 
-/** Applies automatic selection and asynchronous firing progress through one transaction. */
+/** Applies automatic selection and occurrence admission through one transaction. */
 export class PrismaRoutineFiringRepository implements RoutineWorkflowPersistence
 {
 	/** Caller-owned transaction shared with authorization and task admission. */
@@ -236,52 +235,6 @@ export class PrismaRoutineFiringRepository implements RoutineWorkflowPersistence
 		}
 	}
 
-	/** @inheritdoc */
-	async recordRunProgress(command: RoutineFiringProgressCommand): Promise<void>
-	{
-		const target = _PRISMA_FIRING_DISPOSITION[command.disposition];
-		if (!_RunProgressDisposition(target) || (command.resultReference === null) !== (command.resultDigest === null))
-		{
-			throw new Error("routine run progress requires an allowed disposition and paired result evidence");
-		}
-		const firing = await this.transaction.agentRoutineFiring.findFirst({ where: { id: command.firingId, siloId: command.siloId, routineId: command.routineId, routineRevision: command.routineRevision, runId: command.runId }, select: { disposition: true, resultReference: true, resultDigest: true } });
-		if (firing === null)
-		{
-			throw new Error("routine run progress does not match a linked firing");
-		}
-		if (firing.disposition === target)
-		{
-			if (firing.resultReference !== command.resultReference || firing.resultDigest !== command.resultDigest)
-			{
-				throw new Error("routine run progress conflicts with its saved result");
-			}
-			return;
-		}
-		if (!__MayTransitionRoutineFiringProgress(_MODEL_FIRING_DISPOSITION[firing.disposition], command.disposition))
-		{
-			throw new Error("routine run progress transition is not allowed");
-		}
-		const terminal = target === AgentRoutineFiringDisposition.Completed || target === AgentRoutineFiringDisposition.Failed || target === AgentRoutineFiringDisposition.Cancelled;
-		const evidenceRequired = terminal || target === AgentRoutineFiringDisposition.Uncertain;
-		if (evidenceRequired && command.resultReference === null)
-		{
-			throw new Error("terminal routine run progress requires result evidence");
-		}
-		const hasSavedEvidence = firing.resultReference !== null || firing.resultDigest !== null;
-		if (hasSavedEvidence && (firing.resultReference === null || firing.resultDigest === null || firing.resultReference !== command.resultReference || firing.resultDigest !== command.resultDigest))
-		{
-			throw new Error("routine run progress must preserve its first saved result evidence");
-		}
-		const resultReference = firing.resultReference ?? command.resultReference;
-		const resultDigest = firing.resultDigest ?? command.resultDigest;
-		const now = await this.facts.databaseNow();
-		const changed = await this.transaction.agentRoutineFiring.updateMany({ where: { id: command.firingId, siloId: command.siloId, routineId: command.routineId, routineRevision: command.routineRevision, runId: command.runId, disposition: firing.disposition }, data: { disposition: target, resultReference, resultDigest, finishedAt: terminal ? now : null, updatedAt: now } });
-		if (changed.count !== 1)
-		{
-			throw new Error("routine run progress compare-and-set conflict");
-		}
-	}
-
 	/** Loads a firing only when its immutable workflow task receipt still matches. */
 	private async _fencedFiring(identity: RoutineFiringIdentity)
 	{
@@ -356,12 +309,6 @@ export class PrismaRoutineFiringRepository implements RoutineWorkflowPersistence
 function _TaskMatches(taskId: string | null, taskName: string | null, taskKey: string | null, expected: IWorkflowTaskReceipt): boolean
 {
 	return taskId === expected.taskId && taskName === expected.taskName && taskKey === expected.idempotencyKey;
-}
-
-/** Returns whether a linked-run adapter may request this disposition. */
-function _RunProgressDisposition(disposition: AgentRoutineFiringDisposition): boolean
-{
-	return disposition === AgentRoutineFiringDisposition.Running || disposition === AgentRoutineFiringDisposition.Waiting || disposition === AgentRoutineFiringDisposition.Completed || disposition === AgentRoutineFiringDisposition.Failed || disposition === AgentRoutineFiringDisposition.Cancelled || disposition === AgentRoutineFiringDisposition.Uncertain;
 }
 
 /** Builds one automatic occurrence result. */

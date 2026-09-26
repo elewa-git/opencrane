@@ -37,8 +37,8 @@ their concrete adapters, mounts their routers, and starts and stops them in the 
 [backend capabilities](../../libs/backend/README.md)
 
 The conversation workflow bootstrap receives a `ConversationExecutionContext`
-object. Its named fields identify the database, history, Kubernetes clients, admission and dispatch
-ports, workflow engine, and generated-file services supplied by process startup.
+object. Its named fields identify the database, history, Kubernetes clients, admission, routine
+progress and dispatch ports, workflow engine, and generated-file services supplied by process startup.
 The MCP runtime bootstrap similarly receives an `McpExecutionContext`, naming the process
 services and configuration shared by container-based and remote tool execution.
 
@@ -105,8 +105,8 @@ All other production source lives in `src/bootstrap/`:
 | --- | --- |
 | `configuration/` | Read and type deployment configuration once. |
 | `http/` | Assemble authenticated public and workload-facing routers. |
-| `conversations/` | Connect conversation history and computer lifecycle; register turn, generated-file and personal-memory workflows, share generated-file authority with the scanner, and mount the review credential route. |
-| `routines/` | Connect scheduling to occurrence preparation, computer activation, run admission, startup repair and recovery-only turn dispatch. |
+| `conversations/` | Connect conversation history and computer lifecycle; register turn, Stop, generated-file and personal-memory workflows; report producer-verified routine progress; share generated-file authority with the scanner; and mount the review credential route. |
+| `routines/` | Connect scheduling to occurrence preparation, computer activation, run admission, progress persistence, startup repair and recovery-only turn dispatch. |
 | `workflows/` | Compose MCP transport and declare workflow tasks. |
 | `process/` | Initialise telemetry and clients, then start, drain, and close resources. |
 

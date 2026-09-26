@@ -2,11 +2,12 @@ import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { WorkflowTaskRetryableError, type IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
 import type { ConversationComputerCredentialIssuer } from "../turns/conversation-computer-turn.types";
+import type { RoutineRunProgressReporter } from "../../routines/routine-run-progress.types";
 import { CONVERSATION_COMPUTER_STOP_TASK } from "./conversation-computer-stop-task";
 import { ConversationComputerStopAdmissionKinds, ConversationComputerStopDecisions, ConversationComputerStopTaskOutcomes, type ConversationComputerStopAdmissionAuthority, type ConversationComputerStopLifecycle, type ConversationComputerStopPublisher, type ConversationComputerStopTaskInput, type ConversationComputerStopTaskResult } from "./conversation-computer-stop.types";
 
 /** Registers the single durable owner of Stop arbitration and cleanup. */
-export function _RegisterConversationComputerStopWorkflow(workflows: IWorkflowEngine, dependencies: { readonly admissions: ConversationComputerStopAdmissionAuthority; readonly publisher: ConversationComputerStopPublisher; readonly lifecycle: ConversationComputerStopLifecycle; readonly credentials: Pick<ConversationComputerCredentialIssuer, "revoke"> }): void
+export function _RegisterConversationComputerStopWorkflow(workflows: IWorkflowEngine, dependencies: { readonly admissions: ConversationComputerStopAdmissionAuthority; readonly publisher: ConversationComputerStopPublisher; readonly lifecycle: ConversationComputerStopLifecycle; readonly credentials: Pick<ConversationComputerCredentialIssuer, "revoke">; readonly routineProgress: Pick<RoutineRunProgressReporter, "recordStop"> }): void
 {
 	workflows.register({ ...CONVERSATION_COMPUTER_STOP_TASK, run: async function _Run(context, input: ConversationComputerStopTaskInput): Promise<ConversationComputerStopTaskResult>
 	{
@@ -23,7 +24,10 @@ export function _RegisterConversationComputerStopWorkflow(workflows: IWorkflowEn
 			return dependencies.lifecycle.recordDecision(admission, outcome);
 		});
 		if (outcome.decision === ConversationComputerStopDecisions.OutputWon)
+		{
+			await context.checkpoint({ stepName: "record-routine-output-progress" }, function _RecordRoutineProgress() { return dependencies.routineProgress.recordStop(admission, outcome); });
 			return { outcome: ConversationComputerStopTaskOutcomes.OutputCompleted, commandId: input.command.commandId };
+		}
 		if (outcome.decision !== ConversationComputerStopDecisions.CancellationWon)
 			throw new Error("conversation Stop task recovered an invalid target decision");
 		await context.checkpoint({ stepName: "cancel-original-turn-task" }, function _CancelOriginalTask()
@@ -52,6 +56,7 @@ export function _RegisterConversationComputerStopWorkflow(workflows: IWorkflowEn
 		});
 		if (!finalized)
 			throw new WorkflowTaskRetryableError("conversation Stop cleanup has not converged");
+		await context.checkpoint({ stepName: "record-routine-cancellation-progress" }, function _RecordRoutineProgress() { return dependencies.routineProgress.recordStop(admission, outcome); });
 		return { outcome: ConversationComputerStopTaskOutcomes.Cancelled, commandId: input.command.commandId };
 	} });
 }

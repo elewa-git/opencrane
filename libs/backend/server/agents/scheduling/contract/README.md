@@ -54,16 +54,25 @@ result therefore stops before scheduling binds a run identifier or advances the 
 - `___ParseRoutineOccurrencePreparationReceipt`, `___ParseRoutineComputerActivationResult`,
   `___ParseRoutineComputerActivationReceipt` and `___ParseRoutineRunAdmissionReceipt` restore
   checkpoint evidence without normalising it.
+- `RoutineRunProgressObservation`, its strict parser and `RoutineRunProgressSink` carry verified
+  progress back from the conversation owner. The observation includes the exact attempt, snapshot,
+  source state, terminal/Stop fields and newly checked evidence, but no answer or tool content.
 
 ## Boundary
 
 These declarations grant no permission and perform no I/O. Scheduling rechecks current authority
-before each port call; each implementation must repeat the relevant check at its authoritative
+before each execution port call; each implementation must repeat the relevant check at its authoritative
 write. A saved preparation marker means publication already committed and must be recovered without
 recreating removed grants. A fresh publication records that marker in the same transaction as its
 audience grants. Activation repeats current authority even when an activation receipt already
 exists; recovery never turns an old receipt into permission. `Pending` is a normal bounded poll,
 while `Refused` is valid only after the activation owner commits the firing refusal.
+
+Progress reporting is historical bookkeeping, not another execution admission. Producers verify
+saved history and await the sink before settling their work. A failure retries the saved outcome,
+not its external effect. Scheduling rereads current source facts before saving progress and retains
+its first evidence pair; later verified evidence can differ without replacing that original pair.
+Revoking execution access must not prevent reporting work already completed or cancelled.
 
 The package contains no lifecycle rules, encrypted instruction envelope, database adapter, workflow
 handler or application wiring. Activation and run admission cannot receive plaintext or an

@@ -58,6 +58,7 @@ describe("routine workflow composition", function _RoutineWorkflowCompositionSui
 		expect(dispatcher.dependencies.cipher).toBe(cipher);
 		expect(dispatcher.dependencies.membership).toBe(membership);
 		expect(dispatcher.dependencies.workflows).toBeUndefined();
+		expect(composition.progress).toBe(dependencies.persistence);
 		expect(composition.startup.repairAllActiveSchedules).toBeTypeOf("function");
 	});
 

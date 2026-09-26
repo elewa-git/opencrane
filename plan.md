@@ -195,11 +195,11 @@ queue, schema, generic scheduler or process timer is planned.
 | Registration or startup repair fails | Process start | Close process resources without starting workers or accepting connections. |
 
 Result tracking is the next source slice, not part of the current runtime publication. Its
-architecture preflight requires execution/conversation-owned evidence, a final comparison with
-the linked run's current state before scheduling saves progress, and bounded durable workflow
-continuations instead of an indefinitely growing polling history. Scheduling preserves its own
-first evidence pair; an observer may not manufacture evidence from that projection. Source
-acknowledgement and retry must leave a durable repair path when saving progress fails.
+architecture preflight requires execution/conversation-owned evidence and a final comparison with
+the linked run's current state before scheduling saves progress. Scheduling preserves its own
+first evidence pair; an observer may not manufacture evidence from that projection. The initial
+continuation proposal was superseded by producer-coupled reporting below: a continuation without
+its own persisted head could lose repair, and the occurrence's task receipt is immutable.
 
 | Current state | Event | Required outcome |
 | --- | --- | --- |
@@ -231,6 +231,58 @@ Authenticated routine commands, reviewed creation/control screens, their agent f
 result tracking still need implementation, followed by complete candidate qualification. No live
 service or VM was started, and no dependency installation, schema change or deployment occurred.
 Schedules are not yet user-ready.
+
+### Routine result reporting — source implemented, 26 September 2026
+
+This wave starts at published #916 head `544535120694a5d734ce74eb2ab08e3d5f290aae`.
+Live stack snapshot `ab48fc5290ba68606675304f09e47570f87a7665cefa181dd888344affad9ccb`
+passes all 18 open PRs and retains #908 → #910 → #914 → #915 → #916. No merge, deployment,
+tag, new grant, dependency installation or live provider action is part of this wave.
+
+Architecture preflight passes producer-coupled reporting with no polling task or schema change.
+Execution/runs reads the checked snapshot and reciprocal firing link. Conversations verifies saved
+turn/history evidence. Scheduling validates the observation, rereads the current run in the same
+serializable transaction as its firing compare-and-set, and retains the first evidence pair even
+when a later verified result differs. Historical reporting needs no fresh execution grant; new
+effects still require current authority. Apps wire these owners without interpreting states.
+
+| Saved producer event | Firing outcome | Acknowledgement boundary |
+| --- | --- | --- |
+| Proven approval or generated-file wait | Waiting | Report before the durable wait. |
+| Execution resumes | Running | Retain any earlier uncertain evidence. |
+| Response/effect unavailable and run in recovery | Uncertain | Report before the task returns. |
+| Confirmed answer and completed run | Completed | Report before credential cleanup and turn settlement. |
+| Stop output winner | Completed | Report in a retryable checkpoint before returning. |
+| Finalized Stop cancellation | Cancelled | Report after cleanup/finalization, before returning. |
+| Cancelling or unsupported source state | No terminal report | Never infer a terminal result. |
+| Report fails or its acknowledgement is lost | Retry from saved source | Do not repeat the external effect or settle past the failed report. |
+
+Luna implemented the read-only execution facts and model alignment; Sol implemented conversation
+evidence, producer hooks and app wiring; the orchestrator implemented the scheduling contract,
+source fence and first-evidence preservation. The superseded unfenced progress command and firing
+repository method are removed. Historical terminal/uncertain reporting requires no new grant.
+Nonterminal wait verification is non-consuming, but it does perform current-access checks and their
+normal authorization audit writes; it is not described as a side-effect-free database read.
+
+Review corrected two wait/replay gaps. An early wake or timeout does not imply a cleared approval
+or generated-file wait. A crash after execution advances but before Running is reported cannot
+depend on a lost local wait variable: each checked nonterminal model or internal tool-result outcome
+reports Running idempotently after verifying no external wait remains. Initial Running is a no-op;
+terminal, unavailable and generic Retry outcomes do not manufacture an intermediate Running state.
+The observer also distinguishes the managed executing principal from the original human requester.
+
+Validation passes 377 relevant tests: 254 scheduling, 35 occurrence/progress contracts, 19 execution
+facts, three run-model transitions, 63 conversation observer/turn/Stop/replay tests and three app
+composition tests. All six affected TypeScript targets pass. Full dependency-boundary lint, changed
+style and Prisma ownership checks pass; workload/app and agent-domain guards and their negative
+tests pass. Module growth reports no errors and two reviewed cohesive owners: the existing turn
+dependency contract and the new routine progress observer. Independent integrated review found no
+behavioral blocker after the wait/replay corrections; a comments-only pass clarifies the Running
+and acknowledgement contracts before exact-source publication binding.
+
+These checks use controlled ports, not live PostgreSQL, KurrentDB or workers. No VM, service,
+dependency download, live grant or external write was used. Authenticated routine commands,
+reviewed creation/control screens, the agent form tool and live qualification remain required.
 
 ## Conversational routines — source implementation in progress, 25 September 2026
 

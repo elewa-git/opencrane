@@ -53,8 +53,17 @@ Firing progress is separate. `Preparing`, `Running`, `Waiting` and `Uncertain` a
 block automatic overlap. `Uncertain` preserves its saved provider evidence and can resolve only to
 `Running`, `Completed`, `Failed` or `Cancelled` when the linked `AgentRun` supplies the matching
 outcome. Its first result/effect reference remains unchanged through every later transition; the
-linked `AgentRun` owns the latest execution outcome. The future run-result adapter that reports those transitions is typed here but is not wired
-by this package.
+linked `AgentRun` owns the latest execution outcome. `PrismaRoutineRunProgressRepository` accepts
+the conversation owner's verified observation through `RoutineRunProgressSink`. Before saving it,
+the serializable transaction checks the reciprocal run link, attempt, snapshot digest and current
+state, including terminal and Stop fields. A changed source or compare-and-set conflict throws so
+the producer retries from saved history. Later answer or cancellation evidence may differ from the
+first uncertain evidence; the first pair is retained without requiring the new pair to equal it.
+
+Reporting existing work never creates execution grants or requires newly granted access. Producers
+must await reporting before settling a completed turn or returning from unavailable/Stop handling.
+The current conversation path reports Running, Waiting, Uncertain, Completed and Cancelled;
+Cancelling is not terminal, and no Failed result is inferred without a producer that can prove it.
 
 Before preparation, every activation poll and run admission, the workflow opens a fresh transaction
 and rechecks lifecycle, every fixed audience member, both current effect grants and the selected

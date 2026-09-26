@@ -4,3 +4,5 @@ export type { RoutineOccurrencePreparationAuthorization, RoutineOccurrencePrepar
 export { RoutineComputerActivationStatus } from "./routine-occurrence.types";
 export type { PrepareRoutineOccurrenceCommand, RoutineComputerActivationActiveResult, RoutineComputerActivationPendingResult, RoutineComputerActivationPort, RoutineComputerActivationReceipt, RoutineComputerActivationRefusedResult, RoutineComputerActivationResult, RoutineFiringIdentity, RoutineOccurrenceCommand, RoutineOccurrencePreparationPort, RoutineOccurrencePreparationReceipt, RoutineRunAdmissionInput, RoutineRunAdmissionPort, RoutineRunAdmissionReceipt } from "./routine-occurrence.types";
 export { ___ParseRoutineComputerActivationReceipt, ___ParseRoutineComputerActivationResult, ___ParseRoutineOccurrencePreparationReceipt, ___ParseRoutineRunAdmissionReceipt } from "./routine-occurrence.validator";
+export type { RoutineRunProgressObservation, RoutineRunProgressSink } from "./routine-run-progress.types";
+export { ___ParseRoutineRunProgressObservation } from "./routine-run-progress.validator";

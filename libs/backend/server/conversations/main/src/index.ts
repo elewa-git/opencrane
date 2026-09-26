@@ -86,6 +86,9 @@ export { RoutineTurnDispatchKinds } from "./routines/routine-turn-compiler.types
 export type { RoutineTurnCompilerDependencies, RoutineTurnDispatcher, RoutineTurnDispatchResult } from "./routines/routine-turn-compiler.types";
 export type { RoutineRunAdmissionDependencies } from "./routines/routine-run-admission.types";
 export { PrismaRoutineComputerActivationProjectionUnitOfWork } from "./routines/prisma-routine-computer-activation-projection";
+export { ConversationRoutineRunProgressObserver, ConversationRoutineRunProgressReporter, ConversationRoutineRunProgressWaitEvidenceReader } from "./routines/routine-run-progress";
+export { RoutineRunProgressWaitKinds } from "./routines/routine-run-progress.types";
+export type { RoutineRunProgressObserver, RoutineRunProgressReporter, RoutineRunProgressWait } from "./routines/routine-run-progress.types";
 export type { RoutineComputerActivationDependencies } from "./routines/routine-computer-activation.types";
 export type { RoutineOccurrencePreparationDependencies } from "./routines/routine-occurrence-preparation.types";
 export type { RoutineOccurrenceHistoryRecord } from "./routines/routine-occurrence-history.types";

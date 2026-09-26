@@ -21,8 +21,9 @@ function _Fixture(progress: readonly Record<string, unknown>[], cacheCheckpoints
 	const receipts = { bind: vi.fn().mockResolvedValue(true) };
 	const approvalNotifications = { publishRequested: vi.fn().mockResolvedValue("published") };
 	const toolDispatch = { tryExecute: vi.fn().mockResolvedValue(false), settleExhausted: vi.fn().mockResolvedValue(true) };
+	const routineProgress = { recordRunning: vi.fn().mockResolvedValue(undefined), recordWaiting: vi.fn().mockResolvedValue(undefined) };
 	const checkpoints = new Map<string, unknown>();
-	_RegisterConversationComputerTurnWorkflow(execution as never, { approvalNotifications, authority: authority as never, receipts, toolDispatch, siloId: "silo-1" });
+	_RegisterConversationComputerTurnWorkflow(execution as never, { approvalNotifications, authority: authority as never, receipts, routineProgress, toolDispatch, siloId: "silo-1" });
 	const context = { task: _TASK, attempt: 1, checkpoint: vi.fn(async function _Checkpoint(step, operation)
 	{
 		if (!cacheCheckpoints)
@@ -31,7 +32,7 @@ function _Fixture(progress: readonly Record<string, unknown>[], cacheCheckpoints
 			checkpoints.set(step.stepName, await operation());
 		return checkpoints.get(step.stepName);
 	}), spawnChild: vi.fn(), awaitChild: vi.fn(), sleepUntil: vi.fn().mockResolvedValue(undefined), waitForEvent: vi.fn().mockResolvedValue({ eventName: "tool-result:tool-1", payload: {} }) } as unknown as IWorkflowTaskContext;
-	return { approvalNotifications, authority, context, definition, receipts, toolDispatch };
+	return { approvalNotifications, authority, context, definition, receipts, routineProgress, toolDispatch };
 }
 
 describe("conversation computer turn workflow", function _Suite()
@@ -44,7 +45,9 @@ describe("conversation computer turn workflow", function _Suite()
 		expect(fixture.context.waitForEvent).toHaveBeenNthCalledWith(1, "tool-result:tool-1");
 		expect(fixture.context.waitForEvent).toHaveBeenNthCalledWith(2, "generated-output:file-1", { timeoutAt: new Date(deadline) });
 		expect(fixture.authority.advance).toHaveBeenCalledTimes(3);
-		expect(fixture.context.checkpoint).toHaveBeenCalledExactlyOnceWith({ stepName: "dispatch-mcp-invocation:tool-1" }, expect.any(Function));
+		expect(fixture.context.checkpoint).toHaveBeenCalledWith({ stepName: "dispatch-mcp-invocation:tool-1" }, expect.any(Function));
+		expect(fixture.context.checkpoint).toHaveBeenCalledWith({ stepName: "record-routine-waiting:generated_file:file-1" }, expect.any(Function));
+		expect(fixture.routineProgress.recordRunning).toHaveBeenCalledExactlyOnceWith(_TURN);
 		expect(fixture.toolDispatch.tryExecute).toHaveBeenCalledExactlyOnceWith({ siloId: "silo-1", runId: "run-1", attempt: 1, toolInvocationId: "tool-1" });
 		expect(fixture.context.sleepUntil).not.toHaveBeenCalled();
 	});
@@ -65,7 +68,7 @@ describe("conversation computer turn workflow", function _Suite()
 		const fixture = _Fixture([{ outcome: "model_pending", ordinal: 1, notBeforeEpochMs: deadline }, { outcome: "response_unavailable" }]);
 		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "response_unavailable", turnId: "turn-1" });
 		expect(fixture.context.sleepUntil).toHaveBeenCalledExactlyOnceWith(new Date(deadline), "model-1-deadline");
-		expect(fixture.context.checkpoint).not.toHaveBeenCalled();
+		expect(fixture.context.checkpoint).toHaveBeenCalledExactlyOnceWith({ stepName: "record-routine-running:model:1" }, expect.any(Function));
 		expect(fixture.authority.advance).toHaveBeenCalledTimes(2);
 	});
 
@@ -91,7 +94,9 @@ describe("conversation computer turn workflow", function _Suite()
 		expect(fixture.context.sleepUntil).toHaveBeenNthCalledWith(1, new Date(now + 1_000), "model-1-retry-1");
 		expect(fixture.context.sleepUntil).toHaveBeenNthCalledWith(2, new Date(now + 2_000), "model-1-retry-2");
 		expect(fixture.context.sleepUntil).toHaveBeenNthCalledWith(3, new Date(now + 25_000), "model-1-deadline");
-		expect(fixture.context.checkpoint).not.toHaveBeenCalled();
+		expect(fixture.context.checkpoint).toHaveBeenNthCalledWith(1, { stepName: "record-routine-running:model:1:retry:1" }, expect.any(Function));
+		expect(fixture.context.checkpoint).toHaveBeenNthCalledWith(2, { stepName: "record-routine-running:model:1:retry:2" }, expect.any(Function));
+		expect(fixture.context.checkpoint).toHaveBeenNthCalledWith(3, { stepName: "record-routine-running:model:1" }, expect.any(Function));
 		expect(fixture.toolDispatch.tryExecute).not.toHaveBeenCalled();
 	});
 
@@ -146,9 +151,41 @@ describe("conversation computer turn workflow", function _Suite()
 		expect(fixture.approvalNotifications.publishRequested).toHaveBeenCalledTimes(2);
 		expect(fixture.approvalNotifications.publishRequested).toHaveBeenNthCalledWith(1, expect.objectContaining({ approvalId: "tool-1" }));
 		expect(fixture.approvalNotifications.publishRequested).toHaveBeenNthCalledWith(2, expect.objectContaining({ approvalId: "tool-2" }));
-		expect(fixture.context.checkpoint).toHaveBeenNthCalledWith(1, { stepName: "publish-tool-approval-requested:tool-1" }, expect.any(Function));
-		expect(fixture.context.checkpoint).toHaveBeenNthCalledWith(2, { stepName: "publish-tool-approval-requested:tool-1" }, expect.any(Function));
-		expect(fixture.context.checkpoint).toHaveBeenNthCalledWith(3, { stepName: "publish-tool-approval-requested:tool-2" }, expect.any(Function));
+		const published = (fixture.context.checkpoint as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([step]) => step.stepName.startsWith("publish-tool-approval-requested"));
+		expect(published.map(([step]) => step.stepName)).toEqual(["publish-tool-approval-requested:tool-1", "publish-tool-approval-requested:tool-1", "publish-tool-approval-requested:tool-2"]);
+	});
+
+	it("keeps a spurious approval wake Waiting until checked progress changes", async function _SpuriousApprovalWake()
+	{
+		const fixture = _Fixture([{ outcome: "tool_pending", toolInvocationId: "tool-1", waitFor: "approval" }, { outcome: "tool_pending", toolInvocationId: "tool-1", waitFor: "approval" }, { outcome: "completed" }]);
+		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "completed", turnId: "turn-1" });
+		expect(fixture.routineProgress.recordWaiting).toHaveBeenCalledTimes(2);
+		expect(fixture.routineProgress.recordRunning).not.toHaveBeenCalled();
+	});
+
+	it("restores Running only after checked nonterminal progress clears the external wait", async function _ClearedApproval()
+	{
+		const deadline = Date.now() + 20_000;
+		const fixture = _Fixture([{ outcome: "tool_pending", toolInvocationId: "tool-1", waitFor: "approval" }, { outcome: "model_pending", ordinal: 2, notBeforeEpochMs: deadline }, { outcome: "completed" }]);
+		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "completed", turnId: "turn-1" });
+		expect(fixture.routineProgress.recordRunning).toHaveBeenCalledExactlyOnceWith(_TURN);
+		expect(fixture.context.sleepUntil).toHaveBeenCalledWith(new Date(deadline), "model-2-deadline");
+	});
+
+	it("retries Running after saved progress advanced before acknowledgement", async function _RunningReplay()
+	{
+		const deadline = Date.now() + 20_000;
+		const fixture = _Fixture([
+			{ outcome: "tool_pending", toolInvocationId: "tool-1", waitFor: "approval" },
+			{ outcome: "model_pending", ordinal: 2, notBeforeEpochMs: deadline },
+			{ outcome: "model_pending", ordinal: 2, notBeforeEpochMs: deadline },
+			{ outcome: "completed" },
+		], true);
+		fixture.routineProgress.recordRunning.mockRejectedValueOnce(new Error("progress unavailable"));
+
+		await expect(fixture.definition.run(fixture.context, _INPUT)).rejects.toThrow("progress unavailable");
+		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "completed", turnId: "turn-1" });
+		expect(fixture.routineProgress.recordRunning).toHaveBeenCalledTimes(2);
 	});
 
 	it("keeps dispatch checkpoints distinct per invocation while replaying the same ID", async function _DispatchCheckpointIdentity()
@@ -165,9 +202,8 @@ describe("conversation computer turn workflow", function _Suite()
 		expect(fixture.toolDispatch.tryExecute).toHaveBeenCalledTimes(2);
 		expect(fixture.toolDispatch.tryExecute).toHaveBeenNthCalledWith(1, expect.objectContaining({ toolInvocationId: "tool-1" }));
 		expect(fixture.toolDispatch.tryExecute).toHaveBeenNthCalledWith(2, expect.objectContaining({ toolInvocationId: "tool-2" }));
-		expect(fixture.context.checkpoint).toHaveBeenNthCalledWith(1, { stepName: "dispatch-mcp-invocation:tool-1" }, expect.any(Function));
-		expect(fixture.context.checkpoint).toHaveBeenNthCalledWith(2, { stepName: "dispatch-mcp-invocation:tool-1" }, expect.any(Function));
-		expect(fixture.context.checkpoint).toHaveBeenNthCalledWith(3, { stepName: "dispatch-mcp-invocation:tool-2" }, expect.any(Function));
+		const dispatches = (fixture.context.checkpoint as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([step]) => step.stepName.startsWith("dispatch-mcp-invocation"));
+		expect(dispatches.map(([step]) => step.stepName)).toEqual(["dispatch-mcp-invocation:tool-1", "dispatch-mcp-invocation:tool-1", "dispatch-mcp-invocation:tool-2"]);
 	});
 
 	it("resumes a saved approval through the workflow engine and admits one executor on replay", async function _ApprovalEngineJourney()
@@ -187,7 +223,7 @@ describe("conversation computer turn workflow", function _Suite()
 		};
 		const approvalNotifications = { publishRequested: vi.fn().mockResolvedValue("published") };
 		const toolDispatch = { tryExecute: vi.fn().mockResolvedValue(false), settleExhausted: vi.fn().mockResolvedValue(true) };
-		_RegisterConversationComputerTurnWorkflow(execution, { approvalNotifications, authority, receipts: { bind: vi.fn().mockResolvedValue(true) }, toolDispatch, siloId: "silo-1" });
+		_RegisterConversationComputerTurnWorkflow(execution, { approvalNotifications, authority, receipts: { bind: vi.fn().mockResolvedValue(true) }, routineProgress: { recordRunning: vi.fn().mockResolvedValue(undefined), recordWaiting: vi.fn().mockResolvedValue(undefined) }, toolDispatch, siloId: "silo-1" });
 		const task = await execution.spawn({ client: {} }, { taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: _TASK.idempotencyKey, input: _INPUT });
 		const running = execution._DrainPendingTasks();
 		await Promise.resolve();

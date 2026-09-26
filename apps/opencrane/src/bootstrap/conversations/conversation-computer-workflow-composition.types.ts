@@ -1,6 +1,7 @@
 import type * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 import type { ConversationComputerToolInvocationDispatch, ConversationComputerRunAdmissionPort, ConversationToolProposalRuntimeAdmission, ConversationGeneratedFileResultRepositoryFactory, ConversationGeneratedFileOutputLinker, RoutineTurnDispatcher } from "@opencrane/backend/server/conversations";
+import type { RoutineRunProgressSink } from "@opencrane/backend/server/agents/scheduling/contract";
 import type { ConversationPrivatePayloadCipher, ConversationPrivatePayloadKeyringDocument } from "@opencrane/backend/server/conversations/history";
 import type { HumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
@@ -37,6 +38,8 @@ export interface ConversationExecutionContext
 	readonly runAdmission: ConversationComputerRunAdmissionPort;
 	/** Recovers admitted routine turns before ordinary human admission is considered. */
 	readonly routineTurns: RoutineTurnDispatcher;
+	/** Persists observations proven by the routine run and immutable conversation protocol. */
+	readonly routineProgress: RoutineRunProgressSink;
 	/** Admits tool invocations within the proposal transaction. */
 	readonly runtimeAdmission: ConversationToolProposalRuntimeAdmission;
 	/** Dispatches tool invocations from the registered turn workflow. */

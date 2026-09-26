@@ -1,6 +1,7 @@
 import type * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 
+import type { RoutineRunProgressSink } from "@opencrane/backend/server/agents/scheduling/contract";
 import type { RoutineScheduleStartupRecovery } from "@opencrane/backend/server/agents/scheduling";
 import type { RoutineTurnDispatcher } from "@opencrane/backend/server/conversations";
 import type { ConversationPrivatePayloadCipher } from "@opencrane/backend/server/conversations/history";
@@ -38,4 +39,6 @@ export interface RoutineWorkflowComposition
 	readonly startup: Pick<RoutineScheduleStartupRecovery, "repairAllActiveSchedules">;
 	/** Recovers an admitted routine turn without creating another run or task. */
 	readonly dispatcher: RoutineTurnDispatcher;
+	/** Records producer-verified run progress through the scheduling transaction owner. */
+	readonly progress: RoutineRunProgressSink;
 }

@@ -1,6 +1,7 @@
 import type { ConversationComputerTurnAuthority } from "../conversation-computer-turn.types";
 import type { ConversationComputerTurnWorkflowReceiptBinder } from "./conversation-computer-turn-workflow-receipt.types";
 import type { ConversationApprovalNotificationPort } from "../approval-notifications/conversation-approval-notification.types";
+import type { RoutineRunProgressReporter } from "../../../routines/routine-run-progress.types";
 
 /** Carries only durable routing and lease fences into one server-owned conversation turn. */
 export interface ConversationComputerTurnTaskInput
@@ -41,6 +42,8 @@ export interface ConversationComputerTurnWorkflowDependencies
 	readonly approvalNotifications: ConversationApprovalNotificationPort;
 	readonly authority: Pick<ConversationComputerTurnAuthority, "start" | "advance">;
 	readonly receipts: ConversationComputerTurnWorkflowReceiptBinder;
+	/** Projects only protocol-proven waits and their successful wake-ups. */
+	readonly routineProgress: Pick<RoutineRunProgressReporter, "recordRunning" | "recordWaiting">;
 	/** Executes server-mediated tools while leaving companion-owned tools on their result event. */
 	readonly toolDispatch: ConversationComputerToolInvocationDispatch;
 	readonly siloId: string;

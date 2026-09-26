@@ -1,6 +1,5 @@
 import type { IWorkflowTaskDefinition, IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import type { RoutineComputerActivationPort, RoutineComputerActivationReceipt, RoutineFiringIdentity, RoutineOccurrenceCommand, RoutineOccurrencePreparationPort, RoutineOccurrencePreparationReceipt, RoutineRunAdmissionPort } from "@opencrane/backend/server/agents/scheduling/contract";
-import type { RoutineFiringDisposition } from "@opencrane/models/agents";
 
 import type { RoutineIdFactory } from "./routine-authority.types";
 import type { RoutineScheduleRepairPage, RoutineScheduleRepairPageResult } from "./routine-schedule-repair.types";
@@ -51,27 +50,6 @@ export interface RoutineOccurrencePreparationInput extends RoutineOccurrenceComm
 	readonly instruction: RoutineInstructionEnvelope;
 }
 
-/** Exact linked-run progress saved by the future run-result adapter. */
-export interface RoutineFiringProgressCommand
-{
-	/** Organisation that owns both firing and run. */
-	readonly siloId: string;
-	/** Immutable firing whose progress changes. */
-	readonly firingId: string;
-	/** Stable routine that owns the firing. */
-	readonly routineId: string;
-	/** Immutable routine revision used by the firing. */
-	readonly routineRevision: number;
-	/** Exact AgentRun already linked by admission. */
-	readonly runId: string;
-	/** New running, waiting, terminal, or uncertain disposition. */
-	readonly disposition: RoutineFiringDisposition;
-	/** First durable result or effect reference; every later progress event repeats it unchanged. */
-	readonly resultReference: string | null;
-	/** Digest paired with the first reference; the linked AgentRun remains the latest outcome owner. */
-	readonly resultDigest: `sha256:${string}` | null;
-}
-
 /** Transaction-bound task admission supplied by server composition. */
 export interface RoutineTaskAdmissionPort<Transaction>
 {
@@ -96,8 +74,6 @@ export interface RoutineWorkflowPersistence
 	recordActivation(identity: RoutineFiringIdentity, receipt: RoutineComputerActivationReceipt): Promise<RoutineComputerActivationReceipt>;
 	/** Validates and binds the admitted run, including replay after admission committed its backlink. */
 	bindAdmittedRun(identity: RoutineFiringIdentity, runId: string): Promise<void>;
-	/** Saves linked-run progress while preserving the first evidence pair; AgentRun owns latest outcome. */
-	recordRunProgress(command: RoutineFiringProgressCommand): Promise<void>;
 }
 
 /** Result of one automatic wake task after it advances or leaves the cursor. */

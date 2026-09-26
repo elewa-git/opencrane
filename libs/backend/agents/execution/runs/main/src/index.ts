@@ -17,6 +17,9 @@
 export * from "./openapi";
 export { PrismaRunAdmissionUnitOfWork } from "./prisma-run-admission-unit-of-work";
 export * from "./prisma-routine-run-snapshot-recovery-repository";
+export * from "./prisma-routine-run-progress-repository";
+export { RoutineRunProgressCancellationDecisions } from "./routine-run-progress.types";
+export type { RoutineRunProgressCancellation, RoutineRunProgressFacts, RoutineRunProgressFactsRepository, RoutineRunProgressRoutine, RoutineRunProgressTask } from "./routine-run-progress.types";
 export * from "./prisma-conversation-run-lifecycle-authority";
 export * from "./conversation-run-lifecycle.types";
 export * from "./prisma-tool-recovery-event-reporter";

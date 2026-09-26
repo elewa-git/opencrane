@@ -1,20 +1,21 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import type { RoutineComputerActivationReceipt, RoutineFiringIdentity, RoutineOccurrencePreparationReceipt } from "@opencrane/backend/server/agents/scheduling/contract";
+import type { RoutineComputerActivationReceipt, RoutineFiringIdentity, RoutineOccurrencePreparationReceipt, RoutineRunProgressObservation, RoutineRunProgressSink } from "@opencrane/backend/server/agents/scheduling/contract";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 
 import type { AutomaticRoutineFiringCommand, EncryptedRoutineProjection, ReadRoutineCommand, RoutineCommandResult, RoutineFiringResult } from "./routine-authority.types";
 import { PrismaRoutineCommandRepository } from "./prisma-routine-command-repository";
 import { PrismaRoutineFactsRepository } from "./routine-prisma-facts";
 import { PrismaRoutineFiringRepository } from "./prisma-routine-firing-repository";
+import { PrismaRoutineRunProgressRepository } from "./prisma-routine-run-progress-repository";
 import type { ChangeRoutineStatusPersistenceCommand, CreateRoutinePersistenceCommand, ReviseRoutinePersistenceCommand, RoutineCommandPersistence, RunRoutineNowPersistenceCommand } from "./routine-persistence.types";
 import type { PrismaRoutineUnitOfWorkDependencies } from "./routine-unit-of-work.types";
 import type { RoutineScheduleRepairPage, RoutineScheduleRepairPageResult } from "./routine-schedule-repair.types";
-import { RoutineOccurrenceStage, type RoutineFiringProgressCommand, type RoutineOccurrencePreparationInput, type RoutineWorkflowPersistence } from "./routine-workflow.types";
+import { RoutineOccurrenceStage, type RoutineOccurrencePreparationInput, type RoutineWorkflowPersistence } from "./routine-workflow.types";
 
 /** Opens one serializable, bounded-retry transaction for every routine authority operation. */
-export class PrismaRoutineUnitOfWork implements RoutineCommandPersistence, RoutineWorkflowPersistence
+export class PrismaRoutineUnitOfWork implements RoutineCommandPersistence, RoutineWorkflowPersistence, RoutineRunProgressSink
 {
 	/** Root client used only by the shared transaction runner. */
 	private readonly prisma: PrismaClient;
@@ -94,10 +95,18 @@ export class PrismaRoutineUnitOfWork implements RoutineCommandPersistence, Routi
 		await this._RunFiring("routine.run_bind", { ..._IdentityFields(identity), runId }, async function _BindRun(repository) { await repository.bindAdmittedRun(identity, runId); });
 	}
 
-	/** @inheritdoc */
-	async recordRunProgress(command: RoutineFiringProgressCommand): Promise<void>
+	/** Trace and persist progress before the producer acknowledges the corresponding milestone. */
+	async recordRunProgress(command: RoutineRunProgressObservation): Promise<void>
 	{
-		await this._RunFiring("routine.run_progress", { siloId: command.siloId, routineId: command.routineId, routineRevision: command.routineRevision, firingId: command.firingId, runId: command.runId, disposition: command.disposition }, async function _RecordProgress(repository) { await repository.recordRunProgress(command); });
+		const prisma = this.prisma;
+		await ___DoWithTrace("routine.run_progress", { siloId: command.siloId, routineId: command.routineId, firingId: command.firingId, runId: command.runId, disposition: command.disposition }, async function _Trace()
+		{
+			await ___RunInPrismaUnitOfWork(prisma, async function _Transaction(transaction)
+			{
+				const repository = new PrismaRoutineRunProgressRepository(transaction);
+				await repository.recordRunProgress(command);
+			}, { operation: "routine.run_progress", isolationLevel: Prisma.TransactionIsolationLevel.Serializable, attemptLimit: 3 });
+		});
 	}
 
 	/** Opens one traced transaction and gives the operation a transaction-bound command repository. */

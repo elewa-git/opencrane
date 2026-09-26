@@ -214,6 +214,7 @@ export default [
                 "scope:providers",
                 "scope:retrieval",
 				"scope:scheduling",
+				"scope:scheduling-contract",
                 "scope:shared",
                 "scope:skills",
 				"scope:skills-workflow-contract",

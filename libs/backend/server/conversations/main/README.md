@@ -32,7 +32,7 @@ signed-in participant ──► main ◄── HERE ──► history
 | `memory/source/` | Read the selected human message through current history access and recheck its encrypted source inside the command transaction. |
 | `memory/workflow/` | Declare identifier-only memory tasks and resume each saved provider and catalog phase through one Absurd workflow owner. The command transaction retains Absurd's returned receipt. First-dataset creation remains separately unfinished. |
 | `children/` | Resolve explicitly selected parent members, admit group-child work, preserve its original audience, write a closed group-child genesis origin, recover creation, and share human-reviewed text. |
-| `routines/` | Prepare occurrence history and its confirmed audience, activate the computer, join root-run admission with turn-task creation, and recover admitted routine turns without admitting new work. |
+| `routines/` | Prepare occurrence history and its confirmed audience, activate the computer, join root-run admission with turn-task creation, recover admitted routine turns, and derive scheduling progress from checked run and conversation evidence. |
 | `computers/` | Separate activation, lifecycle, checkpoint, turn and review operation owners. |
 | `computers/tools/` | Proposal admission, current dispatch access and saved result consumption each have their own owner. |
 | `computers/interruptions/` | Select and admit requester-owned Stop commands, record their outcome and let Absurd recover cancellation cleanup. |
@@ -196,8 +196,17 @@ compilation dispatches from the durable routine genesis and checked first instru
 selected managed agent's initial run answers, later human messages use normal interactive admission.
 The typed dispatch result keeps absent routine candidates from causing fallback. A missing routine compiler fails
 closed rather than treating the service instruction as a human message. It exposes no task-spawn
-port. These adapters alone do not register schedule workers or expose creation controls.
-Preparation and activation are exported but not registered with a worker or route.
+port.
+
+`ConversationRoutineRunProgressObserver` joins the checked run, occurrence record, frozen turn and
+immutable conversation history before it reports scheduling progress. Ordinary interactive runs
+return no observation. A routine-linked mismatch throws instead of silently skipping progress.
+Completion requires the exact saved assistant answer; unavailable and Stop paths require their
+saved receipts and terminal run state. The workflow reports Waiting only for a currently verified
+participant approval or generated-file wait. A non-consuming current-authority read must prove that
+external wait has cleared before the replay-safe Running checkpoint can acknowledge progression.
+Scheduling acknowledgement is awaited before output settlement, unavailable return or Stop task
+completion, so a lost response retries saved evidence without repeating the producer effect.
 
 ### Tool progress and recovery
 

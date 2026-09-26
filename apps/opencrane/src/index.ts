@@ -86,6 +86,7 @@ async function _Main(): Promise<void>
 			membership,
 			runAdmission: conversationRunAdmission,
 			routineTurns: routineWorkflows.dispatcher,
+			routineProgress: routineWorkflows.progress,
 			runtimeAdmission: mcpRuntime.admitToolInvocationInTransaction,
 			toolDispatch: mcpRuntime.toolDispatch,
 			workflows: workflows.execution,

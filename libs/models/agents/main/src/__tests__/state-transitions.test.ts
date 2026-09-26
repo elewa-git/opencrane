@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { AgentRunStates, AgentRunTerminalReasons } from "../agent-run.types";
 import { __IsAgentRevisionTransitionAllowed, __IsAgentRunTransitionAllowed, __IsAgentServiceTransitionAllowed } from "../index";
 
 describe("agent model state transitions", function _stateTransitionSuite()
@@ -27,6 +28,9 @@ describe("agent model state transitions", function _stateTransitionSuite()
 
 	it("permits only the current personal-run lifecycle", function _agentRunTransitions()
 	{
+		expect(AgentRunStates.Cancelling).toBe("cancelling");
+		expect(AgentRunStates.Cancelled).toBe("cancelled");
+		expect(AgentRunTerminalReasons.UserCancelled).toBe("user_cancelled");
 		expect(__IsAgentRunTransitionAllowed("accepted", "queued")).toBe(true);
 		expect(__IsAgentRunTransitionAllowed("queued", "assigned")).toBe(true);
 		expect(__IsAgentRunTransitionAllowed("assigned", "running")).toBe(true);
@@ -37,7 +41,13 @@ describe("agent model state transitions", function _stateTransitionSuite()
 		expect(__IsAgentRunTransitionAllowed("running", "completed")).toBe(true);
 		expect(__IsAgentRunTransitionAllowed("accepted", "running")).toBe(true);
 		expect(__IsAgentRunTransitionAllowed("waiting_for_input", "completed")).toBe(true);
+		expect(__IsAgentRunTransitionAllowed("accepted", "cancelling")).toBe(true);
+		expect(__IsAgentRunTransitionAllowed("running", "cancelling")).toBe(true);
+		expect(__IsAgentRunTransitionAllowed("recovery_required", "cancelling")).toBe(true);
+		expect(__IsAgentRunTransitionAllowed("cancelling", "completed")).toBe(true);
+		expect(__IsAgentRunTransitionAllowed("cancelling", "cancelled")).toBe(true);
 		expect(__IsAgentRunTransitionAllowed("completed", "running")).toBe(false);
+		expect(__IsAgentRunTransitionAllowed("cancelled", "running")).toBe(false);
 		expect(__IsAgentRunTransitionAllowed("failed", "queued")).toBe(false);
 	});
 

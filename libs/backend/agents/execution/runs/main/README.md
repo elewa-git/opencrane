@@ -63,6 +63,10 @@ does not grant permission to use a run.
 
 - `PrismaRunAdmissionUnitOfWork` saves a new run and its first lease-bound input snapshot together.
 - `PrismaRoutineRunSnapshotRecoveryRepository` reads one already-admitted automatic or manual routine run and returns its first immutable snapshot only after the run, occurrence, requester, workflow-task provenance, execution subject and digest all match. It never admits or creates a run.
+- `PrismaRoutineRunProgressUnitOfWork` reads historical routine progress facts only after the run,
+  reciprocal occurrence, saved snapshot digest, original workflow receipt and cancellation evidence
+  match. It returns null only for a positively identified ordinary interactive run and never admits,
+  spawns, or consults current grants.
 - `PrismaSelfRunStatusUnitOfWork` and `_CreatePrismaSelfRunStatusRouter` expose owner-filtered status
   only after the current exact `AgentRun/Read` grant is checked in the same database snapshot.
 - `PrismaConversationRunCancellationRepository` binds one requester-authorized Stop command,

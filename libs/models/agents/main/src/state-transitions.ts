@@ -20,13 +20,15 @@ const _AGENT_REVISION_TRANSITIONS: Readonly<Record<AgentRevisionState, readonly 
 
 /** Legal next states for each durable agent-run state. */
 const _AGENT_RUN_TRANSITIONS: Readonly<Record<AgentRunState, readonly AgentRunState[]>> = {
-	accepted: ["queued", "running", "failed"],
+	accepted: ["queued", "running", "cancelling", "failed"],
 	queued: ["assigned", "failed"],
 	assigned: ["running", "failed"],
-	running: ["waiting_for_input", "recovery_required", "completed", "failed"],
-	waiting_for_input: ["running", "recovery_required", "completed", "failed"],
-	recovery_required: ["running", "failed"],
+	running: ["waiting_for_input", "recovery_required", "completed", "cancelling", "failed"],
+	waiting_for_input: ["running", "recovery_required", "completed", "cancelling", "failed"],
+	recovery_required: ["running", "cancelling", "failed"],
+	cancelling: ["completed", "cancelled"],
 	completed: [],
+	cancelled: [],
 	failed: [],
 };
 
@@ -54,7 +56,7 @@ export function __IsAgentRevisionTransitionAllowed(current: AgentRevisionState, 
 	return _AGENT_REVISION_TRANSITIONS[current].includes(next);
 }
 
-/** Return whether an agent run may move straight from one state to another. Only the moves in the table above are legal; `completed` and `failed` are terminal. */
+/** Return whether an agent run may move straight from one state to another. Only the moves in the table above are legal; `completed`, `cancelled`, and `failed` are terminal. */
 export function __IsAgentRunTransitionAllowed(current: AgentRunState, next: AgentRunState): boolean
 {
 	return _AGENT_RUN_TRANSITIONS[current].includes(next);

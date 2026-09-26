@@ -3,6 +3,20 @@
 	"owners": {
 		"repositories": [
 			{
+				"path": "libs/backend/agents/execution/runs/main/src/prisma-routine-run-progress-repository.ts",
+				"adapter": "PrismaRoutineRunProgressFactsRepository",
+				"contract": "RoutineRunProgressFactsRepository",
+				"contractImportPath": "./routine-run-progress.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/agents/scheduling/main/src/prisma-routine-run-progress-repository.ts",
+				"adapter": "PrismaRoutineRunProgressRepository",
+				"contract": "RoutineRunProgressSink",
+				"contractImportPath": "@opencrane/backend/server/agents/scheduling/contract",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/agents/execution/runs/main/src/prisma-routine-run-snapshot-recovery-repository.ts",
 				"adapter": "PrismaRoutineRunSnapshotRecoveryRepository",
 				"contract": "RoutineRunSnapshotRecovery",
@@ -1731,6 +1745,15 @@
 		],
 		"unitsOfWork": [
 			{
+				"path": "libs/backend/agents/execution/runs/main/src/prisma-routine-run-progress-repository.ts",
+				"adapter": "PrismaRoutineRunProgressUnitOfWork",
+				"contract": "RoutineRunProgressFactsRepository",
+				"contractImportPath": "./routine-run-progress.types",
+				"constructs": [
+					{ "adapter": "PrismaRoutineRunProgressFactsRepository", "importPath": "<same-file>" }
+				]
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/routines/prisma-routine-run-admission.ts",
 				"adapter": "PrismaRoutineRunAdmissionUnitOfWork",
 				"contract": "RoutineRunAdmissionPort",
@@ -1774,7 +1797,8 @@
 				"constructs": [
 					{ "adapter": "PrismaRoutineFactsRepository", "importPath": "./routine-prisma-facts" },
 					{ "adapter": "PrismaRoutineCommandRepository", "importPath": "./prisma-routine-command-repository" },
-					{ "adapter": "PrismaRoutineFiringRepository", "importPath": "./prisma-routine-firing-repository" }
+					{ "adapter": "PrismaRoutineFiringRepository", "importPath": "./prisma-routine-firing-repository" },
+					{ "adapter": "PrismaRoutineRunProgressRepository", "importPath": "./prisma-routine-run-progress-repository" }
 				]
 			},
 			{

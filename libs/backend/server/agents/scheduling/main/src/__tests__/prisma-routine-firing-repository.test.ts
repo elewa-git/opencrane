@@ -216,29 +216,3 @@ describe("PrismaRoutineFiringRepository schedule repair pages", function _Repair
 		await expect(_Repository({ agentRoutine: { findMany: vi.fn() } }).repository.repairActiveSchedulesPage(page)).rejects.toThrow();
 	});
 });
-
-describe("PrismaRoutineFiringRepository linked-run evidence", function _ProgressSuite()
-{
-	it("preserves the first uncertain evidence through running and terminal resolution", async function _EvidenceChain()
-	{
-		const saved: { disposition: AgentRoutineFiringDisposition; resultReference: string; resultDigest: string } = { disposition: AgentRoutineFiringDisposition.Uncertain, resultReference: "result-1", resultDigest: `sha256:${"7".repeat(64)}` };
-		const findFirst = vi.fn(async function _Read() { return { ...saved }; });
-		const updateMany = vi.fn(async function _Update({ data }: { data: { disposition: AgentRoutineFiringDisposition; resultReference: string | null; resultDigest: string | null } })
-		{
-			saved.disposition = data.disposition;
-			saved.resultReference = data.resultReference!;
-			saved.resultDigest = data.resultDigest!;
-			return { count: 1 };
-		});
-		const transaction = { agentRoutineFiring: { findFirst, updateMany } };
-		const f = _Repository(transaction);
-		const base = { siloId: "silo-1", firingId: "firing-1", routineId: "routine-1", routineRevision: 2, runId: "run-1", resultReference: "result-1", resultDigest: `sha256:${"7".repeat(64)}` as const };
-
-		await f.repository.recordRunProgress({ ...base, disposition: RoutineFiringDisposition.Running });
-		await expect(f.repository.recordRunProgress({ ...base, disposition: RoutineFiringDisposition.Failed, resultReference: "replacement", resultDigest: `sha256:${"8".repeat(64)}` })).rejects.toThrow("preserve its first saved result evidence");
-		await f.repository.recordRunProgress({ ...base, disposition: RoutineFiringDisposition.Completed });
-		expect(updateMany).toHaveBeenNthCalledWith(1, expect.objectContaining({ data: expect.objectContaining({ disposition: AgentRoutineFiringDisposition.Running, resultReference: "result-1", resultDigest: base.resultDigest }) }));
-		expect(updateMany).toHaveBeenNthCalledWith(2, expect.objectContaining({ data: expect.objectContaining({ disposition: AgentRoutineFiringDisposition.Completed, resultReference: "result-1", resultDigest: base.resultDigest, finishedAt: _NOW }) }));
-		expect(updateMany).toHaveBeenCalledTimes(2);
-	});
-});

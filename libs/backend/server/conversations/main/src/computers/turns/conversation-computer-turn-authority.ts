@@ -57,7 +57,10 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 			if (active.protocol.state === ConversationComputerTurnProtocolStates.Cancelled)
 				return null;
 			if (active.protocol.state === ConversationComputerTurnProtocolStates.ResponseUnavailable)
+			{
+				await this._FinishUnavailable(active);
 				return active;
+			}
 			const execution = await this.dependencies.candidates.assertCurrentForWorkflow(active);
 			_AssertRecompiledInput(active, execution.candidate.compiledInput);
 			await this.dependencies.runLifecycle.start(_RunLifecycleCommand(active));
@@ -82,7 +85,10 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		if (turn.protocol.cancellation !== null)
 			return null;
 		if (turn.protocol.state === ConversationComputerTurnProtocolStates.ResponseUnavailable)
+		{
+			await this._FinishUnavailable(turn);
 			return turn;
+		}
 		await this.dependencies.runLifecycle.start(_RunLifecycleCommand(turn));
 		return turn;
 	}
@@ -102,7 +108,7 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 			return { outcome: ConversationComputerModelProgressOutcomes.AuthorityEnded };
 		if (turn.protocol.state === ConversationComputerTurnProtocolStates.ResponseUnavailable)
 		{
-			await this.dependencies.runLifecycle.enterRecoveryRequired(_RunLifecycleCommand(turn));
+			await this._FinishUnavailable(turn);
 			return { outcome: ConversationComputerModelProgressOutcomes.ResponseUnavailable };
 		}
 		let progress: ConversationComputerModelProgress;
@@ -163,7 +169,7 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 			}
 			if (saved === null || saved.protocol.state !== ConversationComputerTurnProtocolStates.ResponseUnavailable)
 				return { outcome: ConversationComputerModelProgressOutcomes.Retry };
-			await this.dependencies.runLifecycle.enterRecoveryRequired(_RunLifecycleCommand(saved));
+			await this._FinishUnavailable(saved);
 		}
 		return progress;
 	}
@@ -248,8 +254,18 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 			}
 		}
 		await this.dependencies.runLifecycle.complete(_RunLifecycleCommand(turn));
+		await this.dependencies.routineProgress.recordCompleted(turn);
 		await this.dependencies.credentials.revoke(turn.bootstrapId);
 		await this.dependencies.store.settle(turn);
+	}
+
+	/** Preserve one saved unavailable result in both run and routine progress before returning it. */
+	private async _FinishUnavailable(turn: FrozenConversationComputerTurn): Promise<void>
+	{
+		if (turn.protocol.state !== ConversationComputerTurnProtocolStates.ResponseUnavailable || turn.protocol.unavailable === null)
+			throw new Error("Conversation computer unavailable progress requires its saved receipt");
+		await this.dependencies.runLifecycle.enterRecoveryRequired(_RunLifecycleCommand(turn));
+		await this.dependencies.routineProgress.recordUnavailable(turn);
 	}
 
 }

@@ -25,6 +25,7 @@ describe("conversation computer workflow composition", function _ConversationCom
 	{
 		const runAdmission = { admit: vi.fn() } as unknown as ConversationComputerRunAdmissionPort;
 		const routineTurns = { dispatch: vi.fn() } as unknown as RoutineTurnDispatcher;
+		const routineProgress = { recordRunProgress: vi.fn() };
 		const cipher = { encrypt: vi.fn(), decrypt: vi.fn() } as unknown as ConversationPrivatePayloadCipher;
 		_CreateConversationComputerWorkflowComposition({
 			prisma: {} as PrismaClient,
@@ -37,6 +38,7 @@ describe("conversation computer workflow composition", function _ConversationCom
 			membership: {} as never,
 			runAdmission,
 			routineTurns,
+			routineProgress,
 			runtimeAdmission: {} as never,
 			toolDispatch: {} as never,
 			workflows: { register: vi.fn(), spawn: vi.fn(), declare: vi.fn() } as never,
