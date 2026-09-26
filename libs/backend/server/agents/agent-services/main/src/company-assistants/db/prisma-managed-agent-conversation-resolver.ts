@@ -40,6 +40,32 @@ export class PrismaManagedAgentConversationResolver
 	}
 
 	/**
+	 * Returns a ready candidate only while the human may Invoke it and the service may Use its model.
+	 *
+	 * This eligibility read records no decision evidence. The caller owns any later operation admission.
+	 * Identity transport and integrity failures propagate so callers can distinguish them from denial.
+	 */
+	public async eligible(caller: { readonly siloId: string; readonly principalId: string }, agentServiceId: string): Promise<ManagedAgentConversationCandidate | null>
+	{
+		const current = await this._loadCandidate(caller, agentServiceId);
+		if (current === null)
+			return null;
+		const { candidate, modelDefinitionId, nowEpochMs } = current;
+		const authorization = new PrismaAuthorizationAuthority(this.transaction);
+		const commands = [
+			{ principalId: caller.principalId, resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: agentServiceId }, action: ProductAuthorizationActions.Invoke },
+			{ principalId: candidate.principalId, resource: { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: modelDefinitionId }, action: ProductAuthorizationActions.Use },
+		];
+		for (const command of commands)
+		{
+			const decision = await authorization.decidePrincipal({ ...command, siloId: caller.siloId, nowEpochMs });
+			if (decision.outcome !== AuthorizationDecisionOutcomes.Allow)
+				return null;
+		}
+		return candidate;
+	}
+
+	/**
 	 * Returns a candidate only while its current identity, revision and requester Invoke decision agree.
 	 * Called by: the app's adapter for managed group-child conversation creation.
 	 * @returns Null when current authority is absent or inactive; the child worker may end that request.

@@ -4,7 +4,7 @@ import { _KurrentHistoryStore, HistoryExpectedRevisions, type HistoryRecordedEve
 import { describe, expect, it, vi } from "vitest";
 
 import { ConversationComputerHistory } from "../conversation-computer-history";
-import type { ConversationComputerAppendCommand, ConversationComputerCurrentCommand } from "../conversation-computer-history.types";
+import type { ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerInitialAppendCommand } from "../conversation-computer-history.types";
 
 /** Reuses a valid UUID for the immutable computer-history event idempotency key. */
 const _EVENT_ID = "31c1f1dc-0010-4f13-9c2f-d3841ffd6651";
@@ -65,6 +65,12 @@ function _AppendCommand(overrides: Partial<ConversationComputerAppendCommand> = 
 	return { expectedRevision: 0n, eventId: _EVENT_ID, computer: _Computer(), lease: _Lease(), ...overrides };
 }
 
+/** Builds the lease-free cold snapshot required for an owner-managed initial append. */
+function _InitialCommand(overrides: Partial<ConversationComputerInitialAppendCommand> = {}): ConversationComputerInitialAppendCommand
+{
+	return { eventId: _EVENT_ID, computer: _Computer({ state: ConversationComputerStates.Cold }), ...overrides };
+}
+
 /** Builds a recorded computer-history envelope whose metadata agrees with its typed snapshot. */
 function _Event(revision: bigint, computer: ConversationComputer = _Computer(), lease: ComputerLease | null = _Lease()): HistoryRecordedEvent
 {
@@ -106,6 +112,73 @@ function _Store(overrides: Partial<Pick<HistoryStore, "append" | "readHead" | "r
 
 describe("ConversationComputerHistory", function ()
 {
+	it("builds the exact validated missing-stream envelope without performing history I/O", function _InitialAppend()
+	{
+		const store = _Store();
+		const history = new ConversationComputerHistory(store);
+		const computer = _Computer({ state: ConversationComputerStates.Cold });
+
+		expect(history.initialAppend({ eventId: _EVENT_ID, computer })).toEqual({
+			streamName: "conversation-computer-computer-1",
+			expectedRevision: HistoryExpectedRevisions.NoStream,
+			events: [{
+				id: _EVENT_ID,
+				type: "opencrane.conversation-computer.v1",
+				data: { computer, lease: null },
+				metadata: { siloId: "silo-1", computerId: "computer-1", conversationId: "conversation-1", agentIdentityId: "identity-1", profileRevisionId: "profile-1" },
+			}],
+		});
+		expect(store.append).not.toHaveBeenCalled();
+		expect(store.readHead).not.toHaveBeenCalled();
+		expect(store.readStream).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		["non-cold state", _Computer({ state: ConversationComputerStates.Warm })],
+		["zero lease generation", _Computer({ state: ConversationComputerStates.Cold, leaseGeneration: 0 })],
+		["later lease generation", _Computer({ state: ConversationComputerStates.Cold, leaseGeneration: 2 })],
+		["workspace checkpoint", _Computer({ state: ConversationComputerStates.Cold, workspaceCheckpoint: { artifactRevisionId: "artifact-revision-1", digest: "sha256:checkpoint", format: "tar", checkpointedAt: "2026-09-01T00:00:00.000Z" } })],
+		["different update time", _Computer({ state: ConversationComputerStates.Cold, updatedAt: "2026-09-01T00:00:01.000Z" })],
+	])("rejects an initial snapshot with %s before history I/O", function _InvalidInitialSnapshot(_name, computer)
+	{
+		const store = _Store();
+		const history = new ConversationComputerHistory(store);
+
+		expect(function _Build() { history.initialAppend(_InitialCommand({ computer })); }).toThrow();
+		expect(store.append).not.toHaveBeenCalled();
+		expect(store.readHead).not.toHaveBeenCalled();
+		expect(store.readStream).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		["computer", { id: "" }],
+		["silo", { siloId: "" }],
+		["conversation", { conversationId: "" }],
+		["agent identity", { agentIdentityId: "" }],
+		["profile revision", { profileRevisionId: "" }],
+	])("rejects an initial computer with an invalid %s scope before history I/O", function _InvalidInitialScope(_name, scope)
+	{
+		const store = _Store();
+		const history = new ConversationComputerHistory(store);
+		const computer = _Computer({ state: ConversationComputerStates.Cold, ...scope });
+
+		expect(function _Build() { history.initialAppend(_InitialCommand({ computer })); }).toThrow();
+		expect(store.append).not.toHaveBeenCalled();
+		expect(store.readHead).not.toHaveBeenCalled();
+		expect(store.readStream).not.toHaveBeenCalled();
+	});
+
+	it("rejects an invalid initial event UUID before history I/O", function _InvalidInitialEventId()
+	{
+		const store = _Store();
+		const history = new ConversationComputerHistory(store);
+
+		expect(function _Build() { history.initialAppend(_InitialCommand({ eventId: "not-a-uuid" })); }).toThrow("UUID event identifier");
+		expect(store.append).not.toHaveBeenCalled();
+		expect(store.readHead).not.toHaveBeenCalled();
+		expect(store.readStream).not.toHaveBeenCalled();
+	});
+
 	it.each(["cold", "warm"])("reloads a %s computer through the Kurrent adapter", async function (state)
 	{
 		const lease = state === "cold" ? null : _Lease();

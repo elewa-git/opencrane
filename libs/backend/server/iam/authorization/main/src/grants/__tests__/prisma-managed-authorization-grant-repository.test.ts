@@ -3,7 +3,7 @@ import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, Authorizati
 import { describe, expect, it, vi } from "vitest";
 
 import type { AdmitPrincipalProductAuthorizationCommand } from "../../authority/authorization-authority.types";
-import type { ReconcileManagedAuthorizationGrantsCommand } from "../managed-authorization-grants.types";
+import type { ManagedAuthorizationGrantSpec, ReconcileManagedAuthorizationGrantsCommand } from "../managed-authorization-grants.types";
 import { PrismaAuthorizationAuthority } from "../../authority/persistence/prisma-authorization-authority";
 import { PrismaManagedAuthorizationGrantRepository } from "../persistence/prisma-managed-authorization-grant-repository";
 
@@ -99,6 +99,66 @@ describe("managed grant activation and same-transaction admission", function _Su
 		const f = _Fixture();
 		await expect(f.repository.reconcileManagedResourceGrants({ ..._Commands().reconciliation, now: new Date(Number.NaN) })).rejects.toThrow("coordinates are invalid");
 		expect(f.transaction.authorizationGrant.findMany).not.toHaveBeenCalled();
+		expect(f.transaction.authorizationGrant.create).not.toHaveBeenCalled();
+	});
+
+	it("restricts unrevoked grants without creating a missing or previously revoked retained grant", async function _RestrictWithoutCreate()
+	{
+		const f = _Fixture();
+		const commands = _Commands(ProductAuthorizationResourceKinds.Routine, ProductAuthorizationActions.Read);
+		const retained = commands.reconciliation.grants[0]!;
+		await f.repository.reconcileManagedResourceGrants(commands.reconciliation);
+		const editCapability = __ProductAuthorizationCapability(ProductAuthorizationResourceKinds.Routine, ProductAuthorizationActions.Edit)!;
+		const useCapability = __ProductAuthorizationCapability(ProductAuthorizationResourceKinds.Routine, ProductAuthorizationActions.Use)!;
+		const retireCapability = __ProductAuthorizationCapability(ProductAuthorizationResourceKinds.Routine, ProductAuthorizationActions.Retire)!;
+		const extraPrincipal = { ...retained, subject: { kind: AuthorizationSubjectKinds.Principal, principalId: "principal-2" }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: "principal-2" } } as const satisfies ManagedAuthorizationGrantSpec;
+		await f.repository.reconcileManagedResourceGrants({ ...commands.reconciliation, grants: [retained, { ...retained, capability: editCapability }, { ...retained, capability: useCapability }, { ...retained, capability: retireCapability }, extraPrincipal] });
+		f.transaction.authorizationGrant.create.mockClear();
+
+		await expect(f.repository.restrictManagedResourceGrants({ siloId: commands.reconciliation.siloId, managerId: commands.reconciliation.managerId, resource: commands.reconciliation.resource, retainedGrants: [retained], now: _DATABASE_TIME })).resolves.toBe(4);
+		expect(f.transaction.authorizationGrant.create).not.toHaveBeenCalled();
+		expect(f.rows.filter(row => row.revokedAt === null)).toHaveLength(1);
+		expect(f.rows.find(row => row.revokedAt === null)?.capabilityId).toBe("routine:read");
+
+		await f.repository.reconcileManagedResourceGrants({ ...commands.reconciliation, grants: [], now: new Date(_DATABASE_TIME.getTime() + 1) });
+		f.transaction.authorizationGrant.create.mockClear();
+		await expect(f.repository.restrictManagedResourceGrants({ siloId: commands.reconciliation.siloId, managerId: commands.reconciliation.managerId, resource: commands.reconciliation.resource, retainedGrants: [retained], now: new Date(_DATABASE_TIME.getTime() + 2) })).resolves.toBe(0);
+		expect(f.transaction.authorizationGrant.create).not.toHaveBeenCalled();
+		expect(f.rows.filter(row => row.revokedAt === null)).toHaveLength(0);
+	});
+
+	it.each(["future", "expired"])("preserves retained Read timing while revoking %s mutation grants", async function _RestrictionTiming(kind)
+	{
+		const f = _Fixture();
+		const commands = _Commands(ProductAuthorizationResourceKinds.Routine, ProductAuthorizationActions.Read);
+		const retained = commands.reconciliation.grants[0]!;
+		const editCapability = __ProductAuthorizationCapability(ProductAuthorizationResourceKinds.Routine, ProductAuthorizationActions.Edit)!;
+		await f.repository.reconcileManagedResourceGrants({ ...commands.reconciliation, grants: [retained, { ...retained, capability: editCapability }] });
+		const readGrant = f.rows.find(row => row.capabilityId === "routine:read")!;
+		const editGrant = f.rows.find(row => row.capabilityId === "routine:edit")!;
+		for (const grant of [readGrant, editGrant])
+		{
+			if (kind === "future")
+				grant.validFrom = new Date(_DATABASE_TIME.getTime() + 1_000);
+			else
+				grant.expiresAt = new Date(_DATABASE_TIME.getTime() - 1);
+		}
+		const originalRead = { ...readGrant };
+		f.transaction.authorizationGrant.create.mockClear();
+		await expect(f.repository.restrictManagedResourceGrants({ siloId: commands.reconciliation.siloId, managerId: commands.reconciliation.managerId, resource: commands.reconciliation.resource, retainedGrants: [retained], now: _DATABASE_TIME })).resolves.toBe(1);
+		expect(readGrant).toEqual(originalRead);
+		expect(editGrant.revokedAt).toEqual(_DATABASE_TIME);
+		expect(f.transaction.authorizationGrant.create).not.toHaveBeenCalled();
+		await expect(f.authority.admitPrincipal({ ...commands.admission, nowEpochMs: _DATABASE_TIME.getTime() })).resolves.toMatchObject({ outcome: AuthorizationDecisionOutcomes.Deny });
+	});
+
+	it("rejects invalid restriction coordinates before reading or writing grants", async function _InvalidRestriction()
+	{
+		const f = _Fixture();
+		const commands = _Commands();
+		await expect(f.repository.restrictManagedResourceGrants({ siloId: commands.reconciliation.siloId, managerId: commands.reconciliation.managerId, resource: commands.reconciliation.resource, retainedGrants: commands.reconciliation.grants, now: new Date(Number.NaN) })).rejects.toThrow("coordinates are invalid");
+		expect(f.transaction.authorizationGrant.findMany).not.toHaveBeenCalled();
+		expect(f.transaction.authorizationGrant.updateMany).not.toHaveBeenCalled();
 		expect(f.transaction.authorizationGrant.create).not.toHaveBeenCalled();
 	});
 

@@ -1,12 +1,12 @@
 import { __SameMembershipBinding } from "@opencrane/backend/server/iam/membership";
-import { __DigestRunInputSnapshot, RunAdmissionBuildOutcomes, RunAdmissionExistingVerificationOutcomes, RunAdmissionMessageInputModes, RunAdmissionOutcomes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type InitialRunAuthority, type RunAdmissionCommit, type RunAdmissionPrepare } from "@opencrane/backend/agents/execution/runs";
-import { RUN_INPUT_SNAPSHOT_VERSION, ___ParseRunBudgetPolicy, type RunBudgetPolicy, type RunInputSnapshot } from "@opencrane/contracts";
+import { __DigestRunInputSnapshot, RunAdmissionBuildOutcomes, RunAdmissionExistingVerificationOutcomes, RunAdmissionMessageInputModes, RunAdmissionOutcomes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type InitialRunAuthority, type RunAdmissionCommit, type RunAdmissionPrepare, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import { AgentRunTriggers, RUN_INPUT_SNAPSHOT_VERSION, ___ParseRunBudgetPolicy, type RunBudgetPolicy, type RunInputOrigin, type RunInputSnapshot } from "@opencrane/contracts";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, ___SortBy } from "@opencrane/util";
 
 import { __AreRunInputSnapshotMcpToolsValid } from "../sources/mcp-tool-snapshot.validator";
 import { RunInputSnapshotAdmissionOutcomes, SessionAssemblyOutcomes, type AssembleRunInputSnapshotResult, type SessionAssemblyRefusalReason } from "./session-assembly-result.types";
-import { RunInputMemoryScopes, SessionAssemblyLoadOutcomes, type ApprovedPersonaInput, type MemoryScopeInput, type SessionAssemblyAuthorities, type SessionAssemblyCommand, type ConversationContextInput, type ToolPolicyInput } from "./session-assembly.types";
+import { RunInputMemoryScopes, SessionAssemblyLoadOutcomes, type ApprovedPersonaInput, type MemoryScopeInput, type SessionAssemblyAuthorities, type SessionAssemblyCommand, type ConversationContextInput, type ToolPolicyInput, type SessionAssemblyLoad } from "./session-assembly.types";
 
 /** Maps the admission repository's serialized result into the public assembly vocabulary. */
 const _ADMISSION_OUTCOMES: Record<`${RunInputSnapshotAdmissionOutcomes}`, RunInputSnapshotAdmissionOutcomes> = {
@@ -63,19 +63,11 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 	// source below can read a conversation the caller has only just created.
 	const admitted = await authorities.admission.admit<SessionAssemblyRefusalReason>(command, async function _VerifyExisting(snapshot, transaction)
 	{
-		const personalMemory = _ExistingPersonalMemoryPolicy(snapshot);
-		if (personalMemory === null)
-			return { outcome: RunAdmissionExistingVerificationOutcomes.Denied, reason: "memory_scope_unavailable" } as const;
-		const authority: InitialRunAuthority = { agentServiceId: snapshot.agentServiceId, agentRevisionId: snapshot.agentRevisionId, executionPolicy: { persona: snapshot.personaRevisionId === null ? RunExecutionPersonaPolicies.None : RunExecutionPersonaPolicies.Required, personalMemory }, promptCompilerVersion: snapshot.promptCompilerVersion, trigger: command.trigger };
-		const current = await authorities.executionSubject.load(command, authority, transaction);
+		const current = await __RevalidateRunInputSnapshot(command, snapshot, authorities, transaction);
 		if (current.outcome === SessionAssemblyLoadOutcomes.Denied)
 			return { outcome: RunAdmissionExistingVerificationOutcomes.Denied, reason: current.reason } as const;
-		if (!_IsExecutionSubjectBound(command, authority, current.value) || !_SameExistingSubject(snapshot.executionSubject, current.value))
-			return { outcome: RunAdmissionExistingVerificationOutcomes.Denied, reason: "identity_unavailable" } as const;
-		const conversation = await authorities.productAuthorization.verifyExisting(command, current.value, transaction);
-		if (conversation.outcome !== SessionAssemblyLoadOutcomes.Denied)
-			checked.subject = current.value;
-		return conversation.outcome === SessionAssemblyLoadOutcomes.Denied ? { outcome: RunAdmissionExistingVerificationOutcomes.Denied, reason: conversation.reason } as const : { outcome: RunAdmissionExistingVerificationOutcomes.Verified } as const;
+		checked.subject = current.value;
+		return { outcome: RunAdmissionExistingVerificationOutcomes.Verified } as const;
 	}, async function _compileWithinAdmission(transaction)
 	{
 		// 3. Load the run and its frozen revision first; every later source needs them.
@@ -140,6 +132,27 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 	return { outcome: SessionAssemblyOutcomes.Assembled, admissionOutcome: _ADMISSION_OUTCOMES[admitted.outcome], snapshot: admitted.snapshot, currentExecutionSubject: checked.subject };
 }
 
+/**
+ * Rechecks an already validated snapshot's current subject and requester conversation permission.
+ * Recovery callers must first verify persisted run, snapshot and origin coordinates through the
+ * execution-runs owner. This method never admits a run, refreshes the saved requester login, or
+ * replays the model and tool resource admissions frozen into the snapshot.
+ */
+export async function __RevalidateRunInputSnapshot(command: SessionAssemblyCommand, snapshot: RunInputSnapshot, authorities: Pick<SessionAssemblyAuthorities, "executionSubject" | "productAuthorization">, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ExecutionSubject>>
+{
+	const personalMemory = _ExistingPersonalMemoryPolicy(snapshot);
+	if (personalMemory === null)
+		return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "memory_scope_unavailable" };
+	const authority: InitialRunAuthority = { agentServiceId: snapshot.agentServiceId, agentRevisionId: snapshot.agentRevisionId, executionPolicy: { persona: snapshot.personaRevisionId === null ? RunExecutionPersonaPolicies.None : RunExecutionPersonaPolicies.Required, personalMemory }, promptCompilerVersion: snapshot.promptCompilerVersion, trigger: command.trigger };
+	const current = await authorities.executionSubject.load(command, authority, transaction);
+	if (current.outcome === SessionAssemblyLoadOutcomes.Denied)
+		return current;
+	if (!_IsExecutionSubjectBound(command, authority, current.value) || !_SameExistingSubject(snapshot.executionSubject, current.value))
+		return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "identity_unavailable" };
+	const conversation = await authorities.productAuthorization.verifyExisting(command, current.value, transaction);
+	return conversation.outcome === SessionAssemblyLoadOutcomes.Denied ? conversation : current;
+}
+
 /** Recovers the saved memory policy without promoting an absent or malformed scope into permission. */
 function _ExistingPersonalMemoryPolicy(snapshot: RunInputSnapshot): RunExecutionPersonalMemoryPolicies | null
 {
@@ -175,12 +188,14 @@ function _isCommandValid(command: SessionAssemblyCommand): boolean
 		&& command.siloId.trim().length > 0
 		&& (command.conversationId === null || command.conversationId.trim().length > 0)
 		&& command.requestIdempotencyKey.trim().length > 0
-		&& _isMessageInputValid(command);
+		&& _isTriggerInputValid(command);
 }
 
-/** Require no message for non-conversational work or one exact pre-persisted history boundary for a conversation. */
-function _isMessageInputValid(command: SessionAssemblyCommand): boolean
+/** Require exactly the input arm owned by the selected server trigger. */
+function _isTriggerInputValid(command: SessionAssemblyCommand): boolean
 {
+	if (command.trigger !== AgentRunTriggers.Interactive)
+		return _isRoutineInputValid(command);
 	if (command.conversationId === null)
 		return command.messageInput === null;
 	const input = command.messageInput;
@@ -198,6 +213,27 @@ function _isMessageInputValid(command: SessionAssemblyCommand): boolean
 		&& input.author.authenticatedAt === command.requester.authenticatedAt;
 }
 
+/** Validate exact routine provenance without accepting a browser identity or forged human message. */
+function _isRoutineInputValid(command: Exclude<SessionAssemblyCommand, { readonly trigger: `${AgentRunTriggers.Interactive}` }>): boolean
+{
+	const input = command.routineInput;
+	if (command.conversationId === null || command.messageInput !== null || input.routineId.trim().length === 0
+		|| !Number.isSafeInteger(input.routineRevision) || input.routineRevision <= 0 || input.firingId.trim().length === 0
+		|| input.requesterPrincipalId.trim().length === 0 || input.requesterIssuer.trim().length === 0 || input.requesterSubjectId.trim().length === 0
+		|| !_isUtcInstant(input.requesterAuthenticatedAt) || input.workflowTaskId.trim().length === 0 || input.workflowTaskName.trim().length === 0 || input.workflowTaskKey.trim().length === 0)
+		return false;
+	if (command.trigger === AgentRunTriggers.Manual)
+		return input.scheduledSlot === null;
+	return input.scheduledSlot !== null && _isUtcInstant(input.scheduledSlot);
+}
+
+/** Accept one canonical UTC instant rather than a locale-dependent date string. */
+function _isUtcInstant(value: string): boolean
+{
+	const parsed = new Date(value);
+	return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === value;
+}
+
 /** Maps the repository-internal `authority_conflict` refusal onto the public assembly vocabulary. */
 function _publicReason(reason: SessionAssemblyRefusalReason | "authority_conflict"): SessionAssemblyRefusalReason
 {
@@ -212,8 +248,9 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 		attempt: executionSubject.runScope.attempt,
 		siloId: command.siloId,
 		agentServiceId: run.agentServiceId,
-		agentRevisionId: run.agentRevisionId,
-		snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION,
+			agentRevisionId: run.agentRevisionId,
+			snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION,
+			origin: _RunInputOrigin(command),
 		conversationId: command.conversationId,
 		messageIds: [...conversation.messageIds],
 		personaRevisionId: persona.personaRevisionId,
@@ -230,6 +267,29 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 	};
 	const digest = __DigestRunInputSnapshot(withoutDigest);
 	return { ...withoutDigest, digest };
+}
+
+/** Freeze only the provenance arm that the validated admission command selected. */
+function _RunInputOrigin(command: SessionAssemblyCommand): RunInputOrigin
+{
+	if (command.trigger === AgentRunTriggers.Interactive)
+	{
+		return { kind: AgentRunTriggers.Interactive, messageId: command.messageInput?.messageId ?? null, historyRevision: command.messageInput?.historyRevision ?? null };
+	}
+	return {
+		kind: command.trigger,
+		routineId: command.routineInput.routineId,
+		routineRevision: command.routineInput.routineRevision,
+		firingId: command.routineInput.firingId,
+		scheduledSlot: command.routineInput.scheduledSlot,
+		requesterPrincipalId: command.routineInput.requesterPrincipalId,
+		requesterIssuer: command.routineInput.requesterIssuer,
+		requesterSubjectId: command.routineInput.requesterSubjectId,
+		requesterAuthenticatedAt: command.routineInput.requesterAuthenticatedAt,
+		workflowTaskId: command.routineInput.workflowTaskId,
+		workflowTaskName: command.routineInput.workflowTaskName,
+		workflowTaskKey: command.routineInput.workflowTaskKey,
+	};
 }
 
 /** Copies and canonically orders exact MCP tool revisions before sealing the run snapshot. */

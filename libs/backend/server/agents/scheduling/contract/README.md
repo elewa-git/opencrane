@@ -1,0 +1,93 @@
+# @opencrane/backend/server/agents/scheduling/contract — routine occurrence hand-off
+
+> [backend](../../../../README.md) › [server](../../../README.md) › [agents](../../README.md) › [scheduling](../README.md) › contract
+
+## What it owns
+
+This package defines the hand-off from routine scheduling to the conversation, computer and root-run
+owners that carry out one occurrence. Scheduling supplies content-free immutable facts to every
+owner and adds plaintext only for preparation; each owner returns restart-safe evidence.
+
+```text
+ scheduling workflow
+        │ content-free occurrence facts
+        ▼
+ ┌───────────────────────────────────────┐
+ │ scheduling contract  ◄── HERE         │
+ │ preparation · activation · admission │
+ └───────────────────────────────────────┘
+        │ validated receipts
+        ▼
+ conversation history · computer · root AgentRun
+```
+
+**In this flow:** [scheduling](../main/README.md) owns lifecycle and fresh authority checks ·
+[conversations](../../../conversations/main/README.md) owns occurrence history and computer
+activation · [root-run admission](../../../../agents/execution/runs/main/README.md) owns the admitted
+AgentRun.
+
+The receipt and activation-result parsers preserve every saved field and reject blank references,
+malformed SHA-256 digests, invalid pending deadlines and unknown fields. A malformed checkpoint
+result therefore stops before scheduling binds a run identifier or advances the firing.
+
+## Public surface
+
+- `RoutineFiringIdentity` binds work to its silo, routine revision, firing and workflow task.
+- `RoutineOccurrenceCommand` carries immutable execution facts without instruction content.
+- `PrepareRoutineOccurrenceCommand` adds plaintext only for conversation-history preparation.
+- `RoutineOccurrencePreparationPort` and `RoutineOccurrencePreparationReceipt` cover conversation
+  history creation or recovery.
+- `RoutineOccurrencePreparationRepository` and its factory let the conversation owner reuse the
+  scheduling authority inside the transaction that publishes prepared history and audience grants.
+- `RoutineComputerActivationPort` and `RoutineComputerActivationReceipt` cover computer activation
+  or recovery without receiving instruction content.
+- `RoutineComputerActivationStatus` and `RoutineComputerActivationResult` distinguish an active
+  receipt, a bounded pending wait and a refusal already committed by the activation owner.
+- `RoutineOccurrenceActivationRepository` and its factory let the computer owner repeat scheduling
+  authority and bind activation to the exact saved preparation inside its transaction.
+- `RoutineRunAdmissionPort`, `RoutineRunAdmissionInput` and `RoutineRunAdmissionReceipt` cover the
+  content-free root AgentRun hand-off after both earlier receipts are saved.
+- `RoutineOccurrenceRunAdmissionRepository` repeats the final scheduling check inside admission,
+  verifies saved receipts during recovery, and refuses only firings without an admitted run.
+  A null admission result means refusal committed; an uncertain commit must throw and retry the
+  same keys instead of recording refusal.
+- `___ParseRoutineOccurrencePreparationReceipt`, `___ParseRoutineComputerActivationResult`,
+  `___ParseRoutineComputerActivationReceipt` and `___ParseRoutineRunAdmissionReceipt` restore
+  checkpoint evidence without normalising it.
+- `RoutineRunProgressObservation`, its strict parser and `RoutineRunProgressSink` carry verified
+  progress back from the conversation owner. The observation includes the exact attempt, snapshot,
+  source state, terminal/Stop fields and newly checked evidence, but no answer or tool content.
+
+## Boundary
+
+These declarations grant no permission and perform no I/O. Scheduling rechecks current authority
+before each execution port call; each implementation must repeat the relevant check at its authoritative
+write. A saved preparation marker means publication already committed and must be recovered without
+recreating removed grants. A fresh publication records that marker in the same transaction as its
+audience grants. Activation repeats current authority even when an activation receipt already
+exists; recovery never turns an old receipt into permission. `Pending` is a normal bounded poll,
+while `Refused` is valid only after the activation owner commits the firing refusal.
+
+Progress reporting is historical bookkeeping, not another execution admission. Producers verify
+saved history and await the sink before settling their work. A failure retries the saved outcome,
+not its external effect. Scheduling rereads current source facts before saving progress and retains
+its first evidence pair; later verified evidence can differ without replacing that original pair.
+Revoking execution access must not prevent reporting work already completed or cancelled.
+
+The package contains no lifecycle rules, encrypted instruction envelope, database adapter, workflow
+handler or application wiring. Activation and run admission cannot receive plaintext or an
+encrypted instruction through this contract. Any later prompt compilation must reread checked,
+service-attested history through the dedicated routine path; activation uses only content-free facts
+and the saved preparation receipt.
+
+## Dependency direction
+
+This `scope:scheduling-contract` library depends only on agent models and the public workflow
+contract. Scheduling and conversation implementations may depend on it; it never imports either
+implementation package.
+
+## See also
+
+- Parent index: [scheduling](../README.md)
+- Lifecycle and workflow owner: [scheduling main](../main/README.md)
+- Workflow engine contract: [workflows](../../../infra/workflows/contract/README.md)

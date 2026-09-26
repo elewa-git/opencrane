@@ -8,8 +8,8 @@ SELECT pg_temp.seed_agent_conversation('snapshot-missing-conversation', 'silo-sn
 
 INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "input_snapshot_digest") VALUES
 ('snapshot-run', 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'snapshot-conversation', 'interactive', 'snapshot-identity', 'snapshot-service-principal', '{"runScope":{"attempt":1}}', 'snapshot-request', 'sha256:' || repeat('c', 64));
-INSERT INTO "run_input_snapshots" ("id", "run_id", "attempt", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id", "execution_subject", "conversation_id", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest") VALUES
-('snapshot-run-input', 'snapshot-run', 1, 1, 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'snapshot-identity', 'snapshot-service-principal', '{"runScope":{"attempt":1}}', 'snapshot-conversation', '{}', '[]', '{}', '{}', 'prompt-v1', 'sha256:' || repeat('c', 64));
+INSERT INTO "run_input_snapshots" ("id", "run_id", "attempt", "snapshot_version", "origin", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id", "execution_subject", "conversation_id", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest") VALUES
+('snapshot-run-input', 'snapshot-run', 1, 3, '{"kind":"interactive","messageId":null,"historyRevision":null}', 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'snapshot-identity', 'snapshot-service-principal', '{"runScope":{"attempt":1}}', 'snapshot-conversation', '{}', '[]', '{}', '{}', 'prompt-v1', 'sha256:' || repeat('c', 64));
 SET CONSTRAINTS ALL IMMEDIATE;
 
 SET CONSTRAINTS ALL DEFERRED;
@@ -38,8 +38,8 @@ BEGIN
     BEGIN
         INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "input_snapshot_digest")
         VALUES ('snapshot-subject-mismatch', 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'snapshot-other-conversation', 'interactive', 'snapshot-identity', 'snapshot-service-principal', '{"runScope":{"attempt":1},"authority":"run"}', 'snapshot-subject-mismatch-request', 'sha256:' || repeat('2', 64));
-        INSERT INTO "run_input_snapshots" ("id", "run_id", "attempt", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id", "execution_subject", "conversation_id", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest")
-        VALUES ('snapshot-subject-mismatch-input', 'snapshot-subject-mismatch', 1, 1, 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'snapshot-identity', 'snapshot-service-principal', '{"runScope":{"attempt":1},"authority":"snapshot"}', 'snapshot-other-conversation', '{}', '[]', '{}', '{}', 'prompt-v1', 'sha256:' || repeat('2', 64));
+        INSERT INTO "run_input_snapshots" ("id", "run_id", "attempt", "snapshot_version", "origin", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id", "execution_subject", "conversation_id", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest")
+        VALUES ('snapshot-subject-mismatch-input', 'snapshot-subject-mismatch', 1, 3, '{"kind":"interactive","messageId":null,"historyRevision":null}', 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'snapshot-identity', 'snapshot-service-principal', '{"runScope":{"attempt":1},"authority":"snapshot"}', 'snapshot-other-conversation', '{}', '[]', '{}', '{}', 'prompt-v1', 'sha256:' || repeat('2', 64));
         SET CONSTRAINTS run_input_snapshots_run_binding IMMEDIATE;
     EXCEPTION WHEN foreign_key_violation THEN
         GET STACKED DIAGNOSTICS actual_message = MESSAGE_TEXT;

@@ -23,7 +23,7 @@ its Kubernetes workload still exists.
 
 ## Public surface
 
-- `ConversationComputerHistory` appends snapshots and loads the checked current computer or active lease.
+- `ConversationComputerHistory` validates the pure initial append for an atomic owner write, appends later snapshots, and loads the checked current computer or active lease.
 - Computer command, snapshot and lease coordinate types define inputs and checked read results.
 - `_ComputerScopeOf` and `_LeaseScopeOf` map stored snapshots to the shared coordinate bundles.
 

@@ -6,16 +6,20 @@
  * routers, transaction-owning authorities, the OpenAPI path fragments, the run-input digest, and
  * the ports an app must implement or pass through.
  *
- * The narrowed `export type` lists further down are deliberate. Anything not named there stays
- * inside the package. Transaction repositories and row mappers remain internal so another package
- * cannot go around the package-owned transaction boundaries.
+ * The narrowed exports further down are deliberate. Only named or re-exported symbols form this
+ * package boundary. Some repositories are intentionally public because their checked contract
+ * accepts a caller-owned transaction; other row access and mapping helpers stay internal.
  *
  * Imported by: apps/opencrane composition and route files, libs/backend/agents/execution
  * (admission, inputs, protocol), libs/backend/server/conversations, and
  * libs/backend/server/api-spec for the OpenAPI fragments.
  */
 export * from "./openapi";
-export * from "./prisma-run-admission-unit-of-work";
+export { PrismaRunAdmissionUnitOfWork } from "./prisma-run-admission-unit-of-work";
+export * from "./prisma-routine-run-snapshot-recovery-repository";
+export * from "./prisma-routine-run-progress-repository";
+export { RoutineRunProgressCancellationDecisions } from "./routine-run-progress.types";
+export type { RoutineRunProgressCancellation, RoutineRunProgressFacts, RoutineRunProgressFactsRepository, RoutineRunProgressRoutine, RoutineRunProgressTask } from "./routine-run-progress.types";
 export * from "./prisma-conversation-run-lifecycle-authority";
 export * from "./conversation-run-lifecycle.types";
 export * from "./prisma-tool-recovery-event-reporter";
@@ -29,6 +33,7 @@ export * from "./run-admission-concurrency";
 export { RunAdmissionConcurrencyDenialReasons, RunAdmissionConcurrencyOutcomes } from "./run-admission-concurrency.types";
 export type { RunAdmissionConcurrencyPolicy, RunAdmissionConcurrencyResult } from "./run-admission-concurrency.types";
 export * from "./run-admission.types";
+export type { RoutineRunSnapshotRecovery, RoutineRunSnapshotRecoveryFactory } from "./routine-run-snapshot-recovery.types";
 export type { RunAdmissionPersistenceRepository } from "./run-admission-persistence.types";
 export * from "./run-input-snapshot-digest";
 

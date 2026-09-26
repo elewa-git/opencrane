@@ -15,7 +15,7 @@ function _Gate()
 
 describe("chosen answer recovery across fresh server instances", function _Suite()
 {
-	it.each(["intent", "history", "complete", "revoke", "settle"])("converges after the %s response is lost", async function _RestartAfterLoss(step)
+	it.each(["intent", "history", "complete", "progress", "revoke", "settle"])("converges after the %s response is lost", async function _RestartAfterLoss(step)
 	{
 		const f = await _OutputRecoveryHarness();
 		let lost = false;
@@ -35,6 +35,8 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		}
 		if (step === "revoke")
 			f.credentials.revoke.mockRejectedValueOnce(new Error("response lost"));
+		if (step === "progress")
+			f.routineProgress.recordCompleted.mockRejectedValueOnce(new Error("response lost"));
 		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("response lost");
 		const saved = (await f.store.load(f.output.bootstrapId))!.protocol.output!.receipt;
 		const compilerCalls = f.compiler.compile.mock.calls.length;
@@ -45,6 +47,8 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		expect(f.flags.runState).toBe("completed");
 		expect(await f.store.loadActive({ siloId: "silo-1", computerId: f.command.computerId, lease: f.command.lease })).toBeNull();
 		expect(f.credentials.issueOnce).not.toHaveBeenCalled();
+		if (step === "progress")
+			expect(f.routineProgress.recordCompleted).toHaveBeenCalledTimes(2);
 		expect(f.flags.payloadWrites).toBe(1);
 		expect(f.outputPayloads.store).toHaveBeenCalledOnce();
 		expect(f.compiler.compile).toHaveBeenCalledTimes(compilerCalls + 1);

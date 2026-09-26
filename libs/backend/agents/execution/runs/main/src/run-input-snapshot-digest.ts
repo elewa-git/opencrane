@@ -16,6 +16,7 @@ export function __DigestRunInputSnapshot(snapshot: Omit<RunInputSnapshot, "diges
 		agentServiceId: snapshot.agentServiceId,
 		agentRevisionId: snapshot.agentRevisionId,
 		snapshotVersion: snapshot.snapshotVersion,
+		origin: snapshot.origin,
 		conversationId: snapshot.conversationId,
 		messageIds: snapshot.messageIds,
 		personaRevisionId: snapshot.personaRevisionId,

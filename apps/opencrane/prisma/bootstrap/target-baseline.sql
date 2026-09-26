@@ -245,7 +245,19 @@ CREATE TYPE "ThirdPartySourceStatus" AS ENUM ('healthy', 'syncing', 'error', 'pe
 CREATE TYPE "ThirdPartySourceItemKind" AS ENUM ('mcp-server');
 
 -- CreateEnum
-CREATE TYPE "AgentRunTrigger" AS ENUM ('interactive');
+CREATE TYPE "AgentRoutineStatus" AS ENUM ('active', 'paused', 'retired');
+
+-- CreateEnum
+CREATE TYPE "AgentRoutineFiringTrigger" AS ENUM ('automatic', 'manual');
+
+-- CreateEnum
+CREATE TYPE "AgentRoutineFiringDisposition" AS ENUM ('preparing', 'running', 'waiting', 'completed', 'failed', 'cancelled', 'skipped_overlap', 'refused', 'uncertain');
+
+-- CreateEnum
+CREATE TYPE "AgentRoutineCommandKind" AS ENUM ('create', 'revise', 'pause', 'resume', 'retire', 'run_now');
+
+-- CreateEnum
+CREATE TYPE "AgentRunTrigger" AS ENUM ('interactive', 'scheduled', 'manual');
 
 -- CreateEnum
 CREATE TYPE "AgentRunState" AS ENUM ('accepted', 'queued', 'assigned', 'running', 'waiting_for_input', 'recovery_required', 'cancelling', 'completed', 'cancelled', 'failed');
@@ -1886,6 +1898,97 @@ CREATE TABLE "third_party_source_items" (
 );
 
 -- CreateTable
+CREATE TABLE "agent_routines" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "original_requester_principal_id" TEXT NOT NULL,
+    "requester_issuer" TEXT NOT NULL,
+    "requester_subject_id" TEXT NOT NULL,
+    "requester_authenticated_at" TIMESTAMP(3) NOT NULL,
+    "destination_conversation_id" TEXT NOT NULL,
+    "selected_managed_service_id" TEXT NOT NULL,
+    "status" "AgentRoutineStatus" NOT NULL DEFAULT 'active',
+    "current_revision" INTEGER NOT NULL DEFAULT 1,
+    "lifecycle_revision" INTEGER NOT NULL DEFAULT 1,
+    "automatic_enabled_after" TIMESTAMP(3) NOT NULL,
+    "last_automatic_occurrence" TIMESTAMP(3),
+    "next_automatic_occurrence" TIMESTAMP(3),
+    "schedule_task_id" TEXT,
+    "schedule_task_name" TEXT,
+    "schedule_task_key" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "agent_routines_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "agent_routine_revisions" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "routine_id" TEXT NOT NULL,
+    "revision" INTEGER NOT NULL,
+    "schedule_expression" TEXT NOT NULL,
+    "schedule_timezone" TEXT NOT NULL,
+    "instruction_key_id" TEXT NOT NULL,
+    "instruction_nonce" BYTEA NOT NULL,
+    "instruction_auth_tag" BYTEA NOT NULL,
+    "instruction_ciphertext" BYTEA NOT NULL,
+    "instruction_ciphertext_digest" TEXT NOT NULL,
+    "audience_principal_ids" TEXT[],
+    "created_by_principal_id" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "agent_routine_revisions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "agent_routine_firings" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "routine_id" TEXT NOT NULL,
+    "routine_revision" INTEGER NOT NULL,
+    "trigger" "AgentRoutineFiringTrigger" NOT NULL,
+    "scheduled_slot" TIMESTAMP(3),
+    "requester_principal_id" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
+    "run_id" TEXT,
+    "disposition" "AgentRoutineFiringDisposition" NOT NULL,
+    "firing_key" TEXT NOT NULL,
+    "workflow_task_id" TEXT,
+    "workflow_task_name" TEXT,
+    "workflow_task_key" TEXT,
+    "preparation_receipt" JSONB,
+    "activation_receipt" JSONB,
+    "refusal_reason" TEXT,
+    "overlap_firing_id" TEXT,
+    "result_reference" TEXT,
+    "result_digest" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "finished_at" TIMESTAMP(3),
+
+    CONSTRAINT "agent_routine_firings_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "agent_routine_command_receipts" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "routine_id" TEXT NOT NULL,
+    "requester_principal_id" TEXT NOT NULL,
+    "kind" "AgentRoutineCommandKind" NOT NULL,
+    "idempotency_key" TEXT NOT NULL,
+    "command_digest" TEXT NOT NULL,
+    "result" JSONB NOT NULL,
+    "routine_revision" INTEGER,
+    "firing_id" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "agent_routine_command_receipts_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "agent_runs" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -1893,6 +1996,10 @@ CREATE TABLE "agent_runs" (
     "agent_revision_id" TEXT NOT NULL,
     "conversation_id" TEXT,
     "trigger" "AgentRunTrigger" NOT NULL,
+    "routine_firing_id" TEXT,
+    "routine_id" TEXT,
+    "routine_revision" INTEGER,
+    "routine_scheduled_slot" TIMESTAMP(3),
     "agent_identity_id" TEXT NOT NULL,
     "principal_id" TEXT NOT NULL,
     "execution_subject" JSONB NOT NULL,
@@ -1948,6 +2055,7 @@ CREATE TABLE "run_input_snapshots" (
     "memory_query_policy" JSONB NOT NULL,
     "budget_policy" JSONB NOT NULL,
     "prompt_compiler_version" TEXT NOT NULL,
+    "origin" JSONB NOT NULL,
     "input_digest" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -3024,6 +3132,69 @@ CREATE INDEX "third_party_source_items_source_id_idx" ON "third_party_source_ite
 CREATE UNIQUE INDEX "third_party_source_items_source_id_kind_upstream_id_key" ON "third_party_source_items"("source_id", "kind", "upstream_id");
 
 -- CreateIndex
+CREATE INDEX "agent_routines_silo_id_original_requester_principal_id_stat_idx" ON "agent_routines"("silo_id", "original_requester_principal_id", "status");
+
+-- CreateIndex
+CREATE INDEX "agent_routines_silo_id_next_automatic_occurrence_status_idx" ON "agent_routines"("silo_id", "next_automatic_occurrence", "status");
+
+-- CreateIndex
+CREATE INDEX "agent_routines_destination_conversation_id_silo_id_idx" ON "agent_routines"("destination_conversation_id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_routines_id_silo_id_key" ON "agent_routines"("id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_routines_schedule_task_key" ON "agent_routines"("schedule_task_name", "schedule_task_key");
+
+-- CreateIndex
+CREATE INDEX "agent_routine_revisions_silo_id_created_by_principal_id_idx" ON "agent_routine_revisions"("silo_id", "created_by_principal_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_routine_revisions_routine_id_revision_key" ON "agent_routine_revisions"("routine_id", "revision");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_routine_revisions_id_silo_id_key" ON "agent_routine_revisions"("id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_routine_revisions_routine_id_revision_silo_id_key" ON "agent_routine_revisions"("routine_id", "revision", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_routine_firings_conversation_id_key" ON "agent_routine_firings"("conversation_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_routine_firings_run_id_key" ON "agent_routine_firings"("run_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_routine_firings_workflow_task_id_key" ON "agent_routine_firings"("workflow_task_id");
+
+-- CreateIndex
+CREATE INDEX "agent_routine_firings_routine_id_disposition_idx" ON "agent_routine_firings"("routine_id", "disposition");
+
+-- CreateIndex
+CREATE INDEX "agent_routine_firings_silo_id_created_at_idx" ON "agent_routine_firings"("silo_id", "created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_routine_firings_id_silo_id_routine_id_routine_revisio_key" ON "agent_routine_firings"("id", "silo_id", "routine_id", "routine_revision");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_routine_firings_firing_key_silo_id_key" ON "agent_routine_firings"("firing_key", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_routine_firings_slot_key" ON "agent_routine_firings"("routine_id", "routine_revision", "scheduled_slot");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_routine_firings_workflow_task_key" ON "agent_routine_firings"("workflow_task_name", "workflow_task_key");
+
+-- CreateIndex
+CREATE INDEX "agent_routine_command_receipts_routine_id_created_at_idx" ON "agent_routine_command_receipts"("routine_id", "created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_routine_commands_request_key" ON "agent_routine_command_receipts"("silo_id", "requester_principal_id", "kind", "idempotency_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_routine_firing_id_key" ON "agent_runs"("routine_firing_id");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "agent_runs_workflow_task_id_key" ON "agent_runs"("workflow_task_id");
 
 -- CreateIndex
@@ -3552,6 +3723,30 @@ ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_
 ALTER TABLE "third_party_source_items" ADD CONSTRAINT "third_party_source_items_source_id_fkey" FOREIGN KEY ("source_id") REFERENCES "third_party_sources"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "agent_routines" ADD CONSTRAINT "agent_routines_original_requester_principal_id_silo_id_fkey" FOREIGN KEY ("original_requester_principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_routines" ADD CONSTRAINT "agent_routines_selected_managed_service_id_silo_id_fkey" FOREIGN KEY ("selected_managed_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_routines" ADD CONSTRAINT "agent_routines_destination_conversation_id_silo_id_fkey" FOREIGN KEY ("destination_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_routine_revisions" ADD CONSTRAINT "agent_routine_revisions_routine_id_silo_id_fkey" FOREIGN KEY ("routine_id", "silo_id") REFERENCES "agent_routines"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_routine_firings" ADD CONSTRAINT "agent_routine_firings_routine_id_silo_id_fkey" FOREIGN KEY ("routine_id", "silo_id") REFERENCES "agent_routines"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_routine_firings" ADD CONSTRAINT "agent_routine_firings_routine_id_routine_revision_silo_id_fkey" FOREIGN KEY ("routine_id", "routine_revision", "silo_id") REFERENCES "agent_routine_revisions"("routine_id", "revision", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_routine_command_receipts" ADD CONSTRAINT "agent_routine_command_receipts_routine_id_silo_id_fkey" FOREIGN KEY ("routine_id", "silo_id") REFERENCES "agent_routines"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_routine_command_receipts" ADD CONSTRAINT "agent_routine_command_receipts_firing_id_fkey" FOREIGN KEY ("firing_id") REFERENCES "agent_routine_firings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_agent_revision_id_fkey" FOREIGN KEY ("agent_service_id", "agent_revision_id") REFERENCES "agent_revisions"("agent_service_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -3559,6 +3754,9 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_silo_id_fke
 
 -- AddForeignKey
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_routine_firing_id_fkey" FOREIGN KEY ("routine_firing_id") REFERENCES "agent_routine_firings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3956,6 +4154,228 @@ CREATE TRIGGER "org_memberships_last_owner_guard"
     FOR EACH ROW EXECUTE FUNCTION "protect_org_membership_last_owner"();
 
 -- Database-native authority guards omitted by Prisma schema diff.
+
+-- Routine identities are frozen before asynchronous history and computer preparation begins.
+ALTER TABLE "agent_routines" ADD CONSTRAINT "agent_routines_material_check" CHECK (
+    btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("requester_issuer") <> ''
+    AND btrim("requester_subject_id") <> '' AND "current_revision" > 0 AND "lifecycle_revision" > 0
+    AND "requester_authenticated_at" <= "created_at" AND "updated_at" >= "created_at"
+    AND num_nonnulls("schedule_task_id", "schedule_task_name", "schedule_task_key") IN (0, 3)
+    AND (("status" = 'active' AND "next_automatic_occurrence" IS NOT NULL)
+        OR ("status" <> 'active' AND "next_automatic_occurrence" IS NULL AND "schedule_task_id" IS NULL))
+    AND ("next_automatic_occurrence" IS NULL OR "next_automatic_occurrence" > "automatic_enabled_after")
+);
+ALTER TABLE "agent_routines" ADD CONSTRAINT "agent_routines_current_revision_fkey"
+    FOREIGN KEY ("id", "current_revision", "silo_id") REFERENCES "agent_routine_revisions"("routine_id", "revision", "silo_id")
+    ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "agent_routine_revisions" ADD CONSTRAINT "agent_routine_revisions_material_check" CHECK (
+    "revision" > 0 AND btrim("schedule_expression") <> '' AND btrim("schedule_timezone") <> ''
+    AND btrim("instruction_key_id") <> '' AND octet_length("instruction_nonce") = 12
+    AND octet_length("instruction_auth_tag") = 16 AND octet_length("instruction_ciphertext") > 0
+    AND "instruction_ciphertext_digest" = 'sha256:' || encode(sha256("instruction_ciphertext"), 'hex')
+    AND cardinality("audience_principal_ids") > 0 AND array_position("audience_principal_ids", NULL) IS NULL
+);
+ALTER TABLE "agent_routine_firings" ADD CONSTRAINT "agent_routine_firings_material_check" CHECK (
+    "routine_revision" > 0 AND btrim("firing_key") <> '' AND btrim("conversation_id") <> ''
+    AND (("trigger" = 'automatic' AND "scheduled_slot" IS NOT NULL) OR ("trigger" = 'manual' AND "scheduled_slot" IS NULL))
+    AND num_nonnulls("workflow_task_id", "workflow_task_name", "workflow_task_key") IN (0, 3)
+    AND num_nonnulls("result_reference", "result_digest") IN (0, 2)
+    AND ("result_digest" IS NULL OR "result_digest" ~ '^sha256:[0-9a-f]{64}$')
+    AND ("disposition" <> 'refused' OR "refusal_reason" IS NOT NULL)
+    AND ("disposition" <> 'skipped_overlap' OR ("overlap_firing_id" IS NOT NULL AND "trigger" = 'automatic'))
+    AND (("disposition" IN ('preparing', 'running', 'waiting', 'uncertain') AND "finished_at" IS NULL)
+        OR ("disposition" NOT IN ('preparing', 'running', 'waiting', 'uncertain') AND "finished_at" IS NOT NULL))
+    AND "updated_at" >= "created_at" AND ("finished_at" IS NULL OR "finished_at" >= "created_at")
+);
+ALTER TABLE "agent_routine_firings" ADD CONSTRAINT "agent_routine_firings_run_fkey"
+    FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT;
+ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_routine_origin_check" CHECK (
+    ("trigger" = 'interactive' AND num_nonnulls("routine_firing_id", "routine_id", "routine_revision", "routine_scheduled_slot") = 0)
+    OR ("trigger" IN ('scheduled', 'manual') AND "routine_firing_id" IS NOT NULL AND "routine_id" IS NOT NULL AND "routine_revision" IS NOT NULL AND "routine_revision" > 0
+        AND (("trigger" = 'scheduled' AND "routine_scheduled_slot" IS NOT NULL) OR ("trigger" = 'manual' AND "routine_scheduled_slot" IS NULL)))
+);
+ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_exact_routine_firing_fkey"
+    FOREIGN KEY ("routine_firing_id", "silo_id", "routine_id", "routine_revision")
+    REFERENCES "agent_routine_firings"("id", "silo_id", "routine_id", "routine_revision") ON DELETE RESTRICT;
+ALTER TABLE "tool_approval_scopes" ADD CONSTRAINT "tool_approval_scopes_routine_revision_fkey"
+    FOREIGN KEY ("routine_id", "routine_revision", "silo_id") REFERENCES "agent_routine_revisions"("routine_id", "revision", "silo_id") ON DELETE RESTRICT;
+ALTER TABLE "agent_routine_command_receipts" ADD CONSTRAINT "agent_routine_command_receipts_material_check" CHECK (
+    btrim("idempotency_key") <> '' AND "command_digest" ~ '^sha256:[0-9a-f]{64}$' AND jsonb_typeof("result") = 'object'
+);
+
+CREATE FUNCTION "enforce_agent_routine_revision"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    routine "agent_routines"%ROWTYPE;
+    original_audience TEXT[];
+BEGIN
+    IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'Routine revisions are immutable'; END IF;
+    SELECT * INTO routine FROM "agent_routines" WHERE "id" = NEW."routine_id" FOR UPDATE;
+    IF routine."silo_id" IS DISTINCT FROM NEW."silo_id" OR routine."original_requester_principal_id" IS DISTINCT FROM NEW."created_by_principal_id"
+        OR NOT routine."original_requester_principal_id" = ANY(NEW."audience_principal_ids") THEN
+        RAISE EXCEPTION 'Routine revision requires its original requester and fixed audience';
+    END IF;
+    IF cardinality(NEW."audience_principal_ids") <> (SELECT count(DISTINCT id) FROM unnest(NEW."audience_principal_ids") AS audience(id))
+        OR EXISTS (SELECT 1 FROM unnest(NEW."audience_principal_ids") AS audience(id)
+            WHERE NOT EXISTS (SELECT 1 FROM "principals" principal WHERE principal."id" = audience.id AND principal."silo_id" = NEW."silo_id" AND principal."provenance" = 'external')) THEN
+        RAISE EXCEPTION 'Routine audience must name unique external principals in its silo';
+    END IF;
+    IF NEW."revision" > 1 THEN
+        SELECT "audience_principal_ids" INTO original_audience FROM "agent_routine_revisions" WHERE "routine_id" = NEW."routine_id" AND "revision" = 1;
+        IF original_audience IS DISTINCT FROM NEW."audience_principal_ids" THEN RAISE EXCEPTION 'Routine revisions cannot change the confirmed audience'; END IF;
+    END IF;
+    IF NEW."revision" NOT IN (routine."current_revision", routine."current_revision" + 1) OR routine."status" = 'retired' THEN
+        RAISE EXCEPTION 'Routine revision must extend the current non-retired definition';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "agent_routine_revisions_authority" BEFORE INSERT OR UPDATE OR DELETE ON "agent_routine_revisions"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_routine_revision"();
+
+CREATE FUNCTION "enforce_agent_routine_identity"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE requester "principals"%ROWTYPE;
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Routine authority records cannot be deleted'; END IF;
+    IF TG_OP = 'INSERT' THEN
+        SELECT * INTO requester FROM "principals" WHERE "id" = NEW."original_requester_principal_id";
+        IF requester."silo_id" IS DISTINCT FROM NEW."silo_id" OR requester."provenance" IS DISTINCT FROM 'external'::"PrincipalProvenance"
+            OR requester."issuer" IS DISTINCT FROM NEW."requester_issuer" OR requester."subject" IS DISTINCT FROM NEW."requester_subject_id"
+            OR NEW."status" <> 'active' OR NEW."current_revision" <> 1 OR NEW."lifecycle_revision" <> 1 OR NEW."last_automatic_occurrence" IS NOT NULL THEN
+            RAISE EXCEPTION 'A routine begins active with its exact original external requester';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."original_requester_principal_id" IS DISTINCT FROM OLD."original_requester_principal_id"
+        OR NEW."requester_issuer" IS DISTINCT FROM OLD."requester_issuer" OR NEW."requester_subject_id" IS DISTINCT FROM OLD."requester_subject_id"
+        OR NEW."requester_authenticated_at" IS DISTINCT FROM OLD."requester_authenticated_at"
+        OR NEW."destination_conversation_id" IS DISTINCT FROM OLD."destination_conversation_id"
+        OR NEW."selected_managed_service_id" IS DISTINCT FROM OLD."selected_managed_service_id" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+        RAISE EXCEPTION 'Routine requester, destination and selected service are immutable';
+    END IF;
+    IF OLD."status" = 'retired' AND NEW IS DISTINCT FROM OLD THEN RAISE EXCEPTION 'Retired routines cannot reopen or change'; END IF;
+    IF NEW."current_revision" NOT IN (OLD."current_revision", OLD."current_revision" + 1)
+        OR NEW."lifecycle_revision" NOT IN (OLD."lifecycle_revision", OLD."lifecycle_revision" + 1)
+        OR ((NEW."status" IS DISTINCT FROM OLD."status" OR NEW."current_revision" <> OLD."current_revision") AND NEW."lifecycle_revision" <> OLD."lifecycle_revision" + 1)
+        OR NEW."updated_at" < OLD."updated_at" OR NEW."automatic_enabled_after" > clock_timestamp() THEN
+        RAISE EXCEPTION 'Routine lifecycle changes require the next revision and a database-bounded time';
+    END IF;
+    IF NEW."current_revision" <> OLD."current_revision" OR (OLD."status" = 'paused' AND NEW."status" = 'active') THEN
+        IF NEW."last_automatic_occurrence" IS NOT NULL OR NEW."automatic_enabled_after" < OLD."automatic_enabled_after" THEN
+            RAISE EXCEPTION 'Routine revision and resume start a new automatic window without catch-up';
+        END IF;
+    ELSIF NEW."automatic_enabled_after" IS DISTINCT FROM OLD."automatic_enabled_after"
+        OR (OLD."last_automatic_occurrence" IS NOT NULL AND (NEW."last_automatic_occurrence" IS NULL OR NEW."last_automatic_occurrence" < OLD."last_automatic_occurrence")) THEN
+        RAISE EXCEPTION 'Routine automatic cursor cannot move backwards';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "agent_routines_authority" BEFORE INSERT OR UPDATE OR DELETE ON "agent_routines"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_routine_identity"();
+
+-- The task is spawned in the same transaction after the aggregate exists; only committed state must be complete.
+CREATE FUNCTION "enforce_agent_routine_schedule_completeness"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE routine "agent_routines"%ROWTYPE;
+BEGIN
+    SELECT * INTO routine FROM "agent_routines" WHERE "id" = NEW."id";
+    IF routine."status" = 'active' AND (routine."next_automatic_occurrence" IS NULL OR routine."schedule_task_id" IS NULL) THEN
+        RAISE EXCEPTION 'Active routine requires its saved next-slot workflow receipt';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE CONSTRAINT TRIGGER "agent_routines_schedule_complete" AFTER INSERT OR UPDATE ON "agent_routines"
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_agent_routine_schedule_completeness"();
+
+CREATE FUNCTION "enforce_agent_routine_firing"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    routine "agent_routines"%ROWTYPE;
+    admitted_run "agent_runs"%ROWTYPE;
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Routine firing records cannot be deleted'; END IF;
+    SELECT * INTO routine FROM "agent_routines" WHERE "id" = NEW."routine_id" FOR UPDATE;
+    IF NEW."silo_id" IS DISTINCT FROM routine."silo_id" OR NEW."requester_principal_id" IS DISTINCT FROM routine."original_requester_principal_id" THEN
+        RAISE EXCEPTION 'Routine firing requires its exact silo and original requester';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."routine_revision" IS DISTINCT FROM routine."current_revision" OR NEW."run_id" IS NOT NULL
+            OR NEW."preparation_receipt" IS NOT NULL OR NEW."activation_receipt" IS NOT NULL
+            OR NEW."disposition" NOT IN ('preparing', 'skipped_overlap', 'refused')
+            OR (NEW."disposition" = 'preparing' AND routine."status" = 'retired')
+            OR (NEW."trigger" = 'automatic' AND routine."status" <> 'active') THEN
+            RAISE EXCEPTION 'A routine firing begins unprepared at its current revision';
+        END IF;
+    ELSE
+        IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."routine_id" IS DISTINCT FROM OLD."routine_id"
+            OR NEW."routine_revision" IS DISTINCT FROM OLD."routine_revision" OR NEW."trigger" IS DISTINCT FROM OLD."trigger"
+            OR NEW."scheduled_slot" IS DISTINCT FROM OLD."scheduled_slot" OR NEW."requester_principal_id" IS DISTINCT FROM OLD."requester_principal_id"
+            OR NEW."conversation_id" IS DISTINCT FROM OLD."conversation_id" OR NEW."firing_key" IS DISTINCT FROM OLD."firing_key"
+            OR NEW."created_at" IS DISTINCT FROM OLD."created_at"
+            OR (OLD."run_id" IS NOT NULL AND NEW."run_id" IS DISTINCT FROM OLD."run_id")
+            OR (OLD."workflow_task_id" IS NOT NULL AND (NEW."workflow_task_id", NEW."workflow_task_name", NEW."workflow_task_key") IS DISTINCT FROM (OLD."workflow_task_id", OLD."workflow_task_name", OLD."workflow_task_key"))
+            OR (OLD."preparation_receipt" IS NOT NULL AND NEW."preparation_receipt" IS DISTINCT FROM OLD."preparation_receipt")
+            OR (OLD."activation_receipt" IS NOT NULL AND NEW."activation_receipt" IS DISTINCT FROM OLD."activation_receipt") THEN
+            RAISE EXCEPTION 'Routine firing identity and saved receipts are immutable';
+        END IF;
+        IF (OLD."result_reference" IS NOT NULL AND NEW."result_reference" IS DISTINCT FROM OLD."result_reference")
+            OR (OLD."result_digest" IS NOT NULL AND NEW."result_digest" IS DISTINCT FROM OLD."result_digest") THEN
+            RAISE EXCEPTION 'Routine firing identity and saved receipts are immutable';
+        END IF;
+        IF OLD."disposition" NOT IN ('preparing', 'running', 'waiting', 'uncertain') AND NEW IS DISTINCT FROM OLD THEN
+            RAISE EXCEPTION 'Terminal routine firing evidence is immutable';
+        END IF;
+        IF NEW."disposition" IS DISTINCT FROM OLD."disposition" AND NOT (
+            (OLD."disposition" = 'preparing' AND NEW."disposition" IN ('running', 'failed', 'cancelled', 'refused', 'uncertain'))
+            OR (OLD."disposition" = 'running' AND NEW."disposition" IN ('waiting', 'completed', 'failed', 'cancelled', 'uncertain'))
+            OR (OLD."disposition" = 'waiting' AND NEW."disposition" IN ('running', 'completed', 'failed', 'cancelled', 'uncertain'))
+            OR (OLD."disposition" = 'uncertain' AND NEW."disposition" IN ('running', 'completed', 'failed', 'cancelled'))
+        ) THEN RAISE EXCEPTION 'Invalid routine firing state transition'; END IF;
+    END IF;
+    IF NEW."activation_receipt" IS NOT NULL AND NEW."preparation_receipt" IS NULL THEN RAISE EXCEPTION 'Routine activation requires saved preparation'; END IF;
+    IF NEW."disposition" = 'refused' AND NEW."run_id" IS NOT NULL THEN
+        RAISE EXCEPTION 'Refused routine firing cannot have an admitted run';
+    END IF;
+    IF NEW."run_id" IS NOT NULL THEN
+        SELECT * INTO admitted_run FROM "agent_runs" WHERE "id" = NEW."run_id";
+        IF admitted_run."routine_firing_id" IS DISTINCT FROM NEW."id" OR admitted_run."silo_id" IS DISTINCT FROM NEW."silo_id"
+            OR admitted_run."routine_id" IS DISTINCT FROM NEW."routine_id" OR admitted_run."routine_revision" IS DISTINCT FROM NEW."routine_revision"
+            OR admitted_run."conversation_id" IS DISTINCT FROM NEW."conversation_id" OR admitted_run."routine_scheduled_slot" IS DISTINCT FROM NEW."scheduled_slot"
+            OR admitted_run."trigger"::TEXT IS DISTINCT FROM CASE WHEN NEW."trigger" = 'automatic' THEN 'scheduled' ELSE 'manual' END
+            OR NEW."activation_receipt" IS NULL THEN
+            RAISE EXCEPTION 'Routine firing run backlink requires its exact prepared AgentRun';
+        END IF;
+        IF TG_OP = 'UPDATE' AND OLD."disposition" = 'uncertain' AND NEW."disposition" <> 'uncertain'
+            AND NEW."disposition"::TEXT IS DISTINCT FROM admitted_run."state"::TEXT THEN
+            RAISE EXCEPTION 'Uncertain routine firing resolution requires its linked run outcome';
+        END IF;
+    ELSIF NEW."disposition" IN ('running', 'waiting', 'completed') THEN RAISE EXCEPTION 'Executing routine firing requires its admitted run'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."disposition" = 'uncertain' AND NEW."disposition" <> 'uncertain' AND NEW."run_id" IS NULL THEN
+        RAISE EXCEPTION 'Uncertain routine firing resolution requires its linked run outcome';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "agent_routine_firings_authority" BEFORE INSERT OR UPDATE OR DELETE ON "agent_routine_firings"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_routine_firing"();
+
+CREATE FUNCTION "enforce_agent_routine_command_receipt"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE routine "agent_routines"%ROWTYPE;
+BEGIN
+    IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'Routine command receipts are immutable'; END IF;
+    SELECT * INTO routine FROM "agent_routines" WHERE "id" = NEW."routine_id";
+    IF NEW."silo_id" IS DISTINCT FROM routine."silo_id" OR NEW."requester_principal_id" IS DISTINCT FROM routine."original_requester_principal_id" THEN
+        RAISE EXCEPTION 'Routine command receipt requires its exact original requester';
+    END IF;
+    IF NEW."firing_id" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "agent_routine_firings" firing
+        WHERE firing."id" = NEW."firing_id" AND firing."silo_id" = NEW."silo_id" AND firing."routine_id" = NEW."routine_id" AND firing."routine_revision" = NEW."routine_revision") THEN
+        RAISE EXCEPTION 'Routine command receipt requires its exact firing';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "agent_routine_command_receipts_authority" BEFORE INSERT OR UPDATE OR DELETE ON "agent_routine_command_receipts"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_routine_command_receipt"();
 
 -- Tree accounts divide existing allowance. These guards do not admit a child workflow or grant delegation.
 ALTER TABLE "agent_run_tree_accounts" ADD CONSTRAINT "agent_run_tree_accounts_material_check" CHECK (
@@ -5053,6 +5473,10 @@ BEGIN
         OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
         OR NEW."conversation_id" IS DISTINCT FROM OLD."conversation_id"
         OR NEW."trigger" IS DISTINCT FROM OLD."trigger"
+        OR NEW."routine_firing_id" IS DISTINCT FROM OLD."routine_firing_id"
+        OR NEW."routine_id" IS DISTINCT FROM OLD."routine_id"
+        OR NEW."routine_revision" IS DISTINCT FROM OLD."routine_revision"
+        OR NEW."routine_scheduled_slot" IS DISTINCT FROM OLD."routine_scheduled_slot"
         OR NEW."agent_identity_id" IS DISTINCT FROM OLD."agent_identity_id"
         OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id"
         OR NEW."request_idempotency_key" IS DISTINCT FROM OLD."request_idempotency_key" THEN
@@ -7498,7 +7922,7 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_cost_check" CHECK (
         ("cost_amount" IS NULL AND "cost_currency" IS NULL) OR
         ("cost_amount" IS NOT NULL AND "cost_amount" >= 0 AND "cost_currency" IS NOT NULL AND btrim("cost_currency") <> '')
     );
-ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_version_check" CHECK ("snapshot_version" > 0);
+ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_version_check" CHECK ("snapshot_version" = 3);
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_nonempty_check" CHECK (
         btrim("silo_id") <> '' AND btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND
         btrim("prompt_compiler_version") <> '' AND btrim("input_digest") <> '' AND
@@ -8181,9 +8605,65 @@ CREATE CONSTRAINT TRIGGER "artifact_preprocess_claim_completeness" AFTER INSERT 
 CREATE CONSTRAINT TRIGGER "artifact_preprocess_output_lease_finalization" AFTER UPDATE OF "state" ON "artifact_upload_leases"
     DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_preprocess_output_lease_finalization"();
 -- Run-input snapshot guards
+-- Both sides call this check after the admission transaction has saved the firing backlink.
+CREATE FUNCTION "require_run_input_origin"(run "agent_runs", snapshot "run_input_snapshots") RETURNS VOID LANGUAGE plpgsql AS $$
+DECLARE
+    firing "agent_routine_firings"%ROWTYPE;
+    routine "agent_routines"%ROWTYPE;
+    service_principal_id TEXT;
+BEGIN
+    IF snapshot."snapshot_version" IS DISTINCT FROM 3 OR jsonb_typeof(snapshot."origin") IS DISTINCT FROM 'object'
+        OR snapshot."origin"->>'kind' IS DISTINCT FROM run."trigger"::TEXT THEN
+        RAISE EXCEPTION 'RunInputSnapshot requires version 3 and its exact run trigger origin';
+    END IF;
+    IF run."trigger" = 'interactive' THEN
+        IF snapshot."origin" - ARRAY['kind', 'messageId', 'historyRevision'] <> '{}'::jsonb
+            OR NOT (snapshot."origin" ?& ARRAY['kind', 'messageId', 'historyRevision'])
+            OR jsonb_typeof(snapshot."origin"->'messageId') NOT IN ('string', 'null')
+            OR snapshot."origin"->>'messageId' IS DISTINCT FROM snapshot."message_ids"[cardinality(snapshot."message_ids")]
+            OR jsonb_typeof(snapshot."origin"->'historyRevision') NOT IN ('string', 'null') THEN
+            RAISE EXCEPTION 'Interactive snapshot origin must bind its final persisted message without routine coordinates';
+        END IF;
+        RETURN;
+    END IF;
+    SELECT * INTO firing FROM "agent_routine_firings" WHERE "id" = run."routine_firing_id";
+    SELECT * INTO routine FROM "agent_routines" WHERE "id" = run."routine_id";
+    SELECT "principal_id" INTO service_principal_id FROM "agent_services" WHERE "id" = run."agent_service_id" AND "kind" = 'managed';
+    IF firing."id" IS NULL OR routine."id" IS NULL OR firing."run_id" IS DISTINCT FROM run."id"
+        OR firing."silo_id" IS DISTINCT FROM run."silo_id" OR routine."silo_id" IS DISTINCT FROM run."silo_id"
+        OR firing."routine_id" IS DISTINCT FROM run."routine_id" OR firing."routine_revision" IS DISTINCT FROM run."routine_revision"
+        OR firing."conversation_id" IS DISTINCT FROM run."conversation_id" OR firing."scheduled_slot" IS DISTINCT FROM run."routine_scheduled_slot"
+        OR routine."selected_managed_service_id" IS DISTINCT FROM run."agent_service_id"
+        OR run."principal_id" IS DISTINCT FROM service_principal_id OR service_principal_id IS NULL
+        OR snapshot."execution_subject"->>'principalId' IS DISTINCT FROM service_principal_id
+        OR snapshot."execution_subject"->'requester'->>'requesterPrincipalId' IS DISTINCT FROM routine."original_requester_principal_id"
+        OR firing."requester_principal_id" IS DISTINCT FROM routine."original_requester_principal_id"
+        OR snapshot."origin" - ARRAY['kind', 'routineId', 'routineRevision', 'firingId', 'scheduledSlot', 'requesterPrincipalId', 'requesterIssuer', 'requesterSubjectId', 'requesterAuthenticatedAt', 'workflowTaskId', 'workflowTaskName', 'workflowTaskKey'] <> '{}'::jsonb
+        OR NOT (snapshot."origin" ?& ARRAY['kind', 'routineId', 'routineRevision', 'firingId', 'scheduledSlot', 'requesterPrincipalId', 'requesterIssuer', 'requesterSubjectId', 'requesterAuthenticatedAt', 'workflowTaskId', 'workflowTaskName', 'workflowTaskKey'])
+        OR snapshot."origin"->>'routineId' IS DISTINCT FROM run."routine_id"
+        OR jsonb_typeof(snapshot."origin"->'routineRevision') IS DISTINCT FROM 'number'
+        OR snapshot."origin"->>'routineRevision' IS DISTINCT FROM run."routine_revision"::TEXT
+        OR snapshot."origin"->>'firingId' IS DISTINCT FROM firing."id"
+        OR firing."workflow_task_id" IS NULL
+        OR snapshot."origin"->>'workflowTaskId' IS DISTINCT FROM firing."workflow_task_id"
+        OR snapshot."origin"->>'workflowTaskName' IS DISTINCT FROM firing."workflow_task_name"
+        OR snapshot."origin"->>'workflowTaskKey' IS DISTINCT FROM firing."workflow_task_key"
+        OR snapshot."origin"->>'requesterPrincipalId' IS DISTINCT FROM routine."original_requester_principal_id"
+        OR snapshot."origin"->>'requesterIssuer' IS DISTINCT FROM routine."requester_issuer"
+        OR snapshot."origin"->>'requesterSubjectId' IS DISTINCT FROM routine."requester_subject_id"
+        OR snapshot."origin"->>'requesterAuthenticatedAt' IS DISTINCT FROM to_char(routine."requester_authenticated_at", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+        OR (run."trigger" = 'scheduled' AND (firing."trigger" <> 'automatic'
+            OR snapshot."origin"->>'scheduledSlot' IS DISTINCT FROM to_char(run."routine_scheduled_slot", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')))
+        OR (run."trigger" = 'manual' AND (firing."trigger" <> 'manual' OR snapshot."origin"->'scheduledSlot' IS DISTINCT FROM 'null'::jsonb)) THEN
+        RAISE EXCEPTION 'Routine snapshot origin requires the exact firing, managed agent and original requester';
+    END IF;
+END;
+$$;
+
 CREATE FUNCTION enforce_agent_run_input_snapshot_completeness()
 RETURNS TRIGGER
 LANGUAGE plpgsql AS $$
+DECLARE snapshot_row "run_input_snapshots"%ROWTYPE;
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM "run_input_snapshots" snapshot
@@ -8200,6 +8680,8 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'AgentRun requires its exact immutable RunInputSnapshot' USING ERRCODE = '23503';
     END IF;
+    SELECT * INTO snapshot_row FROM "run_input_snapshots" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "input_digest" = NEW."input_snapshot_digest";
+    PERFORM "require_run_input_origin"(NEW, snapshot_row);
     RETURN NEW;
 END;
 $$;
@@ -8212,6 +8694,7 @@ EXECUTE FUNCTION enforce_agent_run_input_snapshot_completeness();
 CREATE FUNCTION enforce_run_input_snapshot_run_binding()
 RETURNS TRIGGER
 LANGUAGE plpgsql AS $$
+DECLARE run_row "agent_runs"%ROWTYPE;
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM "agent_runs" run
@@ -8228,6 +8711,8 @@ BEGIN
     ) THEN
         RAISE EXCEPTION 'RunInputSnapshot must bind the exact AgentRun conversation and authority' USING ERRCODE = '23503';
     END IF;
+    SELECT * INTO run_row FROM "agent_runs" WHERE "id" = NEW."run_id";
+    PERFORM "require_run_input_origin"(run_row, NEW);
     RETURN NEW;
 END;
 $$;
@@ -8257,8 +8742,8 @@ INSERT INTO "capability_catalog_revisions" (
     'capability-catalog-opencrane-product-authorization-v1',
     'opencrane-product-authorization',
     1,
-    'sha256:8cf23b55c2e5da4835c86a20373e1b2865228af1926a08c597ad6b8ee5587f43',
-    '[{"id":"organization:read","resourceKind":"organization","actions":["read"],"evidence":"read"},{"id":"organization:edit","resourceKind":"organization","actions":["edit"],"evidence":"decision"},{"id":"organization:manage","resourceKind":"organization","actions":["manage"],"evidence":"decision"},{"id":"organization:administer","resourceKind":"organization","actions":["administer"],"evidence":"decision"},{"id":"authorization-grant:read","resourceKind":"authorization-grant","actions":["read"],"evidence":"read"},{"id":"authorization-grant:create","resourceKind":"authorization-grant","actions":["create"],"evidence":"decision"},{"id":"authorization-grant:edit","resourceKind":"authorization-grant","actions":["edit"],"evidence":"decision"},{"id":"authorization-grant:revoke","resourceKind":"authorization-grant","actions":["revoke"],"evidence":"decision"},{"id":"authorization-grant:administer","resourceKind":"authorization-grant","actions":["administer"],"evidence":"decision"},{"id":"agent-service:discover","resourceKind":"agent-service","actions":["discover"],"evidence":"read"},{"id":"agent-service:read","resourceKind":"agent-service","actions":["read"],"evidence":"read"},{"id":"agent-service:create","resourceKind":"agent-service","actions":["create"],"evidence":"decision"},{"id":"agent-service:edit","resourceKind":"agent-service","actions":["edit"],"evidence":"decision"},{"id":"agent-service:publish","resourceKind":"agent-service","actions":["publish"],"evidence":"decision"},{"id":"agent-service:retire","resourceKind":"agent-service","actions":["retire"],"evidence":"decision"},{"id":"agent-service:administer","resourceKind":"agent-service","actions":["administer"],"evidence":"decision"},{"id":"agent-service:invoke","resourceKind":"agent-service","actions":["invoke"],"evidence":"effect"},{"id":"agent-service:delegate","resourceKind":"agent-service","actions":["delegate"],"evidence":"effect"},{"id":"agent-revision:read","resourceKind":"agent-revision","actions":["read"],"evidence":"read"},{"id":"agent-revision:create","resourceKind":"agent-revision","actions":["create"],"evidence":"decision"},{"id":"agent-revision:edit","resourceKind":"agent-revision","actions":["edit"],"evidence":"decision"},{"id":"agent-revision:publish","resourceKind":"agent-revision","actions":["publish"],"evidence":"decision"},{"id":"agent-revision:assign","resourceKind":"agent-revision","actions":["assign"],"evidence":"decision"},{"id":"agent-revision:revoke","resourceKind":"agent-revision","actions":["revoke"],"evidence":"decision"},{"id":"agent-run:read","resourceKind":"agent-run","actions":["read"],"evidence":"read"},{"id":"tool-invocation:read","resourceKind":"tool-invocation","actions":["read"],"evidence":"read"},{"id":"tool-invocation:invoke","resourceKind":"tool-invocation","actions":["invoke"],"evidence":"effect"},{"id":"approval-request:read","resourceKind":"approval-request","actions":["read"],"evidence":"read"},{"id":"approval-request:decide","resourceKind":"approval-request","actions":["decide"],"evidence":"decision"},{"id":"tool-approval-scope:read","resourceKind":"tool-approval-scope","actions":["read"],"evidence":"read"},{"id":"tool-approval-scope:revoke","resourceKind":"tool-approval-scope","actions":["revoke"],"evidence":"decision"},{"id":"skill:discover","resourceKind":"skill","actions":["discover"],"evidence":"read"},{"id":"skill:read","resourceKind":"skill","actions":["read"],"evidence":"read"},{"id":"skill:create","resourceKind":"skill","actions":["create"],"evidence":"decision"},{"id":"skill:edit","resourceKind":"skill","actions":["edit"],"evidence":"decision"},{"id":"skill:install","resourceKind":"skill","actions":["install"],"evidence":"decision"},{"id":"skill:publish","resourceKind":"skill","actions":["publish"],"evidence":"decision"},{"id":"skill:revoke","resourceKind":"skill","actions":["revoke"],"evidence":"decision"},{"id":"skill:retire","resourceKind":"skill","actions":["retire"],"evidence":"decision"},{"id":"skill:administer","resourceKind":"skill","actions":["administer"],"evidence":"decision"},{"id":"skill-revision:discover","resourceKind":"skill-revision","actions":["discover"],"evidence":"read"},{"id":"skill-revision:read","resourceKind":"skill-revision","actions":["read"],"evidence":"read"},{"id":"skill-revision:assign","resourceKind":"skill-revision","actions":["assign"],"evidence":"decision"},{"id":"skill-revision:review","resourceKind":"skill-revision","actions":["review"],"evidence":"decision"},{"id":"skill-revision:publish","resourceKind":"skill-revision","actions":["publish"],"evidence":"decision"},{"id":"skill-revision:revoke","resourceKind":"skill-revision","actions":["revoke"],"evidence":"decision"},{"id":"skill-revision:use","resourceKind":"skill-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-server:discover","resourceKind":"mcp-server","actions":["discover"],"evidence":"read"},{"id":"mcp-server:read","resourceKind":"mcp-server","actions":["read"],"evidence":"read"},{"id":"mcp-server:create","resourceKind":"mcp-server","actions":["create"],"evidence":"decision"},{"id":"mcp-server:edit","resourceKind":"mcp-server","actions":["edit"],"evidence":"decision"},{"id":"mcp-server:install","resourceKind":"mcp-server","actions":["install"],"evidence":"decision"},{"id":"mcp-server:publish","resourceKind":"mcp-server","actions":["publish"],"evidence":"decision"},{"id":"mcp-server:revoke","resourceKind":"mcp-server","actions":["revoke"],"evidence":"decision"},{"id":"mcp-server:retire","resourceKind":"mcp-server","actions":["retire"],"evidence":"decision"},{"id":"mcp-server:administer","resourceKind":"mcp-server","actions":["administer"],"evidence":"decision"},{"id":"mcp-server-revision:discover","resourceKind":"mcp-server-revision","actions":["discover"],"evidence":"read"},{"id":"mcp-server-revision:read","resourceKind":"mcp-server-revision","actions":["read"],"evidence":"read"},{"id":"mcp-server-revision:assign","resourceKind":"mcp-server-revision","actions":["assign"],"evidence":"decision"},{"id":"mcp-server-revision:review","resourceKind":"mcp-server-revision","actions":["review"],"evidence":"decision"},{"id":"mcp-server-revision:publish","resourceKind":"mcp-server-revision","actions":["publish"],"evidence":"decision"},{"id":"mcp-server-revision:revoke","resourceKind":"mcp-server-revision","actions":["revoke"],"evidence":"decision"},{"id":"mcp-server-revision:use","resourceKind":"mcp-server-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-tool-revision:discover","resourceKind":"mcp-tool-revision","actions":["discover"],"evidence":"read"},{"id":"mcp-tool-revision:read","resourceKind":"mcp-tool-revision","actions":["read"],"evidence":"read"},{"id":"mcp-tool-revision:assign","resourceKind":"mcp-tool-revision","actions":["assign"],"evidence":"decision"},{"id":"mcp-tool-revision:use","resourceKind":"mcp-tool-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-tool-revision:invoke","resourceKind":"mcp-tool-revision","actions":["invoke"],"evidence":"effect"},{"id":"model-definition:discover","resourceKind":"model-definition","actions":["discover"],"evidence":"read"},{"id":"model-definition:read","resourceKind":"model-definition","actions":["read"],"evidence":"read"},{"id":"model-definition:assign","resourceKind":"model-definition","actions":["assign"],"evidence":"decision"},{"id":"model-definition:manage","resourceKind":"model-definition","actions":["manage"],"evidence":"decision"},{"id":"model-definition:administer","resourceKind":"model-definition","actions":["administer"],"evidence":"decision"},{"id":"model-definition:use","resourceKind":"model-definition","actions":["use"],"evidence":"effect"},{"id":"artifact:discover","resourceKind":"artifact","actions":["discover"],"evidence":"read"},{"id":"artifact:read","resourceKind":"artifact","actions":["read"],"evidence":"read"},{"id":"artifact:create","resourceKind":"artifact","actions":["create"],"evidence":"decision"},{"id":"artifact:edit","resourceKind":"artifact","actions":["edit"],"evidence":"decision"},{"id":"artifact:share","resourceKind":"artifact","actions":["share"],"evidence":"decision"},{"id":"artifact:delete","resourceKind":"artifact","actions":["delete"],"evidence":"decision"},{"id":"artifact:administer","resourceKind":"artifact","actions":["administer"],"evidence":"decision"},{"id":"artifact:use","resourceKind":"artifact","actions":["use"],"evidence":"effect"},{"id":"artifact-collection:create","resourceKind":"artifact-collection","actions":["create"],"evidence":"decision"},{"id":"artifact-revision:discover","resourceKind":"artifact-revision","actions":["discover"],"evidence":"read"},{"id":"artifact-revision:read","resourceKind":"artifact-revision","actions":["read"],"evidence":"read"},{"id":"artifact-revision:create","resourceKind":"artifact-revision","actions":["create"],"evidence":"decision"},{"id":"artifact-revision:edit","resourceKind":"artifact-revision","actions":["edit"],"evidence":"decision"},{"id":"artifact-revision:share","resourceKind":"artifact-revision","actions":["share"],"evidence":"decision"},{"id":"artifact-revision:delete","resourceKind":"artifact-revision","actions":["delete"],"evidence":"decision"},{"id":"artifact-revision:administer","resourceKind":"artifact-revision","actions":["administer"],"evidence":"decision"},{"id":"artifact-revision:use","resourceKind":"artifact-revision","actions":["use"],"evidence":"effect"},{"id":"dataset:discover","resourceKind":"dataset","actions":["discover"],"evidence":"read"},{"id":"dataset:read","resourceKind":"dataset","actions":["read"],"evidence":"read"},{"id":"dataset:create","resourceKind":"dataset","actions":["create"],"evidence":"decision"},{"id":"dataset:edit","resourceKind":"dataset","actions":["edit"],"evidence":"decision"},{"id":"dataset:share","resourceKind":"dataset","actions":["share"],"evidence":"decision"},{"id":"dataset:delete","resourceKind":"dataset","actions":["delete"],"evidence":"decision"},{"id":"dataset:administer","resourceKind":"dataset","actions":["administer"],"evidence":"decision"},{"id":"dataset:use","resourceKind":"dataset","actions":["use"],"evidence":"effect"},{"id":"memory-scope:read","resourceKind":"memory-scope","actions":["read"],"evidence":"read"},{"id":"memory-scope:share","resourceKind":"memory-scope","actions":["share"],"evidence":"decision"},{"id":"memory-scope:manage","resourceKind":"memory-scope","actions":["manage"],"evidence":"decision"},{"id":"memory-scope:forget","resourceKind":"memory-scope","actions":["forget"],"evidence":"decision"},{"id":"memory-scope:use","resourceKind":"memory-scope","actions":["use"],"evidence":"effect"},{"id":"persona:discover","resourceKind":"persona","actions":["discover"],"evidence":"read"},{"id":"persona:read","resourceKind":"persona","actions":["read"],"evidence":"read"},{"id":"persona:create","resourceKind":"persona","actions":["create"],"evidence":"decision"},{"id":"persona:edit","resourceKind":"persona","actions":["edit"],"evidence":"decision"},{"id":"persona:share","resourceKind":"persona","actions":["share"],"evidence":"decision"},{"id":"persona:delete","resourceKind":"persona","actions":["delete"],"evidence":"decision"},{"id":"persona:administer","resourceKind":"persona","actions":["administer"],"evidence":"decision"},{"id":"persona:use","resourceKind":"persona","actions":["use"],"evidence":"effect"},{"id":"conversation:discover","resourceKind":"conversation","actions":["discover"],"evidence":"read"},{"id":"conversation:read","resourceKind":"conversation","actions":["read"],"evidence":"read"},{"id":"conversation:create","resourceKind":"conversation","actions":["create"],"evidence":"decision"},{"id":"conversation:edit","resourceKind":"conversation","actions":["edit"],"evidence":"decision"},{"id":"conversation:share","resourceKind":"conversation","actions":["share"],"evidence":"decision"},{"id":"conversation:delete","resourceKind":"conversation","actions":["delete"],"evidence":"decision"},{"id":"conversation:administer","resourceKind":"conversation","actions":["administer"],"evidence":"decision"},{"id":"conversation:use","resourceKind":"conversation","actions":["use"],"evidence":"effect"},{"id":"conversation:delegate","resourceKind":"conversation","actions":["delegate"],"evidence":"effect"},{"id":"conversation-collection:create","resourceKind":"conversation-collection","actions":["create"],"evidence":"decision"},{"id":"provider-connection:discover","resourceKind":"provider-connection","actions":["discover"],"evidence":"read"},{"id":"provider-connection:read","resourceKind":"provider-connection","actions":["read"],"evidence":"read"},{"id":"provider-connection:manage","resourceKind":"provider-connection","actions":["manage"],"evidence":"decision"},{"id":"provider-connection:administer","resourceKind":"provider-connection","actions":["administer"],"evidence":"decision"},{"id":"provider-connection:use","resourceKind":"provider-connection","actions":["use"],"evidence":"effect"},{"id":"budget:read","resourceKind":"budget","actions":["read"],"evidence":"read"},{"id":"budget:manage","resourceKind":"budget","actions":["manage"],"evidence":"decision"},{"id":"budget:administer","resourceKind":"budget","actions":["administer"],"evidence":"decision"},{"id":"budget:use","resourceKind":"budget","actions":["use"],"evidence":"effect"},{"id":"audit-log:read","resourceKind":"audit-log","actions":["read"],"evidence":"read"},{"id":"token-usage:read","resourceKind":"token-usage","actions":["read"],"evidence":"read"},{"id":"third-party-source:discover","resourceKind":"third-party-source","actions":["discover"],"evidence":"read"},{"id":"third-party-source:read","resourceKind":"third-party-source","actions":["read"],"evidence":"read"},{"id":"third-party-source:create","resourceKind":"third-party-source","actions":["create"],"evidence":"decision"},{"id":"third-party-source:edit","resourceKind":"third-party-source","actions":["edit"],"evidence":"decision"},{"id":"third-party-source:share","resourceKind":"third-party-source","actions":["share"],"evidence":"decision"},{"id":"third-party-source:delete","resourceKind":"third-party-source","actions":["delete"],"evidence":"decision"},{"id":"third-party-source:administer","resourceKind":"third-party-source","actions":["administer"],"evidence":"decision"},{"id":"third-party-source:use","resourceKind":"third-party-source","actions":["use"],"evidence":"effect"},{"id":"resource-share:read","resourceKind":"resource-share","actions":["read"],"evidence":"read"},{"id":"resource-share:create","resourceKind":"resource-share","actions":["create"],"evidence":"decision"},{"id":"resource-share:edit","resourceKind":"resource-share","actions":["edit"],"evidence":"decision"},{"id":"resource-share:revoke","resourceKind":"resource-share","actions":["revoke"],"evidence":"decision"},{"id":"resource-share:administer","resourceKind":"resource-share","actions":["administer"],"evidence":"decision"},{"id":"group:discover","resourceKind":"group","actions":["discover"],"evidence":"read"},{"id":"group:read","resourceKind":"group","actions":["read"],"evidence":"read"},{"id":"group:create","resourceKind":"group","actions":["create"],"evidence":"decision"},{"id":"group:edit","resourceKind":"group","actions":["edit"],"evidence":"decision"},{"id":"group:delete","resourceKind":"group","actions":["delete"],"evidence":"decision"},{"id":"group:administer","resourceKind":"group","actions":["administer"],"evidence":"decision"},{"id":"organization-membership:read","resourceKind":"organization-membership","actions":["read"],"evidence":"read"},{"id":"organization-membership:create","resourceKind":"organization-membership","actions":["create"],"evidence":"decision"},{"id":"organization-membership:edit","resourceKind":"organization-membership","actions":["edit"],"evidence":"decision"},{"id":"organization-membership:revoke","resourceKind":"organization-membership","actions":["revoke"],"evidence":"decision"},{"id":"organization-membership:administer","resourceKind":"organization-membership","actions":["administer"],"evidence":"decision"},{"id":"mcp-task:read","resourceKind":"mcp-task","actions":["read"],"evidence":"read"},{"id":"mcp-task:edit","resourceKind":"mcp-task","actions":["edit"],"evidence":"decision"},{"id":"mcp-task:cancel","resourceKind":"mcp-task","actions":["cancel"],"evidence":"decision"},{"id":"persona-collection:create","resourceKind":"persona-collection","actions":["create"],"evidence":"decision"},{"id":"agent-service-collection:create","resourceKind":"agent-service-collection","actions":["create"],"evidence":"decision"}]'::jsonb,
+    'sha256:174b380d3d1efcf9b7644081daac74220b2d7599d2decd495059a5250bcdb926',
+    '[{"id":"organization:read","resourceKind":"organization","actions":["read"],"evidence":"read"},{"id":"organization:edit","resourceKind":"organization","actions":["edit"],"evidence":"decision"},{"id":"organization:manage","resourceKind":"organization","actions":["manage"],"evidence":"decision"},{"id":"organization:administer","resourceKind":"organization","actions":["administer"],"evidence":"decision"},{"id":"authorization-grant:read","resourceKind":"authorization-grant","actions":["read"],"evidence":"read"},{"id":"authorization-grant:create","resourceKind":"authorization-grant","actions":["create"],"evidence":"decision"},{"id":"authorization-grant:edit","resourceKind":"authorization-grant","actions":["edit"],"evidence":"decision"},{"id":"authorization-grant:revoke","resourceKind":"authorization-grant","actions":["revoke"],"evidence":"decision"},{"id":"authorization-grant:administer","resourceKind":"authorization-grant","actions":["administer"],"evidence":"decision"},{"id":"agent-service:discover","resourceKind":"agent-service","actions":["discover"],"evidence":"read"},{"id":"agent-service:read","resourceKind":"agent-service","actions":["read"],"evidence":"read"},{"id":"agent-service:create","resourceKind":"agent-service","actions":["create"],"evidence":"decision"},{"id":"agent-service:edit","resourceKind":"agent-service","actions":["edit"],"evidence":"decision"},{"id":"agent-service:publish","resourceKind":"agent-service","actions":["publish"],"evidence":"decision"},{"id":"agent-service:retire","resourceKind":"agent-service","actions":["retire"],"evidence":"decision"},{"id":"agent-service:administer","resourceKind":"agent-service","actions":["administer"],"evidence":"decision"},{"id":"agent-service:invoke","resourceKind":"agent-service","actions":["invoke"],"evidence":"effect"},{"id":"agent-service:delegate","resourceKind":"agent-service","actions":["delegate"],"evidence":"effect"},{"id":"agent-revision:read","resourceKind":"agent-revision","actions":["read"],"evidence":"read"},{"id":"agent-revision:create","resourceKind":"agent-revision","actions":["create"],"evidence":"decision"},{"id":"agent-revision:edit","resourceKind":"agent-revision","actions":["edit"],"evidence":"decision"},{"id":"agent-revision:publish","resourceKind":"agent-revision","actions":["publish"],"evidence":"decision"},{"id":"agent-revision:assign","resourceKind":"agent-revision","actions":["assign"],"evidence":"decision"},{"id":"agent-revision:revoke","resourceKind":"agent-revision","actions":["revoke"],"evidence":"decision"},{"id":"agent-run:read","resourceKind":"agent-run","actions":["read"],"evidence":"read"},{"id":"routine:read","resourceKind":"routine","actions":["read"],"evidence":"read"},{"id":"routine:edit","resourceKind":"routine","actions":["edit"],"evidence":"decision"},{"id":"routine:retire","resourceKind":"routine","actions":["retire"],"evidence":"decision"},{"id":"routine:use","resourceKind":"routine","actions":["use"],"evidence":"effect"},{"id":"routine-collection:create","resourceKind":"routine-collection","actions":["create"],"evidence":"decision"},{"id":"tool-invocation:read","resourceKind":"tool-invocation","actions":["read"],"evidence":"read"},{"id":"tool-invocation:invoke","resourceKind":"tool-invocation","actions":["invoke"],"evidence":"effect"},{"id":"approval-request:read","resourceKind":"approval-request","actions":["read"],"evidence":"read"},{"id":"approval-request:decide","resourceKind":"approval-request","actions":["decide"],"evidence":"decision"},{"id":"tool-approval-scope:read","resourceKind":"tool-approval-scope","actions":["read"],"evidence":"read"},{"id":"tool-approval-scope:revoke","resourceKind":"tool-approval-scope","actions":["revoke"],"evidence":"decision"},{"id":"skill:discover","resourceKind":"skill","actions":["discover"],"evidence":"read"},{"id":"skill:read","resourceKind":"skill","actions":["read"],"evidence":"read"},{"id":"skill:create","resourceKind":"skill","actions":["create"],"evidence":"decision"},{"id":"skill:edit","resourceKind":"skill","actions":["edit"],"evidence":"decision"},{"id":"skill:install","resourceKind":"skill","actions":["install"],"evidence":"decision"},{"id":"skill:publish","resourceKind":"skill","actions":["publish"],"evidence":"decision"},{"id":"skill:revoke","resourceKind":"skill","actions":["revoke"],"evidence":"decision"},{"id":"skill:retire","resourceKind":"skill","actions":["retire"],"evidence":"decision"},{"id":"skill:administer","resourceKind":"skill","actions":["administer"],"evidence":"decision"},{"id":"skill-revision:discover","resourceKind":"skill-revision","actions":["discover"],"evidence":"read"},{"id":"skill-revision:read","resourceKind":"skill-revision","actions":["read"],"evidence":"read"},{"id":"skill-revision:assign","resourceKind":"skill-revision","actions":["assign"],"evidence":"decision"},{"id":"skill-revision:review","resourceKind":"skill-revision","actions":["review"],"evidence":"decision"},{"id":"skill-revision:publish","resourceKind":"skill-revision","actions":["publish"],"evidence":"decision"},{"id":"skill-revision:revoke","resourceKind":"skill-revision","actions":["revoke"],"evidence":"decision"},{"id":"skill-revision:use","resourceKind":"skill-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-server:discover","resourceKind":"mcp-server","actions":["discover"],"evidence":"read"},{"id":"mcp-server:read","resourceKind":"mcp-server","actions":["read"],"evidence":"read"},{"id":"mcp-server:create","resourceKind":"mcp-server","actions":["create"],"evidence":"decision"},{"id":"mcp-server:edit","resourceKind":"mcp-server","actions":["edit"],"evidence":"decision"},{"id":"mcp-server:install","resourceKind":"mcp-server","actions":["install"],"evidence":"decision"},{"id":"mcp-server:publish","resourceKind":"mcp-server","actions":["publish"],"evidence":"decision"},{"id":"mcp-server:revoke","resourceKind":"mcp-server","actions":["revoke"],"evidence":"decision"},{"id":"mcp-server:retire","resourceKind":"mcp-server","actions":["retire"],"evidence":"decision"},{"id":"mcp-server:administer","resourceKind":"mcp-server","actions":["administer"],"evidence":"decision"},{"id":"mcp-server-revision:discover","resourceKind":"mcp-server-revision","actions":["discover"],"evidence":"read"},{"id":"mcp-server-revision:read","resourceKind":"mcp-server-revision","actions":["read"],"evidence":"read"},{"id":"mcp-server-revision:assign","resourceKind":"mcp-server-revision","actions":["assign"],"evidence":"decision"},{"id":"mcp-server-revision:review","resourceKind":"mcp-server-revision","actions":["review"],"evidence":"decision"},{"id":"mcp-server-revision:publish","resourceKind":"mcp-server-revision","actions":["publish"],"evidence":"decision"},{"id":"mcp-server-revision:revoke","resourceKind":"mcp-server-revision","actions":["revoke"],"evidence":"decision"},{"id":"mcp-server-revision:use","resourceKind":"mcp-server-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-tool-revision:discover","resourceKind":"mcp-tool-revision","actions":["discover"],"evidence":"read"},{"id":"mcp-tool-revision:read","resourceKind":"mcp-tool-revision","actions":["read"],"evidence":"read"},{"id":"mcp-tool-revision:assign","resourceKind":"mcp-tool-revision","actions":["assign"],"evidence":"decision"},{"id":"mcp-tool-revision:use","resourceKind":"mcp-tool-revision","actions":["use"],"evidence":"effect"},{"id":"mcp-tool-revision:invoke","resourceKind":"mcp-tool-revision","actions":["invoke"],"evidence":"effect"},{"id":"model-definition:discover","resourceKind":"model-definition","actions":["discover"],"evidence":"read"},{"id":"model-definition:read","resourceKind":"model-definition","actions":["read"],"evidence":"read"},{"id":"model-definition:assign","resourceKind":"model-definition","actions":["assign"],"evidence":"decision"},{"id":"model-definition:manage","resourceKind":"model-definition","actions":["manage"],"evidence":"decision"},{"id":"model-definition:administer","resourceKind":"model-definition","actions":["administer"],"evidence":"decision"},{"id":"model-definition:use","resourceKind":"model-definition","actions":["use"],"evidence":"effect"},{"id":"artifact:discover","resourceKind":"artifact","actions":["discover"],"evidence":"read"},{"id":"artifact:read","resourceKind":"artifact","actions":["read"],"evidence":"read"},{"id":"artifact:create","resourceKind":"artifact","actions":["create"],"evidence":"decision"},{"id":"artifact:edit","resourceKind":"artifact","actions":["edit"],"evidence":"decision"},{"id":"artifact:share","resourceKind":"artifact","actions":["share"],"evidence":"decision"},{"id":"artifact:delete","resourceKind":"artifact","actions":["delete"],"evidence":"decision"},{"id":"artifact:administer","resourceKind":"artifact","actions":["administer"],"evidence":"decision"},{"id":"artifact:use","resourceKind":"artifact","actions":["use"],"evidence":"effect"},{"id":"artifact-collection:create","resourceKind":"artifact-collection","actions":["create"],"evidence":"decision"},{"id":"artifact-revision:discover","resourceKind":"artifact-revision","actions":["discover"],"evidence":"read"},{"id":"artifact-revision:read","resourceKind":"artifact-revision","actions":["read"],"evidence":"read"},{"id":"artifact-revision:create","resourceKind":"artifact-revision","actions":["create"],"evidence":"decision"},{"id":"artifact-revision:edit","resourceKind":"artifact-revision","actions":["edit"],"evidence":"decision"},{"id":"artifact-revision:share","resourceKind":"artifact-revision","actions":["share"],"evidence":"decision"},{"id":"artifact-revision:delete","resourceKind":"artifact-revision","actions":["delete"],"evidence":"decision"},{"id":"artifact-revision:administer","resourceKind":"artifact-revision","actions":["administer"],"evidence":"decision"},{"id":"artifact-revision:use","resourceKind":"artifact-revision","actions":["use"],"evidence":"effect"},{"id":"dataset:discover","resourceKind":"dataset","actions":["discover"],"evidence":"read"},{"id":"dataset:read","resourceKind":"dataset","actions":["read"],"evidence":"read"},{"id":"dataset:create","resourceKind":"dataset","actions":["create"],"evidence":"decision"},{"id":"dataset:edit","resourceKind":"dataset","actions":["edit"],"evidence":"decision"},{"id":"dataset:share","resourceKind":"dataset","actions":["share"],"evidence":"decision"},{"id":"dataset:delete","resourceKind":"dataset","actions":["delete"],"evidence":"decision"},{"id":"dataset:administer","resourceKind":"dataset","actions":["administer"],"evidence":"decision"},{"id":"dataset:use","resourceKind":"dataset","actions":["use"],"evidence":"effect"},{"id":"memory-scope:read","resourceKind":"memory-scope","actions":["read"],"evidence":"read"},{"id":"memory-scope:share","resourceKind":"memory-scope","actions":["share"],"evidence":"decision"},{"id":"memory-scope:manage","resourceKind":"memory-scope","actions":["manage"],"evidence":"decision"},{"id":"memory-scope:forget","resourceKind":"memory-scope","actions":["forget"],"evidence":"decision"},{"id":"memory-scope:use","resourceKind":"memory-scope","actions":["use"],"evidence":"effect"},{"id":"persona:discover","resourceKind":"persona","actions":["discover"],"evidence":"read"},{"id":"persona:read","resourceKind":"persona","actions":["read"],"evidence":"read"},{"id":"persona:create","resourceKind":"persona","actions":["create"],"evidence":"decision"},{"id":"persona:edit","resourceKind":"persona","actions":["edit"],"evidence":"decision"},{"id":"persona:share","resourceKind":"persona","actions":["share"],"evidence":"decision"},{"id":"persona:delete","resourceKind":"persona","actions":["delete"],"evidence":"decision"},{"id":"persona:administer","resourceKind":"persona","actions":["administer"],"evidence":"decision"},{"id":"persona:use","resourceKind":"persona","actions":["use"],"evidence":"effect"},{"id":"conversation:discover","resourceKind":"conversation","actions":["discover"],"evidence":"read"},{"id":"conversation:read","resourceKind":"conversation","actions":["read"],"evidence":"read"},{"id":"conversation:create","resourceKind":"conversation","actions":["create"],"evidence":"decision"},{"id":"conversation:edit","resourceKind":"conversation","actions":["edit"],"evidence":"decision"},{"id":"conversation:share","resourceKind":"conversation","actions":["share"],"evidence":"decision"},{"id":"conversation:delete","resourceKind":"conversation","actions":["delete"],"evidence":"decision"},{"id":"conversation:administer","resourceKind":"conversation","actions":["administer"],"evidence":"decision"},{"id":"conversation:use","resourceKind":"conversation","actions":["use"],"evidence":"effect"},{"id":"conversation:delegate","resourceKind":"conversation","actions":["delegate"],"evidence":"effect"},{"id":"conversation-collection:create","resourceKind":"conversation-collection","actions":["create"],"evidence":"decision"},{"id":"provider-connection:discover","resourceKind":"provider-connection","actions":["discover"],"evidence":"read"},{"id":"provider-connection:read","resourceKind":"provider-connection","actions":["read"],"evidence":"read"},{"id":"provider-connection:manage","resourceKind":"provider-connection","actions":["manage"],"evidence":"decision"},{"id":"provider-connection:administer","resourceKind":"provider-connection","actions":["administer"],"evidence":"decision"},{"id":"provider-connection:use","resourceKind":"provider-connection","actions":["use"],"evidence":"effect"},{"id":"budget:read","resourceKind":"budget","actions":["read"],"evidence":"read"},{"id":"budget:manage","resourceKind":"budget","actions":["manage"],"evidence":"decision"},{"id":"budget:administer","resourceKind":"budget","actions":["administer"],"evidence":"decision"},{"id":"budget:use","resourceKind":"budget","actions":["use"],"evidence":"effect"},{"id":"audit-log:read","resourceKind":"audit-log","actions":["read"],"evidence":"read"},{"id":"token-usage:read","resourceKind":"token-usage","actions":["read"],"evidence":"read"},{"id":"third-party-source:discover","resourceKind":"third-party-source","actions":["discover"],"evidence":"read"},{"id":"third-party-source:read","resourceKind":"third-party-source","actions":["read"],"evidence":"read"},{"id":"third-party-source:create","resourceKind":"third-party-source","actions":["create"],"evidence":"decision"},{"id":"third-party-source:edit","resourceKind":"third-party-source","actions":["edit"],"evidence":"decision"},{"id":"third-party-source:share","resourceKind":"third-party-source","actions":["share"],"evidence":"decision"},{"id":"third-party-source:delete","resourceKind":"third-party-source","actions":["delete"],"evidence":"decision"},{"id":"third-party-source:administer","resourceKind":"third-party-source","actions":["administer"],"evidence":"decision"},{"id":"third-party-source:use","resourceKind":"third-party-source","actions":["use"],"evidence":"effect"},{"id":"resource-share:read","resourceKind":"resource-share","actions":["read"],"evidence":"read"},{"id":"resource-share:create","resourceKind":"resource-share","actions":["create"],"evidence":"decision"},{"id":"resource-share:edit","resourceKind":"resource-share","actions":["edit"],"evidence":"decision"},{"id":"resource-share:revoke","resourceKind":"resource-share","actions":["revoke"],"evidence":"decision"},{"id":"resource-share:administer","resourceKind":"resource-share","actions":["administer"],"evidence":"decision"},{"id":"group:discover","resourceKind":"group","actions":["discover"],"evidence":"read"},{"id":"group:read","resourceKind":"group","actions":["read"],"evidence":"read"},{"id":"group:create","resourceKind":"group","actions":["create"],"evidence":"decision"},{"id":"group:edit","resourceKind":"group","actions":["edit"],"evidence":"decision"},{"id":"group:delete","resourceKind":"group","actions":["delete"],"evidence":"decision"},{"id":"group:administer","resourceKind":"group","actions":["administer"],"evidence":"decision"},{"id":"organization-membership:read","resourceKind":"organization-membership","actions":["read"],"evidence":"read"},{"id":"organization-membership:create","resourceKind":"organization-membership","actions":["create"],"evidence":"decision"},{"id":"organization-membership:edit","resourceKind":"organization-membership","actions":["edit"],"evidence":"decision"},{"id":"organization-membership:revoke","resourceKind":"organization-membership","actions":["revoke"],"evidence":"decision"},{"id":"organization-membership:administer","resourceKind":"organization-membership","actions":["administer"],"evidence":"decision"},{"id":"mcp-task:read","resourceKind":"mcp-task","actions":["read"],"evidence":"read"},{"id":"mcp-task:edit","resourceKind":"mcp-task","actions":["edit"],"evidence":"decision"},{"id":"mcp-task:cancel","resourceKind":"mcp-task","actions":["cancel"],"evidence":"decision"},{"id":"persona-collection:create","resourceKind":"persona-collection","actions":["create"],"evidence":"decision"},{"id":"agent-service-collection:create","resourceKind":"agent-service-collection","actions":["create"],"evidence":"decision"}]'::jsonb,
     'system:target-baseline'
 );
 
@@ -12237,8 +12722,9 @@ BEGIN
         OR NEW."revocation_idempotency_digest" IS NOT NULL OR NEW."revocation_command_digest" IS NOT NULL
         OR NEW."scope_identity_digest" !~ '^sha256:[0-9a-f]{64}$' OR NEW."active_identity_digest" IS DISTINCT FROM NEW."scope_identity_digest"
         OR NEW."arguments_digest" !~ '^sha256:[0-9a-f]{64}$'
-        OR NEW."tool_action" <> 'invoke' OR NEW."routine_id" IS NOT NULL OR NEW."routine_revision" IS NOT NULL THEN
-        RAISE EXCEPTION 'new ToolApprovalScope requires exact active interactive consent coordinates';
+        OR NEW."tool_action" <> 'invoke' OR num_nonnulls(NEW."routine_id", NEW."routine_revision") NOT IN (0, 2)
+        OR (NEW."routine_revision" IS NOT NULL AND NEW."routine_revision" <= 0) THEN
+        RAISE EXCEPTION 'new ToolApprovalScope requires exact active consent coordinates';
     END IF;
     SELECT * INTO source_approval FROM "approval_requests" WHERE "id" = NEW."source_approval_request_id" FOR KEY SHARE;
     SELECT * INTO source_request FROM "elicitation_requests" WHERE "id" = source_approval."elicitation_request_id" FOR KEY SHARE;
@@ -12250,6 +12736,7 @@ BEGIN
         OR source_approval."action" IS DISTINCT FROM NEW."tool_action" OR source_approval."final_arguments" IS DISTINCT FROM NEW."reviewed_arguments"
         OR source_approval."final_arguments_digest" IS DISTINCT FROM NEW."arguments_digest" OR source_approval."principal_id" IS DISTINCT FROM NEW."connection_owner_principal_id"
         OR source_run."execution_subject"->'requester'->>'requesterPrincipalId' IS DISTINCT FROM NEW."requester_principal_id"
+        OR source_run."routine_id" IS DISTINCT FROM NEW."routine_id" OR source_run."routine_revision" IS DISTINCT FROM NEW."routine_revision"
         OR source_request."assigned_participant_id" IS DISTINCT FROM NEW."requester_subject_id" THEN
         RAISE EXCEPTION 'ToolApprovalScope requires its exact requester-approved Always decision';
     END IF;
@@ -12265,16 +12752,21 @@ CREATE FUNCTION "enforce_tool_approval_admission_write"() RETURNS trigger LANGUA
 DECLARE
     current_scope "tool_approval_scopes"%ROWTYPE;
     current_invocation "tool_invocations"%ROWTYPE;
+    current_run "agent_runs"%ROWTYPE;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ToolApprovalAdmission rows cannot be deleted'; END IF;
     SELECT * INTO current_scope FROM "tool_approval_scopes" WHERE "id" = COALESCE(NEW."scope_id", OLD."scope_id") FOR KEY SHARE;
     SELECT * INTO current_invocation FROM "tool_invocations" WHERE "id" = COALESCE(NEW."tool_invocation_id", OLD."tool_invocation_id") FOR UPDATE;
+    SELECT * INTO current_run FROM "agent_runs" WHERE "id" = current_invocation."run_id" FOR KEY SHARE;
     IF TG_OP = 'INSERT' THEN
         IF NEW."origin" IS DISTINCT FROM 'standing_consent'::"ToolApprovalAdmissionOrigin" OR NEW."consumed_at" IS NOT NULL OR NEW."consumed_claim_fence" IS NOT NULL
             OR current_scope."state" IS DISTINCT FROM 'active'::"ToolApprovalScopeState" OR NEW."scope_revision" IS DISTINCT FROM current_scope."revision"
             OR current_invocation."approval_required" IS DISTINCT FROM TRUE OR current_invocation."state" IS DISTINCT FROM 'awaiting_approval'::"ToolInvocationState"
             OR current_invocation."silo_id" IS DISTINCT FROM current_scope."silo_id" OR current_invocation."agent_service_id" IS DISTINCT FROM current_scope."agent_service_id"
             OR current_invocation."agent_revision_id" IS DISTINCT FROM current_scope."agent_revision_id" OR current_invocation."tool_revision_id" IS DISTINCT FROM current_scope."tool_revision_id"
+            OR current_run."id" IS NULL OR current_run."routine_id" IS DISTINCT FROM current_scope."routine_id"
+            OR current_run."routine_revision" IS DISTINCT FROM current_scope."routine_revision"
+            OR current_run."execution_subject"->'requester'->>'requesterPrincipalId' IS DISTINCT FROM current_scope."requester_principal_id"
             OR current_invocation."arguments_digest" IS DISTINCT FROM NEW."arguments_digest" OR NEW."arguments_digest" IS DISTINCT FROM current_scope."arguments_digest"
             OR current_invocation."arguments" IS DISTINCT FROM current_scope."reviewed_arguments" THEN
             RAISE EXCEPTION 'ToolApprovalAdmission requires an active exact scope and awaiting invocation';

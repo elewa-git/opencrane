@@ -32,6 +32,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		agentServiceId: "svc-1",
 		agentRevisionId: "rev-1",
 		snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION,
+		origin: { kind: "interactive", messageId: "m-2", historyRevision: "2" },
 		conversationId: "conversation-1",
 		messageIds: ["m-1", "m-2"],
 		personaRevisionId: "persona-1",

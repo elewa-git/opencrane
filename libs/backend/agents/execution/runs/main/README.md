@@ -62,6 +62,11 @@ does not grant permission to use a run.
   completed only after durable assistant output. Worker restart uncertainty converges on the same state.
 
 - `PrismaRunAdmissionUnitOfWork` saves a new run and its first lease-bound input snapshot together.
+- `PrismaRoutineRunSnapshotRecoveryRepository` reads one already-admitted automatic or manual routine run and returns its first immutable snapshot only after the run, occurrence, requester, workflow-task provenance, execution subject and digest all match. It never admits or creates a run.
+- `PrismaRoutineRunProgressUnitOfWork` reads historical routine progress facts only after the run,
+  reciprocal occurrence, saved snapshot digest, original workflow receipt and cancellation evidence
+  match. It returns null only for a positively identified ordinary interactive run and never admits,
+  spawns, or consults current grants.
 - `PrismaSelfRunStatusUnitOfWork` and `_CreatePrismaSelfRunStatusRouter` expose owner-filtered status
   only after the current exact `AgentRun/Read` grant is checked in the same database snapshot.
 - `PrismaConversationRunCancellationRepository` binds one requester-authorized Stop command,
@@ -143,9 +148,17 @@ shared backend libraries. It never imports an application or Kubernetes client.
 ## Data and persistence
 
 The main records are `AgentRun` and its append-only `RunInputSnapshot` rows. Initial admission saves
-the run, attempt-one snapshot and personal-owner read grant together. A conversation run later binds
+the run and attempt-one snapshot together, plus a personal-owner read grant only for a personal
+interactive run. Interactive snapshots bind exact final-human-message provenance. Automatic and
+manual routine snapshots instead bind the exact routine, revision, firing, slot and original
+approval provenance; their `AgentRun` is an independent root linked one-to-one to the firing and
+never a delegated tree child. A conversation run later binds
 one immutable Absurd task receipt before model or tool work can proceed. A failure rolls back its
 whole transaction.
+
+Routine compilation may use the read-only recovery repository after admission commits. A missing
+expected run returns no snapshot; a partial or conflicting run, firing or snapshot fails closed.
+The caller owns the surrounding transaction and any current authorization or receipt checks.
 
 ## See also
 

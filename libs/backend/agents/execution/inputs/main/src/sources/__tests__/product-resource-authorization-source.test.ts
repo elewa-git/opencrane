@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { TransactionBoundProductResourceAuthorizationSource } from "../product-resource-authorization-source";
 
 /** Runs the central grant evaluator and audit writer with separate human and company Principals. */
-function _RecordedFixture(kind: ExecutionSubjectMembershipKinds)
+function _RecordedFixture(kind: ExecutionSubjectMembershipKinds, trigger: "interactive" | "scheduled" | "manual" = "interactive")
 {
 	const principalId = kind === ExecutionSubjectMembershipKinds.Managed ? "company-principal" : "human-1";
 	const resources = [
@@ -28,11 +28,18 @@ function _RecordedFixture(kind: ExecutionSubjectMembershipKinds)
 	};
 	const authorization = new PrismaAuthorizationAuthority(transaction as never);
 	const source = new TransactionBoundProductResourceAuthorizationSource();
+	const command = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1", trigger } as never;
+	const subject = { principalId, agentIdentityId: "identity-1", membership: { kind, revision: 7 }, requester: { requesterPrincipalId: "human-1", membership: { kind: ExecutionSubjectMembershipKinds.Fleet, revision: 7 } }, runScope: { agentRevisionId: "revision-1" } } as never;
+	const admission = { authorization, admittedAtEpochMs: 1_000 } as never;
 	async function _Load()
 	{
-		return source.load({ runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1" } as never, { principalId, agentIdentityId: "identity-1", membership: { kind, revision: 7 }, requester: { requesterPrincipalId: "human-1", membership: { kind: ExecutionSubjectMembershipKinds.Fleet, revision: 7 } }, runScope: { agentRevisionId: "revision-1" } } as never, { personaId: null, personaRevisionId: null }, { datasetId: null, memoryQueryPolicy: {} }, { modelDefinitionId: "model-1", modelRoute: {}, mcpTools: [], skillRevisionIds: [], artifactRevisionIds: [] }, { authorization, admittedAtEpochMs: 1_000 } as never);
+		return source.load(command, subject, { personaId: null, personaRevisionId: null }, { datasetId: null, memoryQueryPolicy: {} }, { modelDefinitionId: "model-1", modelRoute: {}, mcpTools: [], skillRevisionIds: [], artifactRevisionIds: [] }, admission);
 	}
-	return { principalId, grants, transaction, load: _Load };
+	async function _VerifyExisting()
+	{
+		return source.verifyExisting(command, subject, admission);
+	}
+	return { principalId, grants, transaction, load: _Load, verifyExisting: _VerifyExisting };
 }
 
 describe("TransactionBoundProductResourceAuthorizationSource", function _Suite()
@@ -42,7 +49,7 @@ describe("TransactionBoundProductResourceAuthorizationSource", function _Suite()
 		const admitPrincipal = vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: "sha256:conversation" } });
 		const admitPrincipalBatch = vi.fn().mockResolvedValue([{ outcome: AuthorizationDecisionOutcomes.Allow }]);
 		const source = new TransactionBoundProductResourceAuthorizationSource();
-		const result = await source.load({ runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1" } as never, { principalId: "company-principal", agentIdentityId: "identity-1", membership: { kind: "managed" }, requester: { requesterPrincipalId: "principal-1", membership: { kind: ExecutionSubjectMembershipKinds.Fleet, revision: 7 } }, runScope: { agentRevisionId: "revision-1" } } as never, { personaId: null, personaRevisionId: null }, { datasetId: null, memoryQueryPolicy: {} }, { modelDefinitionId: "model-1", modelRoute: {}, mcpTools: [], skillRevisionIds: [], artifactRevisionIds: [] }, { authorization: { admitPrincipal, admitPrincipalBatch }, admittedAtEpochMs: 1_000 } as never);
+		const result = await source.load({ runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1", trigger: "interactive" } as never, { principalId: "company-principal", agentIdentityId: "identity-1", membership: { kind: "managed" }, requester: { requesterPrincipalId: "principal-1", membership: { kind: ExecutionSubjectMembershipKinds.Fleet, revision: 7 } }, runScope: { agentRevisionId: "revision-1" } } as never, { personaId: null, personaRevisionId: null }, { datasetId: null, memoryQueryPolicy: {} }, { modelDefinitionId: "model-1", modelRoute: {}, mcpTools: [], skillRevisionIds: [], artifactRevisionIds: [] }, { authorization: { admitPrincipal, admitPrincipalBatch }, admittedAtEpochMs: 1_000 } as never);
 		expect(result).toEqual({ outcome: "loaded", value: null });
 		expect(admitPrincipalBatch).toHaveBeenCalledWith([expect.objectContaining({ principalId: "company-principal", actorKind: "agent-service", actorId: "company-principal", membershipRevision: undefined })]);
 		expect(admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ siloId: "silo-1", principalId: "principal-1", actorKind: "user", actorId: "principal-1", action: ProductAuthorizationActions.Use, resource: { kind: ProductAuthorizationResourceKinds.Conversation, id: "conversation-1" }, membershipRevision: 7, nowEpochMs: 1_000 }));
@@ -52,7 +59,7 @@ describe("TransactionBoundProductResourceAuthorizationSource", function _Suite()
 	{
 		const admitPrincipalBatch = vi.fn();
 		const source = new TransactionBoundProductResourceAuthorizationSource();
-		const result = await source.load({ runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1" } as never, { principalId: "principal-1", agentIdentityId: "identity-1", membership: { kind: "fleet", revision: 7 }, requester: { requesterPrincipalId: "principal-1", membership: { kind: ExecutionSubjectMembershipKinds.Fleet, revision: 7 } }, runScope: { agentRevisionId: "revision-1" } } as never, { personaId: null, personaRevisionId: null }, { datasetId: null, memoryQueryPolicy: {} }, { modelDefinitionId: "model-1", modelRoute: {}, mcpTools: [], skillRevisionIds: [], artifactRevisionIds: [] }, { authorization: { admitPrincipal: vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Deny, evidence: null }), admitPrincipalBatch }, admittedAtEpochMs: 1_000 } as never);
+		const result = await source.load({ runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1", trigger: "interactive" } as never, { principalId: "principal-1", agentIdentityId: "identity-1", membership: { kind: "fleet", revision: 7 }, requester: { requesterPrincipalId: "principal-1", membership: { kind: ExecutionSubjectMembershipKinds.Fleet, revision: 7 } }, runScope: { agentRevisionId: "revision-1" } } as never, { personaId: null, personaRevisionId: null }, { datasetId: null, memoryQueryPolicy: {} }, { modelDefinitionId: "model-1", modelRoute: {}, mcpTools: [], skillRevisionIds: [], artifactRevisionIds: [] }, { authorization: { admitPrincipal: vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Deny, evidence: null }), admitPrincipalBatch }, admittedAtEpochMs: 1_000 } as never);
 		expect(result).toEqual({ outcome: "denied", reason: "product_authorization_unavailable" });
 		expect(admitPrincipalBatch).not.toHaveBeenCalled();
 	});
@@ -69,6 +76,38 @@ describe("TransactionBoundProductResourceAuthorizationSource", function _Suite()
 			expect.objectContaining({ actorKind, actorId: f.principalId, resourceKind: ProductAuthorizationResourceKinds.ModelDefinition, membershipRevision, decidedAt: new Date(1_000) }),
 		]);
 		expect(records[1]).toMatchObject({ audience: undefined, namespace: undefined, serviceAccountName: undefined, workloadKind: undefined, workloadUid: undefined, podUid: undefined });
+	});
+
+	it.each(["interactive", "scheduled", "manual"] as const)("records the %s Conversation Use actor on fresh admission and recovery without borrowing resource grants", async function _RoutineActor(trigger)
+	{
+		const fixture = _RecordedFixture(ExecutionSubjectMembershipKinds.Managed, trigger);
+		await expect(fixture.load()).resolves.toEqual({ outcome: "loaded", value: null });
+		await expect(fixture.verifyExisting()).resolves.toEqual({ outcome: "loaded", value: null });
+		const records = fixture.transaction.auditDecision.create.mock.calls.map(call => call[0].data);
+		const actorKind = trigger === "scheduled" ? AuditDecisionActorKind.System : AuditDecisionActorKind.User;
+		const actorId = trigger === "scheduled" ? "opencrane-server/routine-schedule/v1" : "human-1";
+		const conversation = expect.objectContaining({ actorKind, actorId, resourceKind: ProductAuthorizationResourceKinds.Conversation, membershipRevision: 7 });
+		expect(records).toEqual([
+			conversation,
+			expect.objectContaining({ actorKind: AuditDecisionActorKind.AgentService, actorId: "company-principal", resourceKind: ProductAuthorizationResourceKinds.ModelDefinition }),
+			conversation,
+		]);
+	});
+
+	it.each(["scheduled", "manual"] as const)("denies %s execution when only the requester has a model grant", async function _RoutineResourcePrincipal(trigger)
+	{
+		const fixture = _RecordedFixture(ExecutionSubjectMembershipKinds.Managed, trigger);
+		fixture.transaction.authorizationGrant.findMany.mockResolvedValue(fixture.grants.map(grant => grant.resourceKind === ProductAuthorizationResourceKinds.ModelDefinition ? { ...grant, subjectPrincipalId: "human-1", boundaryPrincipalId: "human-1" } : grant));
+		await expect(fixture.load()).resolves.toEqual({ outcome: "denied", reason: "product_authorization_unavailable" });
+		expect(fixture.transaction.auditDecision.create.mock.calls.map(call => call[0].data.resourceKind)).toEqual([ProductAuthorizationResourceKinds.Conversation]);
+	});
+
+	it.each(["scheduled", "manual"] as const)("denies %s recovery when the requester loses Conversation Use", async function _RoutineConversationRevoked(trigger)
+	{
+		const fixture = _RecordedFixture(ExecutionSubjectMembershipKinds.Managed, trigger);
+		fixture.transaction.authorizationGrant.findMany.mockResolvedValue(fixture.grants.filter(grant => grant.resourceKind !== ProductAuthorizationResourceKinds.Conversation));
+		await expect(fixture.verifyExisting()).resolves.toEqual({ outcome: "denied", reason: "product_authorization_unavailable" });
+		expect(fixture.transaction.auditDecision.create).not.toHaveBeenCalled();
 	});
 
 	it.each([ExecutionSubjectMembershipKinds.Fleet, ExecutionSubjectMembershipKinds.Standalone, ExecutionSubjectMembershipKinds.Managed])("does not let %s execution borrow another Principal's model grant", async function _PreservesExecutionPrincipal(kind)

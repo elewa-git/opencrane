@@ -11,12 +11,14 @@ import type { ConversationComputerOutputPayloadStore, ConversationComputerPendin
 import type { ConversationComputerOutputPayload } from "../output/conversation-computer-output.types";
 import { PrismaConversationProductAuthorizationRepository } from "../../../authorization/db/conversation-product-authorization";
 import { _ConversationComputerEventId } from "../../conversation-computer-event-id";
+import { ConversationGenesisOriginKinds } from "@opencrane/models/conversations";
+import { RoutineTurnDispatchKinds, type RoutineTurnDispatcher } from "../../../routines/routine-turn-compiler.types";
 
 /** Resolves a pending turn and delegates its durable run admission before Kurrent freezes it. */
 export class PrismaConversationComputerTurnRepository implements ConversationComputerTurnProjectionRepository, ConversationComputerPendingTurnCompiler, ConversationComputerOutputPayloadStore
 {
 	private readonly histories: ConversationHistoryReader;
-	public constructor(private readonly prisma: Prisma.TransactionClient, history: Pick<HistoryStore, "readStream">, private readonly cipher: ConversationPrivatePayloadCipher, private readonly maximumTurnCostUsdMicros: number, private readonly runAdmission: ConversationComputerRunAdmissionPort)
+	public constructor(private readonly prisma: Prisma.TransactionClient, history: Pick<HistoryStore, "readStream">, private readonly cipher: ConversationPrivatePayloadCipher, private readonly maximumTurnCostUsdMicros: number, private readonly runAdmission: ConversationComputerRunAdmissionPort, private readonly routines?: RoutineTurnDispatcher)
 	{
 		this.histories = new ConversationHistoryReader(history);
 	}
@@ -33,6 +35,16 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 	{
 		const { siloId, conversationId, computerId, agentIdentityId } = command.computer;
 		const history = await this.histories.read({ siloId, conversationId });
+		if (history.genesis.origin?.kind === ConversationGenesisOriginKinds.RoutineOccurrence)
+		{
+			if (this.routines === undefined)
+				throw new Error("Routine conversation requires its recovery-only turn compiler");
+			const selected = await this.routines.dispatch(command, anchor);
+			if (selected.kind === RoutineTurnDispatchKinds.Routine)
+				return selected.candidate ?? null;
+			if (selected.kind !== RoutineTurnDispatchKinds.Interactive)
+				throw new Error("Routine turn dispatcher returned an unknown owner");
+		}
 		const expectedRevision = anchor?.expectedRevision ?? BigInt(history.entries.at(-1)?.position ?? "0");
 		const entries = anchor === undefined ? history.entries : history.entries.filter(entry => BigInt(entry.position) <= expectedRevision);
 		if (BigInt(entries.at(-1)?.position ?? "-1") !== expectedRevision)
@@ -119,7 +131,7 @@ export class PrismaConversationComputerTurnRepository implements ConversationCom
 /** Opens an isolated Prisma transaction for each conversation-computer persistence operation. */
 export class PrismaConversationComputerTurnUnitOfWork implements ConversationComputerTurnProjectionRepository, ConversationComputerPendingTurnCompiler, ConversationComputerOutputPayloadStore
 {
-	public constructor(private readonly prisma: PrismaClient, private readonly history: Pick<HistoryStore, "readStream">, private readonly cipher: ConversationPrivatePayloadCipher, private readonly maximumTurnCostUsdMicros: number, private readonly runAdmission: ConversationComputerRunAdmissionPort) {}
+	public constructor(private readonly prisma: PrismaClient, private readonly history: Pick<HistoryStore, "readStream">, private readonly cipher: ConversationPrivatePayloadCipher, private readonly maximumTurnCostUsdMicros: number, private readonly runAdmission: ConversationComputerRunAdmissionPort, private readonly routines?: RoutineTurnDispatcher) {}
 
 	public resolve(siloId: string, computerId: string)
 	{
@@ -143,9 +155,10 @@ export class PrismaConversationComputerTurnUnitOfWork implements ConversationCom
 		const cipher = this.cipher;
 		const maximumTurnCostUsdMicros = this.maximumTurnCostUsdMicros;
 		const runAdmission = this.runAdmission;
+		const routines = this.routines;
 		return this.prisma.$transaction(async function _Run(transaction: Prisma.TransactionClient)
 		{
-			return await operation(new PrismaConversationComputerTurnRepository(transaction, history, cipher, maximumTurnCostUsdMicros, runAdmission));
+			return await operation(new PrismaConversationComputerTurnRepository(transaction, history, cipher, maximumTurnCostUsdMicros, runAdmission, routines));
 		}, { isolationLevel });
 	}
 }

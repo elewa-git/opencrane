@@ -1,4 +1,3 @@
-import type { ConversationId } from "@opencrane/models/conversations";
 import type { AgentRevisionId, AgentRunId, AgentServiceId, SiloId } from "./identifiers.types";
 
 /** Records the exact current AgentIdentity head that admission verified for an execution subject. */
@@ -217,8 +216,19 @@ export interface ExecutionSubject
 	readonly admission: ExecutionSubjectAdmissionEvidence;
 }
 
-/** Trigger that created an agent run. */
-export type AgentRunTrigger = "interactive";
+/** Stable durable vocabulary for the server-owned event that created one root run. */
+export enum AgentRunTriggers
+{
+	/** A verified browser turn with one final human-authored message started the run. */
+	Interactive = "interactive",
+	/** The product scheduler admitted one exact automatic routine occurrence. */
+	Scheduled = "scheduled",
+	/** An authorised product command admitted one exact manual routine occurrence. */
+	Manual = "manual",
+}
+
+/** Server-owned event that created one root run. */
+export type AgentRunTrigger = `${AgentRunTriggers}`;
 
 /** Stable durable lifecycle vocabulary for one agent-run attempt. */
 export enum AgentRunStates
@@ -235,8 +245,12 @@ export enum AgentRunStates
 	WaitingForInput = "waiting_for_input",
 	/** Provider ambiguity requires operator recovery. */
 	RecoveryRequired = "recovery_required",
+	/** A requester-approved Stop is fencing further work while its winner is settled. */
+	Cancelling = "cancelling",
 	/** The run completed successfully. */
 	Completed = "completed",
+	/** The requester-approved Stop won and the run ended without another model turn. */
+	Cancelled = "cancelled",
 	/** The run ended in failure. */
 	Failed = "failed",
 }
@@ -244,8 +258,29 @@ export enum AgentRunStates
 /** Durable lifecycle state serialized for one agent-run attempt. */
 export type AgentRunState = `${AgentRunStates}`;
 
+/**
+ * Terminal classifications serialized in `AgentRun.terminalReason` and owner run projections.
+ * The database adapter maps these values to the corresponding Prisma enum members; changing a
+ * serialized value breaks stored and wire observations even when the TypeScript member name stays.
+ */
+export enum AgentRunTerminalReasons
+{
+	/** The run produced its accepted final result. */
+	Success = "success",
+	/** Admission or execution policy refused the run. */
+	PolicyDenied = "policy_denied",
+	/** The run exhausted its admitted spend or execution budget. */
+	BudgetExhausted = "budget_exhausted",
+	/** Runtime processing ended without a valid final result. */
+	RuntimeFailure = "runtime_failure",
+	/** The admitted input could not be used. */
+	InvalidInput = "invalid_input",
+	/** The original requester stopped the run before another model turn. */
+	UserCancelled = "user_cancelled",
+}
+
 /** Terminal classification recorded for a finished run. */
-export type AgentRunTerminalReason = "success" | "policy_denied" | "budget_exhausted" | "runtime_failure" | "invalid_input";
+export type AgentRunTerminalReason = `${AgentRunTerminalReasons}`;
 
 /** Durable record of one agent execution attempt. */
 export interface AgentRun
@@ -258,8 +293,8 @@ export interface AgentRun
 	readonly agentServiceId: AgentServiceId;
 	/** Immutable revision executed by this run. */
 	readonly agentRevisionId: AgentRevisionId;
-	/** Conversation receiving user-visible output, or null for non-conversational runs. */
-	readonly conversationId: ConversationId | null;
+	/** Stable conversation identifier receiving user-visible output, or null for non-conversational runs. */
+	readonly conversationId: string | null;
 	/** Trigger that created the run. */
 	readonly trigger: AgentRunTrigger;
 	/** Immutable subject whose current evidence admitted this execution. */

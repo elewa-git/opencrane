@@ -15,6 +15,7 @@ import type { ConversationComputerReviewCredentialDeriver } from "../review/conv
 import type { ConversationToolResultNotificationPort } from "./tool-result-notifications/conversation-tool-result-notification.types";
 import type { ConversationToolRequestedNotificationPort } from "./tool-progress-notifications/conversation-tool-progress-notification.types";
 import type { ConversationComputerOutputPayload } from "./output/conversation-computer-output.types";
+import type { RoutineRunProgressReporter } from "../../routines/routine-run-progress.types";
 
 /** Coordinates a sandbox Pod must prove before receiving its review credential. */
 export interface ConversationComputerPodLeaseCommand
@@ -369,6 +370,8 @@ export interface ConversationComputerTurnAuthorityDependencies
 	readonly store: ConversationComputerTurnStore;
 	readonly writers: ConversationComputerBoundWriterFactory;
 	readonly runLifecycle: ConversationComputerRunLifecycle;
+	/** Projects only checked saved routine milestones; ordinary runs are explicitly classified and ignored. */
+	readonly routineProgress: Pick<RoutineRunProgressReporter, "recordCompleted" | "recordUnavailable">;
 	/** Owns one stable proposal slot and its current transactional admission. */
 	readonly toolProposals: ConversationToolProposalAdmission;
 }

@@ -1,6 +1,9 @@
 import type * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
-import type { ConversationComputerToolInvocationDispatch, ConversationComputerRunAdmissionPort, ConversationToolProposalRuntimeAdmission, ConversationGeneratedFileResultRepositoryFactory, ConversationGeneratedFileOutputLinker } from "@opencrane/backend/server/conversations";
+import type { ConversationComputerToolInvocationDispatch, ConversationComputerRunAdmissionPort, ConversationToolProposalRuntimeAdmission, ConversationGeneratedFileResultRepositoryFactory, ConversationGeneratedFileOutputLinker, RoutineTurnDispatcher } from "@opencrane/backend/server/conversations";
+import type { RoutineRunProgressSink } from "@opencrane/backend/server/agents/scheduling/contract";
+import type { ConversationPrivatePayloadCipher, ConversationPrivatePayloadKeyringDocument } from "@opencrane/backend/server/conversations/history";
+import type { HumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 import type { AgentSandboxReleaseProfileConfig } from "../configuration/config.types";
@@ -25,10 +28,18 @@ export interface ConversationExecutionContext
 	readonly siloId: string;
 	/** Supplies the sandbox identity and maximum turn cost. */
 	readonly profile: AgentSandboxReleaseProfileConfig;
-	/** Locates the keyring used for private payload encryption and review credentials. */
-	readonly keyringPath: string;
+	/** Supplies the mounted keyring used to derive review credentials. */
+	readonly keyring: ConversationPrivatePayloadKeyringDocument;
+	/** Encrypts turn payloads and is shared with routine composition. */
+	readonly cipher: ConversationPrivatePayloadCipher;
+	/** Selects the current membership evidence authority shared with routine admission. */
+	readonly membership: HumanMembershipEvidenceConfig;
 	/** Admits conversation turns through the production run authority. */
 	readonly runAdmission: ConversationComputerRunAdmissionPort;
+	/** Recovers admitted routine turns before ordinary human admission is considered. */
+	readonly routineTurns: RoutineTurnDispatcher;
+	/** Persists observations proven by the routine run and immutable conversation protocol. */
+	readonly routineProgress: RoutineRunProgressSink;
 	/** Admits tool invocations within the proposal transaction. */
 	readonly runtimeAdmission: ConversationToolProposalRuntimeAdmission;
 	/** Dispatches tool invocations from the registered turn workflow. */

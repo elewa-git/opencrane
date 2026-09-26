@@ -4,7 +4,7 @@ import { PrismaRunAdmissionUnitOfWork, type RunAdmissionCommand, type RunAdmissi
 import { PrismaPromptCompilerRepository, type ExecutionSubjectAuthority } from "@opencrane/backend/agents/execution/inputs";
 import { ConversationComputerTurnAuthorityService, type ConversationComputerRunAdmissionCommand, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { FleetMembershipDeploymentModes, PrismaHumanMembershipEvidenceRepository, type HumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
-import { ___ExecutionSubjectSchema, CompiledFinalOutputModes, ExecutionSubjectMembershipKinds, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, type CompiledRunInput, type ExecutionSubject, type RunInputSnapshot } from "@opencrane/contracts";
+import { ___RunInputOriginSchema, ___ExecutionSubjectSchema, CompiledFinalOutputModes, ExecutionSubjectMembershipKinds, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, type CompiledRunInput, type ExecutionSubject, type RunInputSnapshot } from "@opencrane/contracts";
 import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { AgentServiceKind, ModelRoutingScope } from "@prisma/client";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
@@ -36,7 +36,7 @@ function _subject(): ExecutionSubject
 function _savedRun(): { snapshot: RunInputSnapshot; compiled: CompiledRunInput }
 {
 	const budget = { maxModelTurns: 1, maxCompletionTokens: 4_096, maxCostUsdMicros: 10_000, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: Date.parse("2026-09-07T00:20:00.000Z") };
-	const snapshot: RunInputSnapshot = { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION, conversationId: "child-1", messageIds: ["message-1"], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: { scope: "none" }, mcpTools: [], modelRoute: {}, budgetPolicy: budget, executionSubject: _subject(), promptCompilerVersion: "v1", digest: `sha256:${"b".repeat(64)}`, compiledAt: "2026-09-07T00:00:00.000Z" };
+	const snapshot: RunInputSnapshot = { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION, origin: ___RunInputOriginSchema.parse({ kind: "interactive", messageId: "message-1", historyRevision: "1" }), conversationId: "child-1", messageIds: ["message-1"], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: { scope: "none" }, mcpTools: [], modelRoute: {}, budgetPolicy: budget, executionSubject: _subject(), promptCompilerVersion: "v1", digest: `sha256:${"b".repeat(64)}`, compiledAt: "2026-09-07T00:00:00.000Z" };
 	const compiled: CompiledRunInput = { runId: snapshot.runId, attempt: 1, promptCompilerVersion: "v1", instructions: "", finalOutput: CompiledFinalOutputModes.Text, messages: [{ role: "user", content: "Group request" }], tools: [], model: { modelAlias: "company-model", maxOutputTokens: 4_096, generatedOutputCapabilities: [] }, budget, digest: `sha256:${"c".repeat(64)}` };
 	return { snapshot, compiled };
 }
@@ -224,6 +224,7 @@ function _StandaloneComputerFixture()
 		siloId: "silo-1", endpoint: "http://gateway.test", credentials: { issueOnce, reuseExact: vi.fn(), revoke: vi.fn() },
 		reviewCredentials: { derive: vi.fn(), bearer: vi.fn() }, outputPayloads: { store: vi.fn() }, writers: { confirmSaved: vi.fn(), create: vi.fn() },
 		runLifecycle: { start: vi.fn(), complete: vi.fn(), enterRecoveryRequired: vi.fn() },
+		routineProgress: { recordCompleted: vi.fn(), recordUnavailable: vi.fn() },
 		store: { reserveModel: vi.fn(), recordModelRejection: vi.fn(), claimModelRetry: vi.fn(), selectTool: vi.fn(), recordToolResult: vi.fn(), markResponseUnavailable: vi.fn(), loadActive: async function _Active() { return stored; }, createOrRead: async function _Freeze(turn) { stored = turn; return turn; }, load: async function _Load() { return stored; }, markOutput: vi.fn(), settle: vi.fn() },
 		candidates: {
 			admit: vi.fn(),

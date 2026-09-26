@@ -11,20 +11,21 @@ import { PrismaConversationContextRepository } from "../sources/prisma-conversat
 import { TransactionBoundConversationContextSource } from "../sources/prisma-conversation-context-source";
 import { PrismaRevisionBudgetPolicyAuthority, PrismaRevisionToolPolicyAuthority } from "../sources/prisma-revision-tool-policy-source";
 import { PrismaRunAuthority } from "../sources/prisma-run-authority-source";
+import type { RoutineOccurrencePromptAdmissionReader } from "../sources/routine-occurrence-prompt.types";
 import { PrismaSkillRevisionEligibilityRepository, PrismaSkillRevisionEligibilitySource } from "../sources/prisma-skill-revision-eligibility-source";
 import { TransactionBoundProductResourceAuthorizationSource } from "../sources/product-resource-authorization-source";
 import { RunPolicyMemoryScopeSource } from "../memory/run-policy-memory-scope-source";
 import type { ApprovedPersonaInput, ApprovedPersonaSource, BudgetPolicySource, ConversationHistoryAdmissionReader, ExecutionSubjectAuthority, RunAuthoritySource, SessionAssemblyAuthorities, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicySource } from "./session-assembly.types";
 
 /** Composes the target input authorities around one mandatory verified execution subject source. */
-export function __CreatePrismaSessionAssemblyAuthorities(admission: RunAdmissionRepository, executionSubject: ExecutionSubjectAuthority, conversationHistory: ConversationHistoryAdmissionReader): SessionAssemblyAuthorities
+export function __CreatePrismaSessionAssemblyAuthorities(admission: RunAdmissionRepository, executionSubject: ExecutionSubjectAuthority, conversationHistory: ConversationHistoryAdmissionReader, routinePrompt?: RoutineOccurrencePromptAdmissionReader): SessionAssemblyAuthorities
 {
 	const personalMemoryScope = new PersonalMemoryScopeSource(_CreatePersonalMemory);
 	return {
 		admission,
 		runAuthority: new TransactionBoundRunAuthoritySource(),
 		approvedPersona: new TransactionBoundApprovedPersonaSource(),
-		conversationContext: new TransactionBoundConversationContextSource(function _CreateConversationContext(transaction): PrismaConversationContextRepository { return _CreateConversationContextRepository(transaction, conversationHistory); }),
+		conversationContext: new TransactionBoundConversationContextSource(function _CreateConversationContext(transaction): PrismaConversationContextRepository { return _CreateConversationContextRepository(transaction, conversationHistory, routinePrompt); }),
 		preferenceFacts: new PersonalMemoryPreferenceFactSource(_CreatePersonalMemory),
 		memoryScope: new RunPolicyMemoryScopeSource(personalMemoryScope),
 		toolPolicy: new TransactionBoundRevisionToolPolicySource(),
@@ -60,9 +61,9 @@ function _CreatePersonalMemory(transaction: RunAdmissionTransaction): PrismaPers
 }
 
 /** Binds the conversation reader to the exact final-admission transaction. */
-function _CreateConversationContextRepository(transaction: RunAdmissionTransaction, history: ConversationHistoryAdmissionReader): PrismaConversationContextRepository
+function _CreateConversationContextRepository(transaction: RunAdmissionTransaction, history: ConversationHistoryAdmissionReader, routinePrompt?: RoutineOccurrencePromptAdmissionReader): PrismaConversationContextRepository
 {
-	return new PrismaConversationContextRepository(transaction.prisma as Prisma.TransactionClient, history);
+	return new PrismaConversationContextRepository(transaction.prisma as Prisma.TransactionClient, history, routinePrompt);
 }
 
 /** Binds tool-policy reads to the active admission transaction. */

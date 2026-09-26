@@ -39,6 +39,11 @@ only checks deterministic model rules and never allocates a position itself.
   child creation progress and source coordinates. Strict validation rejects extra fields, self-parenting
   views, and revisions outside the unsigned 64-bit stream range; an enclosing conversation must also
   reject an origin that names itself as parent. These values do not grant access or imply run success.
+- `ConversationGenesisOrigin`, `ConversationGenesisOriginKinds` and
+  `___ConversationGenesisOriginSchema` define the closed provenance stored with derived agent-session
+  history. Group-child origins wrap the unchanged relational source model. Routine-occurrence origins
+  bind one firing and positive safe revision to its original destination; automatic firings require an
+  ISO-8601 slot and manual firings require null. Unknown fields and legacy origins without a kind fail.
 - `__DecideConversationCommand` and the `ConversationCommand*` enums/types — the exhaustive
   State-by-Command and immutable-mode strategy decision.
 - `__HasValidConversationAgentBinding`, lifecycle/message/timeline invariant helpers, and the
@@ -53,8 +58,10 @@ authorization boundaries.
 
 ## Dependency direction
 
-Tagged `scope:conversations` (`layer:model`): it is the dependency-bottom conversation vocabulary
-and does not import agents, backend, frontend, infrastructure, or application packages.
+Tagged `scope:conversations` (`layer:model`): it uses the canonical `RoutineFiringTrigger` from
+[agent models](../../agents/main/README.md) for routine provenance. That dependency is one-way;
+agent models do not import conversation models. It imports no backend, frontend, infrastructure or
+application packages.
 
 ## See also
 

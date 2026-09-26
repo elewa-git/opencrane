@@ -1,10 +1,13 @@
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { HistoryExpectedRevisions } from "@opencrane/backend/server/infra/history-store";
 import { ConversationEntryKinds } from "@opencrane/contracts";
+import { RoutineFiringTrigger } from "@opencrane/models/agents";
+import { ConversationGenesisOriginKinds } from "@opencrane/models/conversations";
 import { describe, expect, it, vi } from "vitest";
 
 import { ConversationHistoryAuthority } from "../conversation-history-authority";
 import { ConversationHistoryAppendOutcomes, type ConversationHistoryAppendCommand } from "../conversation-history-authority.types";
+import { ConversationHistoryModes, type ConversationHistoryGenesis } from "../conversation-history-reader.types";
 
 /** Reuses a valid UUID where an entry id must equal its idempotency key. */
 const _EVENT_ID = "31c1f1dc-0010-4f13-9c2f-d3841ffd6651";
@@ -41,8 +44,28 @@ function _Command(overrides: Partial<ConversationHistoryAppendCommand> = {}): Co
 	};
 }
 
+/** Builds one exact agent-session genesis for write-boundary validation. */
+function _Genesis(overrides: Partial<ConversationHistoryGenesis> = {}): ConversationHistoryGenesis
+{
+	return { schemaVersion: 1, siloId: "silo-1", conversationId: "occurrence-1", mode: ConversationHistoryModes.AgentSession, agentServiceId: "service-1", createdByPrincipalId: "principal-1", createdAt: "2026-09-25T10:00:00.000Z", ...overrides };
+}
+
+/** Exact automatic origin shared by valid and deliberately malformed write cases. */
+const _ROUTINE_ORIGIN = { kind: ConversationGenesisOriginKinds.RoutineOccurrence, routineId: "routine-1", routineRevision: 3, firingId: "firing-1", destinationConversationId: "destination-1", trigger: RoutineFiringTrigger.Automatic, scheduledSlot: "2026-09-25T10:00:00.000Z" } as const;
+
 describe("ConversationHistoryAuthority", function ()
 {
+	it("writes only a strictly validated closed routine-occurrence genesis", function _RoutineGenesis()
+	{
+		const authority = new ConversationHistoryAuthority({ append: vi.fn() });
+		const genesis = _Genesis({ origin: _ROUTINE_ORIGIN });
+
+		expect(authority.genesisAppend(genesis, _EVENT_ID)).toMatchObject({ events: [{ data: { genesis } }] });
+		expect(function _LegacyOrigin() { authority.genesisAppend(_Genesis({ origin: { ..._ROUTINE_ORIGIN, kind: undefined } as never }), _EVENT_ID); }).toThrow("valid immutable coordinates");
+		expect(function _ManualSlot() { authority.genesisAppend(_Genesis({ origin: { ..._ROUTINE_ORIGIN, trigger: RoutineFiringTrigger.Manual } }), _EVENT_ID); }).toThrow("valid immutable coordinates");
+		expect(function _UnknownField() { authority.genesisAppend(_Genesis({ origin: { ..._ROUTINE_ORIGIN, secret: true } as never }), _EVENT_ID); }).toThrow("valid immutable coordinates");
+	});
+
 	it("appends only the validated server-stamped entry to its exact conversation stream", async function ()
 	{
 		const append = vi.fn().mockResolvedValue({ streamName: "conversation-conversation-1", revision: 8n });

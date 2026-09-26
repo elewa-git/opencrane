@@ -56,6 +56,13 @@ an explicit no-personal-memory policy: preference and dataset repositories are s
 provisioning and memory recall remain future work; an enabled policy with no valid dataset still
 denies admission.
 
+Routine occurrences use the same final assembly and current managed-agent authority, but a separate
+service-attested prompt reader supplies the prepared occurrence history. The command contains no
+browser requester and cannot manufacture a human message. Its snapshot freezes the exact routine,
+revision, firing, automatic slot or manual trigger, and original approval provenance. The occurrence
+conversation must already have an active computer lease, and current conversation access is still
+checked through the central authorization authority before admission commits.
+
 Compilation derives the required `finalOutput` mode from the saved conversation ID: a conversation
 run receives Conversation mode, while a run without a conversation receives Text mode. Personal and
 company conversations receive the same final-answer instructions, appended after their existing
@@ -99,8 +106,16 @@ because membership or grants may change before persistence.
 
 Resource-use decisions record the execution Principal: `user` for a personal agent acting through
 its human owner, or `agent-service` for a company agent acting through its own Principal. The
-requester's Conversation Use remains a separate human decision. These server-side admissions do
+requester's Conversation Use remains a separate entitlement check. An automatic routine records
+the scheduler service as the actor; a manual routine records its original requester. These server-side admissions do
 not claim a runtime Pod identity; workload decisions still require verified Kubernetes coordinates.
+The routine subject authority derives that actor only from the checked scheduled/manual run command
+before requesting managed execution evidence; callers cannot supply an arbitrary audit actor.
+
+`__RevalidateRunInputSnapshot` shares duplicate-admission checks with recovery-only compilation.
+Its caller first validates the persisted run and snapshot through the execution-runs owner, then
+this function rechecks the managed subject, membership bindings and requester Conversation Use.
+It cannot admit a new run or renew the requester's saved login.
 
 MCP tools enter the snapshot as revision-selected immutable tool revisions. Each entry contains the
 saved tool identifier, exact runtime name, description, input schema, and schema digest. Missing,
@@ -176,6 +191,8 @@ ceiling or substitutes a different allowance.
   content while compiling.
 - `ConversationHistoryAdmissionReader` re-reads the exact Kurrent revision, ordered identifiers,
   final triggering message, and immutable human author before those identifiers enter a snapshot.
+- `RoutineOccurrencePromptAdmissionReader` re-reads the service-authored message set for one exact
+  routine firing; it never converts routine instructions into a human-authored turn.
 - `VerifiedConversationPromptMessageRepository` accepts decrypted messages only when the
   conversation-owned source returns the complete snapshot set exactly once and in order.
 

@@ -31,7 +31,8 @@ signed-in participant ──► main ◄── HERE ──► history
 | `memory/commands/` | Validate and admit explicit Remember, Correct and Forget requests for an already Active personal dataset, and expose authorized content-free status. Never accept plaintext or caller-supplied authority. |
 | `memory/source/` | Read the selected human message through current history access and recheck its encrypted source inside the command transaction. |
 | `memory/workflow/` | Declare identifier-only memory tasks and resume each saved provider and catalog phase through one Absurd workflow owner. The command transaction retains Absurd's returned receipt. First-dataset creation remains separately unfinished. |
-| `children/` | Resolve explicitly selected parent members, admit group-child work, preserve its original audience, recover creation, and share human-reviewed text. |
+| `children/` | Resolve explicitly selected parent members, admit group-child work, preserve its original audience, write a closed group-child genesis origin, recover creation, and share human-reviewed text. |
+| `routines/` | Prepare occurrence history and its confirmed audience, activate the computer, join root-run admission with turn-task creation, recover admitted routine turns, and derive scheduling progress from checked run and conversation evidence. |
 | `computers/` | Separate activation, lifecycle, checkpoint, turn and review operation owners. |
 | `computers/tools/` | Proposal admission, current dispatch access and saved result consumption each have their own owner. |
 | `computers/interruptions/` | Select and admit requester-owned Stop commands, record their outcome and let Absurd recover cancellation cleanup. |
@@ -60,7 +61,9 @@ signed-in participant ──► main ◄── HERE ──► history
 - `PrismaGroupChildAuthority`, `_CreateGroupChildRouter` and `GROUP_CHILD_TASK` compose explicit child
   requests and recovery. Creation accepts only opaque membership references, includes the requester
   implicitly, and freezes only selected people who currently belong to the parent and can read the
-  source message. Recovery rechecks that saved audience without adding later parent participants.
+  source message. Its history genesis wraps the unchanged parent-request metadata with the closed
+  `group_child` origin kind. Recovery rechecks that saved audience without adding later parent
+  participants; genesis provenance does not inherit source history or grant parent access.
 - `PrismaConversationElicitationAccessRepository` applies existing child-sharing checks inside the assistant-question transaction; the browser route composition supplies it to elicitation.
 - `PrismaPersonalMemoryCommandUnitOfWork` and `_CreatePersonalMemoryCommandRouter` expose
   `POST /api/v1/me/memory/commands` and `GET /api/v1/me/memory/commands/:commandId`.
@@ -94,7 +97,7 @@ signed-in participant ──► main ◄── HERE ──► history
   decrypted text outside the SQL transaction. `PrismaPersonalMemoryMessageSourceRepository`
   rechecks current read access, the visible position and the encrypted payload coordinates in the
   caller's transaction. Later conversation entries do not invalidate an unchanged selected message.
-- Computer activation atomically admits the existing Absurd turn task when it publishes an active lease. The workflow advances saved model, tool-result, continuation and completion state; the only Pod-facing turn route returns its lease-derived review credential.
+- Ordinary message activation atomically admits the existing Absurd turn task when it publishes an active lease. Routine activation saves only its lease and receipt; it must wait for root-run admission before a turn task exists. The turn workflow advances saved model, tool-result, continuation and completion state; the only Pod-facing turn route returns its lease-derived review credential.
 - Stop handling reloads the immutable causation message to derive its requester and never enters activation. Its Kurrent publisher gives final output and cancellation one checked turn-stream winner; cancellation commits the private receipt, safe interrupted log and active-turn settlement together.
   The turn store constructs and validates cancellation and settlement appends at the revision it
   decoded. The Stop publisher composes that pair with its receipt and log; it cannot substitute a
@@ -111,6 +114,99 @@ signed-in participant ──► main ◄── HERE ──► history
 - `_SelfConversationHistoryOpenapiPaths` contributes the conversation API description.
 
 History and computer snapshot classes are imported directly from their sibling packages.
+
+### Routine occurrence preparation
+
+`PrismaRoutineOccurrencePreparationUnitOfWork` implements the scheduling preparation port. It
+checks the persisted firing through an injected transaction-bound scheduling repository, resolves
+current managed-agent eligibility without fabricating a human action, and saves a participant-free
+conversation plus encrypted instruction. The existing payload repository's attested method fixes
+the author to OpenCrane; it never takes a browser identity. Its recovery mode refuses missing rows
+instead of recreating content after a saved preparation.
+
+The conversation's computer identity, profile and creation time are reused after a crash. Current
+published agent revision and permissions are checked again; the executable revision is frozen by
+later root-run admission, not by this projection. Occurrence history is written outside SQL retry
+callbacks. Only after that checked history exists does another Serializable transaction recheck
+authority, publish the confirmed participants and grants, and save the firing's preparation receipt.
+If current execution eligibility has ended, the same transaction commits a refusal instead.
+
+That firing receipt is the publication marker. Exact replay verifies the original projection,
+ciphertext and history and returns it without restoring removed access or reconciling grants.
+Participants cannot see a partly prepared conversation. A failed final receipt write rolls back
+participants and grants together. Tracing records only occurrence identifiers, never instruction
+text. These source checks still need real-database concurrency and authenticated journey proof.
+
+`RoutineOccurrenceHistory` atomically creates three history streams: conversation genesis followed
+by one service-attested instruction, a cold computer, and a private content-free preparation receipt.
+The caller must first save encrypted instruction bytes and keep the relational conversation hidden
+until its current-authority and confirmed-audience transaction succeeds. History neither creates
+participants nor activates a turn. Exact retries recover the same receipt; changed ownership,
+payload or partial history is rejected. A legitimately advanced computer can still be recovered.
+
+`RoutineOccurrencePromptHistoryReader` compares the saved routine, firing, trigger, slot, requester,
+workflow task and assistant with the admission query. It exposes only the initial instruction at
+history revision 1, never destination-chat history or later participant messages. Corrupt saved
+evidence throws; missing preparation or a query mismatch returns no prompt. Current execution
+permissions remain the run-admission transaction's responsibility.
+
+`PrismaRoutineOccurrencePromptMessageRepository` rechecks that exact history and its admitted
+message selection, then checks the payload row's organisation, occurrence, OpenCrane service
+author and encrypted-byte digest before decryption. Only this attested routine path presents the
+instruction as user-level model content. Ordinary service/system message compilation is unchanged;
+this path needs neither a fabricated human author nor a refreshed browser login.
+
+### Routine computer activation
+
+`RoutineComputerActivation` verifies the prepared instruction record, then uses the existing
+computer lifecycle and deployment-selected sandbox profile. Its initial lease and claim stay the
+same across polls. A normal cold start returns Pending with a next-check time bounded by the lease
+expiry; the scheduling workflow owns the durable wait. A retired computer, ended or expired lease,
+or unavailable release profile commits a pre-admission refusal. Missing or substituted history
+remains an error.
+
+`PrismaRoutineComputerActivationProjectionUnitOfWork` rechecks scheduling authority before claims
+and inside the transaction that saves the active lease and activation receipt. Its lease-only
+contract never spawns a turn. The receipt binds the preparation, occurrence, computer identity,
+profile, lease generation, expiry and assigned sandbox. Lost responses recover the same receipt;
+a saved receipt cannot recreate a missing realization. Refusal preserves earlier receipts and
+commits before control returns to the workflow. Traces contain occurrence identifiers, not text.
+
+The existing turn-receipt repository also offers a recovery-only reader. Missing or unbound run
+attempts return no receipt; partial or malformed bindings throw. Reading never admits another task.
+This is needed because duplicate run admission skips the initial transaction's task-spawn callback.
+
+These adapters use the narrow [scheduling contract](../../agents/scheduling/contract/README.md),
+not the scheduling implementation. They are not yet a runnable scheduling feature: root-run/turn-task
+admission and the routine-aware compiler are described below. Runtime wiring and reviewed product controls remain open.
+
+### Routine run admission and recovery
+
+`PrismaRoutineRunAdmissionUnitOfWork` verifies the checked occurrence record and saved activation,
+then delegates to execution-runs' admission transaction. The final scheduling guard runs before
+input assembly in that same transaction. Run, immutable snapshot, firing backlink, execution task
+and receipt binding share one commit. An unknown commit outcome retries the same keys. A definite
+denial may refuse an unadmitted firing, but cannot erase a run that already committed.
+Both fresh and duplicate responses reread saved stage receipts and the bound turn task.
+
+`PrismaRoutineTurnCompilerUnitOfWork` uses a read-only admitted-run reader, not interactive
+admission. It verifies the computer, lease, task, stage receipts and instruction; rechecks current
+managed and requester authority; and compiles the existing frozen snapshot. Ordinary turn
+compilation dispatches from the durable routine genesis and checked first instruction. After the
+selected managed agent's initial run answers, later human messages use normal interactive admission.
+The typed dispatch result keeps absent routine candidates from causing fallback. A missing routine compiler fails
+closed rather than treating the service instruction as a human message. It exposes no task-spawn
+port.
+
+`ConversationRoutineRunProgressObserver` joins the checked run, occurrence record, frozen turn and
+immutable conversation history before it reports scheduling progress. Ordinary interactive runs
+return no observation. A routine-linked mismatch throws instead of silently skipping progress.
+Completion requires the exact saved assistant answer; unavailable and Stop paths require their
+saved receipts and terminal run state. The workflow reports Waiting only for a currently verified
+participant approval or generated-file wait. A non-consuming current-authority read must prove that
+external wait has cleared before the replay-safe Running checkpoint can acknowledge progression.
+Scheduling acknowledgement is awaited before output settlement, unavailable return or Stop task
+completion, so a lost response retries saved evidence without repeating the producer effect.
 
 ### Tool progress and recovery
 

@@ -69,8 +69,10 @@ external identity; its digest enters admission arguments and capability evidence
 a membership revision for Fleet alone.
 
 Company model-use admissions record `agent-service` with the company's Principal ID, both when
-creating a child conversation and when admitting a run. Human Invoke decisions record `user` with
-the requesting Principal ID. Runtime Pod identity belongs to later workload decisions.
+creating a child conversation and when admitting a run. Ordinary and manual Invoke decisions record
+`user` with the requesting Principal ID. An automatic routine keeps that Principal entitled while
+recording the stable scheduler `system` actor and binding its verified trigger into the decision
+arguments. Runtime Pod identity belongs to later workload decisions.
 
 The first company revision has no persona, skills, tools, memory or knowledge-boundary assignments.
 An administrator can then assign exact MCP (Model Context Protocol) tool revisions. New company
@@ -105,9 +107,10 @@ Run admission performs its own strict check and never supplies missing limits.
   admit the human's invocation and the company Principal's model use.
 - `PrismaManagedAgentConversationResolver` resolves a ready company assistant and filters the
   discovery list through current human Discover, Read and Invoke permissions plus the company's
-  own Model Use permission. Listing checks eligibility without recording mutation or effect
-  admissions. Child creation separately records human Invoke and company Model Use decisions after
-  the same current service, identity, profile and membership checks.
+  own Model Use permission. Listing and direct eligibility checks record no mutation or effect
+  admission; the narrower eligibility check requires only human Invoke and company Model Use.
+  Child creation separately records those two decisions after the same current service, identity,
+  profile and membership checks.
 - `PrismaCompanyAssistantProvisioningUnitOfWork` and `_CreateCompanyAssistantProvisioningRouter`
   provide administrator setup and exact tool selection, including checked identity establishment
   after the setup commit.

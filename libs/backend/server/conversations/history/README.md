@@ -26,7 +26,9 @@ an empty command without attachments; the cipher does not invent placeholder tex
 
 ## Public surface
 
-- `ConversationHistoryAuthority` and `ConversationHistoryReader` validate immutable genesis and timeline entries.
+- `ConversationHistoryAuthority` and `ConversationHistoryReader` use one strict immutable-genesis
+  parser for writes and reads. Derived agent sessions may name only the closed group-child or
+  routine-occurrence origin models; ordinary sessions omit the origin.
 - `_ConversationHistoryEntryAppend` supplies the same validated entry envelope to domain transactions that must commit conversation history with another Kurrent stream.
 - `ConversationHistoryAuthority.appendWithActivation` derives `start` or `stop` from the validated human message and commits that action with the message on the existing silo control queue.
 - `ConversationHistoryAuthority.appendWithAttestation` atomically records a service receipt and its participant-visible transformation, so uncertain retries can prove the exact entry without a second append.
@@ -39,6 +41,8 @@ an empty command without attachments; the cipher does not invent placeholder tex
 Current membership, product authorisation, database transactions and run admission belong to callers.
 This package receives no Prisma client. A successful stream read or append cannot authorise an effect.
 `timeline/`, `writing/` and `payloads/` keep event validation, computer stamping and encryption separate.
+Genesis provenance records where a conversation came from; it does not copy source history, add a
+human entry, inherit an audience, or grant access to the source conversation or routine.
 
 An attested append requires a new revision-zero receipt stream and an entry whose attestation names
 that exact stream, event identifier and revision. Both records commit through one KurrentDB atomic

@@ -1,5 +1,502 @@
 # OpenCrane — Active Plan
 
+## Scheduling foundation — published draft #916, 25 September 2026
+
+The user approved a draft PR for the current `feat/conversational-routines` foundation,
+stacked directly on #915 (`feat/explicit-subchat-audience`) at
+`8ae8227c7322a07ffc0f4531e6572a8d73ce7c84`. Review order is
+#908 → #910 → #914 → #915 → #916. Initial published head is
+`1f4ba7ad7698fad6c88f619041d640baa861b84c`; live stack validation passes snapshot
+`b6001edc29d02e335f895c77b895a027553c414da1d2d6928723d7b70be5abd7`.
+The cumulative candidate merges cleanly with develop `10abd0ef6182f36bec13d8f1358e43b15ead7cd5`
+in the read-only merge simulation. No predecessor is absorbed or closed;
+the other open PR branches remain independent. The checkpoints below describe earlier local
+states, not the publication status of this draft.
+
+This is a source foundation, not usable schedules or MVP acceptance. It includes the routine
+schema and lifecycle, current-authority checks, revision-bound approval, root-run input contracts,
+encrypted instruction adapters, and recoverable occurrence history. The follow-ups below add
+preparation, activation, atomic run admission, recovery-only turn compilation and runtime/startup
+wiring. Production routes, frontend and result propagation remain open before real-account
+qualification.
+
+The publication validation passes 892 tests (13 skipped) across seven selected projects and all
+seven TypeScript targets. The unchanged conversation/computer, IAM and application checks below
+remain separate evidence. Refreshed style has zero errors or warnings; Prisma ownership, module
+growth, release-baseline binding, app/workload and agent-domain checks pass, including the boundary
+negative tests. The eleven module-growth candidates are reviewed responsibilities, not errors.
+Independent joined review passes with no findings. It reuses the completed slice reviews and
+checks origin, input assembly, root-run admission, approval, history and composition together.
+PostgreSQL and KurrentDB integration tests remain unexecuted. A draft publication authorizes no
+merge, deployment, live permission change, external action or release tag.
+
+### Occurrence preparation — source implemented and independently reviewed
+
+This source slice starts from the published head above. The actual conversation preparation unit
+of work now rechecks the saved firing through a transaction-bound scheduling contract, then saves
+encrypted service-authored input and a hidden conversation projection with stable computer
+coordinates. Kurrent history establishment remains outside database retry callbacks. A second
+transaction rechecks current authority and publishes only the confirmed audience together with the
+firing's saved preparation receipt. A saved receipt means publication already happened: retry
+recovers it without restoring ended participation or revoked grants. The existing receipt is the
+publication marker; there is no schema change. Managed-agent eligibility is read without recording
+a fictitious current human action. A confirmed loss of eligibility commits a refusal; the workflow
+then ends without activation or run admission.
+
+| Saved state | Preparation attempt | Required result |
+| --- | --- | --- |
+| No projection or receipt | Current firing and managed service remain allowed | Save hidden projection and encrypted instruction together. |
+| Hidden projection, no history | Same immutable command | Reuse coordinates and ciphertext, then establish checked history. |
+| History exists, no preparation receipt | Current authority still permits this occurrence | Publish confirmed participants/grants and save receipt in one transaction. |
+| Preparation receipt exists | Exact retry | Verify saved history/projection and return the receipt without restoring access. |
+| No admitted run; current authority ends | Any unfinished preparation stage | Record refusal, publish no new access, and stop this occurrence. |
+| Conflicting coordinates, ciphertext, history or receipt | Any attempt | Refuse substitution; retain the original evidence. |
+
+The follow-up validation passes 316 tests: 190 scheduling, 9 scheduling-contract, 85 conversation
+routine, 16 encrypted-payload and 16 managed-eligibility checks. Four affected TypeScript targets,
+repository boundary lint, Prisma ownership and mechanical style pass. Module growth has no errors;
+the reviewer accepts the firing lifecycle and preparation-receipt repositories as distinct owners.
+The 19 new preparation tests run the actual unit of work, projection repository, payload owner and
+AES-GCM cipher. Narrow transaction mocks prove ordering and rollback, authority loss, lost
+history/publication responses, unchanged ciphertext, exact audience, and no restored grants.
+Independent integrated review and architecture post-review pass with two Low documentation
+corrections: distinguish encrypted persistence from in-memory plaintext comparison, and explain
+the preparation authority's refused versus recoverable results. No behavioral finding remains.
+
+These tests do not prove PostgreSQL concurrency or KurrentDB integration. The actual activation
+and root-run/turn-task adapters, worker composition and reviewed creation/controls UI remain the
+next implementation work; this preparation adapter alone is not a runnable scheduled task.
+The next slice should reuse the conversation activation authority without its ordinary early turn
+spawn, then join existing root-run admission with turn-task spawning and receipt binding in the
+same transaction. Routine compilation must recover that admitted run and use the checked attested
+instruction, not interactive admission or a fabricated browser session. Bootstrap stays thin and
+registers the existing schedule/occurrence/turn workflow owners. No new schema is currently needed
+for these adapters; loss-of-response receipt recovery remains part of their required test scope.
+
+### Occurrence activation — source implemented and independently reviewed
+
+This wave starts from preparation head `9b75e6efff24b8058363fefe413ea8782326f117`.
+The refreshed live stack passes snapshot
+`5670845f7746d93005eefb738c6c7aa1c164408b5d61ddee972c16f428d6774c` with the same
+#908 → #910 → #914 → #915 → #916 order. Architecture requires a lease-only publication
+contract separate from ordinary message activation, and typed Pending results handled with durable
+sleep. A normal cold start must not exhaust the occurrence task's three failure attempts.
+
+| Current activation state | Event | Required outcome |
+| --- | --- | --- |
+| Prepared, cold computer | Authorized poll | Request its deterministic initial lease; admit no model turn. |
+| Claim pending and unexpired | Sandbox still starting | Save Pending checkpoint, sleep durably and recheck authority before another poll. |
+| Current authority removed | Before claim or lease publication | Commit pre-admission refusal, preserving earlier receipts; admit no run. |
+| Computer retired, lease ended/expired or release profile unavailable | Poll or publication | Commit refusal rather than creating a replacement generation. |
+| Active history, publication missing | Lost response or retry | Verify exact history, then atomically save lease projection and activation receipt. |
+| Activation receipt already saved | Exact unadmitted retry | Recheck authority and verify the receipt; never spawn a turn from activation. |
+| Foreign history, command, lease or receipt | Any poll | Report an integrity error; do not silently replace evidence or treat it as a policy denial. |
+
+Root-run admission and turn-task binding will follow this boundary. They must share a transaction,
+and duplicate admission must read the saved task receipt without spawning another task. The routine
+compiler must recover an already-admitted run. Automatic input authorization must use the system
+actor, not borrow a current human session. Worker/UI composition and live qualification remain open.
+
+The implementation now uses the shared computer lifecycle through a lease-only publisher. It
+commits the active lease and scheduling receipt together after a fresh authority check, returns
+typed Pending for normal cold starts, and durably refuses retired or ended computers. Saved
+activation cannot recreate a missing realization. A recovery-only turn-task receipt reader returns
+the existing task without spawning one; incomplete or malformed bindings fail closed.
+
+Validation passes 372 relevant tests: 220 scheduling, 19 occurrence-contract and 133 conversation
+routine/activation/receipt checks. All three affected TypeScript checks pass. The 15 joined activation
+tests exercise actual computer history and the lease projection with controlled transaction/claim
+ports: rollback, lost commit acknowledgement, authority loss after assignment, lease endings,
+receipt substitution, and no early task admission. They are not real PostgreSQL, KurrentDB or
+Agent Sandbox proof. Mechanical style reports zero errors/warnings, Prisma ownership and agent
+boundaries pass, and module growth has one reviewed cohesive activation-repository candidate.
+
+Independent integrated review and architecture post-review pass for scope digest
+`01c118b4cccbafa7176f13ddd346d04958275e9c4501d75b9c62d762313becc0`.
+The review repaired a real stuck-Preparing path by mapping retired, released, lost and expired
+computers to committed refusal before replay and publication. One Low documentation correction
+records that activation status values are persisted in checkpoints. No behavioral finding remains.
+No schema, workload, route or frontend was changed, and no live service or VM was started.
+
+### Occurrence run admission and recovery — source implemented and independently reviewed
+
+This wave starts at `8bb5072ab7b93aaf37b10d7dd814a53bc0cd4916`. Live stack
+snapshot `e2b7dec493650fa5f0407022b570c80a5f91abc3e141e31631002f61f3a95949`
+preserves #908 → #910 → #914 → #915 → #916. The outcome is an admitted scheduled
+run with a saved execution task, and recovery that cannot admit another run.
+Architecture preflight passes: reuse the run/snapshot transaction owner, managed routine subject,
+attested instruction reader and shared turn task. No schema or deployable change is planned.
+
+| Current state | Event | Required outcome |
+| --- | --- | --- |
+| Prepared and active, no run | Current admission allowed | Save run, snapshot, firing backlink, turn task and task receipt in one transaction. |
+| Any admission write fails | Retry | Roll back all writes; reuse the same request and task keys. |
+| Commit succeeded but acknowledgement was lost | Retry | Recheck current execution authority and recover saved run/task; never spawn again. |
+| Current permission removed | Admission or compilation | Deny execution; never invent a current human login for an automatic firing. |
+| Routine instruction pending | Turn compilation | Recover the admitted run and compile the attested instruction; never use interactive admission. |
+| Initial routine answer verified | Later human follow-up | Use ordinary admission with the real human message's saved identity; failed routine recovery never selects this path. |
+| Missing or conflicting run, receipt, history or lease | Recovery | Fail closed without replacing stored evidence. |
+
+Source now joins scheduling admission and turn-task creation, adds read-only snapshot recovery,
+and preserves ordinary human follow-ups after the initial routine answer. Automatic Conversation
+Use and agent Invoke decisions both record the scheduler actor; manual work retains the requester.
+The original human authentication time is never renewed. The final scheduling guard is the first
+run-authority load inside the existing admission transaction, not an earlier separate check.
+Managed model/tool resources continue to require the company's own grants; the requester's
+Conversation Use and Invoke grants never substitute for them. Recovery also requires the selected
+history prefix to contain the verified first instruction, including when a saved anchor is supplied.
+
+Validation passes 648 relevant tests: 231 scheduling, 173 input assembly, 47 run admission and
+snapshot recovery, 40 agent models, 10 managed execution evidence, and 147 conversation routines,
+turns and output checks. All six affected TypeScript targets pass. Mechanical style checks 30
+production files with zero errors/warnings; Prisma ownership checks 332 files with zero errors;
+module growth has zero errors/candidates. The unchanged agent-domain guard is also green.
+Independent integrated review and architecture post-review pass against the 49-file source
+manifest `793886dcc9ce71628bc462119cb8894788231592958556b8409c47facf89eb28`.
+Review corrected resource-principal borrowing, automatic requester audit attribution and an empty
+history-anchor acceptance bug; each has regression coverage. A subsequent comments-only pass
+clarifies the public read-only recovery exception and the consequential contracts.
+An independently checked barrel correction keeps new matching/mapping helpers package-internal;
+the prior public admission class remains exported. All three affected consumer TypeScript targets
+pass after that correction.
+
+The transaction tests exercise the actual admission and task-receipt owners with rollback and
+lost-acknowledgement fixtures, not live PostgreSQL/Kurrent/Absurd execution. No live service or VM
+was started. No schema, workload, route or frontend changed. Remaining schedule work is:
+
+- Wire the existing libraries through a thin app composition; register both routine tasks with
+  the control-plane queue authority and inject the recovery dispatcher into conversation turns.
+- Repair active schedules before workers start. The existing limit-only method cannot page
+  beyond its first 100 rows; add cursor-based recovery rather than looping the same batch.
+- Derive firing progress from saved run/output evidence and repair lost acknowledgements. The
+  existing `recordRunProgress` port has no production caller; a workflow return is not proof of
+  completed output or a resolved external action.
+- Add authenticated creation/control APIs, reviewed screens and the preconfigured agent form tool.
+- Qualify scheduled/manual runs, current-permission revocation, approval, overlap and restart with
+  real accounts and databases. Global/group/agent aggregate budgets remain a separate MVP item.
+
+### Routine runtime and restart recovery — source implemented, 26 September 2026
+
+The next wave starts from published draft #916 head
+`3ecef49d367c8a6b04bc499d0d5234364e2e8957`. Live stack snapshot
+`9303abc7163fe009b71f35c37561bf0150ec67b4006281fa6b8d5ac8faa63a33` preserves
+#908 → #910 → #914 → #915 → #916. The previous wave is published and reviewed;
+this wave has no deployment, provider action, new grant or release-tag authority.
+
+The outcome is executable routine workflow composition and recovery of all active schedule heads
+on restart. Independent lanes are app composition and silo-scoped keyset repair. Existing libraries
+remain the authority; apps only wire dependencies and start/stop process resources. No new workload,
+queue, schema, generic scheduler or process timer is planned.
+
+| Current state | Event | Required outcome |
+| --- | --- | --- |
+| Process starting | Existing active schedules | Page through this silo's active heads before workers start; retain task keys, without a first-100 ceiling. |
+| Runtime assembled | Routine or occurrence task claimed | Registered library handlers use the existing queue policy and shared conversation recovery dispatcher. |
+| Registration or startup repair fails | Process start | Close process resources without starting workers or accepting connections. |
+
+Result tracking is the next source slice, not part of the current runtime publication. Its
+architecture preflight requires execution/conversation-owned evidence and a final comparison with
+the linked run's current state before scheduling saves progress. Scheduling preserves its own
+first evidence pair; an observer may not manufacture evidence from that projection. The initial
+continuation proposal was superseded by producer-coupled reporting below: a continuation without
+its own persisted head could lose repair, and the occurrence's task receipt is immutable.
+
+| Current state | Event | Required outcome |
+| --- | --- | --- |
+| Run admitted | Repeated progress observation | Derive coordinates from the saved run/firing link; never treat a task return as completed output. |
+| Durable answer or terminal failure/cancellation | Progress observation | Save the matching outcome with verifiable result evidence and preserve its first evidence pair. |
+| Effect or response uncertain | Recovery | Keep the firing unfinished until its linked run supplies a resolved outcome. |
+| Progress saved but acknowledgement lost | Retry | Recover the same evidence without repeating model/tool work. |
+
+Runtime source now registers both routine handlers on the existing control-plane queue and injects
+recovery-only routine dispatch alongside ordinary conversation admission. The shared typed context
+supplies the same instruction cipher, membership authority and history to preparation and recovery.
+Startup pages through active heads within the configured silo, using serializable transactions and
+the saved deterministic task keys. It rejects malformed or non-advancing page results. All computer
+and durable workers remain stopped until recovery succeeds. One pre-lifecycle assembly boundary
+owns failure cleanup; lifecycle takes over afterward, with a ten-second hard-exit bound if dependency
+cleanup cannot finish. No business policy was moved into the app.
+
+Validation passes 58 relevant tests: 34 scheduling repair/repository/unit-of-work checks and 24 app
+routine, conversation, lifecycle, background-worker and queue-composition checks. The final
+corrections rerun all eight startup-recovery tests and all seven lifecycle tests. Both affected
+TypeScript targets pass. Style checks 15 production files with zero errors/warnings, Prisma
+ownership checks 319 files with zero errors, and workload/app and agent-domain guards and their
+negative tests pass. Module growth has one reviewed firing-repository candidate and no errors.
+Independent review corrected premature full-page exhaustion, activation starting before repair,
+and incomplete or hanging startup cleanup. Listener-order tests observe actual listener-open calls,
+not merely cleanup calls. These checks use controlled ports, not running services or databases.
+
+Authenticated routine commands, reviewed creation/control screens, their agent form tool and
+result tracking still need implementation, followed by complete candidate qualification. No live
+service or VM was started, and no dependency installation, schema change or deployment occurred.
+Schedules are not yet user-ready.
+
+### Routine result reporting — source implemented, 26 September 2026
+
+This wave starts at published #916 head `544535120694a5d734ce74eb2ab08e3d5f290aae`.
+Live stack snapshot `ab48fc5290ba68606675304f09e47570f87a7665cefa181dd888344affad9ccb`
+passes all 18 open PRs and retains #908 → #910 → #914 → #915 → #916. No merge, deployment,
+tag, new grant, dependency installation or live provider action is part of this wave.
+
+Architecture preflight passes producer-coupled reporting with no polling task or schema change.
+Execution/runs reads the checked snapshot and reciprocal firing link. Conversations verifies saved
+turn/history evidence. Scheduling validates the observation, rereads the current run in the same
+serializable transaction as its firing compare-and-set, and retains the first evidence pair even
+when a later verified result differs. Historical reporting needs no fresh execution grant; new
+effects still require current authority. Apps wire these owners without interpreting states.
+
+| Saved producer event | Firing outcome | Acknowledgement boundary |
+| --- | --- | --- |
+| Proven approval or generated-file wait | Waiting | Report before the durable wait. |
+| Execution resumes | Running | Retain any earlier uncertain evidence. |
+| Response/effect unavailable and run in recovery | Uncertain | Report before the task returns. |
+| Confirmed answer and completed run | Completed | Report before credential cleanup and turn settlement. |
+| Stop output winner | Completed | Report in a retryable checkpoint before returning. |
+| Finalized Stop cancellation | Cancelled | Report after cleanup/finalization, before returning. |
+| Cancelling or unsupported source state | No terminal report | Never infer a terminal result. |
+| Report fails or its acknowledgement is lost | Retry from saved source | Do not repeat the external effect or settle past the failed report. |
+
+Luna implemented the read-only execution facts and model alignment; Sol implemented conversation
+evidence, producer hooks and app wiring; the orchestrator implemented the scheduling contract,
+source fence and first-evidence preservation. The superseded unfenced progress command and firing
+repository method are removed. Historical terminal/uncertain reporting requires no new grant.
+Nonterminal wait verification is non-consuming, but it does perform current-access checks and their
+normal authorization audit writes; it is not described as a side-effect-free database read.
+
+Review corrected two wait/replay gaps. An early wake or timeout does not imply a cleared approval
+or generated-file wait. A crash after execution advances but before Running is reported cannot
+depend on a lost local wait variable: each checked nonterminal model or internal tool-result outcome
+reports Running idempotently after verifying no external wait remains. Initial Running is a no-op;
+terminal, unavailable and generic Retry outcomes do not manufacture an intermediate Running state.
+The observer also distinguishes the managed executing principal from the original human requester.
+
+Validation passes 377 relevant tests: 254 scheduling, 35 occurrence/progress contracts, 19 execution
+facts, three run-model transitions, 63 conversation observer/turn/Stop/replay tests and three app
+composition tests. All six affected TypeScript targets pass. Full dependency-boundary lint, changed
+style and Prisma ownership checks pass; workload/app and agent-domain guards and their negative
+tests pass. Module growth reports no errors and two reviewed cohesive owners: the existing turn
+dependency contract and the new routine progress observer. Independent integrated review found no
+behavioral blocker after the wait/replay corrections; a comments-only pass clarifies the Running
+and acknowledgement contracts before exact-source publication binding.
+
+These checks use controlled ports, not live PostgreSQL, KurrentDB or workers. No VM, service,
+dependency download, live grant or external write was used. Authenticated routine commands,
+reviewed creation/control screens, the agent form tool and live qualification remain required.
+
+## Conversational routines — source implementation in progress, 25 September 2026
+
+The next complete schedule slice starts from #915 at immutable base
+`8ae8227c7322a07ffc0f4531e6572a8d73ce7c84`, on `feat/conversational-routines`.
+The parent stack #908 → #910 → #914 → #915 is unchanged and its live integrity check passes
+snapshot `9b72ff1d2e162310345f18b9567f673e457bde5f27daa34fd5389897beb4052f`.
+Integration remains develop `10abd0ef6182f36bec13d8f1358e43b15ead7cd5`; this slice is not published.
+The older proposal-only overlay remains separate and is not an executable scheduling implementation.
+
+Architecture preflight passes with a required occurrence boundary: every firing owns a separate
+agent-session conversation using the routine's confirmed audience and destination. Its AgentRun is
+a root, not a delegation-tree child. Manual firing starts immediately even while paused or while
+another firing is active. Only automatic firing skips overlap. Every firing uses the managed
+assistant's current published revision and permissions, with its existing per-run budget. Original
+requester identity is retained as ownership and approval evidence, never as a current browser
+session or a substitute execution principal. Global/group/assistant aggregate budgets remain a
+separate required MVP item; their unresolved group attribution is not silently implemented here.
+
+The implementation waves are: (1) pure calendar/firing types and the owned schema; (2) product
+routine/firing persistence and workflow commands in parallel with scheduled run/input admission;
+(3) occurrence-history/computer adapters, requester-only routine approval, reviewed creation and
+controls through the existing frontend; (4) bootstrap composition and joined validation. The new
+`server/agents/scheduling` library owns the product lifecycle; generic Absurd scheduling remains
+infrastructure. Apps stay bootstrap-only. No new workload, broker, process timer or generic scheduler
+is introduced. No model-selected budget or previously rejected Ask-validator changes are included.
+
+| Current routine state | Command/event | Required outcome and atomic owner |
+| --- | --- | --- |
+| Not created | Reviewed human confirmation | Recheck collection Create, destination/audience and selected managed service; persist routine, immutable revision, exact access projection and first task together. |
+| Active | Automatic due slot | With database time, select only the latest slot after the saved cursor. Record overlap as skipped when any earlier firing is unfinished; otherwise save a Preparing firing and its task. Advance the cursor in the same transaction. |
+| Active or Paused | Manual Run now | Save a separate Preparing firing under the command key immediately; do not change the automatic cursor or wait behind another firing. |
+| Active | Pause | Requester-authorized compare-and-set closes future automatic admission; existing admitted effects keep their original evidence. |
+| Paused | Resume | Requester-authorized compare-and-set starts future selection from database time, without replaying the paused backlog. |
+| Active or Paused | Reviewed revision | Save immutable replacement instructions/schedule with the original audience and destination unchanged; bind future work to the new revision and reset selection from database time. Existing firings retain their original revision. |
+| Active or Paused | Retire | Requester-authorized compare-and-set closes all new firing admission; retained outcomes remain readable under current access. |
+| Retired | Fire/resume/edit | Refuse without admitting another run. |
+| Any | Replayed command or conflicting write | Re-read current authority and the saved command digest; return the matching committed result or conflict, never create another firing. |
+
+Firing preparation must survive restart without repeating a protected effect. Current access governs
+every result and ordinary clarification; only the original requester approves protected writes or
+cancels a run. An uncertain write remains uncertain while the assistant decides whether another
+attempt is appropriate. Routine-scoped Always approval must remain revision/action/connection bound.
+
+Completion still requires actual route/UI/workflow consumers, focused and SQL concurrency tests,
+immutable run-origin validation, history/audience/revocation proof, generated API synchronisation,
+independent source review and component validation. A separately authorized fresh installation and
+live scheduled/manual run, pause/resume, approval/revocation and retirement journey remain required.
+No live grant, provider call, merge, deployment or release tag is authorized by this source wave.
+
+### Foundation checkpoint — 25 September 2026
+
+The uncommitted wave now contains pure calendar/firing models; the owned routine schema and
+fresh-install guards; requester routine commands and durable schedule/occurrence workflow handlers;
+scheduled/manual root-run admission with version-3 input origins; and routine-revision-scoped
+standing approval. The current working tree remains `/private/tmp/opencrane-visual-fixture.yuENw5`.
+No new PR has been published. #915 remains an open draft at the unchanged base above.
+
+The joined models, contracts, input admission, run admission, managed-agent publication, approval
+and personal-configuration checks pass: 1,222 tests passed, 13 skipped, with all seven TypeScript
+checks green. Independent review of that exact source scope found no remaining blocker after
+repairing the workflow-field mismatch in standing approval, sharing a strict non-normalizing origin
+validator, and using one canonical run-trigger model. Uncertain firings remain unfinished and may
+resolve only to the linked run's saved outcome without replacing prior result evidence.
+
+The separate routine service now passes 162 tests across ten files and its TypeScript check.
+Repairs preserve the exact human-confirmed audience, recheck authority before each preparation stage,
+distinguish automatic system actors from manual users, and retain the first saved result evidence.
+New tests exercise the actual repositories and transaction wrapper with narrow Prisma mocks. They
+cover crash recovery after a run backlink commits, immutable older firings after a routine edit,
+latest-slot selection, overlap, manual firing, command replay and compare-and-set failures. These
+tests do not replace PostgreSQL proof. Mechanical style has zero errors or warnings; Prisma boundaries
+pass; module growth has zero errors and 11 reviewed candidates. Workload/app
+composition and agent-domain guards, including their negative tests, pass. Independent service review
+identified one High policy blocker and one Medium validation follow-up. The Medium is now repaired
+and independently re-reviewed below. The retired-history policy and its source repair are now approved
+and independently reviewed. Architecture accepts the library owner, injected boundaries and transaction
+composition; the whole unfinished wave still needs its final joined review.
+The SQL regression suite is wired into the repository's existing `test:sql` discovery; a preparation
+that loses authority may become Refused with its saved receipts intact, but an admitted run may not
+be relabelled as a pre-admission refusal.
+
+The user approved retained-history access on 25 September: original confirmed participants may
+read retired routines while they still have current destination conversation access; running and
+editing remain disabled. The previously rejected change was not applied before this approval.
+The implemented source repair preserves only existing original-audience Read grants, checks each
+retired-history reader's current access independently, and keeps mutation and firing admission
+closed. A restriction-only operation in the central IAM owner revokes unwanted managed grants
+without creating missing ones or restoring revoked ones. Retired Run now and retirement-receipt
+replay also recheck the caller's current chat access. Active/Paused read and admission rules are
+unchanged. No recipients, live grants, schema changes or services were added. The authorization suite
+passes 331 tests across 24 files; its TypeScript check and the routine checks above pass. Architecture
+post-review and independent integrated review pass for this repair, closing the retired-history High.
+Review clarified that restriction removes every unrevoked mutation grant, including future-dated
+ones; retained Read grants keep their validity dates. Two regression cases prove future/expired
+retained Read still receives a current denial and cannot gain authority from retirement. Final
+scoped style and Prisma-boundary checks have no errors or warnings. The schema baseline is unchanged.
+No new PR, commit, push, deployment or live permission change was made; source tests do not prove a
+live retirement journey. The occurrence-contract and history work below is separate from this
+reviewed policy correction.
+
+### Occurrence history and prompt boundary — 25 September 2026
+
+The small `scheduling/contract` library now owns preparation, activation and run-admission ports,
+with strict checkpoint-receipt parsers. Scheduling keeps its encrypted instruction envelope and
+lifecycle implementation. Conversation owners can depend on this contract without importing the
+scheduling implementation. The actual Nx graph is acyclic: the old models-agents type-only
+conversation-ID dependency was removed without changing its unbranded string shape.
+Review narrowed the hand-off further: only preparation receives instruction text, decryption runs
+inside its checkpoint callback, and replay of saved preparation never decrypts again. Activation
+and admission receive content-free facts and receipts; later compilation must use the checked
+history/payload reader.
+
+Genesis now uses a closed `group_child` or `routine_occurrence` origin. Existing group-child
+metadata remains unchanged; saved genesis must include its explicit kind. History reads and writes
+share the same full parser. No compatibility branch, inherited destination history, fabricated
+human author or refreshed requester login was added.
+
+The occurrence history adapter atomically establishes genesis plus the encrypted instruction
+reference, a cold computer and a private preparation receipt in three checked streams. Exact
+retries recover the same evidence, including after a lost response; altered or partial history
+fails closed. Recovery also binds the computer's original creation time while accepting a valid
+later lifecycle state. The prompt reader compares every admission-supplied routine, firing, task,
+requester and service coordinate. Its transaction-bound payload repository decrypts only that
+attested instruction as user-level content; ordinary service/system compilation is unchanged.
+Neither adapter grants access, admits a run, activates a computer or implements a browser route.
+
+Focused tests and the joined conversation suite pass; application fixture checks and server
+TypeScript pass. Conversation history passes 940 tests, with the final construction-only owner
+extraction then checked by 83 routine, group-child and personal-session tests. The computer owner
+passes 26 tests, scheduling 164, the shared occurrence contract nine, and application composition
+21. All affected TypeScript checks pass. The full conversation run required temporary local test sockets after the
+sandbox refused the HTTP test listeners; no product service was started. Live KurrentDB atomic
+append, lost-response and rollback cases are added to the existing integration target but have
+not been executed. No VM, database, dependency download or new credentials were used.
+Independent source and architecture post-review pass for the exact 60-file source manifest
+`ce84f816048e30b921f26d3338dee6210665a31eadf3925e229855958cdf543e` in
+`.nx/routine-occurrence-review-scope.json`. Review consolidated initial computer event construction
+under `ConversationComputerHistory.initialAppend`, which fully validates the initial snapshot
+before any atomic write. Routine, group-child and personal-session creation now use that owner;
+the old raw event envelopes are removed, with existing IDs and write order preserved.
+Scoped style has no errors or warnings; whole-repository dependency checks, Prisma ownership,
+workload/app and agent-domain guards and their negative tests pass. Module growth has no errors
+and the same 11 reviewed candidates. These checks do not certify the rest of the unfinished wave.
+
+Still required: the current-authority preparation transaction and hidden conversation/payload
+projection, confirmed-audience grants, computer activation, atomic root-run/turn-task admission,
+routine-aware replay of that admitted run, runtime composition, authenticated routes, reviewed
+creation/control screens and the agent's preconfigured-form tool. SQL/Kurrent concurrency and
+real-account scheduled/manual/revocation/restart proof remain separate acceptance gates. No new
+PR, commit, push, merge, deployment or live permission change was made. #915 was refreshed and is
+still the open draft at the unchanged parent head and base above.
+
+The next preparation unit of work must freeze managed identity/profile and computer coordinates
+in its own recoverable conversation projection: the firing currently reserves only a conversation
+ID, not those values. Reuse the managed-agent resolver, encrypted payload repository and existing
+conversation participant/grant owner. The group-child orchestration is a reference, not a ready-made
+hidden preparation transaction; it publishes participants/grants during projection. A routine must
+keep its initial projection inaccessible until its exact confirmed audience and history are ready.
+
+The saved-result validation follow-up is implemented and its independent delta review passes.
+Adjacent typed Zod validators replace the partial command/firing and preparation/activation
+parsers. They reject unknown fields, malformed values and inconsistent state combinations without
+normalizing saved evidence. Replayed results are checked against the receipt's routine, revision
+and firing columns; non-create commands also check the requested routine, and Run now replay rejects
+automatic firing evidence even when its fields are otherwise valid. Tests preserve first
+committed identifiers even when retry allocations differ or the current routine revision advances.
+
+Two library-owned adapters now implement instruction encryption and workflow task admission. The
+instruction adapter injects the existing mounted AES-GCM cipher through a structural port, with a
+purpose-separated authenticated reference for the routine and revision. No secret, algorithm or
+dependency edge was added. The generic task adapter forwards the caller's transaction to the
+guarded workflow engine and derives unambiguous retry keys from persisted coordinates. Both use
+strict model-adjacent input validators. They are exported for composition but not wired to runtime
+consumers yet. Nine tests with the real AES-GCM component prove round-trip, ownership/purpose
+binding, tampering rejection, key rotation and the existing size cap; twelve existing run-admission
+composition tests also pass. Full server TypeScript validation passes after synchronizing two old
+test imports with the canonical `AgentRunTriggers` enum. No shared Prisma regeneration was needed.
+Independent integrated review and architecture post-review pass for these adapters. This scoped
+PASS does not cover the separate retired-history repair above or the unfinished whole wave.
+
+The baseline regenerates idempotently, authority-marker verification passes, and the new capability
+catalogue matches the runtime digest. The current manifest binds that baseline. These are source
+checks, not PostgreSQL execution proof: no test database is running locally, and no VM, database,
+container, or dependency download was started. Shared generated Prisma was refreshed once from this
+wave's schema; the original mixed MVP source worktree was not changed.
+
+The final parent-stack refresh still passes digest
+`9b72ff1d2e162310345f18b9567f673e457bde5f27daa34fd5389897beb4052f` with 17 open PRs.
+#915 remains at `8ae8227c7322a07ffc0f4531e6572a8d73ce7c84`, based on #914 at
+`42a88a2d6c0425f5f4bb78645f357ca12db9bb9d`. No PR was absorbed, closed or retargeted. The
+scheduling wave remains an uncommitted overlay; the static baseline digest is
+`e28be6e1637023a03d44071ba106a35361bba22a02461d19d30a085bb3d64241`.
+Independent review of the final SQL refusal transition and regression assertions passes; the fixture
+hash is `cce825080d4d6173be2095113dd619e724fb5fe0b4b0b842b10c39c01ee317c4`. Execution against
+PostgreSQL is still unproven.
+
+The next implementation remains concrete integration: occurrence conversation/history and computer
+preparation, real run admission and result progress, authenticated HTTP/API, reviewed UI
+creation/controls and the model's preconfigured-form tool. Then rerun source review, SQL
+concurrency/restart/revocation tests and the real-account journey.
+Backend ports and unit tests alone do not make schedules usable or satisfy the MVP label.
+
+Occurrence architecture preflight rejects direct reuse of the human-message activation path. A
+routine needs its own closed genesis-origin model and a service-attested instruction, never a fake
+human message or browser session. Keep preparation, projection, activation and the routine-aware
+turn compiler together under `server/conversations/main/src/routines/`. Activation must not spawn
+the ordinary human turn task early: admit that task atomically with the root AgentRun, snapshot and
+firing backlink, then have its compiler recover the already-admitted run. The next slice uses only
+the reviewed instruction; destination messages are not inherited. Separate the small occurrence
+contracts into an approved dependency-neutral owner before connecting the two capabilities; do not
+open a broad conversations-to-scheduling dependency. These are implementation constraints, not
+completed source or live qualification.
+
 ## Explicit initial subchat audience — published source, 25 September 2026
 
 This incremental source slice starts at published #914, immutable base

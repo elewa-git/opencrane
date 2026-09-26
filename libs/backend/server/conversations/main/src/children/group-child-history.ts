@@ -3,11 +3,10 @@ import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import type { GroupChildRequest } from "./group-child.types";
 import { ConversationAuthorKinds, ConversationComputerStates, ConversationEntryAudiences, ConversationEntryKinds, ConversationEntryProvenance, MessageStates, type ConversationComputer, type MessageEntry } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
+import { ConversationGenesisOriginKinds } from "@opencrane/models/conversations";
 
 import { _DeterministicUuid } from "../sessions/agent-session-identifiers";
-import { ConversationHistoryAuthority } from "@opencrane/backend/server/conversations/history";
-import { ConversationHistoryAppendOutcomes } from "@opencrane/backend/server/conversations/history";
-import { ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
+import { ConversationHistoryAppendOutcomes, ConversationHistoryAuthority, ConversationHistoryReader, type ConversationHistoryGenesis } from "@opencrane/backend/server/conversations/history";
 import { ConversationComputerHistory } from "@opencrane/backend/server/conversations/computers";
 import type { StoredConversationPrivatePayload } from "../messages/db/prisma-conversation-history-repository.types";
 import { GroupChildConflictError } from "./group-child.errors";
@@ -29,13 +28,13 @@ export class GroupChildHistory
 	public async establish(request: GroupChildRequest): Promise<void>
 	{
 		const now = request.createdAt.toISOString();
-		const genesis = { schemaVersion: 1 as const, siloId: request.siloId, conversationId: request.childConversationId, mode: "agent_session" as const, agentServiceId: request.agentServiceId, createdByPrincipalId: request.requestedByPrincipalId, createdAt: now, origin: _RequestOrigin(request) };
+		const genesis: ConversationHistoryGenesis = { schemaVersion: 1, siloId: request.siloId, conversationId: request.childConversationId, mode: "agent_session", agentServiceId: request.agentServiceId, createdByPrincipalId: request.requestedByPrincipalId, createdAt: now, origin: { kind: ConversationGenesisOriginKinds.GroupChild, ..._RequestOrigin(request) } };
 		const computer: ConversationComputer = { schemaVersion: 1, id: request.computerId, siloId: request.siloId, conversationId: request.childConversationId, agentIdentityId: request.agentIdentityId, profileRevisionId: request.profileRevisionId, state: ConversationComputerStates.Cold, leaseGeneration: 1, workspaceCheckpoint: null, createdAt: now, updatedAt: now };
 		const conversation = this.authority.genesisAppend(genesis, _DeterministicUuid("group-child-genesis", request.id));
-		const computerStreamName = `conversation-computer-${request.computerId}`;
+		const computerAppend = this.computers.initialAppend({ computer, eventId: _DeterministicUuid("group-child-computer", request.id) });
 		try
 		{
-			await this.store.appendAtomic({ expectedHeads: [{ streamName: conversation.streamName, revision: HistoryExpectedRevisions.NoStream }, { streamName: computerStreamName, revision: HistoryExpectedRevisions.NoStream }], appends: [conversation, { streamName: computerStreamName, expectedRevision: HistoryExpectedRevisions.NoStream, events: [{ id: _DeterministicUuid("group-child-computer", request.id), type: "opencrane.conversation-computer.v1", data: { computer, lease: null }, metadata: { siloId: request.siloId, computerId: request.computerId, conversationId: request.childConversationId, agentIdentityId: request.agentIdentityId, profileRevisionId: request.profileRevisionId } }] }] });
+			await this.store.appendAtomic({ expectedHeads: [{ streamName: conversation.streamName, revision: HistoryExpectedRevisions.NoStream }, { streamName: computerAppend.streamName, revision: HistoryExpectedRevisions.NoStream }], appends: [conversation, computerAppend] });
 		}
 		catch (error)
 		{

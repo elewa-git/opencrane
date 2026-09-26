@@ -1,3 +1,5 @@
+import { AgentRunTriggers } from "@opencrane/contracts";
+
 import type { ExecutionSubjectAuthority, SessionAssemblyCommand } from "../assembly/session-assembly.types";
 import type { ActiveConversationComputerLease, PersonalConversationExecutionSubjectCoordinates } from "./personal-conversation-execution-subject-authority.types";
 
@@ -12,6 +14,8 @@ import type { ActiveConversationComputerLease, PersonalConversationExecutionSubj
  */
 export function _MatchesConversationExecutionCommand(command: SessionAssemblyCommand, run: Parameters<ExecutionSubjectAuthority["load"]>[1], coordinates: PersonalConversationExecutionSubjectCoordinates): boolean
 {
+	if (command.trigger !== AgentRunTriggers.Interactive)
+		return false;
 	const matchesRun = command.runId === coordinates.runId && command.siloId === coordinates.computer.siloId
 		&& command.conversationId === coordinates.computer.conversationId && command.agentServiceId === coordinates.agent.agentServiceId
 		&& run.agentServiceId === coordinates.agent.agentServiceId && run.agentRevisionId === coordinates.agent.agentRevisionId;
@@ -30,7 +34,7 @@ export function _MatchesConversationExecutionCommand(command: SessionAssemblyCom
  * @param coordinates - The conversation's saved computer, profile and claimed lease.
  * @returns Whether every execution coordinate still matches; a false result must deny admission.
  */
-export function _MatchesConversationExecutionLease(active: ActiveConversationComputerLease, coordinates: PersonalConversationExecutionSubjectCoordinates): boolean
+export function _MatchesConversationExecutionLease(active: ActiveConversationComputerLease, coordinates: Pick<PersonalConversationExecutionSubjectCoordinates, "computer" | "agent" | "lease">): boolean
 {
 	const matchesComputer = active.computer.siloId === coordinates.computer.siloId
 		&& active.computer.id === coordinates.computer.computerId
