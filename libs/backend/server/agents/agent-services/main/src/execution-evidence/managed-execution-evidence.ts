@@ -1,7 +1,7 @@
 import { AgentIdentityKinds, AgentIdentityStates } from "@opencrane/contracts";
 import { __DigestHumanMembershipEvidence, __HumanMembershipRevision } from "@opencrane/backend/server/iam/membership";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
-import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
+import { ExecutionSubjectMembershipKinds, __RoutineFiringAuditActor } from "@opencrane/models/agents";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import type { JsonValue } from "@opencrane/util";
 
@@ -32,8 +32,10 @@ export class ManagedExecutionEvidenceAuthority implements ManagedExecutionEviden
 		const human = await this.repository.verifyRequesterMembership(identity.siloId, command.requesterPrincipalId, transaction.admittedAtEpochMs);
 		if (human === null || human.principalId !== command.requesterPrincipalId)
 			return { outcome: ExecutionEvidenceOutcomes.Denied, reason: ManagedExecutionEvidenceDenialReasons.MembershipStale };
-		const argumentsDigest = __DigestCanonicalJson({ agentIdentityId: identity.id, principalId: identity.principalId, agentServiceId: identity.agentServiceId, agentRevisionId: revision.agentRevisionId, agentRevisionDigest: revision.agentRevisionDigest, membershipDigest: __DigestHumanMembershipEvidence(human) });
-		const invocation = await transaction.authorization.admitPrincipal({ siloId: identity.siloId, principalId: command.requesterPrincipalId, actorKind: "user", actorId: command.requesterPrincipalId, resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: identity.agentServiceId }, action: ProductAuthorizationActions.Invoke, argumentsDigest, membershipRevision: __HumanMembershipRevision(human), nowEpochMs: transaction.admittedAtEpochMs });
+		const invocationArguments = { agentIdentityId: identity.id, principalId: identity.principalId, agentServiceId: identity.agentServiceId, agentRevisionId: revision.agentRevisionId, agentRevisionDigest: revision.agentRevisionDigest, membershipDigest: __DigestHumanMembershipEvidence(human) };
+		const argumentsDigest = command.routineTrigger === undefined ? __DigestCanonicalJson(invocationArguments) : __DigestCanonicalJson({ ...invocationArguments, routineTrigger: command.routineTrigger });
+		const invocationActor = command.routineTrigger === undefined ? { actorKind: "user" as const, actorId: command.requesterPrincipalId } : __RoutineFiringAuditActor(command.routineTrigger, command.requesterPrincipalId);
+		const invocation = await transaction.authorization.admitPrincipal({ siloId: identity.siloId, principalId: command.requesterPrincipalId, ...invocationActor, resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: identity.agentServiceId }, action: ProductAuthorizationActions.Invoke, argumentsDigest, membershipRevision: __HumanMembershipRevision(human), nowEpochMs: transaction.admittedAtEpochMs });
 		if (invocation.outcome !== AuthorizationDecisionOutcomes.Allow || invocation.evidence === null)
 			return { outcome: ExecutionEvidenceOutcomes.Denied, reason: ManagedExecutionEvidenceDenialReasons.CapabilityUnavailable };
 		const model = await transaction.authorization.admitPrincipal({ siloId: identity.siloId, principalId: identity.principalId, actorKind: "agent-service", actorId: identity.principalId, resource: { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: revision.modelDefinitionId }, action: ProductAuthorizationActions.Use, argumentsDigest, nowEpochMs: transaction.admittedAtEpochMs });

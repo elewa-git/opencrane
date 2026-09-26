@@ -80,6 +80,11 @@ export type { CompanyAssistantDirectory } from "./metadata/conversation-metadata
 export { RoutineOccurrenceHistory } from "./routines/routine-occurrence-history";
 export { PrismaRoutineOccurrencePreparationUnitOfWork } from "./routines/prisma-routine-occurrence-preparation";
 export { RoutineComputerActivation } from "./routines/routine-computer-activation";
+export { PrismaRoutineRunAdmissionUnitOfWork } from "./routines/prisma-routine-run-admission";
+export { PrismaRoutineTurnCompilerUnitOfWork, PrismaRoutineTurnCompilerRepository } from "./routines/prisma-routine-turn-compiler";
+export { RoutineTurnDispatchKinds } from "./routines/routine-turn-compiler.types";
+export type { RoutineTurnCompilerDependencies, RoutineTurnDispatcher, RoutineTurnDispatchResult } from "./routines/routine-turn-compiler.types";
+export type { RoutineRunAdmissionDependencies } from "./routines/routine-run-admission.types";
 export { PrismaRoutineComputerActivationProjectionUnitOfWork } from "./routines/prisma-routine-computer-activation-projection";
 export type { RoutineComputerActivationDependencies } from "./routines/routine-computer-activation.types";
 export type { RoutineOccurrencePreparationDependencies } from "./routines/routine-occurrence-preparation.types";

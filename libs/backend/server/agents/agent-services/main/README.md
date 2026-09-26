@@ -69,8 +69,10 @@ external identity; its digest enters admission arguments and capability evidence
 a membership revision for Fleet alone.
 
 Company model-use admissions record `agent-service` with the company's Principal ID, both when
-creating a child conversation and when admitting a run. Human Invoke decisions record `user` with
-the requesting Principal ID. Runtime Pod identity belongs to later workload decisions.
+creating a child conversation and when admitting a run. Ordinary and manual Invoke decisions record
+`user` with the requesting Principal ID. An automatic routine keeps that Principal entitled while
+recording the stable scheduler `system` actor and binding its verified trigger into the decision
+arguments. Runtime Pod identity belongs to later workload decisions.
 
 The first company revision has no persona, skills, tools, memory or knowledge-boundary assignments.
 An administrator can then assign exact MCP (Model Context Protocol) tool revisions. New company

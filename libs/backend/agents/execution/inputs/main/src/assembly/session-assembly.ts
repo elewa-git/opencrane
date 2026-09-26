@@ -1,12 +1,12 @@
 import { __SameMembershipBinding } from "@opencrane/backend/server/iam/membership";
-import { __DigestRunInputSnapshot, RunAdmissionBuildOutcomes, RunAdmissionExistingVerificationOutcomes, RunAdmissionMessageInputModes, RunAdmissionOutcomes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type InitialRunAuthority, type RunAdmissionCommit, type RunAdmissionPrepare } from "@opencrane/backend/agents/execution/runs";
+import { __DigestRunInputSnapshot, RunAdmissionBuildOutcomes, RunAdmissionExistingVerificationOutcomes, RunAdmissionMessageInputModes, RunAdmissionOutcomes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type InitialRunAuthority, type RunAdmissionCommit, type RunAdmissionPrepare, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { AgentRunTriggers, RUN_INPUT_SNAPSHOT_VERSION, ___ParseRunBudgetPolicy, type RunBudgetPolicy, type RunInputOrigin, type RunInputSnapshot } from "@opencrane/contracts";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, ___SortBy } from "@opencrane/util";
 
 import { __AreRunInputSnapshotMcpToolsValid } from "../sources/mcp-tool-snapshot.validator";
 import { RunInputSnapshotAdmissionOutcomes, SessionAssemblyOutcomes, type AssembleRunInputSnapshotResult, type SessionAssemblyRefusalReason } from "./session-assembly-result.types";
-import { RunInputMemoryScopes, SessionAssemblyLoadOutcomes, type ApprovedPersonaInput, type MemoryScopeInput, type SessionAssemblyAuthorities, type SessionAssemblyCommand, type ConversationContextInput, type ToolPolicyInput } from "./session-assembly.types";
+import { RunInputMemoryScopes, SessionAssemblyLoadOutcomes, type ApprovedPersonaInput, type MemoryScopeInput, type SessionAssemblyAuthorities, type SessionAssemblyCommand, type ConversationContextInput, type ToolPolicyInput, type SessionAssemblyLoad } from "./session-assembly.types";
 
 /** Maps the admission repository's serialized result into the public assembly vocabulary. */
 const _ADMISSION_OUTCOMES: Record<`${RunInputSnapshotAdmissionOutcomes}`, RunInputSnapshotAdmissionOutcomes> = {
@@ -63,19 +63,11 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 	// source below can read a conversation the caller has only just created.
 	const admitted = await authorities.admission.admit<SessionAssemblyRefusalReason>(command, async function _VerifyExisting(snapshot, transaction)
 	{
-		const personalMemory = _ExistingPersonalMemoryPolicy(snapshot);
-		if (personalMemory === null)
-			return { outcome: RunAdmissionExistingVerificationOutcomes.Denied, reason: "memory_scope_unavailable" } as const;
-		const authority: InitialRunAuthority = { agentServiceId: snapshot.agentServiceId, agentRevisionId: snapshot.agentRevisionId, executionPolicy: { persona: snapshot.personaRevisionId === null ? RunExecutionPersonaPolicies.None : RunExecutionPersonaPolicies.Required, personalMemory }, promptCompilerVersion: snapshot.promptCompilerVersion, trigger: command.trigger };
-		const current = await authorities.executionSubject.load(command, authority, transaction);
+		const current = await __RevalidateRunInputSnapshot(command, snapshot, authorities, transaction);
 		if (current.outcome === SessionAssemblyLoadOutcomes.Denied)
 			return { outcome: RunAdmissionExistingVerificationOutcomes.Denied, reason: current.reason } as const;
-		if (!_IsExecutionSubjectBound(command, authority, current.value) || !_SameExistingSubject(snapshot.executionSubject, current.value))
-			return { outcome: RunAdmissionExistingVerificationOutcomes.Denied, reason: "identity_unavailable" } as const;
-		const conversation = await authorities.productAuthorization.verifyExisting(command, current.value, transaction);
-		if (conversation.outcome !== SessionAssemblyLoadOutcomes.Denied)
-			checked.subject = current.value;
-		return conversation.outcome === SessionAssemblyLoadOutcomes.Denied ? { outcome: RunAdmissionExistingVerificationOutcomes.Denied, reason: conversation.reason } as const : { outcome: RunAdmissionExistingVerificationOutcomes.Verified } as const;
+		checked.subject = current.value;
+		return { outcome: RunAdmissionExistingVerificationOutcomes.Verified } as const;
 	}, async function _compileWithinAdmission(transaction)
 	{
 		// 3. Load the run and its frozen revision first; every later source needs them.
@@ -138,6 +130,27 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 	if (checked.subject === null)
 		throw new Error("Run admission returned without current execution authority");
 	return { outcome: SessionAssemblyOutcomes.Assembled, admissionOutcome: _ADMISSION_OUTCOMES[admitted.outcome], snapshot: admitted.snapshot, currentExecutionSubject: checked.subject };
+}
+
+/**
+ * Rechecks an already validated snapshot's current subject and requester conversation permission.
+ * Recovery callers must first verify persisted run, snapshot and origin coordinates through the
+ * execution-runs owner. This method never admits a run, refreshes the saved requester login, or
+ * replays the model and tool resource admissions frozen into the snapshot.
+ */
+export async function __RevalidateRunInputSnapshot(command: SessionAssemblyCommand, snapshot: RunInputSnapshot, authorities: Pick<SessionAssemblyAuthorities, "executionSubject" | "productAuthorization">, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ExecutionSubject>>
+{
+	const personalMemory = _ExistingPersonalMemoryPolicy(snapshot);
+	if (personalMemory === null)
+		return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "memory_scope_unavailable" };
+	const authority: InitialRunAuthority = { agentServiceId: snapshot.agentServiceId, agentRevisionId: snapshot.agentRevisionId, executionPolicy: { persona: snapshot.personaRevisionId === null ? RunExecutionPersonaPolicies.None : RunExecutionPersonaPolicies.Required, personalMemory }, promptCompilerVersion: snapshot.promptCompilerVersion, trigger: command.trigger };
+	const current = await authorities.executionSubject.load(command, authority, transaction);
+	if (current.outcome === SessionAssemblyLoadOutcomes.Denied)
+		return current;
+	if (!_IsExecutionSubjectBound(command, authority, current.value) || !_SameExistingSubject(snapshot.executionSubject, current.value))
+		return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "identity_unavailable" };
+	const conversation = await authorities.productAuthorization.verifyExisting(command, current.value, transaction);
+	return conversation.outcome === SessionAssemblyLoadOutcomes.Denied ? conversation : current;
 }
 
 /** Recovers the saved memory policy without promoting an absent or malformed scope into permission. */

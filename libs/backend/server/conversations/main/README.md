@@ -32,7 +32,7 @@ signed-in participant ──► main ◄── HERE ──► history
 | `memory/source/` | Read the selected human message through current history access and recheck its encrypted source inside the command transaction. |
 | `memory/workflow/` | Declare identifier-only memory tasks and resume each saved provider and catalog phase through one Absurd workflow owner. The command transaction retains Absurd's returned receipt. First-dataset creation remains separately unfinished. |
 | `children/` | Resolve explicitly selected parent members, admit group-child work, preserve its original audience, write a closed group-child genesis origin, recover creation, and share human-reviewed text. |
-| `routines/` | Prepare hidden occurrence projections, encrypted instructions and checked history; publish the confirmed audience with a scheduling-owned receipt. Activate the prepared computer through a separate lease-only transaction; leave run and turn-task admission to the later execution owner. |
+| `routines/` | Prepare occurrence history and its confirmed audience, activate the computer, join root-run admission with turn-task creation, and recover admitted routine turns without admitting new work. |
 | `computers/` | Separate activation, lifecycle, checkpoint, turn and review operation owners. |
 | `computers/tools/` | Proposal admission, current dispatch access and saved result consumption each have their own owner. |
 | `computers/interruptions/` | Select and admit requester-owned Stop commands, record their outcome and let Absurd recover cancellation cleanup. |
@@ -178,7 +178,25 @@ This is needed because duplicate run admission skips the initial transaction's t
 
 These adapters use the narrow [scheduling contract](../../agents/scheduling/contract/README.md),
 not the scheduling implementation. They are not yet a runnable scheduling feature: root-run/turn-task
-admission, the routine-aware compiler, runtime wiring and reviewed product controls remain open.
+admission and the routine-aware compiler are described below. Runtime wiring and reviewed product controls remain open.
+
+### Routine run admission and recovery
+
+`PrismaRoutineRunAdmissionUnitOfWork` verifies the checked occurrence record and saved activation,
+then delegates to execution-runs' admission transaction. The final scheduling guard runs before
+input assembly in that same transaction. Run, immutable snapshot, firing backlink, execution task
+and receipt binding share one commit. An unknown commit outcome retries the same keys. A definite
+denial may refuse an unadmitted firing, but cannot erase a run that already committed.
+Both fresh and duplicate responses reread saved stage receipts and the bound turn task.
+
+`PrismaRoutineTurnCompilerUnitOfWork` uses a read-only admitted-run reader, not interactive
+admission. It verifies the computer, lease, task, stage receipts and instruction; rechecks current
+managed and requester authority; and compiles the existing frozen snapshot. Ordinary turn
+compilation dispatches from the durable routine genesis and checked first instruction. After the
+selected managed agent's initial run answers, later human messages use normal interactive admission.
+The typed dispatch result keeps absent routine candidates from causing fallback. A missing routine compiler fails
+closed rather than treating the service instruction as a human message. It exposes no task-spawn
+port. These adapters alone do not register schedule workers or expose creation controls.
 Preparation and activation are exported but not registered with a worker or route.
 
 ### Tool progress and recovery

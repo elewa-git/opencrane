@@ -1,6 +1,15 @@
 import type { RoutineSchedule } from "./routine-schedule.types";
 import { RoutineFiringDisposition, RoutineFiringTrigger, RoutineStatus, type RoutineUnfinishedFiringDisposition } from "./routine.types";
 
+/** Records which trusted actor caused a routine effect while the requester remains entitled. */
+export interface RoutineFiringAuditActor
+{
+	/** Identifies whether the actor is a human command or the durable scheduler. */
+	readonly actorKind: "user" | "system";
+	/** Identifies the saved requester or the stable scheduler actor profile. */
+	readonly actorId: string;
+}
+
 /**
  * Supplies a database-owned snapshot for pure firing selection.
  *

@@ -15,9 +15,10 @@ states, not the publication status of this draft.
 
 This is a source foundation, not usable schedules or MVP acceptance. It includes the routine
 schema and lifecycle, current-authority checks, revision-bound approval, root-run input contracts,
-encrypted instruction adapters, and recoverable occurrence history. It deliberately has no
-production route, frontend, worker registration or complete preparation/activation/run wiring.
-The next wave must complete those consumers before real-account qualification.
+encrypted instruction adapters, and recoverable occurrence history. The follow-ups below add
+preparation, activation, atomic run admission and recovery-only turn compilation. Production
+routes, frontend, worker registration and result propagation remain open before real-account
+qualification.
 
 The publication validation passes 892 tests (13 skipped) across seven selected projects and all
 seven TypeScript targets. The unchanged conversation/computer, IAM and application checks below
@@ -116,6 +117,63 @@ The review repaired a real stuck-Preparing path by mapping retired, released, lo
 computers to committed refusal before replay and publication. One Low documentation correction
 records that activation status values are persisted in checkpoints. No behavioral finding remains.
 No schema, workload, route or frontend was changed, and no live service or VM was started.
+
+### Occurrence run admission and recovery — source implemented and independently reviewed
+
+This wave starts at `8bb5072ab7b93aaf37b10d7dd814a53bc0cd4916`. Live stack
+snapshot `e2b7dec493650fa5f0407022b570c80a5f91abc3e141e31631002f61f3a95949`
+preserves #908 → #910 → #914 → #915 → #916. The outcome is an admitted scheduled
+run with a saved execution task, and recovery that cannot admit another run.
+Architecture preflight passes: reuse the run/snapshot transaction owner, managed routine subject,
+attested instruction reader and shared turn task. No schema or deployable change is planned.
+
+| Current state | Event | Required outcome |
+| --- | --- | --- |
+| Prepared and active, no run | Current admission allowed | Save run, snapshot, firing backlink, turn task and task receipt in one transaction. |
+| Any admission write fails | Retry | Roll back all writes; reuse the same request and task keys. |
+| Commit succeeded but acknowledgement was lost | Retry | Recheck current execution authority and recover saved run/task; never spawn again. |
+| Current permission removed | Admission or compilation | Deny execution; never invent a current human login for an automatic firing. |
+| Routine instruction pending | Turn compilation | Recover the admitted run and compile the attested instruction; never use interactive admission. |
+| Initial routine answer verified | Later human follow-up | Use ordinary admission with the real human message's saved identity; failed routine recovery never selects this path. |
+| Missing or conflicting run, receipt, history or lease | Recovery | Fail closed without replacing stored evidence. |
+
+Source now joins scheduling admission and turn-task creation, adds read-only snapshot recovery,
+and preserves ordinary human follow-ups after the initial routine answer. Automatic Conversation
+Use and agent Invoke decisions both record the scheduler actor; manual work retains the requester.
+The original human authentication time is never renewed. The final scheduling guard is the first
+run-authority load inside the existing admission transaction, not an earlier separate check.
+Managed model/tool resources continue to require the company's own grants; the requester's
+Conversation Use and Invoke grants never substitute for them. Recovery also requires the selected
+history prefix to contain the verified first instruction, including when a saved anchor is supplied.
+
+Validation passes 648 relevant tests: 231 scheduling, 173 input assembly, 47 run admission and
+snapshot recovery, 40 agent models, 10 managed execution evidence, and 147 conversation routines,
+turns and output checks. All six affected TypeScript targets pass. Mechanical style checks 30
+production files with zero errors/warnings; Prisma ownership checks 332 files with zero errors;
+module growth has zero errors/candidates. The unchanged agent-domain guard is also green.
+Independent integrated review and architecture post-review pass against the 49-file source
+manifest `793886dcc9ce71628bc462119cb8894788231592958556b8409c47facf89eb28`.
+Review corrected resource-principal borrowing, automatic requester audit attribution and an empty
+history-anchor acceptance bug; each has regression coverage. A subsequent comments-only pass
+clarifies the public read-only recovery exception and the consequential contracts.
+An independently checked barrel correction keeps new matching/mapping helpers package-internal;
+the prior public admission class remains exported. All three affected consumer TypeScript targets
+pass after that correction.
+
+The transaction tests exercise the actual admission and task-receipt owners with rollback and
+lost-acknowledgement fixtures, not live PostgreSQL/Kurrent/Absurd execution. No live service or VM
+was started. No schema, workload, route or frontend changed. Remaining schedule work is:
+
+- Wire the existing libraries through a thin app composition; register both routine tasks with
+  the control-plane queue authority and inject the recovery dispatcher into conversation turns.
+- Repair active schedules before workers start. The existing limit-only method cannot page
+  beyond its first 100 rows; add cursor-based recovery rather than looping the same batch.
+- Derive firing progress from saved run/output evidence and repair lost acknowledgements. The
+  existing `recordRunProgress` port has no production caller; a workflow return is not proof of
+  completed output or a resolved external action.
+- Add authenticated creation/control APIs, reviewed screens and the preconfigured agent form tool.
+- Qualify scheduled/manual runs, current-permission revocation, approval, overlap and restart with
+  real accounts and databases. Global/group/agent aggregate budgets remain a separate MVP item.
 
 ## Conversational routines — source implementation in progress, 25 September 2026
 

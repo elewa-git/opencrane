@@ -1,9 +1,21 @@
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
+import { AgentRunTriggers } from "../agent-run.types";
+
 import { __LatestRoutineOccurrence, __NextRoutineOccurrence } from "./routine-calendar";
-import type { RoutineFiringPlan, RoutineFiringSelection, RoutineFiringStatusHandler } from "./routine-firing.types";
+import type { RoutineFiringAuditActor, RoutineFiringPlan, RoutineFiringSelection, RoutineFiringStatusHandler } from "./routine-firing.types";
 import { __RoutineFiringSelectionSchema } from "./routine-firing.validator";
 import { RoutineFiringDisposition, RoutineFiringTrigger, RoutineStatus } from "./routine.types";
+
+const _AUTOMATIC_ROUTINE_ACTOR_ID = "opencrane-server/routine-schedule/v1";
+
+/** Maps a validated routine trigger to its audit actor without changing the entitled Principal. */
+export function __RoutineFiringAuditActor(trigger: RoutineFiringTrigger | `${AgentRunTriggers.Scheduled}` | `${AgentRunTriggers.Manual}`, requesterPrincipalId: string): RoutineFiringAuditActor
+{
+	if (trigger === RoutineFiringTrigger.Automatic || trigger === AgentRunTriggers.Scheduled)
+		return { actorKind: "system", actorId: _AUTOMATIC_ROUTINE_ACTOR_ID };
+	return { actorKind: "user", actorId: requesterPrincipalId };
+}
 
 /** Dispatches every saved routine status through an explicit lifecycle owner. */
 const _StatusHandlers: Readonly<Record<RoutineStatus, RoutineFiringStatusHandler>> = {

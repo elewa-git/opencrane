@@ -155,6 +155,6 @@ export interface RoutineRunAdmissionReceipt
 /** Admits or recovers the root run after scheduling has saved both external-stage receipts. */
 export interface RoutineRunAdmissionPort
 {
-	/** Admits the root AgentRun while its owner repeats every current authority check. */
-	admit(command: RoutineRunAdmissionInput): Promise<RoutineRunAdmissionReceipt>;
+	/** Admits the root run, or returns null after a definite denial commits a firing refusal. */
+	admit(command: RoutineRunAdmissionInput): Promise<RoutineRunAdmissionReceipt | null>;
 }

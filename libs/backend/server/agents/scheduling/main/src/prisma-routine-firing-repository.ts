@@ -2,7 +2,7 @@ import { AgentRoutineFiringDisposition, AgentRoutineStatus, Prisma } from "@pris
 
 import { ___ParseRoutineComputerActivationReceipt, ___ParseRoutineOccurrencePreparationReceipt, type RoutineComputerActivationReceipt, type RoutineFiringIdentity, type RoutineOccurrenceCommand, type RoutineOccurrencePreparationReceipt } from "@opencrane/backend/server/agents/scheduling/contract";
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
-import { RoutineFiringDisposition, RoutineFiringTrigger, RoutineStatus, __PlanRoutineFiring } from "@opencrane/models/agents";
+import { RoutineFiringDisposition, RoutineFiringTrigger, RoutineStatus, __PlanRoutineFiring, __RoutineFiringAuditActor } from "@opencrane/models/agents";
 
 import { RoutineCommandOutcome, type AutomaticRoutineFiringCommand, type RoutineFiringResult } from "./routine-authority.types";
 import { __MayTransitionRoutineFiringProgress } from "./routine-firing-lifecycle";
@@ -10,9 +10,6 @@ import type { CurrentRoutineRows, RoutineFactsRepository, RoutineFiringActor } f
 import { _MODEL_FIRING_DISPOSITION, _MODEL_FIRING_TRIGGER, _PRISMA_FIRING_DISPOSITION, _PRISMA_FIRING_TRIGGER } from "./routine-prisma-mapping";
 import { ROUTINE_SCHEDULE_TASK_NAME } from "./routine-workflow-contract";
 import { RoutineOccurrenceStage, type RoutineFiringProgressCommand, type RoutineOccurrencePreparationInput, type RoutineOccurrenceTaskInput, type RoutineScheduleTaskInput, type RoutineTaskAdmissionPort, type RoutineWorkflowPersistence } from "./routine-workflow.types";
-
-/** Stable server actor recorded when a durable schedule task causes an automatic effect. */
-const _AUTOMATIC_ROUTINE_ACTOR_ID = "opencrane-server/routine-schedule/v1";
 
 /** Selects the firing facts required by preparation, activation, and run binding. */
 const _FIRING_SELECT = {
@@ -106,7 +103,7 @@ export class PrismaRoutineFiringRepository implements RoutineWorkflowPersistence
 		}
 		let disposition: RoutineFiringDisposition = plan.disposition;
 		let refusalReason: string | null = null;
-		const actor = _FiringActor(RoutineFiringTrigger.Automatic, routine.originalRequesterPrincipalId);
+		const actor = __RoutineFiringAuditActor(RoutineFiringTrigger.Automatic, routine.originalRequesterPrincipalId);
 		if (disposition === RoutineFiringDisposition.Preparing && !(await this._canPrepareFiring(current, actor, now, plan.firingKey)))
 		{
 			disposition = RoutineFiringDisposition.Refused;
@@ -300,7 +297,7 @@ export class PrismaRoutineFiringRepository implements RoutineWorkflowPersistence
 	{
 		const current = await this.facts.current(identity.siloId, identity.routineId);
 		const now = await this.facts.databaseNow();
-		const actor = _FiringActor(_MODEL_FIRING_TRIGGER[firing.trigger], firing.routine.originalRequesterPrincipalId);
+		const actor = __RoutineFiringAuditActor(_MODEL_FIRING_TRIGGER[firing.trigger], firing.routine.originalRequesterPrincipalId);
 		const currentlyAllowed = current !== null && this.facts.modelStatus(current.routine) !== RoutineStatus.Retired
 			&& await this.facts.currentAudienceAllowed(current.routine, current.revision, now)
 			&& await this.facts.findCurrentManagedAgent(current.routine) !== null
@@ -352,16 +349,6 @@ export class PrismaRoutineFiringRepository implements RoutineWorkflowPersistence
 		const input: RoutineOccurrenceTaskInput = { siloId, firingId, routineId, routineRevision };
 		return await this.taskAdmission.admitOccurrence(this.transaction, input);
 	}
-}
-
-/** Derives the actual effect actor from the persisted firing trigger. */
-function _FiringActor(trigger: RoutineFiringTrigger, requesterPrincipalId: string): RoutineFiringActor
-{
-	if (trigger === RoutineFiringTrigger.Automatic)
-	{
-		return { actorKind: "system", actorId: _AUTOMATIC_ROUTINE_ACTOR_ID };
-	}
-	return { actorKind: "user", actorId: requesterPrincipalId };
 }
 
 /** Checks a stored task tuple against an engine receipt. */

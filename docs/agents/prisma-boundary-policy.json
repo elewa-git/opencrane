@@ -3,6 +3,34 @@
 	"owners": {
 		"repositories": [
 			{
+				"path": "libs/backend/agents/execution/runs/main/src/prisma-routine-run-snapshot-recovery-repository.ts",
+				"adapter": "PrismaRoutineRunSnapshotRecoveryRepository",
+				"contract": "RoutineRunSnapshotRecovery",
+				"contractImportPath": "./routine-run-snapshot-recovery.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/agents/scheduling/main/src/prisma-routine-occurrence-run-admission-repository.ts",
+				"adapter": "PrismaRoutineOccurrenceRunAdmissionRepository",
+				"contract": "RoutineOccurrenceRunAdmissionRepository",
+				"contractImportPath": "@opencrane/backend/server/agents/scheduling/contract",
+				"constructs": [
+					{ "adapter": "PrismaRoutineFactsRepository", "importPath": "./routine-prisma-facts" },
+					{ "adapter": "PrismaRoutineFiringRepository", "importPath": "./prisma-routine-firing-repository" }
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/routines/prisma-routine-turn-compiler.ts",
+				"adapter": "PrismaRoutineTurnCompilerRepository",
+				"contract": "RoutineTurnDispatcher",
+				"contractImportPath": "./routine-turn-compiler.types",
+				"constructs": [
+					{ "adapter": "PrismaRoutineRunSnapshotRecoveryRepository", "importPath": "@opencrane/backend/agents/execution/runs" },
+					{ "adapter": "PrismaConversationComputerTurnWorkflowReceiptRepository", "importPath": "../computers/turns/workflow/prisma-conversation-computer-turn-workflow-receipt-repository" },
+					{ "adapter": "PrismaAuthorizationAuthority", "importPath": "@opencrane/backend/server/iam/authorization" }
+				]
+			},
+			{
 				"path": "libs/backend/server/agents/scheduling/main/src/prisma-routine-occurrence-activation-repository.ts",
 				"adapter": "PrismaRoutineOccurrenceActivationRepository",
 				"contract": "RoutineOccurrenceActivationRepository",
@@ -1703,6 +1731,24 @@
 		],
 		"unitsOfWork": [
 			{
+				"path": "libs/backend/server/conversations/main/src/routines/prisma-routine-run-admission.ts",
+				"adapter": "PrismaRoutineRunAdmissionUnitOfWork",
+				"contract": "RoutineRunAdmissionPort",
+				"contractImportPath": "@opencrane/backend/server/agents/scheduling/contract",
+				"constructs": [
+					{ "adapter": "PrismaConversationComputerTurnWorkflowReceiptRepository", "importPath": "../computers/turns/workflow/prisma-conversation-computer-turn-workflow-receipt-repository" }
+				]
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/routines/prisma-routine-turn-compiler.ts",
+				"adapter": "PrismaRoutineTurnCompilerUnitOfWork",
+				"contract": "RoutineTurnDispatcher",
+				"contractImportPath": "./routine-turn-compiler.types",
+				"constructs": [
+					{ "adapter": "PrismaRoutineTurnCompilerRepository", "importPath": "<same-file>" }
+				]
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/routines/prisma-routine-computer-activation-projection.ts",
 				"adapter": "PrismaRoutineComputerActivationProjectionUnitOfWork",
 				"contract": "RoutineComputerActivationProjection",
@@ -2895,6 +2941,8 @@
 			}
 		],
 		"compositions": [
+			"libs/backend/server/conversations/main/src/routines/routine-run-input-composition.ts",
+			"libs/backend/server/conversations/main/src/routines/routine-run-admission.types.ts",
 			"libs/backend/server/agents/scheduling/main/src/routine-prisma-facts.types.ts",
 			"libs/backend/server/agents/scheduling/main/src/routine-unit-of-work.types.ts",
 			"libs/backend/agents/execution/elicitation/main/src/self-tool-approval-scope.router.ts",

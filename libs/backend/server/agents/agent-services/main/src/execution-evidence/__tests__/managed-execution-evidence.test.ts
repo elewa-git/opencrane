@@ -1,6 +1,6 @@
 import { AgentIdentityStates } from "@opencrane/contracts";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
-import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
+import { ExecutionSubjectMembershipKinds, RoutineFiringTrigger } from "@opencrane/models/agents";
 import { describe, expect, it, vi } from "vitest";
 
 import { ManagedExecutionEvidenceAuthority } from "../managed-execution-evidence";
@@ -27,9 +27,23 @@ describe("ManagedExecutionEvidenceAuthority", function _Suite()
 		const result = await f.authority.load(f.command, f.transaction as never);
 		expect(result).toMatchObject({ outcome: "loaded", value: { membership: { kind: ExecutionSubjectMembershipKinds.Managed, principalId: "company-principal", trustedUntil: new Date(6_000).toISOString(), agentRevisionDigest: "sha256:revision", decisionEvidenceId: "sha256:model" }, requesterMembership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "human-1", revision: 7 }, admissionDecisionDigest: "sha256:invoke" } });
 		expect(f.repository.verifyRequesterMembership).toHaveBeenCalledExactlyOnceWith("silo-1", "human-1", 2_000);
-		expect(f.admitPrincipal).toHaveBeenNthCalledWith(1, expect.objectContaining({ principalId: "human-1", action: ProductAuthorizationActions.Invoke, membershipRevision: 7 }));
+		expect(f.admitPrincipal).toHaveBeenNthCalledWith(1, expect.objectContaining({ principalId: "human-1", actorKind: "user", actorId: "human-1", action: ProductAuthorizationActions.Invoke, membershipRevision: 7 }));
 		expect(f.admitPrincipal).toHaveBeenNthCalledWith(2, expect.objectContaining({ principalId: "company-principal", action: ProductAuthorizationActions.Use, resource: { kind: ProductAuthorizationResourceKinds.ModelDefinition, id: "model-1" } }));
 		expect(f.admitPrincipal.mock.calls[1]?.[0]).not.toHaveProperty("membershipRevision");
+	});
+
+	it("records the scheduler for automatic Invoke, the original requester for manual Invoke, and keeps model Use on the company", async function _RoutineActors()
+	{
+		const automatic = _Fixture();
+		const manual = _Fixture();
+		await automatic.authority.load({ ...automatic.command, routineTrigger: RoutineFiringTrigger.Automatic }, automatic.transaction as never);
+		await manual.authority.load({ ...manual.command, routineTrigger: RoutineFiringTrigger.Manual }, manual.transaction as never);
+
+		expect(automatic.admitPrincipal).toHaveBeenNthCalledWith(1, expect.objectContaining({ principalId: "human-1", actorKind: "system", actorId: "opencrane-server/routine-schedule/v1", action: ProductAuthorizationActions.Invoke }));
+		expect(manual.admitPrincipal).toHaveBeenNthCalledWith(1, expect.objectContaining({ principalId: "human-1", actorKind: "user", actorId: "human-1", action: ProductAuthorizationActions.Invoke }));
+		expect(automatic.admitPrincipal).toHaveBeenNthCalledWith(2, expect.objectContaining({ principalId: "company-principal", actorKind: "agent-service", actorId: "company-principal", action: ProductAuthorizationActions.Use }));
+		expect(manual.admitPrincipal).toHaveBeenNthCalledWith(2, expect.objectContaining({ principalId: "company-principal", actorKind: "agent-service", actorId: "company-principal", action: ProductAuthorizationActions.Use }));
+		expect(automatic.admitPrincipal.mock.calls[0]?.[0].argumentsDigest).not.toBe(manual.admitPrincipal.mock.calls[0]?.[0].argumentsDigest);
 	});
 
 	it("binds the exact tool selection into the effective contract digest", async function _BindsTools()

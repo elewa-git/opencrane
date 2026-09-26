@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { __PlanRoutineFiring } from "../routine-firing";
+import { __PlanRoutineFiring, __RoutineFiringAuditActor } from "../routine-firing";
+import { AgentRunTriggers } from "../../agent-run.types";
 import type { RoutineFiringPlan, RoutineFiringSelection } from "../routine-firing.types";
 import { RoutineFiringDisposition, RoutineFiringTrigger, RoutineStatus } from "../routine.types";
 
@@ -90,6 +91,17 @@ describe("routine status and trigger policy", function _policy()
 		}));
 		expect(plan.disposition).toBe(RoutineFiringDisposition.Preparing);
 		expect("advanceAutomaticCursorToEpochMs" in plan).toBe(false);
+	});
+});
+
+describe("routine firing audit actors", function _AuditActors()
+{
+	it("records the scheduler for automatic triggers and the saved requester for manual triggers", function _MapsTriggers()
+	{
+		expect(__RoutineFiringAuditActor(RoutineFiringTrigger.Automatic, "requester-1")).toEqual({ actorKind: "system", actorId: "opencrane-server/routine-schedule/v1" });
+		expect(__RoutineFiringAuditActor(AgentRunTriggers.Scheduled, "requester-1")).toEqual({ actorKind: "system", actorId: "opencrane-server/routine-schedule/v1" });
+		expect(__RoutineFiringAuditActor(RoutineFiringTrigger.Manual, "requester-1")).toEqual({ actorKind: "user", actorId: "requester-1" });
+		expect(__RoutineFiringAuditActor(AgentRunTriggers.Manual, "requester-1")).toEqual({ actorKind: "user", actorId: "requester-1" });
 	});
 });
 

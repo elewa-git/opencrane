@@ -1,4 +1,4 @@
-import { AgentRoutineFiringDisposition, AgentRoutineFiringTrigger, AgentRunTrigger, Prisma, type AgentRun, type PrismaClient, type RunInputSnapshot as PrismaRunInputSnapshot } from "@prisma/client";
+import { AgentRoutineFiringDisposition, AgentRoutineFiringTrigger, AgentRunTrigger, Prisma, type AgentRoutineFiring, type AgentRun, type PrismaClient, type RunInputSnapshot as PrismaRunInputSnapshot } from "@prisma/client";
 
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 import { PrismaAuthorizationAuthority, PrismaManagedAuthorizationGrantRepository, type ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
@@ -206,12 +206,8 @@ class PrismaRunAdmissionRepository implements RunAdmissionPersistenceRepository
 	/** Verify a duplicate still owns the exact firing and saved occurrence workflow fence. */
 	private async _MatchesRoutineFiring(runId: string, command: Exclude<RunAdmissionCommand, { readonly trigger: `${AgentRunTriggers.Interactive}` }>): Promise<boolean>
 	{
-		const routine = command.routineInput;
-		const firing = await this._transaction.agentRoutineFiring.findUnique({ where: { id: routine.firingId } });
-		return firing !== null && _AllowsDuplicateRoutineAdmission(firing.disposition) && firing.siloId === command.siloId && firing.routineId === routine.routineId && firing.routineRevision === routine.routineRevision
-			&& firing.conversationId === command.conversationId && firing.requesterPrincipalId === routine.requesterPrincipalId && firing.trigger === _PrismaRoutineTrigger(command)
-			&& _SameInstant(firing.scheduledSlot, routine.scheduledSlot) && firing.runId === runId && firing.workflowTaskId === routine.workflowTaskId
-			&& firing.workflowTaskName === routine.workflowTaskName && firing.workflowTaskKey === routine.workflowTaskKey;
+		const firing = await this._transaction.agentRoutineFiring.findUnique({ where: { id: command.routineInput.firingId } });
+		return _MatchesRoutineFiring(firing, runId, command);
 	}
 
 	/**
@@ -237,7 +233,7 @@ class PrismaRunAdmissionRepository implements RunAdmissionPersistenceRepository
 }
 
 /** Check the immutable run coordinates selected by the user-visible idempotency key. */
-function _MatchesRun(run: AgentRun, command: RunAdmissionCommand): boolean
+export function _MatchesRun(run: AgentRun, command: RunAdmissionCommand): boolean
 {
 	if (run.siloId !== command.siloId || run.agentServiceId !== command.agentServiceId || run.conversationId !== command.conversationId || run.trigger !== _PrismaRunTrigger(command))
 		return false;
@@ -250,7 +246,7 @@ function _MatchesRun(run: AgentRun, command: RunAdmissionCommand): boolean
 }
 
 /** Check the current immutable snapshot coordinates before returning stored JSON to a duplicate caller. */
-function _MatchesSnapshot(snapshot: PrismaRunInputSnapshot, storedRunId: string, command: RunAdmissionCommand): boolean
+export function _MatchesSnapshot(snapshot: PrismaRunInputSnapshot, storedRunId: string, command: RunAdmissionCommand): boolean
 {
 	const parsed = ___ExecutionSubjectSchema.safeParse(snapshot.executionSubject);
 	if (!parsed.success || parsed.data.principalId !== snapshot.principalId || parsed.data.agentIdentityId !== snapshot.agentIdentityId)
@@ -355,11 +351,13 @@ function _PrismaRoutineTrigger(command: Exclude<RunAdmissionCommand, { readonly 
 	return command.trigger === AgentRunTriggers.Scheduled ? AgentRoutineFiringTrigger.Automatic : AgentRoutineFiringTrigger.Manual;
 }
 
-/** Deny replay after an occurrence is cancelled, refused, failed, or deliberately skipped. */
-function _AllowsDuplicateRoutineAdmission(disposition: AgentRoutineFiringDisposition): boolean
+/** Check one stored occurrence against the exact routine command and linked run. */
+export function _MatchesRoutineFiring(firing: AgentRoutineFiring | null, runId: string, command: Exclude<RunAdmissionCommand, { readonly trigger: `${AgentRunTriggers.Interactive}` }>): boolean
 {
-	return disposition !== AgentRoutineFiringDisposition.Cancelled && disposition !== AgentRoutineFiringDisposition.Refused
-		&& disposition !== AgentRoutineFiringDisposition.Failed && disposition !== AgentRoutineFiringDisposition.SkippedOverlap;
+	const routine = command.routineInput;
+	const allowed = firing !== null && firing.disposition !== AgentRoutineFiringDisposition.Cancelled && firing.disposition !== AgentRoutineFiringDisposition.Refused && firing.disposition !== AgentRoutineFiringDisposition.Failed && firing.disposition !== AgentRoutineFiringDisposition.SkippedOverlap;
+	return allowed && firing.siloId === command.siloId && firing.routineId === routine.routineId && firing.routineRevision === routine.routineRevision && firing.conversationId === command.conversationId && firing.requesterPrincipalId === routine.requesterPrincipalId && firing.trigger === _PrismaRoutineTrigger(command)
+		&& _SameInstant(firing.scheduledSlot, routine.scheduledSlot) && firing.runId === runId && firing.workflowTaskId === routine.workflowTaskId && firing.workflowTaskName === routine.workflowTaskName && firing.workflowTaskKey === routine.workflowTaskKey;
 }
 
 /** Compare a nullable stored DateTime with its canonical snapshot representation. */
@@ -386,7 +384,7 @@ function _RunInputSnapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnaps
  * Called by: duplicate admission recovery and run-input consumers that load a frozen attempt.
  * @see _RunInputSnapshotData for the write projection.
  */
-function _RunInputSnapshot(row: PrismaRunInputSnapshot): RunInputSnapshot
+export function _RunInputSnapshot(row: PrismaRunInputSnapshot): RunInputSnapshot
 {
 	const executionSubject = _ExecutionSubject(row.executionSubject, row.agentIdentityId, row.principalId);
 	const parsedOrigin = ___RunInputOriginSchema.safeParse(row.origin);

@@ -298,6 +298,30 @@ describe("routine durable workflows", function _suite()
 		expect(persistence.bindAdmittedRun).not.toHaveBeenCalled();
 	});
 
+	it("returns a null run after admission commits a definite refusal", async function _RunAdmissionRefusal()
+	{
+		const preparation = { receiptId: "preparation-1", historyReference: "history-1", digest: `sha256:${"b".repeat(64)}` as const };
+		const activation = { receiptId: "activation-1", computerReference: "computer-1", digest: `sha256:${"c".repeat(64)}` as const };
+		const persistence = {
+			authorizeOccurrenceStage: vi.fn().mockResolvedValue(_savedOccurrence()),
+			recordPreparation: vi.fn().mockResolvedValue(preparation),
+			recordActivation: vi.fn().mockResolvedValue(activation),
+			bindAdmittedRun: vi.fn(),
+		} as unknown as RoutineWorkflowPersistence;
+		const dependencies = {
+			persistence,
+			cipher: { decrypt: vi.fn().mockResolvedValue("Do the work."), encrypt: vi.fn() },
+			preparation: { prepare: vi.fn().mockResolvedValue(preparation) },
+			activation: { activate: vi.fn().mockResolvedValue({ status: RoutineComputerActivationStatus.Active, receipt: activation }) },
+			runAdmission: { admit: vi.fn().mockResolvedValue(null) },
+		} as unknown as RoutineWorkflowDependencies;
+		const context = { task: _TASK, attempt: 1, checkpoint: vi.fn(async (_step, operation) => await operation()), waitForEvent: vi.fn(), spawnChild: vi.fn(), awaitChild: vi.fn(), sleepUntil: vi.fn() } as unknown as IWorkflowTaskContext;
+
+		await expect(__CreateRoutineWorkflowDefinitions(dependencies).occurrence.run(context, { siloId: "silo-1", firingId: "firing-1", routineId: "routine-1", routineRevision: 2 })).resolves.toEqual({ firingId: "firing-1", runId: null });
+		expect(dependencies.runAdmission.admit).toHaveBeenCalledOnce();
+		expect(persistence.bindAdmittedRun).not.toHaveBeenCalled();
+	});
+
 	it("repairs a committed run backlink before returning from replay", async function _repairRunBinding()
 	{
 		const persistence = {

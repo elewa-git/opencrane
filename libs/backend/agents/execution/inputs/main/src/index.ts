@@ -15,6 +15,8 @@ export { ManagedRoutineExecutionSubjectAuthority } from "./subjects/managed-rout
 export { PrismaConversationExecutionSubjectAuthority } from "./subjects/prisma-conversation-execution-subject-authority";
 export { __RunInputAuthorityExpiresAt } from "./assembly/run-input-authority-expiry";
 export type { ExecutionSubjectAuthority } from "./assembly/session-assembly.types";
+export { SessionAssemblyLoadOutcomes } from "./assembly/session-assembly.types";
+export { TransactionBoundProductResourceAuthorizationSource } from "./sources/product-resource-authorization-source";
 export type { RoutineOccurrencePromptAdmissionQuery, RoutineOccurrencePromptAdmissionRead, RoutineOccurrencePromptAdmissionReader } from "./sources/routine-occurrence-prompt.types";
 export type { ManagedConversationExecutionSubjectDependencies } from "./subjects/managed-conversation-execution-subject-authority.types";
 export type { ManagedRoutineExecutionSubjectCoordinates, ManagedRoutineExecutionSubjectDependencies } from "./subjects/managed-routine-execution-subject-authority.types";

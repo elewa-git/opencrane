@@ -69,6 +69,9 @@ persistence; a wrong answer here can only refuse a legal move, never invent one.
   `RoutineFiringTrigger`, `RoutineFiringDisposition`, `__ParseRoutineSchedule`,
   `__NextRoutineOccurrence`, `__LatestRoutineOccurrence`, `__PreviewRoutineOccurrences`, and
   `__PlanRoutineFiring`.
+- `__RoutineFiringAuditActor` derives the audit actor from the stored trigger: automatic work is
+  attributed to the scheduler service; manual work retains the original requester. This pure
+  mapping grants no permission and never creates a current human sign-in.
 - `__Is…TransitionAllowed` — the guard functions over the service, revision, and run transition tables.
 
 ## Boundary

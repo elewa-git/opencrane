@@ -14,7 +14,14 @@ export function _AssertRoutineActivationHistory(command: RoutineOccurrenceComman
 {
 	if (record === null)
 		throw new Error("Routine activation requires its prepared occurrence history");
-	const expected: RoutineOccurrenceCommand = {
+	if (!isDeepStrictEqual(command, _RoutineOccurrenceCommand(record)) || !isDeepStrictEqual(preparation, _RoutinePreparationReceipt(record)))
+		throw new Error("Routine activation command or preparation differs from its saved history");
+}
+
+/** Recovers the original unadmitted command from immutable instruction evidence. */
+export function _RoutineOccurrenceCommand(record: RoutineOccurrenceHistoryRecord): RoutineOccurrenceCommand
+{
+	return {
 		siloId: record.siloId, firingId: record.origin.firingId, routineId: record.origin.routineId,
 		routineRevision: record.origin.routineRevision, task: record.task, admittedRunId: null,
 		trigger: record.origin.trigger, scheduledSlot: record.origin.scheduledSlot,
@@ -23,8 +30,6 @@ export function _AssertRoutineActivationHistory(command: RoutineOccurrenceComman
 		requesterIssuer: record.requesterIssuer, requesterSubjectId: record.requesterSubjectId,
 		requesterAuthenticatedAt: record.requesterAuthenticatedAt, audiencePrincipalIds: record.audiencePrincipalIds,
 	};
-	if (!isDeepStrictEqual(command, expected) || !isDeepStrictEqual(preparation, _RoutinePreparationReceipt(record)))
-		throw new Error("Routine activation command or preparation differs from its saved history");
 }
 
 /** Keeps every poll and lost-response retry on the computer's initial generation. */

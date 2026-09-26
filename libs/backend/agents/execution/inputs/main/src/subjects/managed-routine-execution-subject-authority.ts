@@ -2,7 +2,7 @@ import { ExecutionEvidenceOutcomes } from "@opencrane/backend/server/agents/agen
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 import type { RoutineRunAdmissionCommand } from "@opencrane/backend/agents/execution/runs";
 import { AgentIdentityKinds, AgentRunTriggers } from "@opencrane/contracts";
-import type { ExecutionSubject } from "@opencrane/models/agents";
+import { RoutineFiringTrigger, type ExecutionSubject } from "@opencrane/models/agents";
 
 import { SessionAssemblyLoadOutcomes, type ExecutionSubjectAuthority, type SessionAssemblyCommand, type SessionAssemblyLoad } from "../assembly/session-assembly.types";
 import { _MatchesConversationExecutionLease } from "./conversation-execution-subject.validator";
@@ -44,7 +44,8 @@ export class ManagedRoutineExecutionSubjectAuthority implements ExecutionSubject
 			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "identity_unavailable" };
 		if (transaction.authorization === undefined)
 			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "product_authorization_unavailable" };
-		const evidence = await this.dependencies.executionEvidence(transaction).load({ identity: identity.identity, requesterPrincipalId: command.routineInput.requesterPrincipalId, agentRevisionId: run.agentRevisionId }, { authorization: transaction.authorization, admittedAtEpochMs: transaction.admittedAtEpochMs });
+		const routineTrigger = command.trigger === AgentRunTriggers.Scheduled ? RoutineFiringTrigger.Automatic : RoutineFiringTrigger.Manual;
+		const evidence = await this.dependencies.executionEvidence(transaction).load({ identity: identity.identity, requesterPrincipalId: command.routineInput.requesterPrincipalId, agentRevisionId: run.agentRevisionId, routineTrigger }, { authorization: transaction.authorization, admittedAtEpochMs: transaction.admittedAtEpochMs });
 		if (evidence.outcome === ExecutionEvidenceOutcomes.Denied)
 			return evidence;
 		const value = evidence.value;

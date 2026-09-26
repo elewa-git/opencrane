@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
 import type { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
-import type { RoutineStatus, RoutineUnfinishedFiringDisposition } from "@opencrane/models/agents";
+import type { RoutineFiringAuditActor, RoutineStatus, RoutineUnfinishedFiringDisposition } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
 import type { RoutineCaller } from "./routine-authority.types";
@@ -34,13 +34,7 @@ export interface CurrentManagedAgent
 }
 
 /** Trusted actor recorded beside a firing effect admission. */
-export interface RoutineFiringActor
-{
-	/** Manual work is user-initiated; automatic work is initiated by the durable scheduler. */
-	readonly actorKind: "user" | "system";
-	/** Stable human Principal or reviewed server actor profile. */
-	readonly actorId: string;
-}
+export type RoutineFiringActor = RoutineFiringAuditActor;
 
 /** Transaction-scoped current facts consumed by routine persistence repositories. */
 export interface RoutineFactsRepository

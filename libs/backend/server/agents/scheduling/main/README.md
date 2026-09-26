@@ -82,6 +82,10 @@ actor from the persisted trigger rather than accepting it from a worker request.
 - `PrismaRoutineOccurrenceActivationRepository` adopts the computer owner's transaction, matches
   the exact saved preparation and repeats current activation authority before first activation or
   receipt recovery. It records or refuses only an unadmitted preparing firing.
+- `PrismaRoutineOccurrenceRunAdmissionRepository` is the final transaction-bound run fence: it
+  matches the immutable command and both stage receipts, then rechecks current authority. A denial
+  can mark only a preparing, unadmitted firing as `Refused`; this fence admits the root run but never
+  claims or starts runnable work.
 - `RoutineInstructionCipherAdapter` binds encrypted instructions to the silo, destination,
   requester and immutable routine revision. Composition supplies the existing mounted payload
   cipher; this package neither loads keys nor implements another encryption algorithm.

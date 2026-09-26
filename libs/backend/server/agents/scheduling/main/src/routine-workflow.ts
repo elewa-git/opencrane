@@ -69,6 +69,10 @@ async function _RunOccurrence(dependencies: RoutineWorkflowDependencies, context
 	{
 		return await dependencies.runAdmission.admit({ ...occurrence, preparation: savedPreparation, activation: savedActivation });
 	});
+	if (admissionValue === null)
+	{
+		return { firingId: identity.firingId, runId: null };
+	}
 	const admission = ___ParseRoutineRunAdmissionReceipt(admissionValue);
 	await dependencies.persistence.bindAdmittedRun(identity, admission.runId);
 	return { firingId: identity.firingId, runId: admission.runId };

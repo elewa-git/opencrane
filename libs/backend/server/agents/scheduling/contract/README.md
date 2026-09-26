@@ -47,6 +47,10 @@ result therefore stops before scheduling binds a run identifier or advances the 
   authority and bind activation to the exact saved preparation inside its transaction.
 - `RoutineRunAdmissionPort`, `RoutineRunAdmissionInput` and `RoutineRunAdmissionReceipt` cover the
   content-free root AgentRun hand-off after both earlier receipts are saved.
+- `RoutineOccurrenceRunAdmissionRepository` repeats the final scheduling check inside admission,
+  verifies saved receipts during recovery, and refuses only firings without an admitted run.
+  A null admission result means refusal committed; an uncertain commit must throw and retry the
+  same keys instead of recording refusal.
 - `___ParseRoutineOccurrencePreparationReceipt`, `___ParseRoutineComputerActivationResult`,
   `___ParseRoutineComputerActivationReceipt` and `___ParseRoutineRunAdmissionReceipt` restore
   checkpoint evidence without normalising it.

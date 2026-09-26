@@ -16,3 +16,4 @@ export type { RoutineLifecycleDecision } from "./routine-lifecycle.types";
 export type { PrismaRoutineUnitOfWorkDependencies } from "./routine-unit-of-work.types";
 export { RoutineOccurrenceStage } from "./routine-workflow.types";
 export type { RoutineFiringProgressCommand, RoutineOccurrencePreparationInput, RoutineOccurrenceTaskInput, RoutineOccurrenceTaskResult, RoutineScheduleTaskInput, RoutineScheduleTaskResult, RoutineTaskAdmissionPort, RoutineWorkflowDefinitions, RoutineWorkflowDependencies, RoutineWorkflowPersistence } from "./routine-workflow.types";
+export { PrismaRoutineOccurrenceRunAdmissionRepository } from "./prisma-routine-occurrence-run-admission-repository";
