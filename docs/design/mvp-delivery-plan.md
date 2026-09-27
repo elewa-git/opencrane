@@ -13,14 +13,19 @@ and execution-policy items below without rewriting their historical evidence.
   before each model/provider call. A hard cap stops new work, including reserved remaining work,
   and cancellation cascades through descendants; there is no graceful-finishing exemption. A
   provider charge already dispatched cannot be undone, so reservations use a trustworthy worst-case
-  price; unknown cost is never zero. The numeric live-test spend cap is intentionally unresolved.
+  price; unknown cost is never zero. Separately, the live OpenAI MVP qualification envelope is €5
+  total across all test attempts, retries and models, using cheap models; it is not €5 per run and
+  does not change monthly product-budget semantics. Reserve a conservative bound across that whole
+  envelope before paid dispatch; unknown cost is never free.
 - Late invitees may see all existing history in the joined subchat, but never gain implicit parent
   conversation or private-resource grants.
 - Per-tool approval settings use explicit **Allow automatically / Ask / Block** controls. The
   interaction should use OpenCrane's own style and icons; the supplied image is only a visual
   reference. Execution permissions, owner identity and revocation remain independent; automatic
-  mode is an explicit human choice, not a blanket allow. The interaction with the earlier
-  first-write/exact-Always policy still requires an explicit decision.
+  mode is an explicit human choice, not a blanket allow. Selecting **Allow automatically** approves
+  future permitted writes, including the first write, without another first-write prompt; current
+  authority, connection/tool permissions and revocation remain mandatory, and default **Ask** is
+  unchanged.
 - Fresh `testv6` qualification is authorized and verified superseded TEST deployments must be
   retired after each test so compute does not accumulate. Exact resources, in-use state and shared
   dependencies must be checked first; this does not authorize blanket production/data/backup
@@ -28,8 +33,9 @@ and execution-policy items below without rewriting their historical evidence.
   configuration, never exposed or committed. Delegate implementation and test work to cheaper
   Luna/Sol models; root orchestrates and reviews.
 
-These decisions supersede conflicting pending group-attribution/history and “no deploy permission”
-wording only where relevant. They do not claim source completion or live qualification.
+These decisions supersede conflicting pending group-attribution/history, “no deploy permission”,
+unresolved numeric live-test-cap and first-write/Always-policy wording only where relevant. They do
+not claim source completion or live qualification.
 
 OpenCrane gives employees and teams assistants that use company knowledge and tools under company
 control. Personal and group text journeys already have implementation and live evidence. The next

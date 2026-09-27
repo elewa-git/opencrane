@@ -16,7 +16,10 @@ remain open until their source, focused tests, SQL tests and live qualification 
   work, including work remaining under existing reservations, and cancellation cascades through
   descendants; there is no graceful-finishing exemption. Already-dispatched provider charges
   cannot be undone, so reservations must use a trustworthy worst-case price. Unknown cost is not
-  treated as zero. The numeric live-test spend cap remains unanswered and must not be invented.
+  treated as zero. Separately, the live OpenAI MVP qualification envelope is €5 total across all
+  test attempts, retries and models, using cheap models; it is not €5 per run and does not change
+  the product's monthly budget semantics. Reserve a conservative bound across the whole envelope
+  before paid dispatch; unknown cost is never treated as free.
 - **Late subchat participants:** a person joining a shared subchat may see all existing history of
   that joined subchat, but receives no implicit access to the parent conversation or private
   resources. Current conversation access and explicit resource grants still govern every read.
@@ -24,9 +27,10 @@ remain open until their source, focused tests, SQL tests and live qualification 
   per-tool human controls: **Allow automatically**, **Ask**, or **Block**. The interaction should
   use OpenCrane's own style and icons, with the supplied image serving only as a visual reference.
   Execution permissions, owner identity and revocation remain separate; automatic mode is an
-  explicit human policy choice and never means every tool is allowed. The interaction with the
-  earlier first-write/exact Always approval policy still needs one explicit product decision before
-  conflicting behavior is implemented.
+  explicit human policy choice and never means every tool is allowed. Selecting **Allow
+  automatically** also approves future permitted writes, including the first write, without an
+  additional first-write prompt; current authority, connection/tool permissions and revocation
+  remain mandatory, and the default **Ask** behavior is unchanged.
 - **Fresh qualification:** the user authorizes ongoing fresh `testv6` qualification and requires
   verified superseded TEST deployments to be retired after each test so compute does not accumulate.
   Exact resources, in-use state and shared dependencies must be checked first. This is not blanket
@@ -36,9 +40,9 @@ remain open until their source, focused tests, SQL tests and live qualification 
   configuration from `./keys`; it must never be read into output, committed or exposed. Delegate
   implementation and test work to cheaper Luna/Sol models; root orchestrates and reviews.
 
-These decisions supersede older pending group-attribution/history and “no deploy permission” text
-only where those statements conflict. Historical evidence is retained below; the unresolved
-numeric live-test cap and the explicit Always-policy interaction remain open.
+These decisions supersede older pending group-attribution/history, “no deploy permission”,
+unresolved numeric live-test-cap and first-write/Always-policy text only where those statements
+conflict. Historical evidence is retained below.
 
 ## Authenticated routine command API — bounded source increment
 
