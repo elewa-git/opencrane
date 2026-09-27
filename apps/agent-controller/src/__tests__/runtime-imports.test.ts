@@ -9,6 +9,8 @@ it("keeps the worker bundle Prisma-free and uses only declared runtime packages"
 {
 	const root = fileURLToPath(new URL("../../../../", import.meta.url));
 	const manifest = JSON.parse(await readFile(new URL("../../package.json", import.meta.url), "utf8"));
+	expect(manifest.dependencies["cron-parser"]).toBe("5.10.1");
+	expect(manifest.dependencies.luxon).toBe("3.7.2");
 	const result = await build({ absWorkingDir: root, entryPoints: ["apps/agent-controller/src/index.ts"], bundle: true, platform: "node", format: "esm", packages: "external", sourcemap: true, outfile: "dist/apps/agent-controller/index.js", write: false, metafile: true });
 	const externals = Object.values(result.metafile.outputs).flatMap(output => output.imports.filter(item => item.external).map(item => item.path));
 	const prisma = [...Object.keys(result.metafile.inputs), ...externals].filter(path => /(?:^|[/\\])(?:@prisma|\.prisma|prisma|prisma-unit-of-work)(?:[/\\]|$)/u.test(path));

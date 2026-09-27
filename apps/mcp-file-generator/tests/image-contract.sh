@@ -7,6 +7,8 @@ test "$(grep -Ec '^FROM node:22-bookworm-slim@sha256:[a-f0-9]{64}' "$dockerfile"
 grep -Fxq 'USER 65532:65532' "$dockerfile"
 grep -Fxq 'ENTRYPOINT ["node"]' "$dockerfile"
 grep -Fxq 'CMD ["dist/apps/mcp-file-generator/index.js"]' "$dockerfile"
+grep -Fq '"cron-parser": "5.10.1"' apps/mcp-file-generator/package.json
+grep -Fq '"luxon": "3.7.2"' apps/mcp-file-generator/package.json
 grep -Fq '"adaptedVersion": "0.11.0"' apps/mcp-file-generator/project.json
 grep -Fq '"image": "opencrane-mcp-file-generator"' apps/mcp-file-generator/project.json
 grep -Fq '"image-smoke"' apps/mcp-file-generator/project.json

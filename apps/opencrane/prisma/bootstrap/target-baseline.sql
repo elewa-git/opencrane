@@ -4341,7 +4341,7 @@ BEGIN
         IF admitted_run."routine_firing_id" IS DISTINCT FROM NEW."id" OR admitted_run."silo_id" IS DISTINCT FROM NEW."silo_id"
             OR admitted_run."routine_id" IS DISTINCT FROM NEW."routine_id" OR admitted_run."routine_revision" IS DISTINCT FROM NEW."routine_revision"
             OR admitted_run."conversation_id" IS DISTINCT FROM NEW."conversation_id" OR admitted_run."routine_scheduled_slot" IS DISTINCT FROM NEW."scheduled_slot"
-            OR admitted_run."trigger"::TEXT IS DISTINCT FROM CASE WHEN NEW."trigger" = 'automatic' THEN 'scheduled' ELSE 'manual' END
+            OR admitted_run."trigger"::TEXT IS DISTINCT FROM (CASE WHEN NEW."trigger" = 'automatic' THEN 'scheduled' ELSE 'manual' END)
             OR NEW."activation_receipt" IS NULL THEN
             RAISE EXCEPTION 'Routine firing run backlink requires its exact prepared AgentRun';
         END IF;
