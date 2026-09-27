@@ -4,7 +4,7 @@ import { Router } from "@angular/router";
 import { PLATFORM_BRIDGE, type AuthenticationWindowObservation } from "@opencrane/platform";
 
 import { ConversationWorkspacePageComponent } from "../components/conversation-workspace-page/conversation-workspace-page.component";
-import { _ConversationRouteCommands } from "./conversation-workspace-route.state";
+import { _ConversationRouteCommands, _RoutineRouteCommands } from "./conversation-workspace-route.state";
 
 /** Feature-local coordinator for canonical chat URLs and breadcrumb child navigation. */
 @Component({ selector: "wo-conversation-workspace-route", standalone: true, imports: [ConversationWorkspacePageComponent], templateUrl: "./conversation-workspace-route.component.html", styleUrl: "./conversation-workspace-route.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
@@ -49,6 +49,12 @@ export class ConversationWorkspaceRouteComponent
 	protected async selectWorkspaceIndex(): Promise<void>
 	{
 		await this._router.navigate(["/chats"]);
+	}
+
+	/** Opens routine creation with only the current server-selected conversation as its destination. */
+	protected async scheduleRoutine(conversationId: string): Promise<void>
+	{
+		await this._router.navigate(..._RoutineRouteCommands(conversationId));
 	}
 
 	/** Open the fixed server-owned sign-in path without giving the feature navigation authority. */

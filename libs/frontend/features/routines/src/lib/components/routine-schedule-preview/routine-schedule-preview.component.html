@@ -1,0 +1,12 @@
+<section class="routine-preview" aria-labelledby="routine-preview-title">
+	<div class="routine-preview__heading"><div><h3 id="routine-preview-title">Upcoming runs</h3><p>The server applies the same timezone rules used by automatic firing.</p></div><p-button label="Preview schedule" icon="pi pi-calendar-clock" [loading]="loading()" [disabled]="!previewAvailable() || loading()" (onClick)="previewRequested.emit()" /></div>
+	<wo-resource-feedback [loading]="loading()" loadingLabel="Calculating the next five runs…" [error]="error()" [retryAvailable]="error() !== null && previewAvailable()" (retryRequested)="previewRequested.emit()" />
+	@if (stale()) { <p class="routine-preview__stale" role="status">The schedule changed. Preview it again before saving.</p> }
+	@if (preview(); as value) {
+		@if (!stale()) {
+			<p class="routine-preview__schedule"><span class="wo-mono">{{ value.scheduleLabel }}</span> · calculated {{ value.calculatedAtLabel }}</p>
+			<ol>@for (occurrence of value.occurrences; track occurrence) { <li>{{ occurrence }}</li> }</ol>
+		}
+	}
+	<p class="routine-preview__dst">When the clock skips a local time, that run is skipped. When a local time repeats, OpenCrane uses its earliest instant once.</p>
+</section>

@@ -41,6 +41,7 @@
 				"{workspaceRoot}/libs/frontend/features/conversation-workspace/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/settings/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/governance/src/**/*",
+				"{workspaceRoot}/libs/frontend/features/routines/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/tools/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/tools/theme.scss"
 			],
@@ -80,6 +81,7 @@
 				"{workspaceRoot}/libs/frontend/features/conversation-workspace/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/settings/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/governance/src/**/*",
+				"{workspaceRoot}/libs/frontend/features/routines/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/tools/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/tools/theme.scss"
 			],

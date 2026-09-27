@@ -41,20 +41,21 @@ export abstract class OpenCraneApiClientBase<TPaths extends object>
 	 *
 	 * @param method  - HTTP method (`GET`, `POST`, `PUT`, `DELETE`, …).
 	 * @param path    - Path relative to the `/api/v1` base (must start with `/`).
-	 * @param options - Optional JSON `body` and `query` params.
+	 * @param options - Optional JSON `body`, `query` params, and an `AbortSignal` for cancellation.
 	 * @returns The parsed JSON response body, or `undefined` for a 204.
 	 * @throws OpenCraneApiError with the public code and field issues when the response is not 2xx.
+	 * @throws DOMException with name `AbortError` when the supplied signal aborts the fetch.
 	 */
-	public async request<TResponse>(method: string, path: string, options?: { body?: unknown; query?: Record<string, string | number | boolean> }): Promise<TResponse>
+	public async request<TResponse>(method: string, path: string, options?: { body?: unknown; query?: Record<string, string | number | boolean>; signal?: AbortSignal }): Promise<TResponse>
 	{
 		const search = options?.query ? this._queryString(options.query) : "";
-		const init: RequestInit = { method, credentials: "include", headers: { "Content-Type": "application/json" } };
+		const init: RequestInit = { method, credentials: "include", headers: { "Content-Type": "application/json" }, signal: options?.signal };
 		if (options?.body !== undefined)
 		{
 			init.body = JSON.stringify(options.body);
 		}
 		const response = await fetch(`${this._baseUrl}${path}${search}`, init);
-		this._redirectIfUnauthorized(response);
+		this._redirectIfUnauthorized(response, options?.signal);
 		if (!response.ok)
 		{
 			throw await _CreateOpenCraneApiError(response, method, path);
@@ -133,10 +134,10 @@ export abstract class OpenCraneApiClientBase<TPaths extends object>
 		return serialised ? `?${serialised}` : "";
 	}
 
-	/** Redirect to this surface's OIDC login flow on a 401 (shared by the client middleware and {@link request}). */
-	private _redirectIfUnauthorized(response: Response): void
+	/** Redirect to this surface's OIDC login flow on a current 401, never an aborted request. */
+	private _redirectIfUnauthorized(response: Response, signal?: AbortSignal): void
 	{
-		if (response.status === 401 && typeof window !== "undefined")
+		if (response.status === 401 && signal?.aborted !== true && typeof window !== "undefined")
 		{
 			window.location.assign(this.signInUrl(window.location.pathname + window.location.search));
 		}
@@ -151,9 +152,9 @@ export abstract class OpenCraneApiClientBase<TPaths extends object>
 	{
 		const redirectIfUnauthorized = this._redirectIfUnauthorized.bind(this);
 		return {
-			onResponse: function _onResponse({ response }): Response
+			onResponse: function _onResponse({ response, request }): Response
 			{
-				redirectIfUnauthorized(response);
+				redirectIfUnauthorized(response, request.signal);
 				return response;
 			}
 		};

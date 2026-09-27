@@ -1,0 +1,10 @@
+<main class="routine-shell">
+	<header class="routine-shell__header">
+		<a routerLink="/chats" aria-label="Back to chats"><wo-opencrane-brand [appearance]="brandAppearance" /></a>
+		<nav aria-label="Routine navigation">
+			<a routerLink="/routines" routerLinkActive="routine-shell__link--active" [routerLinkActiveOptions]="{ exact: true }">Routines</a>
+			<a routerLink="/chats">Choose a chat</a>
+		</nav>
+	</header>
+	<div class="routine-shell__content"><router-outlet /></div>
+</main>

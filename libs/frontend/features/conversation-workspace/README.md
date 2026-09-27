@@ -163,6 +163,8 @@ is reset, so reloading cannot reopen a stale modal over the access-change explan
 - `CONVERSATION_WORKSPACE_ROUTES` is the child route table the app mounts at `/chats`.
 - `ConversationWorkspacePageComponent` is the composition shell. It emits exact navigation intents
   to the feature-local route coordinator.
+- Its schedule-requested navigation output carries a destination candidate for the routines route;
+  the server still authorizes that candidate and no browser route grants access.
 - Internal header, transcript and composer components own separate typed presentation contracts.
   The header restores context-trigger focus, the transcript owns message anchors and canonical tool-status rows, the page-owned
   conversation body scrolls messages and participant requests together,

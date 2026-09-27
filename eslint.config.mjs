@@ -168,6 +168,7 @@ export default [
             { sourceTag: "scope:execution-inputs", onlyDependOnLibsWithTags: ["scope:agent-services", "scope:agents", "scope:artifacts", "scope:authorization", "scope:conversations", "scope:execution-inputs", "scope:execution-runs", "scope:identity", "scope:membership", "scope:personal-memory", "scope:shared"] },
             { sourceTag: "scope:providers", onlyDependOnLibsWithTags: ["scope:auth", "scope:authorization", "scope:cluster-tenants", "scope:model-routing", "scope:providers", "scope:shared"] },
             { sourceTag: "scope:retrieval", onlyDependOnLibsWithTags: ["scope:auth", "scope:authorization", "scope:retrieval", "scope:shared"] },
+			{ sourceTag: "scope:routines", onlyDependOnLibsWithTags: ["scope:routines", "scope:shared"] },
 			{ sourceTag: "scope:execution-runs", onlyDependOnLibsWithTags: ["scope:agents", "scope:auth", "scope:authorization", "scope:conversations", "scope:execution-runs", "scope:execution-runs-workflow-contract", "scope:runtime-workloads", "scope:shared", "scope:workflows"] },
             { sourceTag: "scope:execution-runs-workflow-contract", onlyDependOnLibsWithTags: ["scope:execution-runs-workflow-contract", "scope:workflows"] },
             { sourceTag: "scope:execution-elicitation", onlyDependOnLibsWithTags: ["scope:agents", "scope:auth", "scope:authorization", "scope:conversations", "scope:execution-elicitation", "scope:execution-runs", "scope:shared"] },
@@ -179,7 +180,7 @@ export default [
 			{ sourceTag: "scope:conversation-workspace", onlyDependOnLibsWithTags: ["scope:conversation-assets", "scope:conversation-elicitation", "scope:conversation-workspace", "scope:conversations", "scope:shared", "scope:user-onboarding", "scope:web"] },
 			{ sourceTag: "scope:web", onlyDependOnLibsWithTags: ["scope:web", "scope:shared"] },
 			{ sourceTag: "scope:governance", onlyDependOnLibsWithTags: ["scope:governance", "scope:shared"] },
-			{ sourceTag: "scope:opencrane-ui", onlyDependOnLibsWithTags: ["scope:conversation-elicitation", "scope:conversation-assets", "scope:conversation-workspace", "scope:governance", "scope:organization-members", "scope:persona-onboarding", "scope:shared", "scope:web"] },
+			{ sourceTag: "scope:opencrane-ui", onlyDependOnLibsWithTags: ["scope:conversation-elicitation", "scope:conversation-assets", "scope:conversation-workspace", "scope:governance", "scope:organization-members", "scope:persona-onboarding", "scope:routines", "scope:shared", "scope:web"] },
             {
               sourceTag: "scope:opencrane",
               onlyDependOnLibsWithTags: [

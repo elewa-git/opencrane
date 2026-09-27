@@ -69,7 +69,8 @@
             [closed]="selected.lifecycle === vm.lifecycles.Closed" [contextPanelOpen]="contextPanelOpen()"
             [contextPanelLabel]="vm.contextPanelLabel()" (backRequested)="backToGroup()"
             [pendingQuestionCount]="vm.elicitationActivity.pendingCount()"
-            (archiveRequested)="archiveConversation()" (closeRequested)="vm.store.close()" (contextRequested)="openContextPanel()" />
+            (archiveRequested)="archiveConversation()" (closeRequested)="vm.store.close()" (contextRequested)="openContextPanel()"
+            (scheduleRequested)="scheduleRoutine()" />
                   <div class="conversation-workspace__body">
                     <wo-conversation-workspace-transcript [entries]="vm.messages()" (assetActionRequested)="vm.assetAction($event)" (askRequested)="vm.askAssistant($event)" (shareRequested)="vm.reviewGroupShare($event)" (childRequested)="openChild($event)" />
                     @if (vm.elicitationStore.elicitation(); as elicitation) {

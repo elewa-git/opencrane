@@ -235,6 +235,11 @@
       "classification": "browser-composition"
     },
     {
+      "path": "apps/opencrane-ui/src/app/routine.providers.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-composition"
+    },
+    {
       "path": "apps/opencrane-ui/src/app/governance.providers.ts",
       "owner": "apps/opencrane-ui",
       "classification": "browser-composition"

@@ -9,11 +9,11 @@ const meta: Meta<ConversationWorkspaceHeaderComponent> =
 	title: "Conversations/Workspace header",
 	component: ConversationWorkspaceHeaderComponent,
 	tags: ["autodocs"],
-	argTypes: { contextRequested: { action: "contextRequested" } },
+	argTypes: { contextRequested: { action: "contextRequested" }, scheduleRequested: { action: "scheduleRequested" } },
 	args:
 	{
 		summary: { id: "chat-1", title: "Branch planning", modeLabel: "Group chat", participantLabel: "Three participants", iconState: ConversationSessionRailIconStates.Group, archived: false },
-		contextPanelLabel: "Files", contextRequested: fn()
+		contextPanelLabel: "Files", contextRequested: fn(), scheduleRequested: fn()
 	}
 };
 export default meta;
@@ -26,6 +26,24 @@ export const Child: Story = { tags: ["visual-test"], args: { hasParent: true } }
 export const Closed: Story = { tags: ["visual-test"], args: { closed: true } };
 /** Pending conversation commands keep the selected heading visible. */
 export const Busy: Story = { args: { busy: true } };
+/** An open conversation forwards one routine-scheduling intent. */
+export const Schedule: Story = { play: async function _Schedule({ canvasElement, args })
+{
+	await userEvent.click(within(canvasElement).getByRole("button", { name: "Schedule routine" }));
+	await expect(args.scheduleRequested).toHaveBeenCalledOnce();
+} };
+/** Closed conversations cannot schedule new routine work. */
+export const ScheduleClosed: Story = { args: { closed: true }, play: async function _ScheduleClosed({ canvasElement, args })
+{
+	await expect(within(canvasElement).getByRole("button", { name: "Schedule routine" })).toBeDisabled();
+	await expect(args.scheduleRequested).not.toHaveBeenCalled();
+} };
+/** Pending conversation commands cannot schedule a second action. */
+export const ScheduleBusy: Story = { args: { busy: true }, play: async function _ScheduleBusy({ canvasElement, args })
+{
+	await expect(within(canvasElement).getByRole("button", { name: "Schedule routine" })).toBeDisabled();
+	await expect(args.scheduleRequested).not.toHaveBeenCalled();
+} };
 /** The existing context action exposes pending questions without introducing a second notification control. */
 export const PendingQuestions: Story = { tags: ["visual-test"], args: { contextPanelLabel: "Activity and files", pendingQuestionCount: 2 }, play: async function _Pending({ canvasElement })
 {

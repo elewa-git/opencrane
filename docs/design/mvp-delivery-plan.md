@@ -37,6 +37,29 @@ These decisions supersede conflicting pending group-attribution/history, “no d
 unresolved numeric live-test-cap and first-write/Always-policy wording only where relevant. They do
 not claim source completion or live qualification.
 
+## Routine browser experience — reviewed source checkpoint
+
+At the pre-publication checkpoint, this source wave adds authenticated list, chat-bound creation, detail, revision,
+control and firing-history routes on base `ae9ff9a1ee19cd7ad823176d7a3a16e141d75f80`. The browser uses
+server-approved audience and managed-service choices, requires a matching server schedule preview,
+keeps the requester selected and preserves exact mutation retry coordinates when a response is
+uncertain. Session and route changes remove protected instructions, rows and result links before a
+late response can update the screen.
+
+Focused validation totals 253 tests across six projects: 46 routine-feature, 24 app-composition, 10
+routine-state, 15 routine-adapter, 17 core and 141 conversation-workspace tests. Feature TypeScript,
+style, Prisma-boundary, module-growth, release and diff checks pass. The current joined Storybook
+build passes, and all 18 tagged routine stories pass their Chromium interaction and accessibility
+checks. Full-page creation candidates plus current detail and history candidates are recorded for
+human review without changing a committed baseline. Independent integrated, architecture,
+state/adapter and component source review pass with no remaining source finding. Publication, Linux
+rendering and human visual approval remain pending.
+
+This wave does not yet provide agent-authored form prefill/tooling, SQL or real-account execution,
+live schedule/history proof or publication. It made no provider call, spent €0 of the €5 live
+qualification envelope, and changed no VM, deployment, database baseline, accepted visual baseline
+or live permission.
+
 ## Authenticated routine API — current source increment
 
 The current source increment covers 11 authenticated operations at `/api/v1/me/routines`: seven

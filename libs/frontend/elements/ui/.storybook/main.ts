@@ -20,6 +20,7 @@ const config: StorybookConfig =
 		,"../../../features/settings/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)"
 		,"../../../features/governance/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)"
 		,"../../../features/tools/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)"
+		,"../../../features/routines/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)"
 	],
 	addons:
 	[

@@ -11,6 +11,20 @@ class _TestApiClient extends OpenCraneApiClientBase<Record<string, never>>
 	{
 		super("https://control.example.test");
 	}
+
+	/** Exercises the generated openapi-fetch middleware without requiring a generated path. */
+	public async protectedRead(signal: AbortSignal): Promise<unknown>
+	{
+		const client = this.client as unknown as { GET(path: string, options: { signal: AbortSignal }): Promise<unknown> };
+		return client.GET("/protected", { signal });
+	}
+}
+
+function _StubBrowserRedirect(): ReturnType<typeof vi.fn>
+{
+	const assign = vi.fn();
+	vi.stubGlobal("window", { location: { assign } });
+	return assign;
 }
 
 describe("OpenCraneApiClientBase.request", function _Suite()
@@ -50,6 +64,43 @@ describe("OpenCraneApiClientBase.request", function _Suite()
 
 		expect(failure).toMatchObject({ status: 502, code: "HTTP_ERROR", issues: [] });
 		expect((failure as Error).message).not.toContain("upstream secret");
+	});
+
+	it("keeps an ordinary current 401 on the sign-in path", async function _CurrentUnauthorized()
+	{
+		const assign = _StubBrowserRedirect();
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("unauthorized", { status: 401 })));
+		const client = new _TestApiClient();
+
+		await client.protectedRead(new AbortController().signal);
+
+		expect(assign).toHaveBeenCalledOnce();
+	});
+
+	it("does not redirect after the request has been aborted", async function _AbortedUnauthorized()
+	{
+		const assign = _StubBrowserRedirect();
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("unauthorized", { status: 401 })));
+		const client = new _TestApiClient();
+		const controller = new AbortController();
+		controller.abort();
+
+		await client.protectedRead(controller.signal);
+
+		expect(assign).not.toHaveBeenCalled();
+	});
+
+	it("passes the abort coordinate to the direct request path", async function _DirectRequestAbort()
+	{
+		const assign = _StubBrowserRedirect();
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("unauthorized", { status: 401 })));
+		const client = new _TestApiClient();
+		const controller = new AbortController();
+		controller.abort();
+
+		await expect(client.request("GET", "/protected", { signal: controller.signal })).rejects.toBeInstanceOf(OpenCraneApiError);
+
+		expect(assign).not.toHaveBeenCalled();
 	});
 });
 

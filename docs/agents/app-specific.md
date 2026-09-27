@@ -129,6 +129,13 @@ Organisation membership uses the same browser authority boundary:
 - [`state/organization/members/adapter`](../../libs/frontend/state/organization/members/adapter/README.md)
   maps the generated signed-in API into that port without interpreting Fleet payment policy.
 
+Routine scheduling uses the same split:
+
+- [`state/routines`](../../libs/frontend/state/routines/README.md) owns the transport-neutral routine
+  port, public DTO aliases, response validation and safe error categories; and
+- [`state/routines/adapter`](../../libs/frontend/state/routines/adapter/README.md) implements that
+  port against the generated authenticated routine API without retries, caches or policy.
+
 Legacy frontend packages use `scope:web`; new capability slices use bounded ownership scopes. The
 persona onboarding feature, state port, and adapter use `scope:persona-onboarding` plus role tags
 that enforce feature → state and adapter → state/core direction. Cross-cutting core and UI elements

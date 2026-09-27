@@ -1,0 +1,17 @@
+<section class="routine-history">
+	<wo-section-heading title="Run history" subtitle="Recorded firing state, settled cost, and currently readable results."><p-button heading-actions label="Refresh history" icon="pi pi-refresh" [text]="true" [disabled]="loading() || loadingMore()" (onClick)="refresh()" /></wo-section-heading>
+	@if (state() === states.AccessChanged) {
+		<section class="routine-history__notice" role="status"><h2>Access changed</h2><p>Run history was removed from this screen because the current routine access changed.</p></section>
+	} @else {
+		<wo-resource-feedback [loading]="loading()" [loadingLabel]="state() === states.Refreshing ? 'Refreshing run history…' : 'Loading run history…'" [error]="error()" [retryAvailable]="state() === states.Unavailable || state() === states.RetainedError" (retryRequested)="refresh()" />
+	}
+	@if (showRows()) {
+		<div class="routine-history__table"><p-table [value]="tableRows()" dataKey="firingId" [pt]="{ tableContainer: { tabindex: '0', role: 'region', 'aria-label': 'Routine run history' } }">
+			<ng-template #header><tr><th scope="col">State</th><th scope="col">Trigger</th><th scope="col">Scheduled</th><th scope="col">Finished</th><th scope="col">Reason</th><th scope="col">Actual cost</th><th scope="col">Result</th></tr></ng-template>
+			<ng-template #body let-row><tr><td><wo-scope-chip [label]="row.disposition.label" [tone]="row.disposition.tone" /></td><td>{{ row.triggerLabel }}</td><td>{{ row.scheduledLabel }}</td><td>{{ row.finishedLabel }}</td><td>{{ row.reasonLabel }}</td><td class="wo-mono">{{ row.costLabel }}</td><td>@if (row.resultConversationId) { <a [routerLink]="['/chats', row.resultConversationId]">Open result</a> } @else { <span>Unavailable</span> }</td></tr></ng-template>
+			<ng-template #emptymessage><tr><td colspan="7">No firing history is visible yet.</td></tr></ng-template>
+		</p-table></div>
+		<wo-resource-feedback [loading]="loadingMore()" loadingLabel="Loading more history…" [error]="loadMoreError()" />
+		@if (hasMore()) { <p-button label="Load more history" icon="pi pi-chevron-down" [text]="true" [disabled]="loading() || loadingMore()" (onClick)="loadMore()" /> }
+	}
+</section>

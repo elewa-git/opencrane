@@ -33,6 +33,8 @@ export class ConversationWorkspaceHeaderComponent
 	public readonly closeRequested = output<void>();
 	/** Requests showing the page's context panel. */
 	public readonly contextRequested = output<void>();
+	/** Requests routine creation for the currently selected open conversation. */
+	public readonly scheduleRequested = output<void>();
 	/** Persistent trigger that receives focus when the page closes its context panel. */
 	@ViewChild("contextPanelToggle")
 	private _contextPanelToggle: ElementRef<HTMLButtonElement> | undefined;

@@ -1,4 +1,6 @@
 
+import type { NavigationExtras } from "@angular/router";
+
 /**
  * Build the canonical URL segments for one selected normal conversation.
  *
@@ -19,4 +21,10 @@
 export function _ConversationRouteCommands(conversationId: string | null): readonly string[]
 {
 	return conversationId === null ? ["/chats"] : ["/chats", conversationId];
+}
+
+/** Build the guarded routine-create destination for one currently selected conversation. */
+export function _RoutineRouteCommands(conversationId: string): readonly [readonly string[], NavigationExtras]
+{
+	return [["/routines", "new"], { queryParams: { destination: conversationId } }];
 }

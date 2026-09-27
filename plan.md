@@ -44,6 +44,31 @@ These decisions supersede older pending group-attribution/history, “no deploy 
 unresolved numeric live-test-cap and first-write/Always-policy text only where those statements
 conflict. Historical evidence is retained below.
 
+## Routine browser experience — reviewed source checkpoint
+
+At the pre-publication checkpoint, this source wave adds authenticated `/routines` list, chat-bound creation, detail,
+revision, pause/resume/retire/run-now and firing-history screens on base
+`ae9ff9a1ee19cd7ad823176d7a3a16e141d75f80`. Creation starts from an existing chat and keeps the
+requester selected; the browser uses server-projected participant and managed-service choices and a
+server-calculated five-occurrence schedule preview. Route-scoped state removes protected values on
+session or target changes, retains exact retry inputs after uncertain mutations, preserves human
+edits across conflicts and does not infer authority from server command hints.
+
+Current focused evidence totals 253 tests across six projects: 46 routine-feature, 24 app-composition,
+10 routine-state, 15 routine-adapter, 17 core and 141 conversation-workspace tests. The feature
+TypeScript check and the mechanical style, Prisma-boundary, module-growth, release and diff checks
+pass. The current joined Storybook build passes, and all 18 tagged routine stories pass their
+Chromium interaction and accessibility checks. Full-page creation candidates plus current detail
+and history candidates are recorded in `.nx/routine-ui-candidates/RENDER-REPORT.md`; they are not
+accepted baselines. Independent integrated, architecture, state/adapter and component source review
+pass with no remaining source finding. Publication, Linux rendering and human visual approval remain
+pending, so this is reviewed source rather than an MVP-completion claim.
+
+Agent-authored form prefill/tooling, SQL and real-account execution, live schedule/history proof and
+publication remain separate follow-ups. No provider was called, the €5 qualification envelope remains
+unspent, and this wave changes no VM, deployment, database baseline, accepted visual baseline or live
+permission.
+
 ## Authenticated routine command API — bounded source increment
 
 The source overlay now defines 11 authenticated routine operations (seven commands plus list,

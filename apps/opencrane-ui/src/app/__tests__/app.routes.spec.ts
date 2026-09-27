@@ -41,4 +41,17 @@ describe("OpenCrane app route composition", function _OpenCraneAppRouteCompositi
 		expect(invite?.loadComponent).toBeTypeOf("function");
 		expect(invite?.data?.["registrationOnAnonymous"]).toBe(true);
 	});
+
+	it("mounts routines as a guarded lazy feature", async function _RoutineRoutes()
+	{
+		const routines = APP_ROUTES.find(function _Routines(route) { return route.path === "routines"; });
+		expect(routines?.canActivate?.length).toBe(1);
+		expect(routines?.loadChildren).toBeTypeOf("function");
+		const loaded = await routines!.loadChildren!() as Routes;
+		const shell = loaded[0];
+		expect(shell?.component?.name).toBe("RoutineShellComponent");
+		expect(shell?.children?.map(function _Path(route) { return route.path; })).toEqual(["", "new", ":routineId"]);
+		expect(shell?.children?.find(function _Create(route) { return route.path === "new"; })?.component?.name).toBe("RoutineCreateRouteComponent");
+		expect(shell?.children?.find(function _Detail(route) { return route.path === ":routineId"; })?.component?.name).toBe("RoutineDetailRouteComponent");
+	});
 });

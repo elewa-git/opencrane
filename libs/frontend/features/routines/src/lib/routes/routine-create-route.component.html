@@ -1,0 +1,14 @@
+@if (destination() === null) {
+	<section class="routine-create-route__missing"><wo-section-heading title="Choose a chat first" subtitle="A routine keeps one reviewed chat destination and audience. Open the chat where every run should appear, then choose Schedule." [level]="headingLevel"><a heading-actions pButton routerLink="/chats" class="p-button">Choose a chat</a></wo-section-heading></section>
+} @else {
+	@if (store.optionsState() === states.AccessChanged) {
+		<section class="routine-create-route__notice" role="status"><h2>Access changed</h2><p>The chat's routine choices are no longer available. Return to the chat and choose Schedule again.</p></section>
+	} @else if (store.optionsState() === states.Idle) {
+		<section class="routine-create-route__notice" role="status"><h2>Routine setup unavailable</h2><p>Return to the chat and choose Schedule again.</p><a pButton [routerLink]="['/chats', destination()]" class="p-button">Return to chat</a></section>
+	} @else {
+		<wo-resource-feedback [loading]="store.optionsState() === states.Loading" loadingLabel="Loading people and assistants…" [error]="store.optionsError()" [retryAvailable]="store.optionsState() === states.Unavailable" (retryRequested)="store.retryOptions()" />
+	}
+	@if (store.optionsState() === states.Ready) {
+		<wo-routine-definition-form [mode]="store.mode()" [draft]="store.draft()" [audienceChoices]="store.audienceChoices()" [serviceChoices]="store.serviceChoices()" [timezoneChoices]="store.timezones" [preview]="store.preview()" [previewStale]="store.previewStale()" [previewLoading]="store.previewLoading()" [previewError]="store.previewError()" [commandState]="store.commandState()" [commandError]="store.commandError()" [canSubmit]="store.canSubmit()" (scheduleModeChanged)="store.setScheduleMode($event)" (localTimeChanged)="store.setLocalTime($event)" (weekdayChanged)="store.setWeekday($event)" (expressionChanged)="store.setExpression($event)" (timezoneChanged)="store.setTimezone($event)" (instructionChanged)="store.setInstruction($event)" (managedServiceChanged)="store.setManagedService($event)" (audienceToggled)="store.toggleAudience($event)" (previewRequested)="store.requestPreview()" (submitted)="submit()" (cancelled)="cancel()" />
+	}
+}

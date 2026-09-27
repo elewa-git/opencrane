@@ -1,0 +1,4 @@
+.routine-create-route__missing { max-width: 48rem; margin: 0 auto; padding: var(--oc-space-8) 0; }
+.routine-create-route__notice, .routine-create-route__status { max-width: 48rem; margin: 0 auto; }
+.routine-create-route__notice { display: grid; gap: var(--oc-space-2); padding: var(--oc-space-4); border: 1px solid var(--oc-border-subtle); border-radius: var(--oc-radius-card); background: var(--oc-surface-subtle); }
+.routine-create-route__notice h2, .routine-create-route__notice p { margin: 0; }
