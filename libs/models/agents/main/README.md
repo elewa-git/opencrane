@@ -68,7 +68,7 @@ persistence; a wrong answer here can only refuse a legal move, never invent one.
   saved budget JSON before a new revision can copy or hash it. Increasing a numeric ceiling, or
   removing a revision cost cap, is a budget widening.
 - Routine calendar and firing contracts: `RoutineSchedule`, `RoutineStatus`,
-  `RoutineFiringTrigger`, `RoutineFiringDisposition`, `__ParseRoutineSchedule`,
+  `RoutineFiringTrigger`, `RoutineFiringDisposition`, `__RoutineScheduleSchema`, `__ParseRoutineSchedule`,
   `__NextRoutineOccurrence`, `__LatestRoutineOccurrence`, `__PreviewRoutineOccurrences`, and
   `__PlanRoutineFiring`.
 - `__RoutineFiringAuditActor` derives the audit actor from the stored trigger: automatic work is

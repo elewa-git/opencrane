@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 
-import { __ParseRoutineSchedule } from "@opencrane/models/agents";
+import { __ParseRoutineSchedule, type RoutineSchedule } from "@opencrane/models/agents";
 import { ProductAuthorizationActions } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import type { ChangeRoutineStatusCommand, CreateRoutineCommand, ReadRoutineCommand, ReviseRoutineCommand, RoutineCommandResult, RoutineFiringResult, RoutineIdFactory, RoutineProjection, RunRoutineNowCommand } from "./routine-authority.types";
+import { RoutineCommandUnavailableError, RoutineCommandValidationError } from "./routine-command.errors";
 import type { RoutineInstructionCipher, RoutineInstructionContext } from "./routine-instruction.types";
 import type { RoutineCommandPersistence } from "./routine-persistence.types";
 import { RoutineLifecycleEvent } from "./routine-lifecycle.types";
@@ -34,8 +35,10 @@ export class RoutineAuthority
 	async create(command: CreateRoutineCommand): Promise<RoutineCommandResult>
 	{
 		_ValidateCaller(command.caller.authenticatedAt);
+		_Identifier(command.destinationConversationId, "routine destination conversation");
+		_Identifier(command.selectedManagedServiceId, "routine selected managed service");
 		const instruction = _Instruction(command.instruction);
-		const schedule = __ParseRoutineSchedule(command.schedule);
+		const schedule = _Schedule(command.schedule);
 		const idempotencyKey = _IdempotencyKey(command.idempotencyKey);
 		const audiencePrincipalIds = _AudiencePrincipalIds(command.audiencePrincipalIds, command.caller.principalId);
 		const routineId = this.ids.routineId();
@@ -48,6 +51,8 @@ export class RoutineAuthority
 	/** Returns the current routine only after transactional authorization and external decryption. */
 	async read(command: ReadRoutineCommand): Promise<RoutineProjection | null>
 	{
+		_ValidateCaller(command.caller.authenticatedAt);
+		_Identifier(command.routineId, "routine");
 		const encrypted = await this.persistence.read(command);
 		if (encrypted === null)
 		{
@@ -62,14 +67,17 @@ export class RoutineAuthority
 	async revise(command: ReviseRoutineCommand): Promise<RoutineCommandResult>
 	{
 		_ValidateCaller(command.caller.authenticatedAt);
+		_Identifier(command.routineId, "routine");
+		_PositiveInteger(command.expectedRevision, "routine expected revision");
+		_PositiveInteger(command.expectedLifecycleRevision, "routine expected lifecycle revision");
 		const instruction = _Instruction(command.instruction);
-		const schedule = __ParseRoutineSchedule(command.schedule);
+		const schedule = _Schedule(command.schedule);
 		const idempotencyKey = _IdempotencyKey(command.idempotencyKey);
 		const revision = command.expectedRevision + 1;
 		const current = await this.persistence.read({ caller: command.caller, routineId: command.routineId });
 		if (current === null)
 		{
-			throw new Error("routine is unavailable for revision");
+			throw new RoutineCommandUnavailableError("routine is unavailable for revision");
 		}
 		const context = _InstructionContext(command.caller.siloId, current.destinationConversationId, current.requesterSubjectId, command.routineId, revision);
 		const envelope = await this.cipher.encrypt(instruction, context);
@@ -99,6 +107,8 @@ export class RoutineAuthority
 	async runNow(command: RunRoutineNowCommand): Promise<RoutineFiringResult>
 	{
 		_ValidateCaller(command.caller.authenticatedAt);
+		_Identifier(command.routineId, "routine");
+		_PositiveInteger(command.expectedLifecycleRevision, "routine expected lifecycle revision");
 		const commandDigest = _CommandDigest({ operation: RoutineLifecycleEvent.RunNow, routineId: command.routineId, expectedLifecycleRevision: command.expectedLifecycleRevision, idempotencyKey: _IdempotencyKey(command.idempotencyKey) });
 		return await this.persistence.runNow({ ...command, idempotencyKey: _IdempotencyKey(command.idempotencyKey), firingId: this.ids.firingId(), conversationId: this.ids.conversationId(), commandReceiptId: this.ids.commandReceiptId(), commandDigest });
 	}
@@ -107,6 +117,8 @@ export class RoutineAuthority
 	private async _ChangeStatus(command: ChangeRoutineStatusCommand, event: RoutineLifecycleEvent): Promise<RoutineCommandResult>
 	{
 		_ValidateCaller(command.caller.authenticatedAt);
+		_Identifier(command.routineId, "routine");
+		_PositiveInteger(command.expectedLifecycleRevision, "routine expected lifecycle revision");
 		const idempotencyKey = _IdempotencyKey(command.idempotencyKey);
 		const commandDigest = _CommandDigest({ operation: event, routineId: command.routineId, expectedLifecycleRevision: command.expectedLifecycleRevision, idempotencyKey });
 		return await this.persistence.changeStatus({ ...command, idempotencyKey, event, commandReceiptId: this.ids.commandReceiptId(), commandDigest });
@@ -125,7 +137,7 @@ function _Instruction(value: string): string
 	const instruction = value.trim();
 	if (instruction.length === 0 || instruction.length > _MAXIMUM_INSTRUCTION_LENGTH)
 	{
-		throw new Error("routine instruction must contain between 1 and 20000 characters");
+		throw new RoutineCommandValidationError("routine instruction must contain between 1 and 20000 characters");
 	}
 	return instruction;
 }
@@ -136,7 +148,7 @@ function _IdempotencyKey(value: string): string
 	const key = value.trim();
 	if (key.length === 0 || key.length > 200)
 	{
-		throw new Error("routine idempotency key must contain between 1 and 200 characters");
+		throw new RoutineCommandValidationError("routine idempotency key must contain between 1 and 200 characters");
 	}
 	return key;
 }
@@ -146,15 +158,15 @@ function _AudiencePrincipalIds(value: readonly string[], requesterPrincipalId: s
 {
 	if (value.length === 0 || value.length > 100)
 	{
-		throw new Error("routine audience must contain between 1 and 100 Principals");
+		throw new RoutineCommandValidationError("routine audience must contain between 1 and 100 Principals");
 	}
 	if (value.some(principalId => principalId.length === 0 || principalId.length > 200 || principalId.trim() !== principalId) || new Set(value).size !== value.length)
 	{
-		throw new Error("routine audience must contain unique nonblank Principal identifiers");
+		throw new RoutineCommandValidationError("routine audience must contain unique nonblank Principal identifiers");
 	}
 	if (!value.includes(requesterPrincipalId))
 	{
-		throw new Error("routine audience must include the original requester");
+		throw new RoutineCommandValidationError("routine audience must include the original requester");
 	}
 	return [...value].sort();
 }
@@ -164,7 +176,38 @@ function _ValidateCaller(authenticatedAt: string): void
 {
 	if (!Number.isFinite(Date.parse(authenticatedAt)))
 	{
-		throw new Error("routine caller authentication instant is invalid");
+		throw new RoutineCommandValidationError("routine caller authentication instant is invalid");
+	}
+}
+
+/** Parses schedule input while keeping its detailed parser failure behind the command boundary. */
+function _Schedule(value: RoutineSchedule): RoutineSchedule
+{
+	try
+	{
+		return __ParseRoutineSchedule(value);
+	}
+	catch
+	{
+		throw new RoutineCommandValidationError("routine schedule is invalid");
+	}
+}
+
+/** Requires a nonblank identifier without changing the value used by persistence or digests. */
+function _Identifier(value: string, name: string): void
+{
+	if (value.length === 0 || value.length > 200 || value.trim() !== value)
+	{
+		throw new RoutineCommandValidationError(`${name} identifier must contain between 1 and 200 characters without outer whitespace`);
+	}
+}
+
+/** Requires a positive safe revision counter. */
+function _PositiveInteger(value: number, name: string): void
+{
+	if (!Number.isSafeInteger(value) || value < 1)
+	{
+		throw new RoutineCommandValidationError(`${name} must be a positive safe integer`);
 	}
 }
 

@@ -2,7 +2,7 @@ import type * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 
 import type { RoutineRunProgressSink } from "@opencrane/backend/server/agents/scheduling/contract";
-import type { RoutineScheduleStartupRecovery } from "@opencrane/backend/server/agents/scheduling";
+import type { RoutineAuthority, RoutineScheduleStartupRecovery } from "@opencrane/backend/server/agents/scheduling";
 import type { RoutineTurnDispatcher } from "@opencrane/backend/server/conversations";
 import type { ConversationPrivatePayloadCipher } from "@opencrane/backend/server/conversations/history";
 import type { HumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
@@ -32,9 +32,11 @@ export interface RoutineWorkflowExecutionContext
 	readonly workflows: IWorkflowEngine;
 }
 
-/** Exposes routine startup repair and recovery-only turn dispatch to process composition. */
+/** Exposes routine HTTP commands, startup repair and recovery-only turn dispatch to process composition. */
 export interface RoutineWorkflowComposition
 {
+	/** Authenticated routine command authority backed by the shared persistence and cipher. */
+	readonly authority: RoutineAuthority;
 	/** Repairs every active schedule head before workers begin claiming tasks. */
 	readonly startup: Pick<RoutineScheduleStartupRecovery, "repairAllActiveSchedules">;
 	/** Recovers an admitted routine turn without creating another run or task. */

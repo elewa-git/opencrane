@@ -25,6 +25,11 @@ It also contributes existing-dataset memory commands and status reads. Their rec
 progress and local result identity, while provider coordinates and selected-message evidence stay
 behind the command authority.
 
+Scheduling contributes the authenticated create, read, revise, pause, resume, retire and run-now
+routine paths. Its public responses exclude requester identity, authentication evidence, encrypted
+payload coordinates and internal replay outcomes. Routine listing and firing history remain outside
+this API increment.
+
 Audit contributes its required entry fields and compound-cursor page contract. Spend contributes
 recorded account usage and currency-specific ceilings, including the empty responses from budget
 writes. This package registers their schemas without keeping separate copies of those domain models.
@@ -64,7 +69,7 @@ top level under `server/` — not inside any one domain group — because it mus
 
 Tagged `scope:api-spec`: it may depend on `scope:shared` and on the route-owning capability scopes it
 aggregates — `access-tokens`, `audit`, `awareness`, `conversation-assets`, `conversations`, `grants`, `groups`, `mcp`, `metrics`,
-`model-routing`, `policies`, `projection`, `providers`, `retrieval`, `skills`, `spend`, and `tenants`
+`model-routing`, `policies`, `projection`, `providers`, `retrieval`, `scheduling`, `skills`, `spend`, and `tenants`
 — and never on apps. Nothing else depends on it in reverse.
 
 ## See also

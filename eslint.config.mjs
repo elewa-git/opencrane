@@ -111,6 +111,7 @@ export default [
                 "scope:personal-personas",
                 "scope:providers",
                 "scope:retrieval",
+				"scope:scheduling",
                 "scope:shared",
                 "scope:skills",
 				"scope:skills-workflow-contract",
@@ -125,7 +126,7 @@ export default [
             { sourceTag: "scope:workload-identity", onlyDependOnLibsWithTags: ["scope:workload-identity", "scope:shared"] },
             { sourceTag: "scope:history-store", onlyDependOnLibsWithTags: ["scope:history-store", "scope:shared"] },
             { sourceTag: "scope:workflows", onlyDependOnLibsWithTags: ["scope:shared", "scope:workflows"] },
-			{ sourceTag: "scope:scheduling", onlyDependOnLibsWithTags: ["scope:agents", "scope:authorization", "scope:scheduling", "scope:scheduling-contract", "scope:shared", "scope:workflows"] },
+			{ sourceTag: "scope:scheduling", onlyDependOnLibsWithTags: ["scope:agents", "scope:auth", "scope:authorization", "scope:scheduling", "scope:scheduling-contract", "scope:shared", "scope:workflows"] },
 			{ sourceTag: "scope:scheduling-contract", onlyDependOnLibsWithTags: ["scope:agents", "scope:scheduling-contract", "scope:shared", "scope:workflows"] },
             { sourceTag: "scope:runtime-workloads", onlyDependOnLibsWithTags: ["scope:runtime-workloads", "scope:shared"] },
             // The file-producing runtime reuses the pure conversation-assets CSV model.

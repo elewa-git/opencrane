@@ -1697,6 +1697,137 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/routines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a reviewed routine
+         * @description Creates one active routine from a caller-reviewed conversation, audience, managed assistant, schedule and instruction. The server derives caller identity from the authenticated request and encrypts the instruction before the transaction.
+         */
+        post: operations["createRoutine"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/routines/{routineId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read an authorized routine
+         * @description Returns the decrypted current instruction and fixed reviewed audience only after current routine and destination access checks. Requester identity and encrypted storage fields are never returned.
+         */
+        get: operations["getRoutine"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/routines/{routineId}/revise": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replace a routine schedule and instruction
+         * @description The original requester appends an immutable revision under the reviewed definition and lifecycle counters. The fixed destination, audience and managed assistant do not change.
+         */
+        post: operations["reviseRoutine"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/routines/{routineId}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause automatic routine firings */
+        post: operations["pauseRoutine"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/routines/{routineId}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume automatic routine firings */
+        post: operations["resumeRoutine"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/routines/{routineId}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retire a routine permanently */
+        post: operations["retireRoutine"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/routines/{routineId}/run-now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admit an immediate routine firing
+         * @description Creates or recovers a manual firing without moving the automatic schedule cursor. A retired or currently unauthorized firing is returned as a saved refused disposition.
+         */
+        post: operations["runRoutineNow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -9638,6 +9769,540 @@ export interface operations {
                 content?: never;
             };
             /** @description Personal memory command authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createRoutine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    destinationConversationId: string;
+                    audiencePrincipalIds: string[];
+                    selectedManagedServiceId: string;
+                    schedule: {
+                        expression: string;
+                        timezone: string;
+                    };
+                    instruction: string;
+                    idempotencyKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Committed or recovered routine definition. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        routine: {
+                            routineId: string;
+                            currentRevision: number;
+                            /** @enum {string} */
+                            status: "active" | "paused" | "retired";
+                            lifecycleRevision: number;
+                            /** Format: date-time */
+                            nextAutomaticOccurrence: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description The path or request body does not satisfy the routine command contract. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A current authenticated Principal and authentication instant are required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The routine or another protected resource is unavailable to this caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The saved revision, lifecycle state or idempotency key conflicts with this command. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getRoutine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Stable routine identifier returned by creation. */
+                routineId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized routine details. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        routine: {
+                            routineId: string;
+                            currentRevision: number;
+                            /** @enum {string} */
+                            status: "active" | "paused" | "retired";
+                            lifecycleRevision: number;
+                            /** Format: date-time */
+                            nextAutomaticOccurrence: string | null;
+                            destinationConversationId: string;
+                            selectedManagedServiceId: string;
+                            schedule: {
+                                expression: string;
+                                timezone: string;
+                            };
+                            audiencePrincipalIds: string[];
+                            instruction: string;
+                        };
+                    };
+                };
+            };
+            /** @description The path or request body does not satisfy the routine command contract. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A current authenticated Principal and authentication instant are required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The routine or another protected resource is unavailable to this caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    reviseRoutine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Stable routine identifier returned by creation. */
+                routineId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedRevision: number;
+                    expectedLifecycleRevision: number;
+                    schedule: {
+                        expression: string;
+                        timezone: string;
+                    };
+                    instruction: string;
+                    idempotencyKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Committed or recovered routine definition. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        routine: {
+                            routineId: string;
+                            currentRevision: number;
+                            /** @enum {string} */
+                            status: "active" | "paused" | "retired";
+                            lifecycleRevision: number;
+                            /** Format: date-time */
+                            nextAutomaticOccurrence: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description The path or request body does not satisfy the routine command contract. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A current authenticated Principal and authentication instant are required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The routine or another protected resource is unavailable to this caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The saved revision, lifecycle state or idempotency key conflicts with this command. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    pauseRoutine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Stable routine identifier returned by creation. */
+                routineId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedLifecycleRevision: number;
+                    idempotencyKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Committed or recovered routine definition. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        routine: {
+                            routineId: string;
+                            currentRevision: number;
+                            /** @enum {string} */
+                            status: "active" | "paused" | "retired";
+                            lifecycleRevision: number;
+                            /** Format: date-time */
+                            nextAutomaticOccurrence: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description The path or request body does not satisfy the routine command contract. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A current authenticated Principal and authentication instant are required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The routine or another protected resource is unavailable to this caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The saved revision, lifecycle state or idempotency key conflicts with this command. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    resumeRoutine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Stable routine identifier returned by creation. */
+                routineId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedLifecycleRevision: number;
+                    idempotencyKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Committed or recovered routine definition. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        routine: {
+                            routineId: string;
+                            currentRevision: number;
+                            /** @enum {string} */
+                            status: "active" | "paused" | "retired";
+                            lifecycleRevision: number;
+                            /** Format: date-time */
+                            nextAutomaticOccurrence: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description The path or request body does not satisfy the routine command contract. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A current authenticated Principal and authentication instant are required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The routine or another protected resource is unavailable to this caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The saved revision, lifecycle state or idempotency key conflicts with this command. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    retireRoutine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Stable routine identifier returned by creation. */
+                routineId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedLifecycleRevision: number;
+                    idempotencyKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Committed or recovered routine definition. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        routine: {
+                            routineId: string;
+                            currentRevision: number;
+                            /** @enum {string} */
+                            status: "active" | "paused" | "retired";
+                            lifecycleRevision: number;
+                            /** Format: date-time */
+                            nextAutomaticOccurrence: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description The path or request body does not satisfy the routine command contract. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A current authenticated Principal and authentication instant are required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The routine or another protected resource is unavailable to this caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The saved revision, lifecycle state or idempotency key conflicts with this command. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    runRoutineNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Stable routine identifier returned by creation. */
+                routineId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedLifecycleRevision: number;
+                    idempotencyKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Saved manual firing decision. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        firing: {
+                            firingId: string;
+                            routineId: string;
+                            routineRevision: number;
+                            /** @enum {string} */
+                            trigger: "automatic" | "manual";
+                            /** @enum {string} */
+                            disposition: "preparing" | "running" | "waiting" | "completed" | "failed" | "cancelled" | "skipped_overlap" | "refused" | "uncertain";
+                            conversationId: string;
+                            /** Format: date-time */
+                            scheduledSlot: string | null;
+                            /** @enum {string|null} */
+                            reason: "routine_retired" | "current_authority_or_audience_refused" | "unfinished_firing" | null;
+                        };
+                    };
+                };
+            };
+            /** @description The path or request body does not satisfy the routine command contract. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A current authenticated Principal and authentication instant are required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The routine or another protected resource is unavailable to this caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The saved revision, lifecycle state or idempotency key conflicts with this command. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation. */
             503: {
                 headers: {
                     [name: string]: unknown;

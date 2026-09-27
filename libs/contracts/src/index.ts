@@ -33,6 +33,8 @@ export type { RunBudgetPolicy } from "./inputs/run-budget-policy.types";
 export { ___ParseRunBudgetPolicy } from "./inputs/run-budget-policy.validator";
 export * from "./inputs/prompt-compiler-version";
 export * from "./agents/personal-configuration.types";
+export * from "./agents/routine-command.types";
+export { ___RoutineControlRequestSchema, ___RoutineCreateRequestSchema, ___RoutineIdentifierSchema, ___RoutineReviseRequestSchema } from "./agents/routine-command.validator";
 export * from "./api/public-health.types";
 export * from "./skills/skill-authoring-validation-bootstrap-reference";
 export * from "./tool-progress";

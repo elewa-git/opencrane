@@ -1,5 +1,65 @@
 # OpenCrane — Active Plan
 
+## Accepted product decisions — 27 September 2026
+
+The user has accepted the following decisions for the remaining MVP work. They are product
+contracts, not claims that implementation or qualification is complete; the owning waves below
+remain open until their source, focused tests, SQL tests and live qualification say otherwise.
+
+- **Shared-work budget:** one paying group is selected when shared work is created or scheduled;
+  children inherit that paying group. Spend contributes to the global ceiling, the paying group's
+  ceiling and any optional assistant ceiling, with one charge recorded rather than duplicate
+  attribution across those scopes. The exact reservation and usage owners must preserve the root
+  allowance across retries, children and lost responses.
+- **Budget policy:** limits are configured in EUR per calendar month, resetting at 00:00 UTC on the
+  first day of the month. Reserve before a model or provider call. Hitting a hard limit stops new
+  work, including work remaining under existing reservations, and cancellation cascades through
+  descendants; there is no graceful-finishing exemption. Already-dispatched provider charges
+  cannot be undone, so reservations must use a trustworthy worst-case price. Unknown cost is not
+  treated as zero. The numeric live-test spend cap remains unanswered and must not be invented.
+- **Late subchat participants:** a person joining a shared subchat may see all existing history of
+  that joined subchat, but receives no implicit access to the parent conversation or private
+  resources. Current conversation access and explicit resource grants still govern every read.
+- **Per-tool approval settings:** replace the proposed read-only certification flow with simple
+  per-tool human controls: **Allow automatically**, **Ask**, or **Block**. The interaction should
+  use OpenCrane's own style and icons, with the supplied image serving only as a visual reference.
+  Execution permissions, owner identity and revocation remain separate; automatic mode is an
+  explicit human policy choice and never means every tool is allowed. The interaction with the
+  earlier first-write/exact Always approval policy still needs one explicit product decision before
+  conflicting behavior is implemented.
+- **Fresh qualification:** the user authorizes ongoing fresh `testv6` qualification and requires
+  verified superseded TEST deployments to be retired after each test so compute does not accumulate.
+  Exact resources, in-use state and shared dependencies must be checked first. This is not blanket
+  permission to delete production data, backups or unrelated infrastructure, and does not authorize
+  recreating a laptop VM.
+- **Credential handling and delegation:** an OpenAI key may be used only through secure
+  configuration from `./keys`; it must never be read into output, committed or exposed. Delegate
+  implementation and test work to cheaper Luna/Sol models; root orchestrates and reviews.
+
+These decisions supersede older pending group-attribution/history and “no deploy permission” text
+only where those statements conflict. Historical evidence is retained below; the unresolved
+numeric live-test cap and the explicit Always-policy interaction remain open.
+
+## Authenticated routine command API — bounded source increment
+
+The source overlay now defines the seven authenticated routine commands and their strict
+request/response contracts, composes one shared routine authority, and mounts its HTTP router at
+`/api/v1/me/routines`. This is source and focused-test evidence only; it is not a claim that list
+or history views, frontend screens, the reviewed agent form, live database/KurrentDB behavior, or
+real-account qualification are complete.
+
+The bounded lane has 11 contract tests, 63 agent-model tests, and 3 OpenCrane app-composition tests
+passing (shared authority composition plus the authenticated routine mount). Combined with the
+confirmed 264 scheduling tests and 7 API-spec tests, the available focused evidence totals 348
+tests; five package typechecks are also confirmed across contracts, agent models, OpenCrane,
+scheduling and API-spec. Live PostgreSQL/KurrentDB proof remains unexecuted.
+
+Independent integrated review and architecture postcheck pass with zero findings on the staged
+source fingerprint `16fcfcbc647f88f013ad0eca1700fcc041fbd34bc92653de5de587bd3719de40`. Style,
+Prisma, app/domain, ESLint, release-baseline and stack guards pass; reviewed module-growth
+candidates are accepted. This remains source-only evidence from base `857ad410aa8f8ca79f4f235c2050077ad644af2d`
+and prepublication stack snapshot `31fba0...`, not a push, commit or CI claim.
+
 ## Scheduling foundation — published draft #916, 25 September 2026
 
 The user approved a draft PR for the current `feat/conversational-routines` foundation,

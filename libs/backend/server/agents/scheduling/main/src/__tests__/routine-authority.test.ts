@@ -4,6 +4,7 @@ import { RoutineStatus } from "@opencrane/models/agents";
 
 import { RoutineAuthority } from "../routine-authority";
 import { RoutineCommandOutcome, type CreateRoutineCommand, type RoutineIdFactory } from "../routine-authority.types";
+import { RoutineCommandValidationError } from "../routine-command.errors";
 import type { RoutineInstructionCipher, RoutineInstructionContext, RoutineInstructionEnvelope } from "../routine-instruction.types";
 import type { RoutineCommandPersistence } from "../routine-persistence.types";
 
@@ -56,6 +57,7 @@ describe("routine authority encryption boundary", function _suite()
 
 		await expect(authority.create({ ..._command(), audiencePrincipalIds: ["principal-1", "principal-1"] })).rejects.toThrow("unique");
 		await expect(authority.create({ ..._command(), audiencePrincipalIds: ["principal-2"] })).rejects.toThrow("original requester");
+		await expect(authority.create({ ..._command(), instruction: " " })).rejects.toBeInstanceOf(RoutineCommandValidationError);
 		expect(cipher.encrypt).not.toHaveBeenCalled();
 		expect(persistence.create).not.toHaveBeenCalled();
 	});

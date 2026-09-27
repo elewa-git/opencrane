@@ -8,6 +8,7 @@ import { ___AuthRouter, ___CreateOidcAuthService, PrismaAuthenticatedPrincipalAd
 import { ___RequestContext } from "@opencrane/backend/observability";
 import { ___AuthMiddleware, PrismaOidcSessionUnitOfWork } from "@opencrane/backend/server/infra/auth";
 import { _CheckHealth, _ErrorHandler, _RateLimit, _TransportSecurity, type PublicHealthReportReader } from "@opencrane/backend/server/infra/http";
+import type { RoutineHttpAuthority } from "@opencrane/backend/server/agents/scheduling";
 
 import { _log } from "../process/log";
 import { _ReadOrganizationMembershipConfig } from "../configuration/config";
@@ -51,7 +52,7 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
  * @param mcpWorkflows - Shared transaction and worker authority for saved MCP jobs.
  * @returns The public Express listener before the lifecycle starts it.
  */
-export function _CreatePublicApp(prisma: PrismaClient, authentication: PublicAuthenticationComposition, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition, providerEffects: ProviderEffectCommandExecutor, memoryWorkflow: PersonalMemoryWorkflowCompositionOptions, historyStore?: HistoryStore, conversationPrivatePayloadKeyringPath?: string, agentSandboxReleaseProfile?: AgentSandboxReleaseProfileConfig): Express
+export function _CreatePublicApp(prisma: PrismaClient, authentication: PublicAuthenticationComposition, artifactScannerEnabled: boolean, health: PublicHealthReportReader, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition, providerEffects: ProviderEffectCommandExecutor, memoryWorkflow: PersonalMemoryWorkflowCompositionOptions, routineAuthority: RoutineHttpAuthority, historyStore?: HistoryStore, conversationPrivatePayloadKeyringPath?: string, agentSandboxReleaseProfile?: AgentSandboxReleaseProfileConfig): Express
 {
 	const app = express();
 
@@ -78,7 +79,7 @@ export function _CreatePublicApp(prisma: PrismaClient, authentication: PublicAut
 		app.use(organizationMembers.productAccess);
 
 	// 5. Mount authenticated product routes, then terminate failures through one structured handler.
-	_RegisterRoutes(app, prisma, artifactScannerEnabled, organizationMembers.router, mcpWorkflows, mcpRuntime, providerEffects, memoryWorkflow, historyStore, conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
+	_RegisterRoutes(app, prisma, artifactScannerEnabled, organizationMembers.router, mcpWorkflows, mcpRuntime, providerEffects, memoryWorkflow, routineAuthority, historyStore, conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

@@ -174,7 +174,10 @@ personal-memory dataset or adopts a fact.
   checks remain context-specific boundaries outside these structural parsers. Both carry opaque
   payload and artifact coordinates, never plaintext bodies, storage credentials, or general
   event-store access.
-- Hand-written DTOs/enums: hierarchical `Group` with nullable `parentId`, `ClusterTenant*`,
+- Hand-written DTOs/enums: hierarchical `Group` with nullable `parentId`, `RoutineCreateRequest`,
+  `RoutineReviseRequest`, `RoutineControlRequest`, `RoutineDefinitionResponse`,
+  `RoutineDetailsResponse`, `RoutineFiringResponse`, `RoutineFiringReasons` and their strict
+  routine command schemas, `ClusterTenant*`,
   `Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
   model-routing types, memory-gateway constants, `ThirdPartySource*`,
   `RunInputSnapshot`/`RunInputSnapshotMcpTool`, `RunInputOrigin`/`AgentRunTriggers`, `ExecutionSubject`,

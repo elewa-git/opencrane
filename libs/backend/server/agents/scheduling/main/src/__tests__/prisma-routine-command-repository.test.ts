@@ -7,6 +7,7 @@ import { RoutineFiringDisposition, RoutineFiringTrigger, RoutineStatus } from "@
 
 import { PrismaRoutineCommandRepository } from "../prisma-routine-command-repository";
 import { RoutineCommandOutcome } from "../routine-authority.types";
+import { RoutineCommandConflictError, RoutineCommandUnavailableError } from "../routine-command.errors";
 import type { RoutineFactsRepository } from "../routine-prisma-facts.types";
 import { RoutineLifecycleEvent } from "../routine-lifecycle.types";
 import type { RoutineTaskAdmissionPort } from "../routine-workflow.types";
@@ -113,7 +114,17 @@ describe("PrismaRoutineCommandRepository", function _Suite()
 		const f = _Repository(transaction);
 		const command = { caller: _CALLER, routineId: "routine-1", expectedRevision: 2, expectedLifecycleRevision: 4, schedule: { expression: "30 * * * *", timezone: "UTC" }, idempotencyKey: "revise-key-1", revisionId: "unused-retry-revision", commandReceiptId: "unused-retry-receipt", instruction: _INSTRUCTION, commandDigest };
 
-		await expect(f.repository.revise(command)).rejects.toThrow("receipt belongs to another routine");
+		await expect(f.repository.revise(command)).rejects.toBeInstanceOf(RoutineCommandConflictError);
+	});
+
+	it("classifies a missing requester routine without exposing a separate authorization outcome", async function _UnavailableRoutine()
+	{
+		const facts = _Facts();
+		facts.current.mockResolvedValue(null as never);
+		const f = _Repository({}, facts);
+		const command = { caller: _CALLER, routineId: "missing-routine", expectedRevision: 2, expectedLifecycleRevision: 4, schedule: { expression: "30 * * * *", timezone: "UTC" }, idempotencyKey: "revise-key-1", revisionId: "revision-3", commandReceiptId: "receipt-revise", instruction: _INSTRUCTION, commandDigest: `sha256:${"c".repeat(64)}` as const };
+
+		await expect(f.repository.revise(command)).rejects.toBeInstanceOf(RoutineCommandUnavailableError);
 	});
 
 	it("reads the encrypted current revision only for one fixed-audience caller with current Read", async function _Read()

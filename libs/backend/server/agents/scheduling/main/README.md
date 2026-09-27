@@ -81,6 +81,11 @@ actor from the persisted trigger rather than accepting it from a worker request.
 
 ## Public surface
 
+- `__CreateRoutineRouter` exposes the existing create, read, revise, pause, resume, retire and
+  run-now authority operations below `/api/v1/me/routines`. It derives the caller from authenticated
+  request state, disables response caching and returns only the public routine DTO fields.
+- `_RoutineOpenapiPaths` describes those same seven operations for the assembled API specification.
+  Listing and firing-history reads are not part of this first HTTP slice.
 - `RoutineAuthority` validates commands, encrypts instructions and invokes transactional
   persistence. Authorized reads decrypt only after their read transaction completes.
 - `PrismaRoutineUnitOfWork` opens bounded Serializable transactions and constructs the facts,
@@ -136,9 +141,12 @@ ownership flag never substitutes for current authorization.
 ## Dependency direction
 
 The app composition root injects transaction-bound authorization, managed-grant and workflow-task
-ports. This package depends on the scheduling and workflow contracts and product models, but never imports a
-conversation, runtime, scheduler-engine or mounted-cipher implementation. Conversation preparation,
-computer activation and run admission remain injected ports.
+ports. This package depends on the authenticated-request resolver, scheduling and workflow contracts,
+public transport contracts and product models, but never imports a conversation, runtime,
+scheduler-engine or mounted-cipher implementation. Conversation preparation, computer activation
+and run admission remain injected ports. The router's `RoutineAuthority` shares the workflow
+composition's persistence, cipher and identifier factory; routing does not construct a second unit
+of work or encryption boundary.
 The instruction adapter accepts a structural payload-cipher port, so the existing conversation
 cipher can be injected without a dependency on its implementation package. Its purpose-prefixed
 payload reference binds the routine identifier and revision separately from ordinary chat payloads.

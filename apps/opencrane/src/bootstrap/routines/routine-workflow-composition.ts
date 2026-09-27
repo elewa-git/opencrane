@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { Prisma } from "@prisma/client";
 
-import { PrismaRoutineOccurrenceActivationRepository, PrismaRoutineOccurrencePreparationRepository, PrismaRoutineOccurrenceRunAdmissionRepository, PrismaRoutineUnitOfWork, RoutineInstructionCipherAdapter, RoutineScheduleStartupRecovery, RoutineTaskAdmission, __CreateRoutineWorkflowDefinitions, type PrismaRoutineUnitOfWorkDependencies, type RoutineIdFactory } from "@opencrane/backend/server/agents/scheduling";
+import { PrismaRoutineOccurrenceActivationRepository, PrismaRoutineOccurrencePreparationRepository, PrismaRoutineOccurrenceRunAdmissionRepository, PrismaRoutineUnitOfWork, RoutineAuthority, RoutineInstructionCipherAdapter, RoutineScheduleStartupRecovery, RoutineTaskAdmission, __CreateRoutineWorkflowDefinitions, type PrismaRoutineUnitOfWorkDependencies, type RoutineIdFactory } from "@opencrane/backend/server/agents/scheduling";
 import { PrismaRoutineComputerActivationProjectionUnitOfWork, PrismaRoutineOccurrencePreparationUnitOfWork, PrismaRoutineRunAdmissionUnitOfWork, PrismaRoutineTurnCompilerUnitOfWork, RoutineComputerActivation, RoutineOccurrenceHistory } from "@opencrane/backend/server/conversations";
 import { ConversationComputerHistory } from "@opencrane/backend/server/conversations/computers";
 import { ConversationHistoryAuthority } from "@opencrane/backend/server/conversations/history";
@@ -75,10 +75,11 @@ export function _CreateRoutineWorkflowComposition(context: RoutineWorkflowExecut
 	const runDependencies = { prisma, routines: runRoutines, occurrences: occurrenceHistory, history, cipher, membership, workflows };
 	const runAdmission = new PrismaRoutineRunAdmissionUnitOfWork(runDependencies);
 	const ids: RoutineIdFactory = { routineId: _RoutineId, revisionId: _RevisionId, commandReceiptId: _CommandReceiptId, firingId: _FiringId, conversationId: _ConversationId };
+	const authority = new RoutineAuthority(persistence, instructionCipher, ids);
 	const definitions = __CreateRoutineWorkflowDefinitions({ persistence, cipher: instructionCipher, preparation, activation, runAdmission, ids });
 	workflows.register(definitions.schedule);
 	workflows.register(definitions.occurrence);
 	const dispatcher = new PrismaRoutineTurnCompilerUnitOfWork(prisma, { routines: runRoutines, occurrences: occurrenceHistory, history, cipher, membership, maximumTurnCostUsdMicros: profile.maximumTurnCostUsdMicros });
 	const startup = new RoutineScheduleStartupRecovery(persistence, siloId);
-	return { dispatcher, progress: persistence, startup };
+	return { authority, dispatcher, progress: persistence, startup };
 }

@@ -18,7 +18,7 @@ export { __PlanRoutineFiring } from "./routines/routine-firing";
 export type { RoutineFiringAuditActor, RoutineFiringPlan, RoutineFiringSelection, RoutineNoFiringPlan, RoutinePreparingFiringPlan, RoutineRefusedFiringPlan, RoutineSkippedOverlapFiringPlan } from "./routines/routine-firing.types";
 export { __RoutineFiringAuditActor } from "./routines/routine-firing";
 export type { RoutineSchedule } from "./routines/routine-schedule.types";
-export { __ParseRoutineSchedule } from "./routines/routine-schedule.validator";
+export { __ParseRoutineSchedule, __RoutineScheduleSchema } from "./routines/routine-schedule.validator";
 export { RoutineFiringDisposition, RoutineFiringTrigger, RoutineStatus } from "./routines/routine.types";
 export type { RoutineUnfinishedFiringDisposition } from "./routines/routine.types";
 export { __IsAgentRevisionTransitionAllowed, __IsAgentRunTransitionAllowed, __IsAgentServiceTransitionAllowed } from "./state-transitions";

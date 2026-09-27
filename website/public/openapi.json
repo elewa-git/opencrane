@@ -15458,6 +15458,1004 @@
         }
       }
     },
+    "/me/routines": {
+      "post": {
+        "operationId": "createRoutine",
+        "summary": "Create a reviewed routine",
+        "tags": [
+          "Routines"
+        ],
+        "description": "Creates one active routine from a caller-reviewed conversation, audience, managed assistant, schedule and instruction. The server derives caller identity from the authenticated request and encrypts the instruction before the transaction.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "destinationConversationId",
+                  "audiencePrincipalIds",
+                  "selectedManagedServiceId",
+                  "schedule",
+                  "instruction",
+                  "idempotencyKey"
+                ],
+                "properties": {
+                  "destinationConversationId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "audiencePrincipalIds": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    }
+                  },
+                  "selectedManagedServiceId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "schedule": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "expression",
+                      "timezone"
+                    ],
+                    "properties": {
+                      "expression": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "timezone": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      }
+                    }
+                  },
+                  "instruction": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Committed or recovered routine definition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "routine"
+                  ],
+                  "properties": {
+                    "routine": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "routineId",
+                        "currentRevision",
+                        "status",
+                        "lifecycleRevision",
+                        "nextAutomaticOccurrence"
+                      ],
+                      "properties": {
+                        "routineId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "currentRevision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "paused",
+                            "retired"
+                          ]
+                        },
+                        "lifecycleRevision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "nextAutomaticOccurrence": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path or request body does not satisfy the routine command contract."
+          },
+          "401": {
+            "description": "A current authenticated Principal and authentication instant are required."
+          },
+          "404": {
+            "description": "The routine or another protected resource is unavailable to this caller."
+          },
+          "409": {
+            "description": "The saved revision, lifecycle state or idempotency key conflicts with this command."
+          },
+          "503": {
+            "description": "A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation."
+          }
+        }
+      }
+    },
+    "/me/routines/{routineId}": {
+      "get": {
+        "operationId": "getRoutine",
+        "summary": "Read an authorized routine",
+        "tags": [
+          "Routines"
+        ],
+        "parameters": [
+          {
+            "name": "routineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Stable routine identifier returned by creation."
+          }
+        ],
+        "description": "Returns the decrypted current instruction and fixed reviewed audience only after current routine and destination access checks. Requester identity and encrypted storage fields are never returned.",
+        "responses": {
+          "200": {
+            "description": "Authorized routine details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "routine"
+                  ],
+                  "properties": {
+                    "routine": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "routineId",
+                        "currentRevision",
+                        "status",
+                        "lifecycleRevision",
+                        "nextAutomaticOccurrence",
+                        "destinationConversationId",
+                        "selectedManagedServiceId",
+                        "schedule",
+                        "audiencePrincipalIds",
+                        "instruction"
+                      ],
+                      "properties": {
+                        "routineId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "currentRevision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "paused",
+                            "retired"
+                          ]
+                        },
+                        "lifecycleRevision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "nextAutomaticOccurrence": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "destinationConversationId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "selectedManagedServiceId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "schedule": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "expression",
+                            "timezone"
+                          ],
+                          "properties": {
+                            "expression": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "timezone": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 128
+                            }
+                          }
+                        },
+                        "audiencePrincipalIds": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 100,
+                          "uniqueItems": true,
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          }
+                        },
+                        "instruction": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 20000
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path or request body does not satisfy the routine command contract."
+          },
+          "401": {
+            "description": "A current authenticated Principal and authentication instant are required."
+          },
+          "404": {
+            "description": "The routine or another protected resource is unavailable to this caller."
+          },
+          "503": {
+            "description": "A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation."
+          }
+        }
+      }
+    },
+    "/me/routines/{routineId}/revise": {
+      "post": {
+        "operationId": "reviseRoutine",
+        "summary": "Replace a routine schedule and instruction",
+        "tags": [
+          "Routines"
+        ],
+        "parameters": [
+          {
+            "name": "routineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Stable routine identifier returned by creation."
+          }
+        ],
+        "description": "The original requester appends an immutable revision under the reviewed definition and lifecycle counters. The fixed destination, audience and managed assistant do not change.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedRevision",
+                  "expectedLifecycleRevision",
+                  "schedule",
+                  "instruction",
+                  "idempotencyKey"
+                ],
+                "properties": {
+                  "expectedRevision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "expectedLifecycleRevision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "schedule": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "expression",
+                      "timezone"
+                    ],
+                    "properties": {
+                      "expression": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "timezone": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      }
+                    }
+                  },
+                  "instruction": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20000
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed or recovered routine definition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "routine"
+                  ],
+                  "properties": {
+                    "routine": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "routineId",
+                        "currentRevision",
+                        "status",
+                        "lifecycleRevision",
+                        "nextAutomaticOccurrence"
+                      ],
+                      "properties": {
+                        "routineId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "currentRevision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "paused",
+                            "retired"
+                          ]
+                        },
+                        "lifecycleRevision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "nextAutomaticOccurrence": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path or request body does not satisfy the routine command contract."
+          },
+          "401": {
+            "description": "A current authenticated Principal and authentication instant are required."
+          },
+          "404": {
+            "description": "The routine or another protected resource is unavailable to this caller."
+          },
+          "409": {
+            "description": "The saved revision, lifecycle state or idempotency key conflicts with this command."
+          },
+          "503": {
+            "description": "A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation."
+          }
+        }
+      }
+    },
+    "/me/routines/{routineId}/pause": {
+      "post": {
+        "operationId": "pauseRoutine",
+        "summary": "Pause automatic routine firings",
+        "tags": [
+          "Routines"
+        ],
+        "parameters": [
+          {
+            "name": "routineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Stable routine identifier returned by creation."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedLifecycleRevision",
+                  "idempotencyKey"
+                ],
+                "properties": {
+                  "expectedLifecycleRevision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed or recovered routine definition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "routine"
+                  ],
+                  "properties": {
+                    "routine": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "routineId",
+                        "currentRevision",
+                        "status",
+                        "lifecycleRevision",
+                        "nextAutomaticOccurrence"
+                      ],
+                      "properties": {
+                        "routineId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "currentRevision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "paused",
+                            "retired"
+                          ]
+                        },
+                        "lifecycleRevision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "nextAutomaticOccurrence": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path or request body does not satisfy the routine command contract."
+          },
+          "401": {
+            "description": "A current authenticated Principal and authentication instant are required."
+          },
+          "404": {
+            "description": "The routine or another protected resource is unavailable to this caller."
+          },
+          "409": {
+            "description": "The saved revision, lifecycle state or idempotency key conflicts with this command."
+          },
+          "503": {
+            "description": "A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation."
+          }
+        }
+      }
+    },
+    "/me/routines/{routineId}/resume": {
+      "post": {
+        "operationId": "resumeRoutine",
+        "summary": "Resume automatic routine firings",
+        "tags": [
+          "Routines"
+        ],
+        "parameters": [
+          {
+            "name": "routineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Stable routine identifier returned by creation."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedLifecycleRevision",
+                  "idempotencyKey"
+                ],
+                "properties": {
+                  "expectedLifecycleRevision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed or recovered routine definition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "routine"
+                  ],
+                  "properties": {
+                    "routine": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "routineId",
+                        "currentRevision",
+                        "status",
+                        "lifecycleRevision",
+                        "nextAutomaticOccurrence"
+                      ],
+                      "properties": {
+                        "routineId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "currentRevision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "paused",
+                            "retired"
+                          ]
+                        },
+                        "lifecycleRevision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "nextAutomaticOccurrence": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path or request body does not satisfy the routine command contract."
+          },
+          "401": {
+            "description": "A current authenticated Principal and authentication instant are required."
+          },
+          "404": {
+            "description": "The routine or another protected resource is unavailable to this caller."
+          },
+          "409": {
+            "description": "The saved revision, lifecycle state or idempotency key conflicts with this command."
+          },
+          "503": {
+            "description": "A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation."
+          }
+        }
+      }
+    },
+    "/me/routines/{routineId}/retire": {
+      "post": {
+        "operationId": "retireRoutine",
+        "summary": "Retire a routine permanently",
+        "tags": [
+          "Routines"
+        ],
+        "parameters": [
+          {
+            "name": "routineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Stable routine identifier returned by creation."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedLifecycleRevision",
+                  "idempotencyKey"
+                ],
+                "properties": {
+                  "expectedLifecycleRevision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed or recovered routine definition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "routine"
+                  ],
+                  "properties": {
+                    "routine": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "routineId",
+                        "currentRevision",
+                        "status",
+                        "lifecycleRevision",
+                        "nextAutomaticOccurrence"
+                      ],
+                      "properties": {
+                        "routineId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "currentRevision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "paused",
+                            "retired"
+                          ]
+                        },
+                        "lifecycleRevision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "nextAutomaticOccurrence": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path or request body does not satisfy the routine command contract."
+          },
+          "401": {
+            "description": "A current authenticated Principal and authentication instant are required."
+          },
+          "404": {
+            "description": "The routine or another protected resource is unavailable to this caller."
+          },
+          "409": {
+            "description": "The saved revision, lifecycle state or idempotency key conflicts with this command."
+          },
+          "503": {
+            "description": "A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation."
+          }
+        }
+      }
+    },
+    "/me/routines/{routineId}/run-now": {
+      "post": {
+        "operationId": "runRoutineNow",
+        "summary": "Admit an immediate routine firing",
+        "tags": [
+          "Routines"
+        ],
+        "parameters": [
+          {
+            "name": "routineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Stable routine identifier returned by creation."
+          }
+        ],
+        "description": "Creates or recovers a manual firing without moving the automatic schedule cursor. A retired or currently unauthorized firing is returned as a saved refused disposition.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedLifecycleRevision",
+                  "idempotencyKey"
+                ],
+                "properties": {
+                  "expectedLifecycleRevision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved manual firing decision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "firing"
+                  ],
+                  "properties": {
+                    "firing": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "firingId",
+                        "routineId",
+                        "routineRevision",
+                        "trigger",
+                        "disposition",
+                        "conversationId",
+                        "scheduledSlot",
+                        "reason"
+                      ],
+                      "properties": {
+                        "firingId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "routineId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "routineRevision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "trigger": {
+                          "type": "string",
+                          "enum": [
+                            "automatic",
+                            "manual"
+                          ]
+                        },
+                        "disposition": {
+                          "type": "string",
+                          "enum": [
+                            "preparing",
+                            "running",
+                            "waiting",
+                            "completed",
+                            "failed",
+                            "cancelled",
+                            "skipped_overlap",
+                            "refused",
+                            "uncertain"
+                          ]
+                        },
+                        "conversationId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "scheduledSlot": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "reason": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "enum": [
+                            "routine_retired",
+                            "current_authority_or_audience_refused",
+                            "unfinished_firing",
+                            null
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path or request body does not satisfy the routine command contract."
+          },
+          "401": {
+            "description": "A current authenticated Principal and authentication instant are required."
+          },
+          "404": {
+            "description": "The routine or another protected resource is unavailable to this caller."
+          },
+          "409": {
+            "description": "The saved revision, lifecycle state or idempotency key conflicts with this command."
+          },
+          "503": {
+            "description": "A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation."
+          }
+        }
+      }
+    },
     "/auth/login": {
       "get": {
         "operationId": "startOidcLogin",

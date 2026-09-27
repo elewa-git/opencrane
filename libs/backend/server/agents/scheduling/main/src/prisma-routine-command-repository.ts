@@ -9,6 +9,7 @@ import { _ProjectRoutineGrants, _RetireRoutineGrants } from "./routine-authoriza
 import type { ReadRoutineCommand, RoutineCaller } from "./routine-authority.types";
 import { RoutineCommandOutcome, type EncryptedRoutineProjection, type RoutineCommandResult, type RoutineFiringResult } from "./routine-authority.types";
 import { _ParseRoutineCommandResult, _ParseRoutineFiringResult } from "./routine-authority.validator";
+import { RoutineCommandConflictError, RoutineCommandUnavailableError } from "./routine-command.errors";
 import type { RoutineInstructionEnvelope } from "./routine-instruction.types";
 import type { CurrentRoutineRows, RoutineFactsRepository, RoutineFiringActor } from "./routine-prisma-facts.types";
 import { _PRISMA_FIRING_DISPOSITION, _PRISMA_ROUTINE_STATUS } from "./routine-prisma-mapping";
@@ -129,12 +130,12 @@ export class PrismaRoutineCommandRepository implements RoutineCommandPersistence
 		}
 		if (current.routine.currentRevision !== command.expectedRevision || current.routine.lifecycleRevision !== command.expectedLifecycleRevision)
 		{
-			throw new Error("routine revision compare-and-set conflict");
+			throw new RoutineCommandConflictError("routine revision compare-and-set conflict");
 		}
 		const decision = __DecideRoutineLifecycle(this.facts.modelStatus(current.routine), RoutineLifecycleEvent.Revise);
 		if (decision.kind !== RoutineLifecycleDecisionKind.Proceed)
 		{
-			throw new Error("retired routine cannot be revised");
+			throw new RoutineCommandConflictError("retired routine cannot be revised");
 		}
 		await this.facts.requireCurrentAudience(current.routine, current.revision, now);
 		const revision = current.routine.currentRevision + 1;
@@ -147,7 +148,7 @@ export class PrismaRoutineCommandRepository implements RoutineCommandPersistence
 		});
 		if (changed.count !== 1)
 		{
-			throw new Error("routine revision compare-and-set conflict");
+			throw new RoutineCommandConflictError("routine revision compare-and-set conflict");
 		}
 		if (nextEpochMs !== null)
 		{
@@ -183,12 +184,12 @@ export class PrismaRoutineCommandRepository implements RoutineCommandPersistence
 		await this.facts.requirePrincipalAction(command.caller.principalId, command.caller.siloId, ProductAuthorizationResourceKinds.Routine, command.routineId, action, now, true, { commandDigest: command.commandDigest });
 		if (current.routine.lifecycleRevision !== command.expectedLifecycleRevision)
 		{
-			throw new Error("routine lifecycle compare-and-set conflict");
+			throw new RoutineCommandConflictError("routine lifecycle compare-and-set conflict");
 		}
 		const decision = __DecideRoutineLifecycle(this.facts.modelStatus(current.routine), command.event);
 		if (decision.kind === RoutineLifecycleDecisionKind.Refuse)
 		{
-			throw new Error("routine lifecycle command is refused");
+			throw new RoutineCommandConflictError("routine lifecycle command is refused");
 		}
 		let lifecycleRevision = current.routine.lifecycleRevision;
 		let next: Date | null = current.routine.nextAutomaticOccurrence;
@@ -203,7 +204,7 @@ export class PrismaRoutineCommandRepository implements RoutineCommandPersistence
 			const changed = await this.transaction.agentRoutine.updateMany({ where: { id: current.routine.id, siloId: current.routine.siloId, lifecycleRevision: command.expectedLifecycleRevision, status: current.routine.status }, data: { status: _PRISMA_ROUTINE_STATUS[decision.nextStatus], lifecycleRevision: { increment: 1 }, automaticEnabledAfter, lastAutomaticOccurrence, nextAutomaticOccurrence: next, scheduleTaskId: null, scheduleTaskName: null, scheduleTaskKey: null, updatedAt: now } });
 			if (changed.count !== 1)
 			{
-				throw new Error("routine lifecycle compare-and-set conflict");
+				throw new RoutineCommandConflictError("routine lifecycle compare-and-set conflict");
 			}
 			if (resume && nextEpochMs !== null)
 			{
@@ -241,7 +242,7 @@ export class PrismaRoutineCommandRepository implements RoutineCommandPersistence
 		}
 		if (current.routine.lifecycleRevision !== command.expectedLifecycleRevision)
 		{
-			throw new Error("routine manual firing compare-and-set conflict");
+			throw new RoutineCommandConflictError("routine manual firing compare-and-set conflict");
 		}
 		const plan = __PlanRoutineFiring({ siloId: current.routine.siloId, routineId: current.routine.id, status, trigger: RoutineFiringTrigger.Manual, schedule: { expression: current.revision.scheduleExpression, timezone: current.revision.scheduleTimezone }, nowEpochMs: now.getTime(), automaticEnabledAfterEpochMs: current.routine.automaticEnabledAfter.getTime(), lastAutomaticOccurrenceEpochMs: current.routine.lastAutomaticOccurrence?.getTime() ?? null, unfinishedFiringDisposition: null, manualRequestId: command.idempotencyKey });
 		if (plan.disposition === null || plan.trigger !== RoutineFiringTrigger.Manual)
@@ -277,7 +278,7 @@ export class PrismaRoutineCommandRepository implements RoutineCommandPersistence
 		const current = await this.facts.current(caller.siloId, routineId);
 		if (current === null)
 		{
-			throw new Error("routine is unavailable");
+			throw new RoutineCommandUnavailableError("routine is unavailable");
 		}
 		this.facts.requireOriginalRequester(caller, current.routine);
 		return current;
@@ -327,11 +328,11 @@ export class PrismaRoutineCommandRepository implements RoutineCommandPersistence
 		const receipt = await this.transaction.agentRoutineCommandReceipt.findUnique({ where: { siloId_requesterPrincipalId_kind_idempotencyKey: { siloId, requesterPrincipalId, kind, idempotencyKey } }, select: { routineId: true, commandDigest: true, result: true, routineRevision: true, firingId: true } });
 		if (receipt !== null && receipt.commandDigest !== commandDigest)
 		{
-			throw new Error("routine idempotency key conflicts with an earlier command");
+			throw new RoutineCommandConflictError("routine idempotency key conflicts with an earlier command");
 		}
 		if (receipt !== null && expectedRoutineId !== undefined && receipt.routineId !== expectedRoutineId)
 		{
-			throw new Error("routine command receipt belongs to another routine");
+			throw new RoutineCommandConflictError("routine command receipt belongs to another routine");
 		}
 		return receipt;
 	}

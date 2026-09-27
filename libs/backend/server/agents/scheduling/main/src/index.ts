@@ -4,6 +4,8 @@ export { PrismaRoutineOccurrenceActivationRepository } from "./prisma-routine-oc
 export { PrismaRoutineOccurrencePreparationRepository } from "./prisma-routine-occurrence-preparation-repository";
 export { RoutineAuthority } from "./routine-authority";
 export { RoutineInstructionCipherAdapter } from "./routine-instruction-cipher-adapter";
+export { __CreateRoutineRouter } from "./http/routine-http.router";
+export { _RoutineOpenapiPaths } from "./http/openapi";
 export { RoutineTaskAdmission } from "./routine-task-admission";
 export { __DecideRoutineLifecycle } from "./routine-lifecycle";
 export { __CreateRoutineWorkflowDefinitions } from "./routine-workflow";
@@ -15,6 +17,7 @@ export type { RoutineInstructionPayloadCipher, RoutineInstructionPayloadCipherte
 export { RoutineLifecycleDecisionKind, RoutineLifecycleEvent } from "./routine-lifecycle.types";
 export type { RoutineLifecycleDecision } from "./routine-lifecycle.types";
 export type { PrismaRoutineUnitOfWorkDependencies } from "./routine-unit-of-work.types";
+export type { RoutineHttpAuthority, RoutineHttpLogger, RoutineRequestPrincipalResolver } from "./http/routine-http.types";
 export { RoutineOccurrenceStage } from "./routine-workflow.types";
 export type { RoutineOccurrencePreparationInput, RoutineOccurrenceTaskInput, RoutineOccurrenceTaskResult, RoutineScheduleTaskInput, RoutineScheduleTaskResult, RoutineTaskAdmissionPort, RoutineWorkflowDefinitions, RoutineWorkflowDependencies, RoutineWorkflowPersistence } from "./routine-workflow.types";
 export type { RoutineScheduleRepairPage, RoutineScheduleRepairPageResult } from "./routine-schedule-repair.types";

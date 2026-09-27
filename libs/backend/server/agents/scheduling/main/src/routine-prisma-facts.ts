@@ -7,6 +7,7 @@ import { RoutineFiringDisposition, type RoutineStatus, type RoutineUnfinishedFir
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { RoutineCaller } from "./routine-authority.types";
+import { RoutineCommandUnavailableError } from "./routine-command.errors";
 import { __IsRoutineFiringUnfinished } from "./routine-firing-lifecycle";
 import { _MODEL_FIRING_DISPOSITION, _MODEL_ROUTINE_STATUS, _PRISMA_FIRING_DISPOSITION } from "./routine-prisma-mapping";
 import type { CurrentManagedAgent, CurrentRoutineRows, RoutineFactsRepository, RoutineFiringActor, RoutineRevisionRow, RoutineRow } from "./routine-prisma-facts.types";
@@ -59,7 +60,7 @@ export class PrismaRoutineFactsRepository implements RoutineFactsRepository
 	{
 		if (routine.siloId !== caller.siloId || routine.originalRequesterPrincipalId !== caller.principalId || routine.requesterIssuer !== caller.issuer || routine.requesterSubjectId !== caller.subjectId)
 		{
-			throw new Error("routine command requires the original requester");
+			throw new RoutineCommandUnavailableError("routine command requires the original requester");
 		}
 	}
 
@@ -72,21 +73,21 @@ export class PrismaRoutineFactsRepository implements RoutineFactsRepository
 		});
 		if (conversation === null)
 		{
-			throw new Error("routine destination conversation is not currently available to the requester");
+			throw new RoutineCommandUnavailableError("routine destination conversation is not currently available to the requester");
 		}
 		await this.requirePrincipalAction(caller.principalId, caller.siloId, ProductAuthorizationResourceKinds.Conversation, destinationConversationId, ProductAuthorizationActions.Read, now, false, {});
 		const currentSubjects = new Set(conversation.participants.map(participant => participant.userId));
 		const principals = await this.transaction.principal.findMany({ where: { siloId: caller.siloId, id: { in: [...selectedPrincipalIds] }, provenance: PrincipalProvenance.External }, select: { id: true, subject: true } });
 		if (principals.length !== selectedPrincipalIds.length)
 		{
-			throw new Error("routine selected audience Principal is unavailable or not external");
+			throw new RoutineCommandUnavailableError("routine selected audience Principal is unavailable or not external");
 		}
 		for (const principalId of selectedPrincipalIds)
 		{
 			const principal = principals.find(candidate => candidate.id === principalId);
 			if (principal === undefined || !currentSubjects.has(principal.subject))
 			{
-				throw new Error("routine selected audience Principal is not a current destination participant");
+				throw new RoutineCommandUnavailableError("routine selected audience Principal is not a current destination participant");
 			}
 			await this.requirePrincipalAction(principal.id, caller.siloId, ProductAuthorizationResourceKinds.Conversation, destinationConversationId, ProductAuthorizationActions.Read, now, false, {});
 		}
@@ -98,7 +99,7 @@ export class PrismaRoutineFactsRepository implements RoutineFactsRepository
 	{
 		if (!(await this.currentAudienceAllowed(routine, revision, now)))
 		{
-			throw new Error("routine fixed audience no longer has current destination access");
+			throw new RoutineCommandUnavailableError("routine fixed audience no longer has current destination access");
 		}
 	}
 
@@ -107,19 +108,19 @@ export class PrismaRoutineFactsRepository implements RoutineFactsRepository
 	{
 		if (caller.siloId !== routine.siloId || !revision.audiencePrincipalIds.includes(caller.principalId))
 		{
-			throw new Error("routine reader no longer has current destination access");
+			throw new RoutineCommandUnavailableError("routine reader no longer has current destination access");
 		}
 		const principal = await this.transaction.principal.findFirst({ where: { id: caller.principalId, siloId: caller.siloId, issuer: caller.issuer, subject: caller.subjectId, provenance: PrincipalProvenance.External }, select: { id: true } });
 		const conversation = await this.transaction.conversation.findFirst({ where: { id: routine.destinationConversationId, siloId: routine.siloId, lifecycle: ConversationLifecycle.Open, participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } }, select: { id: true } });
 		if (principal === null || conversation === null)
 		{
-			throw new Error("routine reader no longer has current destination access");
+			throw new RoutineCommandUnavailableError("routine reader no longer has current destination access");
 		}
 		const routineAllowed = await this.principalActionAllowed(caller.principalId, routine.siloId, ProductAuthorizationResourceKinds.Routine, routine.id, ProductAuthorizationActions.Read, now, false, {});
 		const conversationAllowed = await this.principalActionAllowed(caller.principalId, routine.siloId, ProductAuthorizationResourceKinds.Conversation, routine.destinationConversationId, ProductAuthorizationActions.Read, now, false, {});
 		if (!routineAllowed || !conversationAllowed)
 		{
-			throw new Error("routine reader no longer has current destination access");
+			throw new RoutineCommandUnavailableError("routine reader no longer has current destination access");
 		}
 	}
 
@@ -166,7 +167,7 @@ export class PrismaRoutineFactsRepository implements RoutineFactsRepository
 		const current = await this.findCurrentManagedAgentById(siloId, serviceId);
 		if (current === null)
 		{
-			throw new Error("routine selected managed agent is not currently executable");
+			throw new RoutineCommandUnavailableError("routine selected managed agent is not currently executable");
 		}
 		return current;
 	}
@@ -191,7 +192,7 @@ export class PrismaRoutineFactsRepository implements RoutineFactsRepository
 		const allowed = await this.principalActionAllowed(principalId, siloId, resourceKind, resourceId, action, now, admit, argumentsValue);
 		if (!allowed)
 		{
-			throw new Error("routine action is not currently authorized");
+			throw new RoutineCommandUnavailableError("routine action is not currently authorized");
 		}
 	}
 

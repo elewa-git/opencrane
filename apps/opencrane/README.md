@@ -74,7 +74,7 @@ The route registry is deliberately a catalogue rather than a second application 
 | --- | --- | --- |
 | Public `:8080` | Identity and access | audit, groups, grants, resource shares |
 | Public `:8080` | Agents | agent-service management and governed skill catalogue |
-| Public `:8080` | Personal workspace | guided onboarding, assets, persona, approvals, runs, model and tool configuration, conversations, existing-dataset memory commands |
+| Public `:8080` | Personal workspace | guided onboarding, assets, persona, approvals, runs, routines, model and tool configuration, conversations, existing-dataset memory commands |
 | Public `:8080` | Gateways | MCP catalogue and durable tool tasks, OCI image promotion, model routing, providers, bring-your-own-key, model registry |
 | Public `:8080` | Knowledge and reporting | retrieval sources, budgets, token usage |
 | Internal `:8081` | Controller | run-attempt, workflow-owned skill-authoring validation, and OCI MCP Job dispatch |
@@ -106,7 +106,7 @@ All other production source lives in `src/bootstrap/`:
 | `configuration/` | Read and type deployment configuration once. |
 | `http/` | Assemble authenticated public and workload-facing routers. |
 | `conversations/` | Connect conversation history and computer lifecycle; register turn, Stop, generated-file and personal-memory workflows; report producer-verified routine progress; share generated-file authority with the scanner; and mount the review credential route. |
-| `routines/` | Connect scheduling to occurrence preparation, computer activation, run admission, progress persistence, startup repair and recovery-only turn dispatch. |
+| `routines/` | Connect scheduling to occurrence preparation, computer activation, run admission, progress persistence, startup repair, recovery-only turn dispatch and the single authenticated routine command authority shared with HTTP composition. |
 | `workflows/` | Compose MCP transport and declare workflow tasks. |
 | `process/` | Initialise telemetry and clients, then start, drain, and close resources. |
 
@@ -161,8 +161,9 @@ and the shared history client. The production compiler repository resolves perso
 instructions, tools, artifacts, skills, and the model route through a transaction-bound Prisma read
 snapshot and refuses any missing or mismatched immutable reference. Personal ConversationComputer
 admission is mounted. Routine schedule and occurrence handlers now reuse that conversation path,
-including recovery of the admitted initial turn. Authenticated routine creation and control routes
-remain absent.
+including recovery of the admitted initial turn. The app composes one `RoutineAuthority` from the
+existing persistence, cipher and identifier factory, then passes it to the authenticated HTTP
+route assembly; the scheduling library remains the owner of command behaviour.
 
 Personal run status is mounted for signed-in owners.
 

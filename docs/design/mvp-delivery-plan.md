@@ -1,5 +1,36 @@
 # Deliver useful assistant work
 
+## Accepted product decisions — 27 September 2026
+
+The following decisions are accepted for the remaining MVP design and are deliberately recorded
+as **not yet implemented**. They refine the open budget, shared-work, interaction, qualification
+and execution-policy items below without rewriting their historical evidence.
+
+- One paying group is selected when shared work is created or scheduled, and children inherit it.
+  Spend counts against the global ceiling, that group's ceiling and any optional assistant ceiling,
+  while one effect receives one charge rather than duplicate attribution.
+- Budgets are EUR monthly limits resetting at 00:00 UTC on the first day of the month. Reserve
+  before each model/provider call. A hard cap stops new work, including reserved remaining work,
+  and cancellation cascades through descendants; there is no graceful-finishing exemption. A
+  provider charge already dispatched cannot be undone, so reservations use a trustworthy worst-case
+  price; unknown cost is never zero. The numeric live-test spend cap is intentionally unresolved.
+- Late invitees may see all existing history in the joined subchat, but never gain implicit parent
+  conversation or private-resource grants.
+- Per-tool approval settings use explicit **Allow automatically / Ask / Block** controls. The
+  interaction should use OpenCrane's own style and icons; the supplied image is only a visual
+  reference. Execution permissions, owner identity and revocation remain independent; automatic
+  mode is an explicit human choice, not a blanket allow. The interaction with the earlier
+  first-write/exact-Always policy still requires an explicit decision.
+- Fresh `testv6` qualification is authorized and verified superseded TEST deployments must be
+  retired after each test so compute does not accumulate. Exact resources, in-use state and shared
+  dependencies must be checked first; this does not authorize blanket production/data/backup
+  deletion or laptop-VM recreation. OpenAI credentials may be read only from secure `./keys`
+  configuration, never exposed or committed. Delegate implementation and test work to cheaper
+  Luna/Sol models; root orchestrates and reviews.
+
+These decisions supersede conflicting pending group-attribution/history and “no deploy permission”
+wording only where relevant. They do not claim source completion or live qualification.
+
 OpenCrane gives employees and teams assistants that use company knowledge and tools under company
 control. Personal and group text journeys already have implementation and live evidence. The next
 step is useful work with real records, explicit decisions, durable results and understandable controls.

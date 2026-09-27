@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
+import { RoutineCommandUnavailableError } from "../routine-command.errors";
 import { PrismaRoutineFactsRepository } from "../routine-prisma-facts";
 import { _CALLER, _Current, _NOW } from "./prisma-routine-test-fixtures";
 
@@ -47,7 +48,7 @@ describe("PrismaRoutineFactsRepository", function _Suite()
 		} as unknown as Prisma.TransactionClient;
 		const repository = new PrismaRoutineFactsRepository(transaction, _Authorization() as unknown as AuthorizationAuthority);
 
-		await expect(repository.resolveCreationAudience(_CALLER, "destination-1", ["principal-1", "principal-2"], _NOW)).rejects.toThrow("not a current destination participant");
+		await expect(repository.resolveCreationAudience(_CALLER, "destination-1", ["principal-1", "principal-2"], _NOW)).rejects.toBeInstanceOf(RoutineCommandUnavailableError);
 	});
 
 	it("admits one retired-history reader without consulting another frozen audience member", async function _CurrentReader()
@@ -77,7 +78,7 @@ describe("PrismaRoutineFactsRepository", function _Suite()
 		const repository = new PrismaRoutineFactsRepository(transaction, authorization as unknown as AuthorizationAuthority);
 		const current = _Current();
 
-		await expect(repository.requireCurrentReader(fixture.caller, current.routine, current.revision, _NOW)).rejects.toThrow("routine reader no longer has current destination access");
+		await expect(repository.requireCurrentReader(fixture.caller, current.routine, current.revision, _NOW)).rejects.toBeInstanceOf(RoutineCommandUnavailableError);
 		expect(authorization.decidePrincipal).not.toHaveBeenCalled();
 	});
 
@@ -98,7 +99,7 @@ describe("PrismaRoutineFactsRepository", function _Suite()
 		const repository = new PrismaRoutineFactsRepository(transaction, authorization as unknown as AuthorizationAuthority);
 		const current = _Current();
 
-		await expect(repository.requireCurrentReader(_CALLER, current.routine, current.revision, _NOW)).rejects.toThrow("routine reader no longer has current destination access");
+		await expect(repository.requireCurrentReader(_CALLER, current.routine, current.revision, _NOW)).rejects.toBeInstanceOf(RoutineCommandUnavailableError);
 	});
 
 	it.each([
