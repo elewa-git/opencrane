@@ -1,7 +1,7 @@
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { describe, expect, it, vi } from "vitest";
 
-import { PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION } from "@opencrane/contracts";
+import { CompiledToolDefinitionKinds, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { PrismaPromptCompilerRepository, PrismaPromptCompilerUnitOfWork } from "../prisma-prompt-compiler-repository";
@@ -56,7 +56,7 @@ describe("PrismaPromptCompilerRepository", function _PrismaPromptCompilerReposit
 
 		await expect(repository.loadPersonaInstructions("persona-1")).resolves.toBe("Be helpful.");
 		await expect(repository.loadMessages(["message-1"])).resolves.toEqual([{ role: "user", content: "hello" }]);
-		await expect(repository.loadToolDefinitions([{ toolRevisionId: "tool-1", name: "calendar.read", description: "Read calendar", inputSchema: schema, inputSchemaDigest: ___DigestCanonicalJson(schema) }])).resolves.toEqual([{ toolRevisionId: "tool-1", name: "calendar.read", modelName: "mcp_N7odFteZclDmu0DFKlJhoEt53tfHx79bYbz59tNqNu0", description: "Read calendar", requiresApproval: true, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) }]);
+		await expect(repository.loadToolDefinitions([{ toolRevisionId: "tool-1", name: "calendar.read", description: "Read calendar", inputSchema: schema, inputSchemaDigest: ___DigestCanonicalJson(schema) }])).resolves.toEqual([{ kind: CompiledToolDefinitionKinds.Mcp, toolRevisionId: "tool-1", name: "calendar.read", modelName: "mcp_N7odFteZclDmu0DFKlJhoEt53tfHx79bYbz59tNqNu0", description: "Read calendar", requiresApproval: true, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) }]);
 		await expect(repository.loadArtifactSummaries(["artifact-1"])).resolves.toEqual(["text/plain artifact artifact-1"]);
 		await expect(repository.loadSkillSummaries(["skill-1"])).resolves.toEqual(["skill skill-parent-1 revision skill-1"]);
 		await expect(repository.resolveModelRoute("silo-1", { alias: "tenant-model", modelDefinitionId: "model-1", litellmModelId: "deployment-1", maxOutputTokens: 384, generatedOutputCapabilities: ["image_png"] })).resolves.toEqual({ modelAlias: "tenant-model", maxOutputTokens: 384, generatedOutputCapabilities: ["image_png"] });

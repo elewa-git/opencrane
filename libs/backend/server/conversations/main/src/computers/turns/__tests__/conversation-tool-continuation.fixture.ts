@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { vi } from "vitest";
-import { ConversationModelResponseKinds, ConversationToolProposalOutcomes } from "@opencrane/contracts";
+import { CompiledToolDefinitionKinds, ConversationModelResponseKinds, ConversationToolProposalOutcomes } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { ConversationComputerToolResultOutcomes, type ConversationComputerToolResult } from "../conversation-computer-continuation.types";
@@ -19,7 +19,7 @@ export async function _ToolContinuationHarness(toolCount = 1, maxCompletionToken
 	{
 		const name = index === 0 ? "records.lookup" : `records.lookup-${index + 1}`;
 		const modelName = index === 0 ? "lookup_record" : `lookup_record_${index + 1}`;
-		return { name, modelName, toolRevisionId: `tool-${index + 1}`, description: "Read a dedicated record", requiresApproval: false, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) };
+		return { kind: CompiledToolDefinitionKinds.Mcp, name, modelName, toolRevisionId: `tool-${index + 1}`, description: "Read a dedicated record", requiresApproval: false, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) };
 	});
 	const calls = tools.map((tool, index) =>
 	{

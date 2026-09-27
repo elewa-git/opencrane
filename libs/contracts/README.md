@@ -106,6 +106,14 @@ never enter the snapshot or conversation computer. The compiled model
 route also freezes the model registry's generated-output allowlist; the executor
 cannot infer image-generation authority from a prompt or provider response. The compiled budget
 preserves the admitted model-turn limit alongside token, cost, tool, and wall-clock ceilings.
+
+Compiled callable declarations form a closed union. MCP declarations retain their immutable tool
+revision and deferred-approval policy. Built-in declarations instead name a registered capability
+revision and freeze proposal-only, human-review-required materialization semantics; they carry no
+MCP grant, connection, revision, or invocation identity. `request_routine` and `upgrade_session`
+are registered contract capabilities, but registration alone does not offer either one to a run or
+authorize a handler. Changing a compiled declaration shape requires a prompt-compiler version bump
+so old snapshots are refused instead of producing a different digest on recovery.
 Identity evidence is explicitly tagged. A personal run pins the human's deployment-selected Fleet or Standalone membership.
 A company run pins its own Internal Principal, active service and exact published revision. Both
 carry the human requester's independently verified human membership. The strict schema lives beside the agent model and is re-exported here. Standalone evidence uses

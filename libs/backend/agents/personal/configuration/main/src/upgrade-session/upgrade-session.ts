@@ -1,11 +1,11 @@
-import { AgentConfigPatchKinds, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
+import { AgentConfigPatchKinds, CompiledToolDefinitionKinds, FIRST_PARTY_TOOL_CAPABILITY_CONTRACTS, FirstPartyToolCapabilities, type CompiledFirstPartyToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
-/** Stable first-party revision, deliberately outside the MCP grant namespace. */
-export const UPGRADE_SESSION_TOOL_REVISION = "opencrane:personal:upgrade_session:v1";
+/** Frozen built-in semantics for an upgrade-session proposal. */
+const _UPGRADE_SESSION_CAPABILITY = FIRST_PARTY_TOOL_CAPABILITY_CONTRACTS[FirstPartyToolCapabilities.UpgradeSession];
 
 /**
- * JSON schema for the `upgrade_session` tool's arguments, tied to the revision id above.
+ * JSON schema for the `upgrade_session` capability's arguments.
  *
  * Accepts exactly the two supported patch shapes and nothing else, so an agent cannot smuggle
  * extra fields into a proposal. Its digest is published with the tool as
@@ -18,34 +18,34 @@ export const UPGRADE_SESSION_TOOL_REVISION = "opencrane:personal:upgrade_session
 const _UPGRADE_SESSION_PARAMETERS_SCHEMA = { oneOf: [{ type: "object", properties: { kind: { const: AgentConfigPatchKinds.PersonaRefresh } }, required: ["kind"], additionalProperties: false }, { type: "object", properties: { kind: { const: AgentConfigPatchKinds.ModelAlias }, modelAlias: { type: "string", minLength: 1, maxLength: 200, pattern: "\\S" } }, required: ["kind", "modelAlias"], additionalProperties: false }] } as const;
 
 /**
- * The built-in `upgrade_session` tool an agent uses to propose a configuration change.
+ * The built-in `upgrade_session` declaration for proposing a configuration change.
  *
- * Needs no approval because calling it applies nothing: it records a request the user reviews
- * later. `requiresApproval: false` is safe only for as long as that stays true.
- *
- * Used by: personal configuration composition, which
- * appends it to a run's compiled tools when {@link __IsUpgradeSessionAvailable} allows.
+ * A model selection may only save a proposal. The declaration's materialization rule requires a
+ * later human review before any configuration change can become active. This descriptor is not
+ * offered by production composition until admission persists first-party capability selection.
  */
-export const UPGRADE_SESSION_TOOL: CompiledToolDefinition = {
-	name: "upgrade_session",
-	modelName: "upgrade_session",
-	toolRevisionId: UPGRADE_SESSION_TOOL_REVISION,
+export const UPGRADE_SESSION_TOOL: CompiledFirstPartyToolDefinition = {
+	kind: CompiledToolDefinitionKinds.FirstParty,
+	name: _UPGRADE_SESSION_CAPABILITY.name,
+	modelName: _UPGRADE_SESSION_CAPABILITY.modelName,
+	capability: FirstPartyToolCapabilities.UpgradeSession,
+	capabilityRevision: _UPGRADE_SESSION_CAPABILITY.capabilityRevision,
+	effect: _UPGRADE_SESSION_CAPABILITY.effect,
+	materialization: _UPGRADE_SESSION_CAPABILITY.materialization,
 	description: "Propose a personal-agent configuration change for a future session after the user reviews it.",
-	requiresApproval: false,
 	parametersSchema: _UPGRADE_SESSION_PARAMETERS_SCHEMA,
 	parametersSchemaDigest: ___DigestCanonicalJson(_UPGRADE_SESSION_PARAMETERS_SCHEMA),
 };
 
 /**
- * Returns whether a run may be offered the `upgrade_session` tool.
+ * Returns whether a future admission owner has the immutable coordinates needed for this capability.
  *
  * Requires both a persona revision and a conversation: a proposal must name the persona whose
  * revision it freezes, and the conversation it came from, and neither can be invented later.
  *
- * Called by: the personal configuration composition boundary.
- *
  * @param snapshot - The run's immutable input snapshot.
- * @returns True when the tool may be offered; false leaves the run's tools unchanged.
+ * @returns True when a persisted capability choice could bind both persona and conversation.
+ * This check grants no permission and does not add the declaration to compiled input.
  */
 export function __IsUpgradeSessionAvailable(snapshot: RunInputSnapshot): boolean
 {

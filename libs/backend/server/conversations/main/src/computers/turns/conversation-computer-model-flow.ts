@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, ConversationModelResponseKinds, ConversationModelToolModes, ___ConversationModelToolExchangeSchema, ___ConversationToolProposalSchema, ___ParseRunBudgetPolicy, type ConversationModelDelivery, type ConversationModelToolCall } from "@opencrane/contracts";
+import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, CompiledToolDefinitionKinds, ConversationModelResponseKinds, ConversationModelToolModes, ___ConversationModelToolExchangeSchema, ___ConversationToolProposalSchema, ___ParseRunBudgetPolicy, type ConversationModelDelivery, type ConversationModelToolCall } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, ___ParseAndValidateJson, type JsonValue } from "@opencrane/util";
 
 import { _ConversationToolResultContent } from "./conversation-tool-result-content";
@@ -240,10 +240,13 @@ async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: 
  */
 function _Proposal(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, call: ConversationModelToolCall)
 {
-	const matching = candidate.compiledInput.tools.filter(tool => tool.modelName === call.name);
+	const matching = candidate.compiledInput.tools.filter(tool => tool.kind === CompiledToolDefinitionKinds.Mcp && tool.modelName === call.name);
 	if (matching.length !== 1)
 		throw new Error("Conversation model selected an unavailable or ambiguous tool");
-	const command = ___ParseAndValidateJson(call.arguments, "Conversation tool arguments", argumentsValue => ___ConversationToolProposalSchema.parse({ bootstrapId: turn.bootstrapId, toolRevisionId: matching[0]!.toolRevisionId, arguments: argumentsValue }));
+	const tool = matching[0]!;
+	if (tool.kind !== CompiledToolDefinitionKinds.Mcp)
+		throw new Error("Conversation model selected a non-MCP callable at the MCP proposal boundary");
+	const command = ___ParseAndValidateJson(call.arguments, "Conversation tool arguments", argumentsValue => ___ConversationToolProposalSchema.parse({ bootstrapId: turn.bootstrapId, toolRevisionId: tool.toolRevisionId, arguments: argumentsValue }));
 	return { command, prepared: _PrepareConversationToolProposal(turn, candidate, command) };
 }
 

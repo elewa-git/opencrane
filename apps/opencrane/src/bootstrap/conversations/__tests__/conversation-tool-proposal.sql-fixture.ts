@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { AgentServiceKind, McpExecutionTransport, PrismaClient } from "@prisma/client";
 import { Client } from "pg";
 
-import { ___RunInputOriginSchema, AgentIdentityStates, ConversationModelToolModes, ComputerLeaseStates, ConversationComputerStates, ExecutionSubjectMembershipKinds, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, ___ExecutionSubjectSchema, type ConversationToolProposal, type RunInputSnapshot } from "@opencrane/contracts";
+import { ___RunInputOriginSchema, AgentIdentityStates, CompiledToolDefinitionKinds, ConversationModelToolModes, ComputerLeaseStates, ConversationComputerStates, ExecutionSubjectMembershipKinds, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, ___ExecutionSubjectSchema, type ConversationToolProposal, type RunInputSnapshot } from "@opencrane/contracts";
 import { PrismaPromptCompilerUnitOfWork } from "@opencrane/backend/agents/execution/inputs";
 import { __DigestRunInputSnapshot } from "@opencrane/backend/agents/execution/runs";
 import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
@@ -206,8 +206,8 @@ export async function _SeedConversationToolProposalSqlFixture(options: _FixtureO
 		finally { await prisma.$disconnect(); }
 	};
 	const compiledInput = await recompile();
-	const tool = compiledInput.tools.find(definition => definition.toolRevisionId === toolRevisionId);
-	if (tool === undefined)
+	const tool = compiledInput.tools.find(definition => definition.kind === CompiledToolDefinitionKinds.Mcp && definition.toolRevisionId === toolRevisionId);
+	if (tool === undefined || tool.kind !== CompiledToolDefinitionKinds.Mcp)
 		throw new Error("SQL fixture compiler omitted its exact MCP tool revision");
 	const identityBase = { schemaVersion: 1, id: agentIdentityId, siloId, agentServiceId, name: "SQL assistant", avatarArtifactRevisionId: null, state: AgentIdentityStates.Active, createdByPrincipalId: requesterPrincipalId, createdAt: now.toISOString() } as const;
 	const identity = managed ? { ...identityBase, kind: "managed", principalId } as const : { ...identityBase, kind: "proxied", proxiedPrincipalId: principalId, delegationPolicyId: "personal-agent-session-v1" } as const;

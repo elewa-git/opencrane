@@ -57,14 +57,17 @@ Internally, the source is grouped by responsibility:
 
 - `_CreatePersonalConfigurationRouter` composes the production owner-only API over Prisma.
 - `_PersonalConfigurationOpenapiPaths` contributes the configuration endpoints to the server API.
-- `UPGRADE_SESSION_TOOL` and `UPGRADE_SESSION_TOOL_REVISION` describe the built-in future-change tool.
-  Its explicit provider-facing name is `upgrade_session`, while its first-party revision remains the
-  authority coordinate used when the proposal is admitted.
-- `__IsUpgradeSessionAvailable` checks whether a frozen run can receive that tool descriptor.
-- `UpgradeSessionInvocation` and `UpgradeSessionProposalRepository` form the narrow server-worker
-  contract for proposing that future change after runtime admission.
-- `PrismaUpgradeSessionProposalUnitOfWork` validates the durable admitted invocation, resolves its
-  owner profile, and records the future-session proposal under one transaction.
+- `UPGRADE_SESSION_TOOL` describes the built-in future-change proposal capability. It has a stable
+  capability revision and requires human review before materialization, but has no MCP revision,
+  grant, connection, approval, or invocation coordinate. Production does not offer it yet because
+  run admission does not persist a first-party capability choice.
+- `__IsUpgradeSessionAvailable` checks whether a frozen run has the persona and conversation
+  coordinates a future admission owner would need. It does not grant or append the capability.
+- `UpgradeSessionInvocation`, `UpgradeSessionProposalRepository`, and
+  `PrismaUpgradeSessionProposalUnitOfWork` are dormant remnants of the earlier MCP-shaped proposal
+  adapter. No production caller uses them. The proposal persistence behavior survives, but this DTO
+  must be replaced without a compatibility shim when first-party upgrade-session dispatch is built;
+  it is not compatible with `UPGRADE_SESSION_TOOL`.
 - `PrismaPersonalConfigurationPersonaRefreshRepository` is the transaction-scoped bridge that a
   persona unit of work uses to claim and apply an accepted refresh without taking over the
   configuration delegate.

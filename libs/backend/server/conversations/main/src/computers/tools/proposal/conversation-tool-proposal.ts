@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { ConversationModelToolModes, type ConversationToolProposal } from "@opencrane/contracts";
+import { CompiledToolDefinitionKinds, ConversationModelToolModes, type ConversationToolProposal } from "@opencrane/contracts";
 import { __ValidateDeferredToolArguments } from "@opencrane/backend/server/iam/authorization";
 import { ___CloneCanonicalJson, ___DigestCanonicalJson } from "@opencrane/util";
 
@@ -19,14 +19,14 @@ import { ConversationToolProposalRefusals, type PreparedConversationToolProposal
 export function _PrepareConversationToolProposal(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: ConversationToolProposal): PreparedConversationToolProposal
 {
 	const input = candidate.compiledInput;
-	const tool = input.tools.find(item => item.toolRevisionId === proposal.toolRevisionId);
+	const tool = input.tools.find(item => item.kind === CompiledToolDefinitionKinds.Mcp && item.toolRevisionId === proposal.toolRevisionId);
 	const current = turn.protocol.steps.at(-1);
 	if (turn.protocol.output !== null || turn.protocol.unavailable !== null || turn.protocol.cancellation !== null
 		|| current === undefined || current.state !== ConversationComputerTurnProtocolStates.ModelReserved && current.state !== ConversationComputerTurnProtocolStates.ToolPending
 		|| current.reservation.tools !== ConversationModelToolModes.Select
 		|| proposal.bootstrapId !== turn.bootstrapId || input.digest !== turn.compile.digest
 		|| input.runId !== turn.compile.runId || input.attempt !== turn.compile.attempt
-		|| tool === undefined || ___DigestCanonicalJson(tool.parametersSchema) !== tool.parametersSchemaDigest
+		|| tool === undefined || tool.kind !== CompiledToolDefinitionKinds.Mcp || ___DigestCanonicalJson(tool.parametersSchema) !== tool.parametersSchemaDigest
 		|| !__ValidateDeferredToolArguments(tool.parametersSchema, proposal.arguments))
 		throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Invalid);
 	const deadline = input.budget.wallClockDeadlineEpochMs;

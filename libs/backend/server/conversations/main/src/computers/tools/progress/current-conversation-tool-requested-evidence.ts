@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
-import { ConversationLogToolKinds } from "@opencrane/contracts";
+import { CompiledToolDefinitionKinds, ConversationLogToolKinds } from "@opencrane/contracts";
 
 import type { ConversationComputerTurnCandidateResolver, ConversationComputerTurnStore } from "../../turns/conversation-computer-turn.types";
 import { ConversationComputerTurnProtocolStates } from "../../turns/conversation-computer-turn-protocol.types";
@@ -74,7 +74,7 @@ class _CurrentConversationToolRequestedNotificationEvidenceUnitOfWork implements
 			|| invocation.candidateId !== command.toolInvocationId || invocation.toolInvocationId !== command.toolInvocationId
 			|| invocation.requestFingerprint !== selection.requestFingerprint)
 			return null;
-		const tools = input.tools.filter(tool => tool.toolRevisionId === invocation.toolRevisionId);
+		const tools = input.tools.filter(tool => tool.kind === CompiledToolDefinitionKinds.Mcp && tool.toolRevisionId === invocation.toolRevisionId);
 		if (tools.length !== 1)
 			return null;
 		const tool = tools[0]!;

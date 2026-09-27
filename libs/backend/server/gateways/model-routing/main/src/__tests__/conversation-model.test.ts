@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CompiledFinalOutputModes, ConversationModelResponseKinds, ConversationModelToolModes, type ConversationModelRequest, type ConversationModelToolCall, type CompiledToolDefinition } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, CompiledToolDefinitionKinds, ConversationModelResponseKinds, ConversationModelToolModes, FirstPartyToolCapabilities, FirstPartyToolEffectKinds, FirstPartyToolMaterializationKinds, type ConversationModelRequest, type ConversationModelToolCall, type CompiledFirstPartyToolDefinition, type CompiledMcpToolDefinition, type CompiledToolDefinition } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __RequestConversationModel } from "../core/conversation-model";
@@ -334,10 +334,17 @@ describe("one conversation model text exchange", function _transportSuite()
 
 
 /** Creates a frozen tool revision whose schema is independently pinned by its digest. */
-function _tool(overrides: Partial<CompiledToolDefinition> = {}): CompiledToolDefinition
+function _tool(overrides: Partial<Omit<CompiledMcpToolDefinition, "kind">> = {}): CompiledMcpToolDefinition
 {
 	const parametersSchema = { type: "object", properties: { path: { type: "string" } }, required: ["path"], additionalProperties: false };
-	return { name: "read_file", modelName: "read_file", toolRevisionId: "revision-read-1", description: "Read a file.", requiresApproval: false, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema), ...overrides };
+	return { kind: CompiledToolDefinitionKinds.Mcp, name: "read_file", modelName: "read_file", toolRevisionId: "revision-read-1", description: "Read a file.", requiresApproval: false, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema), ...overrides };
+}
+
+/** Builds a valid built-in proposal descriptor, which has no MCP revision or approval coordinates. */
+function _firstPartyTool(): CompiledFirstPartyToolDefinition
+{
+	const parametersSchema = { type: "object", properties: { instruction: { type: "string" } }, required: ["instruction"], additionalProperties: false };
+	return { kind: CompiledToolDefinitionKinds.FirstParty, name: "request_routine", modelName: "request_routine", description: "Prepare a routine proposal for review.", parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema), capability: FirstPartyToolCapabilities.RequestRoutine, capabilityRevision: "opencrane:scheduling:request_routine:v1", effect: FirstPartyToolEffectKinds.ProposalOnly, materialization: FirstPartyToolMaterializationKinds.HumanReviewRequired };
 }
 
 /** Supplies two-call budgets; their durable aggregate reservation remains the conversation owner's job. */
@@ -432,6 +439,20 @@ describe("one selected tool and its paired continuation", function _toolExchange
 		expect(_telemetry.fields).toEqual([{}]);
 	});
 
+	it("offers a valid first-party descriptor as a provider function without MCP fields", async function _firstPartyOffer()
+	{
+		const firstParty = _firstPartyTool();
+		const fetchMock = vi.fn().mockResolvedValue(_response());
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(__RequestConversationModel(_selection([firstParty]))).resolves.toMatchObject({ kind: ConversationModelResponseKinds.Text });
+		const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1].body));
+		expect(body.tools).toEqual([{ type: "function", function: { name: firstParty.modelName, description: firstParty.description, parameters: firstParty.parametersSchema } }]);
+		expect(body.tools[0]).not.toHaveProperty("toolRevisionId");
+		expect(body.tools[0]).not.toHaveProperty("requiresApproval");
+		expect(body.tools[0].function).not.toHaveProperty("toolRevisionId");
+		expect(body.tools[0].function).not.toHaveProperty("requiresApproval");
+	});
+
 	it("accepts text when a first call chooses not to propose a tool", async function _textInstead()
 	{
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(_response()));
@@ -504,6 +525,17 @@ describe("one selected tool and its paired continuation", function _toolExchange
 		const fetchMock = vi.fn();
 		vi.stubGlobal("fetch", fetchMock);
 		await expect(__RequestConversationModel(_selection(tools))).rejects.toMatchObject({ code: ConversationModelFailureCodes.InvalidRequest });
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		{ ..._firstPartyTool(), toolRevisionId: "forged-mcp-revision", requiresApproval: false },
+		{ ..._tool(), capability: FirstPartyToolCapabilities.RequestRoutine, capabilityRevision: "opencrane:scheduling:request_routine:v1", effect: FirstPartyToolEffectKinds.ProposalOnly, materialization: FirstPartyToolMaterializationKinds.HumanReviewRequired },
+	] as const)("rejects mixed MCP and first-party descriptor fields before dispatch", async function _mixedDescriptor(tool)
+	{
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+		await expect(__RequestConversationModel(_selection([tool as unknown as CompiledToolDefinition]))).rejects.toMatchObject({ code: ConversationModelFailureCodes.InvalidRequest });
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 

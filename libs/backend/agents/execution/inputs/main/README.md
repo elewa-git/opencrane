@@ -184,9 +184,9 @@ ceiling or substitutes a different allowance.
   `skill_unavailable`.
 - `AssembleRunInputSnapshotResult` / `SessionAssemblyRefusalReason` — the all-or-nothing outcome and
   its refusal vocabulary.
-- `__CompileRunInput` / `__AppendCompiledTool` — deterministic expansion of a sealed snapshot and
-  authoritative live attempt into runtime-owned prompt input, with both coordinates digest-sealed
-  and a version stamp that makes a compiler change visible in evidence.
+- `__CompileRunInput` — deterministic expansion of a sealed snapshot and authoritative live attempt
+  into runtime-owned prompt input, with both coordinates digest-sealed and a version stamp that
+  makes a compiler change visible in evidence. The current compiler emits MCP declarations only.
 - `PromptCompilerRepositories` — injected read ports used only to dereference snapshot-authorized
   content while compiling.
 - `ConversationHistoryAdmissionReader` re-reads the exact Kurrent revision, ordered identifiers,
@@ -204,6 +204,12 @@ persona instructions, MCP tool revisions, artifact revisions, skill revisions, a
 It receives canonical conversation messages through `VerifiedConversationPromptMessageRepository`,
 so it has no relational transcript path. Missing rows, changed schemas, foreign model coordinates,
 inactive parents, and unsupported generated-output capabilities fail compilation closed.
+
+Compiled callable declarations distinguish MCP revisions from built-in capabilities. Built-in
+descriptors do not carry an MCP revision, grant, connection, approval, or invocation coordinate.
+This package does not append them after compilation: an admission owner must first persist the
+server-derived capability choice, and that wiring is not present yet. Snapshots stamped with an
+older compiler version are refused rather than recompiled to a different digest.
 
 ## Boundary
 

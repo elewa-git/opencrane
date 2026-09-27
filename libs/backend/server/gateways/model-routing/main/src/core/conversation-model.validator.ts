@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { CompiledFinalOutputModes, ___ConversationModelDeliverySchema, ___ConversationModelResponseSchema, ___ConversationModelToolHistorySchema, ConversationModelResponseKinds, ConversationModelToolModes, type CompiledToolDefinition, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ___CompiledToolDefinitionSchema, ___ConversationModelDeliverySchema, ___ConversationModelResponseSchema, ___ConversationModelToolHistorySchema, ConversationModelResponseKinds, ConversationModelToolModes, type CompiledToolDefinition, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
 import { ___CanonicalizeJson, ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { ConversationModelError, ConversationModelFailureCodes, type PreparedConversationModelRequest } from "./conversation-model.types";
@@ -31,12 +31,16 @@ function _offeredTools(tools: readonly CompiledToolDefinition[]): readonly Compi
 		throw new ConversationModelError(ConversationModelFailureCodes.InvalidRequest);
 	const names = new Set<string>();
 	const offered: CompiledToolDefinition[] = [];
-	for (const tool of tools)
+	for (const candidate of tools)
 	{
-		if (!tool || typeof tool.modelName !== "string" || !/^[A-Za-z0-9_-]{1,64}$/u.test(tool.modelName) || names.has(tool.modelName) || typeof tool.requiresApproval !== "boolean")
+		const parsed = ___CompiledToolDefinitionSchema.safeParse(candidate);
+		if (!parsed.success)
+			throw new ConversationModelError(ConversationModelFailureCodes.InvalidRequest);
+		const tool = parsed.data;
+		if (names.has(tool.modelName))
 			throw new ConversationModelError(ConversationModelFailureCodes.InvalidRequest);
 		names.add(tool.modelName);
-		if (typeof tool.description !== "string" || !_isRecord(tool.parametersSchema) || ___DigestCanonicalJson(tool.parametersSchema) !== tool.parametersSchemaDigest)
+		if (___DigestCanonicalJson(tool.parametersSchema) !== tool.parametersSchemaDigest)
 			throw new ConversationModelError(ConversationModelFailureCodes.InvalidRequest);
 		offered.push(tool);
 	}

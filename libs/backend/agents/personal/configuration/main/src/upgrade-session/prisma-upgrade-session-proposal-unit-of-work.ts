@@ -10,7 +10,11 @@ import { _ProposeUpgradeSession, _RequirePersonalUpgradeSessionCandidate, _Requi
 import type { UpgradeSessionProposalUnitOfWork } from "./upgrade-session-proposal-unit-of-work.types";
 import type { PersonalUpgradeSessionCandidate, PersonalUpgradeSessionSnapshot, UpgradeSessionInvocation, UpgradeSessionProposalReceipt } from "./upgrade-session.types";
 
-/** Prisma transaction owner for one provenance-bound runtime upgrade-session proposal. */
+/**
+ * Dormant Prisma transaction owner for the earlier MCP-shaped upgrade-session proposal adapter.
+ * It has no production caller and must not be wired to the first-party descriptor without replacing
+ * its invocation contract.
+ */
 export class PrismaUpgradeSessionProposalUnitOfWork implements UpgradeSessionProposalUnitOfWork
 {
 	/** Canonical product-authority database client. */

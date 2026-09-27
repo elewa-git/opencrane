@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { GeneratedOutputCapability, type CompiledModelRoute, type CompiledRunInput, type CompiledToolDefinition, type RunInputSnapshotMcpTool } from "@opencrane/contracts";
+import { CompiledToolDefinitionKinds, GeneratedOutputCapability, type CompiledMcpToolDefinition, type CompiledModelRoute, type CompiledRunInput, type RunInputSnapshotMcpTool } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _McpModelToolName } from "./mcp-model-tool-name";
@@ -65,7 +65,7 @@ export class PrismaPromptCompilerRepository implements PromptCompilerRepositorie
 	}
 
 	/** Verify every frozen MCP tool literal against its exact immutable database revision. */
-	async loadToolDefinitions(mcpTools: readonly RunInputSnapshotMcpTool[]): Promise<readonly CompiledToolDefinition[]>
+	async loadToolDefinitions(mcpTools: readonly RunInputSnapshotMcpTool[]): Promise<readonly CompiledMcpToolDefinition[]>
 	{
 		_RequireUniqueIds(mcpTools.map(tool => tool.toolRevisionId), "MCP tool");
 		if (mcpTools.length === 0)
@@ -74,14 +74,14 @@ export class PrismaPromptCompilerRepository implements PromptCompilerRepositorie
 		if (rows.length !== mcpTools.length)
 			throw new Error("Prompt MCP tool revision set is incomplete");
 		const rowsById = new Map(rows.map(row => [row.id, row]));
-		return mcpTools.map(function _CompileTool(tool): CompiledToolDefinition
+		return mcpTools.map(function _CompileTool(tool): CompiledMcpToolDefinition
 		{
 			const row = rowsById.get(tool.toolRevisionId);
 			if (row === undefined || row.name !== tool.name || row.description !== tool.description || row.inputSchemaDigest !== tool.inputSchemaDigest
 				|| ___DigestCanonicalJson(row.inputSchema as JsonValue) !== tool.inputSchemaDigest || ___DigestCanonicalJson(tool.inputSchema) !== tool.inputSchemaDigest
 				|| row.siloId !== row.serverRevision.siloId || row.siloId !== row.serverRevision.server.siloId)
 				throw new Error("Prompt MCP tool revision does not match the admitted snapshot");
-			return { name: tool.name, modelName: _McpModelToolName(tool.toolRevisionId), toolRevisionId: tool.toolRevisionId, description: tool.description ?? "", requiresApproval: row.serverRevision.server.requiresApproval, parametersSchema: tool.inputSchema, parametersSchemaDigest: tool.inputSchemaDigest };
+			return { kind: CompiledToolDefinitionKinds.Mcp, name: tool.name, modelName: _McpModelToolName(tool.toolRevisionId), toolRevisionId: tool.toolRevisionId, description: tool.description ?? "", requiresApproval: row.serverRevision.server.requiresApproval, parametersSchema: tool.inputSchema, parametersSchemaDigest: tool.inputSchemaDigest };
 		});
 	}
 

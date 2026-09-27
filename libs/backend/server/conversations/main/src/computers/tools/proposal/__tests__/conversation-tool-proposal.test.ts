@@ -1,4 +1,4 @@
-import { CompiledFinalOutputModes } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, CompiledToolDefinitionKinds, FirstPartyToolCapabilities, FirstPartyToolEffectKinds, FirstPartyToolMaterializationKinds } from "@opencrane/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ConversationToolProposal } from "@opencrane/contracts";
@@ -14,7 +14,7 @@ function _Fixture()
 	vi.useFakeTimers();
 	vi.setSystemTime(1_800_000_000_000);
 	const schema = { type: "object", additionalProperties: false, required: ["query"], properties: { query: { type: "string" } } };
-	const tool = { name: "records.read", modelName: "records_read", toolRevisionId: "tool-1", description: "Read a record", requiresApproval: false, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) };
+	const tool = { kind: CompiledToolDefinitionKinds.Mcp as const, name: "records.read", modelName: "records_read", toolRevisionId: "tool-1", description: "Read a record", requiresApproval: false, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) };
 	const reservation = { ordinal: 1, invocationFence: "model-1", tools: "select", compiledInputDigest: "sha256:compiled", historyDigest: "sha256:history", requestDigest: "sha256:request", maxCompletionTokens: 512, authorityExpiresAtEpochMs: Date.now() + 60_000, dispatchDeadlineEpochMs: Date.now() + 30_000 };
 	const protocol = { state: ConversationComputerTurnProtocolStates.ModelReserved, revision: 1n, steps: [{ state: ConversationComputerTurnProtocolStates.ModelReserved, reservation, selection: null, result: null }], accounting: { reservedModelCalls: 1, reservedCompletionTokens: 512, reservedToolInvocations: 0, toolResultCyclesFed: 0 }, modelRetry: null, output: null, unavailable: null, cancellation: null };
 	const turn = { bootstrapId: "b1f5a60b-22d8-4dce-b41f-8da167ea0554", siloId: "silo-1", computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" }, binding: { conversationId: "conversation-1", agentIdentityId: "identity-1", expectedRevision: 2n }, compile: { runId: "run-1", attempt: 1, digest: "sha256:compiled" }, budget: { maxModelTurns: 2, maxCompletionTokens: 1_024, maxCostUsdMicros: null, wallClockDeadlineEpochMs: Date.now() + 60_000, maxToolInvocations: 1, maxLoopIterations: 1 }, protocol } as unknown as FrozenConversationComputerTurn;
@@ -69,6 +69,24 @@ describe("one frozen conversation tool proposal", function _Suite()
 		f.tool.requiresApproval = false;
 		f.tool.parametersSchemaDigest = `sha256:${"0".repeat(64)}`;
 		expect(() => _PrepareConversationToolProposal(f.turn, f.candidate, f.proposal)).toThrow("invalid");
+	});
+	it("does not admit a first-party proposal through the MCP proposal path", function _RejectFirstParty()
+	{
+		const f = _Fixture();
+		const firstParty = {
+			kind: CompiledToolDefinitionKinds.FirstParty,
+			name: f.tool.name,
+			modelName: f.tool.modelName,
+			description: f.tool.description,
+			parametersSchema: f.tool.parametersSchema,
+			parametersSchemaDigest: f.tool.parametersSchemaDigest,
+			capability: FirstPartyToolCapabilities.RequestRoutine,
+			capabilityRevision: "opencrane:scheduling:request_routine:v1",
+			effect: FirstPartyToolEffectKinds.ProposalOnly,
+			materialization: FirstPartyToolMaterializationKinds.HumanReviewRequired,
+		};
+		const candidate = { ...f.candidate, compiledInput: { ...f.candidate.compiledInput, tools: [firstParty] } } as never;
+		expect(() => _PrepareConversationToolProposal(f.turn, candidate, f.proposal)).toThrow("invalid");
 	});
 	it("rejects incomplete arguments and an original deadline reached during preparation", function _SchemaAndBudget()
 	{

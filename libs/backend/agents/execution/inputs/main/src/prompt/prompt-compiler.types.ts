@@ -1,4 +1,4 @@
-import type { CompiledMessage, CompiledModelRoute, CompiledToolDefinition, RunInputSnapshotMcpTool } from "@opencrane/contracts";
+import type { CompiledMcpToolDefinition, CompiledMessage, CompiledModelRoute, RunInputSnapshotMcpTool } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
 /**
@@ -63,7 +63,7 @@ export interface PromptCompilerRepositories extends ConversationPromptMessageRep
 	 * sealing the compiled output, so grant/repository iteration order can never change the compiled
 	 * payload or its digest.
 	 */
-	loadToolDefinitions(mcpTools: readonly RunInputSnapshotMcpTool[]): Promise<readonly CompiledToolDefinition[]>;
+	loadToolDefinitions(mcpTools: readonly RunInputSnapshotMcpTool[]): Promise<readonly CompiledMcpToolDefinition[]>;
 	/** Resolve one-line availability summaries for the immutable artifact revisions offered to the run. */
 	loadArtifactSummaries(artifactRevisionIds: readonly string[]): Promise<readonly string[]>;
 	/** Resolve one-line availability summaries for the immutable skill revisions offered to the run. */

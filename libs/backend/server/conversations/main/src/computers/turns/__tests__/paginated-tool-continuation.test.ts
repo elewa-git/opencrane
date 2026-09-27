@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ConversationModelResponseKinds, ConversationModelToolModes, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
+import { CompiledToolDefinitionKinds, ConversationModelResponseKinds, ConversationModelToolModes, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { ConversationComputerToolResultOutcomes } from "../conversation-computer-continuation.types";
@@ -38,8 +38,8 @@ async function _inventoryHarness()
 		Object.assign(candidate, { compiledInput: {
 			...candidate.compiledInput,
 			tools: [
-				{ name: "inventory.discover", modelName: "discover_inventory", toolRevisionId: "inventory-discovery-revision-2", description: "Discover an inventory feed", requiresApproval: false, parametersSchema: discoverySchema, parametersSchemaDigest: ___DigestCanonicalJson(discoverySchema) },
-				{ name: "inventory.page", modelName: "read_inventory_page", toolRevisionId: "inventory-pages-revision-7", description: "Read one inventory page", requiresApproval: false, parametersSchema: pageSchema, parametersSchemaDigest: ___DigestCanonicalJson(pageSchema) },
+				{ kind: CompiledToolDefinitionKinds.Mcp, name: "inventory.discover", modelName: "discover_inventory", toolRevisionId: "inventory-discovery-revision-2", description: "Discover an inventory feed", requiresApproval: false, parametersSchema: discoverySchema, parametersSchemaDigest: ___DigestCanonicalJson(discoverySchema) },
+				{ kind: CompiledToolDefinitionKinds.Mcp, name: "inventory.page", modelName: "read_inventory_page", toolRevisionId: "inventory-pages-revision-7", description: "Read one inventory page", requiresApproval: false, parametersSchema: pageSchema, parametersSchemaDigest: ___DigestCanonicalJson(pageSchema) },
 			],
 			budget: { ...candidate.compiledInput.budget, wallClockDeadlineEpochMs: Date.now() + 120_000 },
 		} });
@@ -60,7 +60,9 @@ async function _inventoryHarness()
 			throw new Error("Inventory result requires a saved declaration");
 		const reply = replies[selection.ordinal - 1]!;
 		expect(saved.declaration.call).toMatchObject({ id: reply.callId, name: reply.name, arguments: JSON.stringify(reply.arguments) });
-		const tool = f.candidate.compiledInput.tools.find(tool => tool.modelName === saved.declaration.call.name)!;
+		const tool = f.candidate.compiledInput.tools.find(tool => tool.kind === CompiledToolDefinitionKinds.Mcp && tool.modelName === saved.declaration.call.name);
+		if (tool === undefined || tool.kind !== CompiledToolDefinitionKinds.Mcp)
+			throw new Error("Inventory result requires a compiled MCP tool");
 		const payload = { toolInvocationId: selection.toolInvocationId, outcome: "succeeded" as const, result: reply.result };
 		return { outcome: ConversationComputerToolResultOutcomes.Available, payload, payloadDigest: ___DigestCanonicalJson(payload), toolRevisionId: tool.toolRevisionId, occurredAt, notAfterEpochMs: f.candidate.compiledInput.budget.wallClockDeadlineEpochMs + 60_000 };
 	});

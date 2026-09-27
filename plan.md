@@ -44,6 +44,82 @@ These decisions supersede older pending group-attribution/history, “no deploy 
 unresolved numeric live-test-cap and first-write/Always-policy text only where those statements
 conflict. Historical evidence is retained below.
 
+## Conversational routine proposals — execution wave
+
+This wave starts from published draft #916 head
+`0d73e53b86e478f68b330d46fb3c87b92c93124f`. Live stack inspection preserves
+#908 → #910 → #914 → #915 → #916 against develop
+`10abd0ef6182f36bec13d8f1358e43b15ead7cd5`, with snapshot
+`849f798c0d05710320db3e249934c9026b132ef30646c1ed339cacd4e58698d3`.
+The preceding UI wave is published; its visual candidates are not approved baselines and its
+source checks are not live scheduling proof.
+
+The accepted outcome is a `request_routine` tool that opens a preconfigured, durable review form.
+The model may propose an instruction and schedule, but the server derives the requester, silo,
+source conversation and admitted run coordinates. The tool creates a proposal, never a routine,
+grant, firing or run. The existing human-reviewed creation command remains the activation boundary,
+including when the tool itself is permitted automatically.
+
+Implementation is divided by owned contracts rather than new infrastructure:
+
+1. Replace the dormant first-party tool's fake MCP identity with a closed, discriminated callable
+   contract. Preserve deterministic compilation and digests; first-party authority must be frozen
+   by admission before a production caller can offer the tool. Existing `upgrade_session` tooling
+   remains unwired and must not acquire authority from this type correction. Delete the unused
+   post-compilation append helper without another public append-by-descriptor replacement. This
+   first increment emits only MCP tools in production. Its new serialized discriminator requires
+   a compiler-version change: old-version snapshots are refused, not translated or replayed with
+   changed bytes. Snapshot shape and database baseline remain unchanged in this increment.
+2. Freeze first-party capability, semantic revision and parameter-schema digest in the existing
+   Serializable run-admission transaction. Persist and strictly recover the dedicated selection;
+   include it in the snapshot digest and versioned fresh-install baseline. Human-origin interactive
+   group subchats remain eligible. Routine and future autonomous-delegation producers must freeze
+   no first-party capabilities. Do not offer `request_routine` until its proposal dispatcher exists.
+3. Extend scheduling with an encrypted proposal and transaction-bound lifecycle. Reuse the existing
+   database, encryption and routine authority; do not use active-run elicitation storage for a form
+   that must survive its originating run. Exact source run/attempt/call replay returns the same
+   proposal; changed arguments conflict.
+4. Join the admitted interactive conversation path to proposal creation and a requester-only durable
+   notification. The existing routine feature reads an opaque proposal reference and presents its
+   content as editable suggestions. Neither URLs nor notification labels contain the instruction.
+5. Accept the final human-reviewed command and mark the proposal accepted in the same Serializable
+   transaction as routine creation. Recheck current membership, source/destination access, audience
+   and executing-service permissions. Prove lost responses, duplicate notifications, expiry,
+   cancellation/acceptance races, changed sessions and revoked access before live qualification.
+
+| Proposal state | Event | Required outcome |
+| --- | --- | --- |
+| Pending | Authorized read | Return the encrypted proposal's decoded suggestions to the original requester under current access; do not activate work. |
+| Pending | Human accepts | Create exactly one routine through its existing authority and save Accepted atomically; final reviewed values may differ from the immutable suggestion. |
+| Pending | Cancel or database-time expiry | Close the proposal without creating a routine. A losing update reloads and interprets the durable winner. |
+| Accepted | Exact creation replay | Return the saved routine; different final command input conflicts. |
+| Cancelled or Expired | Acceptance or new command | Refuse activation; never reopen the proposal. |
+
+No new app, library, workload, generic proposal framework or cleanup scheduler is planned. A schema
+change, when implemented, must update the reviewed fresh-install baseline and release binding in
+the same source slice. This wave does not spend the €5 live-test envelope, grant live access, merge
+the stack, deploy, or create a release tag.
+
+The first increment now has a closed MCP/first-party callable union, strict shared validators,
+MCP-only production compilation and explicit MCP narrowing at proposal, progress and result
+boundaries. The unused append helper and fake first-party MCP revision are removed. Compiler
+version `opencrane.prompt-compiler/2026-09-27.1` binds the new discriminator; snapshot version 3
+and the database baseline are unchanged. This is a dormant prerequisite, not a working
+`request_routine` journey or permission to offer first-party tools.
+
+Current automated evidence totals 631 non-overlapping tests: contracts 231, execution-inputs 172,
+personal configuration 65, the focused application tool-name check 3, model routing 119 and changed
+conversation regressions 41. TypeScript checks pass for those
+three owning packages, conversations, model routing and the joined application. Changed production
+style (17 files), Prisma boundaries (334 files), module growth, full import boundaries, release
+binding and diff checks pass. Initial wider downstream runs passed 977 conversation and 235
+model-routing tests but had sandbox-denied local-listener failures; they are not green full-suite
+claims; both changed-file downstream targets pass without listeners. Independent integrated source
+and test-overlay review found no issues and architecture postcheck passed. The separate dormant
+upgrade-session proposal adapter has no production caller; its MCP-shaped invocation contract must
+be replaced when that first-party dispatcher is implemented, not reused or shimmed. SQL, provider,
+deployment and live journey proof are not claimed.
+
 ## Routine browser experience — reviewed source checkpoint
 
 At the pre-publication checkpoint, this source wave adds authenticated `/routines` list, chat-bound creation, detail,

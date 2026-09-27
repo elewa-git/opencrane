@@ -1,5 +1,5 @@
 import { ToolResultDeliveryOutcomes } from "@opencrane/backend/server/iam/authorization";
-import { ConversationLogToolKinds } from "@opencrane/contracts";
+import { CompiledToolDefinitionKinds, ConversationLogToolKinds } from "@opencrane/contracts";
 
 import { ConversationComputerToolResultOutcomes, type ConversationComputerToolResults } from "../../turns/conversation-computer-continuation.types";
 import type { ConversationComputerTurnCandidateResolver, ConversationComputerTurnStore } from "../../turns/conversation-computer-turn.types";
@@ -38,7 +38,7 @@ export class CurrentConversationToolResultNotificationEvidenceReader implements 
 			|| !Number.isFinite(Date.parse(result.occurredAt)) || result.occurredAt !== new Date(result.occurredAt).toISOString()
 			|| result.payload.outcome !== ToolResultDeliveryOutcomes.Succeeded && result.payload.outcome !== ToolResultDeliveryOutcomes.Failed)
 			return null;
-		const matching = input.tools.filter(tool => tool.toolRevisionId === result.toolRevisionId);
+		const matching = input.tools.filter(tool => tool.kind === CompiledToolDefinitionKinds.Mcp && tool.toolRevisionId === result.toolRevisionId);
 		if (matching.length !== 1)
 			return null;
 		const tool = matching[0]!;

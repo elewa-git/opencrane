@@ -1,7 +1,7 @@
 import { AgentRunState, type Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { ___ExecutionSubjectSchema, ExecutionSubjectMembershipKinds } from "@opencrane/contracts";
+import { CompiledToolDefinitionKinds, ___ExecutionSubjectSchema, ExecutionSubjectMembershipKinds } from "@opencrane/contracts";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -37,7 +37,7 @@ function _fixture()
 	});
 	const schema = { type: "object", properties: { query: { type: "string" } }, required: ["query"], additionalProperties: false };
 	const tool = {
-		toolRevisionId: "tool-1", name: "records.read", modelName: "records_read", description: "Read a record", requiresApproval: false,
+		kind: CompiledToolDefinitionKinds.Mcp as const, toolRevisionId: "tool-1", name: "records.read", modelName: "records_read", description: "Read a record", requiresApproval: false,
 		parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema),
 	};
 	const proposal: PreparedConversationToolProposal = {
