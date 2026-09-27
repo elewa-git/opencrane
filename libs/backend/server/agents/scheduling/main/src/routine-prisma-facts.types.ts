@@ -45,8 +45,6 @@ export interface RoutineFactsRepository
 	current(siloId: string, routineId: string): Promise<CurrentRoutineRows | null>;
 	/** Requires the exact original requester coordinates. */
 	requireOriginalRequester(caller: RoutineCaller, routine: RoutineRow): void;
-	/** Resolves the fixed audience from an existing readable conversation. */
-	resolveCreationAudience(caller: RoutineCaller, destinationConversationId: string, selectedPrincipalIds: readonly string[], now: Date): Promise<readonly string[]>;
 	/** Rechecks current destination membership and read access for the fixed audience. */
 	requireCurrentAudience(routine: RoutineRow, revision: RoutineRevisionRow, now: Date): Promise<void>;
 	/** Rechecks one retired-history reader without depending on other frozen audience members. */

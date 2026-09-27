@@ -1,14 +1,15 @@
 import { createHash } from "node:crypto";
 
-import { __ParseRoutineSchedule, type RoutineSchedule } from "@opencrane/models/agents";
+import { __ParseRoutineSchedule, __PreviewRoutineOccurrences, type RoutineSchedule } from "@opencrane/models/agents";
 import { ProductAuthorizationActions } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
-import type { ChangeRoutineStatusCommand, CreateRoutineCommand, ReadRoutineCommand, ReviseRoutineCommand, RoutineCommandResult, RoutineFiringResult, RoutineIdFactory, RoutineProjection, RunRoutineNowCommand } from "./routine-authority.types";
+import type { ChangeRoutineStatusCommand, CreateRoutineCommand, ListRoutineFiringsCommand, ListRoutinesCommand, ReadRoutineCommand, ReviseRoutineCommand, RoutineCommandResult, RoutineCreationOptionsCommand, RoutineCreationOptionsResult, RoutineFiringListResult, RoutineFiringResult, RoutineIdFactory, RoutineListResult, RoutineProjection, RoutineSchedulePreviewCommand, RoutineSchedulePreviewResult, RunRoutineNowCommand } from "./routine-authority.types";
 import { RoutineCommandUnavailableError, RoutineCommandValidationError } from "./routine-command.errors";
 import type { RoutineInstructionCipher, RoutineInstructionContext } from "./routine-instruction.types";
 import type { RoutineCommandPersistence } from "./routine-persistence.types";
 import { RoutineLifecycleEvent } from "./routine-lifecycle.types";
+import { RoutinePageCursorEndpoints, type RoutinePageCursorCodec, type RoutineReadPersistence } from "./routine-read.types";
 
 /** Maximum plaintext size accepted before mounted encryption. */
 const _MAXIMUM_INSTRUCTION_LENGTH = 20_000;
@@ -17,18 +18,21 @@ const _MAXIMUM_INSTRUCTION_LENGTH = 20_000;
 export class RoutineAuthority
 {
 	/** Transactional product authority that never receives plaintext. */
-	private readonly persistence: RoutineCommandPersistence;
+	private readonly persistence: RoutineCommandPersistence & RoutineReadPersistence;
 	/** Mounted AES-GCM adapter invoked only outside retryable database transactions. */
 	private readonly cipher: RoutineInstructionCipher;
 	/** Opaque id source invoked before retryable database transactions. */
 	private readonly ids: RoutineIdFactory;
+	/** Encrypts and decrypts continuation positions outside database transactions. */
+	private readonly cursors: RoutinePageCursorCodec;
 
 	/** Stores the persistence authority and external encryption boundary. */
-	constructor(persistence: RoutineCommandPersistence, cipher: RoutineInstructionCipher, ids: RoutineIdFactory)
+	constructor(persistence: RoutineCommandPersistence & RoutineReadPersistence, cipher: RoutineInstructionCipher, ids: RoutineIdFactory, cursors: RoutinePageCursorCodec)
 	{
 		this.persistence = persistence;
 		this.cipher = cipher;
 		this.ids = ids;
+		this.cursors = cursors;
 	}
 
 	/** Creates one reviewed routine after encrypting its instruction outside the transaction. */
@@ -40,12 +44,55 @@ export class RoutineAuthority
 		const instruction = _Instruction(command.instruction);
 		const schedule = _Schedule(command.schedule);
 		const idempotencyKey = _IdempotencyKey(command.idempotencyKey);
-		const audiencePrincipalIds = _AudiencePrincipalIds(command.audiencePrincipalIds, command.caller.principalId);
+		const audienceParticipantRefs = _AudienceParticipantRefs(command.audienceParticipantRefs);
 		const routineId = this.ids.routineId();
 		const context = _InstructionContext(command.caller.siloId, command.destinationConversationId, command.caller.subjectId, routineId, 1);
 		const envelope = await this.cipher.encrypt(instruction, context);
-		const commandDigest = _CommandDigest({ operation: ProductAuthorizationActions.Create, destinationConversationId: command.destinationConversationId, selectedManagedServiceId: command.selectedManagedServiceId, audiencePrincipalIds, schedule, instructionDigest: _PlaintextDigest(instruction), idempotencyKey });
-		return await this.persistence.create({ ...command, audiencePrincipalIds, idempotencyKey, schedule, instruction: envelope, routineId, revisionId: this.ids.revisionId(), commandReceiptId: this.ids.commandReceiptId(), commandDigest });
+		const commandDigest = _CommandDigest({ operation: ProductAuthorizationActions.Create, destinationConversationId: command.destinationConversationId, selectedManagedServiceId: command.selectedManagedServiceId, audienceParticipantRefs, schedule, instructionDigest: _PlaintextDigest(instruction), idempotencyKey });
+		return await this.persistence.create({ ...command, audienceParticipantRefs, idempotencyKey, schedule, instruction: envelope, routineId, revisionId: this.ids.revisionId(), commandReceiptId: this.ids.commandReceiptId(), commandDigest });
+	}
+
+	/** Returns a sparse page after decrypting and re-encrypting its caller-bound continuation. */
+	async list(command: ListRoutinesCommand): Promise<RoutineListResult>
+	{
+		_ValidateCaller(command.caller.authenticatedAt);
+		const limit = _Limit(command.limit);
+		const context = { caller: command.caller, endpoint: RoutinePageCursorEndpoints.Routines, routineId: null } as const;
+		const after = command.cursor === undefined ? null : await this.cursors.decode(command.cursor, context);
+		const page = await this.persistence.list({ caller: command.caller, limit, after });
+		const nextCursor = page.next === null ? undefined : await this.cursors.encode(page.next, context);
+		return { items: page.items, limit, ...(nextCursor === undefined ? {} : { nextCursor }) };
+	}
+
+	/** Returns one authorized routine's sparse firing history with a routine-bound continuation. */
+	async firings(command: ListRoutineFiringsCommand): Promise<RoutineFiringListResult>
+	{
+		_ValidateCaller(command.caller.authenticatedAt);
+		_Identifier(command.routineId, "routine");
+		const limit = _Limit(command.limit);
+		const context = { caller: command.caller, endpoint: RoutinePageCursorEndpoints.Firings, routineId: command.routineId } as const;
+		const after = command.cursor === undefined ? null : await this.cursors.decode(command.cursor, context);
+		const page = await this.persistence.firings({ caller: command.caller, routineId: command.routineId, limit, after });
+		const nextCursor = page.next === null ? undefined : await this.cursors.encode(page.next, context);
+		return { items: page.items, limit, ...(nextCursor === undefined ? {} : { nextCursor }) };
+	}
+
+	/** Returns current destination participants and managed services without admitting an effect. */
+	async creationOptions(command: RoutineCreationOptionsCommand): Promise<RoutineCreationOptionsResult>
+	{
+		_ValidateCaller(command.caller.authenticatedAt);
+		_Identifier(command.destinationConversationId, "routine destination conversation");
+		return await this.persistence.creationOptions(command.caller, command.destinationConversationId);
+	}
+
+	/** Calculates five future slots from the database clock without admitting work. */
+	async preview(command: RoutineSchedulePreviewCommand): Promise<RoutineSchedulePreviewResult>
+	{
+		_ValidateCaller(command.caller.authenticatedAt);
+		const schedule = _Schedule(command.schedule);
+		const calculatedAt = await this.persistence.previewClock();
+		const occurrences = __PreviewRoutineOccurrences(schedule, calculatedAt.getTime(), 5).map(epochMs => new Date(epochMs).toISOString());
+		return { schedule, calculatedAt: calculatedAt.toISOString(), nextOccurrences: occurrences as [string, string, string, string, string] };
 	}
 
 	/** Returns the current routine only after transactional authorization and external decryption. */
@@ -154,21 +201,25 @@ function _IdempotencyKey(value: string): string
 }
 
 /** Copies the exact reviewed audience without silently adding or removing a Principal. */
-function _AudiencePrincipalIds(value: readonly string[], requesterPrincipalId: string): readonly string[]
+function _AudienceParticipantRefs(value: readonly string[]): readonly string[]
 {
 	if (value.length === 0 || value.length > 100)
 	{
-		throw new RoutineCommandValidationError("routine audience must contain between 1 and 100 Principals");
+		throw new RoutineCommandValidationError("routine audience must contain between 1 and 100 participants");
 	}
 	if (value.some(principalId => principalId.length === 0 || principalId.length > 200 || principalId.trim() !== principalId) || new Set(value).size !== value.length)
 	{
-		throw new RoutineCommandValidationError("routine audience must contain unique nonblank Principal identifiers");
-	}
-	if (!value.includes(requesterPrincipalId))
-	{
-		throw new RoutineCommandValidationError("routine audience must include the original requester");
+		throw new RoutineCommandValidationError("routine audience must contain unique nonblank participant references");
 	}
 	return [...value].sort();
+}
+
+/** Bounds one database candidate window independently of transport coercion. */
+function _Limit(value: number): number
+{
+	if (!Number.isSafeInteger(value) || value < 1 || value > 25)
+		throw new RoutineCommandValidationError("routine page limit must be between 1 and 25");
+	return value;
 }
 
 /** Requires a valid original authentication instant before retaining it as provenance. */

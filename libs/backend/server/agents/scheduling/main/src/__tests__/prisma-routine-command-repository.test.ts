@@ -2,7 +2,6 @@ import { AgentRoutineCommandKind, AgentRoutineFiringDisposition, AgentRoutineSta
 import type { ManagedAuthorizationGrantRepository, ManagedAuthorizationGrantRestrictionRepository } from "@opencrane/backend/server/iam/authorization";
 import { describe, expect, it, vi } from "vitest";
 
-import { ProductAuthorizationActions } from "@opencrane/models/authorization";
 import { RoutineFiringDisposition, RoutineFiringTrigger, RoutineStatus } from "@opencrane/models/agents";
 
 import { PrismaRoutineCommandRepository } from "../prisma-routine-command-repository";
@@ -19,10 +18,22 @@ function _Grants()
 	return { reconcileManagedResourceGrants: vi.fn().mockResolvedValue(1), restrictManagedResourceGrants: vi.fn().mockResolvedValue(3) };
 }
 
-/** Composes the real command repository from inspectable transaction doubles. */
-function _Repository(transaction: Record<string, unknown>, facts = _Facts(), grants = _Grants(), tasks = _TaskAdmission())
+/** Builds the conversation directory used to resolve opaque audience references. */
+function _Conversations()
 {
-	return { repository: new PrismaRoutineCommandRepository(transaction as unknown as Prisma.TransactionClient, facts as unknown as RoutineFactsRepository, grants as unknown as ManagedAuthorizationGrantRepository & ManagedAuthorizationGrantRestrictionRepository, tasks as unknown as RoutineTaskAdmissionPort<Prisma.TransactionClient>), facts, grants, tasks };
+	return { resolveAudience: vi.fn().mockResolvedValue({ participantRefs: ["participant-1", "participant-2"], principalIds: ["principal-1", "principal-2"] }), projectAudience: vi.fn(), creationAudience: vi.fn(), readableConversationIds: vi.fn() };
+}
+
+/** Builds the managed-service directory used to check selected services. */
+function _ManagedServices()
+{
+	return { list: vi.fn(), eligible: vi.fn().mockResolvedValue({ agentServiceId: "service-1" }) };
+}
+
+/** Composes the real command repository from inspectable transaction doubles. */
+function _Repository(transaction: Record<string, unknown>, facts = _Facts(), grants = _Grants(), tasks = _TaskAdmission(), conversations = _Conversations(), managedServices = _ManagedServices())
+{
+	return { repository: new PrismaRoutineCommandRepository(transaction as unknown as Prisma.TransactionClient, facts as unknown as RoutineFactsRepository, grants as unknown as ManagedAuthorizationGrantRepository & ManagedAuthorizationGrantRestrictionRepository, tasks as unknown as RoutineTaskAdmissionPort<Prisma.TransactionClient>, conversations as never, managedServices as never), facts, grants, tasks };
 }
 
 describe("PrismaRoutineCommandRepository", function _Suite()
@@ -40,7 +51,7 @@ describe("PrismaRoutineCommandRepository", function _Suite()
 		};
 		const current = _Current({}, { audiencePrincipalIds: ["principal-1", "principal-2"] });
 		const f = _Repository(transaction, _Facts(current));
-		const command = { caller: _CALLER, destinationConversationId: "destination-1", audiencePrincipalIds: ["principal-1", "principal-2"], selectedManagedServiceId: "service-1", schedule: { expression: "0 * * * *", timezone: "UTC" }, idempotencyKey: "create-key-1", routineId: "routine-created", revisionId: "revision-created", commandReceiptId: "receipt-created", instruction: _INSTRUCTION, commandDigest: `sha256:${"b".repeat(64)}` as const };
+		const command = { caller: _CALLER, destinationConversationId: "destination-1", audienceParticipantRefs: ["participant-1", "participant-2"], selectedManagedServiceId: "service-1", schedule: { expression: "0 * * * *", timezone: "UTC" }, idempotencyKey: "create-key-1", routineId: "routine-created", revisionId: "revision-created", commandReceiptId: "receipt-created", instruction: _INSTRUCTION, commandDigest: `sha256:${"b".repeat(64)}` as const };
 
 		const first = await f.repository.create(command);
 		const replay = await f.repository.create({ ...command, routineId: "unused-retry-id", revisionId: "unused-retry-revision", commandReceiptId: "unused-retry-receipt" });
@@ -74,7 +85,7 @@ describe("PrismaRoutineCommandRepository", function _Suite()
 		const result = { outcome: RoutineCommandOutcome.Committed, routineId: "routine-created", currentRevision: 1, status: RoutineStatus.Active, lifecycleRevision: 1, nextAutomaticOccurrence: "2026-09-25T13:00:00.000Z", ...patch };
 		const transaction = { agentRoutineCommandReceipt: { findUnique: vi.fn().mockResolvedValue({ routineId: "routine-created", commandDigest, result: result as unknown as Prisma.JsonValue, routineRevision: 1, firingId: null }) } };
 		const f = _Repository(transaction);
-		const command = { caller: _CALLER, destinationConversationId: "destination-1", audiencePrincipalIds: ["principal-1", "principal-2"], selectedManagedServiceId: "service-1", schedule: { expression: "0 * * * *", timezone: "UTC" }, idempotencyKey: "create-key-1", routineId: "routine-created", revisionId: "revision-created", commandReceiptId: "receipt-created", instruction: _INSTRUCTION, commandDigest };
+		const command = { caller: _CALLER, destinationConversationId: "destination-1", audienceParticipantRefs: ["participant-1", "participant-2"], selectedManagedServiceId: "service-1", schedule: { expression: "0 * * * *", timezone: "UTC" }, idempotencyKey: "create-key-1", routineId: "routine-created", revisionId: "revision-created", commandReceiptId: "receipt-created", instruction: _INSTRUCTION, commandDigest };
 
 		await expect(f.repository.create(command)).rejects.toThrow("routine command receipt result is invalid");
 	});
@@ -89,7 +100,7 @@ describe("PrismaRoutineCommandRepository", function _Suite()
 		const result = { outcome: RoutineCommandOutcome.Committed, routineId: "routine-created", currentRevision: 1, status: RoutineStatus.Active, lifecycleRevision: 1, nextAutomaticOccurrence: "2026-09-25T13:00:00.000Z" };
 		const transaction = { agentRoutineCommandReceipt: { findUnique: vi.fn().mockResolvedValue({ ...receipt, commandDigest, result: result as Prisma.JsonValue }) } };
 		const f = _Repository(transaction);
-		const command = { caller: _CALLER, destinationConversationId: "destination-1", audiencePrincipalIds: ["principal-1", "principal-2"], selectedManagedServiceId: "service-1", schedule: { expression: "0 * * * *", timezone: "UTC" }, idempotencyKey: "create-key-1", routineId: "unused-retry-id", revisionId: "unused-retry-revision", commandReceiptId: "unused-retry-receipt", instruction: _INSTRUCTION, commandDigest };
+		const command = { caller: _CALLER, destinationConversationId: "destination-1", audienceParticipantRefs: ["participant-1", "participant-2"], selectedManagedServiceId: "service-1", schedule: { expression: "0 * * * *", timezone: "UTC" }, idempotencyKey: "create-key-1", routineId: "unused-retry-id", revisionId: "unused-retry-revision", commandReceiptId: "unused-retry-receipt", instruction: _INSTRUCTION, commandDigest };
 
 		await expect(f.repository.create(command)).rejects.toThrow("routine command receipt result is invalid");
 	});
@@ -125,31 +136,6 @@ describe("PrismaRoutineCommandRepository", function _Suite()
 		const command = { caller: _CALLER, routineId: "missing-routine", expectedRevision: 2, expectedLifecycleRevision: 4, schedule: { expression: "30 * * * *", timezone: "UTC" }, idempotencyKey: "revise-key-1", revisionId: "revision-3", commandReceiptId: "receipt-revise", instruction: _INSTRUCTION, commandDigest: `sha256:${"c".repeat(64)}` as const };
 
 		await expect(f.repository.revise(command)).rejects.toBeInstanceOf(RoutineCommandUnavailableError);
-	});
-
-	it("reads the encrypted current revision only for one fixed-audience caller with current Read", async function _Read()
-	{
-		const current = _Current();
-		const f = _Repository({}, _Facts(current));
-
-		await expect(f.repository.read({ caller: _CALLER, routineId: "routine-1" })).resolves.toMatchObject({ routineId: "routine-1", status: RoutineStatus.Active, audiencePrincipalIds: ["principal-1", "principal-2"], instruction: _INSTRUCTION });
-		expect(f.facts.requireCurrentAudience).toHaveBeenCalledWith(current.routine, current.revision, _NOW);
-		expect(f.facts.requireCurrentReader).not.toHaveBeenCalled();
-		expect(f.facts.requirePrincipalAction).toHaveBeenCalledWith("principal-1", "silo-1", expect.any(String), "routine-1", ProductAuthorizationActions.Read, _NOW, false, {});
-		await expect(f.repository.read({ caller: { ..._CALLER, principalId: "principal-outside" }, routineId: "routine-1" })).resolves.toBeNull();
-	});
-
-	it("reads retired history through only the caller's current audience and destination access", async function _RetiredRead()
-	{
-		const current = _Current({ status: AgentRoutineStatus.Retired, nextAutomaticOccurrence: null });
-		const facts = _Facts(current);
-		facts.requireCurrentAudience.mockRejectedValue(new Error("another audience member lost access"));
-		const f = _Repository({}, facts);
-
-		await expect(f.repository.read({ caller: _CALLER, routineId: "routine-1" })).resolves.toMatchObject({ routineId: "routine-1", status: RoutineStatus.Retired });
-		expect(f.facts.requireCurrentReader).toHaveBeenCalledWith(_CALLER, current.routine, current.revision, _NOW);
-		expect(f.facts.requireCurrentAudience).not.toHaveBeenCalled();
-		expect(f.facts.requirePrincipalAction).not.toHaveBeenCalled();
 	});
 
 	it("appends a revision with the frozen audience and fails a lost compare-and-set", async function _ReviseCas()

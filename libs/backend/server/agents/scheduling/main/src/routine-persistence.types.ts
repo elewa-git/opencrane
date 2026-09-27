@@ -1,6 +1,6 @@
 import type { RoutineSchedule } from "@opencrane/models/agents";
 
-import type { ChangeRoutineStatusCommand, CreateRoutineCommand, EncryptedRoutineProjection, ReadRoutineCommand, ReviseRoutineCommand, RoutineCommandResult, RoutineFiringResult, RunRoutineNowCommand } from "./routine-authority.types";
+import type { ChangeRoutineStatusCommand, CreateRoutineCommand, ReviseRoutineCommand, RoutineCommandResult, RoutineFiringResult, RunRoutineNowCommand } from "./routine-authority.types";
 import type { RoutineInstructionEnvelope } from "./routine-instruction.types";
 import type { RoutineLifecycleEvent } from "./routine-lifecycle.types";
 
@@ -61,8 +61,6 @@ export interface RoutineCommandPersistence
 {
 	/** Creates the aggregate, first revision, grants, cursor, task, and receipt atomically. */
 	create(command: CreateRoutinePersistenceCommand): Promise<RoutineCommandResult>;
-	/** Reads an encrypted revision only after current fixed-audience authorization. */
-	read(command: ReadRoutineCommand): Promise<EncryptedRoutineProjection | null>;
 	/** Appends one immutable revision and replaces the schedule task without changing audience. */
 	revise(command: ReviseRoutinePersistenceCommand): Promise<RoutineCommandResult>;
 	/** Applies pause, resume, or retirement with requester and lifecycle compare-and-set checks. */

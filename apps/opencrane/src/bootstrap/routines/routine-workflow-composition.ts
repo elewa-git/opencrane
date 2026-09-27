@@ -2,8 +2,10 @@ import { randomUUID } from "node:crypto";
 
 import type { Prisma } from "@prisma/client";
 
-import { PrismaRoutineOccurrenceActivationRepository, PrismaRoutineOccurrencePreparationRepository, PrismaRoutineOccurrenceRunAdmissionRepository, PrismaRoutineUnitOfWork, RoutineAuthority, RoutineInstructionCipherAdapter, RoutineScheduleStartupRecovery, RoutineTaskAdmission, __CreateRoutineWorkflowDefinitions, type PrismaRoutineUnitOfWorkDependencies, type RoutineIdFactory } from "@opencrane/backend/server/agents/scheduling";
-import { PrismaRoutineComputerActivationProjectionUnitOfWork, PrismaRoutineOccurrencePreparationUnitOfWork, PrismaRoutineRunAdmissionUnitOfWork, PrismaRoutineTurnCompilerUnitOfWork, RoutineComputerActivation, RoutineOccurrenceHistory } from "@opencrane/backend/server/conversations";
+import { PrismaRoutineRunHistoryRepository } from "@opencrane/backend/agents/execution/runs";
+import { PrismaManagedAgentConversationResolver } from "@opencrane/backend/server/agents/agent-services";
+import { PrismaRoutineOccurrenceActivationRepository, PrismaRoutineOccurrencePreparationRepository, PrismaRoutineOccurrenceRunAdmissionRepository, PrismaRoutineUnitOfWork, RoutineAuthority, RoutineInstructionCipherAdapter, RoutinePageCursorCipherAdapter, RoutineScheduleStartupRecovery, RoutineTaskAdmission, __CreateRoutineWorkflowDefinitions, type PrismaRoutineUnitOfWorkDependencies, type RoutineIdFactory } from "@opencrane/backend/server/agents/scheduling";
+import { PrismaRoutineComputerActivationProjectionUnitOfWork, PrismaRoutineConversationDirectoryRepository, PrismaRoutineOccurrencePreparationUnitOfWork, PrismaRoutineRunAdmissionUnitOfWork, PrismaRoutineTurnCompilerUnitOfWork, RoutineComputerActivation, RoutineOccurrenceHistory } from "@opencrane/backend/server/conversations";
 import { ConversationComputerHistory } from "@opencrane/backend/server/conversations/computers";
 import { ConversationHistoryAuthority } from "@opencrane/backend/server/conversations/history";
 import { PrismaAuthorizationAuthority, PrismaManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
@@ -50,16 +52,19 @@ export function _CreateRoutineWorkflowComposition(context: RoutineWorkflowExecut
 {
 	const { prisma, history, customApi, siloId, profile, cipher, membership, workflows } = context;
 	const taskAdmission = new RoutineTaskAdmission<Prisma.TransactionClient>(workflows);
+	const identityHistory = new AgentIdentityHistory(history);
+	const agentDependencies = { identityHistory, membershipConfig: membership, profiles: [{ workloadProfile: profile.profileName, profileRevisionId: profile.profileRevisionId }] };
 	const persistenceDependencies: PrismaRoutineUnitOfWorkDependencies = {
 		authorization: function _Authorization(transaction) { return new PrismaAuthorizationAuthority(transaction); },
 		managedGrants: function _ManagedGrants(transaction) { return new PrismaManagedAuthorizationGrantRepository(transaction); },
+		conversations: function _Conversations(transaction) { return new PrismaRoutineConversationDirectoryRepository(transaction); },
+		managedServices: function _ManagedServices(transaction) { return new PrismaManagedAgentConversationResolver(transaction, agentDependencies); },
+		runHistory: function _RunHistory(transaction) { return new PrismaRoutineRunHistoryRepository(transaction); },
 		taskAdmission,
 	};
 	const persistence = new PrismaRoutineUnitOfWork(prisma, persistenceDependencies);
 	const instructionCipher = new RoutineInstructionCipherAdapter(cipher);
 	const occurrenceHistory = new RoutineOccurrenceHistory(history, new ConversationHistoryAuthority(history));
-	const identityHistory = new AgentIdentityHistory(history);
-	const agentDependencies = { identityHistory, membershipConfig: membership, profiles: [{ workloadProfile: profile.profileName, profileRevisionId: profile.profileRevisionId }] };
 	const preparationRoutines = function _PreparationRoutines(transaction: Prisma.TransactionClient) { return new PrismaRoutineOccurrencePreparationRepository(transaction, persistenceDependencies); };
 	const preparation = new PrismaRoutineOccurrencePreparationUnitOfWork(prisma, { routines: preparationRoutines, agents: agentDependencies, cipher, history: occurrenceHistory });
 	const computers = new ConversationComputerHistory(history);
@@ -75,7 +80,7 @@ export function _CreateRoutineWorkflowComposition(context: RoutineWorkflowExecut
 	const runDependencies = { prisma, routines: runRoutines, occurrences: occurrenceHistory, history, cipher, membership, workflows };
 	const runAdmission = new PrismaRoutineRunAdmissionUnitOfWork(runDependencies);
 	const ids: RoutineIdFactory = { routineId: _RoutineId, revisionId: _RevisionId, commandReceiptId: _CommandReceiptId, firingId: _FiringId, conversationId: _ConversationId };
-	const authority = new RoutineAuthority(persistence, instructionCipher, ids);
+	const authority = new RoutineAuthority(persistence, instructionCipher, ids, new RoutinePageCursorCipherAdapter(cipher));
 	const definitions = __CreateRoutineWorkflowDefinitions({ persistence, cipher: instructionCipher, preparation, activation, runAdmission, ids });
 	workflows.register(definitions.schedule);
 	workflows.register(definitions.occurrence);

@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
-import { RoutineFiringReasons, ___RoutineControlRequestSchema, ___RoutineCreateRequestSchema, ___RoutineIdentifierSchema, ___RoutineReviseRequestSchema, type RoutineDefinitionResponse, type RoutineDetailsResponse, type RoutineFiringResponse } from "@opencrane/contracts";
+import { RoutineFiringReasons, ___RoutineControlRequestSchema, ___RoutineCreateRequestSchema, ___RoutineCreationOptionsQuerySchema, ___RoutineFiringListQuerySchema, ___RoutineIdentifierSchema, ___RoutineListQuerySchema, ___RoutineReviseRequestSchema, ___RoutineSchedulePreviewRequestSchema, type RoutineCreationOptionsResponse, type RoutineDefinitionResponse, type RoutineDetailsResponse, type RoutineFiringListResponse, type RoutineFiringResponse, type RoutineListResponse, type RoutineSchedulePreviewResponse } from "@opencrane/contracts";
 
 import type { RoutineCaller, RoutineCommandResult, RoutineFiringResult, RoutineProjection } from "../routine-authority.types";
 import { RoutineCommandConflictError, RoutineCommandUnavailableError, RoutineCommandValidationError } from "../routine-command.errors";
@@ -36,6 +36,83 @@ export function __CreateRoutineRouter(authority: RoutineHttpAuthority, logger: R
 		{
 			const result = await authority.create({ caller, ...parsed.data });
 			response.status(201).json({ routine: _Definition(result) });
+		}
+		catch (error)
+		{
+			_RespondError(response, logger, caller, error);
+		}
+	});
+
+	router.get("/", async function _List(request, response)
+	{
+		const caller = _Caller(request, resolvePrincipal);
+		if (caller === null)
+			return void response.status(401).json({ error: "routine_authentication_required" });
+		const parsed = ___RoutineListQuerySchema.safeParse(request.query);
+		if (!parsed.success)
+			return void response.status(400).json({ error: "invalid_routine_command" });
+		try
+		{
+			const result = await authority.list({ caller, ..._ReadQuery(parsed.data) });
+			response.send(_ProjectList(result));
+		}
+		catch (error)
+		{
+			_RespondError(response, logger, caller, error);
+		}
+	});
+
+	router.get("/creation-options", async function _CreationOptions(request, response)
+	{
+		const caller = _Caller(request, resolvePrincipal);
+		if (caller === null)
+			return void response.status(401).json({ error: "routine_authentication_required" });
+		const parsed = ___RoutineCreationOptionsQuerySchema.safeParse(request.query);
+		if (!parsed.success)
+			return void response.status(400).json({ error: "invalid_routine_command" });
+		try
+		{
+			const result = await authority.creationOptions({ caller, ...parsed.data });
+			response.send(_ProjectCreationOptions(result));
+		}
+		catch (error)
+		{
+			_RespondError(response, logger, caller, error);
+		}
+	});
+
+	router.post("/schedule-preview", async function _Preview(request, response)
+	{
+		const caller = _Caller(request, resolvePrincipal);
+		if (caller === null)
+			return void response.status(401).json({ error: "routine_authentication_required" });
+		const parsed = ___RoutineSchedulePreviewRequestSchema.safeParse(request.body);
+		if (!parsed.success)
+			return void response.status(400).json({ error: "invalid_routine_command" });
+		try
+		{
+			const result = await authority.preview({ caller, ...parsed.data });
+			response.send(_ProjectPreview(result));
+		}
+		catch (error)
+		{
+			_RespondError(response, logger, caller, error);
+		}
+	});
+
+	router.get("/:routineId/firings", async function _Firings(request, response)
+	{
+		const caller = _Caller(request, resolvePrincipal);
+		if (caller === null)
+			return void response.status(401).json({ error: "routine_authentication_required" });
+		const routineId = _RoutineId(request);
+		const parsed = ___RoutineFiringListQuerySchema.safeParse(request.query);
+		if (routineId === null || !parsed.success)
+			return void response.status(400).json({ error: "invalid_routine_command" });
+		try
+		{
+			const result = await authority.firings({ caller, routineId, ..._ReadQuery(parsed.data) });
+			response.send(_ProjectFirings(result));
 		}
 		catch (error)
 		{
@@ -159,6 +236,60 @@ function _RoutineId(request: Request): string | null
 	return result.success ? result.data : null;
 }
 
+/** Copies only the bounded pagination controls into an authority query. */
+function _ReadQuery(query: { readonly limit: number; readonly cursor?: string }): { readonly limit: number; readonly cursor?: string }
+{
+	return query.cursor === undefined ? { limit: query.limit } : { limit: query.limit, cursor: query.cursor };
+}
+
+/** Projects the routine page through the public field allowlist. */
+function _ProjectList(result: RoutineListResponse): RoutineListResponse
+{
+	const page = { items: result.items.map(function _ProjectListItem(item)
+	{
+		return { routineId: item.routineId, currentRevision: item.currentRevision, status: item.status, lifecycleRevision: item.lifecycleRevision, ownership: item.ownership, destinationConversationId: item.destinationConversationId, selectedManagedService: { managedServiceId: item.selectedManagedService.managedServiceId, displayName: item.selectedManagedService.displayName }, schedule: item.schedule, lastAutomaticOccurrence: item.lastAutomaticOccurrence, nextAutomaticOccurrence: item.nextAutomaticOccurrence, lastFiring: _ProjectLastFiring(item.lastFiring), capabilities: { revise: item.capabilities.revise, pause: item.capabilities.pause, resume: item.capabilities.resume, retire: item.capabilities.retire, runNow: item.capabilities.runNow } };
+	}), limit: result.limit };
+	return _WithCursor(page, result.nextCursor);
+}
+
+/** Projects firing history without exposing task, requester, run or refusal internals. */
+function _ProjectFirings(result: RoutineFiringListResponse): RoutineFiringListResponse
+{
+	const page = { items: result.items.map(function _ProjectFiring(item)
+	{
+		return { firingId: item.firingId, routineRevision: item.routineRevision, trigger: item.trigger, disposition: item.disposition, scheduledSlot: item.scheduledSlot, createdAt: item.createdAt, finishedAt: item.finishedAt, reason: item.reason, runTerminalReason: item.runTerminalReason, resultConversationId: item.resultConversationId, actualCost: item.actualCost === null ? null : { amount: item.actualCost.amount, currency: item.actualCost.currency } };
+	}), limit: result.limit };
+	return _WithCursor(page, result.nextCursor);
+}
+
+/** Projects one optional firing summary. */
+function _ProjectLastFiring(item: RoutineListResponse["items"][number]["lastFiring"]): RoutineListResponse["items"][number]["lastFiring"]
+{
+	if (item === null)
+		return null;
+	return { firingId: item.firingId, routineRevision: item.routineRevision, trigger: item.trigger, disposition: item.disposition, scheduledSlot: item.scheduledSlot, finishedAt: item.finishedAt };
+}
+
+/** Preserves continuation only when the authority supplied one. */
+function _WithCursor<T extends { readonly items: readonly unknown[]; readonly limit: number }>(page: T, cursor: string | undefined): T & { readonly nextCursor?: string }
+{
+	if (cursor === undefined)
+		return page;
+	return { ...page, nextCursor: cursor };
+}
+
+/** Projects creation choices while retaining only safe labels and references. */
+function _ProjectCreationOptions(result: RoutineCreationOptionsResponse): RoutineCreationOptionsResponse
+{
+	return { destinationConversationId: result.destinationConversationId, audienceChoices: result.audienceChoices.map(choice => ({ participantRef: choice.participantRef, displayName: choice.displayName, isSelf: choice.isSelf })), managedServiceChoices: result.managedServiceChoices.map(choice => ({ managedServiceId: choice.managedServiceId, displayName: choice.displayName })) };
+}
+
+/** Projects exactly five calculated occurrences and the normalized schedule. */
+function _ProjectPreview(result: RoutineSchedulePreviewResponse): RoutineSchedulePreviewResponse
+{
+	return { schedule: result.schedule, calculatedAt: result.calculatedAt, nextOccurrences: result.nextOccurrences };
+}
+
 /** Projects a command result without its internal replay outcome. */
 function _Definition(result: RoutineCommandResult): RoutineDefinitionResponse
 {
@@ -168,7 +299,7 @@ function _Definition(result: RoutineCommandResult): RoutineDefinitionResponse
 /** Projects an authorized read without requester identity or ciphertext coordinates. */
 function _Details(result: RoutineProjection): RoutineDetailsResponse
 {
-	return { ..._Definition(result), destinationConversationId: result.destinationConversationId, selectedManagedServiceId: result.selectedManagedServiceId, schedule: result.schedule, audiencePrincipalIds: result.audiencePrincipalIds, instruction: result.instruction };
+	return { routineId: result.routineId, currentRevision: result.currentRevision, status: result.status, lifecycleRevision: result.lifecycleRevision, ownership: result.ownership, destinationConversationId: result.destinationConversationId, selectedManagedService: { managedServiceId: result.selectedManagedService.managedServiceId, displayName: result.selectedManagedService.displayName }, schedule: result.schedule, lastAutomaticOccurrence: result.lastAutomaticOccurrence, nextAutomaticOccurrence: result.nextAutomaticOccurrence, lastFiring: result.lastFiring, capabilities: { revise: result.capabilities.revise, pause: result.capabilities.pause, resume: result.capabilities.resume, retire: result.capabilities.retire, runNow: result.capabilities.runNow }, audienceParticipantRefs: result.audienceParticipantRefs, audienceChoices: result.audienceChoices.map(choice => ({ participantRef: choice.participantRef, displayName: choice.displayName, isSelf: choice.isSelf })), instruction: result.instruction };
 }
 
 /** Projects a firing only when its stored reason belongs to the closed public contract. */
@@ -181,7 +312,7 @@ function _Firing(result: RoutineFiringResult): RoutineFiringResponse
 		if (reason === null)
 			throw new Error("routine firing result contains a non-public reason");
 	}
-	return { firingId: result.firingId, routineId: result.routineId, routineRevision: result.routineRevision, trigger: result.trigger, disposition: result.disposition, conversationId: result.conversationId, scheduledSlot: result.scheduledSlot, reason };
+	return { firingId: result.firingId, routineId: result.routineId, routineRevision: result.routineRevision, trigger: result.trigger, disposition: result.disposition, scheduledSlot: result.scheduledSlot, reason };
 }
 
 /** Maps expected domain errors and hides every other failure from the caller and logs. */

@@ -22,7 +22,7 @@ describe("PrismaRoutineUnitOfWork", function _Suite()
 		const authorization = vi.fn();
 		const managedGrants = vi.fn();
 		const tasks = _TaskAdmission();
-		const unit = new PrismaRoutineUnitOfWork({ $transaction: transact } as unknown as PrismaClient, { authorization, managedGrants, taskAdmission: tasks as unknown as RoutineTaskAdmissionPort<Prisma.TransactionClient> });
+		const unit = new PrismaRoutineUnitOfWork({ $transaction: transact } as unknown as PrismaClient, { authorization, managedGrants, taskAdmission: tasks as unknown as RoutineTaskAdmissionPort<Prisma.TransactionClient>, conversations: vi.fn().mockReturnValue({}), managedServices: vi.fn().mockReturnValue({}), runHistory: vi.fn().mockReturnValue({}) });
 		await unit.recordRunProgress({ siloId: "silo-1", routineId: "routine-1", routineRevision: 1, firingId: "firing-1", runId: "run-1", attempt: 1, inputSnapshotDigest: `sha256:${"1".repeat(64)}`, sourceState: AgentRunStates.Running, sourceFinishedAt: null, sourceTerminalReason: null, sourceCancellationCommandId: null, sourceCancellationCommandDigest: null, disposition: RoutineFiringDisposition.Waiting, resultReference: null, resultDigest: null });
 		expect(transact).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: undefined, maxWait: undefined });
 		expect(transaction.agentRoutineFiring.updateMany).toHaveBeenCalledOnce();
@@ -44,6 +44,9 @@ describe("PrismaRoutineUnitOfWork", function _Suite()
 			authorization: authorization as unknown as (client: Prisma.TransactionClient) => AuthorizationAuthority,
 			managedGrants: managedGrants as unknown as (client: Prisma.TransactionClient) => ManagedAuthorizationGrantRepository & ManagedAuthorizationGrantRestrictionRepository,
 			taskAdmission: _TaskAdmission() as unknown as RoutineTaskAdmissionPort<Prisma.TransactionClient>,
+			conversations: vi.fn().mockReturnValue({}),
+			managedServices: vi.fn().mockReturnValue({}),
+			runHistory: vi.fn().mockReturnValue({}),
 		});
 
 		await expect(unit.read({ caller: _CALLER, routineId: "missing-routine" })).resolves.toBeNull();
@@ -56,7 +59,6 @@ describe("PrismaRoutineUnitOfWork", function _Suite()
 		expect(authorization).toHaveBeenCalledTimes(2);
 		expect(authorization).toHaveBeenNthCalledWith(1, transaction);
 		expect(authorization).toHaveBeenNthCalledWith(2, transaction);
-		expect(managedGrants).toHaveBeenCalledOnce();
-		expect(managedGrants).toHaveBeenCalledWith(transaction);
+		expect(managedGrants).not.toHaveBeenCalled();
 	});
 });

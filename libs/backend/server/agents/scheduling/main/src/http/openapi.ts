@@ -1,5 +1,5 @@
 import { RoutineFiringReasons } from "@opencrane/contracts";
-import { RoutineFiringDisposition, RoutineFiringTrigger, RoutineStatus } from "@opencrane/models/agents";
+import { AgentRunTerminalReasons, RoutineFiringDisposition, RoutineFiringTrigger, RoutineStatus } from "@opencrane/models/agents";
 
 /** Opaque public identifier shared by routine paths and payloads. */
 const _IdentifierSchema = { type: "string", minLength: 1, maxLength: 200 } as const;
@@ -17,10 +17,16 @@ const _ScheduleSchema = { type: "object", additionalProperties: false, required:
 const _DefinitionSchema = { type: "object", additionalProperties: false, required: ["routineId", "currentRevision", "status", "lifecycleRevision", "nextAutomaticOccurrence"], properties: { routineId: _IdentifierSchema, currentRevision: _RevisionSchema, status: { type: "string", enum: Object.values(RoutineStatus) }, lifecycleRevision: _RevisionSchema, nextAutomaticOccurrence: { type: ["string", "null"], format: "date-time" } } } as const;
 
 /** Fields returned after an authorized routine read. */
-const _DetailsSchema = { type: "object", additionalProperties: false, required: ["routineId", "currentRevision", "status", "lifecycleRevision", "nextAutomaticOccurrence", "destinationConversationId", "selectedManagedServiceId", "schedule", "audiencePrincipalIds", "instruction"], properties: { ..._DefinitionSchema.properties, destinationConversationId: _IdentifierSchema, selectedManagedServiceId: _IdentifierSchema, schedule: _ScheduleSchema, audiencePrincipalIds: { type: "array", minItems: 1, maxItems: 100, uniqueItems: true, items: _IdentifierSchema }, instruction: { type: "string", minLength: 1, maxLength: 20_000 } } } as const;
+const _ParticipantChoiceSchema = { type: "object", additionalProperties: false, required: ["participantRef", "displayName", "isSelf"], properties: { participantRef: _IdentifierSchema, displayName: { type: "string", minLength: 1, maxLength: 200 }, isSelf: { type: "boolean" } } } as const;
+const _ManagedServiceSchema = { type: "object", additionalProperties: false, required: ["managedServiceId", "displayName"], properties: { managedServiceId: _IdentifierSchema, displayName: { type: "string", minLength: 1, maxLength: 200 } } } as const;
+const _CapabilitiesSchema = { type: "object", additionalProperties: false, required: ["revise", "pause", "resume", "retire", "runNow"], properties: { revise: { type: "boolean" }, pause: { type: "boolean" }, resume: { type: "boolean" }, retire: { type: "boolean" }, runNow: { type: "boolean" } } } as const;
+const _LastFiringSchema = { type: "object", additionalProperties: false, required: ["firingId", "routineRevision", "trigger", "disposition", "scheduledSlot", "finishedAt"], properties: { firingId: _IdentifierSchema, routineRevision: _RevisionSchema, trigger: { type: "string", enum: Object.values(RoutineFiringTrigger) }, disposition: { type: "string", enum: Object.values(RoutineFiringDisposition) }, scheduledSlot: { type: ["string", "null"], format: "date-time" }, finishedAt: { type: ["string", "null"], format: "date-time" } } } as const;
+const _ListItemSchema = { type: "object", additionalProperties: false, required: ["routineId", "currentRevision", "status", "lifecycleRevision", "ownership", "destinationConversationId", "selectedManagedService", "schedule", "lastAutomaticOccurrence", "nextAutomaticOccurrence", "lastFiring", "capabilities"], properties: { ..._DefinitionSchema.properties, ownership: { type: "string", enum: ["owner", "audience"] }, destinationConversationId: _IdentifierSchema, selectedManagedService: _ManagedServiceSchema, schedule: _ScheduleSchema, lastAutomaticOccurrence: { type: ["string", "null"], format: "date-time" }, lastFiring: { anyOf: [_LastFiringSchema, { type: "null" }] }, capabilities: _CapabilitiesSchema } } as const;
+const _DetailsSchema = { type: "object", additionalProperties: false, required: [...Object.keys(_ListItemSchema.properties), "audienceParticipantRefs", "audienceChoices", "instruction"], properties: { ..._ListItemSchema.properties, audienceParticipantRefs: { type: "array", minItems: 1, maxItems: 100, uniqueItems: true, items: _IdentifierSchema }, audienceChoices: { type: "array", minItems: 1, maxItems: 100, items: _ParticipantChoiceSchema }, instruction: { type: "string", minLength: 1, maxLength: 20_000 } } } as const;
 
 /** Fields returned after a manual firing command. */
-const _FiringSchema = { type: "object", additionalProperties: false, required: ["firingId", "routineId", "routineRevision", "trigger", "disposition", "conversationId", "scheduledSlot", "reason"], properties: { firingId: _IdentifierSchema, routineId: _IdentifierSchema, routineRevision: _RevisionSchema, trigger: { type: "string", enum: Object.values(RoutineFiringTrigger) }, disposition: { type: "string", enum: Object.values(RoutineFiringDisposition) }, conversationId: _IdentifierSchema, scheduledSlot: { type: ["string", "null"], format: "date-time" }, reason: { type: ["string", "null"], enum: [...Object.values(RoutineFiringReasons), null] } } } as const;
+const _FiringSchema = { type: "object", additionalProperties: false, required: ["firingId", "routineId", "routineRevision", "trigger", "disposition", "scheduledSlot", "reason"], properties: { firingId: _IdentifierSchema, routineId: _IdentifierSchema, routineRevision: _RevisionSchema, trigger: { type: "string", enum: Object.values(RoutineFiringTrigger) }, disposition: { type: "string", enum: Object.values(RoutineFiringDisposition) }, scheduledSlot: { type: ["string", "null"], format: "date-time" }, reason: { type: ["string", "null"], enum: [...Object.values(RoutineFiringReasons), null] } } } as const;
+const _HistoryFiringSchema = { type: "object", additionalProperties: false, required: ["firingId", "routineRevision", "trigger", "disposition", "scheduledSlot", "createdAt", "finishedAt", "reason", "runTerminalReason", "resultConversationId", "actualCost"], properties: { firingId: _IdentifierSchema, routineRevision: _RevisionSchema, trigger: { type: "string", enum: Object.values(RoutineFiringTrigger) }, disposition: { type: "string", enum: Object.values(RoutineFiringDisposition) }, scheduledSlot: { type: ["string", "null"], format: "date-time" }, createdAt: { type: "string", format: "date-time" }, finishedAt: { type: ["string", "null"], format: "date-time" }, reason: { type: ["string", "null"], enum: [...Object.values(RoutineFiringReasons), null] }, runTerminalReason: { type: ["string", "null"], enum: [...Object.values(AgentRunTerminalReasons), null] }, resultConversationId: { type: ["string", "null"], minLength: 1, maxLength: 200 }, actualCost: { anyOf: [{ type: "object", additionalProperties: false, required: ["amount", "currency"], properties: { amount: { type: "string", minLength: 1, maxLength: 64 }, currency: { type: "string", minLength: 1, maxLength: 16 } } }, { type: "null" }] } } } as const;
 
 /** Routine definition response envelope. */
 const _DefinitionResponseSchema = { type: "object", additionalProperties: false, required: ["routine"], properties: { routine: _DefinitionSchema } } as const;
@@ -30,9 +36,17 @@ const _DetailsResponseSchema = { type: "object", additionalProperties: false, re
 
 /** Routine firing response envelope. */
 const _FiringResponseSchema = { type: "object", additionalProperties: false, required: ["firing"], properties: { firing: _FiringSchema } } as const;
+const _ListQueryParameters = [{ name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 25, default: 20 } }, { name: "cursor", in: "query", required: false, schema: { type: "string", minLength: 1, maxLength: 2_048, pattern: "^[A-Za-z0-9_-]+$" } }] as const;
+function _PageSchema(item: unknown)
+{
+	return { type: "object", additionalProperties: false, required: ["items", "limit"], properties: { items: { type: "array", items: item }, limit: { type: "integer", minimum: 1, maximum: 25 }, nextCursor: { type: "string", minLength: 1, maxLength: 2_048 } } } as const;
+}
+const _CreationOptionsSchema = { type: "object", additionalProperties: false, required: ["destinationConversationId", "audienceChoices", "managedServiceChoices"], properties: { destinationConversationId: _IdentifierSchema, audienceChoices: { type: "array", items: _ParticipantChoiceSchema }, managedServiceChoices: { type: "array", items: _ManagedServiceSchema } } } as const;
+const _PreviewRequestSchema = { type: "object", additionalProperties: false, required: ["schedule"], properties: { schedule: _ScheduleSchema } } as const;
+const _PreviewResponseSchema = { type: "object", additionalProperties: false, required: ["schedule", "calculatedAt", "nextOccurrences"], properties: { schedule: _ScheduleSchema, calculatedAt: { type: "string", format: "date-time" }, nextOccurrences: { type: "array", minItems: 5, maxItems: 5, items: { type: "string", format: "date-time" } } } } as const;
 
 /** Request that creates a reviewed routine. */
-const _CreateRequestSchema = { type: "object", additionalProperties: false, required: ["destinationConversationId", "audiencePrincipalIds", "selectedManagedServiceId", "schedule", "instruction", "idempotencyKey"], properties: { destinationConversationId: _IdentifierSchema, audiencePrincipalIds: { type: "array", minItems: 1, maxItems: 100, uniqueItems: true, items: _IdentifierSchema }, selectedManagedServiceId: _IdentifierSchema, schedule: _ScheduleSchema, instruction: { type: "string", minLength: 1, maxLength: 20_000 }, idempotencyKey: _IdempotencyKeySchema } } as const;
+const _CreateRequestSchema = { type: "object", additionalProperties: false, required: ["destinationConversationId", "audienceParticipantRefs", "selectedManagedServiceId", "schedule", "instruction", "idempotencyKey"], properties: { destinationConversationId: _IdentifierSchema, audienceParticipantRefs: { type: "array", minItems: 1, maxItems: 100, uniqueItems: true, items: _IdentifierSchema }, selectedManagedServiceId: _IdentifierSchema, schedule: _ScheduleSchema, instruction: { type: "string", minLength: 1, maxLength: 20_000 }, idempotencyKey: _IdempotencyKeySchema } } as const;
 
 /** Request that replaces a routine schedule and instruction. */
 const _ReviseRequestSchema = { type: "object", additionalProperties: false, required: ["expectedRevision", "expectedLifecycleRevision", "schedule", "instruction", "idempotencyKey"], properties: { expectedRevision: _RevisionSchema, expectedLifecycleRevision: _RevisionSchema, schedule: _ScheduleSchema, instruction: { type: "string", minLength: 1, maxLength: 20_000 }, idempotencyKey: _IdempotencyKeySchema } } as const;
@@ -61,6 +75,10 @@ const _RoutineIdParameter = { name: "routineId", in: "path", required: true, sch
 /** Authenticated routine paths contributed to the complete API specification. */
 export const _RoutineOpenapiPaths = {
 	"/me/routines": {
+		get: {
+			operationId: "listRoutines", summary: "List authorized routines", tags: ["Routines"], parameters: _ListQueryParameters,
+			responses: { 200: { description: "Authorized routine page.", content: { "application/json": { schema: _PageSchema(_ListItemSchema) } } }, ..._Errors },
+		},
 		post: {
 			operationId: "createRoutine", summary: "Create a reviewed routine", tags: ["Routines"],
 			description: "Creates one active routine from a caller-reviewed conversation, audience, managed assistant, schedule and instruction. The server derives caller identity from the authenticated request and encrypts the instruction before the transaction.",
@@ -68,11 +86,29 @@ export const _RoutineOpenapiPaths = {
 			responses: { 201: { description: "Committed or recovered routine definition.", content: { "application/json": { schema: _DefinitionResponseSchema } } }, ..._Errors },
 		},
 	},
+	"/me/routines/creation-options": {
+		get: {
+			operationId: "getRoutineCreationOptions", summary: "Get routine creation options", tags: ["Routines"], parameters: [{ name: "destinationConversationId", in: "query", required: true, schema: _IdentifierSchema }],
+			responses: { 200: { description: "Authorized routine creation options.", content: { "application/json": { schema: _CreationOptionsSchema } } }, ..._Errors },
+		},
+	},
+	"/me/routines/schedule-preview": {
+		post: {
+			operationId: "previewRoutineSchedule", summary: "Preview upcoming routine slots", tags: ["Routines"], requestBody: { required: true, content: { "application/json": { schema: _PreviewRequestSchema } } },
+			responses: { 200: { description: "Five upcoming schedule slots.", content: { "application/json": { schema: _PreviewResponseSchema } } }, ..._Errors },
+		},
+	},
 	"/me/routines/{routineId}": {
 		get: {
 			operationId: "getRoutine", summary: "Read an authorized routine", tags: ["Routines"], parameters: [_RoutineIdParameter],
 			description: "Returns the decrypted current instruction and fixed reviewed audience only after current routine and destination access checks. Requester identity and encrypted storage fields are never returned.",
 			responses: { 200: { description: "Authorized routine details.", content: { "application/json": { schema: _DetailsResponseSchema } } }, 400: _Errors[400], 401: _Errors[401], 404: _Errors[404], 503: _Errors[503] },
+		},
+	},
+	"/me/routines/{routineId}/firings": {
+		get: {
+			operationId: "listRoutineFirings", summary: "List routine firing history", tags: ["Routines"], parameters: [_RoutineIdParameter, ..._ListQueryParameters],
+			responses: { 200: { description: "Authorized firing history page.", content: { "application/json": { schema: _PageSchema(_HistoryFiringSchema) } } }, ..._Errors },
 		},
 	},
 	"/me/routines/{routineId}/revise": {

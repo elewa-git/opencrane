@@ -15459,6 +15459,287 @@
       }
     },
     "/me/routines": {
+      "get": {
+        "operationId": "listRoutines",
+        "summary": "List authorized routines",
+        "tags": [
+          "Routines"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized routine page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "items",
+                    "limit"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "routineId",
+                          "currentRevision",
+                          "status",
+                          "lifecycleRevision",
+                          "ownership",
+                          "destinationConversationId",
+                          "selectedManagedService",
+                          "schedule",
+                          "lastAutomaticOccurrence",
+                          "nextAutomaticOccurrence",
+                          "lastFiring",
+                          "capabilities"
+                        ],
+                        "properties": {
+                          "routineId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "currentRevision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "active",
+                              "paused",
+                              "retired"
+                            ]
+                          },
+                          "lifecycleRevision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "nextAutomaticOccurrence": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          },
+                          "ownership": {
+                            "type": "string",
+                            "enum": [
+                              "owner",
+                              "audience"
+                            ]
+                          },
+                          "destinationConversationId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "selectedManagedService": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "managedServiceId",
+                              "displayName"
+                            ],
+                            "properties": {
+                              "managedServiceId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "displayName": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              }
+                            }
+                          },
+                          "schedule": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "expression",
+                              "timezone"
+                            ],
+                            "properties": {
+                              "expression": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              },
+                              "timezone": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              }
+                            }
+                          },
+                          "lastAutomaticOccurrence": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          },
+                          "lastFiring": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "firingId",
+                                  "routineRevision",
+                                  "trigger",
+                                  "disposition",
+                                  "scheduledSlot",
+                                  "finishedAt"
+                                ],
+                                "properties": {
+                                  "firingId": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 200
+                                  },
+                                  "routineRevision": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "trigger": {
+                                    "type": "string",
+                                    "enum": [
+                                      "automatic",
+                                      "manual"
+                                    ]
+                                  },
+                                  "disposition": {
+                                    "type": "string",
+                                    "enum": [
+                                      "preparing",
+                                      "running",
+                                      "waiting",
+                                      "completed",
+                                      "failed",
+                                      "cancelled",
+                                      "skipped_overlap",
+                                      "refused",
+                                      "uncertain"
+                                    ]
+                                  },
+                                  "scheduledSlot": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "format": "date-time"
+                                  },
+                                  "finishedAt": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ],
+                                    "format": "date-time"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "capabilities": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "revise",
+                              "pause",
+                              "resume",
+                              "retire",
+                              "runNow"
+                            ],
+                            "properties": {
+                              "revise": {
+                                "type": "boolean"
+                              },
+                              "pause": {
+                                "type": "boolean"
+                              },
+                              "resume": {
+                                "type": "boolean"
+                              },
+                              "retire": {
+                                "type": "boolean"
+                              },
+                              "runNow": {
+                                "type": "boolean"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 25
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path or request body does not satisfy the routine command contract."
+          },
+          "401": {
+            "description": "A current authenticated Principal and authentication instant are required."
+          },
+          "404": {
+            "description": "The routine or another protected resource is unavailable to this caller."
+          },
+          "409": {
+            "description": "The saved revision, lifecycle state or idempotency key conflicts with this command."
+          },
+          "503": {
+            "description": "A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation."
+          }
+        }
+      },
       "post": {
         "operationId": "createRoutine",
         "summary": "Create a reviewed routine",
@@ -15475,7 +15756,7 @@
                 "additionalProperties": false,
                 "required": [
                   "destinationConversationId",
-                  "audiencePrincipalIds",
+                  "audienceParticipantRefs",
                   "selectedManagedServiceId",
                   "schedule",
                   "instruction",
@@ -15487,7 +15768,7 @@
                     "minLength": 1,
                     "maxLength": 200
                   },
-                  "audiencePrincipalIds": {
+                  "audienceParticipantRefs": {
                     "type": "array",
                     "minItems": 1,
                     "maxItems": 100,
@@ -15616,6 +15897,230 @@
         }
       }
     },
+    "/me/routines/creation-options": {
+      "get": {
+        "operationId": "getRoutineCreationOptions",
+        "summary": "Get routine creation options",
+        "tags": [
+          "Routines"
+        ],
+        "parameters": [
+          {
+            "name": "destinationConversationId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized routine creation options.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "destinationConversationId",
+                    "audienceChoices",
+                    "managedServiceChoices"
+                  ],
+                  "properties": {
+                    "destinationConversationId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "audienceChoices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "participantRef",
+                          "displayName",
+                          "isSelf"
+                        ],
+                        "properties": {
+                          "participantRef": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "displayName": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "isSelf": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    },
+                    "managedServiceChoices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "managedServiceId",
+                          "displayName"
+                        ],
+                        "properties": {
+                          "managedServiceId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "displayName": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path or request body does not satisfy the routine command contract."
+          },
+          "401": {
+            "description": "A current authenticated Principal and authentication instant are required."
+          },
+          "404": {
+            "description": "The routine or another protected resource is unavailable to this caller."
+          },
+          "409": {
+            "description": "The saved revision, lifecycle state or idempotency key conflicts with this command."
+          },
+          "503": {
+            "description": "A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation."
+          }
+        }
+      }
+    },
+    "/me/routines/schedule-preview": {
+      "post": {
+        "operationId": "previewRoutineSchedule",
+        "summary": "Preview upcoming routine slots",
+        "tags": [
+          "Routines"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "schedule"
+                ],
+                "properties": {
+                  "schedule": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "expression",
+                      "timezone"
+                    ],
+                    "properties": {
+                      "expression": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "timezone": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Five upcoming schedule slots.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schedule",
+                    "calculatedAt",
+                    "nextOccurrences"
+                  ],
+                  "properties": {
+                    "schedule": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "expression",
+                        "timezone"
+                      ],
+                      "properties": {
+                        "expression": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "timezone": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        }
+                      }
+                    },
+                    "calculatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "nextOccurrences": {
+                      "type": "array",
+                      "minItems": 5,
+                      "maxItems": 5,
+                      "items": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path or request body does not satisfy the routine command contract."
+          },
+          "401": {
+            "description": "A current authenticated Principal and authentication instant are required."
+          },
+          "404": {
+            "description": "The routine or another protected resource is unavailable to this caller."
+          },
+          "409": {
+            "description": "The saved revision, lifecycle state or idempotency key conflicts with this command."
+          },
+          "503": {
+            "description": "A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation."
+          }
+        }
+      }
+    },
     "/me/routines/{routineId}": {
       "get": {
         "operationId": "getRoutine",
@@ -15658,10 +16163,15 @@
                         "status",
                         "lifecycleRevision",
                         "nextAutomaticOccurrence",
+                        "ownership",
                         "destinationConversationId",
-                        "selectedManagedServiceId",
+                        "selectedManagedService",
                         "schedule",
-                        "audiencePrincipalIds",
+                        "lastAutomaticOccurrence",
+                        "lastFiring",
+                        "capabilities",
+                        "audienceParticipantRefs",
+                        "audienceChoices",
                         "instruction"
                       ],
                       "properties": {
@@ -15695,15 +16205,37 @@
                           ],
                           "format": "date-time"
                         },
+                        "ownership": {
+                          "type": "string",
+                          "enum": [
+                            "owner",
+                            "audience"
+                          ]
+                        },
                         "destinationConversationId": {
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 200
                         },
-                        "selectedManagedServiceId": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
+                        "selectedManagedService": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "managedServiceId",
+                            "displayName"
+                          ],
+                          "properties": {
+                            "managedServiceId": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            },
+                            "displayName": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 200
+                            }
+                          }
                         },
                         "schedule": {
                           "type": "object",
@@ -15725,7 +16257,108 @@
                             }
                           }
                         },
-                        "audiencePrincipalIds": {
+                        "lastAutomaticOccurrence": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "lastFiring": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "firingId",
+                                "routineRevision",
+                                "trigger",
+                                "disposition",
+                                "scheduledSlot",
+                                "finishedAt"
+                              ],
+                              "properties": {
+                                "firingId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "routineRevision": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 9007199254740991
+                                },
+                                "trigger": {
+                                  "type": "string",
+                                  "enum": [
+                                    "automatic",
+                                    "manual"
+                                  ]
+                                },
+                                "disposition": {
+                                  "type": "string",
+                                  "enum": [
+                                    "preparing",
+                                    "running",
+                                    "waiting",
+                                    "completed",
+                                    "failed",
+                                    "cancelled",
+                                    "skipped_overlap",
+                                    "refused",
+                                    "uncertain"
+                                  ]
+                                },
+                                "scheduledSlot": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "format": "date-time"
+                                },
+                                "finishedAt": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "format": "date-time"
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "capabilities": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "revise",
+                            "pause",
+                            "resume",
+                            "retire",
+                            "runNow"
+                          ],
+                          "properties": {
+                            "revise": {
+                              "type": "boolean"
+                            },
+                            "pause": {
+                              "type": "boolean"
+                            },
+                            "resume": {
+                              "type": "boolean"
+                            },
+                            "retire": {
+                              "type": "boolean"
+                            },
+                            "runNow": {
+                              "type": "boolean"
+                            }
+                          }
+                        },
+                        "audienceParticipantRefs": {
                           "type": "array",
                           "minItems": 1,
                           "maxItems": 100,
@@ -15734,6 +16367,35 @@
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 200
+                          }
+                        },
+                        "audienceChoices": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 100,
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "participantRef",
+                              "displayName",
+                              "isSelf"
+                            ],
+                            "properties": {
+                              "participantRef": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "displayName": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "isSelf": {
+                                "type": "boolean"
+                              }
+                            }
                           }
                         },
                         "instruction": {
@@ -15756,6 +16418,227 @@
           },
           "404": {
             "description": "The routine or another protected resource is unavailable to this caller."
+          },
+          "503": {
+            "description": "A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation."
+          }
+        }
+      }
+    },
+    "/me/routines/{routineId}/firings": {
+      "get": {
+        "operationId": "listRoutineFirings",
+        "summary": "List routine firing history",
+        "tags": [
+          "Routines"
+        ],
+        "parameters": [
+          {
+            "name": "routineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Stable routine identifier returned by creation."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized firing history page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "items",
+                    "limit"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "firingId",
+                          "routineRevision",
+                          "trigger",
+                          "disposition",
+                          "scheduledSlot",
+                          "createdAt",
+                          "finishedAt",
+                          "reason",
+                          "runTerminalReason",
+                          "resultConversationId",
+                          "actualCost"
+                        ],
+                        "properties": {
+                          "firingId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "routineRevision": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "trigger": {
+                            "type": "string",
+                            "enum": [
+                              "automatic",
+                              "manual"
+                            ]
+                          },
+                          "disposition": {
+                            "type": "string",
+                            "enum": [
+                              "preparing",
+                              "running",
+                              "waiting",
+                              "completed",
+                              "failed",
+                              "cancelled",
+                              "skipped_overlap",
+                              "refused",
+                              "uncertain"
+                            ]
+                          },
+                          "scheduledSlot": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "finishedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          },
+                          "reason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "enum": [
+                              "routine_retired",
+                              "current_authority_or_audience_refused",
+                              "unfinished_firing",
+                              null
+                            ]
+                          },
+                          "runTerminalReason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "enum": [
+                              "success",
+                              "policy_denied",
+                              "budget_exhausted",
+                              "runtime_failure",
+                              "invalid_input",
+                              "user_cancelled",
+                              null
+                            ]
+                          },
+                          "resultConversationId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "minLength": 1,
+                            "maxLength": 200
+                          },
+                          "actualCost": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "amount",
+                                  "currency"
+                                ],
+                                "properties": {
+                                  "amount": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 64
+                                  },
+                                  "currency": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 16
+                                  }
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "limit": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 25
+                    },
+                    "nextCursor": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 2048
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path or request body does not satisfy the routine command contract."
+          },
+          "401": {
+            "description": "A current authenticated Principal and authentication instant are required."
+          },
+          "404": {
+            "description": "The routine or another protected resource is unavailable to this caller."
+          },
+          "409": {
+            "description": "The saved revision, lifecycle state or idempotency key conflicts with this command."
           },
           "503": {
             "description": "A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation."
@@ -16366,7 +17249,6 @@
                         "routineRevision",
                         "trigger",
                         "disposition",
-                        "conversationId",
                         "scheduledSlot",
                         "reason"
                       ],
@@ -16406,11 +17288,6 @@
                             "refused",
                             "uncertain"
                           ]
-                        },
-                        "conversationId": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 200
                         },
                         "scheduledSlot": {
                           "type": [

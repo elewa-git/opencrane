@@ -83,7 +83,6 @@ export function _Facts(current: CurrentRoutineRows = _Current())
 		databaseNow: vi.fn().mockResolvedValue(_NOW),
 		current: vi.fn().mockResolvedValue(current),
 		requireOriginalRequester: vi.fn(),
-		resolveCreationAudience: vi.fn().mockResolvedValue(current.revision.audiencePrincipalIds),
 		requireCurrentAudience: vi.fn().mockResolvedValue(undefined),
 		requireCurrentReader: vi.fn().mockResolvedValue(undefined),
 		currentAudienceAllowed: vi.fn().mockResolvedValue(true),

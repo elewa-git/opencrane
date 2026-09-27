@@ -13,7 +13,7 @@ const _IdempotencyKeySchema = z.string().trim().min(1).max(200);
 /** Validates the exact routine creation request accepted by the public API. */
 export const ___RoutineCreateRequestSchema: z.ZodType<RoutineCreateRequest> = z.object({
 	destinationConversationId: ___RoutineIdentifierSchema,
-	audiencePrincipalIds: z.array(___RoutineIdentifierSchema).min(1).max(100).refine(function _Unique(values): boolean { return new Set(values).size === values.length; }),
+	audienceParticipantRefs: z.array(___RoutineIdentifierSchema).min(1).max(100).refine(function _Unique(values): boolean { return new Set(values).size === values.length; }),
 	selectedManagedServiceId: ___RoutineIdentifierSchema,
 	schedule: __RoutineScheduleSchema,
 	instruction: z.string().trim().min(1).max(20_000),

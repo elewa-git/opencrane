@@ -6,20 +6,28 @@ import { _RoutineOpenapiPaths } from "../openapi";
 
 describe("routine OpenAPI fragment", function _Suite()
 {
-	it("describes only the seven authenticated authority operations and safe firing reasons", function _Contract()
+	it("describes authenticated command, read and preview operations with safe firing reasons", function _Contract()
 	{
 		expect(Object.keys(_RoutineOpenapiPaths)).toEqual([
 			"/me/routines",
+			"/me/routines/creation-options",
+			"/me/routines/schedule-preview",
 			"/me/routines/{routineId}",
+			"/me/routines/{routineId}/firings",
 			"/me/routines/{routineId}/revise",
 			"/me/routines/{routineId}/pause",
 			"/me/routines/{routineId}/resume",
 			"/me/routines/{routineId}/retire",
 			"/me/routines/{routineId}/run-now",
 		]);
-		expect(_RoutineOpenapiPaths["/me/routines"]).not.toHaveProperty("get");
+		expect(_RoutineOpenapiPaths["/me/routines"]).toHaveProperty("get");
 		const firing = _RoutineOpenapiPaths["/me/routines/{routineId}/run-now"].post.responses[200].content["application/json"].schema.properties.firing;
 		expect(firing.properties.reason.enum).toEqual([...Object.values(RoutineFiringReasons), null]);
 		expect(firing.properties).not.toHaveProperty("outcome");
+		const history = _RoutineOpenapiPaths["/me/routines/{routineId}/firings"].get.responses[200].content["application/json"].schema.properties.items.items as { readonly required: readonly string[]; readonly properties: Record<string, unknown> };
+		expect(history.required).toContain("createdAt");
+		expect(history.required).toContain("runTerminalReason");
+		expect(history.properties).toHaveProperty("actualCost");
+		expect(history.properties).not.toHaveProperty("routineId");
 	});
 });

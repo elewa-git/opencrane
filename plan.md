@@ -46,23 +46,33 @@ conflict. Historical evidence is retained below.
 
 ## Authenticated routine command API — bounded source increment
 
-The source overlay now defines the seven authenticated routine commands and their strict
-request/response contracts, composes one shared routine authority, and mounts its HTTP router at
-`/api/v1/me/routines`. This is source and focused-test evidence only; it is not a claim that list
-or history views, frontend screens, the reviewed agent form, live database/KurrentDB behavior, or
-real-account qualification are complete.
+The source overlay now defines 11 authenticated routine operations (seven commands plus list,
+history, creation-options and schedule-preview) and their strict request/response contracts,
+composes one shared routine authority, and mounts its HTTP router at `/api/v1/me/routines`. This
+is source and focused-test evidence only; it is not a claim that frontend screens, the reviewed
+agent form, live database/KurrentDB behavior, or real-account qualification are complete.
 
-The bounded lane has 11 contract tests, 63 agent-model tests, and 3 OpenCrane app-composition tests
-passing (shared authority composition plus the authenticated routine mount). Combined with the
-confirmed 264 scheduling tests and 7 API-spec tests, the available focused evidence totals 348
-tests; five package typechecks are also confirmed across contracts, agent models, OpenCrane,
-scheduling and API-spec. Live PostgreSQL/KurrentDB proof remains unexecuted.
+The current non-overlapping focused evidence totals 350 tests: scheduling 284 (including its
+read-repository, router, OpenAPI and legacy fixture coverage), execution-runs 22, conversation
+directory 11, app composition plus real-AES cursor coverage 17, contracts 14, API-spec 1 and the
+OpenCrane HTTP mount 1. Six package typechecks pass across scheduling, execution-runs,
+conversations, OpenCrane, contracts and API-spec; full ESLint boundaries, style/Prisma/module
+guards, release binding and `git diff --check` pass. Generated client and website OpenAPI artifacts
+are synchronized, and public routine surfaces contain `audienceParticipantRefs` rather than the
+old `audiencePrincipalIds`. Frontend screens, the reviewed agent form, SQL/live
+PostgreSQL/KurrentDB proof and real-account qualification remain pending; no provider calls were
+made and the €5 qualification envelope remains unspent. Integrated and architecture review now
+pass with zero findings, and both module-growth candidates are accepted as cohesive reviewed
+owners. This evidence is scoped to wave base `1ad2657ec604069a6e92f78d8ce89366b77f8e63`; it is
+not a final publication, CI or MVP-completion claim.
 
-Independent integrated review and architecture postcheck pass with zero findings on the staged
-source fingerprint `16fcfcbc647f88f013ad0eca1700fcc041fbd34bc92653de5de587bd3719de40`. Style,
-Prisma, app/domain, ESLint, release-baseline and stack guards pass; reviewed module-growth
-candidates are accepted. This remains source-only evidence from base `857ad410aa8f8ca79f4f235c2050077ad644af2d`
-and prepublication stack snapshot `31fba0...`, not a push, commit or CI claim.
+Historical seven-operation source review and architecture postcheck passed with zero findings on
+the staged fingerprint `16fcfcbc647f88f013ad0eca1700fcc041fbd34bc92653de5de587bd3719de40` (head
+`85ebc7d...`). Its style, Prisma, app/domain, ESLint, release-baseline and stack guards, plus
+reviewed module-growth candidates, belong to that earlier source overlay; they are not a final
+review claim for this 11-operation wave. This remains source-only evidence from base
+`857ad410aa8f8ca79f4f235c2050077ad644af2d` and prepublication stack snapshot `31fba0...`, not a
+push, commit or CI claim.
 
 ## Scheduling foundation — published draft #916, 25 September 2026
 

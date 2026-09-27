@@ -26,31 +26,6 @@ function _Authorization()
 
 describe("PrismaRoutineFactsRepository", function _Suite()
 {
-	it("freezes exactly the confirmed external Principals instead of every current participant", async function _ExactAudience()
-	{
-		const conversation = { participants: [{ userId: "subject-1" }, { userId: "subject-2" }, { userId: "new-unselected-subject" }] };
-		const principalFindMany = vi.fn().mockResolvedValue([{ id: "principal-1", subject: "subject-1" }, { id: "principal-2", subject: "subject-2" }]);
-		const transaction = { conversation: { findFirst: vi.fn().mockResolvedValue(conversation) }, principal: { findMany: principalFindMany } } as unknown as Prisma.TransactionClient;
-		const authorization = _Authorization();
-		const repository = new PrismaRoutineFactsRepository(transaction, authorization as unknown as AuthorizationAuthority);
-
-		await expect(repository.resolveCreationAudience(_CALLER, "destination-1", ["principal-2", "principal-1"], _NOW)).resolves.toEqual(["principal-2", "principal-1"]);
-		expect(principalFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: { in: ["principal-2", "principal-1"] } }) }));
-		expect(authorization.decidePrincipal).toHaveBeenCalledTimes(3);
-		expect(authorization.decidePrincipal).not.toHaveBeenCalledWith(expect.objectContaining({ principalId: "new-unselected-principal" }));
-	});
-
-	it("rejects a confirmed Principal that is no longer a current destination participant", async function _RemovedAudience()
-	{
-		const transaction = {
-			conversation: { findFirst: vi.fn().mockResolvedValue({ participants: [{ userId: "subject-1" }] }) },
-			principal: { findMany: vi.fn().mockResolvedValue([{ id: "principal-1", subject: "subject-1" }, { id: "principal-2", subject: "subject-2" }]) },
-		} as unknown as Prisma.TransactionClient;
-		const repository = new PrismaRoutineFactsRepository(transaction, _Authorization() as unknown as AuthorizationAuthority);
-
-		await expect(repository.resolveCreationAudience(_CALLER, "destination-1", ["principal-1", "principal-2"], _NOW)).rejects.toBeInstanceOf(RoutineCommandUnavailableError);
-	});
-
 	it("admits one retired-history reader without consulting another frozen audience member", async function _CurrentReader()
 	{
 		const principalFindFirst = vi.fn().mockResolvedValue({ id: "principal-1" });

@@ -81,13 +81,14 @@ actor from the persisted trigger rather than accepting it from a worker request.
 
 ## Public surface
 
-- `__CreateRoutineRouter` exposes the existing create, read, revise, pause, resume, retire and
-  run-now authority operations below `/api/v1/me/routines`. It derives the caller from authenticated
-  request state, disables response caching and returns only the public routine DTO fields.
-- `_RoutineOpenapiPaths` describes those same seven operations for the assembled API specification.
-  Listing and firing-history reads are not part of this first HTTP slice.
+- `__CreateRoutineRouter` exposes creation, authorized detail, bounded list and firing-history reads,
+  creation choices, schedule preview, revise, pause, resume, retire and run-now below
+  `/api/v1/me/routines`. It derives the caller from authenticated request state, disables response
+  caching and returns only the public routine DTO fields.
+- `_RoutineOpenapiPaths` describes those operations for the assembled API specification.
 - `RoutineAuthority` validates commands, encrypts instructions and invokes transactional
-  persistence. Authorized reads decrypt only after their read transaction completes.
+  persistence. Authorized reads decrypt only after their read transaction completes. Caller-bound
+  encrypted cursors reveal no inaccessible candidate identifiers.
 - `PrismaRoutineUnitOfWork` opens bounded Serializable transactions and constructs the facts,
   command and firing repositories from the exact transaction callback.
 - `RoutineScheduleStartupRecovery` consumes the typed `RoutineScheduleRepairPage` contract to
@@ -117,9 +118,10 @@ actor from the persisted trigger rather than accepting it from a worker request.
 
 ## Boundary
 
-Creation needs an explicit current `RoutineCollection Create` grant. The command carries the exact
-creator-confirmed Principal list; the transaction verifies only that list against current external
-destination participants and their Read grants. It never adds a participant who joined after review.
+Creation needs an explicit current `RoutineCollection Create` grant. The browser supplies opaque
+organisation membership references from the destination choices; the transaction owner resolves
+them to exact external Principals after current participation and Conversation Read checks. It
+never accepts a browser-supplied Principal or adds a participant who joined after review.
 The transaction verifies the current
 published managed service and projects product-owned grants: the creator receives Read, Edit, Use
 and Retire; each confirmed audience member receives Read in that recipient's Personal boundary.

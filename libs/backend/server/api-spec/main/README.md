@@ -25,10 +25,10 @@ It also contributes existing-dataset memory commands and status reads. Their rec
 progress and local result identity, while provider coordinates and selected-message evidence stay
 behind the command authority.
 
-Scheduling contributes the authenticated create, read, revise, pause, resume, retire and run-now
-routine paths. Its public responses exclude requester identity, authentication evidence, encrypted
-payload coordinates and internal replay outcomes. Routine listing and firing history remain outside
-this API increment.
+Scheduling contributes authenticated routine command, listing, firing-history, creation-options and
+schedule-preview paths. Its public responses exclude requester identity, authentication evidence,
+encrypted payload coordinates, reserved conversation IDs and internal replay outcomes; continuation
+tokens are opaque caller-bound values.
 
 Audit contributes its required entry fields and compound-cursor page contract. Spend contributes
 recorded account usage and currency-specific ceilings, including the empty responses from budget

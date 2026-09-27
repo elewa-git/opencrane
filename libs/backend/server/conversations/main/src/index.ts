@@ -98,6 +98,8 @@ export { ConversationComputerTurnWriterFactory } from "./computers/turns/convers
 export { PrismaConversationComputerActivationUnitOfWork } from "./computers/activation/db/prisma-conversation-computer-activation-unit-of-work";
 export { PrismaConversationComputerLifecycleUnitOfWork } from "./computers/lifecycle/db/prisma-conversation-computer-lifecycle-unit-of-work";
 export { PrismaCompanyAssistantDirectory } from "./metadata/prisma-company-assistant-directory";
+export { PrismaRoutineConversationDirectoryRepository } from "./routines/prisma-routine-conversation-directory";
+export type { RoutineConversationDirectoryRepository } from "./routines/routine-conversation-directory.types";
 export { PrismaConversationMetadataReader } from "./metadata/prisma-conversation-metadata-reader";
 export { PrismaConversationElicitationAccessRepository } from "./children/db/prisma-conversation-elicitation-access";
 export { PrismaGroupChildAgentResolver } from "./children/db/prisma-group-child-agent-resolver";

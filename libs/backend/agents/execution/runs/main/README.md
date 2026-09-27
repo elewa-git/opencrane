@@ -67,6 +67,9 @@ does not grant permission to use a run.
   reciprocal occurrence, saved snapshot digest, original workflow receipt and cancellation evidence
   match. It returns null only for a positively identified ordinary interactive run and never admits,
   spawns, or consults current grants.
+- `PrismaRoutineRunHistoryRepository` gives scheduling a bounded read-only projection of reciprocal
+  routine run and firing coordinates. It validates the trigger, automatic slot, terminal fields and
+  complete settled-cost pair; it never creates a run or decides who may read routine history.
 - `PrismaSelfRunStatusUnitOfWork` and `_CreatePrismaSelfRunStatusRouter` expose owner-filtered status
   only after the current exact `AgentRun/Read` grant is checked in the same database snapshot.
 - `PrismaConversationRunCancellationRepository` binds one requester-authorized Stop command,

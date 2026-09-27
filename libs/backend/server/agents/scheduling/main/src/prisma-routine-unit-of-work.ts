@@ -4,18 +4,20 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 import type { RoutineComputerActivationReceipt, RoutineFiringIdentity, RoutineOccurrencePreparationReceipt, RoutineRunProgressObservation, RoutineRunProgressSink } from "@opencrane/backend/server/agents/scheduling/contract";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 
-import type { AutomaticRoutineFiringCommand, EncryptedRoutineProjection, ReadRoutineCommand, RoutineCommandResult, RoutineFiringResult } from "./routine-authority.types";
+import type { AutomaticRoutineFiringCommand, EncryptedRoutineProjection, ReadRoutineCommand, RoutineCaller, RoutineCommandResult, RoutineFiringResult } from "./routine-authority.types";
 import { PrismaRoutineCommandRepository } from "./prisma-routine-command-repository";
 import { PrismaRoutineFactsRepository } from "./routine-prisma-facts";
 import { PrismaRoutineFiringRepository } from "./prisma-routine-firing-repository";
 import { PrismaRoutineRunProgressRepository } from "./prisma-routine-run-progress-repository";
+import { PrismaRoutineReadRepository } from "./prisma-routine-read-repository";
 import type { ChangeRoutineStatusPersistenceCommand, CreateRoutinePersistenceCommand, ReviseRoutinePersistenceCommand, RoutineCommandPersistence, RunRoutineNowPersistenceCommand } from "./routine-persistence.types";
 import type { PrismaRoutineUnitOfWorkDependencies } from "./routine-unit-of-work.types";
 import type { RoutineScheduleRepairPage, RoutineScheduleRepairPageResult } from "./routine-schedule-repair.types";
+import type { RoutineFiringListPersistencePage, RoutineFiringListPersistenceQuery, RoutineListPersistencePage, RoutineListPersistenceQuery, RoutineReadPersistence } from "./routine-read.types";
 import { RoutineOccurrenceStage, type RoutineOccurrencePreparationInput, type RoutineWorkflowPersistence } from "./routine-workflow.types";
 
 /** Opens one serializable, bounded-retry transaction for every routine authority operation. */
-export class PrismaRoutineUnitOfWork implements RoutineCommandPersistence, RoutineWorkflowPersistence, RoutineRunProgressSink
+export class PrismaRoutineUnitOfWork implements RoutineCommandPersistence, RoutineReadPersistence, RoutineWorkflowPersistence, RoutineRunProgressSink
 {
 	/** Root client used only by the shared transaction runner. */
 	private readonly prisma: PrismaClient;
@@ -38,7 +40,31 @@ export class PrismaRoutineUnitOfWork implements RoutineCommandPersistence, Routi
 	/** @inheritdoc */
 	async read(command: ReadRoutineCommand): Promise<EncryptedRoutineProjection | null>
 	{
-		return await this._RunCommand("routine.read", { siloId: command.caller.siloId, routineId: command.routineId }, async function _Read(repository) { return await repository.read(command); });
+		return await this._RunRead("routine.read", { siloId: command.caller.siloId, routineId: command.routineId }, async function _Read(repository) { return await repository.read(command); });
+	}
+
+	/** @inheritdoc */
+	async list(query: RoutineListPersistenceQuery): Promise<RoutineListPersistencePage>
+	{
+		return await this._RunRead("routine.list", { siloId: query.caller.siloId, limit: query.limit }, async function _List(repository) { return await repository.list(query); });
+	}
+
+	/** @inheritdoc */
+	async firings(query: RoutineFiringListPersistenceQuery): Promise<RoutineFiringListPersistencePage>
+	{
+		return await this._RunRead("routine.firings", { siloId: query.caller.siloId, routineId: query.routineId, limit: query.limit }, async function _Firings(repository) { return await repository.firings(query); });
+	}
+
+	/** @inheritdoc */
+	async creationOptions(caller: RoutineCaller, destinationConversationId: string)
+	{
+		return await this._RunRead("routine.creation_options", { siloId: caller.siloId, destinationConversationId }, async function _Options(repository) { return await repository.creationOptions(caller, destinationConversationId); });
+	}
+
+	/** @inheritdoc */
+	async previewClock(): Promise<Date>
+	{
+		return await this._RunRead("routine.preview_clock", {}, async function _Clock(repository) { return await repository.previewClock(); });
 	}
 
 	/** @inheritdoc */
@@ -121,7 +147,29 @@ export class PrismaRoutineUnitOfWork implements RoutineCommandPersistence, Routi
 				const authorization = self.dependencies.authorization(transaction);
 				const facts = new PrismaRoutineFactsRepository(transaction, authorization);
 				const grants = self.dependencies.managedGrants(transaction);
-				const repository = new PrismaRoutineCommandRepository(transaction, facts, grants, self.dependencies.taskAdmission);
+				const conversations = self.dependencies.conversations(transaction);
+				const managedServices = self.dependencies.managedServices(transaction);
+				const repository = new PrismaRoutineCommandRepository(transaction, facts, grants, self.dependencies.taskAdmission, conversations, managedServices);
+				return await operation(repository);
+			}, { operation: operationName, isolationLevel: Prisma.TransactionIsolationLevel.Serializable, attemptLimit: 3 });
+		});
+	}
+
+	/** Opens one traced transaction for current authorized routine projections. */
+	private _RunRead<Result>(operationName: string, fields: Record<string, unknown>, operation: (repository: PrismaRoutineReadRepository) => Promise<Result>): Promise<Result>
+	{
+		const self = this;
+		const prisma = this.prisma;
+		return ___DoWithTrace(operationName, fields, async function _Trace()
+		{
+			return await ___RunInPrismaUnitOfWork(prisma, async function _Transaction(transaction)
+			{
+				const authorization = self.dependencies.authorization(transaction);
+				const facts = new PrismaRoutineFactsRepository(transaction, authorization);
+				const conversations = self.dependencies.conversations(transaction);
+				const managedServices = self.dependencies.managedServices(transaction);
+				const runHistory = self.dependencies.runHistory(transaction);
+				const repository = new PrismaRoutineReadRepository(transaction, facts, conversations, managedServices, runHistory);
 				return await operation(repository);
 			}, { operation: operationName, isolationLevel: Prisma.TransactionIsolationLevel.Serializable, attemptLimit: 3 });
 		});

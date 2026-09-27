@@ -32,7 +32,7 @@ signed-in participant ──► main ◄── HERE ──► history
 | `memory/source/` | Read the selected human message through current history access and recheck its encrypted source inside the command transaction. |
 | `memory/workflow/` | Declare identifier-only memory tasks and resume each saved provider and catalog phase through one Absurd workflow owner. The command transaction retains Absurd's returned receipt. First-dataset creation remains separately unfinished. |
 | `children/` | Resolve explicitly selected parent members, admit group-child work, preserve its original audience, write a closed group-child genesis origin, recover creation, and share human-reviewed text. |
-| `routines/` | Prepare occurrence history and its confirmed audience, activate the computer, join root-run admission with turn-task creation, recover admitted routine turns, and derive scheduling progress from checked run and conversation evidence. |
+| `routines/` | Resolve reviewed membership references inside the routine transaction, project safe historical audience labels, prepare occurrence history, activate the computer, join root-run admission with turn-task creation, recover admitted routine turns, and derive scheduling progress from checked run and conversation evidence. |
 | `computers/` | Separate activation, lifecycle, checkpoint, turn and review operation owners. |
 | `computers/tools/` | Proposal admission, current dispatch access and saved result consumption each have their own owner. |
 | `computers/interruptions/` | Select and admit requester-owned Stop commands, record their outcome and let Absurd recover cancellation cleanup. |
@@ -181,6 +181,13 @@ not the scheduling implementation. They are not yet a runnable scheduling featur
 admission and the routine-aware compiler are described below. Runtime wiring and reviewed product controls remain open.
 
 ### Routine run admission and recovery
+
+`PrismaRoutineConversationDirectoryRepository` is the transaction-scoped conversation boundary for
+routine creation and reads. It resolves current opaque membership references to external Principals,
+requires current destination participation and Conversation Read, and returns safe display labels.
+Historical projection keeps durable labels for the frozen audience even after another member leaves;
+it does not restore that member's access. Result-conversation links are returned only for the current
+participant whose central Conversation Read decision still allows them.
 
 `PrismaRoutineRunAdmissionUnitOfWork` verifies the checked occurrence record and saved activation,
 then delegates to execution-runs' admission transaction. The final scheduling guard runs before

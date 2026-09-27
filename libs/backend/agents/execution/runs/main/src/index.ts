@@ -20,6 +20,8 @@ export * from "./prisma-routine-run-snapshot-recovery-repository";
 export * from "./prisma-routine-run-progress-repository";
 export { RoutineRunProgressCancellationDecisions } from "./routine-run-progress.types";
 export type { RoutineRunProgressCancellation, RoutineRunProgressFacts, RoutineRunProgressFactsRepository, RoutineRunProgressRoutine, RoutineRunProgressTask } from "./routine-run-progress.types";
+export { PrismaRoutineRunHistoryRepository } from "./prisma-routine-run-history-reader";
+export type { RoutineRunHistoryFact, RoutineRunHistoryRepository, RoutineRunHistoryRequest } from "./routine-run-history.types";
 export * from "./prisma-conversation-run-lifecycle-authority";
 export * from "./conversation-run-lifecycle.types";
 export * from "./prisma-tool-recovery-event-reporter";

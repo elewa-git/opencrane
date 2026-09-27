@@ -33,6 +33,10 @@ function _RoutineAuthority(): RoutineHttpAuthority
 		resume: vi.fn(),
 		retire: vi.fn(),
 		runNow: vi.fn(),
+		list: vi.fn(),
+		firings: vi.fn(),
+		creationOptions: vi.fn(),
+		preview: vi.fn(),
 	};
 }
 

@@ -3,6 +3,29 @@
 	"owners": {
 		"repositories": [
 			{
+				"path": "libs/backend/agents/execution/runs/main/src/prisma-routine-run-history-reader.ts",
+				"adapter": "PrismaRoutineRunHistoryRepository",
+				"contract": "RoutineRunHistoryRepository",
+				"contractImportPath": "./routine-run-history.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/routines/prisma-routine-conversation-directory.ts",
+				"adapter": "PrismaRoutineConversationDirectoryRepository",
+				"contract": "RoutineConversationDirectoryRepository",
+				"contractImportPath": "./routine-conversation-directory.types",
+				"constructs": [
+					{ "adapter": "PrismaAuthorizationAuthority", "importPath": "@opencrane/backend/server/iam/authorization" }
+				]
+			},
+			{
+				"path": "libs/backend/server/agents/scheduling/main/src/prisma-routine-read-repository.ts",
+				"adapter": "PrismaRoutineReadRepository",
+				"contract": "RoutineReadPersistence",
+				"contractImportPath": "./routine-read.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/agents/execution/runs/main/src/prisma-routine-run-progress-repository.ts",
 				"adapter": "PrismaRoutineRunProgressFactsRepository",
 				"contract": "RoutineRunProgressFactsRepository",
@@ -1798,7 +1821,8 @@
 					{ "adapter": "PrismaRoutineFactsRepository", "importPath": "./routine-prisma-facts" },
 					{ "adapter": "PrismaRoutineCommandRepository", "importPath": "./prisma-routine-command-repository" },
 					{ "adapter": "PrismaRoutineFiringRepository", "importPath": "./prisma-routine-firing-repository" },
-					{ "adapter": "PrismaRoutineRunProgressRepository", "importPath": "./prisma-routine-run-progress-repository" }
+					{ "adapter": "PrismaRoutineRunProgressRepository", "importPath": "./prisma-routine-run-progress-repository" },
+					{ "adapter": "PrismaRoutineReadRepository", "importPath": "./prisma-routine-read-repository" }
 				]
 			},
 			{

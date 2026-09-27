@@ -50,6 +50,7 @@ describe("routine workflow composition", function _RoutineWorkflowCompositionSui
 		const preparation = dependencies.preparation as { readonly dependencies: { readonly cipher: unknown; readonly history: unknown } };
 		const runAdmission = dependencies.runAdmission as { readonly dependencies: { readonly cipher: unknown; readonly membership: unknown; readonly occurrences: unknown; readonly workflows: unknown } };
 		const dispatcher = composition.dispatcher as unknown as { readonly dependencies: { readonly cipher: ConversationPrivatePayloadCipher; readonly membership: unknown; readonly workflows?: unknown } };
+		const authority = composition.authority as unknown as { readonly persistence: { readonly dependencies: { readonly conversations: unknown; readonly managedServices: unknown; readonly runHistory: unknown } }; readonly cursors: { readonly cipher: unknown } };
 		expect(preparation.dependencies.cipher).toBe(cipher);
 		expect(runAdmission.dependencies.cipher).toBe(cipher);
 		expect(runAdmission.dependencies.membership).toBe(membership);
@@ -59,7 +60,10 @@ describe("routine workflow composition", function _RoutineWorkflowCompositionSui
 		expect(dispatcher.dependencies.membership).toBe(membership);
 		expect(dispatcher.dependencies.workflows).toBeUndefined();
 		expect(composition.progress).toBe(dependencies.persistence);
-		expect(composition.authority).toBeDefined();
+		expect(authority.persistence.dependencies.conversations).toBeTypeOf("function");
+		expect(authority.persistence.dependencies.managedServices).toBeTypeOf("function");
+		expect(authority.persistence.dependencies.runHistory).toBeTypeOf("function");
+		expect(authority.cursors.cipher).toBe(cipher);
 		expect(composition.startup.repairAllActiveSchedules).toBeTypeOf("function");
 	});
 

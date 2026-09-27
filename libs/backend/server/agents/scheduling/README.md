@@ -7,7 +7,7 @@ occurrence keeps its original request and audience while current permissions con
 
 | Package | What it owns |
 | --- | --- |
-| [main](./main/README.md) | Routine lifecycle, current authorization checks, saved firing records and durable workflow tasks. |
+| [main](./main/README.md) | Routine lifecycle, current authorization checks, saved firing records, durable workflow tasks and the authenticated command/read HTTP boundary. |
 | [contract](./contract/README.md) | Shared preparation, computer activation and run-admission ports and validated receipts. |
 
 ```text

@@ -1,5 +1,7 @@
 import type { RoutineFiringDisposition, RoutineFiringTrigger, RoutineSchedule, RoutineStatus } from "@opencrane/models/agents";
 
+import type { RoutineListItem, RoutineParticipantChoice } from "./routine-read.types";
+
 /** Public reasons that a routine firing can finish before execution starts; values are durable API client strings. */
 export enum RoutineFiringReasons
 {
@@ -16,8 +18,8 @@ export interface RoutineCreateRequest
 {
 	/** Existing conversation whose reviewed audience will be retained. */
 	readonly destinationConversationId: string;
-	/** Exact Principal identifiers selected by the caller from the reviewed audience. */
-	readonly audiencePrincipalIds: readonly string[];
+	/** Exact reviewed audience participant references selected by the caller. */
+	readonly audienceParticipantRefs: readonly string[];
 	/** Managed assistant service used by future firings. */
 	readonly selectedManagedServiceId: string;
 	/** Five-field schedule and named timezone. */
@@ -68,18 +70,15 @@ export interface RoutineDefinitionResponse
 }
 
 /** Safe routine details returned after an authorized read. */
-export interface RoutineDetailsResponse extends RoutineDefinitionResponse
+export interface RoutineDetailsResponse extends RoutineListItem
 {
-	/** Conversation whose reviewed audience was fixed at creation. */
-	readonly destinationConversationId: string;
-	/** Managed assistant service used by future firings. */
-	readonly selectedManagedServiceId: string;
-	/** Current normalized schedule. */
-	readonly schedule: RoutineSchedule;
-	/** Fixed reviewed audience, sorted by the server. */
-	readonly audiencePrincipalIds: readonly string[];
+	/** Fixed reviewed audience references and safe labels. */
+	readonly audienceParticipantRefs: readonly string[];
+	readonly audienceChoices: readonly RoutineParticipantChoice[];
 	/** Decrypted current instruction for the authorized audience. */
 	readonly instruction: string;
+	/** Commands currently permitted by ownership and lifecycle state. */
+	readonly capabilities: { readonly revise: boolean; readonly pause: boolean; readonly resume: boolean; readonly retire: boolean; readonly runNow: boolean };
 }
 
 /** Safe result returned after a manual firing command. */
@@ -95,8 +94,6 @@ export interface RoutineFiringResponse
 	readonly trigger: RoutineFiringTrigger;
 	/** Current saved firing disposition. */
 	readonly disposition: RoutineFiringDisposition;
-	/** Independent conversation reserved for this firing. */
-	readonly conversationId: string;
 	/** Automatic slot, or null for a manual firing. */
 	readonly scheduledSlot: string | null;
 	/** Public refusal or overlap reason, or null for other dispositions. */

@@ -37,6 +37,25 @@ These decisions supersede conflicting pending group-attribution/history, “no d
 unresolved numeric live-test-cap and first-write/Always-policy wording only where relevant. They do
 not claim source completion or live qualification.
 
+## Authenticated routine API — current source increment
+
+The current source increment covers 11 authenticated operations at `/api/v1/me/routines`: seven
+commands plus list, firing history, creation options and schedule preview. Strict contracts use
+opaque caller-bound cursors and public projections; generated client and website OpenAPI artifacts
+are synchronized, with `audienceParticipantRefs` replacing the old public principal-ID field.
+
+Non-overlapping focused evidence totals 350 tests: scheduling 284 (including read-repository,
+router, OpenAPI and legacy fixtures), execution-runs 22, conversation directory 11, app
+composition plus real-AES cursor coverage 17, contracts 14, API-spec 1 and the OpenCrane HTTP
+mount 1. Six package typechecks pass across scheduling, execution-runs, conversations, OpenCrane,
+contracts and API-spec; full ESLint boundaries, style/Prisma/module guards, release binding and
+diff checks pass. Frontend screens, the reviewed agent form, SQL/live PostgreSQL/KurrentDB proof,
+real-account qualification remains pending. Integrated and architecture review pass with zero
+findings, and both module-growth candidates are accepted as cohesive reviewed owners. No provider
+calls were made; the €5 total qualification envelope remains unspent. This source evidence is
+scoped to wave base `1ad2657ec604069a6e92f78d8ce89366b77f8e63`, not to CI, publication or MVP
+completion.
+
 OpenCrane gives employees and teams assistants that use company knowledge and tools under company
 control. Personal and group text journeys already have implementation and live evidence. The next
 step is useful work with real records, explicit decisions, durable results and understandable controls.

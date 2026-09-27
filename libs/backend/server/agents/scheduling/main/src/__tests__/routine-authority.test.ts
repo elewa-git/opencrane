@@ -7,6 +7,7 @@ import { RoutineCommandOutcome, type CreateRoutineCommand, type RoutineIdFactory
 import { RoutineCommandValidationError } from "../routine-command.errors";
 import type { RoutineInstructionCipher, RoutineInstructionContext, RoutineInstructionEnvelope } from "../routine-instruction.types";
 import type { RoutineCommandPersistence } from "../routine-persistence.types";
+import type { RoutinePageCursorCodec, RoutineReadPersistence } from "../routine-read.types";
 
 /** Stable ciphertext used to prove plaintext never enters routine persistence. */
 const _ENVELOPE: RoutineInstructionEnvelope = { keyId: "key-1", nonce: new Uint8Array([1]), ciphertext: new Uint8Array([2]), authTag: new Uint8Array([3]), ciphertextDigest: `sha256:${"a".repeat(64)}` };
@@ -17,7 +18,7 @@ function _command(): CreateRoutineCommand
 	return {
 		caller: { siloId: "silo-1", principalId: "principal-1", issuer: "https://issuer.example", subjectId: "subject-1", authenticatedAt: "2026-09-25T08:00:00.000Z" },
 		destinationConversationId: "conversation-source",
-		audiencePrincipalIds: ["principal-2", "principal-1"],
+		audienceParticipantRefs: ["participant-2", "participant-1"],
 		selectedManagedServiceId: "service-1",
 		schedule: { expression: " 0 9 * * 1-5 ", timezone: "Africa/Nairobi" },
 		instruction: "  Prepare the daily summary.  ",
@@ -25,16 +26,22 @@ function _command(): CreateRoutineCommand
 	};
 }
 
+/** Keeps authority tests independent from the mounted cursor cipher. */
+function _Cursors(): RoutinePageCursorCodec
+{
+	return { encode: vi.fn(), decode: vi.fn() };
+}
+
 describe("routine authority encryption boundary", function _suite()
 {
 	it("encrypts normalized instructions before transactional persistence", async function _encrypt()
 	{
 		const create = vi.fn().mockResolvedValue({ outcome: RoutineCommandOutcome.Committed, routineId: "routine-1", currentRevision: 1, status: RoutineStatus.Active, lifecycleRevision: 1, nextAutomaticOccurrence: "2026-09-25T09:00:00.000Z" });
-		const persistence = { create } as unknown as RoutineCommandPersistence;
+		const persistence = { create } as unknown as RoutineCommandPersistence & RoutineReadPersistence;
 		const encrypt = vi.fn().mockResolvedValue(_ENVELOPE);
 		const cipher = { encrypt, decrypt: vi.fn() } as unknown as RoutineInstructionCipher;
 		const ids: RoutineIdFactory = { routineId: () => "routine-1", revisionId: () => "revision-1", firingId: () => "firing-1", conversationId: () => "conversation-1", commandReceiptId: () => "receipt-1" };
-		const authority = new RoutineAuthority(persistence, cipher, ids);
+		const authority = new RoutineAuthority(persistence, cipher, ids, _Cursors());
 
 		await authority.create(_command());
 
@@ -44,19 +51,19 @@ describe("routine authority encryption boundary", function _suite()
 		const saved = create.mock.calls[0]?.[0];
 		expect(saved.instruction).toEqual(_ENVELOPE);
 		expect(saved.schedule).toEqual({ expression: "0 9 * * 1-5", timezone: "Africa/Nairobi" });
-		expect(saved.audiencePrincipalIds).toEqual(["principal-1", "principal-2"]);
+		expect(saved.audienceParticipantRefs).toEqual(["participant-1", "participant-2"]);
 		expect(JSON.stringify(saved)).not.toContain("Prepare the daily summary");
 	});
 
 	it("rejects duplicate or requester-free reviewed audiences before encryption", async function _audience()
 	{
-		const persistence = { create: vi.fn() } as unknown as RoutineCommandPersistence;
+		const persistence = { create: vi.fn() } as unknown as RoutineCommandPersistence & RoutineReadPersistence;
 		const cipher = { encrypt: vi.fn(), decrypt: vi.fn() } as unknown as RoutineInstructionCipher;
 		const ids: RoutineIdFactory = { routineId: () => "routine-1", revisionId: () => "revision-1", firingId: () => "firing-1", conversationId: () => "conversation-1", commandReceiptId: () => "receipt-1" };
-		const authority = new RoutineAuthority(persistence, cipher, ids);
+		const authority = new RoutineAuthority(persistence, cipher, ids, _Cursors());
 
-		await expect(authority.create({ ..._command(), audiencePrincipalIds: ["principal-1", "principal-1"] })).rejects.toThrow("unique");
-		await expect(authority.create({ ..._command(), audiencePrincipalIds: ["principal-2"] })).rejects.toThrow("original requester");
+		await expect(authority.create({ ..._command(), audienceParticipantRefs: ["participant-1", "participant-1"] })).rejects.toThrow("unique");
+		await expect(authority.create({ ..._command(), audienceParticipantRefs: [" participant-2"] })).rejects.toThrow("unique nonblank participant references");
 		await expect(authority.create({ ..._command(), instruction: " " })).rejects.toBeInstanceOf(RoutineCommandValidationError);
 		expect(cipher.encrypt).not.toHaveBeenCalled();
 		expect(persistence.create).not.toHaveBeenCalled();

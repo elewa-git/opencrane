@@ -64,36 +64,6 @@ export class PrismaRoutineFactsRepository implements RoutineFactsRepository
 		}
 	}
 
-	/** Verifies the exact reviewed audience against current external participants and Read grants. */
-	async resolveCreationAudience(caller: RoutineCaller, destinationConversationId: string, selectedPrincipalIds: readonly string[], now: Date): Promise<readonly string[]>
-	{
-		const conversation = await this.transaction.conversation.findFirst({
-			where: { id: destinationConversationId, siloId: caller.siloId, lifecycle: ConversationLifecycle.Open, participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } },
-			select: { participants: { where: { accessEndedPosition: null }, select: { userId: true }, orderBy: { userId: "asc" } } },
-		});
-		if (conversation === null)
-		{
-			throw new RoutineCommandUnavailableError("routine destination conversation is not currently available to the requester");
-		}
-		await this.requirePrincipalAction(caller.principalId, caller.siloId, ProductAuthorizationResourceKinds.Conversation, destinationConversationId, ProductAuthorizationActions.Read, now, false, {});
-		const currentSubjects = new Set(conversation.participants.map(participant => participant.userId));
-		const principals = await this.transaction.principal.findMany({ where: { siloId: caller.siloId, id: { in: [...selectedPrincipalIds] }, provenance: PrincipalProvenance.External }, select: { id: true, subject: true } });
-		if (principals.length !== selectedPrincipalIds.length)
-		{
-			throw new RoutineCommandUnavailableError("routine selected audience Principal is unavailable or not external");
-		}
-		for (const principalId of selectedPrincipalIds)
-		{
-			const principal = principals.find(candidate => candidate.id === principalId);
-			if (principal === undefined || !currentSubjects.has(principal.subject))
-			{
-				throw new RoutineCommandUnavailableError("routine selected audience Principal is not a current destination participant");
-			}
-			await this.requirePrincipalAction(principal.id, caller.siloId, ProductAuthorizationResourceKinds.Conversation, destinationConversationId, ProductAuthorizationActions.Read, now, false, {});
-		}
-		return [...selectedPrincipalIds];
-	}
-
 	/** Rechecks that every fixed audience member still has destination and routine read access. */
 	async requireCurrentAudience(routine: RoutineRow, revision: RoutineRevisionRow, now: Date): Promise<void>
 	{

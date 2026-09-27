@@ -6,16 +6,19 @@ import { spec } from "../spec";
 
 describe("routine command API contract", function _Suite()
 {
-	it("assembles the seven routine operations without private identity or replay fields", function _Routines()
+	it("assembles routine command, read and preview operations without private identity or replay fields", function _Routines()
 	{
+		expect(spec.paths).toHaveProperty("/me/routines.get");
+		expect(spec.paths).toHaveProperty("/me/routines/creation-options.get");
+		expect(spec.paths).toHaveProperty("/me/routines/schedule-preview.post");
 		expect(spec.paths).toHaveProperty("/me/routines.post");
 		expect(spec.paths).toHaveProperty("/me/routines/{routineId}.get");
+		expect(spec.paths).toHaveProperty("/me/routines/{routineId}/firings.get");
 		expect(spec.paths).toHaveProperty("/me/routines/{routineId}/revise.post");
 		expect(spec.paths).toHaveProperty("/me/routines/{routineId}/pause.post");
 		expect(spec.paths).toHaveProperty("/me/routines/{routineId}/resume.post");
 		expect(spec.paths).toHaveProperty("/me/routines/{routineId}/retire.post");
 		expect(spec.paths).toHaveProperty("/me/routines/{routineId}/run-now.post");
-		expect(spec.paths["/me/routines"]).not.toHaveProperty("get");
 
 		const create = spec.paths["/me/routines"].post.responses[201].content["application/json"].schema.properties.routine;
 		expect(create.properties).not.toHaveProperty("outcome");

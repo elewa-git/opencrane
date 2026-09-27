@@ -1,6 +1,7 @@
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import type { AuthorizationAuthority, ManagedAuthorizationGrantRepository, ManagedAuthorizationGrantRestrictionRepository } from "@opencrane/backend/server/iam/authorization";
 import type { RoutineFiringDisposition, RoutineFiringTrigger, RoutineSchedule, RoutineStatus } from "@opencrane/models/agents";
+import type { RoutineCreationOptionsResponse, RoutineFiringListResponse, RoutineListItem, RoutineListResponse, RoutineManagedServiceChoice, RoutineParticipantChoice, RoutineSchedulePreviewResponse } from "@opencrane/contracts";
 
 import type { RoutineInstructionEnvelope } from "./routine-instruction.types";
 
@@ -41,8 +42,8 @@ export interface CreateRoutineCommand
 	readonly caller: RoutineCaller;
 	/** Existing conversation whose current participants become the fixed explicit audience. */
 	readonly destinationConversationId: string;
-	/** Exact creator-confirmed external Principals selected from reviewed current participants. */
-	readonly audiencePrincipalIds: readonly string[];
+	/** Exact opaque organisation membership references selected from reviewed current participants. */
+	readonly audienceParticipantRefs: readonly string[];
 	/** Active managed agent service selected for every future occurrence. */
 	readonly selectedManagedServiceId: string;
 	/** Normalized five-field cron and named timezone. */
@@ -107,6 +108,42 @@ export interface ReadRoutineCommand
 	readonly routineId: string;
 }
 
+/** Cursor-paginated routine list command. */
+export interface ListRoutinesCommand
+{
+	/** Authenticated audience member. */
+	readonly caller: RoutineCaller;
+	/** Bounded candidate window requested by the browser. */
+	readonly limit: number;
+	/** Opaque encrypted continuation token. */
+	readonly cursor?: string;
+}
+
+/** Cursor-paginated firing-history command. */
+export interface ListRoutineFiringsCommand extends ListRoutinesCommand
+{
+	/** Routine authorized before any firing row is returned. */
+	readonly routineId: string;
+}
+
+/** Destination-scoped creation-options command. */
+export interface RoutineCreationOptionsCommand
+{
+	/** Authenticated requester reviewing creation choices. */
+	readonly caller: RoutineCaller;
+	/** Existing destination conversation. */
+	readonly destinationConversationId: string;
+}
+
+/** Schedule-only preview command using the authenticated silo clock. */
+export interface RoutineSchedulePreviewCommand
+{
+	/** Authenticated requester selecting the silo clock. */
+	readonly caller: RoutineCaller;
+	/** Normalized five-field schedule and named timezone. */
+	readonly schedule: RoutineSchedule;
+}
+
 /** Stable outcomes returned by routine mutations and command replay. */
 export enum RoutineCommandOutcome
 {
@@ -157,12 +194,16 @@ export interface RoutineFiringResult
 }
 
 /** Authorized projection whose encrypted instruction is decrypted after commit. */
-export interface EncryptedRoutineProjection extends RoutineCommandResult
+export interface EncryptedRoutineProjection extends RoutineListItem
 {
 	/** Conversation from which the routine and fixed audience were created. */
 	readonly destinationConversationId: string;
 	/** Managed service checked again before every occurrence. */
 	readonly selectedManagedServiceId: string;
+	/** Safe current label for the selected managed service. */
+	readonly selectedManagedService: RoutineManagedServiceChoice;
+	/** Says whether the caller is the immutable requester or another audience reader. */
+	readonly ownership: "owner" | "audience";
 	/** Original approved requester Principal. */
 	readonly requesterPrincipalId: string;
 	/** Original verified issuer retained for run provenance. */
@@ -173,8 +214,12 @@ export interface EncryptedRoutineProjection extends RoutineCommandResult
 	readonly requesterAuthenticatedAt: string;
 	/** Current normalized schedule. */
 	readonly schedule: RoutineSchedule;
-	/** Fixed creator-confirmed audience, copied unchanged to every revision. */
-	readonly audiencePrincipalIds: readonly string[];
+	/** Fixed creator-confirmed audience mapped back to opaque membership references. */
+	readonly audienceParticipantRefs: readonly string[];
+	/** Safe current labels for fixed audience references. */
+	readonly audienceChoices: readonly RoutineParticipantChoice[];
+	/** Current command hints derived from policy without recording an effect admission. */
+	readonly capabilities: { readonly revise: boolean; readonly pause: boolean; readonly resume: boolean; readonly retire: boolean; readonly runNow: boolean };
 	/** Encrypted current instruction. */
 	readonly instruction: RoutineInstructionEnvelope;
 }
@@ -191,6 +236,15 @@ export type RoutineAuthorizationFactory<Transaction> = (transaction: Transaction
 
 /** Transaction-bound factory for grants derived from the creator-confirmed fixed audience. */
 export type RoutineManagedGrantRepositoryFactory<Transaction> = (transaction: Transaction) => ManagedAuthorizationGrantRepository & ManagedAuthorizationGrantRestrictionRepository;
+
+/** Public read results returned by the routine authority. */
+export type RoutineListResult = RoutineListResponse;
+/** Public firing-history results returned by the routine authority. */
+export type RoutineFiringListResult = RoutineFiringListResponse;
+/** Public destination-scoped creation choices returned by the routine authority. */
+export type RoutineCreationOptionsResult = RoutineCreationOptionsResponse;
+/** Public five-slot schedule preview returned by the routine authority. */
+export type RoutineSchedulePreviewResult = RoutineSchedulePreviewResponse;
 
 /** Input used by the automatic wake task under its saved receipt fence. */
 export interface AutomaticRoutineFiringCommand

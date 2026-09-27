@@ -6,14 +6,15 @@ import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "
 import { RoutineFiringDisposition, RoutineFiringTrigger, RoutineStatus, __NextRoutineOccurrence, __PlanRoutineFiring, type RoutineSchedule } from "@opencrane/models/agents";
 
 import { _ProjectRoutineGrants, _RetireRoutineGrants } from "./routine-authorization";
-import type { ReadRoutineCommand, RoutineCaller } from "./routine-authority.types";
-import { RoutineCommandOutcome, type EncryptedRoutineProjection, type RoutineCommandResult, type RoutineFiringResult } from "./routine-authority.types";
+import type { RoutineCaller } from "./routine-authority.types";
+import { RoutineCommandOutcome, type RoutineCommandResult, type RoutineFiringResult } from "./routine-authority.types";
 import { _ParseRoutineCommandResult, _ParseRoutineFiringResult } from "./routine-authority.validator";
 import { RoutineCommandConflictError, RoutineCommandUnavailableError } from "./routine-command.errors";
 import type { RoutineInstructionEnvelope } from "./routine-instruction.types";
 import type { CurrentRoutineRows, RoutineFactsRepository, RoutineFiringActor } from "./routine-prisma-facts.types";
 import { _PRISMA_FIRING_DISPOSITION, _PRISMA_ROUTINE_STATUS } from "./routine-prisma-mapping";
 import type { ChangeRoutineStatusPersistenceCommand, CreateRoutinePersistenceCommand, ReviseRoutinePersistenceCommand, RoutineCommandPersistence, RunRoutineNowPersistenceCommand } from "./routine-persistence.types";
+import type { RoutineConversationDirectory, RoutineManagedServiceDirectory } from "./routine-read.types";
 import { RoutineLifecycleDecisionKind, RoutineLifecycleEvent } from "./routine-lifecycle.types";
 import { __DecideRoutineLifecycle } from "./routine-lifecycle";
 import type { RoutineOccurrenceTaskInput, RoutineScheduleTaskInput, RoutineTaskAdmissionPort } from "./routine-workflow.types";
@@ -29,14 +30,20 @@ export class PrismaRoutineCommandRepository implements RoutineCommandPersistence
 	private readonly managedGrants: ManagedAuthorizationGrantRepository & ManagedAuthorizationGrantRestrictionRepository;
 	/** Workflow engine whose spawn operation adopts the caller's transaction. */
 	private readonly taskAdmission: RoutineTaskAdmissionPort<Prisma.TransactionClient>;
+	/** Conversation-owned resolver for opaque audience membership references. */
+	private readonly conversations: RoutineConversationDirectory<Prisma.TransactionClient>;
+	/** Agent-service-owned current eligibility reader. */
+	private readonly managedServices: RoutineManagedServiceDirectory;
 
 	/** Stores every transaction-bound collaborator. */
-	constructor(transaction: Prisma.TransactionClient, facts: RoutineFactsRepository, managedGrants: ManagedAuthorizationGrantRepository & ManagedAuthorizationGrantRestrictionRepository, taskAdmission: RoutineTaskAdmissionPort<Prisma.TransactionClient>)
+	constructor(transaction: Prisma.TransactionClient, facts: RoutineFactsRepository, managedGrants: ManagedAuthorizationGrantRepository & ManagedAuthorizationGrantRestrictionRepository, taskAdmission: RoutineTaskAdmissionPort<Prisma.TransactionClient>, conversations: RoutineConversationDirectory<Prisma.TransactionClient>, managedServices: RoutineManagedServiceDirectory)
 	{
 		this.transaction = transaction;
 		this.facts = facts;
 		this.managedGrants = managedGrants;
 		this.taskAdmission = taskAdmission;
+		this.conversations = conversations;
+		this.managedServices = managedServices;
 	}
 
 	/** @inheritdoc */
@@ -50,11 +57,13 @@ export class PrismaRoutineCommandRepository implements RoutineCommandPersistence
 			return _ParseRoutineCommandResult(existing.result, existing);
 		}
 
-		const audiencePrincipalIds = await this.facts.resolveCreationAudience(command.caller, command.destinationConversationId, command.audiencePrincipalIds, now);
-		const service = await this._requireManagedServiceSelection(command.caller.principalId, command.caller.siloId, command.selectedManagedServiceId, now);
-		if (service !== command.selectedManagedServiceId)
+		const audience = await this.conversations.resolveAudience(command.caller, command.destinationConversationId, command.audienceParticipantRefs, now);
+		if (audience === null || audience.participantRefs.length !== command.audienceParticipantRefs.length || audience.participantRefs.some((reference, index) => reference !== command.audienceParticipantRefs[index]))
+			throw new RoutineCommandUnavailableError("routine selected audience is unavailable");
+		const service = await this.managedServices.eligible(command.caller, command.selectedManagedServiceId);
+		if (service === null || service.agentServiceId !== command.selectedManagedServiceId)
 		{
-			throw new Error("routine selected managed service changed during creation");
+			throw new RoutineCommandUnavailableError("routine selected managed service is unavailable");
 		}
 		const nextEpochMs = __NextRoutineOccurrence(command.schedule, now.getTime());
 		await this.transaction.agentRoutine.create({ data: {
@@ -75,46 +84,13 @@ export class PrismaRoutineCommandRepository implements RoutineCommandPersistence
 			createdAt: now,
 			updatedAt: now,
 		} });
-		await this._createRevision(command.revisionId, command.routineId, command.caller.siloId, 1, command.schedule, command.instruction, audiencePrincipalIds, command.caller.principalId, now);
-		await _ProjectRoutineGrants(this.managedGrants, command.caller.siloId, command.routineId, command.caller.principalId, audiencePrincipalIds, now);
+		await this._createRevision(command.revisionId, command.routineId, command.caller.siloId, 1, command.schedule, command.instruction, audience.principalIds, command.caller.principalId, now);
+		await _ProjectRoutineGrants(this.managedGrants, command.caller.siloId, command.routineId, command.caller.principalId, audience.principalIds, now);
 		const scheduleTask = await this._spawnSchedule(command.caller.siloId, command.routineId, 1, nextEpochMs);
 		await this.transaction.agentRoutine.update({ where: { id: command.routineId }, data: { scheduleTaskId: scheduleTask.taskId, scheduleTaskName: scheduleTask.taskName, scheduleTaskKey: scheduleTask.idempotencyKey } });
 		const result = _DefinitionResult(command.routineId, 1, RoutineStatus.Active, 1, new Date(nextEpochMs));
 		await this._saveCommandReceipt(command.commandReceiptId, command.caller.siloId, command.routineId, command.caller.principalId, AgentRoutineCommandKind.Create, command.idempotencyKey, command.commandDigest, result, 1, null, now);
 		return result;
-	}
-
-	/** @inheritdoc */
-	async read(command: ReadRoutineCommand): Promise<EncryptedRoutineProjection | null>
-	{
-		const current = await this.facts.current(command.caller.siloId, command.routineId);
-		if (current === null || !current.revision.audiencePrincipalIds.includes(command.caller.principalId))
-		{
-			return null;
-		}
-		const now = await this.facts.databaseNow();
-		const status = this.facts.modelStatus(current.routine);
-		if (status === RoutineStatus.Retired)
-		{
-			await this.facts.requireCurrentReader(command.caller, current.routine, current.revision, now);
-		}
-		else
-		{
-			await this.facts.requireCurrentAudience(current.routine, current.revision, now);
-			await this.facts.requirePrincipalAction(command.caller.principalId, command.caller.siloId, ProductAuthorizationResourceKinds.Routine, command.routineId, ProductAuthorizationActions.Read, now, false, {});
-		}
-		return {
-			..._DefinitionResult(current.routine.id, current.routine.currentRevision, status, current.routine.lifecycleRevision, current.routine.nextAutomaticOccurrence),
-			destinationConversationId: current.routine.destinationConversationId,
-			selectedManagedServiceId: current.routine.selectedManagedServiceId,
-			requesterPrincipalId: current.routine.originalRequesterPrincipalId,
-			requesterIssuer: current.routine.requesterIssuer,
-			requesterSubjectId: current.routine.requesterSubjectId,
-			requesterAuthenticatedAt: current.routine.requesterAuthenticatedAt.toISOString(),
-			schedule: { expression: current.revision.scheduleExpression, timezone: current.revision.scheduleTimezone },
-			audiencePrincipalIds: [...current.revision.audiencePrincipalIds],
-			instruction: { keyId: current.revision.instructionKeyId, nonce: current.revision.instructionNonce, authTag: current.revision.instructionAuthTag, ciphertext: current.revision.instructionCiphertext, ciphertextDigest: current.revision.instructionCiphertextDigest as `sha256:${string}` },
-		};
 	}
 
 	/** @inheritdoc */
@@ -282,14 +258,6 @@ export class PrismaRoutineCommandRepository implements RoutineCommandPersistence
 		}
 		this.facts.requireOriginalRequester(caller, current.routine);
 		return current;
-	}
-
-	/** Checks current managed-agent invocation eligibility without recording an effect. */
-	private async _requireManagedServiceSelection(principalId: string, siloId: string, serviceId: string, now: Date): Promise<string>
-	{
-		await this.facts.currentManagedAgentById(siloId, serviceId);
-		await this.facts.requirePrincipalAction(principalId, siloId, ProductAuthorizationResourceKinds.AgentService, serviceId, ProductAuthorizationActions.Invoke, now, false, {});
-		return serviceId;
 	}
 
 	/** Rechecks all current firing guards and records both Routine Use and AgentService Invoke. */
