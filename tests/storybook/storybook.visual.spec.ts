@@ -124,6 +124,14 @@ test("conversation workspace visual contracts cover the observed widths", async 
 	}
 });
 
+test("narrow PDF workspace reaches both scroll edges without document scrolling", async ({ page }) =>
+{
+	await page.setViewportSize(VISUAL_NARROW_VIEWPORT);
+	await _OpenStableStory(page, "conversations-workspace-shell--pdf-informed-answer-narrow");
+	await _AssertFullViewportStory(page);
+	expect(await page.locator("html").evaluate(function _DoesNotScroll(element) { return element.scrollHeight <= element.clientHeight; })).toBe(true);
+});
+
 /**
  * Captures one story in a fresh page so Angular teardown from another story cannot race its root.
  * @param context - Deterministic Chromium context shared by the visual contract.
@@ -261,12 +269,46 @@ async function _OpenStableStory(page: Page, storyId: string): Promise<void>
 		{
 			const scrollOwner = page.locator(".conversation-workspace__body");
 			const boundPdfCard = page.locator("wo-conversation-workspace-transcript wo-conversation-asset-card").filter({ hasText: "project-brief.pdf" });
-			await boundPdfCard.evaluate(function _ShowBoundPdf(element) { element.scrollIntoView({ block: "center" }); });
-			await expect.poll(async function _BoundPdfIsInViewport()
+			const scrollMetrics = await scrollOwner.evaluate(function _ScrollMetrics(element)
+			{
+				return { clientHeight: element.clientHeight, clientWidth: element.clientWidth, scrollHeight: element.scrollHeight, scrollWidth: element.scrollWidth };
+			});
+			expect(scrollMetrics.clientHeight).toBeGreaterThan(0);
+			expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight);
+			expect(scrollMetrics.clientWidth).toBeGreaterThan(0);
+			expect(scrollMetrics.scrollWidth).toBeLessThanOrEqual(scrollMetrics.clientWidth + 1);
+			const pdfCardBounds = await boundPdfCard.boundingBox();
+			if (pdfCardBounds === null)
+				throw new Error("The bound PDF card is not visible.");
+			const cardRequiresMonotonicScroll = pdfCardBounds.height > scrollMetrics.clientHeight;
+
+			await boundPdfCard.evaluate(function _ShowBoundPdfTop(element) { element.scrollIntoView({ block: "start", inline: "nearest" }); });
+			await expect.poll(async function _BoundPdfTopIsReachable()
 			{
 				const [bounds, ownerBounds] = await Promise.all([boundPdfCard.boundingBox(), scrollOwner.boundingBox()]);
-				return bounds !== null && ownerBounds !== null && bounds.y >= ownerBounds.y && bounds.y + bounds.height <= ownerBounds.y + ownerBounds.height;
+				return bounds !== null && ownerBounds !== null
+					&& bounds.y >= ownerBounds.y - 1
+					&& bounds.y < ownerBounds.y + ownerBounds.height
+					&& bounds.x >= ownerBounds.x - 1
+					&& bounds.x + bounds.width <= ownerBounds.x + ownerBounds.width + 1;
 			}).toBe(true);
+			const firstScrollTop = await scrollOwner.evaluate(function _FirstScrollTop(element) { return element.scrollTop; });
+
+			await boundPdfCard.evaluate(function _ShowBoundPdfBottom(element) { element.scrollIntoView({ block: "end", inline: "nearest" }); });
+			await expect.poll(async function _BoundPdfBottomIsReachable()
+			{
+				const [bounds, ownerBounds] = await Promise.all([boundPdfCard.boundingBox(), scrollOwner.boundingBox()]);
+				return bounds !== null && ownerBounds !== null
+					&& bounds.y + bounds.height > ownerBounds.y
+					&& bounds.y + bounds.height <= ownerBounds.y + ownerBounds.height + 1
+					&& bounds.x >= ownerBounds.x - 1
+					&& bounds.x + bounds.width <= ownerBounds.x + ownerBounds.width + 1;
+			}).toBe(true);
+			const secondScrollTop = await scrollOwner.evaluate(function _SecondScrollTop(element) { return element.scrollTop; });
+			if (cardRequiresMonotonicScroll)
+				expect(secondScrollTop).toBeGreaterThanOrEqual(firstScrollTop);
+
+			await boundPdfCard.evaluate(function _RecenterBoundPdf(element) { element.scrollIntoView({ block: "center", inline: "nearest" }); });
 		}
 	}
 	if (storyId === "conversations-workspace-shell--personal-tool-approval" || storyId === "conversations-workspace-shell--personal-tool-approval-narrow")

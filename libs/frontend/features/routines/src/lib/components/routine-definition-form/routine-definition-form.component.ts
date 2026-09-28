@@ -77,6 +77,8 @@ export class RoutineDefinitionFormComponent
 	protected readonly weekdays = [{ value: 1, label: "Monday" }, { value: 2, label: "Tuesday" }, { value: 3, label: "Wednesday" }, { value: 4, label: "Thursday" }, { value: 5, label: "Friday" }, { value: 6, label: "Saturday" }, { value: 0, label: "Sunday" }];
 	/** Maps server services into the shared single-choice contract. */
 	protected readonly serviceOptions = computed(() => this.serviceChoices().map(choice => ({ id: choice.id, label: choice.label })));
+	/** Projects readonly timezone input into the mutable array shape required by PrimeNG Select. */
+	protected readonly timezoneOptions = computed(() => [...this.timezoneChoices()]);
 	/** Prevents edits while a command is in flight, uncertain, or awaiting conflict refresh. */
 	protected readonly editingLocked = computed(() => this.commandState() === RoutineCommandStates.Submitting || this.commandState() === RoutineCommandStates.Uncertain || this.commandState() === RoutineCommandStates.Conflict);
 	/** Enables preview only when the current mode and values produce a valid normalized schedule. */

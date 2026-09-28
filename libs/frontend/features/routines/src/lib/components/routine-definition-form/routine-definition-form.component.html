@@ -9,7 +9,7 @@
 			@if (draft().scheduleMode !== scheduleModes.Advanced) { <label>Local time<input pInputText type="time" required [value]="draft().localTime" [disabled]="editingLocked()" (input)="localTimeChanged.emit($any($event.target).value)" /></label> }
 			@if (draft().scheduleMode === scheduleModes.Weekly) { <label>Weekday<p-select [options]="weekdays" optionLabel="label" optionValue="value" [ngModel]="draft().weekday" [ngModelOptions]="{ standalone: true }" [disabled]="editingLocked()" (ngModelChange)="weekdayChanged.emit($event)" /></label> }
 			@if (draft().scheduleMode === scheduleModes.Advanced) { <label>Cron expression<input pInputText required maxlength="256" autocomplete="off" [value]="draft().expression" [disabled]="editingLocked()" (input)="expressionChanged.emit($any($event.target).value)" /><small>Five numeric fields: minute, hour, day, month, weekday.</small></label> }
-			<label>Timezone<p-select [options]="timezoneChoices()" [editable]="true" [filter]="true" [ngModel]="draft().timezone" [ngModelOptions]="{ standalone: true }" [disabled]="editingLocked()" (ngModelChange)="timezoneChanged.emit($event)" /></label>
+			<label>Timezone<p-select [options]="timezoneOptions()" [editable]="true" [filter]="true" [ngModel]="draft().timezone" [ngModelOptions]="{ standalone: true }" [disabled]="editingLocked()" (ngModelChange)="timezoneChanged.emit($event)" /></label>
 		</div>
 		<wo-routine-schedule-preview [preview]="preview()" [stale]="previewStale()" [loading]="previewLoading()" [error]="previewError()" [previewAvailable]="previewAvailable()" (previewRequested)="previewRequested.emit()" />
 	</section>

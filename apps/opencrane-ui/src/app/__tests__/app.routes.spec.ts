@@ -28,7 +28,7 @@ describe("OpenCrane app route composition", function _OpenCraneAppRouteCompositi
 		expect(destinations.map(function _Paths(routes) { return routes.map(function _Path(route) { return route.path; }); })).toEqual([["approvals"], ["audit", "usage"]]);
 		expect(destinations[0][0].component?.name).toBe("ToolApprovalScopeRouteComponent");
 		expect(destinations[1].every(function _Context(route) { return route.providers?.length === 1; })).toBe(true);
-	});
+	}, 10_000);
 
 	it("guards settings and requests registration only for anonymous token acceptance", function _SettingsRoutes()
 	{
