@@ -3,12 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import { WorkflowTaskRetryableError, type IWorkflowTaskContext, type IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
 import { __FakeWorkflowEngine } from "@opencrane/backend/server/infra/workflows/testing";
 import { CONVERSATION_COMPUTER_TURN_MAXIMUM_ATTEMPTS, CONVERSATION_COMPUTER_TURN_TASK } from "../conversation-computer-turn-task";
+import { ConversationComputerTurnProtocolStates } from "../../conversation-computer-turn-protocol.types";
 import type { ConversationComputerTurnTaskInput } from "../conversation-computer-turn-workflow.types";
 import { _RegisterConversationComputerTurnWorkflow } from "../conversation-computer-turn-workflow";
 
 const _TASK = { taskId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: "41c1f1dc-0010-4f13-9c2f-d3841ffd6651" };
 const _INPUT: ConversationComputerTurnTaskInput = { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 2, activationEventId: _TASK.idempotencyKey, causationId: "message-1", causationPosition: "2" };
-const _TURN = { bootstrapId: "turn-1", siloId: "silo-1", binding: { conversationId: "conversation-1" }, latestPendingEntryId: _INPUT.causationId, latestPendingEntryPosition: _INPUT.causationPosition, compile: { runId: "run-1", attempt: 1 } };
+const _TURN = { bootstrapId: "turn-1", siloId: "silo-1", binding: { conversationId: "conversation-1" }, latestPendingEntryId: _INPUT.causationId, latestPendingEntryPosition: _INPUT.causationPosition, compile: { runId: "run-1", attempt: 1 }, protocol: { state: ConversationComputerTurnProtocolStates.Open } };
 
 /** Capture the registered definition and expose deterministic durable-wait seams. */
 function _Fixture(progress: readonly Record<string, unknown>[], cacheCheckpoints = false)
@@ -70,6 +71,15 @@ describe("conversation computer turn workflow", function _Suite()
 		expect(fixture.context.sleepUntil).toHaveBeenCalledExactlyOnceWith(new Date(deadline), "model-1-deadline");
 		expect(fixture.context.checkpoint).toHaveBeenCalledExactlyOnceWith({ stepName: "record-routine-running:model:1" }, expect.any(Function));
 		expect(fixture.authority.advance).toHaveBeenCalledTimes(2);
+	});
+
+	it("finishes a start-recovered unavailable turn without advancing it again", async function _StartUnavailable()
+	{
+		const fixture = _Fixture([]);
+		fixture.authority.start.mockResolvedValue({ ..._TURN, protocol: { state: ConversationComputerTurnProtocolStates.ResponseUnavailable } });
+		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "response_unavailable", turnId: "turn-1" });
+		expect(fixture.receipts.bind).toHaveBeenCalledExactlyOnceWith("run-1", 1, _TASK);
+		expect(fixture.authority.advance).not.toHaveBeenCalled();
 	});
 
 	it("waits for the exact terminal tool event and then completes from saved state", async function _ToolWake()
@@ -253,6 +263,7 @@ describe("conversation computer turn workflow", function _Suite()
 	{
 		const fixture = _Fixture([]);
 		fixture.receipts.bind.mockResolvedValue(false);
+		fixture.authority.start.mockResolvedValue({ ..._TURN, protocol: { state: ConversationComputerTurnProtocolStates.ResponseUnavailable } });
 		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "superseded", turnId: "turn-1" });
 		expect(fixture.authority.advance).not.toHaveBeenCalled();
 	});
@@ -277,5 +288,24 @@ describe("conversation computer turn workflow", function _Suite()
 		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "superseded", turnId: "turn-1" });
 		expect(fixture.receipts.bind).not.toHaveBeenCalled();
 		expect(fixture.authority.advance).not.toHaveBeenCalled();
+	});
+
+	it("rejects a turn whose causation id differs at the admitted position", async function _WrongCausation()
+	{
+		const fixture = _Fixture([]);
+		fixture.authority.start.mockResolvedValue({ ..._TURN, latestPendingEntryId: "message-other", protocol: { state: ConversationComputerTurnProtocolStates.ResponseUnavailable } });
+		await expect(fixture.definition.run(fixture.context, _INPUT)).rejects.toThrow("causation does not match");
+		expect(fixture.receipts.bind).not.toHaveBeenCalled();
+		expect(fixture.authority.advance).not.toHaveBeenCalled();
+	});
+
+	it("retries a transient start failure through the workflow engine", async function _StartRetry()
+	{
+		const fixture = _Fixture([{ outcome: "completed" }]);
+		fixture.authority.start.mockRejectedValueOnce(new Error("start write unavailable"));
+		await expect(fixture.definition.run(fixture.context, _INPUT)).rejects.toBeInstanceOf(WorkflowTaskRetryableError);
+		fixture.authority.start.mockResolvedValueOnce(_TURN);
+		await expect(fixture.definition.run(fixture.context, _INPUT)).resolves.toEqual({ outcome: "completed", turnId: "turn-1" });
+		expect(fixture.authority.start).toHaveBeenCalledTimes(2);
 	});
 });

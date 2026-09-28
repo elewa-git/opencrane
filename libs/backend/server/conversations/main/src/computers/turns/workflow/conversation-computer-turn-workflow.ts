@@ -3,6 +3,7 @@ import { ___GeneratedFileEventName } from "@opencrane/contracts";
 
 import { ConversationComputerToolResultOutcomes } from "../conversation-computer-continuation.types";
 import { ConversationComputerModelProgressOutcomes } from "../conversation-computer-model.types";
+import { ConversationComputerTurnProtocolStates } from "../conversation-computer-turn-protocol.types";
 import { RoutineRunProgressWaitKinds, type RoutineRunProgressWait } from "../../../routines/routine-run-progress.types";
 import { CONVERSATION_COMPUTER_TURN_MAXIMUM_ATTEMPTS, CONVERSATION_COMPUTER_TURN_TASK } from "./conversation-computer-turn-task";
 import type { ConversationComputerTurnTaskInput, ConversationComputerTurnWorkflowDependencies, ConversationComputerTurnWorkflowResult } from "./conversation-computer-turn-workflow.types";
@@ -41,6 +42,11 @@ export function _RegisterConversationComputerTurnWorkflow(workflows: IWorkflowEn
 				throw new Error("Conversation turn workflow causation does not match its history position");
 			if (!await dependencies.receipts.bind(turn.compile.runId, turn.compile.attempt, context.task))
 				return { outcome: "superseded", turnId: turn.bootstrapId };
+			if (turn.protocol.state === ConversationComputerTurnProtocolStates.ResponseUnavailable)
+			{
+				// start() already persisted run recovery and routine progress for this saved unavailable state.
+				return { outcome: ConversationComputerModelProgressOutcomes.ResponseUnavailable, turnId: turn.bootstrapId };
+			}
 
 			let recoveryCycle = 0;
 			while (true)
