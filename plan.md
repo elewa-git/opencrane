@@ -77,6 +77,34 @@ Ask and Block enforced at the real invocation path, current policy/IAM checks at
 retry and revision-conflict handling, protected personal/company settings, and controlled UI
 states. Source tests and fresh PostgreSQL proof remain distinct from real-provider acceptance.
 
+The generated personal/company policy API is available for frontend integration. The runtime
+claim edit is paused after an automated safety rejection; that patch was not applied. Independent
+caller inspection shows that returning a nonterminal `Winner` would not dispatch, but could leave
+the call pending without a valid claim. The proposed replacement retains the existing current
+authority and lease checks, closes denied work through its existing lifecycle owner, and lets
+only a real claim reach provider dispatch. Revised source-only approval has been requested.
+Settings and frontend implementation continue separately and are not operational proof.
+
+The settings/UI source is now independently reviewed in the working overlay above
+`4178a539a0cd0f6217098ea0a2424977b6ad2bfe`. Current-authority checks precede policy replay,
+and immutable receipts preserve the original mode, revision and timestamp. Thirteen focused
+backend tests pass. The frontend has personal and company controls, server/tool labels, exact
+uncertain retries, conflict refresh, and protection against late responses after scope loss.
+Its feature suite passes 47 tests and the MCP adapter suite passes 46; their type checks and
+scoped style checks pass. Independent review includes the repaired retry/error paths.
+
+The final Storybook build passes. Ten policy states render, but all ten screenshot comparisons
+fail because approved macOS references are absent; updates were explicitly disabled and no
+baseline was written. Three separately captured review images are in
+`/private/tmp/opencrane-tool-policy-candidates.oIk3en/` (Ask, uncertain response, narrow long name).
+They are fixture evidence only, not authenticated or provider execution proof. The database
+ownership constraints, fresh-install baseline/release binding, proposal/claim enforcement and
+real-provider journey remain unfinished. No paid provider call or VM was started.
+
+The fixture repair is committed at `4178a539a`; the policy settings/UI overlay remains uncommitted
+until its execution and database contract form a coherent, validated product change. No new PR,
+merge or release tag was created for this unfinished slice.
+
 ## Conversational routine proposals — execution wave
 
 ### Published-head CI result — 29 September 2026
@@ -3928,11 +3956,11 @@ their own completion track; they are not silently bundled into the first tool PR
 | T2 | IN PROGRESS: personal and requester-only company approval/resume are implemented with PostgreSQL proof. Real requester accounts, provider execution and recovery/cancellation acceptance remain. |
 | U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
 | M1 | IN PROGRESS: persistence, transaction-bound Absurd admission and catalog completion are implemented, and the current #899 run passes the Cognee provider contract and database-authority suites. First-dataset permission, fresh authenticated composition and complete isolated Remember/Recall/Correct/Forget journeys remain; provider CI is not live product-memory acceptance. Cognee runs in access-control mode with one gateway service user per silo ([ADR 0017](docs/adr/0017-cognee-access-control-mode-and-gateway-service-user.md)). |
-| U2 | Structured-result production/replay passes source review, controlled checks and real-Kurrent paired-output recovery. Visual approval and authenticated live proof remain. Runtime-question source is separately PAUSED pending explicit approval. |
+| U2 | IN PROGRESS: structured results, collaborative clarification response authority, pending-question notifications and explicit initial subchat audience have reviewed source checkpoints above. Complete model-question/answer continuation, visual approval and authenticated participant/isolation proof remain; earlier approval pauses are superseded by the recorded decisions. |
 | F1 | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV capture, scanning and answer-link recovery are implemented in #879 and pass four real-store cases in #880. The pending SQL guard and complete hosted execution/download qualification remain. |
 | D1 | IN PROGRESS; recursive source accepted 23 September with no fixed depth, child-count or concurrency caps. Run-tree accounting is published; its ten initial SQL cases passed CI. The actual credential-custody correction passes 121 run and 844 conversation tests locally; thirteen revised SQL cases await fresh-baseline CI. Per-call cost authority, spawn/join, narrowed context/permissions and recursive cleanup remain unjoined. This is not a working or qualified delegation journey. |
-| S1 | REQUIRED FOR MVP; source activation remains paused for the private-scheduling decisions. |
-| A2 | PARTIAL: protected audit/usage read screens and their controlled tests are implemented. Governance-reader policy, actual usage collection/pricing/attribution and real-account administration acceptance remain open. |
+| S1 | REQUIRED FOR MVP; scheduling persistence, protected commands, browser controls and conversational proposals are published in draft #916. Narrow failed-CI fixture repairs are committed locally; PostgreSQL requalification, visual review and real automatic/manual/recovery journeys remain. The earlier product-decision pause is resolved. |
+| A2 | PARTIAL: protected audit/usage read screens and controlled tests exist. Owners/Admins are the accepted default readers; EUR hard budgets, trusted pricing and actual usage collection/attribution still need implementation and real-account proof. |
 | T3 | PLANNED, with separate acceptance for its journey. |
 | Q1 — operational acceptance | CONTINUOUS — source checks and CI do not replace fresh-install or real-account acceptance. |
 
