@@ -59,7 +59,42 @@ These decisions supersede older pending group-attribution/history, “no deploy 
 unresolved numeric live-test-cap and first-write/Always-policy text only where those statements
 conflict. Historical evidence is retained below.
 
+## Per-tool approval settings — execution wave
+
+The active wave is `feat/tool-approval-policy`, with immutable review base
+`fadaf5c2f884890c315a32be9bc795c69aa70a65`. The reviewed shared contracts are committed at
+`76ebdcf55399f5471ed74186ddb1539891aba5b1`; they are not yet operational settings.
+
+The backend lane owns policy persistence, authenticated personal/company APIs, proposal admission,
+final provider-claim checks, the fresh-install baseline and generated API. The frontend lane owns
+the feature-local Auto / Ask / Block control, retry-aware state, typed adapter and personal/company
+consumers. Reuse the existing organization company-assistant tools read for the company target;
+do not require conversation-invocation permission merely to administer its tool policies. The
+architecture preflight keeps these responsibilities in existing MCP, conversation and IAM owners.
+
+Acceptance requires Auto on the first permitted write without changing a frozen approval flag,
+Ask and Block enforced at the real invocation path, current policy/IAM checks at claim, exact
+retry and revision-conflict handling, protected personal/company settings, and controlled UI
+states. Source tests and fresh PostgreSQL proof remain distinct from real-provider acceptance.
+
 ## Conversational routine proposals — execution wave
+
+### Published-head CI result — 29 September 2026
+
+Run `36584939916` completed with failure on published head
+`fadaf5c2f884890c315a32be9bc795c69aa70a65`. Mechanical TypeScript style, PostgreSQL authority
+suites and Storybook component contracts failed; the narrow fixture repairs are described below. API,
+KurrentDB history, Cognee provider-contract and service-image checks passed. k3d and image
+publication were skipped. These failures remain acceptance gates; no screenshot baseline or
+database proof is treated as approved merely because the focused source checks passed.
+
+The diagnosed source repairs are isolated from the policy implementation: three authority suites
+now use accepted snapshot version 4 in their positive fixtures, and the alternate-requester
+routine fixture is created active before a valid transition to paused. The subject-mismatch
+negative case still tests the intended binding failure. The routine route fixture now satisfies
+the inline-conditional rule; its 16 focused tests and the conditional check pass. Diff whitespace
+checks pass. No production authority was weakened. PostgreSQL execution needs a fresh CI run;
+the broad Storybook reference differences still require visual review, not automatic replacement.
 
 ### Published joined proposal — 29 September 2026
 

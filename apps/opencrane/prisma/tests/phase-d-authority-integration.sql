@@ -15,7 +15,7 @@ BEGIN
         "agent_identity_id", "principal_id", "execution_subject", "conversation_id", "model_route", "mcp_tools",
         "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest", "origin"
     )
-    SELECT snapshot_identifier, "id", snapshot_attempt, 3, "silo_id", "agent_service_id", "agent_revision_id",
+    SELECT snapshot_identifier, "id", snapshot_attempt, 4, "silo_id", "agent_service_id", "agent_revision_id",
         "agent_identity_id", "principal_id", snapshot_subject, "conversation_id", '{}', '[]', '{}', '{}',
         'prompt-v1', snapshot_digest, '{"kind":"interactive","messageId":null,"historyRevision":null}'::jsonb
     FROM "agent_runs"

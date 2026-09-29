@@ -173,8 +173,11 @@ INSERT INTO "agent_routines" (
     "destination_conversation_id", "selected_managed_service_id", "status", "automatic_enabled_after", "created_at", "updated_at"
 ) VALUES (
     'routine-other-requester', 'routine-silo', 'later-reader', 'https://identity.example.test', 'later-reader', '2026-01-01T00:00:00Z',
-    'routine-destination', 'routine-service', 'paused', clock_timestamp(), clock_timestamp(), clock_timestamp()
+    'routine-destination', 'routine-service', 'active', clock_timestamp(), clock_timestamp(), clock_timestamp()
 );
+UPDATE "agent_routines"
+SET "status" = 'paused', "lifecycle_revision" = 2, "updated_at" = clock_timestamp()
+WHERE "id" = 'routine-other-requester';
 INSERT INTO "agent_routine_revisions" (
     "id", "silo_id", "routine_id", "revision", "schedule_expression", "schedule_timezone", "instruction_key_id", "instruction_nonce",
     "instruction_auth_tag", "instruction_ciphertext", "instruction_ciphertext_digest", "audience_principal_ids", "created_by_principal_id", "created_at"
