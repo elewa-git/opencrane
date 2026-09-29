@@ -168,16 +168,16 @@ SELECT pg_temp.expect_failure('proposal ciphertext cannot change during review',
     $$UPDATE "agent_routine_proposals" SET "suggestion_ciphertext" = decode('02', 'hex') WHERE "id" = 'proposal-1'$$,
     'AgentRoutineProposal source, requester and suggestion are immutable');
 
+SET CONSTRAINTS ALL DEFERRED;
 INSERT INTO "agent_routines" (
     "id", "silo_id", "original_requester_principal_id", "requester_issuer", "requester_subject_id", "requester_authenticated_at",
-    "destination_conversation_id", "selected_managed_service_id", "status", "automatic_enabled_after", "created_at", "updated_at"
+    "destination_conversation_id", "selected_managed_service_id", "status", "automatic_enabled_after", "next_automatic_occurrence",
+    "schedule_task_id", "schedule_task_name", "schedule_task_key", "created_at", "updated_at"
 ) VALUES (
     'routine-other-requester', 'routine-silo', 'later-reader', 'https://identity.example.test', 'later-reader', '2026-01-01T00:00:00Z',
-    'routine-destination', 'routine-service', 'active', clock_timestamp(), clock_timestamp(), clock_timestamp()
+    'routine-destination', 'routine-service', 'active', clock_timestamp() - INTERVAL '1 hour', clock_timestamp() + INTERVAL '1 hour',
+    'routine-other-task', 'routine-schedule', 'routine-other-task-key', clock_timestamp(), clock_timestamp()
 );
-UPDATE "agent_routines"
-SET "status" = 'paused', "lifecycle_revision" = 2, "updated_at" = clock_timestamp()
-WHERE "id" = 'routine-other-requester';
 INSERT INTO "agent_routine_revisions" (
     "id", "silo_id", "routine_id", "revision", "schedule_expression", "schedule_timezone", "instruction_key_id", "instruction_nonce",
     "instruction_auth_tag", "instruction_ciphertext", "instruction_ciphertext_digest", "audience_principal_ids", "created_by_principal_id", "created_at"
@@ -185,6 +185,10 @@ INSERT INTO "agent_routine_revisions" (
     'routine-other-revision-1', 'routine-silo', 'routine-other-requester', 1, '0 10 * * *', 'Africa/Nairobi', 'key-1', decode(repeat('00', 12), 'hex'),
     decode(repeat('00', 16), 'hex'), decode('02', 'hex'), 'sha256:' || encode(sha256(decode('02', 'hex')), 'hex'), ARRAY['later-reader'], 'later-reader', clock_timestamp()
 );
+UPDATE "agent_routines"
+SET "status" = 'paused', "lifecycle_revision" = 2, "next_automatic_occurrence" = NULL,
+    "schedule_task_id" = NULL, "schedule_task_name" = NULL, "schedule_task_key" = NULL, "updated_at" = clock_timestamp()
+WHERE "id" = 'routine-other-requester';
 SET CONSTRAINTS ALL IMMEDIATE;
 SELECT pg_temp.expect_failure('a proposal cannot accept a routine owned by another requester',
     $$UPDATE "agent_routine_proposals" SET "state" = 'accepted', "accepted_routine_id" = 'routine-other-requester', "terminal_at" = clock_timestamp() WHERE "id" = 'proposal-1'$$,

@@ -49,6 +49,7 @@ export async function __VerifyHostedGeneratedFileJourney(config: HostedGenerated
 	await owner.removeMember(membershipId);
 	const deniedPaths = [`/api/v1/me/conversations/${encodeURIComponent(checkpoint.conversationId)}/history`, `/api/v1/me/conversations/${encodeURIComponent(checkpoint.conversationId)}/assets`, "/api/v1/me/runs", `/api/v1/me/runs/${encodeURIComponent(checkpoint.runId)}`];
 	await requester.assertMembershipDenied(deniedPaths);
+	await requester.assertActivationDenied(checkpoint.conversationId, `${checkpoint.activationText} after membership revocation`);
 	await requester.assertDownloadDenied(checkpoint.conversationId, checkpoint.outputAssetId);
 	const freshRequester = __CreateHostedGeneratedFileSession(config);
 	await freshRequester.login({ subject: config.oidcSubject, email: config.oidcEmail });

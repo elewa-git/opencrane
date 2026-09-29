@@ -124,6 +124,29 @@ the inline-conditional rule; its 16 focused tests and the conditional check pass
 checks pass. No production authority was weakened. PostgreSQL execution needs a fresh CI run;
 the broad Storybook reference differences still require visual review, not automatic replacement.
 
+The four repaired SQL fixtures now also pass on a newly initialized native PostgreSQL 17.11
+database in UTC, using baseline SHA-256
+`511cdecb759cce8fdf8316e8705308da4d523fa05e3e22bb7caec3ed5a7105db`.
+That run exposed one further test-setup error: the alternate-requester routine needed a valid
+schedule receipt and revision before it could be paused. The corrected fixture preserves the
+cross-requester rejection assertion and changes no production constraint. All four transactions
+complete and roll back. Logs remain under `/private/tmp/opencrane-native-fixtures.w3EDFg/`;
+the disposable server was stopped after testing. This focused native check does not replace
+exact-SHA CI or deployed fresh-install qualification.
+
+The hosted generated-file verifier now tries a new activation after membership removal and
+requires `403 MEMBERSHIP_REQUIRED`; it rejects logged-out and successful responses. Its existing
+post-verification model-call ledger must remain unchanged. The focused harness passes 28 tests.
+This is source coverage, not a live hosted run, exact tool-grant revocation or in-flight Stop proof.
+
+A current source audit reconfirms that root Stop does not yet clean up active descendants.
+The execution-runs owner needs durable system-owned propagation receipts and a descendant cleanup
+barrier; it must not imitate separate child requester approvals. Shared EUR hard budgets likewise
+still need a connected payer, tariff, reservation, usage and real-dispatch implementation. Payer
+selection must persist on managed conversations and routines as well as admitted runs. These
+remain MVP requirements, not completed features. Their coordinated schema work must not bypass
+the pending tool-execution approval or overlap the unfinished policy baseline lane.
+
 ### Published joined proposal — 29 September 2026
 
 Draft #916 now contains the joined proposal, preserved design references and ownership repair at

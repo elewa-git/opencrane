@@ -402,6 +402,17 @@ export class HostedGeneratedFilePublicClient
 		}
 	}
 
+	/** Prove a fresh activation is rejected after the caller's membership is revoked. */
+	async assertActivationDenied(conversationId: string, text: string): Promise<void>
+	{
+		this._RequireMutable("activate a conversation after membership revocation");
+		const body = { idempotencyKey: randomUUID(), text, assetIds: [], activation: "start" };
+		const response = await this._Request(`/api/v1/me/conversations/${encodeURIComponent(conversationId)}/messages`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }, [403]);
+		const value = _Record(await response.json());
+		if (value["code"] !== "MEMBERSHIP_REQUIRED")
+			throw new Error("Hosted revoked activation did not fail at the membership gate");
+	}
+
 	/** Read participant-visible history without driving workflow state. */
 	async history(conversationId: string, timeoutMilliseconds = this.requestTimeoutMilliseconds): Promise<Record<string, unknown>>
 	{
