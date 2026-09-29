@@ -196,6 +196,10 @@ personal-memory dataset or adopts a fact.
   `RunInputSnapshot`/`RunInputSnapshotMcpTool`, `RunInputFirstPartyCapabilitySelection` and its
   strict validators, `RunInputOrigin`/`AgentRunTriggers`, `ExecutionSubject`,
   `TenantModelSet`, and domain-topology host builders.
+- `ConversationModelUsage` and the versioned `ModelTariff*` contracts normalize provider token
+  evidence and server-owned EUR tariff quotes. Unknown usage is explicit; tariff rates and totals
+  are decimal strings with a fixed micros denominator. These contracts do not reserve, claim or
+  settle budget, and do not provide provider pricing.
 - `McpToolPolicy*` mode, target, change, projection and result contracts with strict validators.
   This shape-only foundation does not wire execution, persistence, settings, IAM admission or API
   routes. An absent policy is represented as `Ask` with null revision and timestamp; callers must

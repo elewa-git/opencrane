@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { _OutputRecoveryHarness } from "./conversation-output-recovery.fixture";
 import { ConversationComputerTurnProtocolStates, ConversationComputerTurnUnavailableReasons } from "../conversation-computer-turn-protocol.types";
+import { ConversationModelUsageKinds, ConversationModelUsageUnknownReasons } from "@opencrane/contracts";
 
 /** Pause exactly the winning gateway request so another process can observe its reservation. */
 function _Gate()
@@ -39,7 +40,7 @@ describe("one server-owned model request across process restarts", function _Sui
 		const f = await _OutputRecoveryHarness(false);
 		const entered = _Gate();
 		const proceed = _Gate();
-		f.model.request.mockImplementationOnce(async function _HeldRequest() { entered.release(); await proceed.promise; return { kind: "text", text: "A private chosen answer" }; });
+		f.model.request.mockImplementationOnce(async function _HeldRequest() { entered.release(); await proceed.promise; return { kind: "text", text: "A private chosen answer", usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } }; });
 		const first = f.authority.advance(f.output.bootstrapId);
 		await entered.promise;
 		expect(await f.restart().advance(f.output.bootstrapId)).toMatchObject({ outcome: "model_pending" });
@@ -165,7 +166,7 @@ describe("one server-owned model request across process restarts", function _Sui
 		{
 			const reservation = (await f.store.load(f.output.bootstrapId))!.protocol.steps.at(-1)!.reservation;
 			vi.spyOn(Date, "now").mockReturnValue(reservation.dispatchDeadlineEpochMs + 1);
-			return { kind: "text", text: "A private chosen answer" };
+			return { kind: "text", text: "A private chosen answer", usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } };
 		});
 		expect(await f.authority.advance(f.output.bootstrapId)).toEqual({ outcome: "response_unavailable" });
 		const unavailable = (await f.store.load(f.output.bootstrapId))!;
@@ -193,7 +194,7 @@ describe("one server-owned model request across process restarts", function _Sui
 			{
 				const reservation = (await f.store.load(f.output.bootstrapId))!.protocol.steps.at(-1)!.reservation;
 				vi.spyOn(Date, "now").mockReturnValue(reservation.dispatchDeadlineEpochMs + 1);
-				return { kind: "text", text: "A private chosen answer" };
+			return { kind: "text", text: "A private chosen answer", usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } };
 			});
 		}
 		f.runLifecycle.enterRecoveryRequired.mockRejectedValueOnce(new Error("run recovery write unavailable"));
@@ -214,7 +215,7 @@ describe("one server-owned model request across process restarts", function _Sui
 	it("rechecks the original history after the gateway responds before publishing its answer", async function _ForeignHistory()
 	{
 		const f = await _OutputRecoveryHarness(false);
-		f.model.request.mockImplementationOnce(async function _ChangedHistory() { f.flags.mayAppend = false; return { kind: "text", text: "A private chosen answer" }; });
+		f.model.request.mockImplementationOnce(async function _ChangedHistory() { f.flags.mayAppend = false; return { kind: "text", text: "A private chosen answer", usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } }; });
 		expect(await f.authority.advance(f.output.bootstrapId)).toEqual({ outcome: "authority_ended" });
 		expect(f.outputPayloads.store).not.toHaveBeenCalled();
 		expect(f.runLifecycle.complete).not.toHaveBeenCalled();

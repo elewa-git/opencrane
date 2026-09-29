@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { REQUEST_ROUTINE_TOOL } from "@opencrane/backend/server/agents/scheduling/contract";
-import { ConversationModelResponseKinds } from "@opencrane/contracts";
+import { ConversationModelResponseKinds, ConversationModelUsageKinds, ConversationModelUsageUnknownReasons } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import type { ConversationComputerModelCustody, ConversationComputerToolDeclaration, ConversationComputerToolExchange } from "../conversation-computer-continuation.types";
@@ -55,8 +55,8 @@ async function _Fixture(requestRoutine?: ConversationComputerTurnAuthorityDepend
 	fixture.model.request.mockImplementation(async function _Model(input)
 	{
 		if (input.history.length === 0)
-			return { kind: ConversationModelResponseKinds.Tool, call: { id: "routine-call-1", name: "request_routine", arguments: JSON.stringify({ instruction: "Send a weekly summary", schedule: { expression: "0 9 * * 1", timezone: "Europe/Brussels" } }), content: null } };
-		return { kind: ConversationModelResponseKinds.Text, text: "I prepared the routine for your review." };
+			return { kind: ConversationModelResponseKinds.Tool, call: { id: "routine-call-1", name: "request_routine", arguments: JSON.stringify({ instruction: "Send a weekly summary", schedule: { expression: "0 9 * * 1", timezone: "Europe/Brussels" } }), content: null }, usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } };
+		return { kind: ConversationModelResponseKinds.Text, text: "I prepared the routine for your review.", usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } };
 	});
 	return fixture;
 }

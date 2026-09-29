@@ -99,6 +99,10 @@ derived from their governed Global resource, so a late first POST cannot create 
 - `__CreateConversationModelTransport` — capture the server's managed-proxy qualification at
   startup and expose the same single-exchange request port. Only this configured instance may
   return authenticated pre-provider rejection evidence; the direct request function does not.
+- `ModelTariff*` contracts and `__CreateConversationModelTariffLookup` — validate server-owned,
+  versioned EUR tariff evidence and a completion-bound worst-case quote. Model responses carry
+  normalized known-or-unknown usage evidence; omitted or malformed provider counts are never
+  interpreted as zero. These exports do not reserve, claim or settle budget.
 
 A request with tool selection enabled can offer every frozen tool definition, including tools that need owner approval.
 Each definition's `modelName` must be unique and legal, with parameters matching their saved schema

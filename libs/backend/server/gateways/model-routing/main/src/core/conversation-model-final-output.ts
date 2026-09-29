@@ -1,4 +1,4 @@
-import { CompiledFinalOutputModes, ConversationModelResponseKinds, ___ConversationFinalOutputSchema, ___ConversationModelResponseSchema, type ConversationFinalOutput, type ConversationModelResponse } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ConversationModelResponseKinds, ConversationModelUsageKinds, ConversationModelUsageUnknownReasons, ___ConversationFinalOutputSchema, ___ConversationModelResponseSchema, type ConversationFinalOutput, type ConversationModelResponse } from "@opencrane/contracts";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import { ConversationModelError, ConversationModelFailureCodes } from "./conversation-model.types";
@@ -15,13 +15,13 @@ export function _DecodeConversationModelFinalOutput(content: unknown, mode: Comp
 		switch (mode)
 		{
 			case CompiledFinalOutputModes.Text:
-				return ___ConversationModelResponseSchema.parse({ kind: ConversationModelResponseKinds.Text, text: content });
+				return ___ConversationModelResponseSchema.parse({ kind: ConversationModelResponseKinds.Text, text: content, usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } });
 			case CompiledFinalOutputModes.Conversation:
 			{
 				if (typeof content !== "string")
 					throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);
 				const answer = ___ParseAndValidateJson(content, "Conversation final output", _validateEnvelope);
-				return { kind: ConversationModelResponseKinds.Text, ...answer };
+				return { kind: ConversationModelResponseKinds.Text, ...answer, usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } };
 			}
 			default:
 				throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);

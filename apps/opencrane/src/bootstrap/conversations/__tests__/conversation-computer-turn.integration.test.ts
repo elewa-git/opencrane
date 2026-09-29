@@ -3,7 +3,7 @@ import type { ConversationComputerTurnCandidate } from "@opencrane/backend/serve
 import { ConversationComputerTurnProtocolStates, ConversationComputerActivationAuthorityAdapter, ConversationComputerTurnAuthorityService, CONVERSATION_COMPUTER_TURN_TASK, _RegisterConversationComputerTurnWorkflow } from "@opencrane/backend/server/conversations";
 import { ConversationComputerHistory } from "@opencrane/backend/server/conversations/computers";
 import type { IWorkflowTaskContext, IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
-import { CompiledFinalOutputModes, ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ComputerLeaseStates, ConversationComputerStates, ConversationModelUsageKinds, ConversationModelUsageUnknownReasons } from "@opencrane/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { _ReserveConversationTurnModel } from "./conversation-turn-protocol.fixture";
@@ -44,7 +44,7 @@ describe("conversation computer turn integration", function _Suite()
 		const execution = { candidate, workload };
 		const routineProgress = { recordCompleted: vi.fn().mockResolvedValue(undefined), recordUnavailable: vi.fn().mockResolvedValue(undefined), recordRunning: vi.fn().mockResolvedValue(undefined), recordWaiting: vi.fn().mockResolvedValue(undefined) };
 		const authority = new ConversationComputerTurnAuthorityService({
-			logger: { warn: vi.fn() }, model: { request: vi.fn().mockResolvedValue({ kind: "text", text: "assistant answer" }) }, toolProposals: { admit: vi.fn() }, siloId: "testv5", runLifecycle: { start: vi.fn(), complete: vi.fn(), enterRecoveryRequired: vi.fn() },
+			logger: { warn: vi.fn() }, model: { request: vi.fn().mockResolvedValue({ kind: "text", text: "assistant answer", usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } }) }, toolProposals: { admit: vi.fn() }, siloId: "testv5", runLifecycle: { start: vi.fn(), complete: vi.fn(), enterRecoveryRequired: vi.fn() },
 			candidates: { resolve: vi.fn().mockResolvedValue(candidate), resolveForWorkflow: vi.fn().mockResolvedValue(execution), assertCurrentForWorkflow: vi.fn().mockResolvedValue(execution), assertLeaseForWorkflow: vi.fn().mockResolvedValue(workload), assertCurrent: vi.fn().mockResolvedValue(candidate), admit: vi.fn() },
 			reviewCredentials: { bearer: vi.fn(), derive: vi.fn().mockReturnValue("keyed-review-secret") }, modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadExchange: vi.fn(), storeExchange: vi.fn() }, generatedFiles: { link: vi.fn() }, toolResults: { read: vi.fn(), consume: vi.fn() }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") }, toolRequestedNotifications: { publishRequested: vi.fn() },
 			credentials: { reuseExact: vi.fn(), issueOnce: vi.fn().mockResolvedValue({ key: "sk-turn", credentialDigest: "sha256:key", expiresAt: "2099-01-01T00:00:00.000Z" }), revoke: vi.fn() }, endpoint: "http://model.stub",

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ConversationModelResponseKinds, ConversationModelToolModes, ConversationToolProposalOutcomes } from "@opencrane/contracts";
+import { ConversationModelResponseKinds, ConversationModelToolModes, ConversationModelUsageKinds, ConversationModelUsageUnknownReasons, ConversationToolProposalOutcomes } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { _ToolContinuationHarness } from "./conversation-tool-continuation.fixture";
@@ -277,7 +277,7 @@ describe("one governed tool and its model continuation", function _Continuation(
 			});
 		}
 		if (boundary === "response")
-			f.model.request.mockResolvedValueOnce({ kind: ConversationModelResponseKinds.Tool, call: f.call }).mockRejectedValueOnce(new Error("paid response lost"));
+			f.model.request.mockResolvedValueOnce({ kind: ConversationModelResponseKinds.Tool, call: f.call, usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } }).mockRejectedValueOnce(new Error("paid response lost"));
 		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending" });
 		const reservedTurn = (await f.store.load(f.step))!;
 		const reservation = reservedTurn.protocol.steps.at(-1)?.reservation;
@@ -370,10 +370,10 @@ describe("one governed tool and its model continuation", function _Continuation(
 	it("refuses a final answer when the selected grant ends during call two", async function _RevokedDuringCall()
 	{
 		const f = await _ToolContinuationHarness();
-		f.model.request.mockResolvedValueOnce({ kind: ConversationModelResponseKinds.Tool, call: f.call }).mockImplementationOnce(async function _Revoke()
+		f.model.request.mockResolvedValueOnce({ kind: ConversationModelResponseKinds.Tool, call: f.call, usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } }).mockImplementationOnce(async function _Revoke()
 		{
 			f.toolFlags.allowed = false;
-			return { kind: ConversationModelResponseKinds.Text, text: "A private chosen answer" };
+			return { kind: ConversationModelResponseKinds.Text, text: "A private chosen answer", usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } };
 		});
 		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending" });
 		expect((await f.store.load(f.step))?.protocol.output).toBeNull();
@@ -383,7 +383,7 @@ describe("one governed tool and its model continuation", function _Continuation(
 	it("refuses a second tool declaration and never admits a second execution", async function _NoSecondTool()
 	{
 		const f = await _ToolContinuationHarness();
-		f.model.request.mockResolvedValue({ kind: ConversationModelResponseKinds.Tool, call: f.call });
+		f.model.request.mockResolvedValue({ kind: ConversationModelResponseKinds.Tool, call: f.call, usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } });
 		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending" });
 		expect(f.toolFlags.executions).toBe(1);
 		expect(f.model.request).toHaveBeenCalledTimes(2);
@@ -393,7 +393,7 @@ describe("one governed tool and its model continuation", function _Continuation(
 	it("rejects a repeated provider call id before the next tool is admitted", async function _DuplicateCallId()
 	{
 		const f = await _ToolContinuationHarness(2);
-		f.model.request.mockResolvedValueOnce({ kind: ConversationModelResponseKinds.Tool, call: f.calls[0] }).mockResolvedValueOnce({ kind: ConversationModelResponseKinds.Tool, call: f.calls[0] });
+		f.model.request.mockResolvedValueOnce({ kind: ConversationModelResponseKinds.Tool, call: f.calls[0], usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } }).mockResolvedValueOnce({ kind: ConversationModelResponseKinds.Tool, call: f.calls[0], usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } });
 		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending", ordinal: 2 });
 		expect(f.model.request).toHaveBeenCalledTimes(2);
 		expect(f.toolFlags.executions).toBe(1);

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CompiledFinalOutputModes, ConversationEntryKinds, ConversationModelResponseKinds, ConversationModelToolModes } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ConversationEntryKinds, ConversationModelResponseKinds, ConversationModelToolModes, ConversationModelUsageKinds, ConversationModelUsageUnknownReasons } from "@opencrane/contracts";
 
 import { ConversationComputerToolResultOutcomes } from "../conversation-computer-continuation.types";
 import { ConversationComputerTurnProtocolStates } from "../conversation-computer-turn-protocol.types";
@@ -36,9 +36,9 @@ async function _CompanyHarness(finalOutput = CompiledFinalOutputModes.Text)
 		const previous = input.history.at(-1);
 		const query = previous === undefined ? "discover-records" : JSON.parse(previous.resultContent).result.record;
 		if (input.tools === ConversationModelToolModes.None)
-			return { kind: ConversationModelResponseKinds.Text, text: `Reconciled through ${query}` };
+			return { kind: ConversationModelResponseKinds.Text, text: `Reconciled through ${query}`, usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } };
 		const call = f.calls[input.history.length]!;
-		return { kind: ConversationModelResponseKinds.Tool, call: { ...call, arguments: JSON.stringify({ query }) } };
+		return { kind: ConversationModelResponseKinds.Tool, call: { ...call, arguments: JSON.stringify({ query }) }, usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } };
 	});
 	if (finalOutput === CompiledFinalOutputModes.Conversation)
 	{
@@ -139,7 +139,7 @@ describe("company assistant multi-step limits", function _Suite()
 		f.model.request.mockImplementation(async function _ExtraTool(input)
 		{
 			if (input.tools === ConversationModelToolModes.None)
-				return { kind: ConversationModelResponseKinds.Tool, call: { ...f.calls[0], id: "forbidden-ninth-call" } };
+				return { kind: ConversationModelResponseKinds.Tool, call: { ...f.calls[0], id: "forbidden-ninth-call" }, usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } };
 			return model(input);
 		});
 		expect(await f.authority.advance(f.step)).toMatchObject({ outcome: "model_pending", ordinal: 9 });

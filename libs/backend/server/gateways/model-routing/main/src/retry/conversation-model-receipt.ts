@@ -1,5 +1,5 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
-import { ___ConversationModelPreForwardEnvelopeSchema, ConversationModelResponseKinds, type ConversationModelResponse } from "@opencrane/contracts";
+import { ___ConversationModelPreForwardEnvelopeSchema, ConversationModelResponseKinds, ConversationModelUsageKinds, ConversationModelUsageUnknownReasons, type ConversationModelResponse } from "@opencrane/contracts";
 import { ___CanonicalizeJson, ___ParseAndValidateJson, type JsonValue } from "@opencrane/util";
 
 import { ConversationModelError, ConversationModelFailureCodes, type PreparedConversationModelRequest } from "../core/conversation-model.types";
@@ -56,7 +56,7 @@ export function _VerifyConversationModelReceipt(text: string, authentication: st
 		const expected = createHmac("sha256", key).update("opencrane:preforward-receipt:message:v1\0").update(canonical).digest();
 		if (!timingSafeEqual(expected, Buffer.from(authentication, "hex")))
 			throw new Error("Invalid receipt authentication");
-		return { kind: ConversationModelResponseKinds.PreForwardRejected, receipt };
+			return { kind: ConversationModelResponseKinds.PreForwardRejected, receipt, usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.PreForwardRejected } };
 	}
 	catch
 	{

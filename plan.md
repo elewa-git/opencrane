@@ -1,5 +1,33 @@
 # OpenCrane — Active Plan
 
+## Overnight resumption — 29 September 2026
+
+The user explicitly approved both source-only repairs: MCP execution must retain current
+permissions and lease checks and acquire a real invocation claim before provider dispatch; a hard
+budget stop must affect only runs proved to use the exhausted account and use the existing
+run/cancellation owner, preserving incurred and uncertain charges. The earlier pauses below are
+resolved by this approval, not by automatic goal continuation. The rejected drafts remain rejected.
+
+Resume the implementation with Luna/Sol lanes and independent review. Keep schema/client generation
+serialized across the two working trees. The overnight heartbeat is active in this task through
+30 September 08:00 Europe/Brussels, when it must checkpoint and report rather than start a new
+slice. The full MVP goal remains active and is not claimed complete. The EUR 5 total paid-test
+allowance, no-laptop-VM rule and existing publication/deployment/side-effect boundaries remain.
+
+A subsequent safety rejection stopped the proposed production financial-ledger repository for
+reserve, claim, settlement, unknown-charge retention and account closure. That file was not created.
+The approval above covers the corrected run-owner stop routing; the broader accounting authority
+now needs explicit renewed approval after its risk is explained. Do not retry or split the rejected
+implementation. Unaffected MCP repair and safe checks continue. Schema and payer-selection changes
+remain incomplete, uncommitted source rather than operational budget enforcement.
+
+The independent normalized-usage and EUR-tariff contract slice is checkpointed separately from
+that unfinished accounting integration. It includes transport parsing, strict quote validation,
+focused tests and the downstream response fixtures. Previously passing focused checks and review
+still apply to these unchanged files; four recorded fixture/validator/test hashes were rechecked.
+No database schema, payer authorization, budget ledger or paid dispatch gate is included in this
+checkpoint. The SQL proposal fixture remains reviewed but not database-executed in this wave.
+
 ## Preserved administration design — 29 September 2026
 
 The user requested preservation of the administration design package during cleanup of the older
@@ -58,6 +86,77 @@ remain open until their source, focused tests, SQL tests and live qualification 
 These decisions supersede older pending group-attribution/history, “no deploy permission”,
 unresolved numeric live-test-cap and first-write/Always-policy text only where those statements
 conflict. Historical evidence is retained below.
+
+## Shared EUR hard budgets — independent implementation wave
+
+The budget wave uses the clean worktree `/private/tmp/opencrane-eur-budget.s85x4O`, branch
+`feat/eur-hard-budgets`, and immutable review base
+`2248132e49054734e53023f6fe0e6c9f1459859f`. The approved tool-policy repair now runs in
+`/private/tmp/opencrane-policy-recovery.wcVJfL`, branch `feat/tool-approval-policy-repair`.
+The old `/private/tmp/opencrane-visual-fixture.yuENw5` was found missing 4,171 tracked baseline
+files. All 50 surviving modified/new source files were copied into the clean checkout and matched
+by SHA-256; the original is retained without mass restoration or deletion. The cause is unproven.
+The architecture dependency check confirms that monthly model-spend enforcement does not depend
+on that policy change. The earlier snapshot-v4 source pause was resolved by the user's 28 September
+approval and is not a reason to hold this independent work. Live PR ancestry passes at snapshot
+`743fa14fcf29075e99fec582317b66f3c11b8fe38eaa86b3689faf0b40afff47`.
+
+Sol owns the coordinated budget schema, baseline, persistence, protected budget settings and real
+model-dispatch gate. Separate Luna lanes own normalized usage/tariff contracts and explicit
+authorized payer selection for managed conversations and routines. They share the approved hard
+EUR monthly policy above, preserve personal-agent charging, and make no live database, provider
+or deployment changes. Source implementation, database race tests and independent review remain
+required; this assignment is not a claim that hard limits are operational. Later integration with
+the tool-policy wave requires fresh conflict and boundary review.
+
+The first production budget UnitOfWork patch was rejected by the edit safety check and was not
+applied. Its proposed shared-ceiling handler could cancel reserved effects and directly mark
+other runs Failed/BudgetExhausted inside the money repository without a proven run-cleanup scope.
+Production persistence, dispatch, limit-lowering and cancellation integration were paused. Revised
+source-only approval is now granted: close the budget, identify only proven affected roots,
+and let the existing run/cancellation owner stop those roots and their descendants without
+discarding charges. Implement this reviewed ownership correction, not the rejected direct writes.
+
+The isolated worktree retains incomplete schema/type/math and payer-request changes. Payer-selection
+source now verifies the same-silo group and uses central authorization with an exact group-budget
+Use decision at database time. Routine creation persists the four payer/evidence fields; a human
+assistant-subchat stores them on its durable request and copies them during conversation projection.
+Actual delegated run children must instead inherit the paying group. Copying evidence into admitted
+runs, the fresh baseline and release binding remain unfinished. The three broken dependency links
+were repaired from the exact lockfile versions after archive-integrity checks, using 5.9 MB; source
+package and lockfiles were unchanged. Prisma generation then passed against the final schema.
+Routine repository tests passed 50 tests, and group-child validator tests passed 19. The lifecycle
+tests still needed new group/clock doubles (18 of 34 failed), and three router tests were blocked
+by sandbox socket permissions. Independent review then found missing payer rechecks on delayed
+projection and routine firing. Their source correction is in progress with focused revocation
+tests; the earlier passing tests do not qualify the changed lifecycle behavior. The post-correction
+style/Prisma boundary checks passed, but behavioral execution and independent re-review remain open.
+This source is uncommitted and must not be published as operational enforcement. No provider call,
+live database change, deployment or VM was started.
+
+Independent usage-contract work distinguishes known token counts from missing or malformed usage
+and validates versioned EUR price quotes. The model flow still discards that usage before any
+accounting owner receives it; these contracts do not yet enforce or settle a budget. Downstream
+typed test fixtures have been updated without changing production dispatch. The money ledger's
+database-clock pricing check and durable binding of the quote to the admitted request remain part
+of the paused integration, not claims made by the transport's local validation.
+
+The source-only usage/pricing checks pass: contracts have 270 passing tests, the complete
+model-routing suite has 267 passing tests across 13 files, and their type checks pass. The tariff
+regressions cover malformed rates, signed-integer overflow, request binding and validity boundaries
+with a controlled clock. After allowing temporary local test listeners, the conversation rerun
+cleared the earlier router failures but is not green: 1,050 tests passed, one company-continuation
+deadline test timed out, and the routine-admission test worker failed to start. The two affected
+files now pass isolated Nx runs with `--maxWorkers=1`: company-tool continuation has 8 passing
+tests (1.76 seconds), and routine run admission has 6 (1.34 seconds). No source, fixture or timeout
+change was needed, and the earlier timeout cause is not proven. These targeted results do not
+replace a complete green conversation-suite run or fresh-database budget qualification. The changed
+SQL tool-proposal fixture expectation was reviewed against its mock but was not executed on a
+database in this wave. The source overlay remains unstaged and uncommitted.
+
+The earlier continuation revalidated the unchanged live PR snapshot above and immutable local base.
+The user's explicit overnight approval resolved the two earlier source-only enforcement pauses;
+the later financial-ledger rejection at the top is a distinct outstanding decision.
 
 ## Per-tool approval settings — execution wave
 
@@ -3982,8 +4081,8 @@ their own completion track; they are not silently bundled into the first tool PR
 | U2 | IN PROGRESS: structured results, collaborative clarification response authority, pending-question notifications and explicit initial subchat audience have reviewed source checkpoints above. Complete model-question/answer continuation, visual approval and authenticated participant/isolation proof remain; earlier approval pauses are superseded by the recorded decisions. |
 | F1 | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV capture, scanning and answer-link recovery are implemented in #879 and pass four real-store cases in #880. The pending SQL guard and complete hosted execution/download qualification remain. |
 | D1 | IN PROGRESS; recursive source accepted 23 September with no fixed depth, child-count or concurrency caps. Run-tree accounting is published; its ten initial SQL cases passed CI. The actual credential-custody correction passes 121 run and 844 conversation tests locally; thirteen revised SQL cases await fresh-baseline CI. Per-call cost authority, spawn/join, narrowed context/permissions and recursive cleanup remain unjoined. This is not a working or qualified delegation journey. |
-| S1 | REQUIRED FOR MVP; scheduling persistence, protected commands, browser controls and conversational proposals are published in draft #916. Narrow failed-CI fixture repairs are committed locally; PostgreSQL requalification, visual review and real automatic/manual/recovery journeys remain. The earlier product-decision pause is resolved. |
-| A2 | PARTIAL: protected audit/usage read screens and controlled tests exist. Owners/Admins are the accepted default readers; EUR hard budgets, trusted pricing and actual usage collection/attribution still need implementation and real-account proof. |
+| S1 | REQUIRED FOR MVP; scheduling persistence, protected commands, browser controls and conversational proposals are published in draft #916. Narrow failed-CI fixture repairs are committed locally at `2248132e4`; all four repaired authority fixtures pass on fresh native PostgreSQL. Exact-candidate CI, visual review and real automatic/manual/recovery journeys remain. The earlier product-decision pause is resolved. |
+| A2 | PARTIAL: protected audit/usage read screens and controlled tests exist. Owners/Admins are the accepted default readers. An isolated, uncommitted EUR-budget wave contains draft schema, payer-request and usage/pricing contracts. Production enforcement is paused for revised scoped approval; settlement, protected settings and real-account proof remain. |
 | T3 | PLANNED, with separate acceptance for its journey. |
 | Q1 — operational acceptance | CONTINUOUS — source checks and CI do not replace fresh-install or real-account acceptance. |
 

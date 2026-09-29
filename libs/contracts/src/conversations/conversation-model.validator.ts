@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ___CanonicalizeJson, ___ParseAndValidateJson, type JsonValue } from "@opencrane/util";
 
-import { ConversationModelResponseKinds, type ConversationModelResponse, type ConversationModelToolCall, type ConversationModelToolExchange } from "./conversation-model.types";
+import { ConversationModelResponseKinds, ConversationModelUsageKinds, ConversationModelUsageUnknownReasons, type ConversationModelResponse, type ConversationModelToolCall, type ConversationModelToolExchange, type ConversationModelUsage } from "./conversation-model.types";
 import { ___ConversationModelPreForwardReceiptSchema } from "./conversation-model-retry.validator";
 import { ___ConversationFinalTextSchema } from "./conversation-final-output.validator";
 import { ___ConversationA2uiDisplaySchema } from "./conversation-a2ui.validator";
@@ -80,8 +80,34 @@ export const ___ConversationModelToolHistorySchema: z.ZodType<readonly Conversat
 });
 
 /** Validates the accepted result kind and its complete payload; provider envelopes remain transport-owned. */
+export const ___ConversationModelUsageSchema: z.ZodType<ConversationModelUsage> = z.union([
+	z.object({ kind: z.literal(ConversationModelUsageKinds.Known), inputTokens: z.number().int().min(0).max(2_147_483_647), outputTokens: z.number().int().min(0).max(2_147_483_647) }).strict(),
+	z.object({ kind: z.literal(ConversationModelUsageKinds.Unknown), reason: z.nativeEnum(ConversationModelUsageUnknownReasons) }).strict(),
+]);
+
+/** Normalizes provider token fields without treating omitted counts as zero. */
+export function ___ParseConversationModelUsage(candidate: unknown): ConversationModelUsage
+{
+	if (candidate === undefined)
+		return { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing };
+	if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate))
+		return { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Malformed };
+	const value = candidate as Record<string, unknown>;
+	const inputTokens = value["input_tokens"];
+	const promptTokens = value["prompt_tokens"];
+	const outputTokens = value["output_tokens"];
+	const completionTokens = value["completion_tokens"];
+	if (inputTokens !== undefined && promptTokens !== undefined && inputTokens !== promptTokens)
+		return { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Malformed };
+	if (outputTokens !== undefined && completionTokens !== undefined && outputTokens !== completionTokens)
+		return { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Malformed };
+	const parsed = ___ConversationModelUsageSchema.safeParse({ kind: ConversationModelUsageKinds.Known, inputTokens: inputTokens ?? promptTokens, outputTokens: outputTokens ?? completionTokens });
+	return parsed.success ? parsed.data : { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Malformed };
+}
+
+/** Validates the accepted result kind and its complete payload; provider envelopes remain transport-owned. */
 export const ___ConversationModelResponseSchema: z.ZodType<ConversationModelResponse> = z.discriminatedUnion("kind", [
-	z.object({ kind: z.literal(ConversationModelResponseKinds.Text), text: ___ConversationFinalTextSchema, display: ___ConversationA2uiDisplaySchema.optional() }).strict(),
-	z.object({ kind: z.literal(ConversationModelResponseKinds.Tool), call: ___ConversationModelToolCallSchema }).strict(),
-	z.object({ kind: z.literal(ConversationModelResponseKinds.PreForwardRejected), receipt: ___ConversationModelPreForwardReceiptSchema }).strict(),
+	z.object({ kind: z.literal(ConversationModelResponseKinds.Text), text: ___ConversationFinalTextSchema, display: ___ConversationA2uiDisplaySchema.optional(), usage: ___ConversationModelUsageSchema }).strict(),
+	z.object({ kind: z.literal(ConversationModelResponseKinds.Tool), call: ___ConversationModelToolCallSchema, usage: ___ConversationModelUsageSchema }).strict(),
+	z.object({ kind: z.literal(ConversationModelResponseKinds.PreForwardRejected), receipt: ___ConversationModelPreForwardReceiptSchema, usage: z.object({ kind: z.literal(ConversationModelUsageKinds.Unknown), reason: z.literal(ConversationModelUsageUnknownReasons.PreForwardRejected) }).strict() }).strict(),
 ]);

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CompiledFinalOutputModes, CompiledToolDefinitionKinds, ConversationModelResponseKinds, ConversationModelToolModes, FirstPartyToolCapabilities, FirstPartyToolEffectKinds, FirstPartyToolMaterializationKinds, type ConversationModelRequest, type ConversationModelToolCall, type CompiledFirstPartyToolDefinition, type CompiledMcpToolDefinition, type CompiledToolDefinition } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, CompiledToolDefinitionKinds, ConversationModelResponseKinds, ConversationModelToolModes, ConversationModelUsageKinds, FirstPartyToolCapabilities, FirstPartyToolEffectKinds, FirstPartyToolMaterializationKinds, type ConversationModelRequest, type ConversationModelToolCall, type CompiledFirstPartyToolDefinition, type CompiledMcpToolDefinition, type CompiledToolDefinition } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __RequestConversationModel } from "../core/conversation-model";
@@ -47,8 +47,11 @@ function _request(overrides: Partial<ConversationModelRequest> = {}): Conversati
 /** Builds the upstream text envelope, including nullable optional fields emitted by compatible proxies. */
 function _answer(text = "  Saved answer.\n"): unknown
 {
-	return { choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: text, tool_calls: null, refusal: null } }], usage: { completion_tokens: 10 } };
+	return { choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: text, tool_calls: null, refusal: null } }], usage: { prompt_tokens: 5, completion_tokens: 10 } };
 }
+
+/** Expresses the provider usage fixture after shared normalization. */
+const _KNOWN_USAGE = { kind: ConversationModelUsageKinds.Known, inputTokens: 5, outputTokens: 10 };
 
 /** Gives the fetch double a real streaming Response without opening a socket. */
 function _response(body: unknown = _answer()): Response
@@ -78,7 +81,7 @@ describe("one conversation model text exchange", function _transportSuite()
 	{
 		const fetchMock = vi.fn().mockResolvedValue(_response());
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModel(_request())).resolves.toEqual({ kind: ConversationModelResponseKinds.Text, text: "  Saved answer.\n" });
+		await expect(__RequestConversationModel(_request())).resolves.toEqual({ kind: ConversationModelResponseKinds.Text, text: "  Saved answer.\n", usage: _KNOWN_USAGE });
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
 		expect(url.toString()).toBe("http://litellm.release.svc.cluster.local/v1/chat/completions");
@@ -328,7 +331,7 @@ describe("one conversation model text exchange", function _transportSuite()
 	{
 		const text = "é".repeat(32_768);
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(_response(_answer(text))));
-		await expect(__RequestConversationModel(_request())).resolves.toEqual({ kind: ConversationModelResponseKinds.Text, text });
+		await expect(__RequestConversationModel(_request())).resolves.toEqual({ kind: ConversationModelResponseKinds.Text, text, usage: _KNOWN_USAGE });
 	});
 });
 
@@ -364,7 +367,7 @@ function _toolCall(overrides: Partial<ConversationModelToolCall> = {}): Conversa
 function _toolAnswer(call = _toolCall()): Record<string, unknown>
 {
 	return { choices: [{ index: 0, finish_reason: "tool_calls", message: { role: "assistant", content: call.content,
-		tool_calls: [{ id: call.id, type: "function", function: { name: call.name, arguments: call.arguments } }] } }] };
+		tool_calls: [{ id: call.id, type: "function", function: { name: call.name, arguments: call.arguments } }] } }], usage: { prompt_tokens: 5, completion_tokens: 10 } };
 }
 
 describe("one selected tool and its paired continuation", function _toolExchange()
@@ -396,7 +399,7 @@ describe("one selected tool and its paired continuation", function _toolExchange
 		const fetchMock = vi.fn().mockResolvedValueOnce(_response(_toolAnswer(call))).mockResolvedValueOnce(_response());
 		vi.stubGlobal("fetch", fetchMock);
 		const input = _selection([tool]);
-		await expect(__RequestConversationModel(input)).resolves.toEqual({ kind: ConversationModelResponseKinds.Tool, call });
+		await expect(__RequestConversationModel(input)).resolves.toEqual({ kind: ConversationModelResponseKinds.Tool, call, usage: _KNOWN_USAGE });
 		const first = JSON.parse(String(fetchMock.mock.calls[0]?.[1].body));
 		expect(first.tools[0].function.name).toBe(tool.modelName);
 		expect(JSON.stringify(first.tools)).not.toContain(sourceName);
@@ -413,7 +416,7 @@ describe("one selected tool and its paired continuation", function _toolExchange
 		const call = _toolCall({ name: second.modelName });
 		const fetchMock = vi.fn().mockResolvedValue(_response(_toolAnswer(call)));
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModel(_selection([first, second]))).resolves.toEqual({ kind: ConversationModelResponseKinds.Tool, call });
+		await expect(__RequestConversationModel(_selection([first, second]))).resolves.toEqual({ kind: ConversationModelResponseKinds.Tool, call, usage: _KNOWN_USAGE });
 		const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1].body));
 		expect(body.tools.map((tool: { function: { name: string } }) => tool.function.name)).toEqual(["mcp_first", "mcp_second"]);
 	});
@@ -431,7 +434,7 @@ describe("one selected tool and its paired continuation", function _toolExchange
 		const call = _toolCall({ content: "  Looking it up.\n" });
 		const fetchMock = vi.fn().mockResolvedValue(_response(_toolAnswer(call)));
 		vi.stubGlobal("fetch", fetchMock);
-		await expect(__RequestConversationModel(_selection([_tool(), _tool({ name: "write_file", modelName: "write_file", toolRevisionId: "revision-write", requiresApproval: true })]))).resolves.toEqual({ kind: ConversationModelResponseKinds.Tool, call });
+		await expect(__RequestConversationModel(_selection([_tool(), _tool({ name: "write_file", modelName: "write_file", toolRevisionId: "revision-write", requiresApproval: true })]))).resolves.toEqual({ kind: ConversationModelResponseKinds.Tool, call, usage: _KNOWN_USAGE });
 		const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1].body));
 		expect(body.tools).toEqual([_tool(), _tool({ name: "write_file", modelName: "write_file", toolRevisionId: "revision-write", requiresApproval: true })].map(tool => ({ type: "function", function: { name: tool.modelName, description: tool.description, parameters: tool.parametersSchema } })));
 		expect(body).toMatchObject({ tool_choice: "auto", parallel_tool_calls: false, n: 1, stream: false });
@@ -456,7 +459,7 @@ describe("one selected tool and its paired continuation", function _toolExchange
 	it("accepts text when a first call chooses not to propose a tool", async function _textInstead()
 	{
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(_response()));
-		await expect(__RequestConversationModel(_selection())).resolves.toEqual({ kind: ConversationModelResponseKinds.Text, text: "  Saved answer.\n" });
+		await expect(__RequestConversationModel(_selection())).resolves.toEqual({ kind: ConversationModelResponseKinds.Text, text: "  Saved answer.\n", usage: _KNOWN_USAGE });
 	});
 
 	it("offers multiple unambiguous frozen names but still accepts exactly one selection", async function _oneOfMany()
