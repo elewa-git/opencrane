@@ -3,6 +3,15 @@
 	"owners": {
 		"repositories": [
 			{
+				"path": "libs/backend/server/conversations/main/src/request-routine/prisma-request-routine-proposal-source-authority.ts",
+				"adapter": "PrismaRequestRoutineProposalSourceAuthority",
+				"contract": "RequestRoutineProposalSourceAuthority",
+				"contractImportPath": "@opencrane/backend/server/agents/scheduling/contract",
+				"constructs": [
+					{ "adapter": "PrismaAuthorizationAuthority", "importPath": "@opencrane/backend/server/iam/authorization" }
+				]
+			},
+			{
 				"path": "libs/backend/agents/execution/runs/main/src/prisma-routine-run-history-reader.ts",
 				"adapter": "PrismaRoutineRunHistoryRepository",
 				"contract": "RoutineRunHistoryRepository",
@@ -1774,6 +1783,22 @@
 			}
 		],
 		"unitsOfWork": [
+			{
+				"path": "libs/backend/server/conversations/main/src/request-routine/prisma-conversation-request-routine-source.ts",
+				"adapter": "PrismaConversationRequestRoutineSourceUnitOfWork",
+				"contract": "ConversationRequestRoutineSourceResolver",
+				"contractImportPath": "../computers/turns/request-routine/conversation-request-routine.types",
+				"constructs": []
+			},
+			{
+				"path": "libs/backend/server/conversations/main/src/request-routine/prisma-conversation-routine-proposal-recipient.ts",
+				"adapter": "PrismaConversationRoutineProposalRecipientUnitOfWork",
+				"contract": "ConversationRoutineProposalRecipientReader",
+				"contractImportPath": "../computers/turns/request-routine/conversation-request-routine.types",
+				"constructs": [
+					{ "adapter": "PrismaRequestRoutineProposalSourceAuthority", "importPath": "./prisma-request-routine-proposal-source-authority" }
+				]
+			},
 			{
 				"path": "libs/backend/agents/execution/runs/main/src/prisma-routine-run-progress-repository.ts",
 				"adapter": "PrismaRoutineRunProgressUnitOfWork",

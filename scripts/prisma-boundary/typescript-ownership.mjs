@@ -94,6 +94,24 @@ export function isTransactionScopedConstruction(source, construction, imports)
 	});
 }
 
+/** Returns whether a delegate call uses the reviewed UnitOfWork helper callback parameter. */
+export function isReviewedUnitOfWorkCallbackDelegate(source, match, imports)
+{
+	return _ReviewedTransactionHelperCallbackBindings(source, imports).some(function _OwnsDelegate(binding)
+	{
+		if (match.index < binding.start || match.index > binding.end) return false;
+		if (_HasShadowingBinding(source, binding, match.index)) return false;
+		const receiver = /(?:^|[^\w$.])([A-Za-z_$][\w$]*)$/u.exec(source.slice(0, match.index));
+		return receiver?.[1] === binding.name;
+	});
+}
+
+/** Returns whether a nested lexical scope reuses the helper callback parameter name. */
+function _HasShadowingBinding(source, binding, offset)
+{
+	return _ContainsLexicalRebinding(source.slice(binding.start + 1, offset), binding.name, true);
+}
+
 /** Finds constructor parameters whose imported type is exactly Prisma.TransactionClient. */
 function _TransactionConstructorParameters(source, owner, imports)
 {
@@ -391,6 +409,7 @@ function _ReviewedTransactionHelperCallbackBindings(source, imports)
 		const invocation = new RegExp(`\\b${_EscapeRegex(helperName)}\\s*\\(`, "gu");
 		for (const match of source.matchAll(invocation))
 		{
+			if (_HasHelperShadow(source, helperName, match.index ?? 0)) continue;
 			const openCall = (match.index ?? 0) + match[0].lastIndexOf("(");
 			const closeCall = _MatchingDelimiter(source, openCall, "(", ")");
 			const argumentsSource = source.slice(openCall + 1, closeCall);
@@ -401,6 +420,26 @@ function _ReviewedTransactionHelperCallbackBindings(source, imports)
 		}
 	}
 	return bindings;
+}
+
+/** Returns whether a local declaration hides an imported transaction helper before one call. */
+function _HasHelperShadow(source, helperName, offset)
+{
+	return _ContainsLexicalRebinding(source.slice(0, offset), helperName, false);
+}
+
+/** Returns whether source declares or reassigns a local binding with the requested name. */
+function _ContainsLexicalRebinding(source, bindingName, includeAssignment)
+{
+	const name = _EscapeRegex(bindingName);
+	const declarations = [
+		new RegExp(`\\b(?:const|let|var|class|function)\\s+${name}\\b`, "u"),
+		new RegExp(`\\bcatch\\s*\\(\\s*${name}\\b`, "u"),
+		new RegExp(`\\bfunction(?:\\s+[A-Za-z_$][\\w$]*)?\\s*\\([^)]*\\b${name}\\b[^)]*\\)`, "u"),
+		new RegExp(`(?:\\([^)]*\\b${name}\\b[^)]*\\)|\\b${name}\\b)\\s*=>`, "u"),
+	];
+	if (includeAssignment) declarations.push(new RegExp(`\\b${name}\\s*=(?!=)`, "u"));
+	return declarations.some(function _Shadows(pattern) { return pattern.test(source); });
 }
 
 /** Escapes a literal for inclusion in a regular expression. */

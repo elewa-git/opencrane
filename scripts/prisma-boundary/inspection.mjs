@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { delegateMatches, rawPrismaMethodMatches, transactionMatches } from "./prisma-bindings.mjs";
 import { rawProcedureSourcePin } from "./policy.mjs";
 import { inspectRawProcedureCall } from "./raw-procedure-inspection.mjs";
-import { authorizedOwner, classes, enclosingClass, importedBindings, isTransactionScopedConstruction, ownerIdentity, repositoryAcceptsTransactionClient, repositoryConstructions } from "./typescript-ownership.mjs";
+import { authorizedOwner, classes, enclosingClass, importedBindings, isReviewedUnitOfWorkCallbackDelegate, isTransactionScopedConstruction, ownerIdentity, repositoryAcceptsTransactionClient, repositoryConstructions } from "./typescript-ownership.mjs";
 
 /** Returns whether a path is hand-maintained production TypeScript. */
 export function isProductionTypeScript(path)
@@ -57,9 +57,11 @@ export function inspectPrismaBoundary(path, source, modelDelegates, owners, exem
 	{
 		if (exemption.has("delegate")) continue;
 		const owner = enclosingClass(classOwners, match.index ?? 0);
-		if (authorizedOwner(owner, imports, owners.repositories, path) === undefined)
+		const repository = authorizedOwner(owner, imports, owners.repositories, path);
+		const unitOfWork = authorizedOwner(owner, imports, owners.unitsOfWork, path);
+		if (repository === undefined && (unitOfWork === undefined || !isReviewedUnitOfWorkCallbackDelegate(source, match, imports)))
 		{
-			findings.push(_Finding(path, source, match.index ?? 0, "PRISMA-DELEGATE-OWNER", `direct ${match.delegate}.${match.method} call outside an exact policy-authorized Repository adapter`, ownerIdentity(source, classOwners, match.index ?? 0)));
+			findings.push(_Finding(path, source, match.index ?? 0, "PRISMA-DELEGATE-OWNER", `direct ${match.delegate}.${match.method} call outside an exact policy-authorized Repository or UnitOfWork transaction callback`, ownerIdentity(source, classOwners, match.index ?? 0)));
 		}
 	}
 	for (const construction of owners.compositions.includes(path) ? [] : repositoryConstructions(source, classOwners, imports))

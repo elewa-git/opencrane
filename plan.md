@@ -61,6 +61,28 @@ conflict. Historical evidence is retained below.
 
 ## Conversational routine proposals — execution wave
 
+### Database-boundary repair — 29 September 2026
+
+The approved correction is implemented without splitting the two cohesive helpers. Their exact
+UnitOfWork registrations use the shared transaction helper and retain the original `Serializable`
+isolation and one-attempt behavior. The transaction-scoped source authority and its nested
+authorization construction are registered explicitly. The checker accepts the reviewed callback
+binding and rejects root-client access, helper lookalikes, shadowing and reassignment. No broad
+exemption, schema change or live database operation is included.
+
+All 16 request-routine ownership findings are cleared. Diff-scoped ownership passes; the full
+repository check still reports 17 inherited findings in personal configuration, model routing and
+tenant middleware. The checker suite passes 27 tests and the focused proposal suite passes six,
+including both isolation assertions. The complete conversation suite passed 1,055 tests before
+the final focused correction; the affected checks and both server TypeScript targets then passed.
+Style has no errors or warnings, release binding and whitespace checks pass, and the module-growth
+review accepts the cohesive checker change. Independent source and architecture review found no
+remaining findings. The ten-file source diff has SHA-256
+`4116c34d144327de05e5208f16ffdb976926afaac81f965b7656185f071c6bba`.
+
+Fresh PostgreSQL/CI proof on the new published head, visual approval and real-account acceptance
+remain separate gates. No provider call ran and none of the EUR 5 live-test allowance was spent.
+
 ### Approved proportional database-boundary correction — 29 September 2026
 
 After reviewing the proposed split, the user approved keeping the two small transaction helpers
@@ -79,8 +101,10 @@ later gate, and the total live-provider test envelope remains EUR 5.
 
 The user explicitly requested publication of the local joined-proposal changes to draft #916.
 Publish this snapshot for review, not as a completed or merge-ready slice. The protected
-database-ownership correction remains unapproved and unapplied: the known 16 Prisma-boundary
-errors, fresh PostgreSQL proof, visual-reference approval and live acceptance remain open.
+database-ownership correction was still unapproved and unapplied at this checkpoint. The later
+approval above supersedes that decision blocker; its implementation must clear the known 16
+Prisma-boundary errors. Fresh PostgreSQL proof, visual-reference approval and live acceptance
+remain open.
 This publication does not waive those gates or authorize any deployment, live permission change,
 provider call or database mutation.
 

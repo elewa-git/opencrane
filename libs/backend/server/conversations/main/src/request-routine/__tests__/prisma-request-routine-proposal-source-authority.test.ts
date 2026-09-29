@@ -7,7 +7,8 @@ import { AuthorizationDecisionOutcomes } from "@opencrane/models/authorization";
 import { ExecutionSubjectMembershipKinds, FirstPartyToolCapabilities, RUN_INPUT_SNAPSHOT_VERSION } from "@opencrane/contracts";
 
 import { PrismaRequestRoutineProposalSourceAuthority } from "../prisma-request-routine-proposal-source-authority";
-import { PrismaConversationRequestRoutineSourceResolver } from "../prisma-conversation-request-routine-source";
+import { PrismaConversationRequestRoutineSourceUnitOfWork } from "../prisma-conversation-request-routine-source";
+import { PrismaConversationRoutineProposalRecipientUnitOfWork } from "../prisma-conversation-routine-proposal-recipient";
 
 const _SOURCE = { siloId: "silo-1", sourceConversationId: "conversation-1", runId: "run-1", attempt: 1, ordinal: 1, requesterPrincipalId: "requester-1" };
 
@@ -38,9 +39,21 @@ describe("Prisma request_routine proposal source authority", function _SourceAut
 	{
 		const transaction = { agentRun: { findFirst: vi.fn().mockResolvedValue({ executionSubject: _Subject() }) } };
 		const prisma = { $transaction: vi.fn(async function _Transaction(work: (value: typeof transaction) => unknown) { return work(transaction); }) };
-		const resolver = new PrismaConversationRequestRoutineSourceResolver(prisma as never);
+		const resolver = new PrismaConversationRequestRoutineSourceUnitOfWork(prisma as never);
 		const turn = { siloId: "silo-1", binding: { conversationId: "conversation-1" }, compile: { runId: "run-1", attempt: 1 } };
 		await expect(resolver.resolve(turn as never, 2)).resolves.toEqual({ siloId: "silo-1", sourceConversationId: "conversation-1", runId: "run-1", attempt: 1, ordinal: 2, requesterPrincipalId: "requester-1" });
+		expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable", maxWait: undefined, timeout: undefined });
+	});
+
+	it("reads the current proposal recipient in one serializable authorization snapshot", async function _CurrentRecipient()
+	{
+		vi.spyOn(PrismaAuthorizationAuthority.prototype, "decidePrincipal").mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow } as never);
+		const transaction = _Transaction();
+		const prisma = { $transaction: vi.fn(async function _Transaction(work: (value: typeof transaction) => unknown) { return work(transaction); }) };
+		const reader = new PrismaConversationRoutineProposalRecipientUnitOfWork(prisma as never);
+		const command = { ..._SOURCE, bootstrapId: "bootstrap-1", proposalRef: "proposal-1", expiresAt: "2026-09-11T00:00:00.000Z" };
+		await expect(reader.readCurrent(command)).resolves.toEqual({ participantId: "user-1" });
+		expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable", maxWait: undefined, timeout: undefined });
 	});
 
 	it("accepts only the active interactive snapshot with the exact frozen capability and current requester read", async function _AuthorizedCreation()

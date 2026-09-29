@@ -37,8 +37,8 @@ export type { ConversationComputerRawCredentialAuthority } from "./computers/tur
 export { ConversationRoutineProposalNotificationOutcomes } from "./computers/turns/request-routine/conversation-request-routine.types";
 export type { ConversationRequestRoutineDependencies, ConversationRequestRoutineSourceResolver, ConversationRoutineProposalNotificationCommand, ConversationRoutineProposalNotificationPort, ConversationRoutineProposalRecipientReader } from "./computers/turns/request-routine/conversation-request-routine.types";
 export { KurrentConversationRoutineProposalNotificationPublisher } from "./request-routine/kurrent-conversation-routine-proposal-notification";
-export { PrismaConversationRequestRoutineSourceResolver } from "./request-routine/prisma-conversation-request-routine-source";
-export { PrismaConversationRoutineProposalRecipientReader } from "./request-routine/prisma-conversation-routine-proposal-recipient";
+export { PrismaConversationRequestRoutineSourceUnitOfWork } from "./request-routine/prisma-conversation-request-routine-source";
+export { PrismaConversationRoutineProposalRecipientUnitOfWork } from "./request-routine/prisma-conversation-routine-proposal-recipient";
 export { PrismaRequestRoutineProposalSourceAuthority } from "./request-routine/prisma-request-routine-proposal-source-authority";
 export { _SelfConversationHistoryOpenapiPaths } from "./http/openapi";
 export { PrismaSelfConversationHistoryUnitOfWork } from "./messages/prisma-self-conversation-history";

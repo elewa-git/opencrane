@@ -61,6 +61,43 @@ test("allows imported repository and unit-of-work contract owners", function _Al
 	assert.deepEqual(inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", _Fixture("positive-unit-of-work"), ["widget"], _OWNERS), []);
 });
 
+test("allows a declared unit of work to use only its reviewed helper callback binding", function _AllowsUnitOfWorkCallbackDelegate()
+{
+	const exact = `
+import type { PrismaClient } from "@prisma/client";
+import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
+import type { WidgetUnitOfWork } from "./widget.types.js";
+
+export class PrismaWidgetUnitOfWork implements WidgetUnitOfWork
+{
+	constructor(private readonly prisma: PrismaClient) {}
+	run(): Promise<unknown>
+	{
+		return ___RunInPrismaUnitOfWork(this.prisma, async function _Read(transaction)
+		{
+			return transaction.widget.findFirst({});
+		}, { isolationLevel: "RepeatableRead", operation: "widget read" });
+	}
+}
+`;
+	assert.deepEqual(inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", exact, ["widget"], _OWNERS), []);
+
+	const lookalike = exact.replace('from "@opencrane/backend/server/infra/prisma-unit-of-work"', 'from "@lookalike/prisma-unit-of-work"');
+	const directTransaction = exact.replace('import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";\n', "").replace("___RunInPrismaUnitOfWork(this.prisma", "this.prisma.$transaction");
+	const rootInsideCallback = exact.replace("transaction.widget.findFirst", "this.prisma.widget.findFirst");
+	const delegateOutsideCallback = exact.replace("return ___RunInPrismaUnitOfWork", "void this.prisma.widget.findFirst({});\n\t\treturn ___RunInPrismaUnitOfWork");
+	const shadowedHelper = exact.replace("return ___RunInPrismaUnitOfWork", "const ___RunInPrismaUnitOfWork = this.lookalike;\n\t\treturn ___RunInPrismaUnitOfWork");
+	const shadowedRootClient = exact.replace("return transaction.widget.findFirst({});", "function _Nested(transaction: PrismaClient) { return transaction.widget.findFirst({}); } return _Nested(this.prisma);");
+	const blockShadowedRootClient = exact.replace("return transaction.widget.findFirst({});", "{ const transaction = this.prisma; return transaction.widget.findFirst({}); }");
+	const arrowShadowedRootClient = exact.replace("return transaction.widget.findFirst({});", "return ((transaction: PrismaClient) => transaction.widget.findFirst({}))(this.prisma);");
+	const reassignedRootClient = exact.replace("return transaction.widget.findFirst({});", "transaction = this.prisma; return transaction.widget.findFirst({});");
+	for (const source of [lookalike, directTransaction, rootInsideCallback, delegateOutsideCallback, shadowedHelper, shadowedRootClient, blockShadowedRootClient, arrowShadowedRootClient, reassignedRootClient])
+	{
+		const findings = inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", source, ["widget"], _OWNERS);
+		assert.equal(findings.some(function _Delegate(finding) { return finding.rule === "PRISMA-DELEGATE-OWNER"; }), true);
+	}
+});
+
 test("recognizes only the exact central authorization transaction helper import", function _AuthorizationTransactionHelper()
 {
 	const exactHelper = `
