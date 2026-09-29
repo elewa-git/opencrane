@@ -1,5 +1,19 @@
 # OpenCrane — Active Plan
 
+## Preserved administration design — 29 September 2026
+
+The user requested preservation of the administration design package during cleanup of the older
+checkout. The [design brief](docs/design/administration-lifecycle/README.md),
+[screenshot guide](docs/design/administration-lifecycle/screenshots.md),
+[component handoff](docs/design/administration-lifecycle/components.md), and
+[36 supplied wireframes](tests/design-targets/organisation-administration/README.md) are retained
+with their original bytes and provenance. All 47 image checksums match their manifests. These
+remain design references, not accepted visual baselines or proof of implemented functionality.
+Their source assessment is pinned to `967f7c0b6`; reconcile current implementation and the later
+accepted product decisions before building from the brief. Developer-tooling files are excluded
+from this preservation commit. The latest database-boundary decision below is retained separately
+from implementation and test claims.
+
 ## Accepted product decisions — 27 September 2026
 
 The user has accepted the following decisions for the remaining MVP work. They are product
@@ -46,6 +60,20 @@ unresolved numeric live-test-cap and first-write/Always-policy text only where t
 conflict. Historical evidence is retained below.
 
 ## Conversational routine proposals — execution wave
+
+### Approved proportional database-boundary correction — 29 September 2026
+
+After reviewing the proposed split, the user approved keeping the two small transaction helpers
+together and making the checker recognize their narrowly defined pattern. This supersedes the
+earlier proposal to split them into separate repository and transaction-owner classes. Preserve
+same-transaction reads and permission checks, register only the exact permitted components, and
+continue rejecting database access outside the transaction. No broad exemption, live database
+change, new user permission, merge or deployment is authorized by this correction.
+
+The approval resolves the user-decision blocker; it does not resolve the 16 checker errors by
+itself. Implementation, focused negative tests and independent review remain required. Other
+accepted MVP product decisions stand. Human acceptance of changed visual references remains a
+later gate, and the total live-provider test envelope remains EUR 5.
 
 ### Work-in-progress publication — 29 September 2026
 
