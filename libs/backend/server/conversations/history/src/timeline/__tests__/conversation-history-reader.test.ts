@@ -1,5 +1,7 @@
 import type { ConversationEntry } from "@opencrane/contracts";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
+import { RoutineFiringTrigger } from "@opencrane/models/agents";
+import { ConversationGenesisOriginKinds } from "@opencrane/models/conversations";
 import { describe, expect, it, vi } from "vitest";
 
 import { ConversationHistoryReader } from "../conversation-history-reader";
@@ -44,9 +46,9 @@ function _Event(revision: bigint, entryId = _FIRST_ENTRY_ID): HistoryRecordedEve
 }
 
 /** Builds the mandatory revision-zero ownership event. */
-function _Genesis(): HistoryRecordedEvent
+function _Genesis(genesisOverrides: Record<string, unknown> = {}): HistoryRecordedEvent
 {
-	return { streamName: "conversation-conversation-1", id: "11c1f1dc-0010-4f13-9c2f-d3841ffd6651", type: "opencrane.conversation-created.v1", data: { genesis: { schemaVersion: 1, siloId: "silo-1", conversationId: "conversation-1", mode: "agent_session", agentServiceId: "service-1", createdByPrincipalId: "principal-1", createdAt: "2026-09-01T00:00:00.000Z" } }, metadata: { siloId: "silo-1", conversationId: "conversation-1" }, revision: 0n, recordedAt: new Date("2026-09-01T00:00:00.000Z") };
+	return { streamName: "conversation-conversation-1", id: "11c1f1dc-0010-4f13-9c2f-d3841ffd6651", type: "opencrane.conversation-created.v1", data: { genesis: { schemaVersion: 1, siloId: "silo-1", conversationId: "conversation-1", mode: "agent_session", agentServiceId: "service-1", createdByPrincipalId: "principal-1", createdAt: "2026-09-01T00:00:00.000Z", ...genesisOverrides } }, metadata: { siloId: "silo-1", conversationId: "conversation-1" }, revision: 0n, recordedAt: new Date("2026-09-01T00:00:00.000Z") };
 }
 
 /** Retrieves the valid fixture entry before one test deliberately mutates its untyped stored payload. */
@@ -71,6 +73,19 @@ describe("ConversationHistoryReader", function ()
 		expect(genesis.conversationId).toBe("conversation-1");
 		expect(readStream).toHaveBeenCalledOnce();
 		expect(readStream).toHaveBeenCalledWith({ streamName: "conversation-conversation-1", fromRevision: 0n, maxCount: 1, signal: undefined });
+	});
+
+	it("reads a closed routine origin and rejects legacy or malformed saved origins", async function _RoutineGenesis()
+	{
+		const origin = { kind: ConversationGenesisOriginKinds.RoutineOccurrence, routineId: "routine-1", routineRevision: 3, firingId: "firing-1", destinationConversationId: "destination-1", trigger: RoutineFiringTrigger.Manual, scheduledSlot: null } as const;
+		const valid = new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events([_Genesis({ origin })])) });
+		await expect(valid.readGenesis({ siloId: "silo-1", conversationId: "conversation-1", maximumBytes: 4096 })).resolves.toMatchObject({ origin });
+
+		const { kind: _kind, ...legacyOrigin } = origin;
+		const legacy = new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events([_Genesis({ origin: legacyOrigin })])) });
+		await expect(legacy.readGenesis({ siloId: "silo-1", conversationId: "conversation-1", maximumBytes: 4096 })).rejects.toThrow("malformed genesis data");
+		const malformed = new ConversationHistoryReader({ readStream: vi.fn().mockReturnValue(_Events([_Genesis({ origin: { ...origin, scheduledSlot: "2026-09-25T10:00:00.000Z" } })])) });
+		await expect(malformed.readGenesis({ siloId: "silo-1", conversationId: "conversation-1", maximumBytes: 4096 })).rejects.toThrow("malformed genesis data");
 	});
 
 	it("checks genesis separately and reads only the bounded contiguous requested range", async function ()

@@ -8,7 +8,7 @@ import { ConversationComputerTurnAuthority } from "../conversation-computer-turn
 import { _ConversationComputerTurnAuthorityEndedError } from "../conversation-computer-turn-errors";
 import type { FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 import { _ReduceConversationComputerTurnProtocol } from "../conversation-computer-turn-protocol";
-import { ConversationComputerTurnProtocolEvents } from "../conversation-computer-turn-protocol.types";
+import { ConversationComputerTurnProtocolEvents, ConversationComputerTurnProtocolStates } from "../conversation-computer-turn-protocol.types";
 import type { ConversationComputerTurnModelReservation, ConversationComputerTurnOutputReceipt, ConversationComputerTurnToolResult, ConversationComputerTurnToolSelection, ConversationComputerTurnUnavailableReceipt } from "../conversation-computer-turn-protocol.types";
 import type { ConversationComputerModelRejection, ConversationComputerModelRetryClaim } from "../conversation-computer-model-retry.types";
 
@@ -113,6 +113,7 @@ function _Harness() {
       start: vi.fn().mockResolvedValue(undefined),
       complete: vi.fn().mockResolvedValue(undefined),
     },
+	routineProgress: { recordCompleted: vi.fn().mockResolvedValue(undefined), recordUnavailable: vi.fn().mockResolvedValue(undefined) },
     store: {
 	  recordModelRejection: vi.fn(async function _Reject(_id: string, rejection: ConversationComputerModelRejection)
 	  {
@@ -340,6 +341,19 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     await expect(authority.advance(bootstrap!.bootstrapId)).resolves.toEqual({ outcome: "response_unavailable" });
     expect(dependencies.store.markResponseUnavailable).toHaveBeenCalledOnce();
     expect(dependencies.runLifecycle.enterRecoveryRequired).toHaveBeenCalledWith(expect.objectContaining({ runId: "run-1", attempt: 1 }));
+    vi.restoreAllMocks();
+  });
+
+  it("retries unavailable progress acknowledgement from the saved protocol", async function () {
+    const { authority, dependencies } = _Harness();
+    const bootstrap = await authority.start({ computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, causationId: "entry-1", causationPosition: "1" });
+    await _ReserveConversationOutputFixture(dependencies.store, bootstrap!.bootstrapId, "31c1f1dc-0010-4f13-9c2f-d3841ffd6651");
+    vi.spyOn(Date, "now").mockReturnValue(2_000_000_000_001);
+    dependencies.routineProgress.recordUnavailable.mockRejectedValueOnce(new Error("progress unavailable"));
+
+    await expect(authority.advance(bootstrap!.bootstrapId)).rejects.toThrow("progress unavailable");
+    await expect(authority.start({ computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 }, causationId: "entry-1", causationPosition: "1" })).resolves.toMatchObject({ protocol: { state: ConversationComputerTurnProtocolStates.ResponseUnavailable } });
+    expect(dependencies.routineProgress.recordUnavailable).toHaveBeenCalledTimes(2);
     vi.restoreAllMocks();
   });
 

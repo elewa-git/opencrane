@@ -1,6 +1,6 @@
 import { __DigestHumanMembershipEvidence, __HumanMembershipRevision } from "@opencrane/backend/server/iam/membership";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
-import { ExecutionSubjectMembershipKinds, type ExecutionSubject } from "@opencrane/models/agents";
+import { AgentRunTriggers, ExecutionSubjectMembershipKinds, __RoutineFiringAuditActor, type ExecutionSubject } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { SessionAssemblyLoadOutcomes, type ApprovedPersonaInput, type MemoryScopeInput, type ProductResourceAuthorizationSource, type SessionAssemblyCommand, type SessionAssemblyLoad, type ToolPolicyInput } from "../assembly/session-assembly.types";
@@ -29,7 +29,10 @@ export class TransactionBoundProductResourceAuthorizationSource implements Produ
 		return admissions.length === resources.length ? { outcome: SessionAssemblyLoadOutcomes.Loaded, value: null } : { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "product_authorization_unavailable" };
 	}
 
-	/** Re-admits current requester access without replaying snapshot resource admissions. */
+	/**
+	 * Re-admits current requester Conversation Use without replaying snapshot resource admissions.
+	 * A routine trigger selects the audit actor but never replaces that requester Principal.
+	 */
 	async verifyExisting(command: SessionAssemblyCommand, executionSubject: ExecutionSubject, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>
 	{
 		if (command.conversationId === null)
@@ -38,7 +41,8 @@ export class TransactionBoundProductResourceAuthorizationSource implements Produ
 			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "product_authorization_unavailable" };
 		const argumentsDigest = ___DigestCanonicalJson({ runId: command.runId, attempt: 1, siloId: command.siloId, agentServiceId: command.agentServiceId, agentRevisionId: executionSubject.runScope.agentRevisionId, conversationId: command.conversationId, requestIdempotencyKey: command.requestIdempotencyKey, membershipDigest: ___DigestCanonicalJson(executionSubject.membership as unknown as JsonValue), requesterMembershipDigest: __DigestHumanMembershipEvidence(executionSubject.requester.membership) } as JsonValue);
 		const requester = executionSubject.requester;
-		const conversation = await transaction.authorization.admitPrincipal({ siloId: command.siloId, principalId: requester.requesterPrincipalId, actorKind: "user", actorId: requester.requesterPrincipalId, action: ProductAuthorizationActions.Use, resource: { kind: ProductAuthorizationResourceKinds.Conversation, id: command.conversationId }, argumentsDigest, membershipRevision: __HumanMembershipRevision(requester.membership), nowEpochMs: transaction.admittedAtEpochMs });
+		const actor = command.trigger === AgentRunTriggers.Interactive ? { actorKind: "user" as const, actorId: requester.requesterPrincipalId } : __RoutineFiringAuditActor(command.trigger, requester.requesterPrincipalId);
+		const conversation = await transaction.authorization.admitPrincipal({ siloId: command.siloId, principalId: requester.requesterPrincipalId, ...actor, action: ProductAuthorizationActions.Use, resource: { kind: ProductAuthorizationResourceKinds.Conversation, id: command.conversationId }, argumentsDigest, membershipRevision: __HumanMembershipRevision(requester.membership), nowEpochMs: transaction.admittedAtEpochMs });
 		return conversation.outcome === AuthorizationDecisionOutcomes.Allow && conversation.evidence !== null ? { outcome: SessionAssemblyLoadOutcomes.Loaded, value: null } : { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "product_authorization_unavailable" };
 	}
 }

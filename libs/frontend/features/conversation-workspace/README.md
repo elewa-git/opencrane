@@ -75,6 +75,11 @@ retry, or execution control. Repeated facts for one call coalesce at the newest 
 tool-call coordinates, result coordinates, arguments, nor result payloads enter the presentation. This same
 history contract applies to personal Agent sessions and shared company-child chats; personal Recent activity
 remains a separate private run index.
+
+A typed `routine_proposal` history log renders as a requester-facing **Routine proposal ready for
+review** status with one named **Review routine** link. The link carries only the opaque proposal
+reference to the existing routine-create route; the transcript never copies the suggestion,
+`detailsRef`, identity, audience, or permission data into browser navigation.
 Immutable artifact blocks render through the existing asset card only when the current authorized
 asset projection matches artifact id, artifact revision id, and message id. Missing or conflicting
 coordinates produce a non-actionable unavailable card rather than a filename-based join.
@@ -163,6 +168,8 @@ is reset, so reloading cannot reopen a stale modal over the access-change explan
 - `CONVERSATION_WORKSPACE_ROUTES` is the child route table the app mounts at `/chats`.
 - `ConversationWorkspacePageComponent` is the composition shell. It emits exact navigation intents
   to the feature-local route coordinator.
+- Its schedule-requested navigation output carries a destination candidate for the routines route;
+  the server still authorizes that candidate and no browser route grants access.
 - Internal header, transcript and composer components own separate typed presentation contracts.
   The header restores context-trigger focus, the transcript owns message anchors and canonical tool-status rows, the page-owned
   conversation body scrolls messages and participant requests together,

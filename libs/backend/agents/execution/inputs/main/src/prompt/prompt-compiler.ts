@@ -1,4 +1,4 @@
-import { CompiledFinalOutputModes, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, ___ParseRunBudgetPolicy, type CompiledRunInput, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, CompiledToolDefinitionKinds, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, ___CompiledToolDefinitionSchema, ___ParseRunBudgetPolicy, type CompiledRunInput, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -41,30 +41,6 @@ export async function __CompileRunInput(snapshot: RunInputSnapshot, attempt: num
 	});
 }
 
-/**
- * Add one first-party tool to an already compiled input and recompute its digest.
- *
- * Used for tools OpenCrane itself offers, which the saved agent revision does not select and so are
- * not in the snapshot. The digest is recomputed so the returned input stays self-consistent —
- * appending without resealing would leave a digest that no longer matches the payload.
- *
- * Called by: production run-input composition, which appends the upgrade-session tool after proving
- * in the same transaction that the run belongs to a personal AgentService.
- *
- * @param input - An already compiled run input. Not modified; a new object is returned.
- * @param tool - The first-party tool to add.
- * @returns A new compiled input with the tool included, tools re-sorted by model name, and a fresh digest.
- * @throws When `input` already contains the same revision or provider-facing model name.
- * @see __CompileRunInput
- */
-export function __AppendCompiledTool(input: CompiledRunInput, tool: CompiledToolDefinition): CompiledRunInput
-{
-	if (input.tools.some(function _sameTool(existing): boolean { return existing.toolRevisionId === tool.toolRevisionId || existing.modelName === tool.modelName; }))
-		throw new Error(`compiled input already contains model tool ${tool.modelName} or revision ${tool.toolRevisionId}`);
-	const unsealed = { ...input, tools: _orderTools([...input.tools, tool]) };
-	return { ...unsealed, digest: _digest(unsealed) };
-}
-
 /** Verify the snapshot's compiler version, then assemble and seal the compiled input. */
 async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, repositories: PromptCompilerRepositories): Promise<CompiledRunInput>
 {
@@ -89,7 +65,9 @@ async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, rep
 	// 2. Look up every record the compiled input needs.
 	const personaInstructions = await repositories.loadPersonaInstructions(snapshot.personaRevisionId);
 	const messages = await repositories.loadMessages(snapshot.messageIds);
-	const tools = _orderTools(await repositories.loadToolDefinitions(snapshot.mcpTools));
+	const mcpTools = await repositories.loadToolDefinitions(snapshot.mcpTools);
+	const firstPartyTools = await repositories.loadFirstPartyToolDefinitions(snapshot.firstPartyCapabilities);
+	const tools = _orderTools([...mcpTools, ...firstPartyTools]);
 	const artifactSummaries = await repositories.loadArtifactSummaries([...snapshot.artifactRevisionIds].sort());
 	const skillSummaries = await repositories.loadSkillSummaries([...snapshot.skillRevisionIds].sort());
 	const model = await repositories.resolveModelRoute(snapshot.siloId, snapshot.modelRoute);
@@ -105,22 +83,22 @@ async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, rep
 /**
  * Validate and order tool definitions by model name so the compiled set never depends on grant iteration order.
  *
- * Two callers rely on this: the initial compile, and `__AppendCompiledTool`, which re-sorts after adding
- * a first-party tool so an appended tool lands in the same place every time.
- *
  * @see https://www.rfc-editor.org/rfc/rfc8785 - JSON Canonicalization Scheme, the serialisation the
  * compiled digest is taken over. It fixes object key order but not array order, so without this sort the
  * same tools arriving in a different order would digest differently.
  */
 function _orderTools(tools: readonly CompiledToolDefinition[]): readonly CompiledToolDefinition[]
 {
-	const revisionIds = new Set<string>();
+	const sourceCoordinates = new Set<string>();
 	const modelNames = new Set<string>();
-	for (const tool of tools)
+	for (const candidate of tools)
 	{
-		if (!_IsModelToolNameValid(tool.modelName) || tool.toolRevisionId.trim().length === 0 || revisionIds.has(tool.toolRevisionId) || modelNames.has(tool.modelName))
-			throw new Error("compiled tool definitions require valid unique model names and revision identifiers");
-		revisionIds.add(tool.toolRevisionId);
+		const tool = ___CompiledToolDefinitionSchema.parse(candidate);
+		const sourceCoordinate = tool.kind === CompiledToolDefinitionKinds.Mcp ? tool.toolRevisionId : `${tool.capability}:${tool.capabilityRevision}`;
+		if (!_IsModelToolNameValid(tool.modelName) || sourceCoordinates.has(sourceCoordinate) || modelNames.has(tool.modelName)
+			|| ___DigestCanonicalJson(tool.parametersSchema) !== tool.parametersSchemaDigest)
+			throw new Error("compiled callable definitions require valid schemas and unique model names and source coordinates");
+		sourceCoordinates.add(sourceCoordinate);
 		modelNames.add(tool.modelName);
 	}
 	return [...tools].sort(function _byModelName(left, right): number { return _compareText(left.modelName, right.modelName); });

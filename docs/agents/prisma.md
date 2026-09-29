@@ -47,9 +47,12 @@ Production TypeScript reaches Prisma through reviewed capability boundaries, enf
 
 1. Domain services, materializers, and use cases do not import Prisma or call model delegates.
 2. Only an exact repository adapter declared in
-   [`prisma-boundary-policy.json`](./prisma-boundary-policy.json) may call model delegates. A
-   declaration binds the repository contract import, adapter class, and source path; renaming or
-   moving any of them requires policy review. `$queryRaw`, `$queryRawUnsafe`, `$executeRaw`, and
+   [`prisma-boundary-policy.json`](./prisma-boundary-policy.json) may call model delegates directly.
+   A declared UnitOfWork may also call a delegate through the transaction parameter of its callback
+   to `___RunInPrismaUnitOfWork`; the exact helper import and callback binding are checked, so a
+   lookalike helper, root-client call, alias, or call outside that callback remains forbidden. Each
+   declaration binds the contract import, adapter class, and source path; renaming or moving any of
+   them requires policy review. `$queryRaw`, `$queryRawUnsafe`, `$executeRaw`, and
    `$executeRawUnsafe` are forbidden in production TypeScript, including declared repositories.
 	The permanent exceptions are the typed `WorkflowTaskAdmission` and `WorkflowTaskEventAdmission`
 	adapters. They call the fixed, parameterized `absurd.spawn_task` and `absurd.emit_event`

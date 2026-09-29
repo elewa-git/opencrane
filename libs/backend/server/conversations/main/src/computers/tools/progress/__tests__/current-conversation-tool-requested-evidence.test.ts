@@ -1,4 +1,4 @@
-import { CompiledFinalOutputModes } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, CompiledToolDefinitionKinds, FirstPartyToolCapabilities, FirstPartyToolEffectKinds, FirstPartyToolMaterializationKinds } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import type { FrozenConversationComputerTurn } from "../../../turns/conversation-computer-turn.types";
@@ -11,10 +11,10 @@ const _COMMAND: ConversationToolRequestedNotificationCommand = { bootstrapId: "t
 /** Build one selected turn, current compiled input and committed proposal row. */
 function _Fixture()
 {
-	const tool = { name: "records.read", modelName: "records_read", toolRevisionId: "tool-revision-1", description: "Read one record", requiresApproval: false, parametersSchema: { type: "object" }, parametersSchemaDigest: `sha256:${"b".repeat(64)}` };
+	const tool = { kind: CompiledToolDefinitionKinds.Mcp, name: "records.read", modelName: "records_read", toolRevisionId: "tool-revision-1", description: "Read one record", requiresApproval: false, parametersSchema: { type: "object" }, parametersSchemaDigest: `sha256:${"b".repeat(64)}` };
 	const compiledInput = { finalOutput: CompiledFinalOutputModes.Text,  promptCompilerVersion: "compiler-v1", runId: "run-1", attempt: 1, instructions: "help", messages: [], tools: [tool], model: { modelAlias: "model-1", maxOutputTokens: 100, generatedOutputCapabilities: [] }, budget: { maxModelTurns: 2, maxCompletionTokens: 200, maxCostUsdMicros: 10, maxToolInvocations: 1, maxLoopIterations: 1, wallClockDeadlineEpochMs: Date.parse("2099-09-12T00:00:00.000Z") }, digest: `sha256:${"a".repeat(64)}` };
 	const reservation = { ordinal: 1, invocationFence: "model-1", tools: "select", compiledInputDigest: compiledInput.digest, historyDigest: `sha256:${"c".repeat(64)}`, requestDigest: `sha256:${"d".repeat(64)}`, maxCompletionTokens: 100, authorityExpiresAtEpochMs: compiledInput.budget.wallClockDeadlineEpochMs, dispatchDeadlineEpochMs: compiledInput.budget.wallClockDeadlineEpochMs };
-	const selection = { ordinal: 1, modelInvocationFence: reservation.invocationFence, declaration: { payloadRef: "payload", ciphertextDigest: `sha256:${"e".repeat(64)}` }, proposalId: "invoke-1", toolInvocationId: "invoke-1", requestFingerprint: "sha256:fingerprint" };
+	const selection = { kind: "mcp" as const, ordinal: 1, modelInvocationFence: reservation.invocationFence, declaration: { payloadRef: "payload", ciphertextDigest: `sha256:${"e".repeat(64)}` }, proposalId: "invoke-1", toolInvocationId: "invoke-1", requestFingerprint: "sha256:fingerprint" };
 	const protocol = { state: ConversationComputerTurnProtocolStates.ToolPending, revision: 2n, steps: [{ state: ConversationComputerTurnProtocolStates.ToolPending, reservation, selection, result: null }], accounting: { reservedModelCalls: 1, reservedCompletionTokens: 100, reservedToolInvocations: 1, toolResultCyclesFed: 0 }, modelRetry: null, output: null, unavailable: null, cancellation: null };
 	const turn = { bootstrapId: "turn-1", siloId: "silo-1", computerId: "computer-1", binding: { siloId: "silo-1", conversationId: "conversation-1", runId: "run-1" }, compile: { runId: compiledInput.runId, attempt: compiledInput.attempt, promptCompilerVersion: compiledInput.promptCompilerVersion, digest: compiledInput.digest }, budget: compiledInput.budget, protocol } as unknown as FrozenConversationComputerTurn;
 	const invocation = { siloId: "silo-1", runId: "run-1", attempt: 1, mcpTaskId: null, runtimeInstanceId: "computer-1", commandId: "turn-1", candidateId: "invoke-1", toolRevisionId: "tool-revision-1", toolInvocationId: "invoke-1", requestFingerprint: "sha256:fingerprint", createdAt: new Date("2026-09-11T10:00:00.000Z") };
@@ -24,7 +24,7 @@ function _Fixture()
 	const transaction = { toolInvocation: { findUnique } };
 	const prisma = { $transaction: vi.fn(async function _Transaction(work: (value: typeof transaction) => Promise<unknown>) { return work(transaction); }) };
 	const reader = new CurrentConversationToolRequestedNotificationEvidenceReader(prisma as never, { load }, { assertCurrentForWorkflow });
-	return { reader, turn, invocation, findUnique, assertCurrentForWorkflow };
+	return { reader, turn, invocation, compiledInput, findUnique, assertCurrentForWorkflow };
 }
 
 describe("current conversation tool requested evidence", function _Suite()
@@ -46,6 +46,25 @@ describe("current conversation tool requested evidence", function _Suite()
 	{
 		const fixture = _Fixture();
 		fixture.findUnique.mockResolvedValue({ ...fixture.invocation, ...override });
+		await expect(fixture.reader.readCurrent(_COMMAND)).resolves.toBeNull();
+	});
+
+	it("does not match a first-party declaration to an MCP progress invocation", async function _RejectFirstParty()
+	{
+		const fixture = _Fixture();
+		const firstParty = {
+			kind: CompiledToolDefinitionKinds.FirstParty,
+			name: "records.read",
+			modelName: "records_read",
+			description: "Read one record",
+			parametersSchema: { type: "object" },
+			parametersSchemaDigest: `sha256:${"b".repeat(64)}`,
+			capability: FirstPartyToolCapabilities.RequestRoutine,
+			capabilityRevision: "opencrane:scheduling:request_routine:v1",
+			effect: FirstPartyToolEffectKinds.ProposalOnly,
+			materialization: FirstPartyToolMaterializationKinds.HumanReviewRequired,
+		};
+		fixture.assertCurrentForWorkflow.mockResolvedValue({ candidate: { ...fixture.turn, compiledInput: { ...fixture.compiledInput, tools: [firstParty] } }, workload: {} } as never);
 		await expect(fixture.reader.readCurrent(_COMMAND)).resolves.toBeNull();
 	});
 

@@ -13,7 +13,7 @@ import type { OpenCraneBackgroundWorkers } from "./background-workers.types";
 import type { ConversationComputerActivationWorker } from "@opencrane/backend/server/conversations";
 import type { OpenCraneProcessConfig } from "../configuration/config.types";
 import type { OpenCraneHistoryStoreComposition } from "@opencrane/backend/server/infra/history-store";
-import type { OpenCraneHttpServers } from "./lifecycle.types";
+import type { OpenCraneHttpServers, OpenCraneStartupRecovery, OpenCraneStartupWorkerFactory } from "./lifecycle.types";
 import { _log } from "./log";
 import { _BeginProcessShutdown } from "./process-shutdown";
 
@@ -65,31 +65,63 @@ function _startHttpServers(publicApp: Express, internalApp: Express, config: Ope
 	return { internal: internalServer, public: publicServer };
 }
 
+/** Close dependencies created before listeners exist after composition or worker startup fails. */
+export async function _CloseFailedProcessStartup(prisma: PrismaClient, workflowRuntime: IWorkflowWorkerRuntime | null, historyStore: OpenCraneHistoryStoreComposition, unbindConsole: () => void, conversationComputerActivations: ConversationComputerActivationWorker = { stop: async function _NoActivationWorker(): Promise<void> {} }): Promise<void>
+{
+	const hardExit = setTimeout(function _ForceStartupExit() { process.exit(1); }, 10_000);
+	hardExit.unref();
+	try
+	{
+		await _runCleanupStage("startup_dependencies", async function _CloseStartupDependencies()
+		{
+			const operations = [conversationComputerActivations.stop(), historyStore.close(), prisma.$disconnect()];
+			if (workflowRuntime !== null)
+				operations.push(workflowRuntime.close());
+			await _settleCleanup(operations);
+		});
+		await _runCleanupStage("startup_telemetry", ___ShutdownTelemetry);
+		unbindConsole();
+	}
+	finally
+	{
+		clearTimeout(hardExit);
+	}
+}
+
+/** Give pre-lifecycle assembly one cleanup owner without making lifecycle failures close twice. */
+export async function _OwnProcessStartupComposition<T>(compose: () => Promise<T>, cleanup: () => Promise<void>): Promise<T>
+{
+	try
+	{
+		return await compose();
+	}
+	catch (error)
+	{
+		await cleanup();
+		throw error;
+	}
+}
+
 /**
  * Start both listeners and background workers, then bind their coordinated shutdown.
  *
  * Workload routes stay on a separate socket throughout the lifecycle; shutdown stops producers
  * before closing listeners and database state, then flushes telemetry as the final I/O boundary.
  */
-export async function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, config: OpenCraneProcessConfig, unbindConsole: () => void, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime, providerEffects: ProviderEffectCommandExecutor, historyStore: OpenCraneHistoryStoreComposition, conversationComputerActivations: ConversationComputerActivationWorker = { stop: async function _NoActivationWorker(): Promise<void> {} }): Promise<void>
+export async function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, config: OpenCraneProcessConfig, unbindConsole: () => void, mcpRuntime: McpRuntimeAuthority, workflowRuntime: IWorkflowWorkerRuntime, providerEffects: ProviderEffectCommandExecutor, historyStore: OpenCraneHistoryStoreComposition, startup: OpenCraneStartupRecovery, startupWorkers: OpenCraneStartupWorkerFactory): Promise<void>
 {
-	// 1. Start workers only after application composition has registered every durable task.
+	// 1. Repair schedule heads after task registration and before a worker can claim them.
 	let backgroundWorkers: OpenCraneBackgroundWorkers;
+	let conversationComputerActivations: ConversationComputerActivationWorker = { stop: async function _NoActivationWorker(): Promise<void> {} };
 	try
 	{
+		await startup.repairAllActiveSchedules();
+		conversationComputerActivations = await startupWorkers.start();
 		backgroundWorkers = await _StartBackgroundWorkers(prisma, config, mcpRuntime, workflowRuntime, providerEffects);
 	}
 	catch (error)
 	{
-		const hardExit = setTimeout(function _forceStartupExit() { process.exit(1); }, 10_000);
-		hardExit.unref();
-		await _runCleanupStage("startup_dependencies", async function _CloseStartupDependencies()
-		{
-			await _settleCleanup([conversationComputerActivations.stop(), historyStore.close(), workflowRuntime.close(), prisma.$disconnect()]);
-		});
-		await _runCleanupStage("startup_telemetry", ___ShutdownTelemetry);
-		clearTimeout(hardExit);
-		unbindConsole();
+		await _CloseFailedProcessStartup(prisma, workflowRuntime, historyStore, unbindConsole, conversationComputerActivations);
 		throw error;
 	}
 

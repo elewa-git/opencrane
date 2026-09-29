@@ -1,6 +1,6 @@
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
-import { RUN_INPUT_SNAPSHOT_VERSION, type RunInputSnapshot } from "@opencrane/contracts";
-import { __DigestRunInputSnapshot, RunAdmissionMessageInputModes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type RunAdmissionCommand } from "@opencrane/backend/agents/execution/runs";
+import { FIRST_PARTY_TOOL_CAPABILITY_CONTRACTS, FirstPartyToolCapabilities, RUN_INPUT_SNAPSHOT_VERSION, type RunInputFirstPartyCapabilitySelection, type RunInputSnapshot } from "@opencrane/contracts";
+import { __DigestRunInputSnapshot, RunAdmissionMessageInputModes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type InteractiveRunAdmissionCommand, type RoutineRunAdmissionCommand } from "@opencrane/backend/agents/execution/runs";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 import { describe, expect, it, vi } from "vitest";
 
@@ -9,9 +9,15 @@ import { TransactionBoundProductResourceAuthorizationSource } from "../../source
 import type { SessionAssemblyAuthorities } from "../session-assembly.types";
 
 /** Builds one command whose subject is pre-verified by the injected authority. */
-function _command(): RunAdmissionCommand
+function _command(): InteractiveRunAdmissionCommand
 {
 	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", trigger: "interactive", requestIdempotencyKey: "request-1", messageInput: { mode: RunAdmissionMessageInputModes.PrePersistedHistory, messageId: "message-1", historyRevision: "7", orderedMessageIds: ["message-1"], author: { principalId: "principal-1", issuer: "https://issuer.example", subjectId: "requester-subject-1", authenticatedAt: "2026-09-01T00:00:00.000Z" } }, requester: { subjectId: "requester-subject-1", issuer: "https://issuer.example", authenticatedAt: "2026-09-01T00:00:00.000Z" } };
+}
+
+/** Builds one service-owned scheduled command from stored routine approval provenance. */
+function _routineCommand(): RoutineRunAdmissionCommand
+{
+	return { runId: "run-routine-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-routine-1", trigger: "scheduled", requestIdempotencyKey: "firing-1", messageInput: null, routineInput: { routineId: "routine-1", routineRevision: 3, firingId: "firing-1", scheduledSlot: "2026-09-01T01:00:00.000Z", requesterPrincipalId: "principal-1", requesterIssuer: "https://issuer.example", requesterSubjectId: "requester-subject-1", requesterAuthenticatedAt: "2026-07-20T00:00:00.000Z", workflowTaskId: "task-1", workflowTaskName: "routine-occurrence", workflowTaskKey: "firing-1" } };
 }
 
 /** Builds the fully fenced subject required before any identity-scoped input can load. */
@@ -34,8 +40,15 @@ function _authorities(): SessionAssemblyAuthorities
 		toolPolicy: { load: async function _load() { const schema = { type: "object" } as const; return { outcome: "loaded", value: { modelDefinitionId: "model-1", modelRoute: {}, mcpTools: [{ toolRevisionId: "tool-1", name: "search", description: null, inputSchema: schema, inputSchemaDigest: ___DigestCanonicalJson(schema) }], skillRevisionIds: [], artifactRevisionIds: [] } } as const; } },
 		skillEligibility: { load: async function _load() { return { outcome: "loaded", value: null } as const; } },
 		productAuthorization: { load: async function _load() { return { outcome: "loaded", value: null } as const; }, verifyExisting: async function _VerifyExisting() { return { outcome: "loaded", value: null } as const; } },
+		firstPartyCapabilities: { load: async function _LoadFirstPartyCapabilities() { return { outcome: "loaded", value: [] } as const; } },
 		budgetPolicy: { load: async function _load() { return { outcome: "loaded", value: { budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 1, maxCostUsdMicros: null, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: 2_000 } } } as const; } },
 	};
+}
+
+/** Build one valid first-party capability selection for admission tests. */
+function _FirstPartySelection(capability: FirstPartyToolCapabilities): RunInputFirstPartyCapabilitySelection
+{
+	return { capability, capabilityRevision: FIRST_PARTY_TOOL_CAPABILITY_CONTRACTS[capability].capabilityRevision, parametersSchemaDigest: `sha256:${"f".repeat(64)}` };
 }
 
 /** Replays a frozen snapshot through the real duplicate checks without recompiling its inputs. */
@@ -68,6 +81,73 @@ describe("__AssembleRunInputSnapshot", function _DescribeSessionAssembly()
 			expect(result.snapshot.executionSubject).toEqual(_subject());
 			expect(result.snapshot.attempt).toBe(1);
 		}
+	});
+
+	it("seals exact scheduled routine coordinates without accepting browser provenance", async function _SealsRoutineOrigin()
+	{
+		const command = _routineCommand();
+		const subject = { ..._subject(), runScope: { ..._subject().runScope, runId: command.runId }, requester: { ..._subject().requester, requestIdempotencyKey: command.requestIdempotencyKey, authenticatedAt: command.routineInput.requesterAuthenticatedAt } };
+		const authorities = _authorities();
+		authorities.runAuthority = { load: async function _ScheduledRun() { return { outcome: "loaded", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", executionPolicy: { persona: RunExecutionPersonaPolicies.Required, personalMemory: RunExecutionPersonalMemoryPolicies.None }, promptCompilerVersion: "v1", trigger: "scheduled" } } as const; } };
+		authorities.executionSubject = { load: async function _ScheduledSubject() { return { outcome: "loaded", value: subject } as const; } };
+		authorities.conversationContext = { load: async function _RoutinePrompt() { return { outcome: "loaded", value: { messageIds: ["service-prompt-1"] } } as const; } };
+
+		const selection = vi.spyOn(authorities.firstPartyCapabilities, "load");
+		await expect(__AssembleRunInputSnapshot(command, authorities)).resolves.toMatchObject({ outcome: "assembled", snapshot: { origin: { kind: "scheduled", routineId: "routine-1", routineRevision: 3, firingId: "firing-1", scheduledSlot: "2026-09-01T01:00:00.000Z", requesterPrincipalId: "principal-1", requesterIssuer: "https://issuer.example", requesterSubjectId: "requester-subject-1", requesterAuthenticatedAt: "2026-07-20T00:00:00.000Z", workflowTaskId: "task-1", workflowTaskName: "routine-occurrence", workflowTaskKey: "firing-1" }, messageIds: ["service-prompt-1"], firstPartyCapabilities: [] } });
+		expect(selection).not.toHaveBeenCalled();
+	});
+
+	it("selects and canonically freezes built-in capabilities only after current product authorization", async function _FreezesFirstPartyCapabilities()
+	{
+		const order: string[] = [];
+		const authorities = _authorities();
+		authorities.productAuthorization = { load: async function _Authorize() { order.push("authorization"); return { outcome: "loaded", value: null }; }, verifyExisting: authorities.productAuthorization.verifyExisting };
+		authorities.firstPartyCapabilities = { load: async function _Select() { order.push("selection"); return { outcome: "loaded", value: [_FirstPartySelection(FirstPartyToolCapabilities.UpgradeSession), _FirstPartySelection(FirstPartyToolCapabilities.RequestRoutine)] }; } };
+
+		const result = await __AssembleRunInputSnapshot(_command(), authorities);
+
+		expect(order).toEqual(["authorization", "selection"]);
+		expect(result).toMatchObject({ outcome: "assembled", snapshot: { firstPartyCapabilities: [_FirstPartySelection(FirstPartyToolCapabilities.RequestRoutine), _FirstPartySelection(FirstPartyToolCapabilities.UpgradeSession)] } });
+	});
+
+	it("refuses malformed or repeated built-in capability coordinates before budget selection", async function _RejectsInvalidFirstPartyCapabilities()
+	{
+		const authorities = _authorities();
+		const invalid = { ..._FirstPartySelection(FirstPartyToolCapabilities.RequestRoutine), capabilityRevision: "changed" };
+		authorities.firstPartyCapabilities = { load: async function _Select() { return { outcome: "loaded", value: [invalid, invalid] as never }; } };
+		const budget = vi.spyOn(authorities.budgetPolicy, "load");
+
+		await expect(__AssembleRunInputSnapshot(_command(), authorities)).resolves.toEqual({ outcome: "denied", reason: "tool_policy_unavailable" });
+		expect(budget).not.toHaveBeenCalled();
+	});
+
+	it("returns the original built-in selection on duplicate admission without selecting again", async function _RetainsDuplicateSelection()
+	{
+		const initial = _authorities();
+		initial.firstPartyCapabilities = { load: async function _Select() { return { outcome: "loaded", value: [_FirstPartySelection(FirstPartyToolCapabilities.RequestRoutine)] }; } };
+		const admitted = await __AssembleRunInputSnapshot(_command(), initial);
+		if (admitted.outcome === "denied")
+			throw new Error("The fixture must assemble its initial snapshot");
+		const authorities = _authorities();
+		const select = vi.fn().mockRejectedValue(new Error("duplicate must not reselect built-in capabilities"));
+		authorities.firstPartyCapabilities = { load: select };
+		authorities.admission = { admit: async function _Replay(_command, verifyExisting)
+		{
+			const verified = await verifyExisting(admitted.snapshot, { prisma: {} as never, admittedAt: "2026-07-20T00:00:00.000Z", admittedAtEpochMs: 1 });
+			return verified.outcome === "denied" ? verified : { outcome: "idempotent", snapshot: admitted.snapshot };
+		} };
+
+		await expect(__AssembleRunInputSnapshot(_command(), authorities)).resolves.toMatchObject({ outcome: "assembled", admissionOutcome: "idempotent", snapshot: { firstPartyCapabilities: [_FirstPartySelection(FirstPartyToolCapabilities.RequestRoutine)] } });
+		expect(select).not.toHaveBeenCalled();
+	});
+
+	it("rejects a scheduled occurrence with a manual-style null slot before authority reads", async function _RejectsScheduledWithoutSlot()
+	{
+		const authorities = _authorities();
+		const load = vi.spyOn(authorities.runAuthority, "load");
+		const command = { ..._routineCommand(), routineInput: { ..._routineCommand().routineInput, scheduledSlot: null } };
+		await expect(__AssembleRunInputSnapshot(command, authorities)).resolves.toEqual({ outcome: "denied", reason: "invalid_command" });
+		expect(load).not.toHaveBeenCalled();
 	});
 
 	it("freezes the deployment-selected standalone witness in the first snapshot", async function _FreezesLocal()

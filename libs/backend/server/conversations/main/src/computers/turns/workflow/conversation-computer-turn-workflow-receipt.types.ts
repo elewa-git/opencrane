@@ -8,6 +8,13 @@ export interface ConversationComputerTurnWorkflowReceiptBinder
 	bind(runId: string, attempt: number, receipt: IWorkflowTaskReceipt): Promise<boolean>;
 }
 
+/** Reads the saved workflow owner of one AgentRun attempt without admitting or changing work. */
+export interface ConversationComputerTurnWorkflowReceiptReader
+{
+	/** Returns the saved task receipt, or null when the run attempt is missing or unbound. */
+	read(runId: string, attempt: number): Promise<IWorkflowTaskReceipt | null>;
+}
+
 /** Wakes the saved turn workflow from the transaction that accepts terminal tool evidence. */
 export interface ConversationComputerTurnWorkflowEventRepository
 {

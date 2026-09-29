@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ___ConversationModelToolCallSchema } from "@opencrane/contracts";
 
 import type { ConversationComputerToolDeclaration, ConversationComputerToolExchange } from "./conversation-computer-continuation.types";
+import { ConversationComputerTurnToolKinds } from "./conversation-computer-turn-protocol.types";
 
 /**
  * Decode private turn events and decrypted custody before they reach the conversation loop.
@@ -16,4 +17,10 @@ const _Reference = z.object({ payloadRef: _Fence, ciphertextDigest: _Digest }).s
 export const _ConversationToolDeclarationSchema: z.ZodType<ConversationComputerToolDeclaration> = z.object({ bootstrapId: _Fence, runId: z.string().min(1), attempt: _Count, compiledInputDigest: _Digest, ordinal: _Count, modelInvocationFence: _Fence, acceptedAtEpochMs: _Count, requestNotAfterEpochMs: _Count, credentialDigest: _Digest, credentialExpiresAt: z.string().datetime({ offset: true }), call: ___ConversationModelToolCallSchema }).strict();
 
 /** Validates the saved exact assistant/tool pair; current authority remains a separate check. */
-export const _ConversationToolExchangeSchema: z.ZodType<ConversationComputerToolExchange> = z.object({ bootstrapId: _Fence, runId: z.string().min(1), attempt: _Count, compiledInputDigest: _Digest, ordinal: _Count, modelInvocationFence: _Fence, declaration: _Reference, proposalId: _Fence, toolInvocationId: _Fence, resultDigest: _Digest, call: ___ConversationModelToolCallSchema, resultContent: z.string().min(1) }).strict();
+const _ExchangeBase = { bootstrapId: _Fence, runId: z.string().min(1), attempt: _Count, compiledInputDigest: _Digest, ordinal: _Count, modelInvocationFence: _Fence, declaration: _Reference, resultDigest: _Digest, call: ___ConversationModelToolCallSchema, resultContent: z.string().min(1) };
+
+/** Validates the saved exact assistant/tool pair; current authority remains a separate check. */
+export const _ConversationToolExchangeSchema: z.ZodType<ConversationComputerToolExchange> = z.discriminatedUnion("kind", [
+	z.object({ ..._ExchangeBase, kind: z.literal(ConversationComputerTurnToolKinds.Mcp), proposalId: _Fence, toolInvocationId: _Fence }).strict(),
+	z.object({ ..._ExchangeBase, kind: z.literal(ConversationComputerTurnToolKinds.RequestRoutine), proposalRef: z.string().min(1), expiresAt: z.string().datetime({ offset: true }) }).strict(),
+]);

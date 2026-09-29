@@ -10,8 +10,7 @@ import { PersonalConfigurationProposalCodes, type ProposePersonalConfigurationCh
  * malformed command never reaches the database, and the digest is recomputed from the patch so
  * a caller cannot record a digest that does not match what it asked for.
  *
- * Called by: {@link PrismaUpgradeSessionProposalRepository.proposeUpgradeSession}, when an agent
- * calls the `upgrade_session` tool.
+ * Called only by the dormant upgrade-session proposal adapter. Production has no caller.
  *
  * @param repository - Re-checks ownership and inserts, in one transaction.
  * @param command - The request to record.

@@ -1,0 +1,14 @@
+<section class="routine-controls" aria-label="Routine actions">
+	<div class="routine-controls__actions">
+		@if (retryAction(); as action) { <p-button [label]="'Retry ' + actionLabel(action)" icon="pi pi-refresh" (onClick)="retrySavedAction(action)" /> }
+		<p-button label="Revise" icon="pi pi-pencil" severity="secondary" [disabled]="actionsLocked() || !capabilities().revise" (onClick)="reviseRequested.emit()" />
+		@if (capabilities().pause) { <p-button label="Pause" icon="pi pi-pause" severity="secondary" [disabled]="actionsLocked()" (onClick)="pauseRequested.emit()" /> }
+		@if (capabilities().resume) { <p-button label="Resume" icon="pi pi-play" severity="secondary" [disabled]="actionsLocked()" (onClick)="resumeRequested.emit()" /> }
+		<p-button label="Run now" icon="pi pi-bolt" [loading]="busy()" [disabled]="actionsLocked() || !capabilities().runNow" (onClick)="runNowRequested.emit()" />
+		<p-button label="Retire" icon="pi pi-trash" severity="danger" [disabled]="actionsLocked() || !capabilities().retire" (onClick)="confirmRetirement()" />
+	</div>
+	@if (error(); as message) { <p-message severity="error" [text]="message" /> }
+	@if (state() === states.Uncertain) { <p-message severity="warn" text="The result is not known. Retry the same action explicitly to reuse its request." /> }
+	@if (state() === states.CommittedRefreshFailed) { <p-message severity="warn" text="The action was accepted, but current details could not be refreshed." /> }
+	<p-confirmdialog header="Confirm routine action" [pt]="confirmationDialogPassThrough" />
+</section>

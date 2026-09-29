@@ -1,0 +1,102 @@
+[
+  {
+    "file": "settings-members--ready.png",
+    "source": "tests/storybook/__screenshots__/linux/settings-members--ready.png",
+    "sourceCommit": "967f7c0b6bac6f32fc519a11a6ea7db902832f8b",
+    "kind": "existing Storybook reference; not live journey proof",
+    "width": 1280,
+    "height": 351,
+    "sha256": "1ce4d3fd358c789e2babc2c432ce9b9525247317d730b3863ed3c7ca4cfcdd34"
+  },
+  {
+    "file": "settings-members--ready-narrow.png",
+    "source": "tests/storybook/__screenshots__/linux/settings-members--ready-narrow.png",
+    "sourceCommit": "967f7c0b6bac6f32fc519a11a6ea7db902832f8b",
+    "kind": "existing Storybook reference; not live journey proof",
+    "width": 390,
+    "height": 404,
+    "sha256": "b3a1fff2db8c05ce79c3378c7c21ae7255370179b668e1b1146c0785397c60a5"
+  },
+  {
+    "file": "tools-model-key-row--unconfigured.png",
+    "source": "tests/storybook/__screenshots__/linux/tools-model-key-row--unconfigured.png",
+    "sourceCommit": "967f7c0b6bac6f32fc519a11a6ea7db902832f8b",
+    "kind": "existing Storybook reference; not live journey proof",
+    "width": 1280,
+    "height": 56,
+    "sha256": "f5133e2ffef06d0a8489ab9507e55ab9c71699a5cec2ebd18191ede0fc06f06c"
+  },
+  {
+    "file": "tools-model-key-row--secret-only.png",
+    "source": "tests/storybook/__screenshots__/linux/tools-model-key-row--secret-only.png",
+    "sourceCommit": "967f7c0b6bac6f32fc519a11a6ea7db902832f8b",
+    "kind": "existing Storybook reference; not live journey proof",
+    "width": 1280,
+    "height": 56,
+    "sha256": "c11406b59b5da7cf1c0af38ee63233a9396d3139a816280d780f854286ee3f1e"
+  },
+  {
+    "file": "tools-model-key-row--saving.png",
+    "source": "tests/storybook/__screenshots__/linux/tools-model-key-row--saving.png",
+    "sourceCommit": "967f7c0b6bac6f32fc519a11a6ea7db902832f8b",
+    "kind": "existing Storybook reference; not live journey proof",
+    "width": 1280,
+    "height": 56,
+    "sha256": "bb64b1ff5acad1ac866e25bea3753b1fae74884274e756793e0c76c2386e22b2"
+  },
+  {
+    "file": "tools-catalogue-card--available.png",
+    "source": "tests/storybook/__screenshots__/linux/tools-catalogue-card--available.png",
+    "sourceCommit": "967f7c0b6bac6f32fc519a11a6ea7db902832f8b",
+    "kind": "existing Storybook reference; not live journey proof",
+    "width": 1280,
+    "height": 99,
+    "sha256": "075855b615dd0f993f273905d9e5fd1c94b1abafdeaa1032a962b0a473fca2d9"
+  },
+  {
+    "file": "tools-installed-row--needs-credential.png",
+    "source": "tests/storybook/__screenshots__/linux/tools-installed-row--needs-credential.png",
+    "sourceCommit": "967f7c0b6bac6f32fc519a11a6ea7db902832f8b",
+    "kind": "existing Storybook reference; not live journey proof",
+    "width": 1280,
+    "height": 41,
+    "sha256": "071883a180ab34811fbf68bb37acdd0173b816fa9d5fe5a1ba809b6847954415"
+  },
+  {
+    "file": "tools-governance-row--pending-review.png",
+    "source": "tests/storybook/__screenshots__/linux/tools-governance-row--pending-review.png",
+    "sourceCommit": "967f7c0b6bac6f32fc519a11a6ea7db902832f8b",
+    "kind": "existing Storybook reference; not live journey proof",
+    "width": 1280,
+    "height": 54,
+    "sha256": "0862592069da14ee1c918596c8c92895d2c62ee2ddf8a0ea39e276825abb66ee"
+  },
+  {
+    "file": "foundation-resource-feedback--retryable-failure.png",
+    "source": "tests/storybook/__screenshots__/linux/foundation-resource-feedback--retryable-failure.png",
+    "sourceCommit": "967f7c0b6bac6f32fc519a11a6ea7db902832f8b",
+    "kind": "existing Storybook reference; not live journey proof",
+    "width": 1280,
+    "height": 37,
+    "sha256": "6efe90ad9dde4ae262d380edc0684e2541db18bf994406d305958486192346d0"
+  },
+  {
+    "file": "foundation-resource-feedback--retrying.png",
+    "source": "tests/storybook/__screenshots__/linux/foundation-resource-feedback--retrying.png",
+    "sourceCommit": "967f7c0b6bac6f32fc519a11a6ea7db902832f8b",
+    "kind": "existing Storybook reference; not live journey proof",
+    "width": 1280,
+    "height": 72,
+    "sha256": "aa66a29c7316a2a243fc6cef45484515c2853d49dd1d319726248806aa3a7cb4"
+  },
+  {
+    "file": "oc8-architecture-overview.jpg",
+    "source": "https://github.com/oc8-ai/oc8/blob/314c6842acdc7e53a1f485b91e306dfa45c82937/ARCHITECTURE.md",
+    "sourceCommit": "314c6842acdc7e53a1f485b91e306dfa45c82937",
+    "kind": "browser screenshot of public documentation excerpt; not product UI",
+    "captured": "2026-09-25",
+    "width": 1280,
+    "height": 720,
+    "sha256": "82850ae81ddcd257ec75df494682d2c269fa510f7f2d97c16eb550bd0d99a69e"
+  }
+]

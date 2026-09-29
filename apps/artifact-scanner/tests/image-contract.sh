@@ -11,6 +11,8 @@ grep -Fxq 'RUN chmod -R a+rX /var/lib/clamav' "$dockerfile"
 grep -Fxq 'USER 65532:65532' "$dockerfile"
 grep -Fxq 'ENTRYPOINT ["/usr/local/bin/node"]' "$dockerfile"
 grep -Fxq 'CMD ["dist/apps/artifact-scanner/index.js"]' "$dockerfile"
+grep -Fq '"cron-parser": "5.10.1"' apps/artifact-scanner/package.json
+grep -Fq '"luxon": "3.7.2"' apps/artifact-scanner/package.json
 grep -Fq 'value: /usr/bin/clamscan' "$helm_template"
 grep -Fq 'value: /var/lib/clamav' "$helm_template"
 grep -Fq '"image-smoke"' apps/artifact-scanner/project.json

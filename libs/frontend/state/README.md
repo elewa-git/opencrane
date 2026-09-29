@@ -33,6 +33,8 @@ owns the client-side stores and caches that hold fetched data.
 | [`organization/members`](./organization/members/README.md) | Member-directory and invitation gateway port and stores. |
 | [`organization/members/adapter`](./organization/members/adapter/README.md) | Live generated-client organisation-member adapter. |
 | [`skills/adapter`](./skills/adapter/README.md) | Live governed-skill catalogue gateway. |
+| [`routines`](./routines/README.md) | Authenticated routine gateway port, public projections and typed browser errors. |
+| [`routines/adapter`](./routines/adapter/README.md) | Generated-client routine reads and commands with strict response validation. |
 
 ```
    features

@@ -14,8 +14,8 @@ BEGIN
     PERFORM pg_temp.seed_agent_conversation(run_id || '-conversation', 'tree-silo', 'tree-service');
     INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger", "agent_identity_id", "principal_id", "execution_subject", "request_idempotency_key", "input_snapshot_digest", "workflow_task_id", "workflow_task_name", "workflow_task_key")
     VALUES (run_id, 'tree-silo', 'tree-service', 'tree-revision', run_id || '-conversation', 'interactive', 'tree-identity', 'tree-service-principal', subject, run_id, digest, md5(run_id)::UUID::TEXT, 'conversation-computer-turn', md5(run_id || '-workflow')::UUID::TEXT);
-    INSERT INTO "run_input_snapshots" ("id", "run_id", "attempt", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id", "execution_subject", "conversation_id", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest")
-    VALUES (run_id || '-snapshot', run_id, 1, 1, 'tree-silo', 'tree-service', 'tree-revision', 'tree-identity', 'tree-service-principal', subject, run_id || '-conversation', '{}', '[]', '{}', budget, 'prompt-v1', digest);
+    INSERT INTO "run_input_snapshots" ("id", "run_id", "attempt", "snapshot_version", "origin", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id", "execution_subject", "conversation_id", "model_route", "mcp_tools", "memory_query_policy", "budget_policy", "prompt_compiler_version", "input_digest")
+    VALUES (run_id || '-snapshot', run_id, 1, 3, '{"kind":"interactive","messageId":null,"historyRevision":null}', 'tree-silo', 'tree-service', 'tree-revision', 'tree-identity', 'tree-service-principal', subject, run_id || '-conversation', '{}', '[]', '{}', budget, 'prompt-v1', digest);
 END;
 $$;
 

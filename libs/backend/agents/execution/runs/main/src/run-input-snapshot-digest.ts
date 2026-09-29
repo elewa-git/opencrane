@@ -16,6 +16,7 @@ export function __DigestRunInputSnapshot(snapshot: Omit<RunInputSnapshot, "diges
 		agentServiceId: snapshot.agentServiceId,
 		agentRevisionId: snapshot.agentRevisionId,
 		snapshotVersion: snapshot.snapshotVersion,
+		origin: snapshot.origin,
 		conversationId: snapshot.conversationId,
 		messageIds: snapshot.messageIds,
 		personaRevisionId: snapshot.personaRevisionId,
@@ -26,6 +27,10 @@ export function __DigestRunInputSnapshot(snapshot: Omit<RunInputSnapshot, "diges
 		mcpTools: snapshot.mcpTools.map(function _McpTool(tool): JsonValue
 		{
 			return { toolRevisionId: tool.toolRevisionId, name: tool.name, description: tool.description, inputSchema: tool.inputSchema, inputSchemaDigest: tool.inputSchemaDigest };
+		}),
+		firstPartyCapabilities: snapshot.firstPartyCapabilities.map(function _FirstPartyCapability(selection): JsonValue
+		{
+			return { capability: selection.capability, capabilityRevision: selection.capabilityRevision, parametersSchemaDigest: selection.parametersSchemaDigest };
 		}),
 		modelRoute: snapshot.modelRoute,
 		budgetPolicy: snapshot.budgetPolicy,

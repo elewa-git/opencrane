@@ -1,5 +1,84 @@
 # Deliver useful assistant work
 
+## Accepted product decisions — 27 September 2026
+
+The following decisions are accepted for the remaining MVP design and are deliberately recorded
+as **not yet implemented**. They refine the open budget, shared-work, interaction, qualification
+and execution-policy items below without rewriting their historical evidence.
+
+- One paying group is selected when shared work is created or scheduled, and children inherit it.
+  Spend counts against the global ceiling, that group's ceiling and any optional assistant ceiling,
+  while one effect receives one charge rather than duplicate attribution.
+- Budgets are EUR monthly limits resetting at 00:00 UTC on the first day of the month. Reserve
+  before each model/provider call. A hard cap stops new work, including reserved remaining work,
+  and cancellation cascades through descendants; there is no graceful-finishing exemption. A
+  provider charge already dispatched cannot be undone, so reservations use a trustworthy worst-case
+  price; unknown cost is never zero. Separately, the live OpenAI MVP qualification envelope is €5
+  total across all test attempts, retries and models, using cheap models; it is not €5 per run and
+  does not change monthly product-budget semantics. Reserve a conservative bound across that whole
+  envelope before paid dispatch; unknown cost is never free.
+- Late invitees may see all existing history in the joined subchat, but never gain implicit parent
+  conversation or private-resource grants.
+- Per-tool approval settings use explicit **Allow automatically / Ask / Block** controls. The
+  interaction should use OpenCrane's own style and icons; the supplied image is only a visual
+  reference. Execution permissions, owner identity and revocation remain independent; automatic
+  mode is an explicit human choice, not a blanket allow. Selecting **Allow automatically** approves
+  future permitted writes, including the first write, without another first-write prompt; current
+  authority, connection/tool permissions and revocation remain mandatory, and default **Ask** is
+  unchanged.
+- Fresh `testv6` qualification is authorized and verified superseded TEST deployments must be
+  retired after each test so compute does not accumulate. Exact resources, in-use state and shared
+  dependencies must be checked first; this does not authorize blanket production/data/backup
+  deletion or laptop-VM recreation. OpenAI credentials may be read only from secure `./keys`
+  configuration, never exposed or committed. Delegate implementation and test work to cheaper
+  Luna/Sol models; root orchestrates and reviews.
+
+These decisions supersede conflicting pending group-attribution/history, “no deploy permission”,
+unresolved numeric live-test-cap and first-write/Always-policy wording only where relevant. They do
+not claim source completion or live qualification.
+
+## Routine browser experience — reviewed source checkpoint
+
+At the pre-publication checkpoint, this source wave adds authenticated list, chat-bound creation, detail, revision,
+control and firing-history routes on base `ae9ff9a1ee19cd7ad823176d7a3a16e141d75f80`. The browser uses
+server-approved audience and managed-service choices, requires a matching server schedule preview,
+keeps the requester selected and preserves exact mutation retry coordinates when a response is
+uncertain. Session and route changes remove protected instructions, rows and result links before a
+late response can update the screen.
+
+Focused validation totals 253 tests across six projects: 46 routine-feature, 24 app-composition, 10
+routine-state, 15 routine-adapter, 17 core and 141 conversation-workspace tests. Feature TypeScript,
+style, Prisma-boundary, module-growth, release and diff checks pass. The current joined Storybook
+build passes, and all 18 tagged routine stories pass their Chromium interaction and accessibility
+checks. Full-page creation candidates plus current detail and history candidates are recorded for
+human review without changing a committed baseline. Independent integrated, architecture,
+state/adapter and component source review pass with no remaining source finding. Publication, Linux
+rendering and human visual approval remain pending.
+
+This wave does not yet provide agent-authored form prefill/tooling, SQL or real-account execution,
+live schedule/history proof or publication. It made no provider call, spent €0 of the €5 live
+qualification envelope, and changed no VM, deployment, database baseline, accepted visual baseline
+or live permission.
+
+## Authenticated routine API — current source increment
+
+The current source increment covers 11 authenticated operations at `/api/v1/me/routines`: seven
+commands plus list, firing history, creation options and schedule preview. Strict contracts use
+opaque caller-bound cursors and public projections; generated client and website OpenAPI artifacts
+are synchronized, with `audienceParticipantRefs` replacing the old public principal-ID field.
+
+Non-overlapping focused evidence totals 350 tests: scheduling 284 (including read-repository,
+router, OpenAPI and legacy fixtures), execution-runs 22, conversation directory 11, app
+composition plus real-AES cursor coverage 17, contracts 14, API-spec 1 and the OpenCrane HTTP
+mount 1. Six package typechecks pass across scheduling, execution-runs, conversations, OpenCrane,
+contracts and API-spec; full ESLint boundaries, style/Prisma/module guards, release binding and
+diff checks pass. Frontend screens, the reviewed agent form, SQL/live PostgreSQL/KurrentDB proof,
+real-account qualification remains pending. Integrated and architecture review pass with zero
+findings, and both module-growth candidates are accepted as cohesive reviewed owners. No provider
+calls were made; the €5 total qualification envelope remains unspent. This source evidence is
+scoped to wave base `1ad2657ec604069a6e92f78d8ce89366b77f8e63`, not to CI, publication or MVP
+completion.
+
 OpenCrane gives employees and teams assistants that use company knowledge and tools under company
 control. Personal and group text journeys already have implementation and live evidence. The next
 step is useful work with real records, explicit decisions, durable results and understandable controls.

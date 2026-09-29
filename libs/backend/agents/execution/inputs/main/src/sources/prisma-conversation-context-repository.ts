@@ -1,9 +1,11 @@
 import { AgentRunState, ConversationLifecycle, ConversationMode, OrgMemberStatus, Prisma } from "@prisma/client";
 
 import { RunAdmissionDenialReasons, RunAdmissionMessageInputModes, type InitialRunAuthority } from "@opencrane/backend/agents/execution/runs";
+import { AgentRunTriggers } from "@opencrane/contracts";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 
 import { SessionAssemblyLoadOutcomes, type ConversationContextInput, type ConversationContextRepository, type ConversationHistoryAdmissionReader, type SessionAssemblyCommand, type SessionAssemblyLoad } from "../assembly/session-assembly.types";
+import type { RoutineOccurrencePromptAdmissionReader } from "./routine-occurrence-prompt.types";
 
 /**
  * Turns one conversation into an ordered list of message ids, for the snapshot.
@@ -24,17 +26,23 @@ export class PrismaConversationContextRepository implements ConversationContextR
 	private readonly transaction: Prisma.TransactionClient;
 	/** Durable history reader supplied by the conversation composition owner. */
 	private readonly history: ConversationHistoryAdmissionReader;
+	/** Service-attested prompt reader supplied only by routine-capable composition. */
+	private readonly routinePrompt: RoutineOccurrencePromptAdmissionReader | undefined;
 
 	/** Creates the reader over one admission transaction. */
-	constructor(transaction: Prisma.TransactionClient, history: ConversationHistoryAdmissionReader)
+	constructor(transaction: Prisma.TransactionClient, history: ConversationHistoryAdmissionReader, routinePrompt?: RoutineOccurrencePromptAdmissionReader)
 	{
 		this.transaction = transaction;
 		this.history = history;
+		this.routinePrompt = routinePrompt;
 	}
 
 	/** Returns no messages for non-conversational work; otherwise only completed messages the caller may see. */
 	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject): Promise<SessionAssemblyLoad<ConversationContextInput>>
 	{
+		if (command.trigger !== AgentRunTriggers.Interactive)
+			return this._LoadRoutinePrompt(command, run);
+
 		// 1. Avoid an unnecessary conversation lookup when the admitted run has no conversation.
 		if (command.conversationId === null)
 		{
@@ -69,6 +77,25 @@ export class PrismaConversationContextRepository implements ConversationContextR
 		if (history === null || !_MatchesHistory(command, executionSubject, history))
 			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "conversation_unavailable" };
 		return { outcome: SessionAssemblyLoadOutcomes.Loaded, value: { messageIds: [...history.orderedMessageIds] } };
+	}
+
+	/** Load an occurrence's service-authored prompt without manufacturing a human requester message. */
+	private async _LoadRoutinePrompt(command: Exclude<SessionAssemblyCommand, { readonly trigger: `${AgentRunTriggers.Interactive}` }>, run: InitialRunAuthority): Promise<SessionAssemblyLoad<ConversationContextInput>>
+	{
+		if (command.conversationId === null || this.routinePrompt === undefined)
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "conversation_unavailable" };
+		const conversation = await this.transaction.conversation.findFirst({
+			where: { id: command.conversationId, siloId: command.siloId, agentServiceId: run.agentServiceId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open },
+			select: { id: true, activeComputerLease: { select: { leaseId: true } }, runs: { where: { state: { notIn: [AgentRunState.Completed, AgentRunState.Failed] } }, take: 1, select: { id: true } } },
+		});
+		if (conversation === null || conversation.activeComputerLease === null || conversation.runs.length > 0)
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: conversation?.runs.length ? RunAdmissionDenialReasons.ActiveRun : "conversation_unavailable" };
+		const prompt = await this.routinePrompt.read({ siloId: command.siloId, conversationId: conversation.id, agentServiceId: run.agentServiceId, trigger: command.trigger, routine: command.routineInput });
+		if (prompt === null || prompt.historyRevision.trim().length === 0 || prompt.orderedMessageIds.length === 0
+			|| new Set(prompt.orderedMessageIds).size !== prompt.orderedMessageIds.length
+			|| !prompt.orderedMessageIds.every(function _NonBlank(messageId): boolean { return messageId.trim().length > 0; }))
+			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "conversation_unavailable" };
+		return { outcome: SessionAssemblyLoadOutcomes.Loaded, value: { messageIds: [...prompt.orderedMessageIds] } };
 	}
 }
 

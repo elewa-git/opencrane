@@ -38,6 +38,20 @@ export enum ConversationLogKinds
 	Memory = "memory",
 	/** Describes an approval request or its resolution. */
 	Approval = "approval",
+	/** Describes a requester-only routine proposal that is ready for human review. */
+	RoutineProposal = "routine_proposal",
+}
+
+/**
+ * Preserves the only participant-visible routine-proposal phase.
+ *
+ * The proposal owner remains authoritative for pending, expiry, cancellation, and acceptance. This
+ * history phase says only that an opaque proposal reference was ready for the requester to review.
+ */
+export enum ConversationRoutineProposalLogPhases
+{
+	/** A requester-only proposal can be opened in the reviewed routine form. */
+	ReadyForReview = "ready_for_review",
 }
 
 /** Names a tool's execution channel in immutable conversation logs, independently of its permission. */

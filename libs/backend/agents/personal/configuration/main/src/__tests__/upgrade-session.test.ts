@@ -1,14 +1,14 @@
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
-import { RUN_INPUT_SNAPSHOT_VERSION, type RunInputSnapshot } from "@opencrane/contracts";
+import { AgentRunTriggers, CompiledToolDefinitionKinds, FirstPartyToolCapabilities, FirstPartyToolEffectKinds, FirstPartyToolMaterializationKinds, RUN_INPUT_SNAPSHOT_VERSION, ___CompiledFirstPartyToolDefinitionSchema, type RunInputSnapshot } from "@opencrane/contracts";
 
 import { __IsUpgradeSessionAvailable, UPGRADE_SESSION_TOOL } from "../upgrade-session/upgrade-session";
 
 /** Build the smallest immutable snapshot needed to test personal-tool eligibility. */
 function _Snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 {
-	return { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "agent-1", snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION, conversationId: "conversation-1", messageIds: [], personaRevisionId: "persona-1", preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: {}, budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 1, maxCostUsdMicros: null, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: 2_000_000_000_000 }, executionSubject: _ExecutionSubject(), promptCompilerVersion: "test", digest: "sha256:snapshot", compiledAt: "2026-07-23T00:00:00.000Z", ...overrides };
+	return { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "agent-1", snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION, origin: { kind: AgentRunTriggers.Interactive, messageId: null, historyRevision: null }, conversationId: "conversation-1", messageIds: [], personaRevisionId: "persona-1", preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: {}, budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 1, maxCostUsdMicros: null, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: 2_000_000_000_000 }, executionSubject: _ExecutionSubject(), promptCompilerVersion: "test", digest: "sha256:snapshot", compiledAt: "2026-07-23T00:00:00.000Z", ...overrides };
 }
 
 /** Builds the execution subject that binds this personal test run to one principal. */
@@ -38,9 +38,12 @@ describe("upgrade_session tool", function _UpgradeSessionSuite()
 		expect(__IsUpgradeSessionAvailable(_Snapshot({ conversationId: null }))).toBe(false);
 	});
 
-	it("is first-party and never opens deferred approval for the invocation", function _Descriptor()
+	it("is a built-in proposal with no MCP authority fields and required human materialization review", function _Descriptor()
 	{
-		expect(UPGRADE_SESSION_TOOL).toMatchObject({ name: "upgrade_session", modelName: "upgrade_session", toolRevisionId: "opencrane:personal:upgrade_session:v1", requiresApproval: false });
+		expect(___CompiledFirstPartyToolDefinitionSchema.parse(UPGRADE_SESSION_TOOL)).toEqual(UPGRADE_SESSION_TOOL);
+		expect(UPGRADE_SESSION_TOOL).toMatchObject({ kind: CompiledToolDefinitionKinds.FirstParty, name: "upgrade_session", modelName: "upgrade_session", capability: FirstPartyToolCapabilities.UpgradeSession, capabilityRevision: "opencrane:personal:upgrade_session:v1", effect: FirstPartyToolEffectKinds.ProposalOnly, materialization: FirstPartyToolMaterializationKinds.HumanReviewRequired });
+		expect(UPGRADE_SESSION_TOOL).not.toHaveProperty("toolRevisionId");
+		expect(UPGRADE_SESSION_TOOL).not.toHaveProperty("requiresApproval");
 		expect(UPGRADE_SESSION_TOOL.parametersSchema).toMatchObject({ oneOf: expect.arrayContaining([expect.objectContaining({ additionalProperties: false })]) });
 		expect(UPGRADE_SESSION_TOOL.parametersSchema).toMatchObject({ oneOf: expect.arrayContaining([expect.objectContaining({ properties: expect.objectContaining({ modelAlias: expect.objectContaining({ pattern: "\\S" }) }) })]) });
 	});

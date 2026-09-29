@@ -26,7 +26,7 @@ export interface CompiledRunInput
 	readonly finalOutput: CompiledFinalOutputModes;
 	/** Ordered conversation turns compiled from the snapshot's message references. */
 	readonly messages: readonly CompiledMessage[];
-	/** Tool schemas the model loop may call, sorted by their provider-facing model name. */
+	/** Closed callable schemas the model loop may select, sorted by their provider-facing model name. */
 	readonly tools: readonly CompiledToolDefinition[];
 	/** Resolved model route carrying no provider credential. */
 	readonly model: CompiledModelRoute;
@@ -46,29 +46,98 @@ export interface CompiledMessage
 }
 
 /**
- * One tool the model loop may call during this attempt.
- *
- * The list is closed: a call to any other name is rejected. `requiresApproval` decides whether
- * a call pauses for a person before dispatch, and `parametersSchemaDigest` lets the server prove
- * the schema still matches the pinned revision when it authorizes the call.
+ * Identifies which authority owns a callable selected by the model.
+ * Stored in the digest-sealed {@link CompiledRunInput}; changing a wire value breaks saved input replay.
  */
-export interface CompiledToolDefinition
+export enum CompiledToolDefinitionKinds
 {
-	/** Exact immutable source name used for disclosure and MCP runtime dispatch. */
+	/** An immutable MCP tool revision owns authorization and external dispatch. */
+	Mcp = "mcp",
+	/** OpenCrane owns a built-in capability with no MCP revision, grant, connection, or invocation. */
+	FirstParty = "first_party",
+}
+
+/**
+ * Built-in capabilities that may be frozen into a compiled run input.
+ * Stored in first-party declarations; changing a wire value breaks saved input replay and dispatch.
+ */
+export enum FirstPartyToolCapabilities
+{
+	/** A selection may create a personal-configuration proposal for later human review. */
+	UpgradeSession = "upgrade_session",
+	/** A selection may create a requester-only routine draft; it never activates the routine. */
+	RequestRoutine = "request_routine",
+}
+
+/**
+ * Describes the maximum effect a built-in selection may have.
+ * Stored in first-party declarations; changing a wire value breaks saved input replay.
+ */
+export enum FirstPartyToolEffectKinds
+{
+	/** The handler may save a proposal but may not apply or activate the proposed change. */
+	ProposalOnly = "proposal_only",
+}
+
+/**
+ * Describes how a built-in proposal may become active product state.
+ * Stored in first-party declarations; changing a wire value breaks saved input replay.
+ */
+export enum FirstPartyToolMaterializationKinds
+{
+	/** The proposal remains inactive until a person reviews and confirms it through the product flow. */
+	HumanReviewRequired = "human_review_required",
+}
+
+/** Declaration metadata for every built-in capability recognized by the compiled-input contract. */
+export const FIRST_PARTY_TOOL_CAPABILITY_CONTRACTS = {
+	[FirstPartyToolCapabilities.UpgradeSession]: { name: "upgrade_session", modelName: "upgrade_session", capabilityRevision: "opencrane:personal:upgrade_session:v1", effect: FirstPartyToolEffectKinds.ProposalOnly, materialization: FirstPartyToolMaterializationKinds.HumanReviewRequired },
+	[FirstPartyToolCapabilities.RequestRoutine]: { name: "request_routine", modelName: "request_routine", capabilityRevision: "opencrane:scheduling:request_routine:v1", effect: FirstPartyToolEffectKinds.ProposalOnly, materialization: FirstPartyToolMaterializationKinds.HumanReviewRequired },
+} as const satisfies Readonly<Record<FirstPartyToolCapabilities, { readonly name: string; readonly modelName: string; readonly capabilityRevision: string; readonly effect: FirstPartyToolEffectKinds; readonly materialization: FirstPartyToolMaterializationKinds }>>;
+
+/** Fields shared by MCP and built-in callable declarations offered to the model. */
+export interface CompiledToolDefinitionBase
+{
+	/** Selects the authority that may interpret this declaration after the model chooses it. */
+	readonly kind: CompiledToolDefinitionKinds;
+	/** Exact source name used for disclosure. */
 	readonly name: string;
 	/** Provider-compatible name used in the model declaration and returned selection; it grants no permission. */
 	readonly modelName: string;
-	/** Tool revision this call is pinned to, so authorization later checks the same revision. */
-	readonly toolRevisionId: string;
-	/** Human-readable tool description compiled from its revision. */
+	/** Human-readable description included in the model declaration. */
 	readonly description: string;
-	/** When true, a call to this tool pauses and waits for a person to approve it before it is sent. */
-	readonly requiresApproval: boolean;
 	/** JSON-Schema for the tool's parameters. The adapter validates against it; a retry never re-validates on its own. */
 	readonly parametersSchema: JsonValue;
-	/** Digest of the parameters schema, proving it matches the pinned revision and the run snapshot. @see RunInputSnapshot */
+	/** Digest of the parameters schema, proving it matches the frozen callable declaration. */
 	readonly parametersSchemaDigest: string;
 }
+
+/** An MCP tool revision frozen by run admission and dispatched only through the MCP authority. */
+export interface CompiledMcpToolDefinition extends CompiledToolDefinitionBase
+{
+	readonly kind: CompiledToolDefinitionKinds.Mcp;
+	/** Tool revision this call is pinned to, so authorization later checks the same revision. */
+	readonly toolRevisionId: string;
+	/** When true, dispatch pauses until a person approves this exact MCP invocation. */
+	readonly requiresApproval: boolean;
+}
+
+/** A built-in proposal capability with no MCP authority coordinates or external dispatch. */
+export interface CompiledFirstPartyToolDefinition extends CompiledToolDefinitionBase
+{
+	readonly kind: CompiledToolDefinitionKinds.FirstParty;
+	/** Closed built-in capability selected by this declaration. */
+	readonly capability: FirstPartyToolCapabilities;
+	/** Stable revision of the capability semantics, independent of MCP tool revisions. */
+	readonly capabilityRevision: string;
+	/** Maximum effect the built-in handler may produce. */
+	readonly effect: FirstPartyToolEffectKinds.ProposalOnly;
+	/** Rule that must be satisfied before the proposal can affect active product state. */
+	readonly materialization: FirstPartyToolMaterializationKinds.HumanReviewRequired;
+}
+
+/** One closed MCP or built-in callable declaration offered during this attempt. */
+export type CompiledToolDefinition = CompiledMcpToolDefinition | CompiledFirstPartyToolDefinition;
 
 /** Which model the runtime calls, and its output cap. It never carries a provider credential. */
 export interface CompiledModelRoute

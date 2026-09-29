@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PrismaConversationComputerTurnUnitOfWork } from "../db/prisma-conversation-computer-turn-unit-of-work";
 import { _ConversationAuthorizationFixture } from "../../../authorization/__tests__/conversation-authorization.fixtures";
+import { RoutineTurnDispatchKinds, type RoutineTurnDispatcher } from "../../../routines/routine-turn-compiler.types";
 
 const _COMMAND = {
   computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" },
@@ -96,6 +97,7 @@ function _Harness(
   admission = { admit: vi.fn().mockResolvedValue({ compiledInput: _CompiledInput(), authorityExpiresAt: "2099-01-01T00:00:00.000Z" }) },
   existingPayload: object | null = null,
   events: readonly HistoryRecordedEvent[] = [_Genesis(), _Event()],
+  routines?: RoutineTurnDispatcher,
 ) {
   const authorization = _ConversationAuthorizationFixture();
   const transaction = {
@@ -183,6 +185,7 @@ function _Harness(
       cipher as never,
       75_000,
       admission,
+      routines,
     ),
   };
 }
@@ -232,6 +235,27 @@ afterEach(function _RestoreSpies() {
 });
 
 describe("PrismaConversationComputerTurnUnitOfWork", function _PrismaConversationComputerTurnUnitOfWorkSuite() {
+	it("never falls back from a selected but idle routine turn to human admission", async function _RoutineIdle()
+	{
+		const genesis = _Genesis();
+		const routineGenesis = { ...genesis, data: { genesis: { ...genesis.data.genesis as object, origin: { kind: "routine_occurrence", routineId: "routine-1", routineRevision: 1, firingId: "firing-1", destinationConversationId: "destination-1", trigger: "manual", scheduledSlot: null } } } };
+		const routines = { dispatch: vi.fn().mockResolvedValue({ kind: RoutineTurnDispatchKinds.Routine }) };
+		const harness = _Harness(undefined, undefined, null, [routineGenesis, _Event()], routines);
+		await expect(harness.authority.compile(_COMMAND)).resolves.toBeNull();
+		expect(harness.admission.admit).not.toHaveBeenCalled();
+		expect(routines.dispatch).toHaveBeenCalledWith(_COMMAND, undefined);
+		await expect(_Harness(undefined, undefined, null, [routineGenesis, _Event()]).authority.compile(_COMMAND)).rejects.toThrow("recovery-only turn compiler");
+	});
+
+	it("allows a dispatcher-verified follow-up to use the real human admission path", async function _RoutineFollowUp()
+	{
+		const genesis = _Genesis();
+		const routineGenesis = { ...genesis, data: { genesis: { ...genesis.data.genesis as object, origin: { kind: "routine_occurrence", routineId: "routine-1", routineRevision: 1, firingId: "firing-1", destinationConversationId: "destination-1", trigger: "manual", scheduledSlot: null } } } };
+		const routines = { dispatch: vi.fn().mockResolvedValue({ kind: RoutineTurnDispatchKinds.Interactive }) };
+		const harness = _Harness(undefined, undefined, null, [routineGenesis, _Event()], routines);
+		await expect(harness.authority.compile(_COMMAND)).resolves.toMatchObject({ latestPendingEntryId: _Entry().id });
+		expect(harness.admission.admit).toHaveBeenCalledWith(expect.objectContaining({ requesterPrincipalId: "principal-1", requesterAuthenticatedAt: "2026-09-05T00:00:00.000Z" }));
+	});
   it("denies compilation after membership or current Use authority is revoked", async function _RevokedAuthority() {
     const revoked = _Harness();
     revoked.transaction.authorizationGrant.findMany.mockResolvedValue([]);

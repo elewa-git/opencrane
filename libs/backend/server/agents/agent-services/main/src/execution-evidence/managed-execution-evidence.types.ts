@@ -1,5 +1,5 @@
 import type { ManagedAgentIdentity } from "@opencrane/contracts";
-import type { ExecutionSubjectHumanMembershipEvidence, ExecutionSubjectManagedMembershipEvidence } from "@opencrane/models/agents";
+import type { ExecutionSubjectHumanMembershipEvidence, ExecutionSubjectManagedMembershipEvidence, RoutineFiringTrigger } from "@opencrane/models/agents";
 
 import type { ExecutionCapabilityEvidence } from "./execution-capability-evidence.types";
 import type { ManagedAgentRevisionEvidence } from "../company-assistants/managed-agent.types";
@@ -11,6 +11,8 @@ export interface ManagedExecutionEvidenceCommand
 	readonly identity: ManagedAgentIdentity;
 	readonly requesterPrincipalId: string;
 	readonly agentRevisionId: string;
+	/** Selects the audit actor for verified routine Invoke; it never changes the requester Principal. */
+	readonly routineTrigger?: RoutineFiringTrigger;
 }
 
 /** Contains current managed execution authority and independent human invocation evidence. */

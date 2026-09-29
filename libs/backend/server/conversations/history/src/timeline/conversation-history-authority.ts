@@ -3,8 +3,8 @@ import { ___ConversationEntrySchema, ConversationAuthorKinds, ConversationEntryK
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import { ConversationHistoryAppendOutcomes, type ConversationHistoryActivationAppendCommand, type ConversationHistoryAppendCommand, type ConversationHistoryAppendResult, type ConversationHistoryAttestedAppendCommand } from "./conversation-history-authority.types";
-import { ConversationHistoryModes, type ConversationHistoryGenesis } from "./conversation-history-reader.types";
-import { _ParseGroupChildOrigin } from "./conversation-genesis.validator";
+import type { ConversationHistoryGenesis } from "./conversation-history-reader.types";
+import { _ParseConversationHistoryGenesis } from "./conversation-genesis.validator";
 
 /** Recognizes event identifiers that can also serve as the entry idempotency key. */
 const _UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -29,13 +29,18 @@ export class ConversationHistoryAuthority
 	/** Builds the checked revision-zero append used by Kurrent-first conversation creation. */
 	public genesisAppend(genesis: ConversationHistoryGenesis, eventId: string): HistoryAppend
 	{
-		if (!_UUID_PATTERN.test(eventId) || !_Identifier(genesis.siloId) || !_Identifier(genesis.conversationId) || !_Identifier(genesis.createdByPrincipalId) || !Number.isFinite(Date.parse(genesis.createdAt)))
+		if (!_UUID_PATTERN.test(eventId))
+			throw new Error("Conversation genesis requires a valid event identifier");
+		let checked: ConversationHistoryGenesis;
+		try
+		{
+			checked = _ParseConversationHistoryGenesis(genesis);
+		}
+		catch
+		{
 			throw new Error("Conversation genesis requires valid immutable coordinates");
-		if ((genesis.mode === ConversationHistoryModes.AgentSession) !== _Identifier(genesis.agentServiceId ?? ""))
-			throw new Error("Conversation genesis requires an exact service binding");
-		if (genesis.origin !== undefined && (genesis.mode !== ConversationHistoryModes.AgentSession || _ParseGroupChildOrigin(genesis.origin, genesis.conversationId) === null))
-			throw new Error("Conversation genesis requires a valid child origin");
-		return { streamName: `conversation-${genesis.conversationId}`, expectedRevision: HistoryExpectedRevisions.NoStream, events: [{ id: eventId, type: "opencrane.conversation-created.v1", data: { genesis }, metadata: { siloId: genesis.siloId, conversationId: genesis.conversationId, causationId: eventId, correlationId: eventId, idempotencyKey: eventId } }] };
+		}
+		return { streamName: `conversation-${checked.conversationId}`, expectedRevision: HistoryExpectedRevisions.NoStream, events: [{ id: eventId, type: "opencrane.conversation-created.v1", data: { genesis: checked }, metadata: { siloId: checked.siloId, conversationId: checked.conversationId, causationId: eventId, correlationId: eventId, idempotencyKey: eventId } }] };
 	}
 
 	/**

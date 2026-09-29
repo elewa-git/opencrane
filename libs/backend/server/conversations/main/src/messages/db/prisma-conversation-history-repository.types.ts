@@ -37,6 +37,23 @@ export interface ConversationMessagePayloadAdmissionCommand extends Pick<Convers
 	readonly payload: EncryptedConversationPrivatePayload;
 }
 
+/** Encrypted service-attested payload coordinates admitted by the owning routine transaction. */
+export interface ConversationAttestedPayloadCommand
+{
+	/** Names the silo that owns both the hidden conversation and encrypted payload row. */
+	readonly siloId: string;
+	/** Names the hidden occurrence conversation whose ordering trigger follows a new payload. */
+	readonly conversationId: string;
+	/** Supplies the stable routine retry key used to recover the first stored ciphertext. */
+	readonly idempotencyKey: string;
+	/** Supplies the opaque reference authenticated into this exact encrypted payload. */
+	readonly payloadRef: string;
+	/** Carries ciphertext created for the OpenCrane service author and exact supplied coordinates. */
+	readonly payload: EncryptedConversationPrivatePayload;
+	/** Requires recovery of an existing exact row and forbids payload creation or ordering changes when absent. */
+	readonly requireExisting?: boolean;
+}
+
 /** Current projection and winning payload admitted together in the message transaction. */
 export interface AdmittedConversationMessagePayload
 {
@@ -59,6 +76,8 @@ export interface ConversationHistoryRepository
 	admitMessagePayload(caller: ConversationCaller, conversationId: string, command: ConversationMessagePayloadAdmissionCommand): Promise<AdmittedConversationMessagePayload | null>;
 	/** Creates an encrypted payload or returns the exact winning retry row. */
 	createOrReadPayload(caller: ConversationCaller, conversationId: string, idempotencyKey: string, payloadRef: string, payload: EncryptedConversationPrivatePayload): Promise<{ readonly created: boolean; readonly payload: StoredConversationPrivatePayload }>;
+	/** Creates or recovers the exact OpenCrane-authored payload already admitted by its owning transaction. */
+	createOrReadAttestedPayload(command: ConversationAttestedPayloadCommand): Promise<{ readonly created: boolean; readonly payload: StoredConversationPrivatePayload }>;
 	/** Loads only encrypted payloads owned by one currently authorized conversation. */
 	readPayloads(caller: ConversationCaller, conversationId: string, payloadRefs: readonly string[]): Promise<readonly StoredConversationPrivatePayload[]>;
 }

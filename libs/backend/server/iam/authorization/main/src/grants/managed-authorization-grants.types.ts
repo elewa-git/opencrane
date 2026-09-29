@@ -34,6 +34,21 @@ export interface ReconcileManagedAuthorizationGrantsCommand
 	readonly now: Date;
 }
 
+/** Removes manager-owned grants outside an approved maximum without creating replacements. */
+export interface RestrictManagedAuthorizationGrantsCommand
+{
+	/** Silo that owns the grants and resource. */
+	readonly siloId: string;
+	/** Stable editor identifier used to isolate restriction ownership. */
+	readonly managerId: string;
+	/** Exact resource whose editor-owned grants are restricted. */
+	readonly resource: AuthorizationResourceLocator;
+	/** Maximum exact grant set that may remain unrevoked; absent grants are never created and existing validity dates are unchanged. */
+	readonly retainedGrants: readonly ManagedAuthorizationGrantSpec[];
+	/** Trusted server operation time used to revoke grants outside the retained set. */
+	readonly now: Date;
+}
+
 /** Validated desired state produced before a managed-grant transaction writes anything. */
 export interface ManagedAuthorizationGrantPlan
 {
@@ -46,4 +61,11 @@ export interface ManagedAuthorizationGrantRepository
 {
 	/** Reconciles one editor's grants and soft-revokes entries omitted from the desired set. */
 	reconcileManagedResourceGrants(command: ReconcileManagedAuthorizationGrantsCommand): Promise<number>;
+}
+
+/** Narrows one product editor's unrevoked grants without creating or reactivating any grant. */
+export interface ManagedAuthorizationGrantRestrictionRepository
+{
+	/** Soft-revokes unrevoked grants outside the retained maximum, including future-dated and expired grants. Retained grants keep their validity dates. */
+	restrictManagedResourceGrants(command: RestrictManagedAuthorizationGrantsCommand): Promise<number>;
 }

@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 
-import { ConversationModelToolModes, type ConversationToolProposal } from "@opencrane/contracts";
+import { CompiledToolDefinitionKinds, ConversationModelToolModes, type ConversationToolProposal } from "@opencrane/contracts";
 import { __ValidateDeferredToolArguments } from "@opencrane/backend/server/iam/authorization";
 import { ___CloneCanonicalJson, ___DigestCanonicalJson } from "@opencrane/util";
 
 import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "../../turns/conversation-computer-turn.types";
-import { ConversationComputerTurnProtocolStates } from "../../turns/conversation-computer-turn-protocol.types";
+import { ConversationComputerTurnProtocolStates, ConversationComputerTurnToolKinds } from "../../turns/conversation-computer-turn-protocol.types";
 import { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
 import { ConversationToolProposalRefusals, type PreparedConversationToolProposal } from "./conversation-tool-proposal.types";
 
@@ -19,14 +19,14 @@ import { ConversationToolProposalRefusals, type PreparedConversationToolProposal
 export function _PrepareConversationToolProposal(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: ConversationToolProposal): PreparedConversationToolProposal
 {
 	const input = candidate.compiledInput;
-	const tool = input.tools.find(item => item.toolRevisionId === proposal.toolRevisionId);
+	const tool = input.tools.find(item => item.kind === CompiledToolDefinitionKinds.Mcp && item.toolRevisionId === proposal.toolRevisionId);
 	const current = turn.protocol.steps.at(-1);
 	if (turn.protocol.output !== null || turn.protocol.unavailable !== null || turn.protocol.cancellation !== null
 		|| current === undefined || current.state !== ConversationComputerTurnProtocolStates.ModelReserved && current.state !== ConversationComputerTurnProtocolStates.ToolPending
 		|| current.reservation.tools !== ConversationModelToolModes.Select
 		|| proposal.bootstrapId !== turn.bootstrapId || input.digest !== turn.compile.digest
 		|| input.runId !== turn.compile.runId || input.attempt !== turn.compile.attempt
-		|| tool === undefined || ___DigestCanonicalJson(tool.parametersSchema) !== tool.parametersSchemaDigest
+		|| tool === undefined || tool.kind !== CompiledToolDefinitionKinds.Mcp || ___DigestCanonicalJson(tool.parametersSchema) !== tool.parametersSchemaDigest
 		|| !__ValidateDeferredToolArguments(tool.parametersSchema, proposal.arguments))
 		throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Invalid);
 	const deadline = input.budget.wallClockDeadlineEpochMs;
@@ -46,7 +46,7 @@ export function _PrepareConversationToolProposal(turn: FrozenConversationCompute
 	// output position. Current run, approval and lease checks still decide whether it may execute.
 	if (candidate.binding.expectedRevision < turn.binding.expectedRevision
 		|| savedSelection === null && candidate.binding.expectedRevision !== turn.binding.expectedRevision
-		|| savedSelection !== null && (savedSelection.proposalId !== proposalId || savedSelection.requestFingerprint !== requestFingerprint))
+		|| savedSelection !== null && (savedSelection.kind !== ConversationComputerTurnToolKinds.Mcp || savedSelection.proposalId !== proposalId || savedSelection.requestFingerprint !== requestFingerprint))
 		throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Invalid);
 	return { proposalId, tool, arguments: argumentsValue, argumentsDigest, assignmentDigest, requestFingerprint };
 }

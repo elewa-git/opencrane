@@ -31,7 +31,12 @@ describe("approval history and the saved model continuation", function _Suite()
 		f.proposals.admit.mockImplementation(async function _AdmitAfterApproval(turn)
 		{
 			if (!approved)
-				return { proposalId: turn.protocol.steps.at(-1)!.selection!.proposalId, outcome: ConversationToolProposalOutcomes.Existing };
+			{
+				const selection = turn.protocol.steps.at(-1)!.selection!;
+				if (selection.kind !== "mcp")
+					throw new Error("fixture requires MCP selection");
+				return { proposalId: selection.proposalId, outcome: ConversationToolProposalOutcomes.Existing };
+			}
 			return admit(turn);
 		});
 		f.results.read.mockImplementation(async function _WaitForDecision(turn)
@@ -45,7 +50,10 @@ describe("approval history and the saved model continuation", function _Suite()
 		expect(f.model.request).toHaveBeenCalledOnce();
 		expect(f.toolFlags.executions).toBe(0);
 		const waiting = (await f.store.load(f.step))!;
-		const approvalId = waiting.protocol.steps.at(-1)!.selection!.proposalId;
+		const waitingSelection = waiting.protocol.steps.at(-1)!.selection!;
+		if (waitingSelection.kind !== "mcp")
+			throw new Error("fixture requires MCP selection");
+		const approvalId = waitingSelection.proposalId;
 		const command = { bootstrapId: f.step, siloId: waiting.siloId, conversationId: waiting.binding.conversationId, runId: waiting.compile.runId, attempt: waiting.compile.attempt, approvalId };
 		const request: ConversationElicitation = { version: CONVERSATION_ELICITATION_VERSION, requestId: approvalId, conversationId: command.conversationId, runId: command.runId, attempt: command.attempt, assignedParticipantId: "owner-1", purpose: ElicitationPurposes.ToolApproval, state: ElicitationRequestStates.Requested, body: { kind: ElicitationBodyKinds.Approval, prompt: "Allow this tool call?", action: "Invoke tool", target: "lookup_record", dataUse: "Send the reviewed arguments to the tool.", consequence: "Runs the selected tool once.", proposedArguments: { query: "private-query" } }, requiresStepUp: true, requestedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString() };
 		const requests = { readCurrent: vi.fn().mockResolvedValue(request) };

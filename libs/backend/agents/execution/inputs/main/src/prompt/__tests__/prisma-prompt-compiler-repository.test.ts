@@ -1,7 +1,7 @@
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { describe, expect, it, vi } from "vitest";
 
-import { PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION } from "@opencrane/contracts";
+import { CompiledToolDefinitionKinds, FIRST_PARTY_TOOL_CAPABILITY_CONTRACTS, FirstPartyToolCapabilities, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { PrismaPromptCompilerRepository, PrismaPromptCompilerUnitOfWork } from "../prisma-prompt-compiler-repository";
@@ -40,7 +40,7 @@ describe("PrismaPromptCompilerRepository", function _PrismaPromptCompilerReposit
 		const messages = { loadMessages: vi.fn().mockResolvedValue([]) };
 		const createMessages = vi.fn().mockReturnValue(messages);
 		const compiler = new PrismaPromptCompilerUnitOfWork(prisma as never, createMessages);
-		const snapshot = { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION, conversationId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], modelRoute: { alias: "tenant-model", modelDefinitionId: "model-1", litellmModelId: "deployment-1", maxOutputTokens: 4096, generatedOutputCapabilities: ["image_png"] }, budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 256000, maxCostUsdMicros: 100, maxToolInvocations: 1, maxLoopIterations: 1, wallClockDeadlineEpochMs: 2_000_000_000_000 }, executionSubject: _executionSubject(), promptCompilerVersion: PROMPT_COMPILER_VERSION, digest: `sha256:${"a".repeat(64)}`, compiledAt: "2026-09-06T00:00:00.000Z" };
+		const snapshot = { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION, origin: { kind: "interactive", messageId: null, historyRevision: null } as const, conversationId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [], firstPartyCapabilities: [], modelRoute: { alias: "tenant-model", modelDefinitionId: "model-1", litellmModelId: "deployment-1", maxOutputTokens: 4096, generatedOutputCapabilities: ["image_png"] }, budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 256000, maxCostUsdMicros: 100, maxToolInvocations: 1, maxLoopIterations: 1, wallClockDeadlineEpochMs: 2_000_000_000_000 }, executionSubject: _executionSubject(), promptCompilerVersion: PROMPT_COMPILER_VERSION, digest: `sha256:${"a".repeat(64)}`, compiledAt: "2026-09-06T00:00:00.000Z" };
 
 		await expect(compiler.compile(snapshot, 1)).resolves.toEqual(expect.objectContaining({ runId: "run-1", messages: [], model: expect.objectContaining({ modelAlias: "tenant-model", maxOutputTokens: 4096 }), budget: expect.objectContaining({ maxCompletionTokens: 256000 }) }));
 		expect(createMessages).toHaveBeenCalledWith(transaction);
@@ -56,10 +56,18 @@ describe("PrismaPromptCompilerRepository", function _PrismaPromptCompilerReposit
 
 		await expect(repository.loadPersonaInstructions("persona-1")).resolves.toBe("Be helpful.");
 		await expect(repository.loadMessages(["message-1"])).resolves.toEqual([{ role: "user", content: "hello" }]);
-		await expect(repository.loadToolDefinitions([{ toolRevisionId: "tool-1", name: "calendar.read", description: "Read calendar", inputSchema: schema, inputSchemaDigest: ___DigestCanonicalJson(schema) }])).resolves.toEqual([{ toolRevisionId: "tool-1", name: "calendar.read", modelName: "mcp_N7odFteZclDmu0DFKlJhoEt53tfHx79bYbz59tNqNu0", description: "Read calendar", requiresApproval: true, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) }]);
+		await expect(repository.loadToolDefinitions([{ toolRevisionId: "tool-1", name: "calendar.read", description: "Read calendar", inputSchema: schema, inputSchemaDigest: ___DigestCanonicalJson(schema) }])).resolves.toEqual([{ kind: CompiledToolDefinitionKinds.Mcp, toolRevisionId: "tool-1", name: "calendar.read", modelName: "mcp_N7odFteZclDmu0DFKlJhoEt53tfHx79bYbz59tNqNu0", description: "Read calendar", requiresApproval: true, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) }]);
 		await expect(repository.loadArtifactSummaries(["artifact-1"])).resolves.toEqual(["text/plain artifact artifact-1"]);
 		await expect(repository.loadSkillSummaries(["skill-1"])).resolves.toEqual(["skill skill-parent-1 revision skill-1"]);
 		await expect(repository.resolveModelRoute("silo-1", { alias: "tenant-model", modelDefinitionId: "model-1", litellmModelId: "deployment-1", maxOutputTokens: 384, generatedOutputCapabilities: ["image_png"] })).resolves.toEqual({ modelAlias: "tenant-model", maxOutputTokens: 384, generatedOutputCapabilities: ["image_png"] });
+	});
+
+	it("fails closed when a saved built-in selection has no composition resolver", async function _RejectsUnresolvedFirstPartyCapability()
+	{
+		const repository = new PrismaPromptCompilerRepository(_Transaction() as never, { loadMessages: vi.fn() } as never, "silo-1");
+		const contract = FIRST_PARTY_TOOL_CAPABILITY_CONTRACTS[FirstPartyToolCapabilities.RequestRoutine];
+
+		await expect(repository.loadFirstPartyToolDefinitions([{ capability: FirstPartyToolCapabilities.RequestRoutine, capabilityRevision: contract.capabilityRevision, parametersSchemaDigest: `sha256:${"f".repeat(64)}` }])).rejects.toThrow(/no resolver/);
 	});
 
 	it("preserves dotted and long source names while deriving distinct provider names", async function _DerivesProviderNames()

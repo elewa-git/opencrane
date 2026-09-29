@@ -37,8 +37,11 @@ their concrete adapters, mounts their routers, and starts and stops them in the 
 [backend capabilities](../../libs/backend/README.md)
 
 The conversation workflow bootstrap receives a `ConversationExecutionContext`
-object. Its named fields identify the database, history, Kubernetes clients, admission and dispatch
-ports, workflow engine, and generated-file services supplied by process startup.
+object. Its named fields identify the database, history, Kubernetes clients, admission, routine
+progress and dispatch ports, workflow engine, and generated-file services supplied by process startup.
+Routine composition is created first and supplies the request-routine proposal and evidence ports to
+conversation composition. Run admission offers the frozen `request_routine` capability only when its
+selection source, definition resolver and conversation dispatcher are all present.
 The MCP runtime bootstrap similarly receives an `McpExecutionContext`, naming the process
 services and configuration shared by container-based and remote tool execution.
 
@@ -46,13 +49,14 @@ Startup proceeds in five visible stages:
 
 1. initialise telemetry before any instrumented dependency loads;
 2. freeze process configuration and construct Prisma and Kubernetes clients;
-3. register the Absurd-owned conversation-turn workflow with the bounded personal run-admission
-   port and generated-file workflow, then start activation only after the handlers exist. Admission rechecks Kurrent identity,
+3. register the Absurd-owned conversation and routine workflows with the bounded run-admission
+   ports, then start activation only after the handlers exist. Admission rechecks Kurrent identity,
    lease and message history plus every immutable compiler input;
 4. build the public and internal Express applications and register saved personal-memory work with
    the existing participant history authority; and
-5. start the workflow runtime and bounded background workers, then open both listeners under one
-   coordinated shutdown path. Signed-in conversation updates use the public SSE route.
+5. repair every active routine schedule head, start the workflow runtime and bounded background
+   workers, then open both listeners under one coordinated shutdown path. Signed-in conversation
+   updates use the public SSE route.
 
 Personal-memory tasks carry only silo and operation IDs. Their conversations-owned worker loads
 saved progress, checks current memory permission, and uses one process-wide private gateway client.
@@ -73,7 +77,7 @@ The route registry is deliberately a catalogue rather than a second application 
 | --- | --- | --- |
 | Public `:8080` | Identity and access | audit, groups, grants, resource shares |
 | Public `:8080` | Agents | agent-service management and governed skill catalogue |
-| Public `:8080` | Personal workspace | guided onboarding, assets, persona, approvals, runs, model and tool configuration, conversations, existing-dataset memory commands |
+| Public `:8080` | Personal workspace | guided onboarding, assets, persona, approvals, runs, routines, model and tool configuration, conversations, existing-dataset memory commands |
 | Public `:8080` | Gateways | MCP catalogue and durable tool tasks, OCI image promotion, model routing, providers, bring-your-own-key, model registry |
 | Public `:8080` | Knowledge and reporting | retrieval sources, budgets, token usage |
 | Internal `:8081` | Controller | run-attempt, workflow-owned skill-authoring validation, and OCI MCP Job dispatch |
@@ -104,12 +108,14 @@ All other production source lives in `src/bootstrap/`:
 | --- | --- |
 | `configuration/` | Read and type deployment configuration once. |
 | `http/` | Assemble authenticated public and workload-facing routers. |
-| `conversations/` | Connect conversation history and computer lifecycle; register turn, generated-file and personal-memory workflows, share generated-file authority with the scanner, and mount the review credential route. |
+| `conversations/` | Connect conversation history and computer lifecycle; register turn, Stop, generated-file and personal-memory workflows; report producer-verified routine progress; share generated-file authority with the scanner; and mount the review credential route. |
+| `routines/` | Connect scheduling to occurrence preparation, computer activation, run admission, progress persistence, startup repair, recovery-only turn dispatch and the single authenticated routine command authority shared with HTTP composition. |
 | `workflows/` | Compose MCP transport and declare workflow tasks. |
 | `process/` | Initialise telemetry and clients, then start, drain, and close resources. |
 
 The [conversation library](../../libs/backend/server/conversations/main/README.md) owns admission and
-compile-before-commit orchestration. [Onboarding](../../libs/backend/server/agents/onboarding/main/README.md)
+compile-before-commit orchestration. [Scheduling](../../libs/backend/server/agents/scheduling/main/README.md)
+owns routine lifecycle, firing and workflow policy. [Onboarding](../../libs/backend/server/agents/onboarding/main/README.md)
 and [personas](../../libs/backend/agents/personal/personas/main/README.md) own their publication adapters.
 [Artifacts](../../libs/backend/server/agents/artifacts/main/README.md) owns lease signing, service
 transport and preprocessing brokers; [conversation assets](../../libs/backend/server/conversation-assets/main/README.md)
@@ -157,7 +163,10 @@ conversation-context, and encrypted prompt-message authorities. The app supplies
 and the shared history client. The production compiler repository resolves persona
 instructions, tools, artifacts, skills, and the model route through a transaction-bound Prisma read
 snapshot and refuses any missing or mismatched immutable reference. Personal ConversationComputer
-admission is mounted; managed run-now and scheduler paths remain absent by design.
+admission is mounted. Routine schedule and occurrence handlers now reuse that conversation path,
+including recovery of the admitted initial turn. The app composes one `RoutineAuthority` from the
+existing persistence, cipher and identifier factory, then passes it to the authenticated HTTP
+route assembly; the scheduling library remains the owner of command behaviour.
 
 Personal run status is mounted for signed-in owners.
 

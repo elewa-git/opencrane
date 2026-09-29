@@ -65,10 +65,10 @@ async function _TurnStore(fixture: Awaited<ReturnType<typeof _SeedConversationTo
 	const authorityExpiresAtEpochMs = Math.min(originalDeadline, Date.parse(fixture.candidate.credentialExpiresAt));
 	const first = fixture.turn.protocol.steps[0]!.reservation;
 	await store.reserveModel(turn.bootstrapId, first);
-	await store.selectTool(turn.bootstrapId, { ordinal: first.ordinal, modelInvocationFence: first.invocationFence,
+	await store.selectTool(turn.bootstrapId, { kind: "mcp", ordinal: first.ordinal, modelInvocationFence: first.invocationFence,
 		proposalId: invocation.toolInvocationId, toolInvocationId: invocation.toolInvocationId, requestFingerprint: invocation.requestFingerprint,
 		declaration: { payloadRef: randomUUID(), ciphertextDigest: payloadDigest } });
-	await store.recordToolResult(turn.bootstrapId, { ordinal: first.ordinal, proposalId: invocation.toolInvocationId,
+	await store.recordToolResult(turn.bootstrapId, { kind: "mcp" as const, ordinal: first.ordinal, proposalId: invocation.toolInvocationId,
 		toolInvocationId: invocation.toolInvocationId, resultDigest: payloadDigest,
 		exchange: { payloadRef: randomUUID(), ciphertextDigest: payloadDigest }, authorityExpiresAtEpochMs });
 	turn = (await store.load(turn.bootstrapId))!;

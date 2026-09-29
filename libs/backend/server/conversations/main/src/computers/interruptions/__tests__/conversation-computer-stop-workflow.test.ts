@@ -14,9 +14,10 @@ function _Fixture(decision: ConversationComputerStopDecisions, cleanup: Array<{ 
 	const workflows = { register: vi.fn(function _Register(value) { definition = value; }), cancel: vi.fn().mockResolvedValue(_INPUT.originalTurnTask) };
 	const lifecycle = { recordDecision: vi.fn().mockResolvedValue(undefined), cleanup: vi.fn().mockImplementation(async function _Cleanup() { return cleanup.shift()!; }), finalize: vi.fn().mockResolvedValue(true) };
 	const credentials = { revoke: vi.fn().mockResolvedValue(undefined) };
-	_RegisterConversationComputerStopWorkflow(workflows as never, { admissions: { read: vi.fn().mockResolvedValue(admission), admit: vi.fn() }, publisher: { recover: vi.fn(), recoverSelection: vi.fn(), select: vi.fn(), publish: vi.fn().mockResolvedValue({ decision, published: true, outputReceiptDigest: decision === ConversationComputerStopDecisions.OutputWon ? `sha256:${"a".repeat(64)}` : null }) }, lifecycle, credentials });
+	const routineProgress = { recordStop: vi.fn().mockResolvedValue(undefined) };
+	_RegisterConversationComputerStopWorkflow(workflows as never, { admissions: { read: vi.fn().mockResolvedValue(admission), admit: vi.fn() }, publisher: { recover: vi.fn(), recoverSelection: vi.fn(), select: vi.fn(), publish: vi.fn().mockResolvedValue({ decision, published: true, outputReceiptDigest: decision === ConversationComputerStopDecisions.OutputWon ? `sha256:${"a".repeat(64)}` : null }) }, lifecycle, credentials, routineProgress });
 	const context = { task: admission.cancellationTask, attempt: 1, checkpoint: vi.fn(async (_step, operation) => operation()), sleepUntil: vi.fn().mockResolvedValue(undefined), waitForEvent: vi.fn(), spawnChild: vi.fn(), awaitChild: vi.fn() };
-	return { definition, workflows, lifecycle, credentials, context };
+	return { definition, workflows, lifecycle, credentials, routineProgress, context };
 }
 
 describe("conversation computer Stop workflow", function _Suite()
@@ -26,6 +27,7 @@ describe("conversation computer Stop workflow", function _Suite()
 		const fixture = _Fixture(ConversationComputerStopDecisions.OutputWon);
 		await expect(fixture.definition.run(fixture.context as never, _INPUT)).resolves.toEqual({ outcome: "output_completed", commandId: "stop-1" });
 		expect(fixture.lifecycle.recordDecision).toHaveBeenCalledOnce();
+		expect(fixture.routineProgress.recordStop).toHaveBeenCalledOnce();
 		expect(fixture.workflows.cancel).not.toHaveBeenCalled();
 		expect(fixture.credentials.revoke).not.toHaveBeenCalled();
 	});
@@ -37,6 +39,7 @@ describe("conversation computer Stop workflow", function _Suite()
 		expect(fixture.lifecycle.recordDecision.mock.invocationCallOrder[0]).toBeLessThan(fixture.workflows.cancel.mock.invocationCallOrder[0]!);
 		expect(fixture.workflows.cancel.mock.invocationCallOrder[0]).toBeLessThan(fixture.credentials.revoke.mock.invocationCallOrder[0]!);
 		expect(fixture.lifecycle.finalize).toHaveBeenCalledOnce();
+		expect(fixture.lifecycle.finalize.mock.invocationCallOrder[0]).toBeLessThan(fixture.routineProgress.recordStop.mock.invocationCallOrder[0]!);
 	});
 
 	it("waits for the saved provider claim expiry and repeats cleanup", async function _WaitsForClaim()
@@ -54,5 +57,13 @@ describe("conversation computer Stop workflow", function _Suite()
 		expect(fixture.lifecycle.recordDecision).not.toHaveBeenCalled();
 		expect(fixture.workflows.cancel).not.toHaveBeenCalled();
 		expect(fixture.credentials.revoke).not.toHaveBeenCalled();
+	});
+
+	it("does not complete after progress acknowledgement fails", async function _ProgressFailure()
+	{
+		const fixture = _Fixture(ConversationComputerStopDecisions.CancellationWon);
+		fixture.routineProgress.recordStop.mockRejectedValueOnce(new Error("progress unavailable"));
+		await expect(fixture.definition.run(fixture.context as never, _INPUT)).rejects.toThrow("progress unavailable");
+		expect(fixture.lifecycle.finalize).toHaveBeenCalledOnce();
 	});
 });

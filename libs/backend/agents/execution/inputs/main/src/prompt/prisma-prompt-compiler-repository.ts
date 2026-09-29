@@ -1,15 +1,25 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { GeneratedOutputCapability, type CompiledModelRoute, type CompiledRunInput, type CompiledToolDefinition, type RunInputSnapshotMcpTool } from "@opencrane/contracts";
+import { CompiledToolDefinitionKinds, GeneratedOutputCapability, type CompiledFirstPartyToolDefinition, type CompiledMcpToolDefinition, type CompiledModelRoute, type CompiledRunInput, type RunInputFirstPartyCapabilitySelection, type RunInputSnapshotMcpTool } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _McpModelToolName } from "./mcp-model-tool-name";
-import type { ConversationPromptMessageRepository, PromptCompilerRepositories } from "./prompt-compiler.types";
+import type { ConversationPromptMessageRepository, FirstPartyToolDefinitionResolver, PromptCompilerRepositories } from "./prompt-compiler.types";
 import { __CompileRunInput } from "./prompt-compiler";
 import type { PromptCompilerUnitOfWork } from "./prompt-compiler-unit-of-work.types";
 
 /** Creates the canonical message repository inside the compiler's exact Prisma read transaction. */
 type _ConversationPromptMessageRepositoryFactory = (transaction: Prisma.TransactionClient) => ConversationPromptMessageRepository;
+
+/** Keeps built-in callables unavailable until composition injects a matching resolver. */
+const _NO_FIRST_PARTY_TOOLS: FirstPartyToolDefinitionResolver = {
+	resolve: function _ResolveNone(selections)
+	{
+		if (selections.length > 0)
+			throw new Error("Prompt compiler has no resolver for the admitted first-party capability");
+		return [];
+	},
+};
 
 /**
  * Owns the read transaction that dereferences one admitted snapshot into compiled runtime input.
@@ -21,7 +31,7 @@ type _ConversationPromptMessageRepositoryFactory = (transaction: Prisma.Transact
 export class PrismaPromptCompilerUnitOfWork implements PromptCompilerUnitOfWork
 {
 	/** Bind compilation to the control-plane client and command-bound canonical message factory. */
-	constructor(private readonly _prisma: PrismaClient, private readonly _messages: _ConversationPromptMessageRepositoryFactory) {}
+	constructor(private readonly _prisma: PrismaClient, private readonly _messages: _ConversationPromptMessageRepositoryFactory, private readonly _firstPartyTools: FirstPartyToolDefinitionResolver = _NO_FIRST_PARTY_TOOLS) {}
 
 	/** Compile every immutable reference exactly once inside one Prisma transaction snapshot. */
 	compile(snapshot: Parameters<PromptCompilerUnitOfWork["compile"]>[0], attempt: number): Promise<CompiledRunInput>
@@ -29,7 +39,7 @@ export class PrismaPromptCompilerUnitOfWork implements PromptCompilerUnitOfWork
 		const unitOfWork = this;
 		return this._prisma.$transaction(async function _CompileInReadSnapshot(transaction)
 		{
-			const repository = new PrismaPromptCompilerRepository(transaction, unitOfWork._messages(transaction), snapshot.siloId);
+			const repository = new PrismaPromptCompilerRepository(transaction, unitOfWork._messages(transaction), snapshot.siloId, unitOfWork._firstPartyTools);
 			return __CompileRunInput(snapshot, attempt, repository);
 		});
 	}
@@ -45,7 +55,7 @@ export class PrismaPromptCompilerUnitOfWork implements PromptCompilerUnitOfWork
 export class PrismaPromptCompilerRepository implements PromptCompilerRepositories
 {
 	/** Bind immutable control-plane reads to the supplied transaction and canonical message repository. */
-	constructor(private readonly _prisma: Prisma.TransactionClient, private readonly _messages: ConversationPromptMessageRepository, private readonly _siloId: string) {}
+	constructor(private readonly _prisma: Prisma.TransactionClient, private readonly _messages: ConversationPromptMessageRepository, private readonly _siloId: string, private readonly _firstPartyTools: FirstPartyToolDefinitionResolver = _NO_FIRST_PARTY_TOOLS) {}
 
 	/** Resolve the exact admitted persona revision without consulting its profile's later publication state. */
 	async loadPersonaInstructions(personaRevisionId: string | null): Promise<string>
@@ -65,7 +75,7 @@ export class PrismaPromptCompilerRepository implements PromptCompilerRepositorie
 	}
 
 	/** Verify every frozen MCP tool literal against its exact immutable database revision. */
-	async loadToolDefinitions(mcpTools: readonly RunInputSnapshotMcpTool[]): Promise<readonly CompiledToolDefinition[]>
+	async loadToolDefinitions(mcpTools: readonly RunInputSnapshotMcpTool[]): Promise<readonly CompiledMcpToolDefinition[]>
 	{
 		_RequireUniqueIds(mcpTools.map(tool => tool.toolRevisionId), "MCP tool");
 		if (mcpTools.length === 0)
@@ -74,15 +84,21 @@ export class PrismaPromptCompilerRepository implements PromptCompilerRepositorie
 		if (rows.length !== mcpTools.length)
 			throw new Error("Prompt MCP tool revision set is incomplete");
 		const rowsById = new Map(rows.map(row => [row.id, row]));
-		return mcpTools.map(function _CompileTool(tool): CompiledToolDefinition
+		return mcpTools.map(function _CompileTool(tool): CompiledMcpToolDefinition
 		{
 			const row = rowsById.get(tool.toolRevisionId);
 			if (row === undefined || row.name !== tool.name || row.description !== tool.description || row.inputSchemaDigest !== tool.inputSchemaDigest
 				|| ___DigestCanonicalJson(row.inputSchema as JsonValue) !== tool.inputSchemaDigest || ___DigestCanonicalJson(tool.inputSchema) !== tool.inputSchemaDigest
 				|| row.siloId !== row.serverRevision.siloId || row.siloId !== row.serverRevision.server.siloId)
 				throw new Error("Prompt MCP tool revision does not match the admitted snapshot");
-			return { name: tool.name, modelName: _McpModelToolName(tool.toolRevisionId), toolRevisionId: tool.toolRevisionId, description: tool.description ?? "", requiresApproval: row.serverRevision.server.requiresApproval, parametersSchema: tool.inputSchema, parametersSchemaDigest: tool.inputSchemaDigest };
+			return { kind: CompiledToolDefinitionKinds.Mcp, name: tool.name, modelName: _McpModelToolName(tool.toolRevisionId), toolRevisionId: tool.toolRevisionId, description: tool.description ?? "", requiresApproval: row.serverRevision.server.requiresApproval, parametersSchema: tool.inputSchema, parametersSchemaDigest: tool.inputSchemaDigest };
 		});
+	}
+
+	/** Resolve built-in declarations only through the admission-matched composition owner. */
+	async loadFirstPartyToolDefinitions(selections: readonly RunInputFirstPartyCapabilitySelection[]): Promise<readonly CompiledFirstPartyToolDefinition[]>
+	{
+		return this._firstPartyTools.resolve(selections);
 	}
 
 	/** Resolve every exact artifact revision without consulting the artifact's later lifecycle state. */

@@ -10,8 +10,8 @@ A **deployable app** composes shared code and ships as one container. This one i
 workspace where people set up their personal assistant, talk with colleagues and ask company
 assistants to help. Administrators also manage members and tools here. It is a single-page app
 (SPA — the UI loads once, then updates without full page reloads), built with Angular.
-The browser composition binds personal activity and selected-conversation approval reads to the
-existing generated API adapters.
+The browser composition binds personal activity, selected-conversation approval reads, and routine
+transport to the existing generated API adapters.
 The conversation feature owns recent status and loaded-answer links; the app adds no run authority.
 
 ## What it owns
@@ -22,8 +22,8 @@ The backend that serves its APIs is [`apps/opencrane`](../opencrane/README.md) (
 this app only renders screens and calls that server.
 
 It composes the frontend feature and state libraries under `libs/frontend/*` — the route table
-lazy-loads the persona survey, review, bounded first-chat, normal conversation workspace, member
-settings, public invitation acceptance, and MCP tool-administration screens. MCP is the Model Context Protocol for
+lazy-loads the persona survey, review, bounded first-chat, normal conversation workspace, routine
+creation and history, member settings, public invitation acceptance, and MCP tool-administration screens. MCP is the Model Context Protocol for
 connecting tools. Two beats
 define what it *is* as a deployable:
 
@@ -58,7 +58,8 @@ If the backend is unreachable the app refuses authenticated actions.
 `Entrypoint: src/main.ts` (bootstraps `AppComponent` with `appConfig` from `src/app/app.config.ts`).
 Route table `src/app/app.routes.ts`: `login`, `onboarding` (the server-authoritative persona state
 shell and first chat), `chats` and `chats/:conversationId` (direct, group, and Agent-session
-workspace), `settings/members` (organisation directory and invitations), `settings/audit` (permitted
+workspace), `settings/members` (organisation directory and invitations), `routines` (scheduled
+assistant work), `settings/audit` (permitted
 audit records), `settings/usage` (recorded usage and independently protected budget reads), `invite` (public token
 acceptance), and `admin` (MCP tool administration). The root route redirects to
 `/onboarding`; protected routes use `OperatorAccessGuard`. Conversation history and computer state

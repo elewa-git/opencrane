@@ -1,0 +1,20 @@
+<wo-section-heading title="Routines" subtitle="Recurring assistant work you created or can still read." [level]="headingLevel">
+	<a heading-actions pButton routerLink="/chats" class="p-button" aria-label="Choose a chat before creating a routine"><i class="pi pi-plus" aria-hidden="true"></i><span>New routine</span></a>
+	<p-button heading-actions label="Refresh" icon="pi pi-refresh" [text]="true" [disabled]="loading() || loadingMore()" (onClick)="refresh()" />
+</wo-section-heading>
+@if (state() === states.AccessChanged) {
+	<section class="routine-list__notice"><h2>Access changed</h2><p>Your saved routine data was removed from this screen.</p><p-button label="Try again" (onClick)="refresh()" /></section>
+} @else {
+	<wo-resource-feedback [loading]="loading()" [loadingLabel]="state() === states.Refreshing ? 'Refreshing routines…' : 'Loading routines…'" [error]="error()" [retryAvailable]="state() === states.Unavailable || state() === states.RetainedError" (retryRequested)="refresh()" />
+	@if (showRows()) {
+		<section class="routine-list__table" [attr.aria-busy]="loading() || loadingMore()">
+			<p-table [value]="tableRows()" dataKey="routineId" [pt]="{ tableContainer: { tabindex: '0', role: 'region', 'aria-label': 'Authorized routines' } }">
+				<ng-template #header><tr><th scope="col">State</th><th scope="col">Assistant</th><th scope="col">Schedule</th><th scope="col">Next</th><th scope="col">Latest run</th><th scope="col"><span class="sr-only">Open</span></th></tr></ng-template>
+				<ng-template #body let-row><tr><td><wo-scope-chip [label]="row.status.label" [tone]="row.status.tone" /> <small>{{ row.ownershipLabel }}</small></td><td>{{ row.serviceLabel }}</td><td class="wo-mono">{{ row.scheduleLabel }}</td><td>{{ row.nextOccurrenceLabel }}</td><td>{{ row.lastFiringLabel }}</td><td><a pButton class="p-button p-button-text" [routerLink]="['/routines', row.routineId]" aria-label="Open routine details"><i class="pi pi-arrow-right" aria-hidden="true"></i></a></td></tr></ng-template>
+				<ng-template #emptymessage><tr><td colspan="6">No routines are visible. Start from an open chat to create one.</td></tr></ng-template>
+			</p-table>
+		</section>
+		<wo-resource-feedback [loading]="loadingMore()" loadingLabel="Loading more routines…" [error]="loadMoreError()" />
+		@if (hasMore()) { <p-button class="routine-list__more" label="Load more routines" icon="pi pi-chevron-down" [text]="true" [disabled]="loading() || loadingMore()" (onClick)="loadMore()" /> }
+	}
+}

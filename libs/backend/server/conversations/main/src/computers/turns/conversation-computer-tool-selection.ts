@@ -3,32 +3,39 @@ import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/histo
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _ConversationComputerEventId } from "../conversation-computer-event-id";
-import type { ConversationComputerTurnToolSelection } from "./conversation-computer-turn-protocol.types";
+import { ConversationComputerTurnToolKinds, type ConversationComputerTurnToolSelection } from "./conversation-computer-turn-protocol.types";
 import type { FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 
 /** Identifies the fresh-install ordered tool-selection event. */
-export const _CONVERSATION_TOOL_SELECTED_EVENT = "opencrane.conversation-computer-turn-tool-selected.v2";
+export const _CONVERSATION_TOOL_SELECTED_EVENT = "opencrane.conversation-computer-turn-tool-selected.v3";
 
 const _Digest = z.string().regex(/^sha256:[0-9a-f]{64}$/u);
 const _Identifier = z.string().min(1);
-const _SelectionSchema: z.ZodType<ConversationComputerTurnToolSelection> = z.object({
+const _SelectionBase = {
 	ordinal: z.number().int().positive().safe(),
 	modelInvocationFence: z.string().uuid(),
 	declaration: z.object({ payloadRef: _Identifier, ciphertextDigest: _Digest }).strict(),
-	proposalId: _Identifier,
-	toolInvocationId: _Identifier,
-	requestFingerprint: _Digest,
-}).strict();
+};
+const _SelectionSchema: z.ZodType<ConversationComputerTurnToolSelection> = z.discriminatedUnion("kind", [
+	z.object({ ..._SelectionBase, kind: z.literal(ConversationComputerTurnToolKinds.Mcp), proposalId: _Identifier, toolInvocationId: _Identifier, requestFingerprint: _Digest }).strict(),
+	z.object({ ..._SelectionBase, kind: z.literal(ConversationComputerTurnToolKinds.RequestRoutine), proposalRef: _Identifier, expiresAt: z.string().datetime({ offset: true }), resultDigest: _Digest }).strict(),
+]);
 
 /** Builds a content-free per-step selection after encrypted declaration custody. */
 export function _ConversationToolSelectionEvent(turn: FrozenConversationComputerTurn, selection: ConversationComputerTurnToolSelection)
 {
 	return {
-		id: _ConversationComputerEventId(`tool-selection-${selection.ordinal}`, selection.proposalId),
+		id: _ConversationComputerEventId(`tool-selection-${selection.ordinal}`, _SelectionIdentity(selection)),
 		type: _CONVERSATION_TOOL_SELECTED_EVENT,
 		data: { bootstrapId: turn.bootstrapId, selection },
 		metadata: _Metadata(turn),
 	};
+}
+
+/** Selects the durable authority-owned identity without manufacturing an MCP proposal. */
+function _SelectionIdentity(selection: ConversationComputerTurnToolSelection): string
+{
+	return selection.kind === ConversationComputerTurnToolKinds.Mcp ? selection.proposalId : selection.proposalRef;
 }
 
 /**

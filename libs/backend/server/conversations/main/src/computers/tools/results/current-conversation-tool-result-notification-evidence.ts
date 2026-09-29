@@ -1,9 +1,9 @@
 import { ToolResultDeliveryOutcomes } from "@opencrane/backend/server/iam/authorization";
-import { ConversationLogToolKinds } from "@opencrane/contracts";
+import { CompiledToolDefinitionKinds, ConversationLogToolKinds } from "@opencrane/contracts";
 
 import { ConversationComputerToolResultOutcomes, type ConversationComputerToolResults } from "../../turns/conversation-computer-continuation.types";
 import type { ConversationComputerTurnCandidateResolver, ConversationComputerTurnStore } from "../../turns/conversation-computer-turn.types";
-import { ConversationComputerTurnProtocolStates } from "../../turns/conversation-computer-turn-protocol.types";
+import { ConversationComputerTurnProtocolStates, ConversationComputerTurnToolKinds } from "../../turns/conversation-computer-turn-protocol.types";
 import type { ConversationToolResultNotificationCommand, ConversationToolResultNotificationEvidence, ConversationToolResultNotificationEvidenceReader } from "../../turns/tool-result-notifications/conversation-tool-result-notification.types";
 
 /** Rechecks one frozen selection, live workflow identity, and terminal delivery without database access. */
@@ -23,7 +23,7 @@ export class CurrentConversationToolResultNotificationEvidenceReader implements 
 		const reservation = current?.state === ConversationComputerTurnProtocolStates.ToolPending ? current.reservation : null;
 		if (turn === null || turn.siloId !== command.siloId || turn.binding.conversationId !== command.conversationId
 			|| turn.compile.runId !== command.runId || turn.compile.attempt !== command.attempt
-			|| current?.state !== ConversationComputerTurnProtocolStates.ToolPending || selection === null || reservation === null
+			|| current?.state !== ConversationComputerTurnProtocolStates.ToolPending || selection === null || selection.kind !== ConversationComputerTurnToolKinds.Mcp || reservation === null
 			|| selection.ordinal !== reservation.ordinal || selection.modelInvocationFence !== reservation.invocationFence
 			|| selection.proposalId !== selection.toolInvocationId || selection.toolInvocationId !== command.toolInvocationId
 			|| turn.protocol.output !== null || turn.protocol.unavailable !== null || turn.protocol.cancellation !== null)
@@ -38,7 +38,7 @@ export class CurrentConversationToolResultNotificationEvidenceReader implements 
 			|| !Number.isFinite(Date.parse(result.occurredAt)) || result.occurredAt !== new Date(result.occurredAt).toISOString()
 			|| result.payload.outcome !== ToolResultDeliveryOutcomes.Succeeded && result.payload.outcome !== ToolResultDeliveryOutcomes.Failed)
 			return null;
-		const matching = input.tools.filter(tool => tool.toolRevisionId === result.toolRevisionId);
+		const matching = input.tools.filter(tool => tool.kind === CompiledToolDefinitionKinds.Mcp && tool.toolRevisionId === result.toolRevisionId);
 		if (matching.length !== 1)
 			return null;
 		const tool = matching[0]!;

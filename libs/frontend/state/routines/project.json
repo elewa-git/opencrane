@@ -1,0 +1,30 @@
+{
+  "name": "frontend-state-routines",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/frontend/state/routines/src",
+  "prefix": "wo",
+  "tags": [
+    "type:lib",
+    "layer:frontend",
+    "scope:routines",
+    "frontend-role:state"
+  ],
+  "projectType": "library",
+  "// targets": "to see all targets run: nx show project frontend-state-routines --web",
+  "targets": {
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p tsconfig.lint.json",
+        "cwd": "libs/frontend/state/routines"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --passWithNoTests",
+        "cwd": "libs/frontend/state/routines"
+      }
+    }
+  }
+}

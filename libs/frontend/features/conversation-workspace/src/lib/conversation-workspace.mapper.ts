@@ -1,6 +1,6 @@
 import { AvatarTones } from "@opencrane/elements/ui";
 import { ConversationMessageTones, ConversationStatusTones, type ConversationMessagePresentation, type ConversationRichTextPresentation, type ConversationStatusPresentation } from "@opencrane/elements/conversation";
-import { ConversationAuthorKinds, ConversationEntryKinds, ConversationLogKinds, ConversationMessageContentBlockKinds, ConversationToolCallLogPhases, type ArtifactMessageContentBlock, type ConversationEntry, type ToolCallLogEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryKinds, ConversationLogKinds, ConversationMessageContentBlockKinds, ConversationRoutineProposalLogPhases, ConversationToolCallLogPhases, type ArtifactMessageContentBlock, type ConversationEntry, type RoutineProposalLogEntry, type ToolCallLogEntry } from "@opencrane/contracts";
 import { ConversationAssetPresentationStates, type ConversationAssetPresentation } from "@opencrane/features/conversation-assets";
 import { ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
 import { toSanitizedMarkdownHtml, toStreamingMarkdownHtml } from "@opencrane/state/conversation/render";
@@ -193,6 +193,8 @@ export function _ConversationEntryViews(entries: readonly ConversationEntry[], p
 		}
 		if (entry.kind === ConversationEntryKinds.Log && entry.logKind === ConversationLogKinds.ToolCall)
 			return latestTools.get(entry.toolCallId)?.id === entry.id ? [{ kind: ConversationWorkspaceTranscriptEntryKinds.ToolActivity, id: entry.id, status: _ConversationToolStatus(entry) }] : [];
+		if (entry.kind === ConversationEntryKinds.Log && entry.logKind === ConversationLogKinds.RoutineProposal)
+			return _ConversationRoutineProposal(entry);
 		if (entry.kind !== ConversationEntryKinds.Message)
 			return [];
 		const text = entry.blocks.flatMap(function _Block(block): readonly string[]
@@ -213,6 +215,14 @@ export function _ConversationEntryViews(entries: readonly ConversationEntry[], p
 		const html = entry.state === MessageStates.Streaming ? toStreamingMarkdownHtml(text) : toSanitizedMarkdownHtml(text);
 		return [{ kind: ConversationWorkspaceTranscriptEntryKinds.Message, id: entry.id, message: presentation, richText: { messageId: entry.id, html, label: `${authorName} message` }, requestSource: null, shareSource: null, children: [], attachments }];
 	});
+}
+
+/** Maps only the one server-attested ready phase into a named review route. */
+function _ConversationRoutineProposal(entry: RoutineProposalLogEntry): readonly ConversationWorkspaceTranscriptEntry[]
+{
+	if (entry.phase !== ConversationRoutineProposalLogPhases.ReadyForReview || entry.proposalRef.trim().length === 0)
+		return [];
+	return [{ kind: ConversationWorkspaceTranscriptEntryKinds.RoutineProposal, id: entry.id, proposalRef: entry.proposalRef, status: { label: "Routine proposal ready for review", detail: "Review the suggested schedule before creating it.", tone: ConversationStatusTones.Attention } }];
 }
 
 /** Joins one immutable artifact block to a currently authorized asset without using display text as identity. */

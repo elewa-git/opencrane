@@ -56,6 +56,15 @@ export interface ConversationComputerAppendCommand
 	readonly lease: ComputerLease | null;
 }
 
+/** Supplies the complete cold computer snapshot used to create its owner-managed history stream. */
+export interface ConversationComputerInitialAppendCommand
+{
+	/** Supplies the caller-chosen UUID that makes an atomic initial append idempotent. */
+	readonly eventId: string;
+	/** Carries the complete lease-free cold computer snapshot validated by this history owner. */
+	readonly computer: ConversationComputer;
+}
+
 /** Carries the checked computer and lease state stored at one history revision. */
 export interface ConversationComputerHistorySnapshot
 {

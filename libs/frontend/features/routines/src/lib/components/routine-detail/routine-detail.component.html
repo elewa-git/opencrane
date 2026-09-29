@@ -1,0 +1,18 @@
+<section class="routine-detail">
+	@if (state() === states.AccessChanged) {
+		<wo-section-heading title="Access changed" subtitle="This routine and its decrypted instruction were removed from this screen." [level]="headingLevel"><a heading-actions pButton routerLink="/routines" class="p-button">Back to routines</a></wo-section-heading>
+	} @else {
+		@if (state() === states.CommittedRefreshFailed) {
+			<section class="routine-detail__refresh-failed" role="status"><h2>Change accepted</h2><p>The routine change was accepted, but current details could not be loaded. Refresh before another action.</p><p-button label="Refresh details" icon="pi pi-refresh" [text]="true" (onClick)="refreshRequested.emit()" /></section>
+		} @else {
+			<wo-resource-feedback [loading]="state() === states.Loading || state() === states.Refreshing" [loadingLabel]="state() === states.Refreshing ? 'Refreshing routine…' : 'Loading routine…'" [error]="error()" [retryAvailable]="state() === states.Unavailable || state() === states.RetainedError" (retryRequested)="refreshRequested.emit()" />
+		}
+		@if (detail(); as value) {
+			<wo-section-heading title="Routine details" [subtitle]="value.ownershipLabel" [level]="headingLevel"><a heading-actions pButton routerLink="/routines" class="p-button p-button-text"><i class="pi pi-arrow-left" aria-hidden="true"></i><span>All routines</span></a></wo-section-heading>
+			<div class="routine-detail__summary"><div><span>State</span><wo-scope-chip [label]="value.status.label" [tone]="value.status.tone" /></div><div><span>Assistant</span><strong>{{ value.serviceLabel }}</strong></div><div><span>Schedule</span><strong class="wo-mono">{{ value.scheduleLabel }}</strong></div><div><span>Next automatic run</span><strong>{{ value.nextOccurrenceLabel }}</strong></div><div><span>Last automatic run</span><strong>{{ value.lastOccurrenceLabel }}</strong></div></div>
+			<section class="routine-detail__section"><h2>Audience</h2><ul>@for (label of value.audienceLabels; track $index) { <li>{{ label }}</li> }</ul></section>
+			<section class="routine-detail__section"><h2>Instruction</h2><p class="routine-detail__instruction">{{ value.instruction }}</p></section>
+			@if (capabilities(); as hints) { <wo-routine-controls [capabilities]="hints" [state]="commandState()" [retryAction]="retryAction()" [error]="commandError()" (reviseRequested)="reviseRequested.emit()" (pauseRequested)="pauseRequested.emit()" (resumeRequested)="resumeRequested.emit()" (retireRequested)="retireRequested.emit()" (runNowRequested)="runNowRequested.emit()" (retryRequested)="retryRequested.emit($event)" /> }
+		}
+	}
+</section>

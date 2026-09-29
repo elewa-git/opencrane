@@ -2,11 +2,11 @@ import { ConversationLifecycle, ConversationMode, OrgMemberStatus, type Prisma }
 
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 
-import type { EncryptedConversationPrivatePayload } from "@opencrane/backend/server/conversations/history";
+import type { ConversationPrivatePayloadCoordinates, EncryptedConversationPrivatePayload } from "@opencrane/backend/server/conversations/history";
 import { ConversationMessageActivations } from "../self-conversation-history.types";
 import type { ConversationCaller } from "../../authorization/conversation-caller.types";
 import { PrismaConversationProductAuthorizationRepository } from "../../authorization/db/conversation-product-authorization";
-import type { AdmittedConversationMessagePayload, AuthorizedConversationProjection, ConversationHistoryRepository, ConversationMessagePayloadAdmissionCommand, StoredConversationPrivatePayload } from "./prisma-conversation-history-repository.types";
+import type { AdmittedConversationMessagePayload, AuthorizedConversationProjection, ConversationAttestedPayloadCommand, ConversationHistoryRepository, ConversationMessagePayloadAdmissionCommand, StoredConversationPrivatePayload } from "./prisma-conversation-history-repository.types";
 import { PrismaGroupChildAccessRepository } from "../../children/db/prisma-group-child-access-repository";
 
 /** Persists only encrypted private payload bytes behind current participant authorization. */
@@ -61,7 +61,7 @@ export class PrismaConversationHistoryRepository implements ConversationHistoryR
 			return null;
 		// 3. Commit evidence, encrypted content and ordering together, or let the caller roll them back.
 		const stored = existing === null
-			? { created: true, payload: await this._createPayload(caller, conversationId, command.idempotencyKey, payloadRef, command.payload) }
+			? { created: true, payload: await this._createPayload(_Coordinates(caller.siloId, conversationId, payloadRef, caller.subjectId), command.idempotencyKey, command.payload) }
 			: { created: false, payload: existing };
 		return { created: stored.created, projection, payload: stored.payload };
 	}
@@ -69,10 +69,31 @@ export class PrismaConversationHistoryRepository implements ConversationHistoryR
 	/** Stores ciphertext once per participant retry key, moves the conversation to the top of every list, and returns the winning encrypted row. */
 	public async createOrReadPayload(caller: ConversationCaller, conversationId: string, idempotencyKey: string, payloadRef: string, payload: EncryptedConversationPrivatePayload): Promise<{ readonly created: boolean; readonly payload: StoredConversationPrivatePayload }>
 	{
-		const existing = await this._readPayload(caller, conversationId, idempotencyKey);
+		const coordinates = _Coordinates(caller.siloId, conversationId, payloadRef, caller.subjectId);
+		const existing = await this._readPayload(coordinates, idempotencyKey);
 		if (existing !== null)
 			return { created: false, payload: existing };
-		return { created: true, payload: await this._createPayload(caller, conversationId, idempotencyKey, payloadRef, payload) };
+		return { created: true, payload: await this._createPayload(coordinates, idempotencyKey, payload) };
+	}
+
+	/** Stores or recovers one exact OpenCrane-authored payload after its owning unit of work admits preparation. */
+	public async createOrReadAttestedPayload(command: ConversationAttestedPayloadCommand): Promise<{ readonly created: boolean; readonly payload: StoredConversationPrivatePayload }>
+	{
+		_ValidateIdentifier(command.siloId, "silo identifier");
+		_ValidateIdentifier(command.conversationId, "conversation identifier");
+		_ValidateIdentifier(command.payloadRef, "payload reference");
+		_ValidateIdentifier(command.idempotencyKey, "idempotency key");
+		const coordinates = _Coordinates(command.siloId, command.conversationId, command.payloadRef, "opencrane");
+		const existing = await this._readPayload(coordinates, command.idempotencyKey);
+		if (existing !== null)
+		{
+			if (!_SameCoordinates(existing.coordinates, coordinates))
+				throw new Error("Conversation attested payload retry does not match its stored coordinates");
+			return { created: false, payload: existing };
+		}
+		if (command.requireExisting === true)
+			throw new Error("Conversation attested payload recovery requires its stored ciphertext");
+		return { created: true, payload: await this._createPayload(coordinates, command.idempotencyKey, command.payload) };
 	}
 
 	/** Loads the exact encrypted rows referenced by already-filtered participant-visible entries. */
@@ -107,9 +128,9 @@ export class PrismaConversationHistoryRepository implements ConversationHistoryR
 	}
 
 	/** Reads one participant's retry row for internal copied-message operations. */
-	private async _readPayload(caller: ConversationCaller, conversationId: string, idempotencyKey: string): Promise<StoredConversationPrivatePayload | null>
+	private async _readPayload(coordinates: ConversationPrivatePayloadCoordinates, idempotencyKey: string): Promise<StoredConversationPrivatePayload | null>
 	{
-		const row = await this.transaction.conversationPrivatePayload.findUnique({ where: { conversationId_authorSubject_idempotencyKey: { conversationId, authorSubject: caller.subjectId, idempotencyKey } } });
+		const row = await this.transaction.conversationPrivatePayload.findUnique({ where: { conversationId_authorSubject_idempotencyKey: { conversationId: coordinates.conversationId, authorSubject: coordinates.authorSubject, idempotencyKey } } });
 		return row === null ? null : _Stored(row);
 	}
 
@@ -123,13 +144,32 @@ export class PrismaConversationHistoryRepository implements ConversationHistoryR
 	}
 
 	/** Stores admitted ciphertext and updates list ordering in the same transaction. */
-	private async _createPayload(caller: ConversationCaller, conversationId: string, idempotencyKey: string, payloadRef: string, payload: EncryptedConversationPrivatePayload): Promise<StoredConversationPrivatePayload>
+	private async _createPayload(coordinates: ConversationPrivatePayloadCoordinates, idempotencyKey: string, payload: EncryptedConversationPrivatePayload): Promise<StoredConversationPrivatePayload>
 	{
-		const created = await this.transaction.conversationPrivatePayload.create({ data: { id: payloadRef, siloId: caller.siloId, conversationId, authorSubject: caller.subjectId, idempotencyKey, keyId: payload.keyId, nonce: Buffer.from(payload.nonce), authTag: Buffer.from(payload.authTag), ciphertext: Buffer.from(payload.ciphertext), ciphertextDigest: payload.ciphertextDigest } });
+		const created = await this.transaction.conversationPrivatePayload.create({ data: { id: coordinates.payloadRef, siloId: coordinates.siloId, conversationId: coordinates.conversationId, authorSubject: coordinates.authorSubject, idempotencyKey, keyId: payload.keyId, nonce: Buffer.from(payload.nonce), authTag: Buffer.from(payload.authTag), ciphertext: Buffer.from(payload.ciphertext), ciphertextDigest: payload.ciphertextDigest } });
 		// The trigger requires the ciphertext from this transaction and stamps the database time.
-		await this.transaction.conversation.update({ where: { id_siloId: { id: conversationId, siloId: caller.siloId } }, data: { updatedAt: new Date() }, select: { id: true } });
+		await this.transaction.conversation.update({ where: { id_siloId: { id: coordinates.conversationId, siloId: coordinates.siloId } }, data: { updatedAt: new Date() }, select: { id: true } });
 		return _Stored(created);
 	}
+}
+
+/** Builds the immutable ownership coordinates authenticated into ciphertext. */
+function _Coordinates(siloId: string, conversationId: string, payloadRef: string, authorSubject: string): ConversationPrivatePayloadCoordinates
+{
+	return { siloId, conversationId, payloadRef, authorSubject };
+}
+
+/** Rejects malformed coordinates without trimming or otherwise normalizing saved evidence. */
+function _ValidateIdentifier(value: string, name: string): void
+{
+	if (value.trim().length === 0 || value !== value.trim())
+		throw new Error(`Conversation private payload requires an exact ${name}`);
+}
+
+/** Checks every coordinate before an attested retry may reuse stored ciphertext. */
+function _SameCoordinates(first: ConversationPrivatePayloadCoordinates, second: ConversationPrivatePayloadCoordinates): boolean
+{
+	return first.siloId === second.siloId && first.conversationId === second.conversationId && first.payloadRef === second.payloadRef && first.authorSubject === second.authorSubject;
 }
 
 /** Maps Prisma byte buffers into the narrow encrypted payload contract. */

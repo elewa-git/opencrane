@@ -67,6 +67,55 @@ describe("PrismaManagedAgentConversationResolver", function _Suite()
 		await expect(f.resolver.list(_CALLER)).resolves.toEqual([]);
 	});
 
+	it("returns an eligible candidate through human Invoke and company Model Use without recording admission", async function _Eligible()
+	{
+		const f = _Fixture();
+
+		await expect(f.resolver.eligible(_CALLER, _SERVICE)).resolves.toMatchObject({ agentServiceId: _SERVICE, principalId: "company-principal", profileRevisionId: "profile-1" });
+		expect(f.decide.mock.calls.map(call => [call[0].principalId, call[0].resource.kind, call[0].action])).toEqual([
+			["human-1", ProductAuthorizationResourceKinds.AgentService, ProductAuthorizationActions.Invoke],
+			["company-principal", ProductAuthorizationResourceKinds.ModelDefinition, ProductAuthorizationActions.Use],
+		]);
+		expect(f.admit).not.toHaveBeenCalled();
+		expect(f.transaction.auditDecision.create).not.toHaveBeenCalled();
+	});
+
+	it.each([ProductAuthorizationActions.Invoke, ProductAuthorizationActions.Use])("returns no eligible candidate when current %s permission is missing", async function _EligibleDenial(action)
+	{
+		const f = _Fixture();
+		f.transaction.authorizationGrant.findMany.mockResolvedValue(f.grants.filter(grant => grant.id !== `grant-${action}`));
+
+		await expect(f.resolver.eligible(_CALLER, _SERVICE)).resolves.toBeNull();
+		expect(f.admit).not.toHaveBeenCalled();
+		expect(f.transaction.auditDecision.create).not.toHaveBeenCalled();
+	});
+
+	it("returns no eligible candidate for a missing profile, identity or current membership", async function _EligibleReadiness()
+	{
+		const f = _Fixture();
+		const missingProfile = new PrismaManagedAgentConversationResolver(f.transaction as never, { ...f.dependencies, profiles: [] });
+		await expect(missingProfile.eligible(_CALLER, _SERVICE)).resolves.toBeNull();
+
+		f.identityHistory.load.mockResolvedValueOnce(null);
+		await expect(f.resolver.eligible(_CALLER, _SERVICE)).resolves.toBeNull();
+
+		f.membership.mockResolvedValueOnce(null);
+		await expect(f.resolver.eligible(_CALLER, _SERVICE)).resolves.toBeNull();
+		expect(f.admit).not.toHaveBeenCalled();
+		expect(f.transaction.auditDecision.create).not.toHaveBeenCalled();
+	});
+
+	it("propagates identity history failures during eligibility checks", async function _EligibleHistoryFailure()
+	{
+		const f = _Fixture();
+		const failure = new Error("identity history integrity failure");
+		f.identityHistory.load.mockRejectedValueOnce(failure);
+
+		await expect(f.resolver.eligible(_CALLER, _SERVICE)).rejects.toBe(failure);
+		expect(f.admit).not.toHaveBeenCalled();
+		expect(f.transaction.auditDecision.create).not.toHaveBeenCalled();
+	});
+
 	it("keeps recorded human Invoke and company Model Use admission for child creation", async function _CreationAdmissions()
 	{
 		const f = _Fixture();

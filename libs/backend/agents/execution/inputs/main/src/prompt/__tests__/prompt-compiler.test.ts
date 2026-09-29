@@ -1,10 +1,10 @@
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
-import { CompiledFinalOutputModes, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, type CompiledModelRoute, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, CompiledToolDefinitionKinds, FIRST_PARTY_TOOL_CAPABILITY_CONTRACTS, FirstPartyToolCapabilities, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, type CompiledFirstPartyToolDefinition, type CompiledMcpToolDefinition, type CompiledModelRoute, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import { __AppendCompiledTool, __CompileRunInput } from "../prompt-compiler";
+import { __CompileRunInput } from "../prompt-compiler";
 import type { PromptCompilerRepositories } from "../prompt-compiler.types";
 import { _CONVERSATION_FINAL_OUTPUT_INSTRUCTIONS } from "../conversation-final-output-instructions";
 
@@ -32,6 +32,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		agentServiceId: "svc-1",
 		agentRevisionId: "rev-1",
 		snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION,
+		origin: { kind: "interactive", messageId: "m-2", historyRevision: "2" },
 		conversationId: "conversation-1",
 		messageIds: ["m-1", "m-2"],
 		personaRevisionId: "persona-1",
@@ -40,6 +41,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		skillRevisionIds: ["skill-1"],
 		memoryQueryPolicy: {},
 		mcpTools: [_mcpTool("mcp-tool-revision-b", "write"), _mcpTool("mcp-tool-revision-a", "read")],
+		firstPartyCapabilities: [],
 		modelRoute: { alias: "silo-default" },
 		budgetPolicy: { maxModelTurns: 4, maxCompletionTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, maxLoopIterations: 4, wallClockDeadlineEpochMs: 1_800_000_000_000 },
 		executionSubject: _executionSubject(),
@@ -50,6 +52,14 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 	};
 }
 
+/** Build the exact request-routine descriptor supplied by application composition. */
+function _requestRoutineTool(): CompiledFirstPartyToolDefinition
+{
+	const contract = FIRST_PARTY_TOOL_CAPABILITY_CONTRACTS[FirstPartyToolCapabilities.RequestRoutine];
+	const parametersSchema = { type: "object", additionalProperties: false, properties: { instruction: { type: "string" } } } as const;
+	return { kind: CompiledToolDefinitionKinds.FirstParty, capability: FirstPartyToolCapabilities.RequestRoutine, ...contract, description: "Prepare a routine for human review.", parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
+}
+
 /** Builds the required evidence-bound subject without affecting prompt compilation. */
 function _executionSubject(): RunInputSnapshot["executionSubject"]
 {
@@ -57,11 +67,11 @@ function _executionSubject(): RunInputSnapshot["executionSubject"]
 }
 
 /** Two tool definitions returned in grant order to prove model-name ordering is applied. */
-function _tools(): readonly CompiledToolDefinition[]
+function _tools(): readonly CompiledMcpToolDefinition[]
 {
 	return [
-		{ name: "zulu.source", modelName: "model_alpha", toolRevisionId: "tr-z", description: "first by model name", requiresApproval: false, parametersSchema: _snapshotTool("zulu").parametersSchema, parametersSchemaDigest: _snapshotTool("zulu").parametersSchemaDigest },
-		{ name: "alpha.source", modelName: "model_zulu", toolRevisionId: "tr-a", description: "last by model name", requiresApproval: true, parametersSchema: _snapshotTool("alpha").parametersSchema, parametersSchemaDigest: _snapshotTool("alpha").parametersSchemaDigest },
+		{ kind: CompiledToolDefinitionKinds.Mcp, name: "zulu.source", modelName: "model_alpha", toolRevisionId: "tr-z", description: "first by model name", requiresApproval: false, parametersSchema: _snapshotTool("zulu").parametersSchema, parametersSchemaDigest: _snapshotTool("zulu").parametersSchemaDigest },
+		{ kind: CompiledToolDefinitionKinds.Mcp, name: "alpha.source", modelName: "model_zulu", toolRevisionId: "tr-a", description: "last by model name", requiresApproval: true, parametersSchema: _snapshotTool("alpha").parametersSchema, parametersSchemaDigest: _snapshotTool("alpha").parametersSchemaDigest },
 	];
 }
 
@@ -72,7 +82,8 @@ function _repositories(overrides: Partial<PromptCompilerRepositories> = {}): Pro
 	return {
 		loadPersonaInstructions: async function _persona(id): Promise<string> { return id === null ? "" : "You are a careful assistant."; },
 		loadMessages: async function _messages(ids): Promise<readonly { role: "user"; content: string }[]> { return ids.map(function _turn(id): { role: "user"; content: string } { return { role: "user", content: `msg:${id}` }; }); },
-		loadToolDefinitions: async function _toolDefs(): Promise<readonly CompiledToolDefinition[]> { return _tools(); },
+		loadToolDefinitions: async function _toolDefs(): Promise<readonly CompiledMcpToolDefinition[]> { return _tools(); },
+		loadFirstPartyToolDefinitions: async function _FirstPartyTools(): Promise<readonly CompiledFirstPartyToolDefinition[]> { return []; },
 		loadArtifactSummaries: async function _artifacts(ids): Promise<readonly string[]> { return ids.map(function _summary(id): string { return `artifact ${id}`; }); },
 		loadSkillSummaries: async function _skills(ids): Promise<readonly string[]> { return ids.map(function _summary(id): string { return `skill ${id}`; }); },
 		resolveModelRoute: async function _route(): Promise<CompiledModelRoute> { return model; },
@@ -97,6 +108,15 @@ describe("__CompileRunInput", function _describeCompiler()
 		expect(compiled.tools.map(function _Name(t): string { return t.modelName; })).toEqual(["model_alpha", "model_zulu"]);
 	});
 
+	it("merges an admitted built-in declaration with MCP tools in one provider-name order", async function _OrdersAcrossSources()
+	{
+		const descriptor = _requestRoutineTool();
+		const firstPartyCapabilities = [{ capability: descriptor.capability, capabilityRevision: descriptor.capabilityRevision, parametersSchemaDigest: descriptor.parametersSchemaDigest }];
+		const compiled = await __CompileRunInput(_snapshot({ firstPartyCapabilities }), 1, _repositories({ loadFirstPartyToolDefinitions: async function _ResolveFirstParty(received): Promise<readonly CompiledFirstPartyToolDefinition[]> { expect(received).toEqual(firstPartyCapabilities); return [descriptor]; } }));
+
+		expect(compiled.tools.map(function _ModelName(tool): string { return tool.modelName; })).toEqual(["model_alpha", "model_zulu", "request_routine"]);
+	});
+
 	it("offers the saved approval-gated tools to a managed assistant without dropping the approval requirement", async function _CompanyApprovals()
 	{
 		const subject = _executionSubject();
@@ -104,7 +124,8 @@ describe("__CompileRunInput", function _describeCompiler()
 		const compiled = await __CompileRunInput(_snapshot({ executionSubject: managed }), 1, _repositories());
 
 		expect(compiled.tools.map(function _Name(t): string { return t.name; })).toEqual(["zulu.source", "alpha.source"]);
-		expect(compiled.tools.find(tool => tool.modelName === "model_zulu")?.requiresApproval).toBe(true);
+		const approvalTool = compiled.tools.find(tool => tool.kind === CompiledToolDefinitionKinds.Mcp && tool.modelName === "model_zulu");
+		expect(approvalTool?.kind === CompiledToolDefinitionKinds.Mcp && approvalTool.requiresApproval).toBe(true);
 	});
 
 	it("passes exact immutable MCP tool revisions to the tool-definition port", async function _PassesMcpToolRevisions()
@@ -112,7 +133,7 @@ describe("__CompileRunInput", function _describeCompiler()
 		let received: RunInputSnapshot["mcpTools"] | null = null;
 		const snapshot = _snapshot({ mcpTools: [_mcpTool("mcp-tool-revision-z", "write"), _mcpTool("mcp-tool-revision-y", "read")] });
 
-		await __CompileRunInput(snapshot, 1, _repositories({ loadToolDefinitions: async function _toolDefinitions(assignments): Promise<readonly CompiledToolDefinition[]> { received = assignments; return []; } }));
+		await __CompileRunInput(snapshot, 1, _repositories({ loadToolDefinitions: async function _toolDefinitions(assignments): Promise<readonly CompiledMcpToolDefinition[]> { received = assignments; return []; } }));
 
 		expect(received).toEqual(snapshot.mcpTools);
 	});
@@ -183,7 +204,7 @@ describe("__CompileRunInput", function _describeCompiler()
 	it("produces the same order and digest when repository iteration order changes", async function _StableRepositoryOrder()
 	{
 		const first = await __CompileRunInput(_snapshot(), 1, _repositories());
-		const restarted = await __CompileRunInput(_snapshot(), 1, _repositories({ loadToolDefinitions: async function _Reordered(): Promise<readonly CompiledToolDefinition[]> { return [..._tools()].reverse(); } }));
+		const restarted = await __CompileRunInput(_snapshot(), 1, _repositories({ loadToolDefinitions: async function _Reordered(): Promise<readonly CompiledMcpToolDefinition[]> { return [..._tools()].reverse(); } }));
 
 		expect(restarted.tools).toEqual(first.tools);
 		expect(restarted.digest).toBe(first.digest);
@@ -192,7 +213,7 @@ describe("__CompileRunInput", function _describeCompiler()
 	it("allows repeated source names when immutable revisions have distinct model names", async function _AllowsRepeatedSourceNames()
 	{
 		const definitions = _tools().map(tool => ({ ...tool, name: "files.export" }));
-		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories({ loadToolDefinitions: async function _RepeatedNames(): Promise<readonly CompiledToolDefinition[]> { return definitions; } }));
+		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories({ loadToolDefinitions: async function _RepeatedNames(): Promise<readonly CompiledMcpToolDefinition[]> { return definitions; } }));
 
 		expect(compiled.tools.map(function _Name(tool): string { return tool.name; })).toEqual(["files.export", "files.export"]);
 		expect(compiled.tools.map(function _ModelName(tool): string { return tool.modelName; })).toEqual(["model_alpha", "model_zulu"]);
@@ -204,8 +225,14 @@ describe("__CompileRunInput", function _describeCompiler()
 		const duplicateRevision = [tools[0]!, { ...tools[1]!, toolRevisionId: tools[0]!.toolRevisionId }];
 		const duplicateModelName = [tools[0]!, { ...tools[1]!, modelName: tools[0]!.modelName }];
 
-		await expect(__CompileRunInput(_snapshot(), 1, _repositories({ loadToolDefinitions: async function _DuplicateRevision(): Promise<readonly CompiledToolDefinition[]> { return duplicateRevision; } }))).rejects.toThrow(/unique model names and revision identifiers/);
-		await expect(__CompileRunInput(_snapshot(), 1, _repositories({ loadToolDefinitions: async function _DuplicateModelName(): Promise<readonly CompiledToolDefinition[]> { return duplicateModelName; } }))).rejects.toThrow(/unique model names and revision identifiers/);
+		await expect(__CompileRunInput(_snapshot(), 1, _repositories({ loadToolDefinitions: async function _DuplicateRevision(): Promise<readonly CompiledMcpToolDefinition[]> { return duplicateRevision; } }))).rejects.toThrow(/unique model names and source coordinates/);
+		await expect(__CompileRunInput(_snapshot(), 1, _repositories({ loadToolDefinitions: async function _DuplicateModelName(): Promise<readonly CompiledMcpToolDefinition[]> { return duplicateModelName; } }))).rejects.toThrow(/unique model names and source coordinates/);
+	});
+
+	it("refuses a first-party descriptor returned through the MCP-only compilation port", async function _RejectsUnadmittedFirstPartyTool()
+	{
+		const invalid = { ..._tools()[0]!, kind: CompiledToolDefinitionKinds.FirstParty } as unknown as CompiledMcpToolDefinition;
+		await expect(__CompileRunInput(_snapshot(), 1, _repositories({ loadToolDefinitions: async function _InvalidSource(): Promise<readonly CompiledMcpToolDefinition[]> { return [invalid]; } }))).rejects.toThrow();
 	});
 
 	it("seals the immutable snapshot attempt and refuses a mismatched live attempt", async function _BindsLiveAttempt()
@@ -234,27 +261,5 @@ describe("__CompileRunInput", function _describeCompiler()
 	it("fails closed when the snapshot targets a different compiler version", async function _versionMismatch()
 	{
 		await expect(__CompileRunInput(_snapshot({ promptCompilerVersion: "opencrane.prompt-compiler/other" }), 1, _repositories())).rejects.toThrow(/cannot compile snapshot version/);
-	});
-});
-
-describe("__AppendCompiledTool", function _describeAppend()
-{
-	it("orders the added first-party tool and reseals the changed payload", async function _Reseals()
-	{
-		const input = await __CompileRunInput(_snapshot(), 1, _repositories());
-		const tool = _snapshotTool("upgrade_session");
-		const updated = __AppendCompiledTool(input, { name: "upgrade_session", modelName: "upgrade_session", toolRevisionId: "opencrane:personal:upgrade_session:v1", description: "future change", requiresApproval: false, parametersSchema: tool.parametersSchema, parametersSchemaDigest: tool.parametersSchemaDigest });
-
-		expect(updated.tools.map(function _Name(tool): string { return tool.modelName; })).toEqual(["model_alpha", "model_zulu", "upgrade_session"]);
-		expect(updated.digest).not.toBe(input.digest);
-	});
-
-	it("rejects a duplicate provider name so an MCP descriptor cannot shadow a first-party tool", async function _RejectsDuplicateName()
-	{
-		const input = await __CompileRunInput(_snapshot(), 1, _repositories());
-		const tool = _snapshotTool("alpha");
-		expect(function _appendDuplicateName(): void { __AppendCompiledTool(input, { name: "another.source", modelName: "model_alpha", toolRevisionId: "opencrane:personal:upgrade_session:v1", description: "shadow", requiresApproval: false, parametersSchema: tool.parametersSchema, parametersSchemaDigest: tool.parametersSchemaDigest }); }).toThrow(/already contains model tool/);
-		expect(function _appendInvalidModelName(): void { __AppendCompiledTool(input, { name: "first.party", modelName: "first.party", toolRevisionId: "opencrane:first-party:v1", description: "invalid provider name", requiresApproval: false, parametersSchema: tool.parametersSchema, parametersSchemaDigest: tool.parametersSchemaDigest }); }).toThrow(/valid unique model names/);
-		expect(function _appendMissingModelName(): void { __AppendCompiledTool(input, { name: "first_party", modelName: undefined as unknown as string, toolRevisionId: "opencrane:first-party:v2", description: "missing provider name", requiresApproval: false, parametersSchema: tool.parametersSchema, parametersSchemaDigest: tool.parametersSchemaDigest }); }).toThrow(/valid unique model names/);
 	});
 });

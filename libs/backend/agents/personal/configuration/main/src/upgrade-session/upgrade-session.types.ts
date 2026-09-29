@@ -3,16 +3,21 @@ import type { JsonValue } from "@opencrane/util";
 
 import type { PersonalConfigurationPatch } from "../proposal/personal-configuration-patch.types";
 
-/** The fields of one accepted upgrade_session tool call. */
+/**
+ * Dormant proposal candidate from the earlier MCP-shaped upgrade-session design.
+ *
+ * Production has no caller. This shape is incompatible with `CompiledFirstPartyToolDefinition`
+ * and must be replaced, without a compatibility shim, when upgrade-session first-party dispatch is built.
+ */
 export interface UpgradeSessionInvocation
 {
 	/** Run that owns the requested future configuration change. */
 	readonly runId: string;
 	/** Attempt that admitted the action. */
 	readonly attempt: number;
-	/** Immutable built-in tool revision. */
+	/** Unused MCP-shaped revision coordinate retained only by the dormant adapter tests. */
 	readonly toolRevisionId: string;
-	/** Tool-invocation id, kept so the proposal can be traced back in audit records. */
+	/** Unused MCP-shaped invocation coordinate retained only by the dormant adapter tests. */
 	readonly toolInvocationId: string;
 	/**
 	 * `sha256:<hex>` digest of `arguments` in canonical JSON form, stored on the proposal as its
@@ -41,10 +46,8 @@ export interface UpgradeSessionProposalReceipt
  * The bridge between an agent run and this package: the agent asks for a change, this records
  * the request, and the user decides it later. Nothing about the running agent changes.
  *
- * Called by: `production-external-action-adapter.ts` in
- * the personal configuration composition boundary as its `personalConfiguration` dependency.
- *
- * @see {@link PrismaUpgradeSessionProposalRepository} for the transaction-scoped implementation.
+ * This interface and its unit of work have no production caller. They preserve the proposal
+ * persistence capability for a later rewrite, but must not be wired to the first-party descriptor.
  */
 export interface UpgradeSessionProposalRepository
 {

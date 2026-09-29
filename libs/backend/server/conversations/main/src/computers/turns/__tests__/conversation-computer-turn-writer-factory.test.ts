@@ -50,8 +50,8 @@ function _ToolTurn(): FrozenConversationComputerTurn
 	const digest = `sha256:${"b".repeat(64)}`;
 	const reference = { payloadRef: "tool-declaration", ciphertextDigest: digest };
 	const first = { ordinal: 1, invocationFence: "11c1f1dc-0010-4f13-9c2f-d3841ffd6651", tools: ConversationModelToolModes.Select, compiledInputDigest: _TURN.compile.digest, historyDigest: digest, requestDigest: digest, maxCompletionTokens: 100, authorityExpiresAtEpochMs: 4_070_908_800_000, dispatchDeadlineEpochMs: 4_070_908_700_000 };
-	const selection = { ordinal: 1, modelInvocationFence: first.invocationFence, declaration: reference, proposalId: "proposal-1", toolInvocationId: "proposal-1", requestFingerprint: digest };
-	const result = { ordinal: 1, proposalId: "proposal-1", toolInvocationId: "proposal-1", resultDigest: "sha256:result", exchange: { payloadRef: "tool-exchange", ciphertextDigest: digest }, authorityExpiresAtEpochMs: 4_070_908_600_000 };
+	const selection = { kind: "mcp" as const, ordinal: 1, modelInvocationFence: first.invocationFence, declaration: reference, proposalId: "proposal-1", toolInvocationId: "proposal-1", requestFingerprint: digest };
+	const result = { kind: "mcp" as const, ordinal: 1, proposalId: "proposal-1", toolInvocationId: "proposal-1", resultDigest: "sha256:result", exchange: { payloadRef: "tool-exchange", ciphertextDigest: digest }, authorityExpiresAtEpochMs: 4_070_908_600_000 };
 	const final = { ...first, ordinal: 2, invocationFence: _COMMAND.sourceCommandId, tools: ConversationModelToolModes.None, authorityExpiresAtEpochMs: 4_070_908_500_000, dispatchDeadlineEpochMs: 4_070_908_400_000 };
 	return {
 		..._TURN,

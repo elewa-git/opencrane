@@ -130,9 +130,9 @@ describe("bounded model retry protocol", function ()
 	it("clears only current-step retry evidence when a later logical reservation is admitted", function ()
 	{
 		const claimed = _Apply(_Waiting(), { kind: Events.ModelRetryClaimed, claim: _Claim() });
-		const selection = { ordinal: 1, modelInvocationFence: _Reservation().invocationFence, declaration: { payloadRef: "declaration-1", ciphertextDigest: _DIGEST }, proposalId: "proposal-1", toolInvocationId: "proposal-1", requestFingerprint: _DIGEST };
+		const selection = { kind: "mcp" as const, ordinal: 1, modelInvocationFence: _Reservation().invocationFence, declaration: { payloadRef: "declaration-1", ciphertextDigest: _DIGEST }, proposalId: "proposal-1", toolInvocationId: "proposal-1", requestFingerprint: _DIGEST };
 		const selected = _Apply(claimed, { kind: Events.ToolSelected, selection });
-		const ready = _Apply(selected, { kind: Events.ToolResultRecorded, result: { ordinal: 1, proposalId: "proposal-1", toolInvocationId: "proposal-1", resultDigest: _DIGEST, exchange: { payloadRef: "exchange-1", ciphertextDigest: _DIGEST }, authorityExpiresAtEpochMs: _NOW + 30_000 } });
+		const ready = _Apply(selected, { kind: Events.ToolResultRecorded, result: { kind: "mcp", ordinal: 1, proposalId: "proposal-1", toolInvocationId: "proposal-1", resultDigest: _DIGEST, exchange: { payloadRef: "exchange-1", ciphertextDigest: _DIGEST }, authorityExpiresAtEpochMs: _NOW + 30_000 } });
 		const next = _Apply(ready, { kind: Events.ModelReserved, reservation: { ..._Reservation(), ordinal: 2, invocationFence: "51c1f1dc-0010-4f13-9c2f-d3841ffd6651", tools: ConversationModelToolModes.None, authorityExpiresAtEpochMs: _NOW + 30_000, historyDigest: _ConversationComputerTurnHistoryDigest(ready.steps) } });
 		expect(next.modelRetry).toBeNull();
 		expect(next.accounting).toEqual({ reservedModelCalls: 2, reservedCompletionTokens: 200, reservedToolInvocations: 1, toolResultCyclesFed: 1 });

@@ -1,5 +1,7 @@
 export * from "./conversation-command";
 export * from "./conversation-command.types";
+export * from "./conversation-genesis-origin.types";
+export * from "./conversation-genesis-origin.validator";
 export * from "./conversation-invariants";
 export * from "./conversation.types";
 export * from "./conversation.validator";

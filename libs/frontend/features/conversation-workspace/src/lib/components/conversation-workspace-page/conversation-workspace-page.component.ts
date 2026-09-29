@@ -54,6 +54,8 @@ export class ConversationWorkspacePageComponent
 	public readonly workspaceIndexSelected = output<void>();
 	/** Requests app-owned verified sign-in without letting the feature navigate. */
 	public readonly stepUpRequested = output<string>();
+	/** Requests the app route coordinator to open routine creation for the selected conversation. */
+	public readonly scheduleRequested = output<string>();
 	/** Keeps a route selection and the component-scoped store aligned. */
 	private readonly _routeSelectionEffect = effect(this._OpenRouteSelection.bind(this));
 	/** Restores the approval control after the app reports that verified sign-in completed. */
@@ -106,6 +108,15 @@ export class ConversationWorkspacePageComponent
 		const parent = this.vm.store.selected()?.parent;
 		if (parent != null)
 			await this.openConversation(parent.parentConversationId);
+	}
+
+	/** Forwards only the current open conversation, never a stale route coordinate. */
+	protected scheduleRoutine(): void
+	{
+		const selected = this.vm.store.selected();
+		if (selected === null || selected.lifecycle === this.vm.lifecycles.Closed || this.vm.store.conversationCommandBusy())
+			return;
+		this.scheduleRequested.emit(selected.id);
 	}
 
 	/** Delegate one visually unified rail selection to its real server-backed source. */

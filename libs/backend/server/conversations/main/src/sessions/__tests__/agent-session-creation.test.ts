@@ -37,10 +37,12 @@ vi.mock("@opencrane/backend/server/conversations/history", async function _MockC
     },
   };
 });
-vi.mock("@opencrane/backend/server/conversations/computers", function _MockComputerHistory() {
+vi.mock("@opencrane/backend/server/conversations/computers", async function _MockComputerHistory(importOriginal) {
+  const actual = await importOriginal<typeof import("@opencrane/backend/server/conversations/computers")>();
   return {
-    ConversationComputerHistory: class {
-      public load = _Mocks.computerLoad;
+    ...actual,
+    ConversationComputerHistory: class extends actual.ConversationComputerHistory {
+      public override load = _Mocks.computerLoad;
     },
   };
 });

@@ -1,5 +1,6 @@
 import { ConversationStatusTones } from "@opencrane/elements/conversation";
-import type { MessageEntry, ToolCallLogEntry } from "@opencrane/contracts";
+import { ConversationLogKinds, ConversationRoutineProposalLogPhases } from "@opencrane/contracts";
+import type { MessageEntry, RoutineProposalLogEntry, ToolCallLogEntry } from "@opencrane/contracts";
 import { ConversationAssetPresentationStates, type ConversationAssetPresentation } from "@opencrane/features/conversation-assets";
 import { ConversationAssetDisposition, ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
 import { ConversationAssetContentCommandStates } from "@opencrane/state/conversation/assets";
@@ -45,6 +46,12 @@ function _GeneratedCsvAsset(overrides: Partial<ConversationAssetPresentation> = 
 function _Tool(phase: ToolCallLogEntry["phase"], position: string, toolName = "Customer records"): ToolCallLogEntry
 {
 	return { schemaVersion: 1, id: `tool-entry-${position}`, conversationId: "conversation-1", position, author: { kind: "system", systemId: "opencrane", name: "OpenCrane" }, provenance: "service-attested", visibility: { audience: "conversation" }, runId: "run-private", causationId: "cause-private", correlationId: "correlation-private", idempotencyKey: `tool-entry-${position}`, occurredAt: "2026-08-12T11:08:01.000Z", attestation: null, kind: "log", summary: "Tool status", detailsRef: null, logKind: "tool_call", toolCallId: "tool-call-private", toolKind: "mcp", toolName, phase, resultArtifactRevisionId: phase === "completed" ? "artifact-private" : null };
+}
+
+/** Builds one typed proposal-ready log without copying the protected suggestion into history. */
+function _RoutineProposal(proposalRef = "proposal-opaque"): RoutineProposalLogEntry
+{
+	return { schemaVersion: 1, id: "proposal-entry-1", conversationId: "conversation-1", position: "1", author: { kind: "system", systemId: "opencrane", name: "OpenCrane" }, provenance: "service-attested", visibility: { audience: "participant_subset", participantIds: ["subject"] }, runId: null, causationId: "cause-private", correlationId: "correlation-private", idempotencyKey: "proposal-entry-1", occurredAt: "2026-08-12T11:08:01.000Z", attestation: null, kind: "log", summary: "Routine proposal ready for review", detailsRef: null, logKind: ConversationLogKinds.RoutineProposal, proposalRef, phase: ConversationRoutineProposalLogPhases.ReadyForReview };
 }
 
 describe("Conversation workspace presentation", function _ConversationWorkspacePresentation()
@@ -179,6 +186,20 @@ describe("Conversation workspace presentation", function _ConversationWorkspaceP
 		expect(views.map(view => view.kind === ConversationWorkspaceTranscriptEntryKinds.ToolActivity ? view.status.tone : null)).toEqual([ConversationStatusTones.Neutral, ConversationStatusTones.Neutral, ConversationStatusTones.Neutral, ConversationStatusTones.Danger, ConversationStatusTones.Danger, ConversationStatusTones.Attention]);
 		expect(views[2]!.kind === ConversationWorkspaceTranscriptEntryKinds.ToolActivity ? views[2]!.status.detail : "").toContain("may still be preparing its answer");
 		expect(views.every(view => view.kind !== ConversationWorkspaceTranscriptEntryKinds.ToolActivity || view.status.detail?.startsWith("Customer records:") === true)).toBe(true);
+	});
+
+	it("maps only a typed ready proposal to the named review route without exposing its suggestion", function _RoutineProposalRoute()
+	{
+		const view = _ConversationEntryViews([_RoutineProposal()], {})[0]!;
+		expect(view).toMatchObject({ kind: ConversationWorkspaceTranscriptEntryKinds.RoutineProposal, id: "proposal-entry-1", proposalRef: "proposal-opaque", status: { label: "Routine proposal ready for review", tone: ConversationStatusTones.Attention } });
+		expect(JSON.stringify(view)).not.toContain("0 9");
+		expect(JSON.stringify(view)).not.toContain("Review the weekly sales");
+		expect(JSON.stringify(view)).not.toContain("detailsRef");
+	});
+
+	it("does not create a proposal link for malformed opaque references", function _MalformedRoutineProposal()
+	{
+		expect(_ConversationEntryViews([_RoutineProposal(" ")], {})).toEqual([]);
 	});
 
 	it("preserves a long display-safe tool name as text for the presentation component to escape", function _ToolName()

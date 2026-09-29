@@ -27,6 +27,7 @@ describe("conversation entry validation", function ()
 		{ logKind: "artifact", fields: { artifactId: "artifact-1", artifactRevisionId: null }, valid: "published", invalid: "completed" },
 		{ logKind: "memory", fields: { operation: "recall" }, valid: "denied", invalid: "granted" },
 		{ logKind: "approval", fields: { approvalId: "approval-1", action: "Publish report" }, valid: "granted", invalid: "cancelled" },
+		{ logKind: "routine_proposal", fields: { proposalRef: "proposal-1" }, valid: "ready_for_review", invalid: "completed" },
 	])("keeps $logKind progress separate from another log's phases", function ({ logKind, fields, valid, invalid })
 	{
 		const entry = { ..._BASE, kind: "log", summary: "Work progress", detailsRef: null, logKind, ...fields };

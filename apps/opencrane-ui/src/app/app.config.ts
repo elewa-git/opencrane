@@ -17,6 +17,7 @@ import { APP_ROUTES } from "./app.routes";
 import { provideConversationWorkspaceComposition } from "./conversation-workspace.providers";
 import { provideGovernanceReads } from "./governance.providers";
 import { provideToolApprovalScopes } from "./tool-approval-scope.providers";
+import { provideRoutineComposition } from "./routine.providers";
 
 /**
  * Root application configuration for the OpenCrane frontend.
@@ -53,6 +54,7 @@ export const appConfig: ApplicationConfig =
 		...provideConversationWorkspaceComposition(),
 		...provideGovernanceReads(),
 		...provideToolApprovalScopes(),
+		...provideRoutineComposition(),
 		// This app is the org/customer surface — capabilities derive from the
 		// org-admin claim only (platform-operator claims grant nothing here).
 		{ provide: PLATFORM_SURFACE, useValue: "org" },

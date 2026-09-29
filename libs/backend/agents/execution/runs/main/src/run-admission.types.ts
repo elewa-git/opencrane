@@ -1,5 +1,5 @@
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
-import type { RunInputSnapshot } from "@opencrane/contracts";
+import { AgentRunTriggers, type RunInputSnapshot } from "@opencrane/contracts";
 import type { AgentRevisionId, AgentRunId, AgentServiceId, SiloId } from "@opencrane/models/agents";
 import type { ConversationId, MessageId } from "@opencrane/models/conversations";
 
@@ -15,7 +15,7 @@ export interface InitialRunAuthority
 	/** Version of the prompt compiler selected by the published revision. */
 	readonly promptCompilerVersion: string;
 	/** Trigger accepted for the initial logical run. */
-	readonly trigger: "interactive";
+	readonly trigger: `${AgentRunTriggers}`;
 }
 
 /** States whether the current immutable execution policy requires a persona revision. */
@@ -73,6 +73,39 @@ export interface RunAdmissionMessageInput
 }
 
 /**
+ * Carries only durable routine coordinates into admission.
+ *
+ * The caller cannot supply message identifiers or a browser identity on this path. An injected
+ * service-attested prompt reader resolves the occurrence's canonical conversation history inside
+ * the admission fence.
+ */
+export interface RunAdmissionRoutineInput
+{
+	/** Immutable routine aggregate that approved this occurrence. */
+	readonly routineId: string;
+	/** Positive immutable routine revision executed by the occurrence. */
+	readonly routineRevision: number;
+	/** Durable firing linked one-to-one with the admitted run. */
+	readonly firingId: string;
+	/** UTC automatic slot, or null for an immediate manual firing. */
+	readonly scheduledSlot: string | null;
+	/** Original routine requester retained as approval provenance only. */
+	readonly requesterPrincipalId: string;
+	/** OpenID Connect issuer frozen with the original routine approval. */
+	readonly requesterIssuer: string;
+	/** Issuer-scoped subject frozen with the original routine approval. */
+	readonly requesterSubjectId: string;
+	/** Authentication instant frozen with the original approval, never refreshed by a firing. */
+	readonly requesterAuthenticatedAt: string;
+	/** Saved occurrence-preparation workflow task identifier. */
+	readonly workflowTaskId: string;
+	/** Saved occurrence-preparation workflow definition name. */
+	readonly workflowTaskName: string;
+	/** Saved occurrence-preparation workflow idempotency fence. */
+	readonly workflowTaskKey: string;
+}
+
+/**
  * Preserves immutable human author provenance for the final Kurrent message.
  *
  * Called by: conversation history admission readers and the run persistence fence.
@@ -112,8 +145,6 @@ export interface RunAdmissionCommandCoordinates
 	readonly conversationId: ConversationId | null;
 	/** User-visible key making duplicate transport delivery return the first admission. */
 	readonly requestIdempotencyKey: string;
-	/** Exact conversational message provenance, or null for non-conversational work. */
-	readonly messageInput: RunAdmissionMessageInput | null;
 }
 
 /** Captures server-verified request provenance before the transaction resolves its durable principal. */
@@ -127,14 +158,34 @@ export interface RunAdmissionRequester
 	readonly authenticatedAt: string;
 }
 
-/** Initial admission carries only server-derived coordinates and requester provenance. */
-export interface RunAdmissionCommand extends RunAdmissionCommandCoordinates
+/** Browser-triggered admission preserves the existing verified human-message contract. */
+export interface InteractiveRunAdmissionCommand extends RunAdmissionCommandCoordinates
 {
-	/** Trigger accepted for this new logical run. */
-	readonly trigger: "interactive";
+	/** Selects verified interactive admission. */
+	readonly trigger: `${AgentRunTriggers.Interactive}`;
 	/** Provenance from which transaction-scoped authority resolves the requester principal. */
 	readonly requester: RunAdmissionRequester;
+	/** Exact conversational message provenance, or null for non-conversational work. */
+	readonly messageInput: RunAdmissionMessageInput | null;
+	/** Routine coordinates can never enter an interactive command. */
+	readonly routineInput?: never;
 }
+
+/** Product-triggered admission for one independent routine root run. */
+export interface RoutineRunAdmissionCommand extends RunAdmissionCommandCoordinates
+{
+	/** Selects an automatic schedule occurrence or an immediate manual occurrence. */
+	readonly trigger: `${AgentRunTriggers.Scheduled}` | `${AgentRunTriggers.Manual}`;
+	/** No human message may be forged for a product-triggered occurrence. */
+	readonly messageInput: null;
+	/** Exact durable routine provenance loaded by the scheduling owner. */
+	readonly routineInput: RunAdmissionRoutineInput;
+	/** Browser provenance is forbidden because the product service attests this command. */
+	readonly requester?: never;
+}
+
+/** Safe command union accepted by the shared initial-run admission authority. */
+export type RunAdmissionCommand = InteractiveRunAdmissionCommand | RoutineRunAdmissionCommand;
 
 /** The transaction and trusted clock that every input loader uses at the final admission fence. */
 export interface RunAdmissionTransaction

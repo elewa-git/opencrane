@@ -1,0 +1,7 @@
+:host { display: block; min-width: 0; }
+.routine-history { display: grid; gap: var(--oc-space-4); }
+.routine-history__table { overflow-x: auto; }
+.routine-history__notice { display: grid; gap: var(--oc-space-2); padding: var(--oc-space-4); border: 1px solid var(--oc-border-subtle); border-radius: var(--oc-radius-card); background: var(--oc-surface-subtle); }
+.routine-history__notice h2, .routine-history__notice p { margin: 0; }
+.routine-history th, .routine-history td { vertical-align: top; white-space: nowrap; }
+.routine-history td:nth-child(5) { min-inline-size: 13rem; white-space: normal; }

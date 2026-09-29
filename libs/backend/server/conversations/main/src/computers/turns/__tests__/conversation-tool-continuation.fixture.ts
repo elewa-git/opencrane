@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { vi } from "vitest";
-import { ConversationModelResponseKinds, ConversationToolProposalOutcomes } from "@opencrane/contracts";
+import { CompiledToolDefinitionKinds, ConversationModelResponseKinds, ConversationToolProposalOutcomes } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { ConversationComputerToolResultOutcomes, type ConversationComputerToolResult } from "../conversation-computer-continuation.types";
@@ -19,7 +19,7 @@ export async function _ToolContinuationHarness(toolCount = 1, maxCompletionToken
 	{
 		const name = index === 0 ? "records.lookup" : `records.lookup-${index + 1}`;
 		const modelName = index === 0 ? "lookup_record" : `lookup_record_${index + 1}`;
-		return { name, modelName, toolRevisionId: `tool-${index + 1}`, description: "Read a dedicated record", requiresApproval: false, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) };
+		return { kind: CompiledToolDefinitionKinds.Mcp, name, modelName, toolRevisionId: `tool-${index + 1}`, description: "Read a dedicated record", requiresApproval: false, parametersSchema: schema, parametersSchemaDigest: ___DigestCanonicalJson(schema) };
 	});
 	const calls = tools.map((tool, index) =>
 	{
@@ -57,7 +57,7 @@ export async function _ToolContinuationHarness(toolCount = 1, maxCompletionToken
 	const proposals = { admit: vi.fn(async function _Admit(turn: FrozenConversationComputerTurn)
 	{
 		const selection = turn.protocol.steps.at(-1)?.selection;
-		if (selection === null || selection === undefined)
+		if (selection === null || selection === undefined || selection.kind !== "mcp")
 			throw new Error("tool selection is missing");
 		if (!admitted.has(selection.proposalId))
 		{
@@ -82,7 +82,7 @@ export async function _ToolContinuationHarness(toolCount = 1, maxCompletionToken
 			if (flags.pending)
 				return { outcome: ConversationComputerToolResultOutcomes.Pending } as const;
 			const selection = turn.protocol.steps.at(-1)?.selection ?? [...turn.protocol.steps].reverse().find(step => step.result !== null)?.selection;
-			if (selection === null || selection === undefined)
+			if (selection === null || selection === undefined || selection.kind !== "mcp")
 				throw new Error("tool selection is missing");
 			return resultFor(selection);
 		}),
@@ -90,7 +90,7 @@ export async function _ToolContinuationHarness(toolCount = 1, maxCompletionToken
 		{
 			const saved = (await f.store.load(turn.bootstrapId))!;
 			const resultStep = [...saved.protocol.steps].reverse().find(step => step.result !== null);
-			if (resultStep === undefined || resultStep.result === null || turn.protocol.state !== ConversationComputerTurnProtocolStates.ModelReserved)
+			if (resultStep === undefined || resultStep.result === null || resultStep.selection.kind !== "mcp" || turn.protocol.state !== ConversationComputerTurnProtocolStates.ModelReserved)
 				throw new Error("acknowledgement requires durable continuation evidence");
 			const resultTurn = { ...turn, protocol: { ...saved.protocol, state: ConversationComputerTurnProtocolStates.ResultReady, steps: saved.protocol.steps.slice(0, -1) } } as FrozenConversationComputerTurn;
 			const result = await results.read(resultTurn);

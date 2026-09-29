@@ -119,7 +119,7 @@ if (authorityIndex < 0)
 }
 let authoritySql = _RemoveGeneratedObjects(current.slice(authorityIndex), normalizedGenerated);
 // Keep this accepted catalogue addition bound to the same canonical digest the TypeScript authority uses.
-authoritySql = authoritySql.replace(/(capability-catalog-opencrane-product-authorization-v1'[\s\S]*?\n    )'sha256:[0-9a-f]{64}'(,\n    )'(\[[^\n]*\])'::jsonb/u, function _StandingApprovalCapabilities(_seed, prefix, separator, payload)
+authoritySql = authoritySql.replace(/(capability-catalog-opencrane-product-authorization-v1'[\s\S]*?\n    )'sha256:[0-9a-f]{64}'(,\n    )'(\[[^\n]*\])'::jsonb/u, function _ProductCapabilities(_seed, prefix, separator, payload)
 {
 	const capabilities = JSON.parse(payload);
 	for (const capability of [
@@ -129,6 +129,17 @@ authoritySql = authoritySql.replace(/(capability-catalog-opencrane-product-autho
 	{
 		if (!capabilities.some(existing => existing.id === capability.id))
 			capabilities.splice(capabilities.findIndex(existing => existing.id === "skill:discover"), 0, capability);
+	}
+	for (const capability of [
+		{ id: "routine:read", resourceKind: "routine", actions: ["read"], evidence: "read" },
+		{ id: "routine:edit", resourceKind: "routine", actions: ["edit"], evidence: "decision" },
+		{ id: "routine:retire", resourceKind: "routine", actions: ["retire"], evidence: "decision" },
+		{ id: "routine:use", resourceKind: "routine", actions: ["use"], evidence: "effect" },
+		{ id: "routine-collection:create", resourceKind: "routine-collection", actions: ["create"], evidence: "decision" },
+	])
+	{
+		if (!capabilities.some(existing => existing.id === capability.id))
+			capabilities.splice(capabilities.findIndex(existing => existing.id === "tool-invocation:read"), 0, capability);
 	}
 	const canonical = function _Canonical(value)
 	{
@@ -307,8 +318,9 @@ BEGIN
         OR NEW."revocation_idempotency_digest" IS NOT NULL OR NEW."revocation_command_digest" IS NOT NULL
         OR NEW."scope_identity_digest" !~ '^sha256:[0-9a-f]{64}$' OR NEW."active_identity_digest" IS DISTINCT FROM NEW."scope_identity_digest"
         OR NEW."arguments_digest" !~ '^sha256:[0-9a-f]{64}$'
-        OR NEW."tool_action" <> 'invoke' OR NEW."routine_id" IS NOT NULL OR NEW."routine_revision" IS NOT NULL THEN
-        RAISE EXCEPTION 'new ToolApprovalScope requires exact active interactive consent coordinates';
+        OR NEW."tool_action" <> 'invoke' OR num_nonnulls(NEW."routine_id", NEW."routine_revision") NOT IN (0, 2)
+        OR (NEW."routine_revision" IS NOT NULL AND NEW."routine_revision" <= 0) THEN
+        RAISE EXCEPTION 'new ToolApprovalScope requires exact active consent coordinates';
     END IF;
     SELECT * INTO source_approval FROM "approval_requests" WHERE "id" = NEW."source_approval_request_id" FOR KEY SHARE;
     SELECT * INTO source_request FROM "elicitation_requests" WHERE "id" = source_approval."elicitation_request_id" FOR KEY SHARE;
@@ -320,6 +332,7 @@ BEGIN
         OR source_approval."action" IS DISTINCT FROM NEW."tool_action" OR source_approval."final_arguments" IS DISTINCT FROM NEW."reviewed_arguments"
         OR source_approval."final_arguments_digest" IS DISTINCT FROM NEW."arguments_digest" OR source_approval."principal_id" IS DISTINCT FROM NEW."connection_owner_principal_id"
         OR source_run."execution_subject"->'requester'->>'requesterPrincipalId' IS DISTINCT FROM NEW."requester_principal_id"
+        OR source_run."routine_id" IS DISTINCT FROM NEW."routine_id" OR source_run."routine_revision" IS DISTINCT FROM NEW."routine_revision"
         OR source_request."assigned_participant_id" IS DISTINCT FROM NEW."requester_subject_id" THEN
         RAISE EXCEPTION 'ToolApprovalScope requires its exact requester-approved Always decision';
     END IF;
@@ -335,16 +348,21 @@ CREATE FUNCTION "enforce_tool_approval_admission_write"() RETURNS trigger LANGUA
 DECLARE
     current_scope "tool_approval_scopes"%ROWTYPE;
     current_invocation "tool_invocations"%ROWTYPE;
+    current_run "agent_runs"%ROWTYPE;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ToolApprovalAdmission rows cannot be deleted'; END IF;
     SELECT * INTO current_scope FROM "tool_approval_scopes" WHERE "id" = COALESCE(NEW."scope_id", OLD."scope_id") FOR KEY SHARE;
     SELECT * INTO current_invocation FROM "tool_invocations" WHERE "id" = COALESCE(NEW."tool_invocation_id", OLD."tool_invocation_id") FOR UPDATE;
+    SELECT * INTO current_run FROM "agent_runs" WHERE "id" = current_invocation."run_id" FOR KEY SHARE;
     IF TG_OP = 'INSERT' THEN
         IF NEW."origin" IS DISTINCT FROM 'standing_consent'::"ToolApprovalAdmissionOrigin" OR NEW."consumed_at" IS NOT NULL OR NEW."consumed_claim_fence" IS NOT NULL
             OR current_scope."state" IS DISTINCT FROM 'active'::"ToolApprovalScopeState" OR NEW."scope_revision" IS DISTINCT FROM current_scope."revision"
             OR current_invocation."approval_required" IS DISTINCT FROM TRUE OR current_invocation."state" IS DISTINCT FROM 'awaiting_approval'::"ToolInvocationState"
             OR current_invocation."silo_id" IS DISTINCT FROM current_scope."silo_id" OR current_invocation."agent_service_id" IS DISTINCT FROM current_scope."agent_service_id"
             OR current_invocation."agent_revision_id" IS DISTINCT FROM current_scope."agent_revision_id" OR current_invocation."tool_revision_id" IS DISTINCT FROM current_scope."tool_revision_id"
+            OR current_run."id" IS NULL OR current_run."routine_id" IS DISTINCT FROM current_scope."routine_id"
+            OR current_run."routine_revision" IS DISTINCT FROM current_scope."routine_revision"
+            OR current_run."execution_subject"->'requester'->>'requesterPrincipalId' IS DISTINCT FROM current_scope."requester_principal_id"
             OR current_invocation."arguments_digest" IS DISTINCT FROM NEW."arguments_digest" OR NEW."arguments_digest" IS DISTINCT FROM current_scope."arguments_digest"
             OR current_invocation."arguments" IS DISTINCT FROM current_scope."reviewed_arguments" THEN
             RAISE EXCEPTION 'ToolApprovalAdmission requires an active exact scope and awaiting invocation';
@@ -370,6 +388,93 @@ if (/CREATE FUNCTION "enforce_tool_approval_scope_write"\(\) RETURNS trigger[\s\
 	authoritySql = authoritySql.replace(/-- Standing consent is derived only from an authenticated requester decision[\s\S]*?CREATE TRIGGER "tool_approval_admission_write"[\s\S]*?;/u, function _StandingApprovalAuthority() { return standingApprovalAuthority; });
 }
 else authoritySql = `${authoritySql}\n\n${standingApprovalAuthority}`;
+
+// Snapshot v4 adds an explicit built-in capability list and deliberately rejects every older row.
+authoritySql = authoritySql.replace('CHECK ("snapshot_version" = 3)', 'CHECK ("snapshot_version" = 4)');
+authoritySql = authoritySql.replace('snapshot."snapshot_version" IS DISTINCT FROM 3', 'snapshot."snapshot_version" IS DISTINCT FROM 4');
+authoritySql = authoritySql.replace('RunInputSnapshot requires version 3 and its exact run trigger origin', 'RunInputSnapshot requires version 4 and its exact run trigger origin');
+const firstPartyCapabilityConstraint = `ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_first_party_capabilities_check" CHECK (
+    jsonb_typeof("first_party_capabilities") = 'array'
+);`;
+if (/ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_first_party_capabilities_check" CHECK \([\s\S]*?\n\);/u.test(authoritySql))
+	authoritySql = authoritySql.replace(/ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_first_party_capabilities_check" CHECK \([\s\S]*?\n\);/u, function _FirstPartyCapabilityConstraint() { return firstPartyCapabilityConstraint; });
+else authoritySql = `${authoritySql}\n\n${firstPartyCapabilityConstraint}`;
+
+const routineProposalAuthority = `-- Routine suggestions retain their source and encrypted envelope while the requester reviews them.
+ALTER TABLE "agent_routine_proposals" ADD CONSTRAINT "agent_routine_proposals_material_check" CHECK (
+    "source_run_attempt" > 0 AND "source_ordinal" > 0
+    AND "suggestion_ciphertext_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND "arguments_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND "expires_at" = "created_at" + INTERVAL '24 hours'
+);
+ALTER TABLE "agent_routine_proposals" ADD CONSTRAINT "agent_routine_proposals_lifecycle_check" CHECK (
+    ("state" = 'pending' AND "accepted_routine_id" IS NULL AND "terminal_at" IS NULL)
+    OR ("state" = 'accepted' AND "accepted_routine_id" IS NOT NULL AND "terminal_at" IS NOT NULL)
+    OR ("state" IN ('cancelled', 'expired') AND "accepted_routine_id" IS NULL AND "terminal_at" IS NOT NULL)
+);
+CREATE FUNCTION "enforce_agent_routine_proposal_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    decision_time TIMESTAMP(3) := date_trunc('milliseconds', statement_timestamp())::TIMESTAMP(3);
+    source_run "agent_runs"%ROWTYPE;
+    accepted_routine "agent_routines"%ROWTYPE;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'AgentRoutineProposal rows cannot be deleted';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."state" <> 'pending' OR NEW."accepted_routine_id" IS NOT NULL OR NEW."terminal_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'AgentRoutineProposal must begin pending';
+        END IF;
+        SELECT * INTO source_run FROM "agent_runs" WHERE "id" = NEW."source_run_id" AND "attempt" = NEW."source_run_attempt";
+        IF source_run."id" IS NULL OR source_run."silo_id" IS DISTINCT FROM NEW."silo_id"
+            OR source_run."conversation_id" IS DISTINCT FROM NEW."source_conversation_id"
+            OR source_run."execution_subject"->'requester'->>'requesterPrincipalId' IS DISTINCT FROM NEW."requester_principal_id" THEN
+            RAISE EXCEPTION 'AgentRoutineProposal requires its exact source run, conversation and requester';
+        END IF;
+        NEW."created_at" := decision_time;
+        NEW."expires_at" := decision_time + INTERVAL '24 hours';
+        RETURN NEW;
+    END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."source_conversation_id" IS DISTINCT FROM OLD."source_conversation_id"
+        OR NEW."source_run_id" IS DISTINCT FROM OLD."source_run_id"
+        OR NEW."source_run_attempt" IS DISTINCT FROM OLD."source_run_attempt"
+        OR NEW."source_ordinal" IS DISTINCT FROM OLD."source_ordinal"
+        OR NEW."requester_principal_id" IS DISTINCT FROM OLD."requester_principal_id"
+        OR NEW."suggestion_key_id" IS DISTINCT FROM OLD."suggestion_key_id"
+        OR NEW."suggestion_nonce" IS DISTINCT FROM OLD."suggestion_nonce"
+        OR NEW."suggestion_auth_tag" IS DISTINCT FROM OLD."suggestion_auth_tag"
+        OR NEW."suggestion_ciphertext" IS DISTINCT FROM OLD."suggestion_ciphertext"
+        OR NEW."suggestion_ciphertext_digest" IS DISTINCT FROM OLD."suggestion_ciphertext_digest"
+        OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest"
+        OR NEW."created_at" IS DISTINCT FROM OLD."created_at"
+        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" THEN
+        RAISE EXCEPTION 'AgentRoutineProposal source, requester and suggestion are immutable';
+    END IF;
+    IF OLD."state" <> 'pending' OR NEW."state" = 'pending' THEN
+        RAISE EXCEPTION 'AgentRoutineProposal may leave pending exactly once';
+    END IF;
+    IF NEW."state" = 'accepted' THEN
+        IF decision_time >= OLD."expires_at" THEN
+            RAISE EXCEPTION 'AgentRoutineProposal cannot be accepted after expiry';
+        END IF;
+        SELECT * INTO accepted_routine FROM "agent_routines" WHERE "id" = NEW."accepted_routine_id" AND "silo_id" = NEW."silo_id";
+        IF accepted_routine."id" IS NULL OR accepted_routine."original_requester_principal_id" IS DISTINCT FROM NEW."requester_principal_id" THEN
+            RAISE EXCEPTION 'AgentRoutineProposal acceptance requires a routine owned by its requester';
+        END IF;
+    ELSIF NEW."state" = 'expired' AND decision_time < OLD."expires_at" THEN
+        RAISE EXCEPTION 'AgentRoutineProposal cannot expire before its deadline';
+    END IF;
+    NEW."terminal_at" := decision_time;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "agent_routine_proposals_authority" BEFORE INSERT OR UPDATE OR DELETE ON "agent_routine_proposals"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_routine_proposal_lifecycle"();`;
+if (/-- Routine suggestions retain their source and encrypted envelope[\s\S]*?CREATE TRIGGER "agent_routine_proposals_authority"[\s\S]*?;/u.test(authoritySql))
+	authoritySql = authoritySql.replace(/-- Routine suggestions retain their source and encrypted envelope[\s\S]*?CREATE TRIGGER "agent_routine_proposals_authority"[\s\S]*?;/u, function _RoutineProposalAuthority() { return routineProposalAuthority; });
+else authoritySql = `${authoritySql}\n\n${routineProposalAuthority}`;
+
 const header = "-- OpenCrane target database baseline.\n-- Applied once by CloudNativePG while creating an empty application database.";
 const nextBaseline = `${header}\n\n${normalizedGenerated}\n\n${mcpConstraints}\n\n${snapshotConstraints}\n\n${authoritySql}\n`;
 

@@ -1,0 +1,8 @@
+:host { display: block; }
+.routine-preview { display: grid; gap: var(--oc-space-3); padding: var(--oc-space-4); border: 1px solid var(--oc-border-default); border-radius: var(--oc-radius-card); background: var(--oc-surface-subtle); }
+.routine-preview__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--oc-space-4); }
+.routine-preview h3, .routine-preview p { margin: 0; }
+.routine-preview__heading p, .routine-preview__schedule, .routine-preview__dst { color: var(--oc-ink-muted); }
+.routine-preview__stale { color: var(--oc-warning); }
+.routine-preview ol { display: grid; gap: var(--oc-space-2); margin: 0; padding-inline-start: var(--oc-space-6); }
+@media (max-width: 42rem) { .routine-preview__heading { align-items: stretch; flex-direction: column; } }

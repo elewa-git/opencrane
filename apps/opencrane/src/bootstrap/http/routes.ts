@@ -18,6 +18,7 @@ import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/ret
 import { spec } from "@opencrane/backend/server/api-spec";
 import { _CreateSelfElicitationActivityRouter, _CreateSelfElicitationRouter, _CreateSelfToolApprovalScopeRouter } from "@opencrane/backend/agents/execution/elicitation";
 import { _CreateSelfRunStatusRouter } from "@opencrane/backend/agents/execution/runs";
+import { __CreateRoutineRouter, type RoutineHttpAuthority } from "@opencrane/backend/server/agents/scheduling";
 import { _CreatePersonaOnboardingRouter } from "@opencrane/backend/agents/personal/personas";
 import { _ResolveUserOnboardingOwner } from "@opencrane/backend/server/agents/onboarding";
 import { _CreatePersonalArtifactCatalogueRouter } from "@opencrane/backend/server/agents/artifacts";
@@ -58,7 +59,7 @@ import type { McpRuntimeComposition } from "../workflows/mcp-runtime-composition
  * @returns The configured public listener.
  * @throws When the deployment has not supplied its conversation-computer profile.
  */
-export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition, providerEffects: ProviderEffectCommandExecutor, memoryWorkflow: PersonalMemoryWorkflowCompositionOptions, historyStore?: HistoryStore, conversationPrivatePayloadKeyringPath?: string, agentSandboxReleaseProfile?: AgentSandboxReleaseProfileConfig): Express
+export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition, providerEffects: ProviderEffectCommandExecutor, memoryWorkflow: PersonalMemoryWorkflowCompositionOptions, routineAuthority: RoutineHttpAuthority, historyStore?: HistoryStore, conversationPrivatePayloadKeyringPath?: string, agentSandboxReleaseProfile?: AgentSandboxReleaseProfileConfig): Express
 {
 	if (agentSandboxReleaseProfile === undefined)
 		throw new Error("Product routes require the configured conversation-computer profile");
@@ -79,6 +80,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScan
 		{ method: "use", path: "/api/v1/skills", handler: __CreateSkillAuthoringValidationSubmissionRouter({ resolveCaller: _ResolveSkillAuthoringValidationCaller, authority: new PrismaSkillAuthoringValidationSubmissionUnitOfWork(prisma, mcpWorkflows.execution), logger: _log }) },
 	];
 	const personalWorkspaceRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/v1/me/routines", handler: __CreateRoutineRouter(routineAuthority, _log) },
 		{ method: "use", path: "/api/v1/me/onboarding", handler: onboarding.router },
 		{ method: "use", path: "/api/v1/me/assets", handler: _CreatePersonalArtifactCatalogueRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/persona", handler: _CreatePersonaOnboardingRouter(prisma, _log, onboarding.personaWorkflow, _CreatePersonaAgentRevisionSelectionFactory()) },

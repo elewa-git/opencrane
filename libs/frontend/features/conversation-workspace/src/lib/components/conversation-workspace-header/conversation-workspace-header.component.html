@@ -13,6 +13,14 @@
                 <p>{{ summary()?.participantLabel }}</p>
               </div>
               <div class="conversation-workspace__header-actions">
+                <p-button
+                  label="Schedule routine"
+                  icon="pi pi-calendar-plus"
+                  severity="secondary"
+                  [text]="true"
+                  [disabled]="busy() || closed()"
+                  (onClick)="scheduleRequested.emit()"
+                />
                 <button
                   #contextPanelToggle
                   type="button"

@@ -56,13 +56,28 @@ an explicit no-personal-memory policy: preference and dataset repositories are s
 provisioning and memory recall remain future work; an enabled policy with no valid dataset still
 denies admission.
 
+Routine occurrences use the same final assembly and current managed-agent authority, but a separate
+service-attested prompt reader supplies the prepared occurrence history. The command contains no
+browser requester and cannot manufacture a human message. Its snapshot freezes the exact routine,
+revision, firing, automatic slot or manual trigger, and original approval provenance. The occurrence
+conversation must already have an active computer lease, and current conversation access is still
+checked through the central authorization authority before admission commits.
+
+Interactive human conversation admission can also freeze a closed built-in capability selection.
+The selector runs after current conversation and product authorization, and the snapshot stores only
+the capability, its semantic revision and the digest of its parameter schema. Scheduled and manual
+routine runs always freeze an empty selection. The prompt compiler resolves a saved selection only
+through the matching descriptor supplied by application composition; a changed revision or schema
+digest fails compilation instead of substituting a newer declaration.
+
 Compilation derives the required `finalOutput` mode from the saved conversation ID: a conversation
 run receives Conversation mode, while a run without a conversation receives Text mode. Personal and
 company conversations receive the same final-answer instructions, appended after their existing
 persona and resource context. The instructions require a JSON object with ordinary answer text and
 an optional complete static A2UI 0.8 display. Both the mode and instructions are included in the
-compiled digest; the compiler version changes with this contract. Tool declarations keep their
-existing protocol, and non-conversation instructions remain unchanged.
+compiled digest; the compiler version changes with this contract. MCP and built-in declarations
+share one model-name ordering and compiled-input digest. Built-in declarations carry no MCP
+revision, connection, grant or approval coordinate. Non-conversation instructions remain unchanged.
 
 ```
  run request  (runId · silo · service · conversation? · subject · idempotency key)
@@ -70,7 +85,7 @@ existing protocol, and non-conversation instructions remain unchanged.
           ▼
  ┌─────────────────────────────────────────┐
  │   execution/inputs  ◄── HERE              │  load run/persona/conversation/preferences/
- │   · orchestrates 9 authority loads        │  memory/tools/skill eligibility/budget/identity,
+ │   · orchestrates 11 authority loads       │  memory/tools/skills/grants/built-ins/budget,
  │   · compiles + digests the one snapshot   │  the runs package's admission transaction
  │   · compiles deterministic runtime input  │
  └─────────────────────────────────────────┘
@@ -99,8 +114,16 @@ because membership or grants may change before persistence.
 
 Resource-use decisions record the execution Principal: `user` for a personal agent acting through
 its human owner, or `agent-service` for a company agent acting through its own Principal. The
-requester's Conversation Use remains a separate human decision. These server-side admissions do
+requester's Conversation Use remains a separate entitlement check. An automatic routine records
+the scheduler service as the actor; a manual routine records its original requester. These server-side admissions do
 not claim a runtime Pod identity; workload decisions still require verified Kubernetes coordinates.
+The routine subject authority derives that actor only from the checked scheduled/manual run command
+before requesting managed execution evidence; callers cannot supply an arbitrary audit actor.
+
+`__RevalidateRunInputSnapshot` shares duplicate-admission checks with recovery-only compilation.
+Its caller first validates the persisted run and snapshot through the execution-runs owner, then
+this function rechecks the managed subject, membership bindings and requester Conversation Use.
+It cannot admit a new run or renew the requester's saved login.
 
 MCP tools enter the snapshot as revision-selected immutable tool revisions. Each entry contains the
 saved tool identifier, exact runtime name, description, input schema, and schema digest. Missing,
@@ -169,13 +192,15 @@ ceiling or substitutes a different allowance.
   `skill_unavailable`.
 - `AssembleRunInputSnapshotResult` / `SessionAssemblyRefusalReason` — the all-or-nothing outcome and
   its refusal vocabulary.
-- `__CompileRunInput` / `__AppendCompiledTool` — deterministic expansion of a sealed snapshot and
-  authoritative live attempt into runtime-owned prompt input, with both coordinates digest-sealed
-  and a version stamp that makes a compiler change visible in evidence.
+- `__CompileRunInput` — deterministic expansion of a sealed snapshot and authoritative live attempt
+  into runtime-owned prompt input, with both coordinates digest-sealed and a version stamp that
+  makes a compiler change visible in evidence. The current compiler emits MCP declarations only.
 - `PromptCompilerRepositories` — injected read ports used only to dereference snapshot-authorized
   content while compiling.
 - `ConversationHistoryAdmissionReader` re-reads the exact Kurrent revision, ordered identifiers,
   final triggering message, and immutable human author before those identifiers enter a snapshot.
+- `RoutineOccurrencePromptAdmissionReader` re-reads the service-authored message set for one exact
+  routine firing; it never converts routine instructions into a human-authored turn.
 - `VerifiedConversationPromptMessageRepository` accepts decrypted messages only when the
   conversation-owned source returns the complete snapshot set exactly once and in order.
 
@@ -187,6 +212,14 @@ persona instructions, MCP tool revisions, artifact revisions, skill revisions, a
 It receives canonical conversation messages through `VerifiedConversationPromptMessageRepository`,
 so it has no relational transcript path. Missing rows, changed schemas, foreign model coordinates,
 inactive parents, and unsupported generated-output capabilities fail compilation closed.
+
+Compiled callable declarations distinguish MCP revisions from built-in capabilities. Built-in
+descriptors do not carry an MCP revision, grant, connection, approval, or invocation coordinate.
+`RequestRoutineCapabilitySelectionSource` selects only the injected request-routine declaration for
+an admitted human conversation. `RequestRoutineToolDefinitionResolver` then requires the saved
+capability, semantic revision and parameter-schema digest to match that same declaration before the
+compiler may expose it. The upgrade-session capability remains unavailable. Snapshots stamped with
+an older compiler or snapshot version are refused rather than recompiled to a different digest.
 
 ## Boundary
 

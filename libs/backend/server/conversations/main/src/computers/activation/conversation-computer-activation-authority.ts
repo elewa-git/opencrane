@@ -4,7 +4,7 @@ import { ComputerLeaseStates, ConversationComputerStates, type ComputerLease, ty
 import type { AgentSandboxClaimAdapter } from "@opencrane/backend/server/infra/agent-sandbox";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import { ConversationComputerActivationQueueActions, type ConversationComputerActivationAuthority, type ConversationComputerActivationCommand, type ConversationComputerActiveLeaseProjectionCommand, type ConversationComputerActivationOutcome, type ConversationComputerActivationProfile, type ConversationComputerActivationProjectionRepository } from "./conversation-computer-activation.types";
+import { ConversationComputerActivationQueueActions, type ConversationComputerActivationAuthority, type ConversationComputerActivationCommand, type ConversationComputerActiveLeaseProjectionCommand, type ConversationComputerActivationOutcome, type ConversationComputerActivationProfile, type ConversationComputerActivationLeasePublisher } from "./conversation-computer-activation.types";
 import { ConversationComputerHistory, _ComputerScopeOf, _LeaseScopeOf } from "@opencrane/backend/server/conversations/computers";
 
 /** Realizes activation requests through one release-owned Agent Sandbox profile. */
@@ -14,7 +14,7 @@ export class ConversationComputerActivationAuthorityAdapter implements Conversat
 	private readonly computers: ConversationComputerHistory;
 
 	/** Connects relational coordinate lookup, Kurrent history, and the sole SandboxClaim mutator. */
-	public constructor(private readonly projections: ConversationComputerActivationProjectionRepository, historyStore: Pick<HistoryStore, "append" | "readHead" | "readStream">, private readonly claims: Pick<AgentSandboxClaimAdapter, "claim">, private readonly profile: ConversationComputerActivationProfile)
+	public constructor(private readonly projections: ConversationComputerActivationLeasePublisher, historyStore: Pick<HistoryStore, "append" | "readHead" | "readStream">, private readonly claims: Pick<AgentSandboxClaimAdapter, "claim">, private readonly profile: ConversationComputerActivationProfile)
 	{
 		this.computers = new ConversationComputerHistory(historyStore);
 	}

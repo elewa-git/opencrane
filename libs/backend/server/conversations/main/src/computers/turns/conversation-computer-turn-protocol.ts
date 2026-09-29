@@ -3,7 +3,7 @@ import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _ClaimConversationModelRetry, _RejectConversationModel } from "./conversation-computer-model-retry";
 
-import { ConversationComputerTurnProtocolEvents, ConversationComputerTurnProtocolStates, ConversationComputerTurnUnavailableReasons } from "./conversation-computer-turn-protocol.types";
+import { ConversationComputerTurnProtocolEvents, ConversationComputerTurnProtocolStates, ConversationComputerTurnToolKinds, ConversationComputerTurnUnavailableReasons } from "./conversation-computer-turn-protocol.types";
 import type { ConversationComputerTurnBudget, ConversationComputerTurnProtocolEvent, ConversationComputerTurnProtocolProjection, ConversationComputerTurnStep } from "./conversation-computer-turn-protocol.types";
 
 /** Applies one event to one current state without external I/O. */
@@ -48,7 +48,7 @@ export function _ConversationComputerTurnHistoryDigest(steps: readonly Conversat
 {
 	const history = steps.flatMap(function _Result(step)
 	{
-		return step.result === null ? [] : [{ ordinal: step.reservation.ordinal, proposalId: step.result.proposalId, toolInvocationId: step.result.toolInvocationId, resultDigest: step.result.resultDigest, exchange: step.result.exchange }];
+		return step.result === null ? [] : [step.result];
 	});
 	return ___DigestCanonicalJson(history as unknown as JsonValue);
 }
@@ -164,8 +164,8 @@ function _SelectTool(projection: ConversationComputerTurnProtocolProjection, eve
 	const selection = event.selection;
 	if (current?.state !== ConversationComputerTurnProtocolStates.ModelReserved || current.reservation.tools !== ConversationModelToolModes.Select
 		|| selection.ordinal !== current.reservation.ordinal || selection.modelInvocationFence !== current.reservation.invocationFence
-		|| !_Reference(selection.declaration) || !_Identifier(selection.proposalId) || selection.toolInvocationId !== selection.proposalId || !_Digest(selection.requestFingerprint)
-		|| projection.steps.some(step => step.selection?.proposalId === selection.proposalId || step.selection?.toolInvocationId === selection.toolInvocationId || step.selection?.declaration.payloadRef === selection.declaration.payloadRef)
+		|| !_Reference(selection.declaration) || !_ValidSelection(selection)
+		|| projection.steps.some(step => _SameSelectionIdentity(step.selection, selection) || step.selection?.declaration.payloadRef === selection.declaration.payloadRef)
 		|| projection.accounting.reservedToolInvocations >= budget.maxToolInvocations
 		|| projection.accounting.reservedModelCalls >= budget.maxModelTurns || projection.accounting.reservedCompletionTokens >= budget.maxCompletionTokens
 		|| projection.accounting.toolResultCyclesFed >= budget.maxLoopIterations)
@@ -182,7 +182,7 @@ function _RecordToolResult(projection: ConversationComputerTurnProtocolProjectio
 	const current = projection.steps.at(-1);
 	const result = event.result;
 	if (current?.state !== ConversationComputerTurnProtocolStates.ToolPending || result.ordinal !== current.reservation.ordinal
-		|| result.proposalId !== current.selection.proposalId || result.toolInvocationId !== current.selection.toolInvocationId
+		|| !_ResultMatchesSelection(result, current.selection)
 		|| !_Digest(result.resultDigest) || !_Reference(result.exchange) || !_Positive(result.authorityExpiresAtEpochMs)
 		|| projection.steps.slice(0, -1).some(step => step.result?.exchange.payloadRef === result.exchange.payloadRef)
 		|| result.authorityExpiresAtEpochMs > current.reservation.authorityExpiresAtEpochMs)
@@ -216,7 +216,7 @@ function _MarkUnavailable(projection: ConversationComputerTurnProtocolProjection
 		&& (current?.state !== ConversationComputerTurnProtocolStates.ModelReserved || receipt.sourceCommandId !== current.reservation.invocationFence))
 		throw new Error("Conversation computer unavailable result crossed its model reservation");
 	if (receipt.reason === ConversationComputerTurnUnavailableReasons.ToolResultUnavailable
-		&& (current?.state !== ConversationComputerTurnProtocolStates.ToolPending || receipt.sourceCommandId !== current.selection.toolInvocationId))
+		&& (current?.state !== ConversationComputerTurnProtocolStates.ToolPending || receipt.sourceCommandId !== _SelectionIdentity(current.selection)))
 		throw new Error("Conversation computer unavailable result crossed its tool selection");
 	if (receipt.reason === ConversationComputerTurnUnavailableReasons.AllowanceExhausted
 		&& projection.state !== ConversationComputerTurnProtocolStates.Open && projection.state !== ConversationComputerTurnProtocolStates.ResultReady)
@@ -276,4 +276,48 @@ function _Digest(value: string): boolean
 function _Reference(value: { readonly payloadRef: string; readonly ciphertextDigest: string }): boolean
 {
 	return _Identifier(value.payloadRef) && _Digest(value.ciphertextDigest);
+}
+
+/** Validates the authority-specific fields retained by one closed selection arm. */
+function _ValidSelection(selection: import("./conversation-computer-turn-protocol.types").ConversationComputerTurnToolSelection): boolean
+{
+	if (selection.kind === ConversationComputerTurnToolKinds.Mcp)
+		return _Identifier(selection.proposalId) && selection.toolInvocationId === selection.proposalId && _Digest(selection.requestFingerprint);
+	return selection.kind === ConversationComputerTurnToolKinds.RequestRoutine && _Identifier(selection.proposalRef) && _Digest(selection.resultDigest) && _Instant(selection.expiresAt);
+}
+
+/** Detects reuse of an authority-owned selection identity across ordered model steps. */
+function _SameSelectionIdentity(previous: import("./conversation-computer-turn-protocol.types").ConversationComputerTurnToolSelection | null, current: import("./conversation-computer-turn-protocol.types").ConversationComputerTurnToolSelection): boolean
+{
+	return previous !== null && previous.kind === current.kind && _SelectionIdentity(previous) === _SelectionIdentity(current);
+}
+
+/** Matches a result only to the closed selection arm that owns it. */
+function _ResultMatchesSelection(result: import("./conversation-computer-turn-protocol.types").ConversationComputerTurnToolResult, selection: import("./conversation-computer-turn-protocol.types").ConversationComputerTurnToolSelection): boolean
+{
+	if (result.kind !== selection.kind)
+		return false;
+	if (result.kind === ConversationComputerTurnToolKinds.Mcp && selection.kind === ConversationComputerTurnToolKinds.Mcp)
+		return result.proposalId === selection.proposalId && result.toolInvocationId === selection.toolInvocationId;
+	return result.kind === ConversationComputerTurnToolKinds.RequestRoutine && selection.kind === ConversationComputerTurnToolKinds.RequestRoutine
+		&& result.proposalRef === selection.proposalRef && result.expiresAt === selection.expiresAt && result.resultDigest === selection.resultDigest;
+}
+
+/** Returns the authority-owned source command used by unavailable receipts. */
+export function _ConversationComputerSelectionIdentity(selection: import("./conversation-computer-turn-protocol.types").ConversationComputerTurnToolSelection): string
+{
+	return _SelectionIdentity(selection);
+}
+
+/** Returns the authority-owned identity without crossing discriminated protocol arms. */
+function _SelectionIdentity(selection: import("./conversation-computer-turn-protocol.types").ConversationComputerTurnToolSelection): string
+{
+	return selection.kind === ConversationComputerTurnToolKinds.Mcp ? selection.toolInvocationId : selection.proposalRef;
+}
+
+/** Recognizes one canonical UTC instant without accepting normalized variants. */
+function _Instant(value: string): boolean
+{
+	const epochMs = Date.parse(value);
+	return Number.isFinite(epochMs) && new Date(epochMs).toISOString() === value;
 }

@@ -102,6 +102,20 @@ export const APP_ROUTES: Routes =
 			});
 		}
 	},
+	{
+		// Routine creation and history are a guarded lazy feature; a destination query is an opaque
+		// candidate that the server authorizes through creation options and the create command, not a
+		// browser-trusted identity.
+		path: "routines",
+		canActivate: [___OperatorAccessGuard],
+		loadChildren: function loadRoutineRoutes()
+		{
+			return import("@opencrane/features/routines").then(function pickRoutineRoutes(module)
+			{
+				return module.ROUTINE_ROUTES;
+			});
+		}
+	},
 	{ path: "", pathMatch: "full", redirectTo: "onboarding" },
 	{
 		path: "**",

@@ -58,8 +58,8 @@ function _Reservation(turn: FrozenConversationComputerTurn): ConversationCompute
 	return { invocationFence: "41c1f1dc-0010-4f13-9c2f-d3841ffd6651", ...facts, requestDigest: _ConversationModelRequestDigest(turn, facts) };
 }
 
-const _SELECTION: ConversationComputerTurnToolSelection = { ordinal: 1, modelInvocationFence: "41c1f1dc-0010-4f13-9c2f-d3841ffd6651", declaration: { payloadRef: "private-declaration-1", ciphertextDigest: _DIGEST_A }, proposalId: "proposal-1", toolInvocationId: "proposal-1", requestFingerprint: _DIGEST_B };
-const _RESULT: ConversationComputerTurnToolResult = { ordinal: 1, proposalId: "proposal-1", toolInvocationId: "proposal-1", resultDigest: _DIGEST_A, exchange: { payloadRef: "private-exchange-1", ciphertextDigest: _DIGEST_B }, authorityExpiresAtEpochMs: 1_850_000_000_000 };
+const _SELECTION: ConversationComputerTurnToolSelection = { kind: "mcp" as const, ordinal: 1, modelInvocationFence: "41c1f1dc-0010-4f13-9c2f-d3841ffd6651", declaration: { payloadRef: "private-declaration-1", ciphertextDigest: _DIGEST_A }, proposalId: "proposal-1", toolInvocationId: "proposal-1", requestFingerprint: _DIGEST_B };
+const _RESULT: ConversationComputerTurnToolResult = { kind: "mcp" as const, ordinal: 1, proposalId: "proposal-1", toolInvocationId: "proposal-1", resultDigest: _DIGEST_A, exchange: { payloadRef: "private-exchange-1", ciphertextDigest: _DIGEST_B }, authorityExpiresAtEpochMs: 1_850_000_000_000 };
 
 describe("KurrentConversationComputerTurnStore", function ()
 {

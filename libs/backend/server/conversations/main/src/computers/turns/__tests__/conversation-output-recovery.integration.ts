@@ -150,7 +150,7 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 		const first = _ModelReservationFixture(turn, randomUUID(), ConversationModelToolModes.Select);
 		await new KurrentConversationComputerTurnStore(history).reserveModel(turn.bootstrapId, first);
 		const proposalId = randomUUID();
-		const tool = { ordinal: first.ordinal, modelInvocationFence: first.invocationFence, proposalId, toolInvocationId: proposalId, requestFingerprint: `sha256:${"b".repeat(64)}`, declaration: { payloadRef: randomUUID(), ciphertextDigest: `sha256:${"c".repeat(64)}` } };
+		const tool = { kind: "mcp" as const, ordinal: first.ordinal, modelInvocationFence: first.invocationFence, proposalId, toolInvocationId: proposalId, requestFingerprint: `sha256:${"b".repeat(64)}`, declaration: { payloadRef: randomUUID(), ciphertextDigest: `sha256:${"c".repeat(64)}` } };
 		const answer = await _PrepareConversationOutputIntent(turn, first.invocationFence);
 		const [answerStore, toolStore] = _RacingStores(1n);
 		const results = await Promise.allSettled([answerStore!.markOutput(turn.bootstrapId, answer), toolStore!.selectTool(turn.bootstrapId, tool)]);
@@ -167,9 +167,9 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 		const first = _ModelReservationFixture(turn, randomUUID(), ConversationModelToolModes.Select);
 		await store.reserveModel(turn.bootstrapId, first);
 		const proposalId = randomUUID();
-		const selection = { ordinal: first.ordinal, modelInvocationFence: first.invocationFence, proposalId, toolInvocationId: proposalId, requestFingerprint: `sha256:${"b".repeat(64)}`, declaration: { payloadRef: randomUUID(), ciphertextDigest: `sha256:${"c".repeat(64)}` } };
+		const selection = { kind: "mcp" as const, ordinal: first.ordinal, modelInvocationFence: first.invocationFence, proposalId, toolInvocationId: proposalId, requestFingerprint: `sha256:${"b".repeat(64)}`, declaration: { payloadRef: randomUUID(), ciphertextDigest: `sha256:${"c".repeat(64)}` } };
 		await store.selectTool(turn.bootstrapId, selection);
-		await store.recordToolResult(turn.bootstrapId, { ordinal: first.ordinal, proposalId, toolInvocationId: proposalId, resultDigest: `sha256:${"e".repeat(64)}`, exchange: { payloadRef: randomUUID(), ciphertextDigest: `sha256:${"d".repeat(64)}` }, authorityExpiresAtEpochMs: first.authorityExpiresAtEpochMs });
+		await store.recordToolResult(turn.bootstrapId, { kind: "mcp", ordinal: first.ordinal, proposalId, toolInvocationId: proposalId, resultDigest: `sha256:${"e".repeat(64)}`, exchange: { payloadRef: randomUUID(), ciphertextDigest: `sha256:${"d".repeat(64)}` }, authorityExpiresAtEpochMs: first.authorityExpiresAtEpochMs });
 		const selected = (await store.load(turn.bootstrapId))!;
 		const facts = { ordinal: 2, tools: ConversationModelToolModes.None, compiledInputDigest: turn.compile.digest, historyDigest: _ConversationComputerTurnHistoryDigest(selected.protocol.steps), maxCompletionTokens: 50, authorityExpiresAtEpochMs: first.authorityExpiresAtEpochMs, dispatchDeadlineEpochMs: first.dispatchDeadlineEpochMs };
 		const contenders = [0, 1].map(() => ({ ...facts, invocationFence: randomUUID(), requestDigest: _ConversationModelRequestDigest(selected, facts) }));

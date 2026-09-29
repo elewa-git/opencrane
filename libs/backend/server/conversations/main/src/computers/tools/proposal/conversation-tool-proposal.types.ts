@@ -1,4 +1,4 @@
-import type { CompiledToolDefinition, ConversationToolProposal, ConversationToolProposalReceipt } from "@opencrane/contracts";
+import type { CompiledMcpToolDefinition, ConversationToolProposal, ConversationToolProposalReceipt } from "@opencrane/contracts";
 import type { ProductAuthorizationWorkloadContext } from "@opencrane/backend/server/iam/authorization";
 
 import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "../../turns/conversation-computer-turn.types";
@@ -22,7 +22,7 @@ export interface PreparedConversationToolProposal
 	/** Identifies the allowed proposal for one ordered model step in this run attempt. */
 	readonly proposalId: string;
 	/** Retains the validated frozen tool and exact schema. */
-	readonly tool: CompiledToolDefinition;
+	readonly tool: CompiledMcpToolDefinition;
 	/** Retains the complete schema-validated arguments. */
 	readonly arguments: ConversationToolProposal["arguments"];
 	/** Binds authorization to those exact arguments. */

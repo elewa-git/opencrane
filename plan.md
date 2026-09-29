@@ -1,5 +1,972 @@
 # OpenCrane — Active Plan
 
+## Preserved administration design — 29 September 2026
+
+The user requested preservation of the administration design package during cleanup of the older
+checkout. The [design brief](docs/design/administration-lifecycle/README.md),
+[screenshot guide](docs/design/administration-lifecycle/screenshots.md),
+[component handoff](docs/design/administration-lifecycle/components.md), and
+[36 supplied wireframes](tests/design-targets/organisation-administration/README.md) are retained
+with their original bytes and provenance. All 47 image checksums match their manifests. These
+remain design references, not accepted visual baselines or proof of implemented functionality.
+Their source assessment is pinned to `967f7c0b6`; reconcile current implementation and the later
+accepted product decisions before building from the brief. Developer-tooling files are excluded
+from this preservation commit. The latest database-boundary decision below is retained separately
+from implementation and test claims.
+
+## Accepted product decisions — 27 September 2026
+
+The user has accepted the following decisions for the remaining MVP work. They are product
+contracts, not claims that implementation or qualification is complete; the owning waves below
+remain open until their source, focused tests, SQL tests and live qualification say otherwise.
+
+- **Shared-work budget:** one paying group is selected when shared work is created or scheduled;
+  children inherit that paying group. Spend contributes to the global ceiling, the paying group's
+  ceiling and any optional assistant ceiling, with one charge recorded rather than duplicate
+  attribution across those scopes. The exact reservation and usage owners must preserve the root
+  allowance across retries, children and lost responses.
+- **Budget policy:** limits are configured in EUR per calendar month, resetting at 00:00 UTC on the
+  first day of the month. Reserve before a model or provider call. Hitting a hard limit stops new
+  work, including work remaining under existing reservations, and cancellation cascades through
+  descendants; there is no graceful-finishing exemption. Already-dispatched provider charges
+  cannot be undone, so reservations must use a trustworthy worst-case price. Unknown cost is not
+  treated as zero. Separately, the live OpenAI MVP qualification envelope is €5 total across all
+  test attempts, retries and models, using cheap models; it is not €5 per run and does not change
+  the product's monthly budget semantics. Reserve a conservative bound across the whole envelope
+  before paid dispatch; unknown cost is never treated as free.
+- **Late subchat participants:** a person joining a shared subchat may see all existing history of
+  that joined subchat, but receives no implicit access to the parent conversation or private
+  resources. Current conversation access and explicit resource grants still govern every read.
+- **Per-tool approval settings:** replace the proposed read-only certification flow with simple
+  human controls per installed connection and tool: **Allow automatically**, **Ask**, or **Block**.
+  The user confirmed this scope on 28 September. The interaction should
+  use OpenCrane's own style and icons, with the supplied image serving only as a visual reference.
+  Execution permissions, owner identity and revocation remain separate; automatic mode is an
+  explicit human policy choice and never means every tool is allowed. Selecting **Allow
+  automatically** also approves future permitted writes, including the first write, without an
+  additional first-write prompt; current authority, connection/tool permissions and revocation
+  remain mandatory, and the default **Ask** behavior is unchanged.
+- **Fresh qualification:** the user authorizes ongoing fresh `testv6` qualification and requires
+  verified superseded TEST deployments to be retired after each test so compute does not accumulate.
+  Exact resources, in-use state and shared dependencies must be checked first. This is not blanket
+  permission to delete production data, backups or unrelated infrastructure, and does not authorize
+  recreating a laptop VM.
+- **Credential handling and delegation:** an OpenAI key may be used only through secure
+  configuration from `./keys`; it must never be read into output, committed or exposed. Delegate
+  implementation and test work to cheaper Luna/Sol models; root orchestrates and reviews.
+
+These decisions supersede older pending group-attribution/history, “no deploy permission”,
+unresolved numeric live-test-cap and first-write/Always-policy text only where those statements
+conflict. Historical evidence is retained below.
+
+## Conversational routine proposals — execution wave
+
+### Database-boundary repair — 29 September 2026
+
+The approved correction is implemented without splitting the two cohesive helpers. Their exact
+UnitOfWork registrations use the shared transaction helper and retain the original `Serializable`
+isolation and one-attempt behavior. The transaction-scoped source authority and its nested
+authorization construction are registered explicitly. The checker accepts the reviewed callback
+binding and rejects root-client access, helper lookalikes, shadowing and reassignment. No broad
+exemption, schema change or live database operation is included.
+
+All 16 request-routine ownership findings are cleared. Diff-scoped ownership passes; the full
+repository check still reports 17 inherited findings in personal configuration, model routing and
+tenant middleware. The checker suite passes 27 tests and the focused proposal suite passes six,
+including both isolation assertions. The complete conversation suite passed 1,055 tests before
+the final focused correction; the affected checks and both server TypeScript targets then passed.
+Style has no errors or warnings, release binding and whitespace checks pass, and the module-growth
+review accepts the cohesive checker change. Independent source and architecture review found no
+remaining findings. The ten-file source diff has SHA-256
+`4116c34d144327de05e5208f16ffdb976926afaac81f965b7656185f071c6bba`.
+
+Fresh PostgreSQL/CI proof on the new published head, visual approval and real-account acceptance
+remain separate gates. No provider call ran and none of the EUR 5 live-test allowance was spent.
+
+### Approved proportional database-boundary correction — 29 September 2026
+
+After reviewing the proposed split, the user approved keeping the two small transaction helpers
+together and making the checker recognize their narrowly defined pattern. This supersedes the
+earlier proposal to split them into separate repository and transaction-owner classes. Preserve
+same-transaction reads and permission checks, register only the exact permitted components, and
+continue rejecting database access outside the transaction. No broad exemption, live database
+change, new user permission, merge or deployment is authorized by this correction.
+
+The approval resolves the user-decision blocker; it does not resolve the 16 checker errors by
+itself. Implementation, focused negative tests and independent review remain required. Other
+accepted MVP product decisions stand. Human acceptance of changed visual references remains a
+later gate, and the total live-provider test envelope remains EUR 5.
+
+### Work-in-progress publication — 29 September 2026
+
+The user explicitly requested publication of the local joined-proposal changes to draft #916.
+Publish this snapshot for review, not as a completed or merge-ready slice. The protected
+database-ownership correction was still unapproved and unapplied at this checkpoint. The later
+approval above supersedes that decision blocker; its implementation must clear the known 16
+Prisma-boundary errors. Fresh PostgreSQL proof, visual-reference approval and live acceptance
+remain open.
+This publication does not waive those gates or authorize any deployment, live permission change,
+provider call or database mutation.
+
+The publication check reuses the independently reviewed backend and dispatch/UI manifests:
+the dispatch/UI aggregate is unchanged, and the sole backend-manifest difference is the already
+recorded enum documentation correction. No additional Critical/High publication finding or
+unrelated source file was found. The production UI build passed on the unchanged source on
+28 September; it is not live qualification. Release-baseline binding and whitespace checks pass.
+The live PR graph retains #908 → #910 → #914 → #915 → #916, with no predecessor absorbed,
+closed or retargeted.
+
+### Remaining frontend CI repairs — 28 September 2026
+
+Run `36352538223` completed with failure on head `274c111e191241dac04ec6c8f2bce62915f92d4b`.
+Database, KurrentDB, service-image and Cognee jobs passed. The remaining build job failed the
+production UI template check because the routine timezone select received a readonly array where
+PrimeNG requires mutable options, and the settings route-composition test exceeded its five-second
+cold-import allowance. These are distinct failures; the passing focused checks did not cover AOT
+template checking under the complete production build.
+
+The narrow PDF screenshot test also required a card taller than its scroll viewport to be fully
+visible at once. Its replacement proves top- and bottom-edge reachability, horizontal containment,
+the fixed shell and absence of document scrolling. The focused behavior checks pass without any
+header/style or reference-image changes; the unapproved screenshot mismatch remains visible.
+The timezone fix retains its readonly public input and creates a computed options copy inside the
+existing form. The route check retains its actual lazy imports and assertions, with a bounded
+ten-second allowance for that test alone. The five-file repair is independently reviewed and
+published to draft #916 at `9580a0a5da9f94fd2ac924c5797a21b3ec071a05`. All 47 owning routine
+tests, 24 application tests, the production Angular AOT build and three focused PDF/browser
+behavior checks pass. Routine lint, source style, module-growth and diff checks pass; integrated
+source and component post-diff review found no remaining findings. The committed binary diff
+matches `158f3608f34d0f94ea8264531028126408a1f6bb9ab1b132d418271c47d79b9f`, and all five
+committed file hashes match the reviewed manifest. The frozen routine-proposal WIP is excluded.
+
+Live stack snapshot `72f1427b92fe7ffe99f8053b77bf0ae0700cbb7d3ef8cf9b84550d35a952f377`
+preserves #908 → #910 → #914 → #915 → #916. The direct-parent range now contains 440 files;
+the cumulative develop range contains 579 files and merges cleanly in a read-only simulation
+against `10abd0ef6182f36bec13d8f1358e43b15ead7cd5`. Remote CI on the new head remains a
+separate gate, as does human approval of missing/changed visual references. No baseline was
+accepted or replaced, no provider call ran, and no deployment or VM was changed in this wave.
+
+The new-head run `36391647059` now passes both PostgreSQL authority and KurrentDB history jobs,
+plus the agent-controller, artifact-scanner, MCP file-generator, LiteLLM, PostgreSQL and
+skill-authoring image checks. API/generated-client verification also passes. Build/test/lint,
+Storybook and Cognee were still running at the bounded 28 September checkpoint; k3d was skipped.
+These results do not claim the full pipeline or a real-account journey has passed.
+
+The same run finished with failure at 07:41:56 UTC. Cognee's provider-contract job passed.
+Storybook still failed its reference-image comparisons. Build/test/lint failed only the
+conversation test target: two `_RecoverWriteFailure` cases in
+`conversation-computer-model-progression.test.ts` expected two recovery-entry calls but
+observed three; 1,038 other conversation tests passed. The cases cover a saved-status recovery
+and a caught late response. Their cause is under focused diagnosis; no assertion has been
+weakened and no production behavior change is claimed yet.
+
+The focused reproduction confirmed both failures. The authority's `start()` already awaited
+run recovery and routine progress, then the workflow redundantly called `advance()` and repeated
+those acknowledgements. The three-file repair returns the recovered unavailable outcome only
+after existing causation and receipt checks, preserving failed-write retry and stale-work refusal.
+All 81 focused checks and the complete 107-file, 1,043-test conversation suite pass locally;
+local listener restrictions required a scoped-permission rerun. Style and diff checks pass.
+Independent integrated review reports no findings. The repair changes no schema, permission,
+provider dispatch or saved-run format, and excludes all paused proposal work.
+
+It is published to draft #916 at `70b5aacc087f7c09c6294021e22ea5e6675fddf6`; all three
+reviewed, staged and committed file hashes match, with binary diff
+`b589a20a13081e74aaa0944345483eed5cb5bb8ef2f581d4c9bba7ad5c2e07d6`.
+Live stack snapshot `b8260b06f1bd04e062086577f599987ac3be7a3e5b2312b38c7559409ebf6172`
+preserves #908 → #910 → #914 → #915 → #916. The incremental range has 441 files and the
+cumulative develop range has 580; the non-checkout merge simulation is clean against
+`10abd0ef6182f36bec13d8f1358e43b15ead7cd5`. New-head CI run `36394602431` is queued;
+the local pass is not a remote or live-journey claim. No paid provider call, deployment or VM ran.
+
+The self-contained visual review gallery is available locally at
+`.nx/routine-ci-repair/VISUAL-GALLERY.html`: 80 missing references, 31 before/after/diff changes,
+and one historical PDF timeout, matching the 112 failed cases in run `36350716879` exactly.
+Its 173 embedded PNGs are fixture evidence from `7f46cc1b`, not captures of the new repair or
+live product proof. Human baseline approval remains required; no baseline has been changed.
+
+### Shared-assistant hard-budget preflight — 28 September 2026
+
+The independent architecture preflight passes for a coordinated production slice, recorded in
+`.nx/routine-ci-repair/EUR-HARD-BUDGET-PREFLIGHT.md`. The user's shared-assistant scope leaves
+personal-agent charging unchanged. Managed roots require an explicit authorized paying group,
+which children inherit; versioned operator-owned EUR tariffs provide admission bounds and
+missing/unusable prices refuse paid dispatch. These are implementation decisions within the
+accepted policy, not additional questions for the user.
+
+The slice must join monthly accounts, per-physical-attempt reservations, model usage, root
+admission, real model dispatch and system-owned descendant cancellation. A full worst-case
+reservation must not falsely cancel a cheap first call; settled/terminal-unknown exhaustion or
+a lowered hard cap must still stop unclaimed work. Unknown paid attempts cannot fund retries.
+The preflight does not implement this feature. Its schema/baseline/recovery risk review remains
+required, and the existing saved-run safety pause must not be bypassed through budget work.
+
+### Autonomous delegation reachability — 28 September 2026
+
+A separate read-only call-site check at committed head
+`9580a0a5da9f94fd2ac924c5797a21b3ec071a05`, excluding the dirty proposal overlay, confirms
+`PrismaRunTreeRepository` has no production construction or callers: root initialization,
+child allocation, tree reservation and closure are exercised only by its tests. The owning
+execution-runs README already identifies the missing integration. Ordinary AgentRun/snapshot
+admission and model dispatch are wired, but they do not create run-tree accounts or expose
+autonomous delegation to the model. The existing human-mediated group-child workflow is not
+autonomous delegation and does not supply child budget allocation or result brokering.
+
+D1 is therefore source-foundation-only, not a completed product capability or live-qualified
+journey. Production root/child admission, selected child context, narrower capabilities,
+durable child results and root-driven recursive cancellation remain required, together with
+the shared budget/deadline. No arbitrary nesting, spawn or parallel-execution caps are allowed.
+The budget and delegation implementation must join these real execution paths; tests of the
+currently unused repository are not evidence of production enforcement.
+
+### Current-candidate qualification repairs
+
+Exact-head CI on `7f46cc1b289e63ae86d583805e695a8fa64df5d0` exposed a malformed PL/pgSQL
+comparison in the existing fresh baseline and missing routine-calendar runtime dependencies in
+three images. The isolated repair parenthesizes the existing `CASE` expression without changing
+storage shape, updates the release baseline digest, and declares the already-pinned `cron-parser`
+and `luxon` dependencies in agent-controller, mcp-file-generator and artifact-scanner. Their app-owned
+regression checks now cover those declarations. No snapshot-v4 or proposal-schema change is included.
+
+Local authority regeneration/verification and release binding pass. Agent-controller's six tests
+and Helm contract, mcp-file-generator's image contract, and artifact-scanner's two tests and image
+contract pass; lock entries, shell syntax, style and diff checks pass. Actual fresh PostgreSQL
+application and container image smokes still require the repaired commit's remote CI. Existing
+Storybook screenshot mismatches remain under investigation; no visual baseline was replaced.
+
+The nine-file repair is independently reviewed and published at draft #916 head
+`274c111e191241dac04ec6c8f2bce62915f92d4b`. Its exact reviewed, staged and committed binary diff
+matches `5f0476fddc0662e0ada87d07c568010dd9e8475b77546143135195be17aa703c`; unfinished proposal
+work remains uncommitted. Live stack snapshot
+`fbd6a5451a3b1a81c7da3f3697740d308cd657bfa7685077fed8fd0278758e00` preserves
+#908 → #910 → #914 → #915 → #916. The direct-parent range contains 438 files and the cumulative
+develop range contains 577 files; the latter has a clean merge simulation against
+`10abd0ef6182f36bec13d8f1358e43b15ead7cd5`. No predecessor was merged, retargeted or closed, and
+no provider call, deployment or local VM ran. The €5 paid-test envelope remains unspent in these
+source waves. These are repair-publication facts, not remote qualification or MVP acceptance.
+
+Current Storybook artifact `10942356703` from run `36350716879` confirms 112 failures:
+80 missing reference screenshots (including all 18 routine stories), 31 changed screenshots and
+one timeout in `conversations-workspace-shell--pdf-informed-answer-narrow`; 118 stories pass.
+The tools controls changed to PrimeNG buttons, and the narrow child header now contains the
+Schedule routine action. These are current candidate images requiring deliberate visual review,
+not permission to replace every baseline. The downloaded artifact is 37,325,966 bytes and the
+extracted evidence is approximately 41 MB; no local VM or full rebuild was needed for diagnosis.
+The repair commit's subsequent single CI snapshot, around 21:44–21:45 UTC on 27 September,
+confirms success for PostgreSQL fresh-baseline/application and authority suites (job `108714232658`),
+KurrentDB fresh-baseline/history proofs (`108714232710`), and image smokes for agent-controller
+(`108714232807`), artifact-scanner (`108714232810`) and mcp-file-generator (`108714232824`), all in
+run `36352538223` on the exact repair head. Build/test/lint, Cognee and Storybook were still running;
+k3d was skipped. This is actual remote database/image proof for those repaired paths, not a whole
+pipeline pass or a live scheduled-user journey.
+
+The next read-only CI checkpoint confirms Cognee's pinned provider contract also passed in job
+`108714232730` at 21:46:48 UTC, while build/test/lint and Storybook were still running. This is
+provider-contract proof, not completion of the remember/recall/correct/forget real-account journey.
+
+A focused narrow PDF replay against the existing Storybook build reproduced the remaining layout
+predicate failure without a rebuild or baseline edit: the PDF card is 112.25 px high while its
+scroll owner is 107.8125 px high. Scroll position remained stable across later samples. Full-card
+containment therefore cannot pass in that measured render; whether to revise the narrow layout or
+its intended scrolling assertion remains a visual-contract decision, not a proven network flake.
+The temporary loopback renderer was stopped after measurement.
+
+### Joined proposal implementation
+
+The callable prerequisite is published at draft #916 head
+`7f46cc1b289e63ae86d583805e695a8fa64df5d0`. The joined proposal implementation now uses that
+immutable wave base and live stack snapshot
+`7f866732392d5745a5fc93c9264f9432d71d455384dae4b1dc5dfd3c57e74ec5`; develop and the direct parent
+remain unchanged. Execution-input snapshot selection and scheduling-owned encrypted proposal
+persistence are independent implementation lanes. Their shared schema/client/baseline generation
+is serialized, followed by first-party dispatch, requester notification and existing-form integration.
+The target is the working human-reviewed journey, not another dormant-only contract publication.
+
+The edit safety gate initially paused snapshot storage/recovery/digest and database-schema changes
+pending explicit confirmation of the v4 compatibility break. On 28 September the user approved A:
+the source-only v4 snapshot and routine-proposal changes may proceed, with older saved snapshots
+refused and a fresh test installation required instead of preserving old test-run continuity. No
+live database, deployment or backup change is included in this approval. The joined candidate still
+requires completed persistence, dispatch, human review, validation and independent review before
+publication; the approval itself is not implementation or test evidence.
+
+The same reply settled B: Auto / Ask / Block is scoped to each installed connection and tool.
+Ask is the default; Auto may approve the first permitted write immediately, while current IAM,
+connection/tool access and final-claim revocation checks remain mandatory. The policy work follows
+the accepted capability-owned handoff in `.nx/routine-ci-repair/AUTO-TOOL-POLICY-HANDOFF.md` and
+shares the serialized schema/baseline lane rather than racing the proposal changes.
+
+The resumed source checkpoint starts from published head
+`70b5aacc087f7c09c6294021e22ea5e6675fddf6`; live stack inspection passes with snapshot
+`a962da0fccf9789d1b952a30668c3495886246292d912a1f9f5d3e7b10557ba3` and unchanged review order
+#908 → #910 → #914 → #915 → #916. Exact-head Actions run `36394602431` has completed: build,
+test and lint passed at 08:11:07 UTC on 28 September, including the repaired conversations target.
+Database authority, KurrentDB/history, API/client, Cognee and image jobs also passed; k3d was
+skipped. Storybook remains failed on screenshot comparisons (119 passed, 112 failed); its logs
+show no separate behavior or accessibility failure. Those references remain unapproved. None of
+these results qualifies the uncommitted joined-proposal work or a live MVP journey.
+
+Local joined-proposal work now connects snapshot v4 and encrypted proposal persistence to a distinct
+`request_routine` dispatch arm, a requester-only notification, the existing prefilled review form,
+and authenticated accept/cancel routes. Backend source review found no critical, high or medium
+findings. Component review passed. Independent UI review found two cancellation races; both now
+have independently verified fixes and regression coverage. The final dispatch/application source
+review also passed, excluding the known blocked database ownership correction. Focused results
+include 191 run tests (13 skipped), 310 scheduling tests, 42 scheduling
+contract tests, 54 routine UI tests, 11 routine state tests, 16 API adapter tests and 143 workspace
+tests. These counts describe separate suites, not a single end-to-end run.
+
+The full conversation rerun passed 1,054 of 1,055 tests; the single review-router socket failure
+passed its isolated eight-test rerun. Dispatch/protocol/source/notification, application composition
+and shared validator checks also passed. The omitted-dispatcher case now fails closed and has a
+regression test. The generated API client and website API document are synchronized, and the website
+build passed. The first production UI compilation failed with an esbuild Go deadlock. One bounded
+retry with task-local `NG_BUILD_MAX_WORKERS=1` passed on the unchanged source overlay at
+09:19:51 UTC on 28 September, producing fresh output in this worktree. There were no source, package
+or configuration edits. This verifies production compilation, not the live user journey; the
+earlier build failure remains recorded rather than being recast as a source defect or a proven
+upstream cause.
+
+Publication is held at the protected database-boundary gate. A registry edit for three new
+routine-proposal responsibilities was rejected by the tool safety reviewer and was not retried.
+The current checker reports 16 errors. Architecture review requires separating two transaction-bound
+repositories from their root-client units of work and registering five exact owners/constructions,
+without broad exemptions. Explicit user approval for that narrow correction is requested; the
+earlier scheduling registry additions remain independently reviewed and unchanged. No new commit,
+push, live database change or paid provider call occurred during this checkpoint. Fresh PostgreSQL,
+visual approval and live acceptance remain distinct unfinished gates.
+
+Remote qualification on `7f46cc1b289e63ae86d583805e695a8fa64df5d0`, Actions run `36350716879`,
+has failed the fresh-baseline application step in both database and KurrentDB jobs. Three image
+smokes and Storybook also report failure; the run is still in progress. Exact failed-job logs are
+being retrieved before assigning repairs. These failures invalidate any inference of deployability
+from the local focused checks; no whole-candidate CI pass is claimed.
+
+This wave starts from published draft #916 head
+`0d73e53b86e478f68b330d46fb3c87b92c93124f`. Live stack inspection preserves
+#908 → #910 → #914 → #915 → #916 against develop
+`10abd0ef6182f36bec13d8f1358e43b15ead7cd5`, with snapshot
+`849f798c0d05710320db3e249934c9026b132ef30646c1ed339cacd4e58698d3`.
+The preceding UI wave is published; its visual candidates are not approved baselines and its
+source checks are not live scheduling proof.
+
+The accepted outcome is a `request_routine` tool that opens a preconfigured, durable review form.
+The model may propose an instruction and schedule, but the server derives the requester, silo,
+source conversation and admitted run coordinates. The tool creates a proposal, never a routine,
+grant, firing or run. The existing human-reviewed creation command remains the activation boundary,
+including when the tool itself is permitted automatically.
+
+Implementation is divided by owned contracts rather than new infrastructure:
+
+1. Replace the dormant first-party tool's fake MCP identity with a closed, discriminated callable
+   contract. Preserve deterministic compilation and digests; first-party authority must be frozen
+   by admission before a production caller can offer the tool. Existing `upgrade_session` tooling
+   remains unwired and must not acquire authority from this type correction. Delete the unused
+   post-compilation append helper without another public append-by-descriptor replacement. This
+   first increment emits only MCP tools in production. Its new serialized discriminator requires
+   a compiler-version change: old-version snapshots are refused, not translated or replayed with
+   changed bytes. Snapshot shape and database baseline remain unchanged in this increment.
+2. Freeze first-party capability, semantic revision and parameter-schema digest in the existing
+   Serializable run-admission transaction. Persist and strictly recover the dedicated selection;
+   include it in the snapshot digest and versioned fresh-install baseline. Human-origin interactive
+   group subchats remain eligible. Routine and future autonomous-delegation producers must freeze
+   no first-party capabilities. Do not offer `request_routine` until its proposal dispatcher exists.
+3. Extend scheduling with an encrypted proposal and transaction-bound lifecycle. Reuse the existing
+   database, encryption and routine authority; do not use active-run elicitation storage for a form
+   that must survive its originating run. Exact source run/attempt/call replay returns the same
+   proposal; changed arguments conflict.
+4. Join the admitted interactive conversation path to proposal creation and a requester-only durable
+   notification. The existing routine feature reads an opaque proposal reference and presents its
+   content as editable suggestions. Neither URLs nor notification labels contain the instruction.
+5. Accept the final human-reviewed command and mark the proposal accepted in the same Serializable
+   transaction as routine creation. Recheck current membership, source/destination access, audience
+   and executing-service permissions. Prove lost responses, duplicate notifications, expiry,
+   cancellation/acceptance races, changed sessions and revoked access before live qualification.
+
+| Proposal state | Event | Required outcome |
+| --- | --- | --- |
+| Pending | Authorized read | Return the encrypted proposal's decoded suggestions to the original requester under current access; do not activate work. |
+| Pending | Human accepts | Create exactly one routine through its existing authority and save Accepted atomically; final reviewed values may differ from the immutable suggestion. |
+| Pending | Cancel or database-time expiry | Close the proposal without creating a routine. A losing update reloads and interprets the durable winner. |
+| Accepted | Exact creation replay | Return the saved routine; different final command input conflicts. |
+| Cancelled or Expired | Acceptance or new command | Refuse activation; never reopen the proposal. |
+
+No new app, library, workload, generic proposal framework or cleanup scheduler is planned. A schema
+change, when implemented, must update the reviewed fresh-install baseline and release binding in
+the same source slice. This wave does not spend the €5 live-test envelope, grant live access, merge
+the stack, deploy, or create a release tag.
+
+The first increment now has a closed MCP/first-party callable union, strict shared validators,
+MCP-only production compilation and explicit MCP narrowing at proposal, progress and result
+boundaries. The unused append helper and fake first-party MCP revision are removed. Compiler
+version `opencrane.prompt-compiler/2026-09-27.1` binds the new discriminator; snapshot version 3
+and the database baseline are unchanged. This is a dormant prerequisite, not a working
+`request_routine` journey or permission to offer first-party tools.
+
+Current automated evidence totals 631 non-overlapping tests: contracts 231, execution-inputs 172,
+personal configuration 65, the focused application tool-name check 3, model routing 119 and changed
+conversation regressions 41. TypeScript checks pass for those
+three owning packages, conversations, model routing and the joined application. Changed production
+style (17 files), Prisma boundaries (334 files), module growth, full import boundaries, release
+binding and diff checks pass. Initial wider downstream runs passed 977 conversation and 235
+model-routing tests but had sandbox-denied local-listener failures; they are not green full-suite
+claims; both changed-file downstream targets pass without listeners. Independent integrated source
+and test-overlay review found no issues and architecture postcheck passed. The separate dormant
+upgrade-session proposal adapter has no production caller; its MCP-shaped invocation contract must
+be replaced when that first-party dispatcher is implemented, not reused or shimmed. SQL, provider,
+deployment and live journey proof are not claimed.
+
+## Routine browser experience — reviewed source checkpoint
+
+At the pre-publication checkpoint, this source wave adds authenticated `/routines` list, chat-bound creation, detail,
+revision, pause/resume/retire/run-now and firing-history screens on base
+`ae9ff9a1ee19cd7ad823176d7a3a16e141d75f80`. Creation starts from an existing chat and keeps the
+requester selected; the browser uses server-projected participant and managed-service choices and a
+server-calculated five-occurrence schedule preview. Route-scoped state removes protected values on
+session or target changes, retains exact retry inputs after uncertain mutations, preserves human
+edits across conflicts and does not infer authority from server command hints.
+
+Current focused evidence totals 253 tests across six projects: 46 routine-feature, 24 app-composition,
+10 routine-state, 15 routine-adapter, 17 core and 141 conversation-workspace tests. The feature
+TypeScript check and the mechanical style, Prisma-boundary, module-growth, release and diff checks
+pass. The current joined Storybook build passes, and all 18 tagged routine stories pass their
+Chromium interaction and accessibility checks. Full-page creation candidates plus current detail
+and history candidates are recorded in `.nx/routine-ui-candidates/RENDER-REPORT.md`; they are not
+accepted baselines. Independent integrated, architecture, state/adapter and component source review
+pass with no remaining source finding. Publication, Linux rendering and human visual approval remain
+pending, so this is reviewed source rather than an MVP-completion claim.
+
+Agent-authored form prefill/tooling, SQL and real-account execution, live schedule/history proof and
+publication remain separate follow-ups. No provider was called, the €5 qualification envelope remains
+unspent, and this wave changes no VM, deployment, database baseline, accepted visual baseline or live
+permission.
+
+## Authenticated routine command API — bounded source increment
+
+The source overlay now defines 11 authenticated routine operations (seven commands plus list,
+history, creation-options and schedule-preview) and their strict request/response contracts,
+composes one shared routine authority, and mounts its HTTP router at `/api/v1/me/routines`. This
+is source and focused-test evidence only; it is not a claim that frontend screens, the reviewed
+agent form, live database/KurrentDB behavior, or real-account qualification are complete.
+
+The current non-overlapping focused evidence totals 350 tests: scheduling 284 (including its
+read-repository, router, OpenAPI and legacy fixture coverage), execution-runs 22, conversation
+directory 11, app composition plus real-AES cursor coverage 17, contracts 14, API-spec 1 and the
+OpenCrane HTTP mount 1. Six package typechecks pass across scheduling, execution-runs,
+conversations, OpenCrane, contracts and API-spec; full ESLint boundaries, style/Prisma/module
+guards, release binding and `git diff --check` pass. Generated client and website OpenAPI artifacts
+are synchronized, and public routine surfaces contain `audienceParticipantRefs` rather than the
+old `audiencePrincipalIds`. Frontend screens, the reviewed agent form, SQL/live
+PostgreSQL/KurrentDB proof and real-account qualification remain pending; no provider calls were
+made and the €5 qualification envelope remains unspent. Integrated and architecture review now
+pass with zero findings, and both module-growth candidates are accepted as cohesive reviewed
+owners. This evidence is scoped to wave base `1ad2657ec604069a6e92f78d8ce89366b77f8e63`; it is
+not a final publication, CI or MVP-completion claim.
+
+Historical seven-operation source review and architecture postcheck passed with zero findings on
+the staged fingerprint `16fcfcbc647f88f013ad0eca1700fcc041fbd34bc92653de5de587bd3719de40` (head
+`85ebc7d...`). Its style, Prisma, app/domain, ESLint, release-baseline and stack guards, plus
+reviewed module-growth candidates, belong to that earlier source overlay; they are not a final
+review claim for this 11-operation wave. This remains source-only evidence from base
+`857ad410aa8f8ca79f4f235c2050077ad644af2d` and prepublication stack snapshot `31fba0...`, not a
+push, commit or CI claim.
+
+## Scheduling foundation — published draft #916, 25 September 2026
+
+The user approved a draft PR for the current `feat/conversational-routines` foundation,
+stacked directly on #915 (`feat/explicit-subchat-audience`) at
+`8ae8227c7322a07ffc0f4531e6572a8d73ce7c84`. Review order is
+#908 → #910 → #914 → #915 → #916. Initial published head is
+`1f4ba7ad7698fad6c88f619041d640baa861b84c`; live stack validation passes snapshot
+`b6001edc29d02e335f895c77b895a027553c414da1d2d6928723d7b70be5abd7`.
+The cumulative candidate merges cleanly with develop `10abd0ef6182f36bec13d8f1358e43b15ead7cd5`
+in the read-only merge simulation. No predecessor is absorbed or closed;
+the other open PR branches remain independent. The checkpoints below describe earlier local
+states, not the publication status of this draft.
+
+This is a source foundation, not usable schedules or MVP acceptance. It includes the routine
+schema and lifecycle, current-authority checks, revision-bound approval, root-run input contracts,
+encrypted instruction adapters, and recoverable occurrence history. The follow-ups below add
+preparation, activation, atomic run admission, recovery-only turn compilation and runtime/startup
+wiring. Production routes, frontend and result propagation remain open before real-account
+qualification.
+
+The publication validation passes 892 tests (13 skipped) across seven selected projects and all
+seven TypeScript targets. The unchanged conversation/computer, IAM and application checks below
+remain separate evidence. Refreshed style has zero errors or warnings; Prisma ownership, module
+growth, release-baseline binding, app/workload and agent-domain checks pass, including the boundary
+negative tests. The eleven module-growth candidates are reviewed responsibilities, not errors.
+Independent joined review passes with no findings. It reuses the completed slice reviews and
+checks origin, input assembly, root-run admission, approval, history and composition together.
+PostgreSQL and KurrentDB integration tests remain unexecuted. A draft publication authorizes no
+merge, deployment, live permission change, external action or release tag.
+
+### Occurrence preparation — source implemented and independently reviewed
+
+This source slice starts from the published head above. The actual conversation preparation unit
+of work now rechecks the saved firing through a transaction-bound scheduling contract, then saves
+encrypted service-authored input and a hidden conversation projection with stable computer
+coordinates. Kurrent history establishment remains outside database retry callbacks. A second
+transaction rechecks current authority and publishes only the confirmed audience together with the
+firing's saved preparation receipt. A saved receipt means publication already happened: retry
+recovers it without restoring ended participation or revoked grants. The existing receipt is the
+publication marker; there is no schema change. Managed-agent eligibility is read without recording
+a fictitious current human action. A confirmed loss of eligibility commits a refusal; the workflow
+then ends without activation or run admission.
+
+| Saved state | Preparation attempt | Required result |
+| --- | --- | --- |
+| No projection or receipt | Current firing and managed service remain allowed | Save hidden projection and encrypted instruction together. |
+| Hidden projection, no history | Same immutable command | Reuse coordinates and ciphertext, then establish checked history. |
+| History exists, no preparation receipt | Current authority still permits this occurrence | Publish confirmed participants/grants and save receipt in one transaction. |
+| Preparation receipt exists | Exact retry | Verify saved history/projection and return the receipt without restoring access. |
+| No admitted run; current authority ends | Any unfinished preparation stage | Record refusal, publish no new access, and stop this occurrence. |
+| Conflicting coordinates, ciphertext, history or receipt | Any attempt | Refuse substitution; retain the original evidence. |
+
+The follow-up validation passes 316 tests: 190 scheduling, 9 scheduling-contract, 85 conversation
+routine, 16 encrypted-payload and 16 managed-eligibility checks. Four affected TypeScript targets,
+repository boundary lint, Prisma ownership and mechanical style pass. Module growth has no errors;
+the reviewer accepts the firing lifecycle and preparation-receipt repositories as distinct owners.
+The 19 new preparation tests run the actual unit of work, projection repository, payload owner and
+AES-GCM cipher. Narrow transaction mocks prove ordering and rollback, authority loss, lost
+history/publication responses, unchanged ciphertext, exact audience, and no restored grants.
+Independent integrated review and architecture post-review pass with two Low documentation
+corrections: distinguish encrypted persistence from in-memory plaintext comparison, and explain
+the preparation authority's refused versus recoverable results. No behavioral finding remains.
+
+These tests do not prove PostgreSQL concurrency or KurrentDB integration. The actual activation
+and root-run/turn-task adapters, worker composition and reviewed creation/controls UI remain the
+next implementation work; this preparation adapter alone is not a runnable scheduled task.
+The next slice should reuse the conversation activation authority without its ordinary early turn
+spawn, then join existing root-run admission with turn-task spawning and receipt binding in the
+same transaction. Routine compilation must recover that admitted run and use the checked attested
+instruction, not interactive admission or a fabricated browser session. Bootstrap stays thin and
+registers the existing schedule/occurrence/turn workflow owners. No new schema is currently needed
+for these adapters; loss-of-response receipt recovery remains part of their required test scope.
+
+### Occurrence activation — source implemented and independently reviewed
+
+This wave starts from preparation head `9b75e6efff24b8058363fefe413ea8782326f117`.
+The refreshed live stack passes snapshot
+`5670845f7746d93005eefb738c6c7aa1c164408b5d61ddee972c16f428d6774c` with the same
+#908 → #910 → #914 → #915 → #916 order. Architecture requires a lease-only publication
+contract separate from ordinary message activation, and typed Pending results handled with durable
+sleep. A normal cold start must not exhaust the occurrence task's three failure attempts.
+
+| Current activation state | Event | Required outcome |
+| --- | --- | --- |
+| Prepared, cold computer | Authorized poll | Request its deterministic initial lease; admit no model turn. |
+| Claim pending and unexpired | Sandbox still starting | Save Pending checkpoint, sleep durably and recheck authority before another poll. |
+| Current authority removed | Before claim or lease publication | Commit pre-admission refusal, preserving earlier receipts; admit no run. |
+| Computer retired, lease ended/expired or release profile unavailable | Poll or publication | Commit refusal rather than creating a replacement generation. |
+| Active history, publication missing | Lost response or retry | Verify exact history, then atomically save lease projection and activation receipt. |
+| Activation receipt already saved | Exact unadmitted retry | Recheck authority and verify the receipt; never spawn a turn from activation. |
+| Foreign history, command, lease or receipt | Any poll | Report an integrity error; do not silently replace evidence or treat it as a policy denial. |
+
+Root-run admission and turn-task binding will follow this boundary. They must share a transaction,
+and duplicate admission must read the saved task receipt without spawning another task. The routine
+compiler must recover an already-admitted run. Automatic input authorization must use the system
+actor, not borrow a current human session. Worker/UI composition and live qualification remain open.
+
+The implementation now uses the shared computer lifecycle through a lease-only publisher. It
+commits the active lease and scheduling receipt together after a fresh authority check, returns
+typed Pending for normal cold starts, and durably refuses retired or ended computers. Saved
+activation cannot recreate a missing realization. A recovery-only turn-task receipt reader returns
+the existing task without spawning one; incomplete or malformed bindings fail closed.
+
+Validation passes 372 relevant tests: 220 scheduling, 19 occurrence-contract and 133 conversation
+routine/activation/receipt checks. All three affected TypeScript checks pass. The 15 joined activation
+tests exercise actual computer history and the lease projection with controlled transaction/claim
+ports: rollback, lost commit acknowledgement, authority loss after assignment, lease endings,
+receipt substitution, and no early task admission. They are not real PostgreSQL, KurrentDB or
+Agent Sandbox proof. Mechanical style reports zero errors/warnings, Prisma ownership and agent
+boundaries pass, and module growth has one reviewed cohesive activation-repository candidate.
+
+Independent integrated review and architecture post-review pass for scope digest
+`01c118b4cccbafa7176f13ddd346d04958275e9c4501d75b9c62d762313becc0`.
+The review repaired a real stuck-Preparing path by mapping retired, released, lost and expired
+computers to committed refusal before replay and publication. One Low documentation correction
+records that activation status values are persisted in checkpoints. No behavioral finding remains.
+No schema, workload, route or frontend was changed, and no live service or VM was started.
+
+### Occurrence run admission and recovery — source implemented and independently reviewed
+
+This wave starts at `8bb5072ab7b93aaf37b10d7dd814a53bc0cd4916`. Live stack
+snapshot `e2b7dec493650fa5f0407022b570c80a5f91abc3e141e31631002f61f3a95949`
+preserves #908 → #910 → #914 → #915 → #916. The outcome is an admitted scheduled
+run with a saved execution task, and recovery that cannot admit another run.
+Architecture preflight passes: reuse the run/snapshot transaction owner, managed routine subject,
+attested instruction reader and shared turn task. No schema or deployable change is planned.
+
+| Current state | Event | Required outcome |
+| --- | --- | --- |
+| Prepared and active, no run | Current admission allowed | Save run, snapshot, firing backlink, turn task and task receipt in one transaction. |
+| Any admission write fails | Retry | Roll back all writes; reuse the same request and task keys. |
+| Commit succeeded but acknowledgement was lost | Retry | Recheck current execution authority and recover saved run/task; never spawn again. |
+| Current permission removed | Admission or compilation | Deny execution; never invent a current human login for an automatic firing. |
+| Routine instruction pending | Turn compilation | Recover the admitted run and compile the attested instruction; never use interactive admission. |
+| Initial routine answer verified | Later human follow-up | Use ordinary admission with the real human message's saved identity; failed routine recovery never selects this path. |
+| Missing or conflicting run, receipt, history or lease | Recovery | Fail closed without replacing stored evidence. |
+
+Source now joins scheduling admission and turn-task creation, adds read-only snapshot recovery,
+and preserves ordinary human follow-ups after the initial routine answer. Automatic Conversation
+Use and agent Invoke decisions both record the scheduler actor; manual work retains the requester.
+The original human authentication time is never renewed. The final scheduling guard is the first
+run-authority load inside the existing admission transaction, not an earlier separate check.
+Managed model/tool resources continue to require the company's own grants; the requester's
+Conversation Use and Invoke grants never substitute for them. Recovery also requires the selected
+history prefix to contain the verified first instruction, including when a saved anchor is supplied.
+
+Validation passes 648 relevant tests: 231 scheduling, 173 input assembly, 47 run admission and
+snapshot recovery, 40 agent models, 10 managed execution evidence, and 147 conversation routines,
+turns and output checks. All six affected TypeScript targets pass. Mechanical style checks 30
+production files with zero errors/warnings; Prisma ownership checks 332 files with zero errors;
+module growth has zero errors/candidates. The unchanged agent-domain guard is also green.
+Independent integrated review and architecture post-review pass against the 49-file source
+manifest `793886dcc9ce71628bc462119cb8894788231592958556b8409c47facf89eb28`.
+Review corrected resource-principal borrowing, automatic requester audit attribution and an empty
+history-anchor acceptance bug; each has regression coverage. A subsequent comments-only pass
+clarifies the public read-only recovery exception and the consequential contracts.
+An independently checked barrel correction keeps new matching/mapping helpers package-internal;
+the prior public admission class remains exported. All three affected consumer TypeScript targets
+pass after that correction.
+
+The transaction tests exercise the actual admission and task-receipt owners with rollback and
+lost-acknowledgement fixtures, not live PostgreSQL/Kurrent/Absurd execution. No live service or VM
+was started. No schema, workload, route or frontend changed. Remaining schedule work is:
+
+- Wire the existing libraries through a thin app composition; register both routine tasks with
+  the control-plane queue authority and inject the recovery dispatcher into conversation turns.
+- Repair active schedules before workers start. The existing limit-only method cannot page
+  beyond its first 100 rows; add cursor-based recovery rather than looping the same batch.
+- Derive firing progress from saved run/output evidence and repair lost acknowledgements. The
+  existing `recordRunProgress` port has no production caller; a workflow return is not proof of
+  completed output or a resolved external action.
+- Add authenticated creation/control APIs, reviewed screens and the preconfigured agent form tool.
+- Qualify scheduled/manual runs, current-permission revocation, approval, overlap and restart with
+  real accounts and databases. Global/group/agent aggregate budgets remain a separate MVP item.
+
+### Routine runtime and restart recovery — source implemented, 26 September 2026
+
+The next wave starts from published draft #916 head
+`3ecef49d367c8a6b04bc499d0d5234364e2e8957`. Live stack snapshot
+`9303abc7163fe009b71f35c37561bf0150ec67b4006281fa6b8d5ac8faa63a33` preserves
+#908 → #910 → #914 → #915 → #916. The previous wave is published and reviewed;
+this wave has no deployment, provider action, new grant or release-tag authority.
+
+The outcome is executable routine workflow composition and recovery of all active schedule heads
+on restart. Independent lanes are app composition and silo-scoped keyset repair. Existing libraries
+remain the authority; apps only wire dependencies and start/stop process resources. No new workload,
+queue, schema, generic scheduler or process timer is planned.
+
+| Current state | Event | Required outcome |
+| --- | --- | --- |
+| Process starting | Existing active schedules | Page through this silo's active heads before workers start; retain task keys, without a first-100 ceiling. |
+| Runtime assembled | Routine or occurrence task claimed | Registered library handlers use the existing queue policy and shared conversation recovery dispatcher. |
+| Registration or startup repair fails | Process start | Close process resources without starting workers or accepting connections. |
+
+Result tracking is the next source slice, not part of the current runtime publication. Its
+architecture preflight requires execution/conversation-owned evidence and a final comparison with
+the linked run's current state before scheduling saves progress. Scheduling preserves its own
+first evidence pair; an observer may not manufacture evidence from that projection. The initial
+continuation proposal was superseded by producer-coupled reporting below: a continuation without
+its own persisted head could lose repair, and the occurrence's task receipt is immutable.
+
+| Current state | Event | Required outcome |
+| --- | --- | --- |
+| Run admitted | Repeated progress observation | Derive coordinates from the saved run/firing link; never treat a task return as completed output. |
+| Durable answer or terminal failure/cancellation | Progress observation | Save the matching outcome with verifiable result evidence and preserve its first evidence pair. |
+| Effect or response uncertain | Recovery | Keep the firing unfinished until its linked run supplies a resolved outcome. |
+| Progress saved but acknowledgement lost | Retry | Recover the same evidence without repeating model/tool work. |
+
+Runtime source now registers both routine handlers on the existing control-plane queue and injects
+recovery-only routine dispatch alongside ordinary conversation admission. The shared typed context
+supplies the same instruction cipher, membership authority and history to preparation and recovery.
+Startup pages through active heads within the configured silo, using serializable transactions and
+the saved deterministic task keys. It rejects malformed or non-advancing page results. All computer
+and durable workers remain stopped until recovery succeeds. One pre-lifecycle assembly boundary
+owns failure cleanup; lifecycle takes over afterward, with a ten-second hard-exit bound if dependency
+cleanup cannot finish. No business policy was moved into the app.
+
+Validation passes 58 relevant tests: 34 scheduling repair/repository/unit-of-work checks and 24 app
+routine, conversation, lifecycle, background-worker and queue-composition checks. The final
+corrections rerun all eight startup-recovery tests and all seven lifecycle tests. Both affected
+TypeScript targets pass. Style checks 15 production files with zero errors/warnings, Prisma
+ownership checks 319 files with zero errors, and workload/app and agent-domain guards and their
+negative tests pass. Module growth has one reviewed firing-repository candidate and no errors.
+Independent review corrected premature full-page exhaustion, activation starting before repair,
+and incomplete or hanging startup cleanup. Listener-order tests observe actual listener-open calls,
+not merely cleanup calls. These checks use controlled ports, not running services or databases.
+
+Authenticated routine commands, reviewed creation/control screens, their agent form tool and
+result tracking still need implementation, followed by complete candidate qualification. No live
+service or VM was started, and no dependency installation, schema change or deployment occurred.
+Schedules are not yet user-ready.
+
+### Routine result reporting — source implemented, 26 September 2026
+
+This wave starts at published #916 head `544535120694a5d734ce74eb2ab08e3d5f290aae`.
+Live stack snapshot `ab48fc5290ba68606675304f09e47570f87a7665cefa181dd888344affad9ccb`
+passes all 18 open PRs and retains #908 → #910 → #914 → #915 → #916. No merge, deployment,
+tag, new grant, dependency installation or live provider action is part of this wave.
+
+Architecture preflight passes producer-coupled reporting with no polling task or schema change.
+Execution/runs reads the checked snapshot and reciprocal firing link. Conversations verifies saved
+turn/history evidence. Scheduling validates the observation, rereads the current run in the same
+serializable transaction as its firing compare-and-set, and retains the first evidence pair even
+when a later verified result differs. Historical reporting needs no fresh execution grant; new
+effects still require current authority. Apps wire these owners without interpreting states.
+
+| Saved producer event | Firing outcome | Acknowledgement boundary |
+| --- | --- | --- |
+| Proven approval or generated-file wait | Waiting | Report before the durable wait. |
+| Execution resumes | Running | Retain any earlier uncertain evidence. |
+| Response/effect unavailable and run in recovery | Uncertain | Report before the task returns. |
+| Confirmed answer and completed run | Completed | Report before credential cleanup and turn settlement. |
+| Stop output winner | Completed | Report in a retryable checkpoint before returning. |
+| Finalized Stop cancellation | Cancelled | Report after cleanup/finalization, before returning. |
+| Cancelling or unsupported source state | No terminal report | Never infer a terminal result. |
+| Report fails or its acknowledgement is lost | Retry from saved source | Do not repeat the external effect or settle past the failed report. |
+
+Luna implemented the read-only execution facts and model alignment; Sol implemented conversation
+evidence, producer hooks and app wiring; the orchestrator implemented the scheduling contract,
+source fence and first-evidence preservation. The superseded unfenced progress command and firing
+repository method are removed. Historical terminal/uncertain reporting requires no new grant.
+Nonterminal wait verification is non-consuming, but it does perform current-access checks and their
+normal authorization audit writes; it is not described as a side-effect-free database read.
+
+Review corrected two wait/replay gaps. An early wake or timeout does not imply a cleared approval
+or generated-file wait. A crash after execution advances but before Running is reported cannot
+depend on a lost local wait variable: each checked nonterminal model or internal tool-result outcome
+reports Running idempotently after verifying no external wait remains. Initial Running is a no-op;
+terminal, unavailable and generic Retry outcomes do not manufacture an intermediate Running state.
+The observer also distinguishes the managed executing principal from the original human requester.
+
+Validation passes 377 relevant tests: 254 scheduling, 35 occurrence/progress contracts, 19 execution
+facts, three run-model transitions, 63 conversation observer/turn/Stop/replay tests and three app
+composition tests. All six affected TypeScript targets pass. Full dependency-boundary lint, changed
+style and Prisma ownership checks pass; workload/app and agent-domain guards and their negative
+tests pass. Module growth reports no errors and two reviewed cohesive owners: the existing turn
+dependency contract and the new routine progress observer. Independent integrated review found no
+behavioral blocker after the wait/replay corrections; a comments-only pass clarifies the Running
+and acknowledgement contracts before exact-source publication binding.
+
+These checks use controlled ports, not live PostgreSQL, KurrentDB or workers. No VM, service,
+dependency download, live grant or external write was used. Authenticated routine commands,
+reviewed creation/control screens, the agent form tool and live qualification remain required.
+
+## Conversational routines — source implementation in progress, 25 September 2026
+
+The next complete schedule slice starts from #915 at immutable base
+`8ae8227c7322a07ffc0f4531e6572a8d73ce7c84`, on `feat/conversational-routines`.
+The parent stack #908 → #910 → #914 → #915 is unchanged and its live integrity check passes
+snapshot `9b72ff1d2e162310345f18b9567f673e457bde5f27daa34fd5389897beb4052f`.
+Integration remains develop `10abd0ef6182f36bec13d8f1358e43b15ead7cd5`; this slice is not published.
+The older proposal-only overlay remains separate and is not an executable scheduling implementation.
+
+Architecture preflight passes with a required occurrence boundary: every firing owns a separate
+agent-session conversation using the routine's confirmed audience and destination. Its AgentRun is
+a root, not a delegation-tree child. Manual firing starts immediately even while paused or while
+another firing is active. Only automatic firing skips overlap. Every firing uses the managed
+assistant's current published revision and permissions, with its existing per-run budget. Original
+requester identity is retained as ownership and approval evidence, never as a current browser
+session or a substitute execution principal. Global/group/assistant aggregate budgets remain a
+separate required MVP item; their unresolved group attribution is not silently implemented here.
+
+The implementation waves are: (1) pure calendar/firing types and the owned schema; (2) product
+routine/firing persistence and workflow commands in parallel with scheduled run/input admission;
+(3) occurrence-history/computer adapters, requester-only routine approval, reviewed creation and
+controls through the existing frontend; (4) bootstrap composition and joined validation. The new
+`server/agents/scheduling` library owns the product lifecycle; generic Absurd scheduling remains
+infrastructure. Apps stay bootstrap-only. No new workload, broker, process timer or generic scheduler
+is introduced. No model-selected budget or previously rejected Ask-validator changes are included.
+
+| Current routine state | Command/event | Required outcome and atomic owner |
+| --- | --- | --- |
+| Not created | Reviewed human confirmation | Recheck collection Create, destination/audience and selected managed service; persist routine, immutable revision, exact access projection and first task together. |
+| Active | Automatic due slot | With database time, select only the latest slot after the saved cursor. Record overlap as skipped when any earlier firing is unfinished; otherwise save a Preparing firing and its task. Advance the cursor in the same transaction. |
+| Active or Paused | Manual Run now | Save a separate Preparing firing under the command key immediately; do not change the automatic cursor or wait behind another firing. |
+| Active | Pause | Requester-authorized compare-and-set closes future automatic admission; existing admitted effects keep their original evidence. |
+| Paused | Resume | Requester-authorized compare-and-set starts future selection from database time, without replaying the paused backlog. |
+| Active or Paused | Reviewed revision | Save immutable replacement instructions/schedule with the original audience and destination unchanged; bind future work to the new revision and reset selection from database time. Existing firings retain their original revision. |
+| Active or Paused | Retire | Requester-authorized compare-and-set closes all new firing admission; retained outcomes remain readable under current access. |
+| Retired | Fire/resume/edit | Refuse without admitting another run. |
+| Any | Replayed command or conflicting write | Re-read current authority and the saved command digest; return the matching committed result or conflict, never create another firing. |
+
+Firing preparation must survive restart without repeating a protected effect. Current access governs
+every result and ordinary clarification; only the original requester approves protected writes or
+cancels a run. An uncertain write remains uncertain while the assistant decides whether another
+attempt is appropriate. Routine-scoped Always approval must remain revision/action/connection bound.
+
+Completion still requires actual route/UI/workflow consumers, focused and SQL concurrency tests,
+immutable run-origin validation, history/audience/revocation proof, generated API synchronisation,
+independent source review and component validation. A separately authorized fresh installation and
+live scheduled/manual run, pause/resume, approval/revocation and retirement journey remain required.
+No live grant, provider call, merge, deployment or release tag is authorized by this source wave.
+
+### Foundation checkpoint — 25 September 2026
+
+The uncommitted wave now contains pure calendar/firing models; the owned routine schema and
+fresh-install guards; requester routine commands and durable schedule/occurrence workflow handlers;
+scheduled/manual root-run admission with version-3 input origins; and routine-revision-scoped
+standing approval. The current working tree remains `/private/tmp/opencrane-visual-fixture.yuENw5`.
+No new PR has been published. #915 remains an open draft at the unchanged base above.
+
+The joined models, contracts, input admission, run admission, managed-agent publication, approval
+and personal-configuration checks pass: 1,222 tests passed, 13 skipped, with all seven TypeScript
+checks green. Independent review of that exact source scope found no remaining blocker after
+repairing the workflow-field mismatch in standing approval, sharing a strict non-normalizing origin
+validator, and using one canonical run-trigger model. Uncertain firings remain unfinished and may
+resolve only to the linked run's saved outcome without replacing prior result evidence.
+
+The separate routine service now passes 162 tests across ten files and its TypeScript check.
+Repairs preserve the exact human-confirmed audience, recheck authority before each preparation stage,
+distinguish automatic system actors from manual users, and retain the first saved result evidence.
+New tests exercise the actual repositories and transaction wrapper with narrow Prisma mocks. They
+cover crash recovery after a run backlink commits, immutable older firings after a routine edit,
+latest-slot selection, overlap, manual firing, command replay and compare-and-set failures. These
+tests do not replace PostgreSQL proof. Mechanical style has zero errors or warnings; Prisma boundaries
+pass; module growth has zero errors and 11 reviewed candidates. Workload/app
+composition and agent-domain guards, including their negative tests, pass. Independent service review
+identified one High policy blocker and one Medium validation follow-up. The Medium is now repaired
+and independently re-reviewed below. The retired-history policy and its source repair are now approved
+and independently reviewed. Architecture accepts the library owner, injected boundaries and transaction
+composition; the whole unfinished wave still needs its final joined review.
+The SQL regression suite is wired into the repository's existing `test:sql` discovery; a preparation
+that loses authority may become Refused with its saved receipts intact, but an admitted run may not
+be relabelled as a pre-admission refusal.
+
+The user approved retained-history access on 25 September: original confirmed participants may
+read retired routines while they still have current destination conversation access; running and
+editing remain disabled. The previously rejected change was not applied before this approval.
+The implemented source repair preserves only existing original-audience Read grants, checks each
+retired-history reader's current access independently, and keeps mutation and firing admission
+closed. A restriction-only operation in the central IAM owner revokes unwanted managed grants
+without creating missing ones or restoring revoked ones. Retired Run now and retirement-receipt
+replay also recheck the caller's current chat access. Active/Paused read and admission rules are
+unchanged. No recipients, live grants, schema changes or services were added. The authorization suite
+passes 331 tests across 24 files; its TypeScript check and the routine checks above pass. Architecture
+post-review and independent integrated review pass for this repair, closing the retired-history High.
+Review clarified that restriction removes every unrevoked mutation grant, including future-dated
+ones; retained Read grants keep their validity dates. Two regression cases prove future/expired
+retained Read still receives a current denial and cannot gain authority from retirement. Final
+scoped style and Prisma-boundary checks have no errors or warnings. The schema baseline is unchanged.
+No new PR, commit, push, deployment or live permission change was made; source tests do not prove a
+live retirement journey. The occurrence-contract and history work below is separate from this
+reviewed policy correction.
+
+### Occurrence history and prompt boundary — 25 September 2026
+
+The small `scheduling/contract` library now owns preparation, activation and run-admission ports,
+with strict checkpoint-receipt parsers. Scheduling keeps its encrypted instruction envelope and
+lifecycle implementation. Conversation owners can depend on this contract without importing the
+scheduling implementation. The actual Nx graph is acyclic: the old models-agents type-only
+conversation-ID dependency was removed without changing its unbranded string shape.
+Review narrowed the hand-off further: only preparation receives instruction text, decryption runs
+inside its checkpoint callback, and replay of saved preparation never decrypts again. Activation
+and admission receive content-free facts and receipts; later compilation must use the checked
+history/payload reader.
+
+Genesis now uses a closed `group_child` or `routine_occurrence` origin. Existing group-child
+metadata remains unchanged; saved genesis must include its explicit kind. History reads and writes
+share the same full parser. No compatibility branch, inherited destination history, fabricated
+human author or refreshed requester login was added.
+
+The occurrence history adapter atomically establishes genesis plus the encrypted instruction
+reference, a cold computer and a private preparation receipt in three checked streams. Exact
+retries recover the same evidence, including after a lost response; altered or partial history
+fails closed. Recovery also binds the computer's original creation time while accepting a valid
+later lifecycle state. The prompt reader compares every admission-supplied routine, firing, task,
+requester and service coordinate. Its transaction-bound payload repository decrypts only that
+attested instruction as user-level content; ordinary service/system compilation is unchanged.
+Neither adapter grants access, admits a run, activates a computer or implements a browser route.
+
+Focused tests and the joined conversation suite pass; application fixture checks and server
+TypeScript pass. Conversation history passes 940 tests, with the final construction-only owner
+extraction then checked by 83 routine, group-child and personal-session tests. The computer owner
+passes 26 tests, scheduling 164, the shared occurrence contract nine, and application composition
+21. All affected TypeScript checks pass. The full conversation run required temporary local test sockets after the
+sandbox refused the HTTP test listeners; no product service was started. Live KurrentDB atomic
+append, lost-response and rollback cases are added to the existing integration target but have
+not been executed. No VM, database, dependency download or new credentials were used.
+Independent source and architecture post-review pass for the exact 60-file source manifest
+`ce84f816048e30b921f26d3338dee6210665a31eadf3925e229855958cdf543e` in
+`.nx/routine-occurrence-review-scope.json`. Review consolidated initial computer event construction
+under `ConversationComputerHistory.initialAppend`, which fully validates the initial snapshot
+before any atomic write. Routine, group-child and personal-session creation now use that owner;
+the old raw event envelopes are removed, with existing IDs and write order preserved.
+Scoped style has no errors or warnings; whole-repository dependency checks, Prisma ownership,
+workload/app and agent-domain guards and their negative tests pass. Module growth has no errors
+and the same 11 reviewed candidates. These checks do not certify the rest of the unfinished wave.
+
+Still required: the current-authority preparation transaction and hidden conversation/payload
+projection, confirmed-audience grants, computer activation, atomic root-run/turn-task admission,
+routine-aware replay of that admitted run, runtime composition, authenticated routes, reviewed
+creation/control screens and the agent's preconfigured-form tool. SQL/Kurrent concurrency and
+real-account scheduled/manual/revocation/restart proof remain separate acceptance gates. No new
+PR, commit, push, merge, deployment or live permission change was made. #915 was refreshed and is
+still the open draft at the unchanged parent head and base above.
+
+The next preparation unit of work must freeze managed identity/profile and computer coordinates
+in its own recoverable conversation projection: the firing currently reserves only a conversation
+ID, not those values. Reuse the managed-agent resolver, encrypted payload repository and existing
+conversation participant/grant owner. The group-child orchestration is a reference, not a ready-made
+hidden preparation transaction; it publishes participants/grants during projection. A routine must
+keep its initial projection inaccessible until its exact confirmed audience and history are ready.
+
+The saved-result validation follow-up is implemented and its independent delta review passes.
+Adjacent typed Zod validators replace the partial command/firing and preparation/activation
+parsers. They reject unknown fields, malformed values and inconsistent state combinations without
+normalizing saved evidence. Replayed results are checked against the receipt's routine, revision
+and firing columns; non-create commands also check the requested routine, and Run now replay rejects
+automatic firing evidence even when its fields are otherwise valid. Tests preserve first
+committed identifiers even when retry allocations differ or the current routine revision advances.
+
+Two library-owned adapters now implement instruction encryption and workflow task admission. The
+instruction adapter injects the existing mounted AES-GCM cipher through a structural port, with a
+purpose-separated authenticated reference for the routine and revision. No secret, algorithm or
+dependency edge was added. The generic task adapter forwards the caller's transaction to the
+guarded workflow engine and derives unambiguous retry keys from persisted coordinates. Both use
+strict model-adjacent input validators. They are exported for composition but not wired to runtime
+consumers yet. Nine tests with the real AES-GCM component prove round-trip, ownership/purpose
+binding, tampering rejection, key rotation and the existing size cap; twelve existing run-admission
+composition tests also pass. Full server TypeScript validation passes after synchronizing two old
+test imports with the canonical `AgentRunTriggers` enum. No shared Prisma regeneration was needed.
+Independent integrated review and architecture post-review pass for these adapters. This scoped
+PASS does not cover the separate retired-history repair above or the unfinished whole wave.
+
+The baseline regenerates idempotently, authority-marker verification passes, and the new capability
+catalogue matches the runtime digest. The current manifest binds that baseline. These are source
+checks, not PostgreSQL execution proof: no test database is running locally, and no VM, database,
+container, or dependency download was started. Shared generated Prisma was refreshed once from this
+wave's schema; the original mixed MVP source worktree was not changed.
+
+The final parent-stack refresh still passes digest
+`9b72ff1d2e162310345f18b9567f673e457bde5f27daa34fd5389897beb4052f` with 17 open PRs.
+#915 remains at `8ae8227c7322a07ffc0f4531e6572a8d73ce7c84`, based on #914 at
+`42a88a2d6c0425f5f4bb78645f357ca12db9bb9d`. No PR was absorbed, closed or retargeted. The
+scheduling wave remains an uncommitted overlay; the static baseline digest is
+`e28be6e1637023a03d44071ba106a35361bba22a02461d19d30a085bb3d64241`.
+Independent review of the final SQL refusal transition and regression assertions passes; the fixture
+hash is `cce825080d4d6173be2095113dd619e724fb5fe0b4b0b842b10c39c01ee317c4`. Execution against
+PostgreSQL is still unproven.
+
+The next implementation remains concrete integration: occurrence conversation/history and computer
+preparation, real run admission and result progress, authenticated HTTP/API, reviewed UI
+creation/controls and the model's preconfigured-form tool. Then rerun source review, SQL
+concurrency/restart/revocation tests and the real-account journey.
+Backend ports and unit tests alone do not make schedules usable or satisfy the MVP label.
+
+Occurrence architecture preflight rejects direct reuse of the human-message activation path. A
+routine needs its own closed genesis-origin model and a service-attested instruction, never a fake
+human message or browser session. Keep preparation, projection, activation and the routine-aware
+turn compiler together under `server/conversations/main/src/routines/`. Activation must not spawn
+the ordinary human turn task early: admit that task atomically with the root AgentRun, snapshot and
+firing backlink, then have its compiler recover the already-admitted run. The next slice uses only
+the reviewed instruction; destination messages are not inherited. Separate the small occurrence
+contracts into an approved dependency-neutral owner before connecting the two capabilities; do not
+open a broad conversations-to-scheduling dependency. These are implementation constraints, not
+completed source or live qualification.
+
 ## Explicit initial subchat audience — published source, 25 September 2026
 
 This incremental source slice starts at published #914, immutable base

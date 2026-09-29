@@ -201,9 +201,10 @@ describe("one server-owned model request across process restarts", function _Sui
 		const reservation = (await f.store.load(f.output.bootstrapId))!.protocol.steps.at(-1)!.reservation;
 		expect(f.runLifecycle.complete).not.toHaveBeenCalled();
 		expect((await f.store.load(f.output.bootstrapId))!.protocol.output).toBeNull();
-		expect(await f.restart().start(f.workflowCommand)).toMatchObject({ bootstrapId: f.output.bootstrapId });
-		expect(await f.restart().advance(f.output.bootstrapId)).toEqual({ outcome: "response_unavailable" });
+		const recovered = await f.restart().start(f.workflowCommand);
+		expect(recovered).toMatchObject({ bootstrapId: f.output.bootstrapId, protocol: { state: ConversationComputerTurnProtocolStates.ResponseUnavailable } });
 		expect(f.runLifecycle.enterRecoveryRequired).toHaveBeenCalledTimes(2);
+		expect(f.routineProgress.recordUnavailable).toHaveBeenCalledOnce();
 		expect((await f.store.load(f.output.bootstrapId))!.protocol.steps.at(-1)?.reservation).toEqual(reservation);
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();
 		expect(f.model.request).toHaveBeenCalledOnce();

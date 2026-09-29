@@ -7,6 +7,8 @@ import { type HistoryAtomicAppend, type HistoryRecordedEvent } from "@opencrane/
 
 import { ConversationApprovalNotificationOutcomes } from "../conversation-approval-notification.types";
 import { KurrentConversationApprovalNotificationPublisher } from "../kurrent-conversation-approval-notification";
+import { KurrentConversationRoutineProposalNotificationPublisher } from "../../../../request-routine/kurrent-conversation-routine-proposal-notification";
+import { ConversationRoutineProposalNotificationOutcomes } from "../../request-routine/conversation-request-routine.types";
 
 const _APPROVAL_ID = "61c1f1dc-0010-4f13-9c2f-d3841ffd6651";
 const _COMMAND = { bootstrapId: "turn-1", siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 1, approvalId: _APPROVAL_ID };
@@ -79,6 +81,47 @@ describe("Kurrent conversation approval notification", function _Suite()
 		const state = _History();
 		const publisher = new KurrentConversationApprovalNotificationPublisher({ readCurrent: vi.fn().mockResolvedValue(null) }, new ConversationHistoryAuthority(state.history as never), new ConversationHistoryReader(state.history as never), state.history as never);
 		await expect(publisher.publishRequested(_COMMAND)).resolves.toBe(ConversationApprovalNotificationOutcomes.NoLongerVisible);
+		expect(state.appendAtomic).not.toHaveBeenCalled();
+	});
+});
+
+describe("Kurrent conversation routine proposal notification", function _RoutineProposalSuite()
+{
+	const command = { bootstrapId: "turn-1", siloId: "silo-1", sourceConversationId: "conversation-1", runId: "run-1", attempt: 1, ordinal: 1, requesterPrincipalId: "principal-1", proposalRef: "routine-proposal-1", expiresAt: "2026-09-11T10:00:00.000Z" };
+
+	it("publishes only the opaque requester-visible proposal link and deduplicates its receipt", async function _PublishRoutineProposal()
+	{
+		const state = _History();
+		const evidence = { readCurrent: vi.fn().mockResolvedValue(command) };
+		const recipients = { readCurrent: vi.fn().mockResolvedValue({ participantId: "user-1" }) };
+		const publisher = new KurrentConversationRoutineProposalNotificationPublisher(evidence, recipients, new ConversationHistoryAuthority(state.history as never), new ConversationHistoryReader(state.history as never), state.history as never, { now: function _Now() { return new Date("2026-09-10T10:01:00.000Z"); } });
+
+		await expect(publisher.publish(command)).resolves.toBe(ConversationRoutineProposalNotificationOutcomes.Published);
+		await expect(publisher.publish(command)).resolves.toBe(ConversationRoutineProposalNotificationOutcomes.Published);
+		expect(state.appendAtomic).toHaveBeenCalledTimes(1);
+		const entry = state.streams.get("conversation-conversation-1")![1]!.data["entry"];
+		expect(entry).toMatchObject({ logKind: "routine_proposal", proposalRef: "routine-proposal-1", phase: "ready_for_review", summary: "Routine proposal ready for review", detailsRef: null, visibility: { audience: "participant_subset", participantIds: ["user-1"] } });
+		expect(JSON.stringify(entry)).not.toContain("instruction");
+	});
+
+	it("recovers an already visible receipt after acceptance or cancellation without requiring a pending proposal", async function _RecoverAfterTerminalProposal()
+	{
+		const state = _History();
+		const evidence = { readCurrent: vi.fn().mockResolvedValueOnce(command).mockResolvedValueOnce(null) };
+		const recipients = { readCurrent: vi.fn().mockResolvedValue({ participantId: "user-1" }) };
+		const publisher = new KurrentConversationRoutineProposalNotificationPublisher(evidence, recipients, new ConversationHistoryAuthority(state.history as never), new ConversationHistoryReader(state.history as never), state.history as never);
+
+		await expect(publisher.publish(command)).resolves.toBe(ConversationRoutineProposalNotificationOutcomes.Published);
+		await expect(publisher.publish(command)).resolves.toBe(ConversationRoutineProposalNotificationOutcomes.Published);
+		expect(state.appendAtomic).toHaveBeenCalledTimes(1);
+		expect(evidence.readCurrent).toHaveBeenCalledTimes(1);
+	});
+
+	it("suppresses a new notification when the proposal is expired or requester access ended", async function _SuppressEndedAuthority()
+	{
+		const state = _History();
+		const publisher = new KurrentConversationRoutineProposalNotificationPublisher({ readCurrent: vi.fn().mockResolvedValue(null) }, { readCurrent: vi.fn().mockResolvedValue({ participantId: "user-1" }) }, new ConversationHistoryAuthority(state.history as never), new ConversationHistoryReader(state.history as never), state.history as never);
+		await expect(publisher.publish(command)).resolves.toBe(ConversationRoutineProposalNotificationOutcomes.NoLongerVisible);
 		expect(state.appendAtomic).not.toHaveBeenCalled();
 	});
 });

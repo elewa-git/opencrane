@@ -44,6 +44,7 @@ export function _McpModelNameAuthority(prisma: PrismaClient, history: HistorySto
 		store: turns,
 		writers: new ConversationComputerTurnWriterFactory(history, turns, candidates, toolResults),
 		runLifecycle: new PrismaConversationRunLifecycleUnitOfWork(prisma),
+		routineProgress: { async recordCompleted() {}, async recordUnavailable() {} },
 		toolProposals: new PrismaConversationToolProposalUnitOfWork(prisma, fixture.dependencies, runtime.admission, async function _ApprovalExpiry() {}),
 	};
 	const authority = new ConversationComputerTurnAuthorityService(dependencies);

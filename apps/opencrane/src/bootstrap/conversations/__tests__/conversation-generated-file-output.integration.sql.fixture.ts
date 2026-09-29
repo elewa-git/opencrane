@@ -164,6 +164,7 @@ function _AuthorityDependencies(prisma: PrismaClient, capture: _ActualGeneratedF
 		store: turns,
 		writers: new ConversationComputerTurnWriterFactory(history, turns, candidates, toolResults),
 		runLifecycle,
+		routineProgress: { async recordCompleted() {}, async recordUnavailable() {} },
 		toolProposals: proposals,
 	};
 }

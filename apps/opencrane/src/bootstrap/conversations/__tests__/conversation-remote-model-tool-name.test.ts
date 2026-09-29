@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ConversationComputerTurnAuthorityService, ConversationComputerToolResultOutcomes, type ConversationComputerTurnModelReservation, type ConversationComputerTurnToolSelection, type ConversationComputerTurnCandidate, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { McpInvocationDispatchOutcomes, RemoteMcpInvocationExecutor } from "@opencrane/backend/server/gateways/mcp";
-import { CompiledFinalOutputModes, ConversationModelResponseKinds, ConversationToolProposalOutcomes, McpConnectionCredentialKinds } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, CompiledToolDefinitionKinds, ConversationModelResponseKinds, ConversationToolProposalOutcomes, McpConnectionCredentialKinds } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { _OpenConversationTurnProtocol, _ReserveConversationTurnModel, _SelectConversationTurnTool } from "./conversation-turn-protocol.fixture";
@@ -24,7 +24,7 @@ function _ModelSelectionHarness(callName: string)
 		attempt: 1,
 		instructions: "Find one record",
 		messages: [],
-		tools: [{ name: _SOURCE_NAME, modelName: _MODEL_NAME, toolRevisionId: _TOOL_REVISION_ID, description: "Find one record", requiresApproval: false, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) }],
+		tools: [{ kind: CompiledToolDefinitionKinds.Mcp, name: _SOURCE_NAME, modelName: _MODEL_NAME, toolRevisionId: _TOOL_REVISION_ID, description: "Find one record", requiresApproval: false, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) }],
 		model: { modelAlias: "test-model", maxOutputTokens: 100, generatedOutputCapabilities: [] },
 		budget: { maxCompletionTokens: 100, maxModelTurns: 2, maxToolInvocations: 1, maxCostUsdMicros: null, maxLoopIterations: 1, wallClockDeadlineEpochMs: Date.now() + 60_000 },
 		digest: `sha256:${"b".repeat(64)}`,
@@ -55,7 +55,7 @@ function _ModelSelectionHarness(callName: string)
 	const proposals = { admit: vi.fn(async function _Admit(selected: FrozenConversationComputerTurn)
 	{
 		const selection = selected.protocol.steps.at(-1)?.selection;
-		if (selection == null)
+		if (selection == null || selection.kind !== "mcp")
 			throw new Error("The tool must be selected before admission");
 		return { proposalId: selection.proposalId, outcome: ConversationToolProposalOutcomes.Existing };
 	}) };

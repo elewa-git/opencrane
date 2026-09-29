@@ -3,6 +3,8 @@ import { ___GeneratedFileEventName } from "@opencrane/contracts";
 
 import { ConversationComputerToolResultOutcomes } from "../conversation-computer-continuation.types";
 import { ConversationComputerModelProgressOutcomes } from "../conversation-computer-model.types";
+import { ConversationComputerTurnProtocolStates } from "../conversation-computer-turn-protocol.types";
+import { RoutineRunProgressWaitKinds, type RoutineRunProgressWait } from "../../../routines/routine-run-progress.types";
 import { CONVERSATION_COMPUTER_TURN_MAXIMUM_ATTEMPTS, CONVERSATION_COMPUTER_TURN_TASK } from "./conversation-computer-turn-task";
 import type { ConversationComputerTurnTaskInput, ConversationComputerTurnWorkflowDependencies, ConversationComputerTurnWorkflowResult } from "./conversation-computer-turn-workflow.types";
 
@@ -40,11 +42,19 @@ export function _RegisterConversationComputerTurnWorkflow(workflows: IWorkflowEn
 				throw new Error("Conversation turn workflow causation does not match its history position");
 			if (!await dependencies.receipts.bind(turn.compile.runId, turn.compile.attempt, context.task))
 				return { outcome: "superseded", turnId: turn.bootstrapId };
+			if (turn.protocol.state === ConversationComputerTurnProtocolStates.ResponseUnavailable)
+			{
+				// start() already persisted run recovery and routine progress for this saved unavailable state.
+				return { outcome: ConversationComputerModelProgressOutcomes.ResponseUnavailable, turnId: turn.bootstrapId };
+			}
 
 			let recoveryCycle = 0;
 			while (true)
 			{
 				const progress = await dependencies.authority.advance(turn.bootstrapId);
+				const runningKey = _RunningKey(progress);
+				if (runningKey !== null)
+					await _RecordRunning(context, dependencies, turn, runningKey);
 				switch (progress.outcome)
 				{
 					case ConversationComputerModelProgressOutcomes.Completed:
@@ -60,6 +70,7 @@ export function _RegisterConversationComputerTurnWorkflow(workflows: IWorkflowEn
 					case ConversationComputerToolResultOutcomes.GeneratedFilePending:
 						if (!Number.isSafeInteger(progress.notAfterEpochMs) || progress.notAfterEpochMs <= 0)
 							throw new Error("Generated file wait requires the original authority deadline");
+						await _RecordWaiting(context, dependencies, turn, { kind: RoutineRunProgressWaitKinds.GeneratedFile, id: progress.operationId });
 						await context.waitForEvent(___GeneratedFileEventName(progress.operationId), { timeoutAt: new Date(progress.notAfterEpochMs) });
 						break;
 					case ConversationComputerModelProgressOutcomes.ToolPending:
@@ -96,6 +107,9 @@ export function _RegisterConversationComputerTurnWorkflow(workflows: IWorkflowEn
 						}
 						const approvalWait = progress.waitFor === "approval" && progress.waitUntilEpochMs !== undefined ? { timeoutAt: new Date(progress.waitUntilEpochMs) } : undefined;
 						const eventName = progress.waitFor === "approval" ? _ToolApprovalEventName(progress.toolInvocationId) : _ToolResultEventName(progress.toolInvocationId);
+						const approval = progress.waitFor === "approval" ? { kind: RoutineRunProgressWaitKinds.Approval, id: progress.toolInvocationId } as const : null;
+						if (approval !== null)
+							await _RecordWaiting(context, dependencies, turn, approval);
 						if (approvalWait === undefined)
 							await context.waitForEvent(eventName);
 						else
@@ -109,6 +123,30 @@ export function _RegisterConversationComputerTurnWorkflow(workflows: IWorkflowEn
 			}
 		}
 	} });
+}
+
+/** Checkpoint a protocol-proven wait so a routine firing cannot remain falsely Running. */
+function _RecordWaiting(context: IWorkflowTaskContext, dependencies: ConversationComputerTurnWorkflowDependencies, turn: Parameters<ConversationComputerTurnWorkflowDependencies["routineProgress"]["recordWaiting"]>[0], wait: RoutineRunProgressWait): Promise<void>
+{
+	return context.checkpoint({ stepName: `record-routine-waiting:${wait.kind}:${wait.id}` }, function _Record() { return dependencies.routineProgress.recordWaiting(turn, wait); });
+}
+
+/** Checkpoints a checked Running milestone under a durable progress identity. */
+function _RecordRunning(context: IWorkflowTaskContext, dependencies: ConversationComputerTurnWorkflowDependencies, turn: Parameters<ConversationComputerTurnWorkflowDependencies["routineProgress"]["recordRunning"]>[0], key: string): Promise<void>
+{
+	return context.checkpoint({ stepName: `record-routine-running:${key}` }, function _Record() { return dependencies.routineProgress.recordRunning(turn); });
+}
+
+/** Give every checked nonterminal execution state a stable replay checkpoint identity. */
+function _RunningKey(progress: { readonly outcome: string; readonly ordinal?: number; readonly retryOrdinal?: number; readonly toolInvocationId?: string; readonly waitFor?: string }): string | null
+{
+	if (progress.outcome === ConversationComputerModelProgressOutcomes.ModelPending)
+		return `model:${progress.ordinal}`;
+	if (progress.outcome === ConversationComputerModelProgressOutcomes.ModelRetryWaiting)
+		return `model:${progress.ordinal}:retry:${progress.retryOrdinal}`;
+	if (progress.outcome === ConversationComputerModelProgressOutcomes.ToolPending && progress.waitFor !== "approval")
+		return `tool-result:${progress.toolInvocationId}`;
+	return null;
 }
 
 /** Name the private task event from the immutable invocation chosen by the model. */

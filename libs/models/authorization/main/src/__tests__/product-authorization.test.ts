@@ -54,4 +54,21 @@ describe("product authorization catalogue", function _Suite()
 		expect(__ProductAuthorizationRule(ProductAuthorizationResourceKinds.McpTask, ProductAuthorizationActions.Cancel)?.evidence).toBe(ProductAuthorizationEvidenceKinds.Decision);
 		expect(__ProductAuthorizationRule(ProductAuthorizationResourceKinds.McpTask, ProductAuthorizationActions.Invoke)).toBeNull();
 	});
+
+	it("separates reviewed routine creation, lifecycle changes and firing admission", function _RoutineActions()
+	{
+		expect(__ProductAuthorizationRule(ProductAuthorizationResourceKinds.RoutineCollection, ProductAuthorizationActions.Create)?.evidence).toBe(ProductAuthorizationEvidenceKinds.Decision);
+		expect(__ProductAuthorizationRule(ProductAuthorizationResourceKinds.Routine, ProductAuthorizationActions.Read)?.evidence).toBe(ProductAuthorizationEvidenceKinds.Read);
+		for (const action of [ProductAuthorizationActions.Edit, ProductAuthorizationActions.Retire])
+			expect(__ProductAuthorizationRule(ProductAuthorizationResourceKinds.Routine, action)?.evidence).toBe(ProductAuthorizationEvidenceKinds.Decision);
+		expect(__ProductAuthorizationRule(ProductAuthorizationResourceKinds.Routine, ProductAuthorizationActions.Use)?.evidence).toBe(ProductAuthorizationEvidenceKinds.Effect);
+	});
+
+	it("does not turn routine access into a sharing, delegated or tool-execution capability", function _RoutineScope()
+	{
+		for (const action of [ProductAuthorizationActions.Create, ProductAuthorizationActions.Invoke, ProductAuthorizationActions.Delegate, ProductAuthorizationActions.Share, ProductAuthorizationActions.Administer])
+			expect(__ProductAuthorizationCapability(ProductAuthorizationResourceKinds.Routine, action)).toBeNull();
+		expect(__ProductAuthorizationCapability(ProductAuthorizationResourceKinds.Routine, ProductAuthorizationActions.Use)?.capabilityId).toBe("routine:use");
+		expect(__ProductAuthorizationCapability(ProductAuthorizationResourceKinds.RoutineCollection, ProductAuthorizationActions.Read)).toBeNull();
+	});
 });

@@ -75,7 +75,7 @@ describe("requester approval through the conversation workflow on PostgreSQL", f
 				return { outcome: "completed" as const };
 			},
 		};
-		_RegisterConversationComputerTurnWorkflow(workflows, { toolDispatch: { tryExecute: async function _WaitForCompanion() { return false; }, settleExhausted: async function _KeepCompanionAuthority() { return false; } }, authority: authority as never, approvalNotifications: _APPROVAL_NOTIFICATIONS, receipts: { bind: async function _Bind() { return true; } }, siloId: f.siloId });
+		_RegisterConversationComputerTurnWorkflow(workflows, { toolDispatch: { tryExecute: async function _WaitForCompanion() { return false; }, settleExhausted: async function _KeepCompanionAuthority() { return false; } }, authority: authority as never, approvalNotifications: _APPROVAL_NOTIFICATIONS, receipts: { bind: async function _Bind() { return true; } }, routineProgress: { recordRunning: async function _Running() {}, recordWaiting: async function _Waiting() {} }, siloId: f.siloId });
 		const activationEventId = randomUUID();
 		const task = await workflows.spawn({ client: {} }, { taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: activationEventId, input: { siloId: f.siloId, computerId: f.turn.computerId, leaseId: f.turn.lease.leaseId, leaseGeneration: f.turn.lease.leaseGeneration, activationEventId, causationId: f.turn.latestPendingEntryId, causationPosition: f.turn.latestPendingEntryPosition } });
 		const persistedTask = { ...task, taskId: randomUUID() };
@@ -143,7 +143,7 @@ describe("requester approval through the conversation workflow on PostgreSQL", f
 		const restarted = new __FakeWorkflowEngine();
 		const restartedAliases = new Map<string, { readonly taskId: string; readonly taskName: string; readonly idempotencyKey: string }>();
 		const restartedEventPort = _EventPort(restarted, emitted, restartedAliases);
-		_RegisterConversationComputerTurnWorkflow(restarted, { toolDispatch: { tryExecute: async function _WaitForCompanion() { return false; }, settleExhausted: async function _KeepCompanionAuthority() { return false; } }, authority: authority as never, approvalNotifications: _APPROVAL_NOTIFICATIONS, receipts: { bind: async function _Bind() { return true; } }, siloId: f.siloId });
+		_RegisterConversationComputerTurnWorkflow(restarted, { toolDispatch: { tryExecute: async function _WaitForCompanion() { return false; }, settleExhausted: async function _KeepCompanionAuthority() { return false; } }, authority: authority as never, approvalNotifications: _APPROVAL_NOTIFICATIONS, receipts: { bind: async function _Bind() { return true; } }, routineProgress: { recordRunning: async function _Running() {}, recordWaiting: async function _Waiting() {} }, siloId: f.siloId });
 		const restartedActivationEventId = activationEventId;
 		const restartedTask = await restarted.spawn({ client: {} }, { taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: restartedActivationEventId, input: { siloId: f.siloId, computerId: f.turn.computerId, leaseId: f.turn.lease.leaseId, leaseGeneration: f.turn.lease.leaseGeneration, activationEventId: restartedActivationEventId, causationId: f.turn.latestPendingEntryId, causationPosition: f.turn.latestPendingEntryPosition } });
 		restartedAliases.set(persistedTask.taskId, restartedTask);
@@ -396,11 +396,11 @@ function _ResultTurn(f: Awaited<ReturnType<typeof _SeedConversationToolProposalS
 {
 	const deadline = f.candidate.compiledInput.budget.wallClockDeadlineEpochMs;
 	const first = f.turn.protocol.steps[0]!.reservation;
-	const selected = _SelectConversationTurnTool(f.turn, { ordinal: first.ordinal, modelInvocationFence: first.invocationFence,
+	const selected = _SelectConversationTurnTool(f.turn, { kind: "mcp", ordinal: first.ordinal, modelInvocationFence: first.invocationFence,
 		proposalId, toolInvocationId: proposalId, requestFingerprint, declaration: { payloadRef: "payload-ref", ciphertextDigest: "sha256:cipher" } });
 	if (resultDigest === "sha256:cipher")
 		return selected;
-	const ready = _RecordConversationTurnResult(selected, { ordinal: first.ordinal, proposalId, toolInvocationId: proposalId,
+	const ready = _RecordConversationTurnResult(selected, { kind: "mcp", ordinal: first.ordinal, proposalId, toolInvocationId: proposalId,
 		resultDigest, authorityExpiresAtEpochMs: deadline, exchange: { payloadRef: "exchange-ref", ciphertextDigest: resultDigest } });
 	const reservation = _ConversationTurnRequest(ready, { ordinal: 2, invocationFence: "continuation-fence", tools: ConversationModelToolModes.None,
 		maxCompletionTokens: 128, authorityExpiresAtEpochMs: deadline, dispatchDeadlineEpochMs: deadline });

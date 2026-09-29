@@ -13,6 +13,9 @@
       "@opencrane/state/governance": ["./libs/frontend/state/governance/src/index.ts"],
       "@opencrane/state/governance/adapter": ["./libs/frontend/state/governance/adapter/src/index.ts"],
       "@opencrane/features/governance": ["./libs/frontend/features/governance/src/index.ts"],
+      "@opencrane/features/routines": ["./libs/frontend/features/routines/src/index.ts"],
+      "@opencrane/state/routines": ["./libs/frontend/state/routines/src/index.ts"],
+      "@opencrane/state/routines/adapter": ["./libs/frontend/state/routines/adapter/src/index.ts"],
       "@opencrane/backend/server/utils": [
         "./libs/backend/server/utils/src/index.ts"
       ],
@@ -354,6 +357,12 @@
       ],
       "@opencrane/backend/agents/runtime/mcp-file-generator": [
         "./libs/backend/agents/runtime/mcp-file-generator/main/src/index.ts"
+      ],
+      "@opencrane/backend/server/agents/scheduling": [
+        "./libs/backend/server/agents/scheduling/main/src/index.ts"
+      ],
+      "@opencrane/backend/server/agents/scheduling/contract": [
+        "./libs/backend/server/agents/scheduling/contract/src/index.ts"
       ]
     }
   },

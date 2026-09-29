@@ -1,0 +1,260 @@
+{
+  "sourceArchive": "OpenCrane Frontend Wireframes-.zip",
+  "sourceArchiveSha256": "362078a159f7471de9790aa25524d9822bd0c24e75bbff463756eae470633c7a",
+  "importedOn": "2026-09-25",
+  "purpose": "User-supplied design targets; not accepted visual test baselines",
+  "images": [
+    {
+      "file": "01-1a-member-directory.png",
+      "archiveEntry": "export/images/01-1a-member-directory.png",
+      "width": 2350,
+      "height": 1610,
+      "sha256": "26f9d37862c2dcb06cd0ae6aad2616b9adb11893e663d9a45c9b99bf11581d3a"
+    },
+    {
+      "file": "01-1b-member-directory-390.png",
+      "archiveEntry": "export/images/01-1b-member-directory-390.png",
+      "width": 1640,
+      "height": 1948,
+      "sha256": "b1ace300c393bd26383d31ec97ce84dd9d1641f7650302c4763ac41c067ca1b6"
+    },
+    {
+      "file": "01-1c-provider-not-connected.png",
+      "archiveEntry": "export/images/01-1c-provider-not-connected.png",
+      "width": 2350,
+      "height": 720,
+      "sha256": "75042ef1363cd005eb376d056ae7f6b245b9125aeda0d22a295838eb1e26469b"
+    },
+    {
+      "file": "01-1d-provider-key-saved.png",
+      "archiveEntry": "export/images/01-1d-provider-key-saved.png",
+      "width": 2350,
+      "height": 688,
+      "sha256": "09054b55c5e3487b764faa7231409429aa410af226b5fd4e9a900c9ae98a3ab9"
+    },
+    {
+      "file": "01-1e-provider-saving-unknown.png",
+      "archiveEntry": "export/images/01-1e-provider-saving-unknown.png",
+      "width": 2350,
+      "height": 816,
+      "sha256": "a73dad1c473650df8da745d9ad250547bfd458ece4c8d173f42a62d6f4521d26"
+    },
+    {
+      "file": "01-1f-catalogue-mcp-card.png",
+      "archiveEntry": "export/images/01-1f-catalogue-mcp-card.png",
+      "width": 2350,
+      "height": 892,
+      "sha256": "db318039572ea67a866032dd86171f10b14eaf2a26826af90c3ba23cd8357dae"
+    },
+    {
+      "file": "01-1g-installed-needs-connection.png",
+      "archiveEntry": "export/images/01-1g-installed-needs-connection.png",
+      "width": 2350,
+      "height": 646,
+      "sha256": "0d810d3ab914672481e02d3306937d52e458736acb694a8c55b5bbdb12a086d7"
+    },
+    {
+      "file": "01-1h-governance-review.png",
+      "archiveEntry": "export/images/01-1h-governance-review.png",
+      "width": 2350,
+      "height": 1038,
+      "sha256": "3d71b0446edec63bf5f845f509ea3faae3805fe4689c078e956f680a18497aab"
+    },
+    {
+      "file": "01-1i-read-failure.png",
+      "archiveEntry": "export/images/01-1i-read-failure.png",
+      "width": 2350,
+      "height": 854,
+      "sha256": "224ddc721bb1ea1992bedd4789520b338d2570592b1a7a08beead36bff0fce26"
+    },
+    {
+      "file": "01-1j-retrying.png",
+      "archiveEntry": "export/images/01-1j-retrying.png",
+      "width": 2350,
+      "height": 918,
+      "sha256": "032d7d6e2239552c56ec679f2456018a6219f316b538423d77a608f653e23139"
+    },
+    {
+      "file": "01-1k-system-explainer.png",
+      "archiveEntry": "export/images/01-1k-system-explainer.png",
+      "width": 2350,
+      "height": 1906,
+      "sha256": "3ace3315b479748330f7894404aa34c30d8d3df9124db0078152f03893a71224"
+    },
+    {
+      "file": "02-2a-navigation-map.png",
+      "archiveEntry": "export/images/02-2a-navigation-map.png",
+      "width": 840,
+      "height": 1396,
+      "sha256": "3343134f2746c2a860fa138cff44849b73fe68ca21ca464b79f3f6bb825e7ea6"
+    },
+    {
+      "file": "02-2b-overview.png",
+      "archiveEntry": "export/images/02-2b-overview.png",
+      "width": 2350,
+      "height": 1524,
+      "sha256": "7d0bcae22c0d4f263f11a0116f4946fd2d7a2611dcd08d0f35dfae0628bcbbae"
+    },
+    {
+      "file": "02-2c-overview-390.png",
+      "archiveEntry": "export/images/02-2c-overview-390.png",
+      "width": 780,
+      "height": 918,
+      "sha256": "c4fbe65db3bd93995929d0f3c249494c6db53e87c82c1bf42405c3ce62afb91f"
+    },
+    {
+      "file": "03-3a-providers-models.png",
+      "archiveEntry": "export/images/03-3a-providers-models.png",
+      "width": 2350,
+      "height": 1386,
+      "sha256": "e2b65857e651c08448d7f72fea3409e416d50b2fc640689bc0c50fc77109e6f0"
+    },
+    {
+      "file": "03-3b-connect-provider-flow.png",
+      "archiveEntry": "export/images/03-3b-connect-provider-flow.png",
+      "width": 2350,
+      "height": 1382,
+      "sha256": "21c0b96e5a67c274a98bd6824ee33ab6cf9ec0a9ceb6ca3149b8783af55a98ec"
+    },
+    {
+      "file": "03-3c-retire-connection.png",
+      "archiveEntry": "export/images/03-3c-retire-connection.png",
+      "width": 1520,
+      "height": 1014,
+      "sha256": "b0a14fc6af186554e8ea6e97a076c53cf13c620ab72fb8e5ed24fe0961e879f5"
+    },
+    {
+      "file": "03-3d-provider-detail-390.png",
+      "archiveEntry": "export/images/03-3d-provider-detail-390.png",
+      "width": 780,
+      "height": 996,
+      "sha256": "796507549f53583ba41896e0cc8f91df37c107cec73a3e614cba7832797ee9c9"
+    },
+    {
+      "file": "04-4a-mcp-register.png",
+      "archiveEntry": "export/images/04-4a-mcp-register.png",
+      "width": 2350,
+      "height": 1422,
+      "sha256": "251bd09d422e98cbd4e3bd853f6d4f43c33e25dd431ea4916c147d19098789fa"
+    },
+    {
+      "file": "04-4b-add-mcp-source.png",
+      "archiveEntry": "export/images/04-4b-add-mcp-source.png",
+      "width": 2350,
+      "height": 1470,
+      "sha256": "838735b703cd5fe5f7d6c2c26f9bcbfa66be1bae41c04be5259298fa4a1f891f"
+    },
+    {
+      "file": "04-4c-mcp-connection-m365.png",
+      "archiveEntry": "export/images/04-4c-mcp-connection-m365.png",
+      "width": 2350,
+      "height": 1664,
+      "sha256": "8ed7f3d6dcfc565031bae39546dd03690fc1eac49926835fd6924466ce5595ba"
+    },
+    {
+      "file": "04-4d-mcp-tools-access-odoo.png",
+      "archiveEntry": "export/images/04-4d-mcp-tools-access-odoo.png",
+      "width": 2350,
+      "height": 1934,
+      "sha256": "2bf3fd276669a383785b57e8d1b0f1a48395692534b179dc185a960e85060b96"
+    },
+    {
+      "file": "04-4e-mcp-server-detail.png",
+      "archiveEntry": "export/images/04-4e-mcp-server-detail.png",
+      "width": 2350,
+      "height": 1174,
+      "sha256": "b22751e3eced0592f20b2f8176920a7a3c93d130c42828464506e0970266db48"
+    },
+    {
+      "file": "04-4f-mcp-update-comparison.png",
+      "archiveEntry": "export/images/04-4f-mcp-update-comparison.png",
+      "width": 1520,
+      "height": 996,
+      "sha256": "f930835cb30bb50fd012600258c8562bf08379a731e4892e2768ad07733a77bf"
+    },
+    {
+      "file": "04-4g-mcp-removal-review.png",
+      "archiveEntry": "export/images/04-4g-mcp-removal-review.png",
+      "width": 1120,
+      "height": 794,
+      "sha256": "849c07f660a306ed959a4fe185bda030e4a0cda8b1407b85396809e160f9fbbb"
+    },
+    {
+      "file": "05-5a-member-detail.png",
+      "archiveEntry": "export/images/05-5a-member-detail.png",
+      "width": 2350,
+      "height": 1404,
+      "sha256": "48e5ecab4d59bdfa16b949fad6d8ac2304171f347281d4ced4c1b0cdcdc95286"
+    },
+    {
+      "file": "05-5b-remove-access.png",
+      "archiveEntry": "export/images/05-5b-remove-access.png",
+      "width": 1240,
+      "height": 970,
+      "sha256": "4dad814d14b78a52610a6a0ad6db8d764440cadab6f474b090979ee54e632fbc"
+    },
+    {
+      "file": "05-5c-last-owner.png",
+      "archiveEntry": "export/images/05-5c-last-owner.png",
+      "width": 920,
+      "height": 524,
+      "sha256": "57ba8d3c39bebace163d266833e29dbbf2fe00b7c4026c10a6080b2065f749a8"
+    },
+    {
+      "file": "05-5d-invite-delivery.png",
+      "archiveEntry": "export/images/05-5d-invite-delivery.png",
+      "width": 1120,
+      "height": 1248,
+      "sha256": "fceff9bbea418f71eaf61afe91572b98709a26502bc41ded87abab165b5f4f97"
+    },
+    {
+      "file": "05-5e-member-detail-390.png",
+      "archiveEntry": "export/images/05-5e-member-detail-390.png",
+      "width": 780,
+      "height": 734,
+      "sha256": "279f5189fcb87902c987090e77847e3b32ea0271e9bcb8738f2a8dbcf0f0c3d8"
+    },
+    {
+      "file": "06-7a-skills-library.png",
+      "archiveEntry": "export/images/06-7a-skills-library.png",
+      "width": 2350,
+      "height": 1290,
+      "sha256": "7a735642b9e60fe8aa057939f209740f39bcf735f41a04de1305661c41597950"
+    },
+    {
+      "file": "06-7b-skill-detail.png",
+      "archiveEntry": "export/images/06-7b-skill-detail.png",
+      "width": 2350,
+      "height": 1186,
+      "sha256": "340fdaeda7e81b50a351f243f8cd7748befb9ebe132b3520c41c1120a7e983b7"
+    },
+    {
+      "file": "06-7c-share-skill.png",
+      "archiveEntry": "export/images/06-7c-share-skill.png",
+      "width": 1120,
+      "height": 1230,
+      "sha256": "1fd6acda484703b96fade3013f3dd59386cd7be4db0ee5cfc00394532f110fe3"
+    },
+    {
+      "file": "06-7d-workflow.png",
+      "archiveEntry": "export/images/06-7d-workflow.png",
+      "width": 2350,
+      "height": 1254,
+      "sha256": "10ca15797c001e8740120071bb5cbd5ce90581738ec53dc93c8317c835add3d1"
+    },
+    {
+      "file": "06-7e-workflow-approval-390.png",
+      "archiveEntry": "export/images/06-7e-workflow-approval-390.png",
+      "width": 780,
+      "height": 888,
+      "sha256": "de8b2fd346fb5e32d4ee34b109a1c2eed81648d5dc2d7c578d2c1a3b3c5dfdb7"
+    },
+    {
+      "file": "07-6a-state-vocabulary.png",
+      "archiveEntry": "export/images/07-6a-state-vocabulary.png",
+      "width": 2350,
+      "height": 1166,
+      "sha256": "57dc5dd0b60b20ed379fe81413e156d4d7ad8eee3dcdecff03c1563051524a74"
+    }
+  ]
+}

@@ -77,12 +77,12 @@ async function _savedTurn(reserve: boolean)
 	await store.createOrRead(frozen);
 	const first = { ordinal: 1 as const, tools: ConversationModelToolModes.Select, compiledInputDigest: _DIGEST, historyDigest: _ConversationComputerTurnHistoryDigest([]), maxCompletionTokens: 100, authorityExpiresAtEpochMs: _NOW.getTime() + 60_000, dispatchDeadlineEpochMs: _NOW.getTime() + 25_000 };
 	await store.reserveModel(frozen.bootstrapId, { ...first, invocationFence: _FIRST, requestDigest: _ConversationModelRequestDigest(frozen, first) });
-	await store.selectTool(frozen.bootstrapId, { ordinal: 1, modelInvocationFence: _FIRST, declaration: { payloadRef: _REFERENCE, ciphertextDigest: _DIGEST }, proposalId: _PROPOSAL, toolInvocationId: _PROPOSAL, requestFingerprint: _DIGEST });
+	await store.selectTool(frozen.bootstrapId, { kind: "mcp" as const, ordinal: 1, modelInvocationFence: _FIRST, declaration: { payloadRef: _REFERENCE, ciphertextDigest: _DIGEST }, proposalId: _PROPOSAL, toolInvocationId: _PROPOSAL, requestFingerprint: _DIGEST });
 	let turn = (await store.load(frozen.bootstrapId))!;
 	const row = _row(turn);
 	if (reserve)
 	{
-		await store.recordToolResult(frozen.bootstrapId, { ordinal: 1, proposalId: _PROPOSAL, toolInvocationId: _PROPOSAL, resultDigest: row.resultDelivery.payloadDigest, exchange: { payloadRef: _REFERENCE, ciphertextDigest: _DIGEST }, authorityExpiresAtEpochMs: _NOW.getTime() + 60_000 });
+		await store.recordToolResult(frozen.bootstrapId, { kind: "mcp" as const, ordinal: 1, proposalId: _PROPOSAL, toolInvocationId: _PROPOSAL, resultDigest: row.resultDelivery.payloadDigest, exchange: { payloadRef: _REFERENCE, ciphertextDigest: _DIGEST }, authorityExpiresAtEpochMs: _NOW.getTime() + 60_000 });
 		turn = (await store.load(frozen.bootstrapId))!;
 	}
 	const second = { ordinal: 2 as const, tools: ConversationModelToolModes.None, compiledInputDigest: _DIGEST, historyDigest: _ConversationComputerTurnHistoryDigest(turn.protocol.steps), maxCompletionTokens: 100, authorityExpiresAtEpochMs: _NOW.getTime() + 60_000, dispatchDeadlineEpochMs: _NOW.getTime() + 25_000 };
@@ -99,7 +99,7 @@ async function _savedTurn(reserve: boolean)
 function _row(turn: FrozenConversationComputerTurn)
 {
 	const selection = turn.protocol.steps.find(step => step.selection !== null)?.selection;
-	if (selection === undefined || selection === null)
+	if (selection === undefined || selection === null || selection.kind !== "mcp")
 		throw new Error("Fixture requires a selected tool");
 	const _COMMAND = { siloId: turn.siloId, runId: turn.compile.runId, attempt: turn.compile.attempt, toolInvocationId: selection.toolInvocationId, runtimeInstanceId: turn.computerId, commandId: turn.bootstrapId, requestFingerprint: selection.requestFingerprint };
 	const payload = { toolInvocationId: _COMMAND.toolInvocationId, outcome: "succeeded", result: { record: { name: "Private result" } } };

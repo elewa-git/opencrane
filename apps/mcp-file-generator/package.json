@@ -11,6 +11,8 @@
     "@opentelemetry/core": "2.9.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.220.0",
     "@opentelemetry/sdk-node": "^0.220.0",
+    "cron-parser": "5.10.1",
+    "luxon": "3.7.2",
     "openapi-fetch": "0.17.0",
     "pino": "^9.6.0",
     "zod": "3.25.76"

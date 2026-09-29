@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CompiledFinalOutputModes, CONVERSATION_A2UI_SURFACE_PLACEHOLDER, ConversationModelResponseKinds, ConversationModelToolModes, type ConversationModelRequest } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, CompiledToolDefinitionKinds, CONVERSATION_A2UI_SURFACE_PLACEHOLDER, ConversationModelResponseKinds, ConversationModelToolModes, type ConversationModelRequest } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __RequestConversationModel } from "../core/conversation-model";
@@ -92,7 +92,7 @@ describe("explicit final output format", function _Suite()
 	{
 		const request = _request();
 		const parametersSchema = { type: "object", additionalProperties: false };
-		const tool = { name: "records.lookup", modelName: "lookup", toolRevisionId: "tool-revision", description: "Look up records", requiresApproval: false, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
+		const tool = { kind: CompiledToolDefinitionKinds.Mcp as const, name: "records.lookup", modelName: "lookup", toolRevisionId: "tool-revision", description: "Look up records", requiresApproval: false, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
 		const call = { id: "call_lookup", name: "lookup", arguments: "  {} ", content: "Looking up records" };
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ index: 0, finish_reason: "tool_calls", message: { role: "assistant", content: call.content, tool_calls: [{ id: call.id, type: "function", function: { name: call.name, arguments: call.arguments } }] } }] }), { headers: { "content-type": "application/json" } })));
 		expect(await __RequestConversationModel({ ...request, tools: ConversationModelToolModes.Select, compiledInput: { ...request.compiledInput, tools: [tool] } })).toEqual({ kind: ConversationModelResponseKinds.Tool, call });

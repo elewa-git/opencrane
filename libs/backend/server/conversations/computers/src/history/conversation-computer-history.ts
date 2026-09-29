@@ -1,7 +1,7 @@
 import { ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
-import { HistoryExpectedRevisions, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
+import { HistoryExpectedRevisions, type HistoryAppend, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import type { ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, CurrentConversationComputer } from "./conversation-computer-history.types";
+import type { ActiveConversationComputerLease, ActiveConversationComputerLeaseCommand, ConversationComputerAppendCommand, ConversationComputerCurrentCommand, ConversationComputerHistorySnapshot, ConversationComputerInitialAppendCommand, CurrentConversationComputer } from "./conversation-computer-history.types";
 import { _ComputerScopeOf } from "./conversation-computer-scope";
 import { _ConversationComputerStreamName, _ValidateConversationComputerCurrentCommand, _ValidatedConversationComputerSnapshot, _ValidatedConversationComputerEvent, _ValidateSnapshotTransition } from "./conversation-computer-history-validation";
 
@@ -23,6 +23,28 @@ export class ConversationComputerHistory
 	public constructor(private readonly historyStore: Pick<HistoryStore, "append" | "readHead" | "readStream">) {}
 
 	/**
+	 * Builds the owner-validated first append for inclusion in a wider atomic history write.
+	 *
+	 * @param command - Supplies one lease-free cold computer and its UUID event key.
+	 * @returns The exact missing-stream append owned by computer history without performing I/O.
+	 * @throws {Error} Rejects malformed or noninitial computer snapshots and invalid event identifiers.
+	 */
+	public initialAppend(command: ConversationComputerInitialAppendCommand): HistoryAppend
+	{
+		const snapshot = _ValidatedConversationComputerSnapshot({ computer: command.computer, lease: null });
+		_ValidateEventId(command.eventId);
+		if (snapshot.computer.state !== ConversationComputerStates.Cold)
+			throw new Error("Conversation computer initial history requires a cold computer");
+		if (snapshot.computer.leaseGeneration !== 1)
+			throw new Error("Conversation computer initial history requires lease generation one");
+		if (snapshot.computer.workspaceCheckpoint !== null)
+			throw new Error("Conversation computer initial history cannot begin with a workspace checkpoint");
+		if (snapshot.computer.createdAt !== snapshot.computer.updatedAt)
+			throw new Error("Conversation computer initial history requires matching creation and update times");
+		return _ComputerAppend(snapshot, command.eventId, HistoryExpectedRevisions.NoStream);
+	}
+
+	/**
 	 * Appends one complete computer-and-lease snapshot at the caller-observed stream revision.
 	 *
 	 * @param command - Supplies closed snapshots, a UUID event key, and the checked stream head.
@@ -34,8 +56,7 @@ export class ConversationComputerHistory
 		const snapshot = _ValidatedConversationComputerSnapshot({ computer: command.computer, lease: command.lease });
 		if (!_ExpectedRevision(command.expectedRevision))
 			throw new Error("Conversation computer history append requires a nonnegative expected revision");
-		if (!_UUID_PATTERN.test(command.eventId))
-			throw new Error("Conversation computer history append requires a UUID event identifier");
+		_ValidateEventId(command.eventId);
 		if (command.expectedRevision !== HistoryExpectedRevisions.NoStream)
 		{
 			const previous = await this.load({ computer: _ComputerScopeOf(snapshot.computer), profileRevisionId: snapshot.computer.profileRevisionId });
@@ -43,24 +64,8 @@ export class ConversationComputerHistory
 				throw new Error("Conversation computer history append requires the current expected revision");
 			_ValidateSnapshotTransition(previous, snapshot);
 		}
-		const streamName = _ConversationComputerStreamName(snapshot.computer.id);
-		return this.historyStore.append({
-			streamName,
-			expectedRevision: command.expectedRevision,
-			events: [{
-				id: command.eventId,
-				type: "opencrane.conversation-computer.v1",
-				data: { computer: snapshot.computer, lease: snapshot.lease },
-				metadata: {
-					siloId: snapshot.computer.siloId,
-					computerId: snapshot.computer.id,
-					conversationId: snapshot.computer.conversationId,
-					agentIdentityId: snapshot.computer.agentIdentityId,
-					profileRevisionId: snapshot.computer.profileRevisionId,
-					...(snapshot.lease === null ? {} : { leaseId: snapshot.lease.id, leaseGeneration: String(snapshot.lease.generation), leaseState: snapshot.lease.state }),
-				},
-			}],
-		});
+		const append = _ComputerAppend(snapshot, command.eventId, command.expectedRevision);
+		return this.historyStore.append(append);
 	}
 
 	/**
@@ -125,4 +130,33 @@ export class ConversationComputerHistory
 function _ExpectedRevision(value: ConversationComputerAppendCommand["expectedRevision"]): boolean
 {
 	return value === HistoryExpectedRevisions.NoStream || (typeof value === "bigint" && value >= 0n);
+}
+
+/** Rejects event identifiers that cannot be used as HistoryStore idempotency keys. */
+function _ValidateEventId(eventId: string): void
+{
+	if (!_UUID_PATTERN.test(eventId))
+		throw new Error("Conversation computer history append requires a UUID event identifier");
+}
+
+/** Builds the sole owner-approved event envelope for initial and later computer snapshots. */
+function _ComputerAppend(snapshot: ConversationComputerHistorySnapshot, eventId: string, expectedRevision: ConversationComputerAppendCommand["expectedRevision"]): HistoryAppend
+{
+	return {
+		streamName: _ConversationComputerStreamName(snapshot.computer.id),
+		expectedRevision,
+		events: [{
+			id: eventId,
+			type: "opencrane.conversation-computer.v1",
+			data: { computer: snapshot.computer, lease: snapshot.lease },
+			metadata: {
+				siloId: snapshot.computer.siloId,
+				computerId: snapshot.computer.id,
+				conversationId: snapshot.computer.conversationId,
+				agentIdentityId: snapshot.computer.agentIdentityId,
+				profileRevisionId: snapshot.computer.profileRevisionId,
+				...(snapshot.lease === null ? {} : { leaseId: snapshot.lease.id, leaseGeneration: String(snapshot.lease.generation), leaseState: snapshot.lease.state }),
+			},
+		}],
+	};
 }

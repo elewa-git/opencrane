@@ -66,7 +66,8 @@ describe("terminal tool history before the final model call", function _Suite()
 		const reader = new ConversationHistoryReader(f.history);
 		const replay = await reader.read({ siloId: "silo-1", conversationId: "conversation-1", fromRevision: 2n, maxCount: 2, maximumBytes: 65_536 });
 		expect(replay.entries.map(entry => entry.kind)).toEqual(["log", "message"]);
-		expect(f.history.streams.get(`conversation-tool-result-notification-${completed.protocol.steps[0].selection!.proposalId}`)).toHaveLength(1);
+		const selection = completed.protocol.steps[0].selection!;
+		expect(f.history.streams.get(`conversation-tool-result-notification-${selection.kind === "mcp" ? selection.proposalId : selection.proposalRef}`)).toHaveLength(1);
 		expect(f.model.request).toHaveBeenCalledTimes(2);
 		const [first, final] = f.model.request.mock.calls.map(call => call[0]);
 		expect(first.maxCompletionTokens + final.maxCompletionTokens).toBe(f.candidate.compiledInput.budget.maxCompletionTokens);

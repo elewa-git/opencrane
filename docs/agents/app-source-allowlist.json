@@ -100,6 +100,16 @@
       "classification": "process-composition"
     },
     {
+      "path": "apps/opencrane/src/bootstrap/routines/routine-workflow-composition.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/routines/routine-workflow-composition.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
       "path": "apps/opencrane/src/bootstrap/workflows/mcp-workflow-composition.ts",
       "owner": "apps/opencrane",
       "classification": "route-composition"
@@ -221,6 +231,11 @@
     },
     {
       "path": "apps/opencrane-ui/src/app/conversation-workspace.providers.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-composition"
+    },
+    {
+      "path": "apps/opencrane-ui/src/app/routine.providers.ts",
       "owner": "apps/opencrane-ui",
       "classification": "browser-composition"
     },

@@ -54,6 +54,9 @@ coupling.
 The fleet client contains no MCP catalogue types. MCP reads use the generated Control Plane contract
 in `@opencrane/contracts`, so their credential requirement has one maintained API source.
 
+An authenticated request that the caller has already aborted cannot redirect the browser to sign-in if
+a late response arrives with HTTP 401; only a current protected request can trigger that navigation.
+
 ## Dependency direction
 
 Tagged `type:lib`, `layer:frontend`, `scope:shared`, and `frontend-role:core`. It imports no other
