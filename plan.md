@@ -61,6 +61,26 @@ conflict. Historical evidence is retained below.
 
 ## Conversational routine proposals — execution wave
 
+### Published joined proposal — 29 September 2026
+
+Draft #916 now contains the joined proposal, preserved design references and ownership repair at
+`fadaf5c2f884890c315a32be9bc795c69aa70a65`; the remote head matches the reviewed local head.
+Live stack snapshot `743fa14fcf29075e99fec582317b66f3c11b8fe38eaa86b3689faf0b40afff47`
+retains #908 → #910 → #914 → #915 → #916, with no predecessor absorbed, closed or retargeted.
+The incremental parent range contains 571 files and the cumulative develop range 710. A
+non-checkout merge simulation against develop `10abd0ef6182f36bec13d8f1358e43b15ead7cd5`
+passes. The PR body now describes the joined tool/form flow and its remaining acceptance gates;
+it no longer describes `request_routine` as dormant. New-head CI remains separate evidence.
+
+The next wave uses `feat/tool-approval-policy`, based on that published head. Its shared contract
+foundation defines Auto / Ask / Block per installed connection and exact tool revision, strict
+idempotent commands, revision-aware projections and safe change outcomes. Eleven focused tests,
+the contracts TypeScript target, changed-source style and independent review pass. This is not
+operational tool approval: persistence, current-IAM policy changes, invocation/claim admission,
+authenticated APIs and frontend controls still need wiring. The existing implementation handoff
+remains `.nx/routine-ci-repair/AUTO-TOOL-POLICY-HANDOFF.md`; schema/baseline changes must have one
+owner and preserve frozen tool declarations and current permission checks.
+
 ### Database-boundary repair — 29 September 2026
 
 The approved correction is implemented without splitting the two cohesive helpers. Their exact

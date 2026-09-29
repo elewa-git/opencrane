@@ -196,6 +196,10 @@ personal-memory dataset or adopts a fact.
   `RunInputSnapshot`/`RunInputSnapshotMcpTool`, `RunInputFirstPartyCapabilitySelection` and its
   strict validators, `RunInputOrigin`/`AgentRunTriggers`, `ExecutionSubject`,
   `TenantModelSet`, and domain-topology host builders.
+- `McpToolPolicy*` mode, target, change, projection and result contracts with strict validators.
+  This shape-only foundation does not wire execution, persistence, settings, IAM admission or API
+  routes. An absent policy is represented as `Ask` with null revision and timestamp; callers must
+  not infer an execution grant from that shape.
 - `ConversationModelRequest`, `ConversationModelResponse`, `ConversationModelToolCall` and
   `ConversationModelToolExchange` — shared server-only model transport contracts. A request carries
   an ordered history of accepted assistant calls and their results. Adjacent strict schemas validate
