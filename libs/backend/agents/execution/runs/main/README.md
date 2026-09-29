@@ -155,7 +155,10 @@ the run and attempt-one snapshot together, plus a personal-owner read grant only
 interactive run. Interactive snapshots bind exact final-human-message provenance. Automatic and
 manual routine snapshots instead bind the exact routine, revision, firing, slot and original
 approval provenance; their `AgentRun` is an independent root linked one-to-one to the firing and
-never a delegated tree child. A conversation run later binds
+never a delegated tree child. Snapshot version 4 also stores a dedicated JSON array of built-in
+capability selections. Its capability, semantic revision and parameter-schema digest are included
+in the snapshot digest; duplicate recovery validates and returns the original array instead of
+selecting capabilities again. A conversation run later binds
 one immutable Absurd task receipt before model or tool work can proceed. A failure rolls back its
 whole transaction.
 

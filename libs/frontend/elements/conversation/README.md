@@ -29,7 +29,9 @@ contracts.
 - `ConversationMessageComponent` renders one message and a named rich-card slot; a rich-only
   message does not create an empty plain-text bubble before its projected content.
 - `ConversationComposerComponent` displays a host-owned draft and emits edit or submit intents.
-- `ConversationStatusLineComponent` announces one display-safe status.
+- `ConversationStatusLineComponent` announces one display-safe status and may render one host-owned
+  navigation or action link through the `conversation-status-action` content slot. The host supplies
+  the link semantics and destination; the status element never accepts a URL or navigates.
 - `ConversationRichTextComponent` displays HTML already sanitized by the shared conversation renderer.
 - `ConversationRunActionsComponent` displays current personal work, pending or terminal Stop state,
   and a single controlled Stop intent. It never receives run coordinates or treats emission as

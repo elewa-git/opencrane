@@ -92,6 +92,41 @@ export const MessageAndStatusStates: Story =
 	}
 };
 
+/** A proposal status keeps its navigation link in the host while reusing the status row. */
+export const ProposalStatusWithAction: Story =
+{
+	tags: ["visual-test"],
+	render: function render()
+	{
+		return { template: `<div style="max-width:720px;padding:20px"><wo-conversation-status-line [status]="status"><a conversation-status-action href="/routines/new?proposalRef=opaque-ref">Review routine</a></wo-conversation-status-line></div>`, props: { status: { label: "Routine proposed", detail: "Review the suggested schedule before creating it.", tone: ConversationStatusTones.Attention } } };
+	},
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		const link = canvas.getByRole("link", { name: "Review routine" });
+		await expect(link).toHaveAttribute("href", "/routines/new?proposalRef=opaque-ref");
+		await userEvent.tab();
+		await expect(link).toHaveFocus();
+	}
+};
+
+/** A host can omit an unavailable proposal action without changing the default status anatomy. */
+export const ProposalStatusWithoutAction: Story =
+{
+	tags: ["visual-test", "visual-test-narrow"],
+	parameters: { viewport: { defaultViewport: "mobile1" } },
+	render: function render()
+	{
+		return { template: `<div style="width:390px;padding:12px"><wo-conversation-status-line [status]="status" /></div>`, props: { status: { label: "Routine proposed", detail: "This proposal is no longer available.", tone: ConversationStatusTones.Danger } } };
+	},
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		await expect(canvas.getByRole("status")).toHaveTextContent("This proposal is no longer available.");
+		await expect(canvas.queryByRole("link")).not.toBeInTheDocument();
+	}
+};
+
 /** Active personal work exposes one explicit Stop intent without run coordinates. */
 export const ActiveWorkControl: Story =
 {

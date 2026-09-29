@@ -3,32 +3,40 @@ import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/histo
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _ConversationComputerEventId } from "../conversation-computer-event-id";
-import type { ConversationComputerTurnToolResult } from "./conversation-computer-turn-protocol.types";
+import { ConversationComputerTurnToolKinds, type ConversationComputerTurnToolResult } from "./conversation-computer-turn-protocol.types";
 import type { FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 
 /** Identifies the event that records one privately saved assistant/tool exchange. */
-export const _CONVERSATION_TOOL_RESULT_RECORDED_EVENT = "opencrane.conversation-computer-turn-tool-result-recorded.v1";
+export const _CONVERSATION_TOOL_RESULT_RECORDED_EVENT = "opencrane.conversation-computer-turn-tool-result-recorded.v2";
 
 const _Digest = z.string().regex(/^sha256:[0-9a-f]{64}$/u);
 const _Identifier = z.string().min(1);
-const _ResultSchema: z.ZodType<ConversationComputerTurnToolResult> = z.object({
+const _ResultBase = {
 	ordinal: z.number().int().positive().safe(),
-	proposalId: _Identifier,
-	toolInvocationId: _Identifier,
 	resultDigest: _Digest,
 	exchange: z.object({ payloadRef: _Identifier, ciphertextDigest: _Digest }).strict(),
 	authorityExpiresAtEpochMs: z.number().int().positive().safe(),
-}).strict();
+};
+const _ResultSchema: z.ZodType<ConversationComputerTurnToolResult> = z.discriminatedUnion("kind", [
+	z.object({ ..._ResultBase, kind: z.literal(ConversationComputerTurnToolKinds.Mcp), proposalId: _Identifier, toolInvocationId: _Identifier }).strict(),
+	z.object({ ..._ResultBase, kind: z.literal(ConversationComputerTurnToolKinds.RequestRoutine), proposalRef: _Identifier, expiresAt: z.string().datetime({ offset: true }) }).strict(),
+]);
 
 /** Builds non-secret result evidence after the exact assistant/tool exchange enters custody. */
 export function _ConversationToolResultEvent(turn: FrozenConversationComputerTurn, result: ConversationComputerTurnToolResult)
 {
 	return {
-		id: _ConversationComputerEventId(`tool-result-${result.ordinal}`, result.toolInvocationId),
+		id: _ConversationComputerEventId(`tool-result-${result.ordinal}`, _ResultIdentity(result)),
 		type: _CONVERSATION_TOOL_RESULT_RECORDED_EVENT,
 		data: { bootstrapId: turn.bootstrapId, result },
 		metadata: _Metadata(turn),
 	};
+}
+
+/** Selects the durable authority-owned identity without manufacturing an MCP invocation. */
+function _ResultIdentity(result: ConversationComputerTurnToolResult): string
+{
+	return result.kind === ConversationComputerTurnToolKinds.Mcp ? result.toolInvocationId : result.proposalRef;
 }
 
 /** Validates one result event without reading, consuming or disclosing its private payload. */

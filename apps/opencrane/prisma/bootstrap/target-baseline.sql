@@ -257,6 +257,9 @@ CREATE TYPE "AgentRoutineFiringDisposition" AS ENUM ('preparing', 'running', 'wa
 CREATE TYPE "AgentRoutineCommandKind" AS ENUM ('create', 'revise', 'pause', 'resume', 'retire', 'run_now');
 
 -- CreateEnum
+CREATE TYPE "AgentRoutineProposalState" AS ENUM ('pending', 'accepted', 'cancelled', 'expired');
+
+-- CreateEnum
 CREATE TYPE "AgentRunTrigger" AS ENUM ('interactive', 'scheduled', 'manual');
 
 -- CreateEnum
@@ -1923,6 +1926,30 @@ CREATE TABLE "agent_routines" (
 );
 
 -- CreateTable
+CREATE TABLE "agent_routine_proposals" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "source_conversation_id" TEXT NOT NULL,
+    "source_run_id" TEXT NOT NULL,
+    "source_run_attempt" INTEGER NOT NULL,
+    "source_ordinal" INTEGER NOT NULL,
+    "requester_principal_id" TEXT NOT NULL,
+    "suggestion_key_id" TEXT NOT NULL,
+    "suggestion_nonce" BYTEA NOT NULL,
+    "suggestion_auth_tag" BYTEA NOT NULL,
+    "suggestion_ciphertext" BYTEA NOT NULL,
+    "suggestion_ciphertext_digest" TEXT NOT NULL,
+    "arguments_digest" TEXT NOT NULL,
+    "state" "AgentRoutineProposalState" NOT NULL DEFAULT 'pending',
+    "accepted_routine_id" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "terminal_at" TIMESTAMP(3),
+
+    CONSTRAINT "agent_routine_proposals_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "agent_routine_revisions" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -2051,6 +2078,7 @@ CREATE TABLE "run_input_snapshots" (
     "memory_facts" JSONB NOT NULL DEFAULT '[]',
     "model_route" JSONB NOT NULL,
     "mcp_tools" JSONB NOT NULL,
+    "first_party_capabilities" JSONB NOT NULL DEFAULT '[]',
     "skill_revision_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "memory_query_policy" JSONB NOT NULL,
     "budget_policy" JSONB NOT NULL,
@@ -3147,6 +3175,21 @@ CREATE UNIQUE INDEX "agent_routines_id_silo_id_key" ON "agent_routines"("id", "s
 CREATE UNIQUE INDEX "agent_routines_schedule_task_key" ON "agent_routines"("schedule_task_name", "schedule_task_key");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "agent_routine_proposals_accepted_routine_id_key" ON "agent_routine_proposals"("accepted_routine_id");
+
+-- CreateIndex
+CREATE INDEX "agent_routine_proposals_silo_id_requester_principal_id_stat_idx" ON "agent_routine_proposals"("silo_id", "requester_principal_id", "state", "expires_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_routine_proposals_id_silo_id_key" ON "agent_routine_proposals"("id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_routine_proposals_accepted_routine_id_silo_id_key" ON "agent_routine_proposals"("accepted_routine_id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_routine_proposals_source_slot_key" ON "agent_routine_proposals"("silo_id", "source_run_id", "source_run_attempt", "source_ordinal");
+
+-- CreateIndex
 CREATE INDEX "agent_routine_revisions_silo_id_created_by_principal_id_idx" ON "agent_routine_revisions"("silo_id", "created_by_principal_id");
 
 -- CreateIndex
@@ -3730,6 +3773,18 @@ ALTER TABLE "agent_routines" ADD CONSTRAINT "agent_routines_selected_managed_ser
 
 -- AddForeignKey
 ALTER TABLE "agent_routines" ADD CONSTRAINT "agent_routines_destination_conversation_id_silo_id_fkey" FOREIGN KEY ("destination_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_routine_proposals" ADD CONSTRAINT "agent_routine_proposals_requester_principal_id_silo_id_fkey" FOREIGN KEY ("requester_principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_routine_proposals" ADD CONSTRAINT "agent_routine_proposals_source_conversation_id_silo_id_fkey" FOREIGN KEY ("source_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_routine_proposals" ADD CONSTRAINT "agent_routine_proposals_source_run_id_source_run_attempt_fkey" FOREIGN KEY ("source_run_id", "source_run_attempt") REFERENCES "agent_runs"("id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_routine_proposals" ADD CONSTRAINT "agent_routine_proposals_accepted_routine_id_silo_id_fkey" FOREIGN KEY ("accepted_routine_id", "silo_id") REFERENCES "agent_routines"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "agent_routine_revisions" ADD CONSTRAINT "agent_routine_revisions_routine_id_silo_id_fkey" FOREIGN KEY ("routine_id", "silo_id") REFERENCES "agent_routines"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -7922,7 +7977,7 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_cost_check" CHECK (
         ("cost_amount" IS NULL AND "cost_currency" IS NULL) OR
         ("cost_amount" IS NOT NULL AND "cost_amount" >= 0 AND "cost_currency" IS NOT NULL AND btrim("cost_currency") <> '')
     );
-ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_version_check" CHECK ("snapshot_version" = 3);
+ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_version_check" CHECK ("snapshot_version" = 4);
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_nonempty_check" CHECK (
         btrim("silo_id") <> '' AND btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND
         btrim("prompt_compiler_version") <> '' AND btrim("input_digest") <> '' AND
@@ -8612,9 +8667,9 @@ DECLARE
     routine "agent_routines"%ROWTYPE;
     service_principal_id TEXT;
 BEGIN
-    IF snapshot."snapshot_version" IS DISTINCT FROM 3 OR jsonb_typeof(snapshot."origin") IS DISTINCT FROM 'object'
+    IF snapshot."snapshot_version" IS DISTINCT FROM 4 OR jsonb_typeof(snapshot."origin") IS DISTINCT FROM 'object'
         OR snapshot."origin"->>'kind' IS DISTINCT FROM run."trigger"::TEXT THEN
-        RAISE EXCEPTION 'RunInputSnapshot requires version 3 and its exact run trigger origin';
+        RAISE EXCEPTION 'RunInputSnapshot requires version 4 and its exact run trigger origin';
     END IF;
     IF run."trigger" = 'interactive' THEN
         IF snapshot."origin" - ARRAY['kind', 'messageId', 'historyRevision'] <> '{}'::jsonb
@@ -12787,3 +12842,79 @@ $$;
 
 CREATE TRIGGER "tool_approval_admission_write" BEFORE INSERT OR UPDATE OR DELETE ON "tool_approval_admissions"
 FOR EACH ROW EXECUTE FUNCTION "enforce_tool_approval_admission_write"();
+
+ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_first_party_capabilities_check" CHECK (
+    jsonb_typeof("first_party_capabilities") = 'array'
+);
+
+-- Routine suggestions retain their source and encrypted envelope while the requester reviews them.
+ALTER TABLE "agent_routine_proposals" ADD CONSTRAINT "agent_routine_proposals_material_check" CHECK (
+    "source_run_attempt" > 0 AND "source_ordinal" > 0
+    AND "suggestion_ciphertext_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND "arguments_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND "expires_at" = "created_at" + INTERVAL '24 hours'
+);
+ALTER TABLE "agent_routine_proposals" ADD CONSTRAINT "agent_routine_proposals_lifecycle_check" CHECK (
+    ("state" = 'pending' AND "accepted_routine_id" IS NULL AND "terminal_at" IS NULL)
+    OR ("state" = 'accepted' AND "accepted_routine_id" IS NOT NULL AND "terminal_at" IS NOT NULL)
+    OR ("state" IN ('cancelled', 'expired') AND "accepted_routine_id" IS NULL AND "terminal_at" IS NOT NULL)
+);
+CREATE FUNCTION "enforce_agent_routine_proposal_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    decision_time TIMESTAMP(3) := date_trunc('milliseconds', statement_timestamp())::TIMESTAMP(3);
+    source_run "agent_runs"%ROWTYPE;
+    accepted_routine "agent_routines"%ROWTYPE;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'AgentRoutineProposal rows cannot be deleted';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."state" <> 'pending' OR NEW."accepted_routine_id" IS NOT NULL OR NEW."terminal_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'AgentRoutineProposal must begin pending';
+        END IF;
+        SELECT * INTO source_run FROM "agent_runs" WHERE "id" = NEW."source_run_id" AND "attempt" = NEW."source_run_attempt";
+        IF source_run."id" IS NULL OR source_run."silo_id" IS DISTINCT FROM NEW."silo_id"
+            OR source_run."conversation_id" IS DISTINCT FROM NEW."source_conversation_id"
+            OR source_run."execution_subject"->'requester'->>'requesterPrincipalId' IS DISTINCT FROM NEW."requester_principal_id" THEN
+            RAISE EXCEPTION 'AgentRoutineProposal requires its exact source run, conversation and requester';
+        END IF;
+        NEW."created_at" := decision_time;
+        NEW."expires_at" := decision_time + INTERVAL '24 hours';
+        RETURN NEW;
+    END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."source_conversation_id" IS DISTINCT FROM OLD."source_conversation_id"
+        OR NEW."source_run_id" IS DISTINCT FROM OLD."source_run_id"
+        OR NEW."source_run_attempt" IS DISTINCT FROM OLD."source_run_attempt"
+        OR NEW."source_ordinal" IS DISTINCT FROM OLD."source_ordinal"
+        OR NEW."requester_principal_id" IS DISTINCT FROM OLD."requester_principal_id"
+        OR NEW."suggestion_key_id" IS DISTINCT FROM OLD."suggestion_key_id"
+        OR NEW."suggestion_nonce" IS DISTINCT FROM OLD."suggestion_nonce"
+        OR NEW."suggestion_auth_tag" IS DISTINCT FROM OLD."suggestion_auth_tag"
+        OR NEW."suggestion_ciphertext" IS DISTINCT FROM OLD."suggestion_ciphertext"
+        OR NEW."suggestion_ciphertext_digest" IS DISTINCT FROM OLD."suggestion_ciphertext_digest"
+        OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest"
+        OR NEW."created_at" IS DISTINCT FROM OLD."created_at"
+        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" THEN
+        RAISE EXCEPTION 'AgentRoutineProposal source, requester and suggestion are immutable';
+    END IF;
+    IF OLD."state" <> 'pending' OR NEW."state" = 'pending' THEN
+        RAISE EXCEPTION 'AgentRoutineProposal may leave pending exactly once';
+    END IF;
+    IF NEW."state" = 'accepted' THEN
+        IF decision_time >= OLD."expires_at" THEN
+            RAISE EXCEPTION 'AgentRoutineProposal cannot be accepted after expiry';
+        END IF;
+        SELECT * INTO accepted_routine FROM "agent_routines" WHERE "id" = NEW."accepted_routine_id" AND "silo_id" = NEW."silo_id";
+        IF accepted_routine."id" IS NULL OR accepted_routine."original_requester_principal_id" IS DISTINCT FROM NEW."requester_principal_id" THEN
+            RAISE EXCEPTION 'AgentRoutineProposal acceptance requires a routine owned by its requester';
+        END IF;
+    ELSIF NEW."state" = 'expired' AND decision_time < OLD."expires_at" THEN
+        RAISE EXCEPTION 'AgentRoutineProposal cannot expire before its deadline';
+    END IF;
+    NEW."terminal_at" := decision_time;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "agent_routine_proposals_authority" BEFORE INSERT OR UPDATE OR DELETE ON "agent_routine_proposals"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_routine_proposal_lifecycle"();

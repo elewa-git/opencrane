@@ -1,7 +1,7 @@
 import type * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 
-import type { RoutineRunProgressSink } from "@opencrane/backend/server/agents/scheduling/contract";
+import type { RequestRoutineProposalNotificationEvidenceReader, RequestRoutineProposalPort, RoutineRunProgressSink } from "@opencrane/backend/server/agents/scheduling/contract";
 import type { RoutineAuthority, RoutineScheduleStartupRecovery } from "@opencrane/backend/server/agents/scheduling";
 import type { RoutineTurnDispatcher } from "@opencrane/backend/server/conversations";
 import type { ConversationPrivatePayloadCipher } from "@opencrane/backend/server/conversations/history";
@@ -43,4 +43,8 @@ export interface RoutineWorkflowComposition
 	readonly dispatcher: RoutineTurnDispatcher;
 	/** Records producer-verified run progress through the scheduling transaction owner. */
 	readonly progress: RoutineRunProgressSink;
+	/** Persists one inactive model suggestion under scheduling authority. */
+	readonly proposals: RequestRoutineProposalPort;
+	/** Rechecks pending, unexpired proposal evidence without exposing its suggestion. */
+	readonly proposalNotifications: RequestRoutineProposalNotificationEvidenceReader;
 }

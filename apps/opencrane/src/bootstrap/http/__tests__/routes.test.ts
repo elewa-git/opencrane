@@ -27,6 +27,8 @@ function _RoutineAuthority(): RoutineHttpAuthority
 {
 	return {
 		create: vi.fn(),
+		readProposal: vi.fn(),
+		cancelProposal: vi.fn(),
 		read: vi.fn(),
 		revise: vi.fn(),
 		pause: vi.fn(),

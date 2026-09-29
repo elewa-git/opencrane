@@ -90,13 +90,18 @@ keep that original value and their command key so a delayed request cannot chang
 
 Invariant: the client's types are a faithful projection of the server's published spec — regenerate
 after any API change so the two never silently diverge. `RunInputSnapshot` is the cross-domain
-record of one run's frozen persona, transcript, memory references, tools, budgets, model route and
+record of one run's frozen persona, transcript, memory references, tools, built-in capability
+selections, budgets, model route and
 verified identity provenance; it carries only immutable coordinates and canonical JSON, never
 provider credentials or mutable source objects. Its `mcpTools` list records immutable MCP tool
 revision identifiers plus each saved name, description, exact input JSON Schema, and canonical
 schema digest. Compilation keeps that exact source name for disclosure and MCP dispatch, while it
 adds a provider-compatible `modelName` derived from the immutable revision identifier. The alias is
 sealed into the compiled input; it is neither stored in the snapshot nor used as permission.
+Its separate `firstPartyCapabilities` list stores only a closed capability, semantic revision and
+parameter-schema digest. The adjacent strict validators reject unknown fields, revisions that do
+not match the declaration contract, duplicates and non-canonical order. A selection is not a grant;
+the prompt compiler must resolve the same descriptor before it can expose a built-in callable.
 Its required `origin` discriminant keeps an interactive message boundary separate from an automatic
 or manual routine firing. Routine origin freezes the exact routine, revision, firing, slot and
 original approval provenance; it never turns the requester into the managed agent's execution
@@ -184,11 +189,12 @@ personal-memory dataset or adopts a fact.
   event-store access.
 - Hand-written DTOs/enums: hierarchical `Group` with nullable `parentId`, routine command and
   read projections (`RoutineCreateRequest`, `RoutineListResponse`, `RoutineFiringListResponse`,
-  `RoutineCreationOptionsResponse`, `RoutineSchedulePreviewResponse`) and their strict query/body
-  schemas, `ClusterTenant*`,
+  `RoutineCreationOptionsResponse`, `RoutineSchedulePreviewResponse`, `RoutineProposalReadResponse`
+  and `RoutineProposalStates`) and their strict query/body schemas, `ClusterTenant*`,
   `Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
   model-routing types, memory-gateway constants, `ThirdPartySource*`,
-  `RunInputSnapshot`/`RunInputSnapshotMcpTool`, `RunInputOrigin`/`AgentRunTriggers`, `ExecutionSubject`,
+  `RunInputSnapshot`/`RunInputSnapshotMcpTool`, `RunInputFirstPartyCapabilitySelection` and its
+  strict validators, `RunInputOrigin`/`AgentRunTriggers`, `ExecutionSubject`,
   `TenantModelSet`, and domain-topology host builders.
 - `ConversationModelRequest`, `ConversationModelResponse`, `ConversationModelToolCall` and
   `ConversationModelToolExchange` — shared server-only model transport contracts. A request carries

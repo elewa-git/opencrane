@@ -129,7 +129,7 @@ function _HistoryStore(gateway: RoutineGatewayPort, session = signal<string | nu
 function _Gateway(overrides: Partial<RoutineGatewayPort>): RoutineGatewayPort
 {
 	const unavailable = vi.fn().mockRejectedValue(new Error("Unexpected gateway call"));
-	return { list: unavailable, read: unavailable, firings: unavailable, creationOptions: unavailable, preview: unavailable, create: unavailable, revise: unavailable, pause: unavailable, resume: unavailable, retire: unavailable, runNow: unavailable, ...overrides };
+	return { list: unavailable, read: unavailable, firings: unavailable, creationOptions: unavailable, proposal: unavailable, cancelProposal: unavailable, preview: unavailable, create: unavailable, revise: unavailable, pause: unavailable, resume: unavailable, retire: unavailable, runNow: unavailable, ...overrides };
 }
 
 function _Page(firingId: string, nextCursor?: string): RoutineFiringPage

@@ -39,6 +39,9 @@ export type RoutineCreationOptions = paths["/me/routines/creation-options"]["get
 /** Five upcoming occurrences calculated for one schedule. */
 export type RoutineSchedulePreview = paths["/me/routines/schedule-preview"]["post"]["responses"][200]["content"]["application/json"];
 
+/** One requester-only proposal projection returned by the scheduling routes. */
+export type RoutineProposalReadResponse = paths["/me/routines/proposals/{proposalRef}"]["get"]["responses"][200]["content"]["application/json"];
+
 /** Browser-safe failure categories returned by the routine adapter. */
 export enum RoutineGatewayErrorKinds
 {
@@ -146,6 +149,10 @@ export interface RoutineGateway
 	firings(routineId: string, query?: RoutineFiringQuery, signal?: AbortSignal): Promise<RoutineFiringPage>;
 	/** Reads audience and managed-service choices for one destination. */
 	creationOptions(destinationConversationId: string, signal?: AbortSignal): Promise<RoutineCreationOptions>;
+	/** Reads one requester-only proposal projection after the server checks current access. */
+	proposal(proposalRef: string, signal?: AbortSignal): Promise<RoutineProposalReadResponse>;
+	/** Cancels one requester-owned proposal without activating a routine. */
+	cancelProposal(proposalRef: string, signal?: AbortSignal): Promise<RoutineProposalReadResponse>;
 	/** Calculates five upcoming occurrences without saving a routine. */
 	preview(schedule: RoutineSchedule, signal?: AbortSignal): Promise<RoutineSchedulePreview>;
 	/** Creates one reviewed routine. */

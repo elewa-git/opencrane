@@ -34,6 +34,14 @@ enum AgentRoutineCommandKind {
   RunNow @map("run_now")
 }
 
+/// Durable review state for one routine suggested by a conversation run.
+enum AgentRoutineProposalState {
+  Pending   @map("pending")
+  Accepted  @map("accepted")
+  Cancelled @map("cancelled")
+  Expired   @map("expired")
+}
+
 /// Stores one requester-owned routine and the cursor for its automatic occurrence chain.
 model AgentRoutine {
   id                           String             @id
@@ -61,6 +69,7 @@ model AgentRoutine {
   revisions                    AgentRoutineRevision[]
   firings                      AgentRoutineFiring[]
   commandReceipts              AgentRoutineCommandReceipt[]
+  acceptedProposal             AgentRoutineProposal?             @relation("AcceptedRoutineProposal")
 
   @@unique([id, siloId])
   @@unique([scheduleTaskName, scheduleTaskKey], map: "agent_routines_schedule_task_key")
@@ -68,6 +77,38 @@ model AgentRoutine {
   @@index([siloId, nextAutomaticOccurrence, status])
   @@index([destinationConversationId, siloId])
   @@map("agent_routines")
+}
+
+/// Stores one encrypted routine suggestion while a requester reviews whether to create it.
+model AgentRoutineProposal {
+  id                         String                    @id
+  siloId                     String                    @map("silo_id")
+  sourceConversationId       String                    @map("source_conversation_id")
+  sourceRunId                String                    @map("source_run_id")
+  sourceRunAttempt           Int                       @map("source_run_attempt")
+  sourceOrdinal              Int                       @map("source_ordinal")
+  requesterPrincipalId       String                    @map("requester_principal_id")
+  suggestionKeyId            String                    @map("suggestion_key_id")
+  suggestionNonce            Bytes                     @map("suggestion_nonce")
+  suggestionAuthTag          Bytes                     @map("suggestion_auth_tag")
+  suggestionCiphertext       Bytes                     @map("suggestion_ciphertext")
+  suggestionCiphertextDigest String                    @map("suggestion_ciphertext_digest")
+  argumentsDigest            String                    @map("arguments_digest")
+  state                      AgentRoutineProposalState @default(Pending)
+  acceptedRoutineId          String?                   @unique @map("accepted_routine_id")
+  createdAt                  DateTime                  @map("created_at")
+  expiresAt                  DateTime                  @map("expires_at")
+  terminalAt                 DateTime?                 @map("terminal_at")
+  requester                  Principal                 @relation("RoutineProposalRequester", fields: [requesterPrincipalId, siloId], references: [id, siloId], onDelete: Restrict)
+  sourceConversation         Conversation              @relation("RoutineProposalSourceConversation", fields: [sourceConversationId, siloId], references: [id, siloId], onDelete: Restrict)
+  sourceRun                  AgentRun                  @relation("RoutineProposalSourceRun", fields: [sourceRunId, sourceRunAttempt], references: [id, attempt], onDelete: Restrict)
+  acceptedRoutine            AgentRoutine?             @relation("AcceptedRoutineProposal", fields: [acceptedRoutineId, siloId], references: [id, siloId], onDelete: Restrict)
+
+  @@unique([id, siloId])
+  @@unique([acceptedRoutineId, siloId])
+  @@unique([siloId, sourceRunId, sourceRunAttempt, sourceOrdinal], map: "agent_routine_proposals_source_slot_key")
+  @@index([siloId, requesterPrincipalId, state, expiresAt])
+  @@map("agent_routine_proposals")
 }
 
 /// Stores encrypted instructions and the frozen explicit audience for one immutable revision.

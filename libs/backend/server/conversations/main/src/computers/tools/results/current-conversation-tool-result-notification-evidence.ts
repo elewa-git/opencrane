@@ -3,7 +3,7 @@ import { CompiledToolDefinitionKinds, ConversationLogToolKinds } from "@opencran
 
 import { ConversationComputerToolResultOutcomes, type ConversationComputerToolResults } from "../../turns/conversation-computer-continuation.types";
 import type { ConversationComputerTurnCandidateResolver, ConversationComputerTurnStore } from "../../turns/conversation-computer-turn.types";
-import { ConversationComputerTurnProtocolStates } from "../../turns/conversation-computer-turn-protocol.types";
+import { ConversationComputerTurnProtocolStates, ConversationComputerTurnToolKinds } from "../../turns/conversation-computer-turn-protocol.types";
 import type { ConversationToolResultNotificationCommand, ConversationToolResultNotificationEvidence, ConversationToolResultNotificationEvidenceReader } from "../../turns/tool-result-notifications/conversation-tool-result-notification.types";
 
 /** Rechecks one frozen selection, live workflow identity, and terminal delivery without database access. */
@@ -23,7 +23,7 @@ export class CurrentConversationToolResultNotificationEvidenceReader implements 
 		const reservation = current?.state === ConversationComputerTurnProtocolStates.ToolPending ? current.reservation : null;
 		if (turn === null || turn.siloId !== command.siloId || turn.binding.conversationId !== command.conversationId
 			|| turn.compile.runId !== command.runId || turn.compile.attempt !== command.attempt
-			|| current?.state !== ConversationComputerTurnProtocolStates.ToolPending || selection === null || reservation === null
+			|| current?.state !== ConversationComputerTurnProtocolStates.ToolPending || selection === null || selection.kind !== ConversationComputerTurnToolKinds.Mcp || reservation === null
 			|| selection.ordinal !== reservation.ordinal || selection.modelInvocationFence !== reservation.invocationFence
 			|| selection.proposalId !== selection.toolInvocationId || selection.toolInvocationId !== command.toolInvocationId
 			|| turn.protocol.output !== null || turn.protocol.unavailable !== null || turn.protocol.cancellation !== null)

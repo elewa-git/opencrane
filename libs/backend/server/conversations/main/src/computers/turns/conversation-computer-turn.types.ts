@@ -16,6 +16,7 @@ import type { ConversationToolResultNotificationPort } from "./tool-result-notif
 import type { ConversationToolRequestedNotificationPort } from "./tool-progress-notifications/conversation-tool-progress-notification.types";
 import type { ConversationComputerOutputPayload } from "./output/conversation-computer-output.types";
 import type { RoutineRunProgressReporter } from "../../routines/routine-run-progress.types";
+import type { ConversationRequestRoutineDependencies } from "./request-routine/conversation-request-routine.types";
 
 /** Coordinates a sandbox Pod must prove before receiving its review credential. */
 export interface ConversationComputerPodLeaseCommand
@@ -374,6 +375,8 @@ export interface ConversationComputerTurnAuthorityDependencies
 	readonly routineProgress: Pick<RoutineRunProgressReporter, "recordCompleted" | "recordUnavailable">;
 	/** Owns one stable proposal slot and its current transactional admission. */
 	readonly toolProposals: ConversationToolProposalAdmission;
+	/** Owns the complete built-in request_routine path; null refuses a selected declaration. */
+	readonly requestRoutine?: ConversationRequestRoutineDependencies | null;
 }
 
 /** Run, attempt and lease fence a run lifecycle transition must match against the saved execution subject. */

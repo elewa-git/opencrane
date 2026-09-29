@@ -52,6 +52,8 @@ export interface CreateRoutineCommand
 	readonly instruction: string;
 	/** Caller key that recovers the first committed result. */
 	readonly idempotencyKey: string;
+	/** Opaque proposal accepted by this reviewed create command, when present. */
+	readonly proposalRef?: string;
 }
 
 /** Requester command that replaces only instruction and schedule with a new revision. */

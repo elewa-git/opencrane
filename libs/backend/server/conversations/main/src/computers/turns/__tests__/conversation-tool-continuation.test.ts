@@ -21,14 +21,17 @@ function _Barrier()
 function _CurrentSelection(turn: FrozenConversationComputerTurn)
 {
 	const selection = turn.protocol.steps.at(-1)?.selection;
-	if (selection === null || selection === undefined)
+	if (selection === null || selection === undefined || selection.kind !== "mcp")
 		throw new Error("Expected the current ordered step to have a selection");
 	return selection;
 }
 
 function _LastSelection(turn: FrozenConversationComputerTurn)
 {
-	return turn.protocol.steps.at(-1)?.selection ?? [...turn.protocol.steps].reverse().find(step => step.result !== null)?.selection ?? _CurrentSelection(turn);
+	const selection = turn.protocol.steps.at(-1)?.selection ?? [...turn.protocol.steps].reverse().find(step => step.result !== null)?.selection ?? _CurrentSelection(turn);
+	if (selection.kind !== "mcp")
+		throw new Error("Expected an MCP selection");
+	return selection;
 }
 
 function _LastResult(turn: FrozenConversationComputerTurn)

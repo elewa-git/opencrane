@@ -1,4 +1,4 @@
-import { CompiledFinalOutputModes, CompiledToolDefinitionKinds, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, ___CompiledMcpToolDefinitionSchema, ___ParseRunBudgetPolicy, type CompiledMcpToolDefinition, type CompiledRunInput, type RunInputSnapshot } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, CompiledToolDefinitionKinds, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, ___CompiledToolDefinitionSchema, ___ParseRunBudgetPolicy, type CompiledRunInput, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -65,7 +65,9 @@ async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, rep
 	// 2. Look up every record the compiled input needs.
 	const personaInstructions = await repositories.loadPersonaInstructions(snapshot.personaRevisionId);
 	const messages = await repositories.loadMessages(snapshot.messageIds);
-	const tools = _orderMcpTools(await repositories.loadToolDefinitions(snapshot.mcpTools));
+	const mcpTools = await repositories.loadToolDefinitions(snapshot.mcpTools);
+	const firstPartyTools = await repositories.loadFirstPartyToolDefinitions(snapshot.firstPartyCapabilities);
+	const tools = _orderTools([...mcpTools, ...firstPartyTools]);
 	const artifactSummaries = await repositories.loadArtifactSummaries([...snapshot.artifactRevisionIds].sort());
 	const skillSummaries = await repositories.loadSkillSummaries([...snapshot.skillRevisionIds].sort());
 	const model = await repositories.resolveModelRoute(snapshot.siloId, snapshot.modelRoute);
@@ -85,17 +87,18 @@ async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, rep
  * compiled digest is taken over. It fixes object key order but not array order, so without this sort the
  * same tools arriving in a different order would digest differently.
  */
-function _orderMcpTools(tools: readonly CompiledMcpToolDefinition[]): readonly CompiledMcpToolDefinition[]
+function _orderTools(tools: readonly CompiledToolDefinition[]): readonly CompiledToolDefinition[]
 {
-	const revisionIds = new Set<string>();
+	const sourceCoordinates = new Set<string>();
 	const modelNames = new Set<string>();
 	for (const candidate of tools)
 	{
-		const tool = ___CompiledMcpToolDefinitionSchema.parse(candidate);
-		if (tool.kind !== CompiledToolDefinitionKinds.Mcp || !_IsModelToolNameValid(tool.modelName) || revisionIds.has(tool.toolRevisionId) || modelNames.has(tool.modelName)
+		const tool = ___CompiledToolDefinitionSchema.parse(candidate);
+		const sourceCoordinate = tool.kind === CompiledToolDefinitionKinds.Mcp ? tool.toolRevisionId : `${tool.capability}:${tool.capabilityRevision}`;
+		if (!_IsModelToolNameValid(tool.modelName) || sourceCoordinates.has(sourceCoordinate) || modelNames.has(tool.modelName)
 			|| ___DigestCanonicalJson(tool.parametersSchema) !== tool.parametersSchemaDigest)
-			throw new Error("compiled MCP tool definitions require valid schemas and unique model names and revision identifiers");
-		revisionIds.add(tool.toolRevisionId);
+			throw new Error("compiled callable definitions require valid schemas and unique model names and source coordinates");
+		sourceCoordinates.add(sourceCoordinate);
 		modelNames.add(tool.modelName);
 	}
 	return [...tools].sort(function _byModelName(left, right): number { return _compareText(left.modelName, right.modelName); });

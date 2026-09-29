@@ -15,10 +15,15 @@ import type { RoutineOccurrencePromptAdmissionReader } from "../sources/routine-
 import { PrismaSkillRevisionEligibilityRepository, PrismaSkillRevisionEligibilitySource } from "../sources/prisma-skill-revision-eligibility-source";
 import { TransactionBoundProductResourceAuthorizationSource } from "../sources/product-resource-authorization-source";
 import { RunPolicyMemoryScopeSource } from "../memory/run-policy-memory-scope-source";
-import type { ApprovedPersonaInput, ApprovedPersonaSource, BudgetPolicySource, ConversationHistoryAdmissionReader, ExecutionSubjectAuthority, RunAuthoritySource, SessionAssemblyAuthorities, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicySource } from "./session-assembly.types";
+import type { ApprovedPersonaInput, ApprovedPersonaSource, BudgetPolicySource, ConversationHistoryAdmissionReader, ExecutionSubjectAuthority, FirstPartyCapabilitySelectionSource, RunAuthoritySource, SessionAssemblyAuthorities, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicySource } from "./session-assembly.types";
+
+/** Keeps built-in callables unavailable until composition injects an admission-owned selector. */
+const _NO_FIRST_PARTY_CAPABILITIES: FirstPartyCapabilitySelectionSource = {
+	load: async function _LoadNoCapabilities() { return { outcome: "loaded", value: [] }; },
+};
 
 /** Composes the target input authorities around one mandatory verified execution subject source. */
-export function __CreatePrismaSessionAssemblyAuthorities(admission: RunAdmissionRepository, executionSubject: ExecutionSubjectAuthority, conversationHistory: ConversationHistoryAdmissionReader, routinePrompt?: RoutineOccurrencePromptAdmissionReader): SessionAssemblyAuthorities
+export function __CreatePrismaSessionAssemblyAuthorities(admission: RunAdmissionRepository, executionSubject: ExecutionSubjectAuthority, conversationHistory: ConversationHistoryAdmissionReader, routinePrompt?: RoutineOccurrencePromptAdmissionReader, firstPartyCapabilities: FirstPartyCapabilitySelectionSource = _NO_FIRST_PARTY_CAPABILITIES): SessionAssemblyAuthorities
 {
 	const personalMemoryScope = new PersonalMemoryScopeSource(_CreatePersonalMemory);
 	return {
@@ -31,6 +36,7 @@ export function __CreatePrismaSessionAssemblyAuthorities(admission: RunAdmission
 		toolPolicy: new TransactionBoundRevisionToolPolicySource(),
 		skillEligibility: new PrismaSkillRevisionEligibilitySource(_CreateSkillRevisionEligibilityRepository),
 		productAuthorization: new TransactionBoundProductResourceAuthorizationSource(),
+		firstPartyCapabilities,
 		budgetPolicy: new TransactionBoundRevisionBudgetPolicySource(),
 		executionSubject,
 	};

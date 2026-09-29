@@ -1752,6 +1752,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/routines/proposals/{proposalRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a routine proposal
+         * @description Returns decrypted suggestion content only to the original requester while current source-conversation access remains valid. A database-clock expiry is committed before return.
+         */
+        get: operations["getRoutineProposal"];
+        put?: never;
+        post?: never;
+        /**
+         * Cancel a routine proposal
+         * @description Closes a pending proposal without creating a routine, or returns the durable terminal winner after concurrent acceptance, cancellation or expiry.
+         */
+        delete: operations["cancelRoutineProposal"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/routines/{routineId}": {
         parameters: {
             query?: never;
@@ -9950,6 +9974,7 @@ export interface operations {
                     };
                     instruction: string;
                     idempotencyKey: string;
+                    proposalRef?: string;
                 };
             };
         };
@@ -10136,6 +10161,194 @@ export interface operations {
             };
             /** @description The saved revision, lifecycle state or idempotency key conflicts with this command. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getRoutineProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque routine proposal reference from the requester notification. */
+                proposalRef: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current requester-owned proposal. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        proposalRef: string;
+                        sourceConversationId: string;
+                        suggestion: {
+                            instruction: string;
+                            schedule: {
+                                expression: string;
+                                timezone: string;
+                            };
+                        };
+                        /** Format: date-time */
+                        expiresAt: string;
+                        /** @constant */
+                        state: "pending";
+                    } | {
+                        proposalRef: string;
+                        sourceConversationId: string;
+                        suggestion: {
+                            instruction: string;
+                            schedule: {
+                                expression: string;
+                                timezone: string;
+                            };
+                        };
+                        /** Format: date-time */
+                        expiresAt: string;
+                        /** @constant */
+                        state: "accepted";
+                        acceptedRoutineId: string;
+                    } | {
+                        proposalRef: string;
+                        sourceConversationId: string;
+                        suggestion: {
+                            instruction: string;
+                            schedule: {
+                                expression: string;
+                                timezone: string;
+                            };
+                        };
+                        /** Format: date-time */
+                        expiresAt: string;
+                        /** @enum {unknown} */
+                        state: "cancelled" | "expired";
+                    };
+                };
+            };
+            /** @description The path or request body does not satisfy the routine command contract. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A current authenticated Principal and authentication instant are required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The routine or another protected resource is unavailable to this caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cancelRoutineProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque routine proposal reference from the requester notification. */
+                proposalRef: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Durable proposal state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        proposalRef: string;
+                        sourceConversationId: string;
+                        suggestion: {
+                            instruction: string;
+                            schedule: {
+                                expression: string;
+                                timezone: string;
+                            };
+                        };
+                        /** Format: date-time */
+                        expiresAt: string;
+                        /** @constant */
+                        state: "pending";
+                    } | {
+                        proposalRef: string;
+                        sourceConversationId: string;
+                        suggestion: {
+                            instruction: string;
+                            schedule: {
+                                expression: string;
+                                timezone: string;
+                            };
+                        };
+                        /** Format: date-time */
+                        expiresAt: string;
+                        /** @constant */
+                        state: "accepted";
+                        acceptedRoutineId: string;
+                    } | {
+                        proposalRef: string;
+                        sourceConversationId: string;
+                        suggestion: {
+                            instruction: string;
+                            schedule: {
+                                expression: string;
+                                timezone: string;
+                            };
+                        };
+                        /** Format: date-time */
+                        expiresAt: string;
+                        /** @enum {unknown} */
+                        state: "cancelled" | "expired";
+                    };
+                };
+            };
+            /** @description The path or request body does not satisfy the routine command contract. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A current authenticated Principal and authentication instant are required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The routine or another protected resource is unavailable to this caller. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

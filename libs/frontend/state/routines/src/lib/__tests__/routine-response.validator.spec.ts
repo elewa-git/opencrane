@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { RoutineFiringReasons } from "@opencrane/contracts";
+import { RoutineFiringReasons, RoutineProposalStates } from "@opencrane/contracts";
 
 import { AgentRunTerminalReasons, RoutineFiringDisposition, RoutineFiringTrigger, RoutineStatus } from "../routine-gateway.types";
-import { ___RoutineCreationOptionsSchema, ___RoutineDefinitionResponseSchema, ___RoutineDetailsResponseSchema, ___RoutineFiringPageSchema, ___RoutineFiringResponseSchema, ___RoutineListPageSchema, ___RoutineSchedulePreviewSchema } from "../routine-response.validator";
+import { ___RoutineCreationOptionsSchema, ___RoutineDefinitionResponseSchema, ___RoutineDetailsResponseSchema, ___RoutineFiringPageSchema, ___RoutineFiringResponseSchema, ___RoutineListPageSchema, ___RoutineProposalReadResponseSchema, ___RoutineSchedulePreviewSchema } from "../routine-response.validator";
 
 const _INSTANT = "2026-09-27T09:00:00.000Z";
 const _SCHEDULE = { expression: "0 9 * * *", timezone: "UTC" };
@@ -36,6 +36,15 @@ describe("routine response validators", function _suite()
 		expect(___RoutineFiringResponseSchema.safeParse({ firing: { firingId: "firing-2", routineId: "routine-1", routineRevision: 2, trigger: RoutineFiringTrigger.Manual, disposition: RoutineFiringDisposition.Preparing, scheduledSlot: null, reason: null } }).success).toBe(true);
 		expect(___RoutineCreationOptionsSchema.safeParse({ destinationConversationId: "conversation-1", audienceChoices: [{ participantRef: "participant-1", displayName: "You", isSelf: true }], managedServiceChoices: [{ managedServiceId: "service-1", displayName: "Research assistant" }] }).success).toBe(true);
 		expect(___RoutineSchedulePreviewSchema.safeParse({ schedule: _SCHEDULE, calculatedAt: _INSTANT, nextOccurrences: [_INSTANT, _INSTANT, _INSTANT, _INSTANT, _INSTANT] }).success).toBe(true);
+	});
+
+	it("validates proposal lifecycle fields without accepting protected extras", function _proposalResponses()
+	{
+		const pending = { proposalRef: "proposal-1", sourceConversationId: "conversation-1", suggestion: { instruction: "Review the conversation.", schedule: _SCHEDULE }, expiresAt: _INSTANT, state: RoutineProposalStates.Pending };
+		expect(___RoutineProposalReadResponseSchema.safeParse(pending).success).toBe(true);
+		expect(___RoutineProposalReadResponseSchema.safeParse({ ...pending, state: RoutineProposalStates.Accepted, acceptedRoutineId: "routine-1" }).success).toBe(true);
+		expect(___RoutineProposalReadResponseSchema.safeParse({ ...pending, state: RoutineProposalStates.Accepted }).success).toBe(false);
+		expect(___RoutineProposalReadResponseSchema.safeParse({ ...pending, suggestion: { ...pending.suggestion, secret: "hidden" } }).success).toBe(false);
 	});
 
 	it("accepts sparse empty pages and opaque continuation tokens", function _sparsePage()

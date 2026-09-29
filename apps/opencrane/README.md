@@ -39,6 +39,9 @@ their concrete adapters, mounts their routers, and starts and stops them in the 
 The conversation workflow bootstrap receives a `ConversationExecutionContext`
 object. Its named fields identify the database, history, Kubernetes clients, admission, routine
 progress and dispatch ports, workflow engine, and generated-file services supplied by process startup.
+Routine composition is created first and supplies the request-routine proposal and evidence ports to
+conversation composition. Run admission offers the frozen `request_routine` capability only when its
+selection source, definition resolver and conversation dispatcher are all present.
 The MCP runtime bootstrap similarly receives an `McpExecutionContext`, naming the process
 services and configuration shared by container-based and remote tool execution.
 

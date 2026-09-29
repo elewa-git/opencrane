@@ -2,13 +2,14 @@ import { AgentRoutineFiringDisposition, AgentRoutineFiringTrigger, AgentRunTrigg
 
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 import { PrismaAuthorizationAuthority, PrismaManagedAuthorizationGrantRepository, type ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
-import { AgentRunTriggers, RUN_INPUT_SNAPSHOT_VERSION, ___ExecutionSubjectSchema, ___ParseRunBudgetPolicy, ___RunInputOriginSchema, type RunInputSnapshot } from "@opencrane/contracts";
+import { AgentRunTriggers, RUN_INPUT_SNAPSHOT_VERSION, ___ExecutionSubjectSchema, ___ParseRunBudgetPolicy, ___RunInputFirstPartyCapabilitySelectionsSchema, ___RunInputOriginSchema, type RunInputSnapshot } from "@opencrane/contracts";
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { RunAdmissionPersistenceRepository } from "./run-admission-persistence.types";
 import { RunAdmissionBuildOutcomes, RunAdmissionDenialReasons, RunAdmissionExistingVerificationOutcomes, RunAdmissionMessageInputModes, RunAdmissionOutcomes, type InitialRunAuthority, type RunAdmissionBuild, type RunAdmissionBuildResult, type RunAdmissionClock, type RunAdmissionCommand, type RunAdmissionCommit, type RunAdmissionExistingVerifier, type RunAdmissionPrepare, type RunAdmissionRepository, type RunAdmissionResult, type RunAdmissionTransaction } from "./run-admission.types";
+import { __DigestRunInputSnapshot } from "./run-input-snapshot-digest";
 
 /** Forces Prisma to roll back authority writes whenever later admission checks refuse the run. */
 class _AdmissionDenied<TDenial> extends Error
@@ -175,7 +176,10 @@ class PrismaRunAdmissionRepository implements RunAdmissionPersistenceRepository
 		const row = await this._transaction.runInputSnapshot.findUnique({ where: { runId_attempt_digest: { runId: run.id, attempt: run.attempt, digest: run.inputSnapshotDigest } } });
 		if (row === null || !_MatchesSnapshot(row, run.id, command))
 			return { outcome: RunAdmissionOutcomes.Denied, reason: RunAdmissionDenialReasons.AuthorityConflict };
-		return { outcome: RunAdmissionOutcomes.Idempotent, snapshot: _RunInputSnapshot(row) };
+		const snapshot = _RunInputSnapshot(row);
+		if (!_HasValidSnapshotDigest(snapshot))
+			throw new Error("Recovered run input snapshot digest is invalid");
+		return { outcome: RunAdmissionOutcomes.Idempotent, snapshot };
 	}
 
 	/** Persist the logical run and its first append-only snapshot as one deferred-relation pair. */
@@ -264,6 +268,8 @@ function _MatchesAdmission(value: RunAdmissionBuild, command: RunAdmissionComman
 	return value.authority.agentServiceId === command.agentServiceId
 		&& value.authority.agentRevisionId === value.snapshot.agentRevisionId
 		&& value.authority.trigger === command.trigger
+		&& value.snapshot.snapshotVersion === RUN_INPUT_SNAPSHOT_VERSION
+		&& ___RunInputFirstPartyCapabilitySelectionsSchema.safeParse(value.snapshot.firstPartyCapabilities).success
 		&& value.snapshot.runId === command.runId
 		&& value.snapshot.attempt === 1
 		&& value.snapshot.siloId === command.siloId
@@ -375,7 +381,8 @@ function _SameInstant(stored: Date | null, expected: string | null): boolean
 function _RunInputSnapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnapshotUncheckedCreateInput
 {
 	const subject = _ExecutionSubject(snapshot.executionSubject, snapshot.executionSubject.agentIdentityId, snapshot.executionSubject.principalId);
-	return { runId: snapshot.runId, attempt: snapshot.attempt, snapshotVersion: snapshot.snapshotVersion, origin: _Json(snapshot.origin), siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, agentRevisionId: snapshot.agentRevisionId, agentIdentityId: subject.agentIdentityId, principalId: subject.principalId, executionSubject: _Json(subject), personaRevisionId: snapshot.personaRevisionId, conversationId: snapshot.conversationId, messageIds: [...snapshot.messageIds], preferenceFactIds: [...snapshot.preferenceFactIds], artifactRevisionIds: [...snapshot.artifactRevisionIds], modelRoute: _Json(snapshot.modelRoute), mcpTools: _Json(snapshot.mcpTools), skillRevisionIds: [...snapshot.skillRevisionIds], memoryQueryPolicy: _Json(snapshot.memoryQueryPolicy), budgetPolicy: _Json(snapshot.budgetPolicy), promptCompilerVersion: snapshot.promptCompilerVersion, digest: snapshot.digest, compiledAt: new Date(snapshot.compiledAt) };
+	const firstPartyCapabilities = ___RunInputFirstPartyCapabilitySelectionsSchema.parse(snapshot.firstPartyCapabilities);
+	return { runId: snapshot.runId, attempt: snapshot.attempt, snapshotVersion: snapshot.snapshotVersion, origin: _Json(snapshot.origin), siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, agentRevisionId: snapshot.agentRevisionId, agentIdentityId: subject.agentIdentityId, principalId: subject.principalId, executionSubject: _Json(subject), personaRevisionId: snapshot.personaRevisionId, conversationId: snapshot.conversationId, messageIds: [...snapshot.messageIds], preferenceFactIds: [...snapshot.preferenceFactIds], artifactRevisionIds: [...snapshot.artifactRevisionIds], modelRoute: _Json(snapshot.modelRoute), mcpTools: _Json(snapshot.mcpTools), firstPartyCapabilities: _Json(firstPartyCapabilities), skillRevisionIds: [...snapshot.skillRevisionIds], memoryQueryPolicy: _Json(snapshot.memoryQueryPolicy), budgetPolicy: _Json(snapshot.budgetPolicy), promptCompilerVersion: snapshot.promptCompilerVersion, digest: snapshot.digest, compiledAt: new Date(snapshot.compiledAt) };
 }
 
 /**
@@ -386,12 +393,22 @@ function _RunInputSnapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnaps
  */
 export function _RunInputSnapshot(row: PrismaRunInputSnapshot): RunInputSnapshot
 {
+	if (row.snapshotVersion !== RUN_INPUT_SNAPSHOT_VERSION)
+		throw new Error(`Run input snapshot version ${row.snapshotVersion} is not supported`);
 	const executionSubject = _ExecutionSubject(row.executionSubject, row.agentIdentityId, row.principalId);
 	const parsedOrigin = ___RunInputOriginSchema.safeParse(row.origin);
 	if (!parsedOrigin.success)
 		throw new Error("Run input snapshot origin is invalid");
 	const origin = parsedOrigin.data;
-	return { runId: row.runId, attempt: row.attempt, siloId: row.siloId, agentServiceId: row.agentServiceId, agentRevisionId: row.agentRevisionId, snapshotVersion: row.snapshotVersion, origin, conversationId: row.conversationId, messageIds: row.messageIds, personaRevisionId: row.personaRevisionId, preferenceFactIds: row.preferenceFactIds, artifactRevisionIds: row.artifactRevisionIds, skillRevisionIds: row.skillRevisionIds, memoryQueryPolicy: row.memoryQueryPolicy as RunInputSnapshot["memoryQueryPolicy"], mcpTools: row.mcpTools as unknown as RunInputSnapshot["mcpTools"], modelRoute: row.modelRoute as RunInputSnapshot["modelRoute"], budgetPolicy: ___ParseRunBudgetPolicy(row.budgetPolicy), executionSubject, promptCompilerVersion: row.promptCompilerVersion, digest: row.digest, compiledAt: row.compiledAt.toISOString() };
+	const firstPartyCapabilities = ___RunInputFirstPartyCapabilitySelectionsSchema.parse(row.firstPartyCapabilities);
+	return { runId: row.runId, attempt: row.attempt, siloId: row.siloId, agentServiceId: row.agentServiceId, agentRevisionId: row.agentRevisionId, snapshotVersion: row.snapshotVersion, origin, conversationId: row.conversationId, messageIds: row.messageIds, personaRevisionId: row.personaRevisionId, preferenceFactIds: row.preferenceFactIds, artifactRevisionIds: row.artifactRevisionIds, skillRevisionIds: row.skillRevisionIds, memoryQueryPolicy: row.memoryQueryPolicy as RunInputSnapshot["memoryQueryPolicy"], mcpTools: row.mcpTools as unknown as RunInputSnapshot["mcpTools"], firstPartyCapabilities, modelRoute: row.modelRoute as RunInputSnapshot["modelRoute"], budgetPolicy: ___ParseRunBudgetPolicy(row.budgetPolicy), executionSubject, promptCompilerVersion: row.promptCompilerVersion, digest: row.digest, compiledAt: row.compiledAt.toISOString() };
+}
+
+/** Recompute the complete v4 snapshot digest before recovered input leaves persistence. */
+function _HasValidSnapshotDigest(snapshot: RunInputSnapshot): boolean
+{
+	const { digest, ...content } = snapshot;
+	return __DigestRunInputSnapshot(content) === digest;
 }
 
 /** Parse subject evidence and reject a row whose indexed identity coordinates diverge. */

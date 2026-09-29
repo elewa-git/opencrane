@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
+import type { RequestRoutineProposalSourceAuthorityFactory } from "@opencrane/backend/server/agents/scheduling/contract";
 import type { RoutineAuthorizationFactory, RoutineManagedGrantRepositoryFactory } from "./routine-authority.types";
 import type { RoutineTaskAdmissionPort } from "./routine-workflow.types";
 import type { RoutineConversationDirectoryFactory, RoutineManagedServiceDirectoryFactory, RoutineRunHistoryRepositoryFactory } from "./routine-read.types";
@@ -19,4 +20,6 @@ export interface PrismaRoutineUnitOfWorkDependencies
 	readonly managedServices: RoutineManagedServiceDirectoryFactory<Prisma.TransactionClient>;
 	/** Builds the execution-owned run history reader over the same transaction. */
 	readonly runHistory: RoutineRunHistoryRepositoryFactory<Prisma.TransactionClient>;
+	/** Builds conversation-owned creation and requester-access checks over the same transaction. */
+	readonly proposalSources: RequestRoutineProposalSourceAuthorityFactory<Prisma.TransactionClient>;
 }

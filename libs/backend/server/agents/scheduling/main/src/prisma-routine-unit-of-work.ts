@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import type { RoutineComputerActivationReceipt, RoutineFiringIdentity, RoutineOccurrencePreparationReceipt, RoutineRunProgressObservation, RoutineRunProgressSink } from "@opencrane/backend/server/agents/scheduling/contract";
+import type { RequestRoutineProposalNotificationEvidence, RoutineComputerActivationReceipt, RoutineFiringIdentity, RoutineOccurrencePreparationReceipt, RoutineRunProgressObservation, RoutineRunProgressSink } from "@opencrane/backend/server/agents/scheduling/contract";
 import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 
 import type { AutomaticRoutineFiringCommand, EncryptedRoutineProjection, ReadRoutineCommand, RoutineCaller, RoutineCommandResult, RoutineFiringResult } from "./routine-authority.types";
@@ -10,14 +10,16 @@ import { PrismaRoutineFactsRepository } from "./routine-prisma-facts";
 import { PrismaRoutineFiringRepository } from "./prisma-routine-firing-repository";
 import { PrismaRoutineRunProgressRepository } from "./prisma-routine-run-progress-repository";
 import { PrismaRoutineReadRepository } from "./prisma-routine-read-repository";
+import { PrismaRoutineProposalRepository } from "./prisma-routine-proposal-repository";
 import type { ChangeRoutineStatusPersistenceCommand, CreateRoutinePersistenceCommand, ReviseRoutinePersistenceCommand, RoutineCommandPersistence, RunRoutineNowPersistenceCommand } from "./routine-persistence.types";
 import type { PrismaRoutineUnitOfWorkDependencies } from "./routine-unit-of-work.types";
 import type { RoutineScheduleRepairPage, RoutineScheduleRepairPageResult } from "./routine-schedule-repair.types";
 import type { RoutineFiringListPersistencePage, RoutineFiringListPersistenceQuery, RoutineListPersistencePage, RoutineListPersistenceQuery, RoutineReadPersistence } from "./routine-read.types";
+import type { CreateRoutineProposalPersistenceCommand, EncryptedRoutineProposalProjection, RoutineProposalAccessCommand, RoutineProposalPersistence } from "./routine-proposal.types";
 import { RoutineOccurrenceStage, type RoutineOccurrencePreparationInput, type RoutineWorkflowPersistence } from "./routine-workflow.types";
 
 /** Opens one serializable, bounded-retry transaction for every routine authority operation. */
-export class PrismaRoutineUnitOfWork implements RoutineCommandPersistence, RoutineReadPersistence, RoutineWorkflowPersistence, RoutineRunProgressSink
+export class PrismaRoutineUnitOfWork implements RoutineCommandPersistence, RoutineReadPersistence, RoutineProposalPersistence, RoutineWorkflowPersistence, RoutineRunProgressSink
 {
 	/** Root client used only by the shared transaction runner. */
 	private readonly prisma: PrismaClient;
@@ -29,6 +31,30 @@ export class PrismaRoutineUnitOfWork implements RoutineCommandPersistence, Routi
 	{
 		this.prisma = prisma;
 		this.dependencies = dependencies;
+	}
+
+	/** @inheritdoc */
+	async propose(command: CreateRoutineProposalPersistenceCommand)
+	{
+		return await this._RunProposal("routine.proposal_create", { siloId: command.siloId, sourceConversationId: command.sourceConversationId, runId: command.runId, attempt: command.attempt, ordinal: command.ordinal }, async function _Propose(repository) { return await repository.propose(command); });
+	}
+
+	/** @inheritdoc */
+	async readProposal(command: RoutineProposalAccessCommand): Promise<EncryptedRoutineProposalProjection | null>
+	{
+		return await this._RunProposal("routine.proposal_read", { siloId: command.caller.siloId, proposalRef: command.proposalRef }, async function _ReadProposal(repository) { return await repository.readProposal(command); });
+	}
+
+	/** @inheritdoc */
+	async cancelProposal(command: RoutineProposalAccessCommand): Promise<EncryptedRoutineProposalProjection | null>
+	{
+		return await this._RunProposal("routine.proposal_cancel", { siloId: command.caller.siloId, proposalRef: command.proposalRef }, async function _CancelProposal(repository) { return await repository.cancelProposal(command); });
+	}
+
+	/** @inheritdoc */
+	async readCurrent(command: RequestRoutineProposalNotificationEvidence): Promise<RequestRoutineProposalNotificationEvidence | null>
+	{
+		return await this._RunProposal("routine.proposal_notification_read", { siloId: command.siloId, proposalRef: command.proposalRef, runId: command.runId, attempt: command.attempt, ordinal: command.ordinal }, async function _ReadCurrent(repository) { return await repository.readCurrent(command); });
 	}
 
 	/** @inheritdoc */
@@ -149,7 +175,25 @@ export class PrismaRoutineUnitOfWork implements RoutineCommandPersistence, Routi
 				const grants = self.dependencies.managedGrants(transaction);
 				const conversations = self.dependencies.conversations(transaction);
 				const managedServices = self.dependencies.managedServices(transaction);
-				const repository = new PrismaRoutineCommandRepository(transaction, facts, grants, self.dependencies.taskAdmission, conversations, managedServices);
+				const proposals = new PrismaRoutineProposalRepository(transaction, facts, self.dependencies.proposalSources(transaction));
+				const repository = new PrismaRoutineCommandRepository(transaction, facts, grants, self.dependencies.taskAdmission, conversations, managedServices, proposals);
+				return await operation(repository);
+			}, { operation: operationName, isolationLevel: Prisma.TransactionIsolationLevel.Serializable, attemptLimit: 3 });
+		});
+	}
+
+	/** Opens one traced transaction over the scheduling-owned proposal aggregate. */
+	private _RunProposal<Result>(operationName: string, fields: Record<string, unknown>, operation: (repository: PrismaRoutineProposalRepository) => Promise<Result>): Promise<Result>
+	{
+		const self = this;
+		const prisma = this.prisma;
+		return ___DoWithTrace(operationName, fields, async function _Trace()
+		{
+			return await ___RunInPrismaUnitOfWork(prisma, async function _Transaction(transaction)
+			{
+				const authorization = self.dependencies.authorization(transaction);
+				const facts = new PrismaRoutineFactsRepository(transaction, authorization);
+				const repository = new PrismaRoutineProposalRepository(transaction, facts, self.dependencies.proposalSources(transaction));
 				return await operation(repository);
 			}, { operation: operationName, isolationLevel: Prisma.TransactionIsolationLevel.Serializable, attemptLimit: 3 });
 		});

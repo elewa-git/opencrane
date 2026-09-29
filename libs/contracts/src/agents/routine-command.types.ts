@@ -28,6 +28,8 @@ export interface RoutineCreateRequest
 	readonly instruction: string;
 	/** Caller-owned retry key for recovering an uncertain response. */
 	readonly idempotencyKey: string;
+	/** Opaque routine proposal reference when this creation accepts a reviewed suggestion. */
+	readonly proposalRef?: string;
 }
 
 /** Browser request for replacing one routine's schedule and instruction. */

@@ -55,6 +55,8 @@ export class PrismaConversationGeneratedFileOutputRepository implements Generate
 			return;
 		if (operation.asset.messageId !== null)
 			throw new Error("Generated file output is already linked to another message");
+		if (step.selection.kind !== "mcp" || step.result.kind !== "mcp")
+			throw new Error("Generated file output requires an MCP result");
 
 		const result = await __ReadRunToolResultInTransaction(this.transaction, {
 			siloId: turn.siloId, runId: turn.compile.runId, attempt: turn.compile.attempt,
@@ -92,13 +94,14 @@ export class PrismaConversationGeneratedFileOutputRepository implements Generate
 /** Bind the saved Artifact block to every immutable operation and turn coordinate. */
 function _OperationMatches(operation: _Operation, turn: FrozenConversationComputerTurn, artifact: ReturnType<typeof __ReadConversationGeneratedFileOutput>): boolean
 {
+	const priorSelection = turn.protocol.steps.at(-2)?.selection;
 	return artifact !== null && operation.siloId === turn.siloId && operation.siloId === turn.binding.siloId
 		&& operation.conversationId === turn.binding.conversationId && operation.runId === turn.compile.runId
 		&& operation.runId === turn.binding.runId && operation.attempt === turn.compile.attempt
 		&& operation.bootstrapId === turn.bootstrapId && operation.computerId === turn.computerId
 		&& operation.computerId === turn.binding.computerId && operation.leaseId === turn.lease.leaseId
 		&& operation.leaseGeneration === turn.lease.leaseGeneration && operation.leaseGeneration === turn.binding.leaseGeneration
-		&& operation.agentIdentityId === turn.binding.agentIdentityId && operation.toolInvocationId === turn.protocol.steps.at(-2)?.selection?.toolInvocationId
+		&& operation.agentIdentityId === turn.binding.agentIdentityId && operation.toolInvocationId === (priorSelection?.kind === "mcp" ? priorSelection.toolInvocationId : null)
 		&& operation.assetId === artifact.id && operation.artifactId === artifact.artifactId && operation.revisionId === artifact.artifactRevisionId
 		&& operation.displayName === artifact.name && operation.mediaType === artifact.mediaType
 		&& operation.asset.state === ConversationAssetState.Ready && operation.asset.artifactId === operation.artifactId

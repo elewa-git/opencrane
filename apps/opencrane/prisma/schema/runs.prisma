@@ -109,6 +109,7 @@ model AgentRun {
   toolInvocations                   ToolInvocation[]
   treeAccount                       AgentRunTreeAccount?                  @relation("RunTreeAccountRun")
   closedTreeAccounts                AgentRunTreeAccount[]                 @relation("RunTreeClosureSource")
+  routineProposals                  AgentRoutineProposal[]                @relation("RoutineProposalSourceRun")
 
   @@unique([siloId, requestIdempotencyKey])
   @@unique([id, agentServiceId, agentRevisionId])
@@ -146,6 +147,8 @@ model RunInputSnapshot {
   retiredMemoryFacts      Json      @default("[]") @map("memory_facts")
   modelRoute              Json      @map("model_route")
   mcpTools                Json      @map("mcp_tools")
+  /// Server-selected built-in capability coordinates included in the snapshot digest.
+  firstPartyCapabilities  Json      @default("[]") @map("first_party_capabilities")
   skillRevisionIds        String[]  @default([]) @map("skill_revision_ids")
   memoryQueryPolicy       Json      @map("memory_query_policy")
   budgetPolicy            Json      @map("budget_policy")

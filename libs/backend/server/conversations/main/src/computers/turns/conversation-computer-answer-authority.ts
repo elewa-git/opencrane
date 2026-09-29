@@ -2,6 +2,7 @@ import type { ConversationGeneratedFileContinuation } from "../tools/results/con
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
 import { ConversationComputerToolResultOutcomes } from "./conversation-computer-continuation.types";
+import { ConversationComputerTurnToolKinds } from "./conversation-computer-turn-protocol.types";
 import type { ConversationComputerAnswerAuthorityDependencies, ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 
 /**
@@ -19,11 +20,16 @@ export async function __AssertConversationComputerAnswerAuthority(turn: FrozenCo
 	const resultStep = [...turn.protocol.steps].reverse().find(step => step.result !== null);
 	if (resultStep !== undefined)
 	{
-		const result = await dependencies.toolResults.read(turn, workload);
-		if (result.outcome !== ConversationComputerToolResultOutcomes.Available || result.payloadDigest !== resultStep.result?.resultDigest)
-			throw new Error("Conversation tool authority ended before answer append");
-		notAfter = Math.min(notAfter, result.notAfterEpochMs);
-		generatedFile = result.generatedFile;
+		if (resultStep.result?.kind === ConversationComputerTurnToolKinds.Mcp)
+		{
+			const result = await dependencies.toolResults.read(turn, workload);
+			if (result.outcome !== ConversationComputerToolResultOutcomes.Available || result.payloadDigest !== resultStep.result.resultDigest)
+				throw new Error("Conversation tool authority ended before answer append");
+			notAfter = Math.min(notAfter, result.notAfterEpochMs);
+			generatedFile = result.generatedFile;
+		}
+		else if (resultStep.result !== null)
+			notAfter = Math.min(notAfter, resultStep.result.authorityExpiresAtEpochMs);
 	}
 	if (!Number.isSafeInteger(notAfter) || notAfter <= Date.now())
 		throw new Error("Conversation answer authority expired before append");

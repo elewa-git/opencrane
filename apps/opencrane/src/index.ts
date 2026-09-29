@@ -17,6 +17,8 @@ import { _CreateInternalApp } from "./bootstrap/http/internal-app";
 import { _CreateMcpWorkflowComposition } from "./bootstrap/workflows/mcp-workflow-composition";
 import { _CreateMcpRuntimeComposition } from "./bootstrap/workflows/mcp-runtime-composition";
 import { _CreateProductionConversationRunAdmission } from "@opencrane/backend/server/conversations";
+import { RequestRoutineCapabilitySelectionSource, RequestRoutineToolDefinitionResolver } from "@opencrane/backend/agents/execution/inputs";
+import { REQUEST_ROUTINE_TOOL } from "@opencrane/backend/server/agents/scheduling/contract";
 import { _CreateMemoryGatewayClient } from "./bootstrap/process/memory-gateway-client.factory";
 import { _CreateKubernetesClients } from "./bootstrap/process/kubernetes-clients";
 import { _CloseFailedProcessStartup, _OwnProcessStartupComposition, _StartProcessLifecycle } from "./bootstrap/process/lifecycle";
@@ -70,7 +72,7 @@ async function _Main(): Promise<void>
 		const providerEffects = _CreateProviderEffectCommandExecutor(prisma, kubernetes.coreApi, config.runtime.serverNamespace, _log);
 		// Run admission creates document repositories inside its prompt-preparation and compilation transactions.
 		const documentAuthorities = { create: function _CreatePromptDocumentAuthority(transaction: Prisma.TransactionClient) { return new PrismaConversationPromptDocumentRepository(transaction); } };
-		const conversationRunAdmission = _CreateProductionConversationRunAdmission(prisma, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, documentAuthorities, _CreatePublishedArtifactReader(prisma), config.runAdmission, _log);
+		const conversationRunAdmission = _CreateProductionConversationRunAdmission(prisma, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, documentAuthorities, _CreatePublishedArtifactReader(prisma), config.runAdmission, _log, new RequestRoutineCapabilitySelectionSource(REQUEST_ROUTINE_TOOL), new RequestRoutineToolDefinitionResolver(REQUEST_ROUTINE_TOOL));
 		const conversationKeyring = _ReadConversationPrivatePayloadKeyring(config.conversationPrivatePayloadKeyringPath);
 		const conversationCipher = AesGcmConversationPrivatePayloadCipher.fromDocument(conversationKeyring);
 		const membership = _CreateHumanMembershipEvidenceConfig();
@@ -87,6 +89,8 @@ async function _Main(): Promise<void>
 			runAdmission: conversationRunAdmission,
 			routineTurns: routineWorkflows.dispatcher,
 			routineProgress: routineWorkflows.progress,
+			routineProposals: routineWorkflows.proposals,
+			routineProposalNotifications: routineWorkflows.proposalNotifications,
 			runtimeAdmission: mcpRuntime.admitToolInvocationInTransaction,
 			toolDispatch: mcpRuntime.toolDispatch,
 			workflows: workflows.execution,

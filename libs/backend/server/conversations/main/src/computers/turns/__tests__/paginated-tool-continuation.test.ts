@@ -56,7 +56,7 @@ async function _inventoryHarness()
 		if (selection === undefined || selection === null)
 			throw new Error("Inventory result requires a saved tool selection");
 		const saved = await f.custody.loadDeclaration(turn, selection.ordinal);
-		if (saved === null)
+		if (saved === null || selection.kind !== "mcp")
 			throw new Error("Inventory result requires a saved declaration");
 		const reply = replies[selection.ordinal - 1]!;
 		expect(saved.declaration.call).toMatchObject({ id: reply.callId, name: reply.name, arguments: JSON.stringify(reply.arguments) });
@@ -127,7 +127,7 @@ describe("controlled inventory pagination and recovery", function _suite()
 			expect(f.proposals.admit).toHaveBeenNthCalledWith(index + 1, expect.anything(), expect.anything(), { bootstrapId: f.step, toolRevisionId: revision, arguments: JSON.parse(exchange.call.arguments) }, expect.anything());
 		}
 		expect(new Set(exchanges.map(exchange => exchange.call.id)).size).toBe(3);
-		expect(new Set(exchanges.map(exchange => exchange.toolInvocationId)).size).toBe(3);
+		expect(new Set(exchanges.map(exchange => exchange.kind === "mcp" ? exchange.toolInvocationId : exchange.proposalRef)).size).toBe(3);
 		expect(f.proposals.admit).toHaveBeenCalledTimes(3);
 		expect(f.toolFlags).toMatchObject({ executions: 3, acknowledgements: 3 });
 		expect(f.credentials.issueOnce).toHaveBeenCalledOnce();

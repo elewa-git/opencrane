@@ -1,7 +1,7 @@
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
-import { CompiledFinalOutputModes, CompiledToolDefinitionKinds, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, type CompiledMcpToolDefinition, type CompiledModelRoute, type RunInputSnapshot } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, CompiledToolDefinitionKinds, FIRST_PARTY_TOOL_CAPABILITY_CONTRACTS, FirstPartyToolCapabilities, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, type CompiledFirstPartyToolDefinition, type CompiledMcpToolDefinition, type CompiledModelRoute, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { __CompileRunInput } from "../prompt-compiler";
@@ -41,6 +41,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		skillRevisionIds: ["skill-1"],
 		memoryQueryPolicy: {},
 		mcpTools: [_mcpTool("mcp-tool-revision-b", "write"), _mcpTool("mcp-tool-revision-a", "read")],
+		firstPartyCapabilities: [],
 		modelRoute: { alias: "silo-default" },
 		budgetPolicy: { maxModelTurns: 4, maxCompletionTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, maxLoopIterations: 4, wallClockDeadlineEpochMs: 1_800_000_000_000 },
 		executionSubject: _executionSubject(),
@@ -49,6 +50,14 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		compiledAt: "2026-07-20T00:00:00.000Z",
 		...overrides,
 	};
+}
+
+/** Build the exact request-routine descriptor supplied by application composition. */
+function _requestRoutineTool(): CompiledFirstPartyToolDefinition
+{
+	const contract = FIRST_PARTY_TOOL_CAPABILITY_CONTRACTS[FirstPartyToolCapabilities.RequestRoutine];
+	const parametersSchema = { type: "object", additionalProperties: false, properties: { instruction: { type: "string" } } } as const;
+	return { kind: CompiledToolDefinitionKinds.FirstParty, capability: FirstPartyToolCapabilities.RequestRoutine, ...contract, description: "Prepare a routine for human review.", parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
 }
 
 /** Builds the required evidence-bound subject without affecting prompt compilation. */
@@ -74,6 +83,7 @@ function _repositories(overrides: Partial<PromptCompilerRepositories> = {}): Pro
 		loadPersonaInstructions: async function _persona(id): Promise<string> { return id === null ? "" : "You are a careful assistant."; },
 		loadMessages: async function _messages(ids): Promise<readonly { role: "user"; content: string }[]> { return ids.map(function _turn(id): { role: "user"; content: string } { return { role: "user", content: `msg:${id}` }; }); },
 		loadToolDefinitions: async function _toolDefs(): Promise<readonly CompiledMcpToolDefinition[]> { return _tools(); },
+		loadFirstPartyToolDefinitions: async function _FirstPartyTools(): Promise<readonly CompiledFirstPartyToolDefinition[]> { return []; },
 		loadArtifactSummaries: async function _artifacts(ids): Promise<readonly string[]> { return ids.map(function _summary(id): string { return `artifact ${id}`; }); },
 		loadSkillSummaries: async function _skills(ids): Promise<readonly string[]> { return ids.map(function _summary(id): string { return `skill ${id}`; }); },
 		resolveModelRoute: async function _route(): Promise<CompiledModelRoute> { return model; },
@@ -96,6 +106,15 @@ describe("__CompileRunInput", function _describeCompiler()
 		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories());
 
 		expect(compiled.tools.map(function _Name(t): string { return t.modelName; })).toEqual(["model_alpha", "model_zulu"]);
+	});
+
+	it("merges an admitted built-in declaration with MCP tools in one provider-name order", async function _OrdersAcrossSources()
+	{
+		const descriptor = _requestRoutineTool();
+		const firstPartyCapabilities = [{ capability: descriptor.capability, capabilityRevision: descriptor.capabilityRevision, parametersSchemaDigest: descriptor.parametersSchemaDigest }];
+		const compiled = await __CompileRunInput(_snapshot({ firstPartyCapabilities }), 1, _repositories({ loadFirstPartyToolDefinitions: async function _ResolveFirstParty(received): Promise<readonly CompiledFirstPartyToolDefinition[]> { expect(received).toEqual(firstPartyCapabilities); return [descriptor]; } }));
+
+		expect(compiled.tools.map(function _ModelName(tool): string { return tool.modelName; })).toEqual(["model_alpha", "model_zulu", "request_routine"]);
 	});
 
 	it("offers the saved approval-gated tools to a managed assistant without dropping the approval requirement", async function _CompanyApprovals()
@@ -206,8 +225,8 @@ describe("__CompileRunInput", function _describeCompiler()
 		const duplicateRevision = [tools[0]!, { ...tools[1]!, toolRevisionId: tools[0]!.toolRevisionId }];
 		const duplicateModelName = [tools[0]!, { ...tools[1]!, modelName: tools[0]!.modelName }];
 
-		await expect(__CompileRunInput(_snapshot(), 1, _repositories({ loadToolDefinitions: async function _DuplicateRevision(): Promise<readonly CompiledMcpToolDefinition[]> { return duplicateRevision; } }))).rejects.toThrow(/unique model names and revision identifiers/);
-		await expect(__CompileRunInput(_snapshot(), 1, _repositories({ loadToolDefinitions: async function _DuplicateModelName(): Promise<readonly CompiledMcpToolDefinition[]> { return duplicateModelName; } }))).rejects.toThrow(/unique model names and revision identifiers/);
+		await expect(__CompileRunInput(_snapshot(), 1, _repositories({ loadToolDefinitions: async function _DuplicateRevision(): Promise<readonly CompiledMcpToolDefinition[]> { return duplicateRevision; } }))).rejects.toThrow(/unique model names and source coordinates/);
+		await expect(__CompileRunInput(_snapshot(), 1, _repositories({ loadToolDefinitions: async function _DuplicateModelName(): Promise<readonly CompiledMcpToolDefinition[]> { return duplicateModelName; } }))).rejects.toThrow(/unique model names and source coordinates/);
 	});
 
 	it("refuses a first-party descriptor returned through the MCP-only compilation port", async function _RejectsUnadmittedFirstPartyTool()

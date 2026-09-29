@@ -8,7 +8,7 @@ import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { ConversationComputerStopDecisions, type ConversationComputerStopAdmission, type ConversationComputerStopPublishOutcome } from "../computers/interruptions/conversation-computer-stop.types";
 import { ConversationComputerToolResultOutcomes } from "../computers/turns/conversation-computer-continuation.types";
-import { ConversationComputerTurnProtocolStates } from "../computers/turns/conversation-computer-turn-protocol.types";
+import { ConversationComputerTurnProtocolStates, ConversationComputerTurnToolKinds } from "../computers/turns/conversation-computer-turn-protocol.types";
 import type { ConversationComputerTurnStore, FrozenConversationComputerTurn } from "../computers/turns/conversation-computer-turn.types";
 import type { ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
 import { _RoutineInstructionEntry } from "./routine-occurrence-history.mapper";
@@ -153,7 +153,7 @@ export class ConversationRoutineRunProgressWaitEvidenceReader implements Routine
 			return null;
 		const execution = await this.dependencies.candidates.assertCurrentForWorkflow(turn);
 		const result = await this.dependencies.toolResults.read(turn, execution.workload);
-		if (result.outcome === ConversationComputerToolResultOutcomes.Pending && result.waitFor === "approval")
+		if (step.selection.kind === ConversationComputerTurnToolKinds.Mcp && result.outcome === ConversationComputerToolResultOutcomes.Pending && result.waitFor === "approval")
 			return { kind: RoutineRunProgressWaitKinds.Approval, id: step.selection.toolInvocationId };
 		if (result.outcome === ConversationComputerToolResultOutcomes.GeneratedFilePending)
 			return { kind: RoutineRunProgressWaitKinds.GeneratedFile, id: result.operationId };

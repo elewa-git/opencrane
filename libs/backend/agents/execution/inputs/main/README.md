@@ -63,13 +63,21 @@ revision, firing, automatic slot or manual trigger, and original approval proven
 conversation must already have an active computer lease, and current conversation access is still
 checked through the central authorization authority before admission commits.
 
+Interactive human conversation admission can also freeze a closed built-in capability selection.
+The selector runs after current conversation and product authorization, and the snapshot stores only
+the capability, its semantic revision and the digest of its parameter schema. Scheduled and manual
+routine runs always freeze an empty selection. The prompt compiler resolves a saved selection only
+through the matching descriptor supplied by application composition; a changed revision or schema
+digest fails compilation instead of substituting a newer declaration.
+
 Compilation derives the required `finalOutput` mode from the saved conversation ID: a conversation
 run receives Conversation mode, while a run without a conversation receives Text mode. Personal and
 company conversations receive the same final-answer instructions, appended after their existing
 persona and resource context. The instructions require a JSON object with ordinary answer text and
 an optional complete static A2UI 0.8 display. Both the mode and instructions are included in the
-compiled digest; the compiler version changes with this contract. Tool declarations keep their
-existing protocol, and non-conversation instructions remain unchanged.
+compiled digest; the compiler version changes with this contract. MCP and built-in declarations
+share one model-name ordering and compiled-input digest. Built-in declarations carry no MCP
+revision, connection, grant or approval coordinate. Non-conversation instructions remain unchanged.
 
 ```
  run request  (runId · silo · service · conversation? · subject · idempotency key)
@@ -77,7 +85,7 @@ existing protocol, and non-conversation instructions remain unchanged.
           ▼
  ┌─────────────────────────────────────────┐
  │   execution/inputs  ◄── HERE              │  load run/persona/conversation/preferences/
- │   · orchestrates 9 authority loads        │  memory/tools/skill eligibility/budget/identity,
+ │   · orchestrates 11 authority loads       │  memory/tools/skills/grants/built-ins/budget,
  │   · compiles + digests the one snapshot   │  the runs package's admission transaction
  │   · compiles deterministic runtime input  │
  └─────────────────────────────────────────┘
@@ -207,9 +215,11 @@ inactive parents, and unsupported generated-output capabilities fail compilation
 
 Compiled callable declarations distinguish MCP revisions from built-in capabilities. Built-in
 descriptors do not carry an MCP revision, grant, connection, approval, or invocation coordinate.
-This package does not append them after compilation: an admission owner must first persist the
-server-derived capability choice, and that wiring is not present yet. Snapshots stamped with an
-older compiler version are refused rather than recompiled to a different digest.
+`RequestRoutineCapabilitySelectionSource` selects only the injected request-routine declaration for
+an admitted human conversation. `RequestRoutineToolDefinitionResolver` then requires the saved
+capability, semantic revision and parameter-schema digest to match that same declaration before the
+compiler may expose it. The upgrade-session capability remains unavailable. Snapshots stamped with
+an older compiler or snapshot version are refused rather than recompiled to a different digest.
 
 ## Boundary
 

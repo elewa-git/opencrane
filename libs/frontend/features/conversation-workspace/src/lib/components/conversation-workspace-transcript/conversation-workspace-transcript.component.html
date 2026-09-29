@@ -35,6 +35,9 @@
                 @case (kinds.ToolActivity) {
                   <wo-conversation-status-line [status]="entry.status" />
                 }
+                @case (kinds.RoutineProposal) {
+                  <wo-conversation-status-line [status]="entry.status"><a conversation-status-action [routerLink]="['/routines', 'new']" [queryParams]="{ proposalRef: entry.proposalRef }" aria-label="Review routine">Review routine</a></wo-conversation-status-line>
+                }
                 @case (kinds.A2uiDisplay) {
                   <wo-conversation-a2ui-display [presentation]="entry.display" />
                 }

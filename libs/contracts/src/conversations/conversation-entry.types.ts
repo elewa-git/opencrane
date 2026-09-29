@@ -1,5 +1,5 @@
 import type { MessageStates } from "@opencrane/models/conversations";
-import type { ConversationA2UIOperations, ConversationApprovalLogPhases, ConversationArtifactLogPhases, ConversationEntryAudiences, ConversationEntryProvenance, ConversationLogKinds, ConversationLogToolKinds, ConversationMemoryLogOperations, ConversationMemoryLogPhases, ConversationModelLogPhases, ConversationRunLogPhases, ConversationToolCallLogPhases } from "./conversation-entry-categories.types";
+import type { ConversationA2UIOperations, ConversationApprovalLogPhases, ConversationArtifactLogPhases, ConversationEntryAudiences, ConversationEntryProvenance, ConversationLogKinds, ConversationLogToolKinds, ConversationMemoryLogOperations, ConversationMemoryLogPhases, ConversationModelLogPhases, ConversationRoutineProposalLogPhases, ConversationRunLogPhases, ConversationToolCallLogPhases } from "./conversation-entry-categories.types";
 
 /**
  * Selects the author shape used to read an entry.
@@ -276,7 +276,7 @@ export interface MessageEntry extends ConversationEntryBase
  * Consumers branch on the log kind to render a safe progress fact without treating a log as the
  * authoritative domain event that caused it.
  */
-export type LogEntry = RunLogEntry | ModelLogEntry | ToolCallLogEntry | ArtifactLogEntry | MemoryLogEntry | ApprovalLogEntry;
+export type LogEntry = RunLogEntry | ModelLogEntry | ToolCallLogEntry | ArtifactLogEntry | MemoryLogEntry | ApprovalLogEntry | RoutineProposalLogEntry;
 
 /** Holds the safe common fields for a structured participant-visible log. */
 export interface LogEntryBase extends ConversationEntryBase
@@ -363,6 +363,17 @@ export interface ApprovalLogEntry extends LogEntryBase
 	readonly action: string;
 	/** States the safe approval lifecycle phase. */
 	readonly phase: `${ConversationApprovalLogPhases}`;
+}
+
+/** Records one requester-only routine proposal without copying its suggestion into history. */
+export interface RoutineProposalLogEntry extends LogEntryBase
+{
+	/** Selects the routine-proposal log handler. */
+	readonly logKind: `${ConversationLogKinds.RoutineProposal}`;
+	/** Carries the opaque scheduling-owned reference used by the review route. */
+	readonly proposalRef: string;
+	/** States that the proposal was ready for requester review when this fact was appended. */
+	readonly phase: `${ConversationRoutineProposalLogPhases.ReadyForReview}`;
 }
 
 /**

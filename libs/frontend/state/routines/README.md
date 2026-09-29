@@ -20,7 +20,8 @@ categories without granting browser policy authority.
 
 - `ROUTINE_GATEWAY` — injection token for the transport-neutral `RoutineGateway`.
 - `ROUTINE_SESSION` — app-supplied signed-in subject and silo signal used by feature state.
-- `RoutineGateway` — list, detail, history, options, preview and seven command methods.
+- `RoutineGateway` — list, detail, history, options, requester-only proposal reads/cancellation,
+  preview and seven command methods.
 - `RoutineGatewayError` and `RoutineGatewayErrorKinds` — safe browser error vocabulary.
 - Routine DTO aliases, response validators and the public status, trigger, disposition, terminal
   reason and refusal enums used by feature mappers.
@@ -29,6 +30,8 @@ categories without granting browser policy authority.
 
 The state package never decides whether a caller may create, revise, run or retire a routine. The
 server remains the authority for identity, audience, lifecycle, permissions, cursors and results.
+Proposal projections are browser-safe suggestions only; creation remains a human-reviewed mutation,
+and an opaque proposal reference does not grant activation authority.
 
 For `Unavailable`, `Unknown` or `InvalidResponse` after a mutation request, the outcome is
 unconfirmed: the server may have committed the command even though the browser did not receive a

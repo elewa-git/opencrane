@@ -396,11 +396,11 @@ function _ResultTurn(f: Awaited<ReturnType<typeof _SeedConversationToolProposalS
 {
 	const deadline = f.candidate.compiledInput.budget.wallClockDeadlineEpochMs;
 	const first = f.turn.protocol.steps[0]!.reservation;
-	const selected = _SelectConversationTurnTool(f.turn, { ordinal: first.ordinal, modelInvocationFence: first.invocationFence,
+	const selected = _SelectConversationTurnTool(f.turn, { kind: "mcp", ordinal: first.ordinal, modelInvocationFence: first.invocationFence,
 		proposalId, toolInvocationId: proposalId, requestFingerprint, declaration: { payloadRef: "payload-ref", ciphertextDigest: "sha256:cipher" } });
 	if (resultDigest === "sha256:cipher")
 		return selected;
-	const ready = _RecordConversationTurnResult(selected, { ordinal: first.ordinal, proposalId, toolInvocationId: proposalId,
+	const ready = _RecordConversationTurnResult(selected, { kind: "mcp", ordinal: first.ordinal, proposalId, toolInvocationId: proposalId,
 		resultDigest, authorityExpiresAtEpochMs: deadline, exchange: { payloadRef: "exchange-ref", ciphertextDigest: resultDigest } });
 	const reservation = _ConversationTurnRequest(ready, { ordinal: 2, invocationFence: "continuation-fence", tools: ConversationModelToolModes.None,
 		maxCompletionTokens: 128, authorityExpiresAtEpochMs: deadline, dispatchDeadlineEpochMs: deadline });

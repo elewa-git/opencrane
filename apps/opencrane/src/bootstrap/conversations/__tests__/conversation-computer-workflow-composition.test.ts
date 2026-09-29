@@ -39,6 +39,8 @@ describe("conversation computer workflow composition", function _ConversationCom
 			runAdmission,
 			routineTurns,
 			routineProgress,
+			routineProposals: { propose: vi.fn() },
+			routineProposalNotifications: { readCurrent: vi.fn() },
 			runtimeAdmission: {} as never,
 			toolDispatch: {} as never,
 			workflows: { register: vi.fn(), spawn: vi.fn(), declare: vi.fn() } as never,

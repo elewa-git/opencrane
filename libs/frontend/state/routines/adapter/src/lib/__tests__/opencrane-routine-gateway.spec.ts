@@ -3,6 +3,7 @@ import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@ang
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ControlPlaneApiService } from "@opencrane/core";
+import { RoutineProposalStates } from "@opencrane/contracts";
 import { RoutineGatewayErrorKinds, RoutineFiringDisposition, RoutineFiringTrigger } from "@opencrane/state/routines";
 
 import { OpenCraneRoutineGateway } from "../opencrane-routines.gateway";
@@ -22,10 +23,11 @@ const _detail = { ..._routine, ownership: "owner" as const, destinationConversat
 const _listItem = { ..._routine, ownership: _detail.ownership, destinationConversationId: _detail.destinationConversationId, selectedManagedService: _detail.selectedManagedService, schedule: _detail.schedule, lastAutomaticOccurrence: null, lastFiring: null, capabilities: _detail.capabilities };
 const _firing = { firingId: "firing-1", routineId: "routine-1", routineRevision: 2, trigger: RoutineFiringTrigger.Manual, disposition: RoutineFiringDisposition.Preparing, scheduledSlot: null, reason: null };
 const _historyItem = { firingId: "firing-1", routineRevision: 2, trigger: RoutineFiringTrigger.Manual, disposition: RoutineFiringDisposition.Completed, scheduledSlot: null, createdAt: "2026-09-01T00:00:00.000Z", finishedAt: "2026-09-01T00:01:00.000Z", reason: null, runTerminalReason: "success" as const, resultConversationId: "conversation-2", actualCost: null };
+const _proposal = { proposalRef: "proposal-1", sourceConversationId: "conversation-1", suggestion: { instruction: "Review the latest records.", schedule: _detail.schedule }, expiresAt: "2026-09-02T00:00:00.000Z", state: RoutineProposalStates.Pending };
 
-function _Gateway(get: ReturnType<typeof vi.fn>, post: ReturnType<typeof vi.fn>): OpenCraneRoutineGateway
+function _Gateway(get: ReturnType<typeof vi.fn>, post: ReturnType<typeof vi.fn>, remove = vi.fn()): OpenCraneRoutineGateway
 {
-	TestBed.configureTestingModule({ providers: [OpenCraneRoutineGateway, { provide: ControlPlaneApiService, useValue: { client: { GET: get, POST: post } } }] });
+	TestBed.configureTestingModule({ providers: [OpenCraneRoutineGateway, { provide: ControlPlaneApiService, useValue: { client: { GET: get, POST: post, DELETE: remove } } }] });
 	return TestBed.inject(OpenCraneRoutineGateway);
 }
 
@@ -42,7 +44,9 @@ describe("OpenCraneRoutineGateway", function _GatewaySuite()
 			.mockResolvedValueOnce(_Ok({ items: [_listItem], limit: 20 }))
 			.mockResolvedValueOnce(_Ok({ routine: _detail }))
 			.mockResolvedValueOnce(_Ok({ items: [_historyItem], limit: 20 }))
-			.mockResolvedValueOnce(_Ok({ destinationConversationId: "conversation-1", audienceChoices: _detail.audienceChoices, managedServiceChoices: [_detail.selectedManagedService] }));
+			.mockResolvedValueOnce(_Ok({ destinationConversationId: "conversation-1", audienceChoices: _detail.audienceChoices, managedServiceChoices: [_detail.selectedManagedService] }))
+			.mockResolvedValueOnce(_Ok(_proposal));
+		const remove = vi.fn().mockResolvedValue(_Ok({ ..._proposal, state: RoutineProposalStates.Cancelled }));
 		const post = vi.fn()
 			.mockResolvedValueOnce(_Ok({ schedule: _detail.schedule, calculatedAt: "2026-09-01T00:00:00.000Z", nextOccurrences: ["2026-09-02T00:00:00.000Z", "2026-09-03T00:00:00.000Z", "2026-09-04T00:00:00.000Z", "2026-09-05T00:00:00.000Z", "2026-09-06T00:00:00.000Z"] }))
 			.mockResolvedValueOnce(_Ok({ routine: _routine }, 201))
@@ -51,7 +55,7 @@ describe("OpenCraneRoutineGateway", function _GatewaySuite()
 			.mockResolvedValueOnce(_Ok({ routine: _routine }))
 			.mockResolvedValueOnce(_Ok({ routine: _routine }))
 			.mockResolvedValueOnce(_Ok({ firing: _firing }));
-		const gateway = _Gateway(get, post);
+		const gateway = _Gateway(get, post, remove);
 		const query = { limit: 20, cursor: "opaque-token" };
 		const control = { expectedLifecycleRevision: 3, idempotencyKey: "key-1" };
 
@@ -59,8 +63,10 @@ describe("OpenCraneRoutineGateway", function _GatewaySuite()
 		await gateway.read("routine-1");
 		await gateway.firings("routine-1", query);
 		await gateway.creationOptions("conversation-1");
+		await gateway.proposal("proposal-1");
+		await gateway.cancelProposal("proposal-1");
 		await gateway.preview(_detail.schedule);
-		await gateway.create({ destinationConversationId: "conversation-1", audienceParticipantRefs: ["self"], selectedManagedServiceId: "service-1", schedule: _detail.schedule, instruction: "Review the latest records.", idempotencyKey: "key-1" });
+		await gateway.create({ destinationConversationId: "conversation-1", audienceParticipantRefs: ["self"], selectedManagedServiceId: "service-1", schedule: _detail.schedule, instruction: "Review the latest records.", proposalRef: "proposal-1", idempotencyKey: "key-1" });
 		await gateway.revise("routine-1", { expectedRevision: 2, expectedLifecycleRevision: 3, schedule: _detail.schedule, instruction: "Review the latest records.", idempotencyKey: "key-2" });
 		await gateway.pause("routine-1", control);
 		await gateway.resume("routine-1", control);
@@ -71,6 +77,9 @@ describe("OpenCraneRoutineGateway", function _GatewaySuite()
 		expect(get).toHaveBeenNthCalledWith(2, "/me/routines/{routineId}", { params: { path: { routineId: "routine-1" } }, signal: undefined });
 		expect(get).toHaveBeenNthCalledWith(3, "/me/routines/{routineId}/firings", { params: { path: { routineId: "routine-1" }, query }, signal: undefined });
 		expect(get).toHaveBeenNthCalledWith(4, "/me/routines/creation-options", { params: { query: { destinationConversationId: "conversation-1" } }, signal: undefined });
+		expect(get).toHaveBeenNthCalledWith(5, "/me/routines/proposals/{proposalRef}", { params: { path: { proposalRef: "proposal-1" } }, signal: undefined });
+		expect(remove).toHaveBeenCalledWith("/me/routines/proposals/{proposalRef}", { params: { path: { proposalRef: "proposal-1" } }, signal: undefined });
+		expect(post).toHaveBeenNthCalledWith(2, "/me/routines", expect.objectContaining({ body: expect.objectContaining({ proposalRef: "proposal-1" }) }));
 		expect(post).toHaveBeenNthCalledWith(1, "/me/routines/schedule-preview", expect.objectContaining({ body: { schedule: _detail.schedule } }));
 		expect(post).toHaveBeenNthCalledWith(3, "/me/routines/{routineId}/revise", expect.objectContaining({ body: expect.objectContaining({ expectedRevision: 2 }) }));
 		expect(post).toHaveBeenNthCalledWith(7, "/me/routines/{routineId}/run-now", expect.objectContaining({ body: control }));
@@ -93,7 +102,8 @@ describe("OpenCraneRoutineGateway", function _GatewaySuite()
 	{
 		const get = vi.fn();
 		const post = vi.fn();
-		const gateway = _Gateway(get, post);
+		const remove = vi.fn();
+		const gateway = _Gateway(get, post, remove);
 		const controller = new AbortController();
 		controller.abort();
 		const control = { expectedLifecycleRevision: 3, idempotencyKey: "key-1" };
@@ -102,6 +112,8 @@ describe("OpenCraneRoutineGateway", function _GatewaySuite()
 			() => gateway.read("routine-1", controller.signal),
 			() => gateway.firings("routine-1", undefined, controller.signal),
 			() => gateway.creationOptions("conversation-1", controller.signal),
+			() => gateway.proposal("proposal-1", controller.signal),
+			() => gateway.cancelProposal("proposal-1", controller.signal),
 			() => gateway.preview(_detail.schedule, controller.signal),
 			() => gateway.create({ destinationConversationId: "conversation-1", audienceParticipantRefs: ["self"], selectedManagedServiceId: "service-1", schedule: _detail.schedule, instruction: "Review the latest records.", idempotencyKey: "key-1" }, controller.signal),
 			() => gateway.revise("routine-1", { expectedRevision: 2, expectedLifecycleRevision: 3, schedule: _detail.schedule, instruction: "Review the latest records.", idempotencyKey: "key-2" }, controller.signal),
@@ -116,6 +128,7 @@ describe("OpenCraneRoutineGateway", function _GatewaySuite()
 
 		expect(get).not.toHaveBeenCalled();
 		expect(post).not.toHaveBeenCalled();
+		expect(remove).not.toHaveBeenCalled();
 	});
 
 	it("rejects a successful read bound to another routine", async function _RejectsMismatchedReadIdentity()
@@ -130,6 +143,13 @@ describe("OpenCraneRoutineGateway", function _GatewaySuite()
 		const gateway = _Gateway(vi.fn().mockResolvedValue(_Ok({ destinationConversationId: "conversation-2", audienceChoices: _detail.audienceChoices, managedServiceChoices: [_detail.selectedManagedService] })), vi.fn());
 
 		await expect(gateway.creationOptions("conversation-1")).rejects.toMatchObject({ kind: RoutineGatewayErrorKinds.InvalidResponse });
+	});
+
+	it("rejects a proposal bound to another opaque reference", async function _RejectsMismatchedProposalIdentity()
+	{
+		const gateway = _Gateway(vi.fn().mockResolvedValue(_Ok({ ..._proposal, proposalRef: "proposal-2" })), vi.fn());
+
+		await expect(gateway.proposal("proposal-1")).rejects.toMatchObject({ kind: RoutineGatewayErrorKinds.InvalidResponse });
 	});
 
 	it("rejects successful lifecycle definitions bound to another routine", async function _RejectsMismatchedDefinitionIdentity()

@@ -15813,6 +15813,11 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 200
+                  },
+                  "proposalRef": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
                   }
                 }
               }
@@ -16114,6 +16119,514 @@
           },
           "409": {
             "description": "The saved revision, lifecycle state or idempotency key conflicts with this command."
+          },
+          "503": {
+            "description": "A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation."
+          }
+        }
+      }
+    },
+    "/me/routines/proposals/{proposalRef}": {
+      "get": {
+        "operationId": "getRoutineProposal",
+        "summary": "Read a routine proposal",
+        "tags": [
+          "Routines"
+        ],
+        "parameters": [
+          {
+            "name": "proposalRef",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Opaque routine proposal reference from the requester notification."
+          }
+        ],
+        "description": "Returns decrypted suggestion content only to the original requester while current source-conversation access remains valid. A database-clock expiry is committed before return.",
+        "responses": {
+          "200": {
+            "description": "Current requester-owned proposal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "proposalRef",
+                        "sourceConversationId",
+                        "suggestion",
+                        "expiresAt",
+                        "state"
+                      ],
+                      "properties": {
+                        "proposalRef": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "sourceConversationId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "suggestion": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "instruction",
+                            "schedule"
+                          ],
+                          "properties": {
+                            "instruction": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 20000
+                            },
+                            "schedule": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "expression",
+                                "timezone"
+                              ],
+                              "properties": {
+                                "expression": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "timezone": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "expiresAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "state": {
+                          "const": "pending"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "proposalRef",
+                        "sourceConversationId",
+                        "suggestion",
+                        "expiresAt",
+                        "state",
+                        "acceptedRoutineId"
+                      ],
+                      "properties": {
+                        "proposalRef": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "sourceConversationId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "suggestion": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "instruction",
+                            "schedule"
+                          ],
+                          "properties": {
+                            "instruction": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 20000
+                            },
+                            "schedule": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "expression",
+                                "timezone"
+                              ],
+                              "properties": {
+                                "expression": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "timezone": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "expiresAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "state": {
+                          "const": "accepted"
+                        },
+                        "acceptedRoutineId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "proposalRef",
+                        "sourceConversationId",
+                        "suggestion",
+                        "expiresAt",
+                        "state"
+                      ],
+                      "properties": {
+                        "proposalRef": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "sourceConversationId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "suggestion": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "instruction",
+                            "schedule"
+                          ],
+                          "properties": {
+                            "instruction": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 20000
+                            },
+                            "schedule": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "expression",
+                                "timezone"
+                              ],
+                              "properties": {
+                                "expression": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "timezone": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "expiresAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "state": {
+                          "enum": [
+                            "cancelled",
+                            "expired"
+                          ]
+                        }
+                      }
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "state"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path or request body does not satisfy the routine command contract."
+          },
+          "401": {
+            "description": "A current authenticated Principal and authentication instant are required."
+          },
+          "404": {
+            "description": "The routine or another protected resource is unavailable to this caller."
+          },
+          "503": {
+            "description": "A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation."
+          }
+        }
+      },
+      "delete": {
+        "operationId": "cancelRoutineProposal",
+        "summary": "Cancel a routine proposal",
+        "tags": [
+          "Routines"
+        ],
+        "parameters": [
+          {
+            "name": "proposalRef",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Opaque routine proposal reference from the requester notification."
+          }
+        ],
+        "description": "Closes a pending proposal without creating a routine, or returns the durable terminal winner after concurrent acceptance, cancellation or expiry.",
+        "responses": {
+          "200": {
+            "description": "Durable proposal state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "proposalRef",
+                        "sourceConversationId",
+                        "suggestion",
+                        "expiresAt",
+                        "state"
+                      ],
+                      "properties": {
+                        "proposalRef": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "sourceConversationId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "suggestion": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "instruction",
+                            "schedule"
+                          ],
+                          "properties": {
+                            "instruction": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 20000
+                            },
+                            "schedule": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "expression",
+                                "timezone"
+                              ],
+                              "properties": {
+                                "expression": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "timezone": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "expiresAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "state": {
+                          "const": "pending"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "proposalRef",
+                        "sourceConversationId",
+                        "suggestion",
+                        "expiresAt",
+                        "state",
+                        "acceptedRoutineId"
+                      ],
+                      "properties": {
+                        "proposalRef": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "sourceConversationId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "suggestion": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "instruction",
+                            "schedule"
+                          ],
+                          "properties": {
+                            "instruction": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 20000
+                            },
+                            "schedule": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "expression",
+                                "timezone"
+                              ],
+                              "properties": {
+                                "expression": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "timezone": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "expiresAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "state": {
+                          "const": "accepted"
+                        },
+                        "acceptedRoutineId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "proposalRef",
+                        "sourceConversationId",
+                        "suggestion",
+                        "expiresAt",
+                        "state"
+                      ],
+                      "properties": {
+                        "proposalRef": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "sourceConversationId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "suggestion": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "instruction",
+                            "schedule"
+                          ],
+                          "properties": {
+                            "instruction": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 20000
+                            },
+                            "schedule": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "expression",
+                                "timezone"
+                              ],
+                              "properties": {
+                                "expression": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "timezone": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "expiresAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "state": {
+                          "enum": [
+                            "cancelled",
+                            "expired"
+                          ]
+                        }
+                      }
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "state"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The path or request body does not satisfy the routine command contract."
+          },
+          "401": {
+            "description": "A current authenticated Principal and authentication instant are required."
+          },
+          "404": {
+            "description": "The routine or another protected resource is unavailable to this caller."
           },
           "503": {
             "description": "A routine dependency is unavailable or saved state failed validation. Read current state before retrying an uncertain mutation."

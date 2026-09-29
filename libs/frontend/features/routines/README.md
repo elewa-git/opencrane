@@ -19,6 +19,12 @@ The browser presents server-approved participants, assistants, command hints, pr
 links. It does not infer authority, decode cursors, calculate occurrences, or create routines from a
 typed conversation identifier. Standard creation starts from an open chat.
 
+A requester-only conversation proposal opens the same reviewed form through
+`/routines/new?proposalRef=...`. The route reads the authorized source conversation before loading
+creation choices, seeds only a Pending suggestion, and submits final human-edited values with the
+opaque reference. Accepted, cancelled, expired, unreadable, and access-lost proposals never
+activate or display protected suggestion values; explicit cancellation is a separate request.
+
 An uncertain mutation keeps its original retry key and payload until the person explicitly retries
 the same action or leaves the route. Aborting browser work prevents late UI changes; it does not
 claim that a server mutation was undone.

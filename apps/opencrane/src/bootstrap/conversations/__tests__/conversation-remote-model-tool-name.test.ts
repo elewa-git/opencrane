@@ -55,7 +55,7 @@ function _ModelSelectionHarness(callName: string)
 	const proposals = { admit: vi.fn(async function _Admit(selected: FrozenConversationComputerTurn)
 	{
 		const selection = selected.protocol.steps.at(-1)?.selection;
-		if (selection == null)
+		if (selection == null || selection.kind !== "mcp")
 			throw new Error("The tool must be selected before admission");
 		return { proposalId: selection.proposalId, outcome: ConversationToolProposalOutcomes.Existing };
 	}) };

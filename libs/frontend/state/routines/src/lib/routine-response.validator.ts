@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { RoutineFiringReasons } from "@opencrane/contracts";
+import { RoutineFiringReasons, RoutineProposalStates } from "@opencrane/contracts";
 
 import { AgentRunTerminalReasons, RoutineFiringDisposition, RoutineFiringTrigger, RoutineStatus, type RoutineCreationOptions, type RoutineDefinition, type RoutineDetails, type RoutineFiringPage, type RoutineListPage, type RoutineSchedulePreview } from "./routine-gateway.types";
 
@@ -16,6 +16,8 @@ const _Capabilities = z.object({ revise: z.boolean(), pause: z.boolean(), resume
 const _ListItem = z.object({ ..._Definition.shape, ownership: z.enum(["owner", "audience"]), destinationConversationId: _Identifier, selectedManagedService: _ManagedService, schedule: _Schedule, lastAutomaticOccurrence: z.string().datetime({ offset: true }).nullable(), lastFiring: _LastFiring.nullable(), capabilities: _Capabilities }).strict();
 const _Firing = z.object({ firingId: _Identifier, routineRevision: _Revision, trigger: z.nativeEnum(RoutineFiringTrigger), disposition: z.nativeEnum(RoutineFiringDisposition), scheduledSlot: z.string().datetime({ offset: true }).nullable(), createdAt: z.string().datetime({ offset: true }), finishedAt: z.string().datetime({ offset: true }).nullable(), reason: z.nativeEnum(RoutineFiringReasons).nullable(), runTerminalReason: z.nativeEnum(AgentRunTerminalReasons).nullable(), resultConversationId: _Identifier.nullable(), actualCost: z.object({ amount: z.string().min(1).max(64), currency: z.string().min(1).max(16) }).strict().nullable() }).strict();
 const _CommandFiring = z.object({ firingId: _Identifier, routineId: _Identifier, routineRevision: _Revision, trigger: z.nativeEnum(RoutineFiringTrigger), disposition: z.nativeEnum(RoutineFiringDisposition), scheduledSlot: z.string().datetime({ offset: true }).nullable(), reason: z.nativeEnum(RoutineFiringReasons).nullable() }).strict();
+const _ProposalBase = { proposalRef: _Identifier, sourceConversationId: _Identifier, suggestion: z.object({ instruction: z.string().min(1).max(20_000), schedule: _Schedule }).strict(), expiresAt: z.string().datetime({ offset: true }) };
+const _Proposal = z.union([z.object({ ..._ProposalBase, state: z.literal(RoutineProposalStates.Pending) }).strict(), z.object({ ..._ProposalBase, state: z.literal(RoutineProposalStates.Accepted), acceptedRoutineId: _Identifier }).strict(), z.object({ ..._ProposalBase, state: z.literal(RoutineProposalStates.Cancelled) }).strict(), z.object({ ..._ProposalBase, state: z.literal(RoutineProposalStates.Expired) }).strict()]);
 
 /** Validates one committed routine definition envelope. */
 export const ___RoutineDefinitionResponseSchema: z.ZodType<{ readonly routine: RoutineDefinition }> = z.object({ routine: _Definition }).strict();
@@ -37,3 +39,6 @@ export const ___RoutineCreationOptionsSchema: z.ZodType<RoutineCreationOptions> 
 
 /** Validates a normalized schedule preview. */
 export const ___RoutineSchedulePreviewSchema: z.ZodType<RoutineSchedulePreview> = z.object({ schedule: _Schedule, calculatedAt: z.string().datetime({ offset: true }), nextOccurrences: z.array(z.string().datetime({ offset: true })).length(5) }).strict();
+
+/** Validates one requester-only proposal projection and its state-specific fields. */
+export const ___RoutineProposalReadResponseSchema: z.ZodType<import("./routine-gateway.types").RoutineProposalReadResponse> = _Proposal;

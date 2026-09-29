@@ -3,7 +3,7 @@ import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/wo
 import type { ToolResultDeliveryPayload } from "@opencrane/backend/server/iam/authorization";
 
 import type { ConversationGeneratedFileContinuation } from "../tools/results/conversation-generated-file-result.types";
-import type { ConversationComputerPrivateModelReference } from "./conversation-computer-turn-protocol.types";
+import { ConversationComputerTurnToolKinds, type ConversationComputerPrivateModelReference } from "./conversation-computer-turn-protocol.types";
 import type { FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 
 /**
@@ -38,7 +38,7 @@ export interface ConversationComputerToolDeclaration
 }
 
 /** Saves one assistant/tool pair privately so ordered model history remains exact. */
-export interface ConversationComputerToolExchange
+export interface ConversationComputerToolExchangeBase
 {
 	/** Names the frozen conversation turn that owns this private content. */
 	readonly bootstrapId: string;
@@ -54,10 +54,6 @@ export interface ConversationComputerToolExchange
 	readonly modelInvocationFence: string;
 	/** Points to the encrypted declaration saved for this step. */
 	readonly declaration: ConversationComputerPrivateModelReference;
-	/** Names the proposal admitted for this model step. */
-	readonly proposalId: string;
-	/** Names the exact invocation that supplied the result. */
-	readonly toolInvocationId: string;
 	/** Binds the pair to the immutable tool delivery payload. */
 	readonly resultDigest: string;
 	/** Preserves the provider call ID, tool name, arguments and assistant content. */
@@ -65,6 +61,31 @@ export interface ConversationComputerToolExchange
 	/** Carries the private result and any final file-publication outcome to the next model. */
 	readonly resultContent: string;
 }
+
+/** Saves one MCP assistant/tool pair with its proposal and invocation identity. */
+export interface ConversationComputerMcpToolExchange extends ConversationComputerToolExchangeBase
+{
+	/** Selects MCP proposal and delivery authority. */
+	readonly kind: `${ConversationComputerTurnToolKinds.Mcp}`;
+	/** Names the proposal admitted for this model step. */
+	readonly proposalId: string;
+	/** Names the exact invocation that supplied the result. */
+	readonly toolInvocationId: string;
+}
+
+/** Saves one request_routine assistant/tool pair without manufacturing MCP coordinates. */
+export interface ConversationComputerRequestRoutineExchange extends ConversationComputerToolExchangeBase
+{
+	/** Selects the scheduling-owned proposal path. */
+	readonly kind: `${ConversationComputerTurnToolKinds.RequestRoutine}`;
+	/** Names the opaque proposal created for later human review. */
+	readonly proposalRef: string;
+	/** Preserves the database-clock expiry returned by scheduling. */
+	readonly expiresAt: string;
+}
+
+/** One closed private exchange projected into the provider's existing call/result history shape. */
+export type ConversationComputerToolExchange = ConversationComputerMcpToolExchange | ConversationComputerRequestRoutineExchange;
 
 /**
  * Retains encrypted content under references derived from its ordered model reservation.

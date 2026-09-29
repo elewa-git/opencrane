@@ -100,6 +100,7 @@ function _Authorities(admission: RunAdmissionRepository, currentExecutionAuthori
 		approvedPersona: { load: async function _LoadPersona() { return loaded({ personaId: null, personaRevisionId: null }); } },
 		conversationContext: { load: async function _LoadConversation(command) { return loaded({ messageIds: [command.requestIdempotencyKey] }); } },
 		preferenceFacts: { load: async function _LoadPreferences() { return loaded([]); } },
+		firstPartyCapabilities: { load: async function _LoadFirstPartyCapabilities() { return loaded([]); } },
 		memoryScope: { load: async function _LoadMemory() { return loaded({ memoryQueryPolicy: { scope: "none" }, datasetId: null }); } },
 		toolPolicy: { load: async function _LoadTools() { return loaded({ modelDefinitionId: "model-1", modelRoute: { alias: "target" }, mcpTools: [], skillRevisionIds: [], artifactRevisionIds: [] }); } },
 		skillEligibility: { load: async function _LoadSkills() { return loaded(null); } },

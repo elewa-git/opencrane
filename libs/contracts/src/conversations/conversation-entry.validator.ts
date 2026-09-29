@@ -7,7 +7,7 @@
  */
 import { z } from "zod";
 import { MessageStates } from "@opencrane/models/conversations";
-import { ConversationA2UIOperations, ConversationApprovalLogPhases, ConversationArtifactLogPhases, ConversationEntryAudiences, ConversationEntryProvenance, ConversationLogKinds, ConversationLogToolKinds, ConversationMemoryLogOperations, ConversationMemoryLogPhases, ConversationModelLogPhases, ConversationRunLogPhases, ConversationToolCallLogPhases } from "./conversation-entry-categories.types";
+import { ConversationA2UIOperations, ConversationApprovalLogPhases, ConversationArtifactLogPhases, ConversationEntryAudiences, ConversationEntryProvenance, ConversationLogKinds, ConversationLogToolKinds, ConversationMemoryLogOperations, ConversationMemoryLogPhases, ConversationModelLogPhases, ConversationRoutineProposalLogPhases, ConversationRunLogPhases, ConversationToolCallLogPhases } from "./conversation-entry-categories.types";
 
 import { ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageActivations, ConversationMessageContentBlockKinds, type ConversationEntry } from "./conversation-entry.types";
 
@@ -63,6 +63,7 @@ const _LogEntrySchema = z.discriminatedUnion("logKind", [
 	z.object({ ..._LogEntryBase, logKind: z.literal(ConversationLogKinds.Artifact), artifactId: _IdentifierSchema, artifactRevisionId: _IdentifierSchema.nullable(), phase: z.nativeEnum(ConversationArtifactLogPhases) }).strict(),
 	z.object({ ..._LogEntryBase, logKind: z.literal(ConversationLogKinds.Memory), operation: z.nativeEnum(ConversationMemoryLogOperations), phase: z.nativeEnum(ConversationMemoryLogPhases) }).strict(),
 	z.object({ ..._LogEntryBase, logKind: z.literal(ConversationLogKinds.Approval), approvalId: _IdentifierSchema, action: _IdentifierSchema, phase: z.nativeEnum(ConversationApprovalLogPhases) }).strict(),
+	z.object({ ..._LogEntryBase, logKind: z.literal(ConversationLogKinds.RoutineProposal), proposalRef: _IdentifierSchema, phase: z.nativeEnum(ConversationRoutineProposalLogPhases) }).strict(),
 ]);
 const _A2UIEntrySchema = z.discriminatedUnion("operation", [
 	z.object({ ..._EntryBase, kind: z.literal(ConversationEntryKinds.A2UI), surfaceId: _IdentifierSchema, a2uiSchemaVersion: _IdentifierSchema, operation: z.literal(ConversationA2UIOperations.Replace), payloadRef: _IdentifierSchema, payloadDigest: _IdentifierSchema }).strict(),

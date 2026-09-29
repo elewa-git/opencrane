@@ -53,9 +53,7 @@ export function _RecordConversationTurnResult(turn: FrozenConversationComputerTu
 /** Encodes the public saved-reservation fields for SQL tests using the real Kurrent adapter. */
 export function _ConversationTurnRequest(turn: FrozenConversationComputerTurn, reservation: Omit<ConversationComputerTurnModelReservation, "requestDigest" | "historyDigest" | "compiledInputDigest">): ConversationComputerTurnModelReservation
 {
-	const history = turn.protocol.steps.flatMap(step => step.result === null ? [] : [{ ordinal: step.reservation.ordinal,
-		proposalId: step.result.proposalId, toolInvocationId: step.result.toolInvocationId,
-		resultDigest: step.result.resultDigest, exchange: step.result.exchange }]);
+	const history = turn.protocol.steps.flatMap(step => step.result === null ? [] : [step.result]);
 	const { invocationFence, ...limits } = reservation;
 	const facts = { ...limits, compiledInputDigest: turn.compile.digest, historyDigest: ___DigestCanonicalJson(history as unknown as JsonValue) };
 	const requestDigest = ___DigestCanonicalJson({ bootstrapId: turn.bootstrapId, runId: turn.compile.runId,

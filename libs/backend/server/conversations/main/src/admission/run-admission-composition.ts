@@ -11,6 +11,7 @@ import { PrismaPromptCompilerRepository, PrismaPromptCompilerUnitOfWork } from "
 import { SessionAssemblyOutcomes } from "@opencrane/backend/agents/execution/inputs";
 import { VerifiedConversationPromptMessageRepository } from "@opencrane/backend/agents/execution/inputs";
 import type { ExecutionSubjectAuthority } from "@opencrane/backend/agents/execution/inputs";
+import type { FirstPartyCapabilitySelectionSource, FirstPartyToolDefinitionResolver } from "@opencrane/backend/agents/execution/inputs";
 import { PrismaRunAdmissionUnitOfWork, RunAdmissionConcurrencyGate, RunAdmissionConcurrencyOutcomes, RunAdmissionMessageInputModes } from "@opencrane/backend/agents/execution/runs";
 import { AesGcmConversationPrivatePayloadCipher } from "@opencrane/backend/server/conversations/history";
 import { ConversationComputerHistory } from "@opencrane/backend/server/conversations/computers";
@@ -35,7 +36,7 @@ import type { ConversationRunExecutionSubjectAuthorityFactory, ConversationRunHi
  * Called by: the OpenCrane process entrypoint before it creates the private computer router.
  * @see _CreateConversationRunAdmission for capacity and transaction sequencing.
  */
-export function _CreateProductionConversationRunAdmission(prisma: ConstructorParameters<typeof PrismaRunAdmissionUnitOfWork>[0], history: HistoryStore, keyringPath: string, documentAuthorities: ConversationPromptDocumentAuthorityFactory, documentContent: ConversationPromptDocumentContentReader, policy: RunAdmissionConcurrencyPolicy, logger: Logger): ConversationComputerRunAdmissionPort
+export function _CreateProductionConversationRunAdmission(prisma: ConstructorParameters<typeof PrismaRunAdmissionUnitOfWork>[0], history: HistoryStore, keyringPath: string, documentAuthorities: ConversationPromptDocumentAuthorityFactory, documentContent: ConversationPromptDocumentContentReader, policy: RunAdmissionConcurrencyPolicy, logger: Logger, firstPartyCapabilities?: FirstPartyCapabilitySelectionSource, firstPartyTools?: FirstPartyToolDefinitionResolver): ConversationComputerRunAdmissionPort
 {
 	const authorities = _CreateConversationRunAuthorities(history, _CreateHumanMembershipEvidenceConfig());
 	const cipher = AesGcmConversationPrivatePayloadCipher.fromDocument(_ReadConversationPrivatePayloadKeyring(keyringPath));
@@ -48,14 +49,14 @@ export function _CreateProductionConversationRunAdmission(prisma: ConstructorPar
 	}
 	const compilers: ConversationRunInputCompilerRepositoryFactory = {
 		prepare: function _PrepareDocuments(command) { return documents.prepare(_DocumentCommand(command)); },
-		create: function _CreateCompiler(command, prepared, transaction) { return new PrismaPromptCompilerRepository(transaction, _CreateMessages(command, prepared, transaction), command.computer.siloId); },
+		create: function _CreateCompiler(command, prepared, transaction) { return new PrismaPromptCompilerRepository(transaction, _CreateMessages(command, prepared, transaction), command.computer.siloId, firstPartyTools); },
 		compile: function _CompileIdempotent(command, prepared, snapshot)
 		{
-			const compiler = new PrismaPromptCompilerUnitOfWork(prisma, function _CreateIdempotentMessages(transaction) { return _CreateMessages(command, prepared, transaction); });
+			const compiler = new PrismaPromptCompilerUnitOfWork(prisma, function _CreateIdempotentMessages(transaction) { return _CreateMessages(command, prepared, transaction); }, firstPartyTools);
 			return compiler.compile(snapshot, snapshot.attempt);
 		},
 	};
-	return _CreateConversationRunAdmission(prisma, authorities.executionSubjects, authorities.histories, compilers, policy, logger);
+	return _CreateConversationRunAdmission(prisma, authorities.executionSubjects, authorities.histories, compilers, policy, logger, firstPartyCapabilities);
 }
 
 /** Convert a server-resolved computer command into document preparation coordinates. */
@@ -118,7 +119,7 @@ function _CreateConversationRunAuthorities(history: HistoryStore, membership: Hu
 }
 
 /** Compose one process-wide admission queue around the canonical run and snapshot transaction owner. */
-export function _CreateConversationRunAdmission(prisma: ConstructorParameters<typeof PrismaRunAdmissionUnitOfWork>[0], executionSubjects: ConversationRunExecutionSubjectAuthorityFactory, histories: ConversationRunHistoryAdmissionReaderFactory, compilers: ConversationRunInputCompilerRepositoryFactory, policy: RunAdmissionConcurrencyPolicy, logger: Logger): ConversationComputerRunAdmissionPort
+export function _CreateConversationRunAdmission(prisma: ConstructorParameters<typeof PrismaRunAdmissionUnitOfWork>[0], executionSubjects: ConversationRunExecutionSubjectAuthorityFactory, histories: ConversationRunHistoryAdmissionReaderFactory, compilers: ConversationRunInputCompilerRepositoryFactory, policy: RunAdmissionConcurrencyPolicy, logger: Logger, firstPartyCapabilities?: FirstPartyCapabilitySelectionSource): ConversationComputerRunAdmissionPort
 {
 	const concurrency = new RunAdmissionConcurrencyGate(policy);
 	const persistence = new PrismaRunAdmissionUnitOfWork(prisma, undefined, logger);
@@ -145,7 +146,7 @@ export function _CreateConversationRunAdmission(prisma: ConstructorParameters<ty
 			{
 				const currentPreparation = await compilers.prepare(command);
 				prepared = currentPreparation;
-				const authorities = __CreatePrismaSessionAssemblyAuthorities(persistence, executionSubjects.create(command), histories.create(command));
+				const authorities = __CreatePrismaSessionAssemblyAuthorities(persistence, executionSubjects.create(command), histories.create(command), undefined, firstPartyCapabilities);
 				return await __AssembleRunInputSnapshot(admission, authorities, async function _CompileBeforeCommit(transaction, value)
 				{
 					compiled = await __CompileRunInput(value.snapshot, value.snapshot.attempt, compilers.create(command, currentPreparation, transaction.prisma as Prisma.TransactionClient));

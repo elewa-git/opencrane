@@ -13,7 +13,9 @@ export enum ConversationWorkspaceTranscriptEntryKinds
 	/** A server-attested tool lifecycle fact with no participant action. */
 	ToolActivity = "tool-activity",
 	/** The latest read-only A2UI display, without message or action authority. */
-	A2uiDisplay = "a2ui-display"
+	A2uiDisplay = "a2ui-display",
+	/** A server-attested routine proposal that the requester may open for review. */
+	RoutineProposal = "routine-proposal"
 }
 
 /** Display-safe stream state and its available reconnect interaction. */
@@ -64,5 +66,18 @@ export interface ConversationWorkspaceTranscriptA2uiEntry
 	readonly display: ConversationA2uiDisplayPresentation;
 }
 
+/** Renders one requester-only routine proposal without copying its suggestion into chat history. */
+export interface ConversationWorkspaceTranscriptRoutineProposalEntry
+{
+	/** Selects the routine-proposal status-row anatomy. */
+	readonly kind: ConversationWorkspaceTranscriptEntryKinds.RoutineProposal;
+	/** Stable history entry key used only for Angular tracking. */
+	readonly id: string;
+	/** Fixed participant-facing readiness copy. */
+	readonly status: ConversationStatusPresentation;
+	/** Opaque scheduling reference passed only to the named review route. */
+	readonly proposalRef: string;
+}
+
 /** Ordered, display-safe rows accepted by the selected conversation transcript. */
-export type ConversationWorkspaceTranscriptEntry = ConversationWorkspaceTranscriptMessageEntry | ConversationWorkspaceTranscriptToolEntry | ConversationWorkspaceTranscriptA2uiEntry;
+export type ConversationWorkspaceTranscriptEntry = ConversationWorkspaceTranscriptMessageEntry | ConversationWorkspaceTranscriptToolEntry | ConversationWorkspaceTranscriptA2uiEntry | ConversationWorkspaceTranscriptRoutineProposalEntry;

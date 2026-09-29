@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { RoutineFiringReasons } from "@opencrane/contracts";
+import { RoutineFiringReasons, RoutineProposalStates } from "@opencrane/contracts";
 import { RoutineFiringDisposition, RoutineFiringTrigger, RoutineStatus } from "@opencrane/models/agents";
 
 import { RoutineCommandConflictError, RoutineCommandUnavailableError, RoutineCommandValidationError } from "../../routine-command.errors";
@@ -31,6 +31,8 @@ function _Authority(): RoutineHttpAuthority
 		firings: vi.fn().mockResolvedValue({ items: [{ firingId: "firing-1", routineRevision: 2, trigger: RoutineFiringTrigger.Manual, disposition: RoutineFiringDisposition.Preparing, scheduledSlot: null, createdAt: "2026-09-27T08:00:00.000Z", finishedAt: null, reason: null, runTerminalReason: null, resultConversationId: null, actualCost: null, taskId: "private-task" } as never], limit: 20, requesterSubjectId: "private-subject" } as never),
 		creationOptions: vi.fn().mockResolvedValue({ destinationConversationId: "conversation-source", audienceChoices: [], managedServiceChoices: [] }),
 		preview: vi.fn().mockResolvedValue({ schedule: { expression: "0 8 * * *", timezone: "UTC" }, calculatedAt: "2026-09-27T08:00:00.000Z", nextOccurrences: ["2026-09-28T08:00:00.000Z", "2026-09-29T08:00:00.000Z", "2026-09-30T08:00:00.000Z", "2026-10-01T08:00:00.000Z", "2026-10-02T08:00:00.000Z"] }),
+		readProposal: vi.fn().mockResolvedValue({ proposalRef: "proposal-1", sourceConversationId: "conversation-source", suggestion: { instruction: "Prepare a summary.", schedule: { expression: "0 8 * * *", timezone: "UTC" } }, expiresAt: "2026-09-28T08:00:00.000Z", state: RoutineProposalStates.Pending }),
+		cancelProposal: vi.fn().mockResolvedValue({ proposalRef: "proposal-1", sourceConversationId: "conversation-source", suggestion: { instruction: "Prepare a summary.", schedule: { expression: "0 8 * * *", timezone: "UTC" } }, expiresAt: "2026-09-28T08:00:00.000Z", state: RoutineProposalStates.Cancelled }),
 	};
 }
 
@@ -98,6 +100,21 @@ describe("routine HTTP router", function _Suite()
 		expect(authority.preview).toHaveBeenCalledWith(expect.objectContaining({ schedule: { expression: "0 8 * * *", timezone: "UTC" } }));
 		expect(JSON.stringify(list.body)).not.toContain("private-subject");
 		expect(JSON.stringify(firings.body)).not.toContain("private-task");
+	});
+
+	it("reads and cancels requester-only proposals before dynamic routine identifiers", async function _ProposalRoutes()
+	{
+		const authority = _Authority();
+		const fixture = _App(authority);
+
+		const read = await request(fixture.app).get("/proposals/proposal-1").expect(200).expect("cache-control", "no-store");
+		const cancelled = await request(fixture.app).delete("/proposals/proposal-1").expect(200).expect("cache-control", "no-store");
+
+		expect(authority.readProposal).toHaveBeenCalledWith(expect.objectContaining({ proposalRef: "proposal-1", caller: expect.objectContaining({ principalId: "principal-1" }) }));
+		expect(authority.cancelProposal).toHaveBeenCalledWith(expect.objectContaining({ proposalRef: "proposal-1", caller: expect.objectContaining({ principalId: "principal-1" }) }));
+		expect(read.body.state).toBe(RoutineProposalStates.Pending);
+		expect(cancelled.body.state).toBe(RoutineProposalStates.Cancelled);
+		expect(JSON.stringify(read.body)).not.toContain("principal-1");
 	});
 
 	it("rejects missing authentication, invalid authentication instants and body-owned identity", async function _Authentication()

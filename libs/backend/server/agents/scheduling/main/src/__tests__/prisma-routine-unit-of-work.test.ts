@@ -22,7 +22,7 @@ describe("PrismaRoutineUnitOfWork", function _Suite()
 		const authorization = vi.fn();
 		const managedGrants = vi.fn();
 		const tasks = _TaskAdmission();
-		const unit = new PrismaRoutineUnitOfWork({ $transaction: transact } as unknown as PrismaClient, { authorization, managedGrants, taskAdmission: tasks as unknown as RoutineTaskAdmissionPort<Prisma.TransactionClient>, conversations: vi.fn().mockReturnValue({}), managedServices: vi.fn().mockReturnValue({}), runHistory: vi.fn().mockReturnValue({}) });
+		const unit = new PrismaRoutineUnitOfWork({ $transaction: transact } as unknown as PrismaClient, { authorization, managedGrants, taskAdmission: tasks as unknown as RoutineTaskAdmissionPort<Prisma.TransactionClient>, conversations: vi.fn().mockReturnValue({}), managedServices: vi.fn().mockReturnValue({}), runHistory: vi.fn().mockReturnValue({}), proposalSources: vi.fn().mockReturnValue({}) });
 		await unit.recordRunProgress({ siloId: "silo-1", routineId: "routine-1", routineRevision: 1, firingId: "firing-1", runId: "run-1", attempt: 1, inputSnapshotDigest: `sha256:${"1".repeat(64)}`, sourceState: AgentRunStates.Running, sourceFinishedAt: null, sourceTerminalReason: null, sourceCancellationCommandId: null, sourceCancellationCommandDigest: null, disposition: RoutineFiringDisposition.Waiting, resultReference: null, resultDigest: null });
 		expect(transact).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: undefined, maxWait: undefined });
 		expect(transaction.agentRoutineFiring.updateMany).toHaveBeenCalledOnce();
@@ -47,6 +47,7 @@ describe("PrismaRoutineUnitOfWork", function _Suite()
 			conversations: vi.fn().mockReturnValue({}),
 			managedServices: vi.fn().mockReturnValue({}),
 			runHistory: vi.fn().mockReturnValue({}),
+			proposalSources: vi.fn().mockReturnValue({}),
 		});
 
 		await expect(unit.read({ caller: _CALLER, routineId: "missing-routine" })).resolves.toBeNull();

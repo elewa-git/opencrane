@@ -4,8 +4,8 @@ import type { Prisma } from "@prisma/client";
 
 import { PrismaRoutineRunHistoryRepository } from "@opencrane/backend/agents/execution/runs";
 import { PrismaManagedAgentConversationResolver } from "@opencrane/backend/server/agents/agent-services";
-import { PrismaRoutineOccurrenceActivationRepository, PrismaRoutineOccurrencePreparationRepository, PrismaRoutineOccurrenceRunAdmissionRepository, PrismaRoutineUnitOfWork, RoutineAuthority, RoutineInstructionCipherAdapter, RoutinePageCursorCipherAdapter, RoutineScheduleStartupRecovery, RoutineTaskAdmission, __CreateRoutineWorkflowDefinitions, type PrismaRoutineUnitOfWorkDependencies, type RoutineIdFactory } from "@opencrane/backend/server/agents/scheduling";
-import { PrismaRoutineComputerActivationProjectionUnitOfWork, PrismaRoutineConversationDirectoryRepository, PrismaRoutineOccurrencePreparationUnitOfWork, PrismaRoutineRunAdmissionUnitOfWork, PrismaRoutineTurnCompilerUnitOfWork, RoutineComputerActivation, RoutineOccurrenceHistory } from "@opencrane/backend/server/conversations";
+import { PrismaRoutineOccurrenceActivationRepository, PrismaRoutineOccurrencePreparationRepository, PrismaRoutineOccurrenceRunAdmissionRepository, PrismaRoutineUnitOfWork, RoutineAuthority, RoutineInstructionCipherAdapter, RoutinePageCursorCipherAdapter, RoutineProposalCipherAdapter, RoutineScheduleStartupRecovery, RoutineTaskAdmission, __CreateRoutineWorkflowDefinitions, type PrismaRoutineUnitOfWorkDependencies, type RoutineIdFactory } from "@opencrane/backend/server/agents/scheduling";
+import { PrismaRequestRoutineProposalSourceAuthority, PrismaRoutineComputerActivationProjectionUnitOfWork, PrismaRoutineConversationDirectoryRepository, PrismaRoutineOccurrencePreparationUnitOfWork, PrismaRoutineRunAdmissionUnitOfWork, PrismaRoutineTurnCompilerUnitOfWork, RoutineComputerActivation, RoutineOccurrenceHistory } from "@opencrane/backend/server/conversations";
 import { ConversationComputerHistory } from "@opencrane/backend/server/conversations/computers";
 import { ConversationHistoryAuthority } from "@opencrane/backend/server/conversations/history";
 import { PrismaAuthorizationAuthority, PrismaManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
@@ -44,6 +44,12 @@ function _CommandReceiptId(): string
 	return randomUUID();
 }
 
+/** Creates an opaque inactive proposal identifier. */
+function _ProposalId(): string
+{
+	return randomUUID();
+}
+
 /**
  * Registers both routine tasks and shares their scheduling, history, authorization and recovery
  * adapters. Product rules remain in their owning libraries; this function only selects adapters.
@@ -60,6 +66,7 @@ export function _CreateRoutineWorkflowComposition(context: RoutineWorkflowExecut
 		conversations: function _Conversations(transaction) { return new PrismaRoutineConversationDirectoryRepository(transaction); },
 		managedServices: function _ManagedServices(transaction) { return new PrismaManagedAgentConversationResolver(transaction, agentDependencies); },
 		runHistory: function _RunHistory(transaction) { return new PrismaRoutineRunHistoryRepository(transaction); },
+		proposalSources: function _ProposalSources(transaction) { return new PrismaRequestRoutineProposalSourceAuthority(transaction); },
 		taskAdmission,
 	};
 	const persistence = new PrismaRoutineUnitOfWork(prisma, persistenceDependencies);
@@ -80,11 +87,11 @@ export function _CreateRoutineWorkflowComposition(context: RoutineWorkflowExecut
 	const runDependencies = { prisma, routines: runRoutines, occurrences: occurrenceHistory, history, cipher, membership, workflows };
 	const runAdmission = new PrismaRoutineRunAdmissionUnitOfWork(runDependencies);
 	const ids: RoutineIdFactory = { routineId: _RoutineId, revisionId: _RevisionId, commandReceiptId: _CommandReceiptId, firingId: _FiringId, conversationId: _ConversationId };
-	const authority = new RoutineAuthority(persistence, instructionCipher, ids, new RoutinePageCursorCipherAdapter(cipher));
+	const authority = new RoutineAuthority(persistence, instructionCipher, ids, new RoutinePageCursorCipherAdapter(cipher), new RoutineProposalCipherAdapter(cipher), { proposalId: _ProposalId });
 	const definitions = __CreateRoutineWorkflowDefinitions({ persistence, cipher: instructionCipher, preparation, activation, runAdmission, ids });
 	workflows.register(definitions.schedule);
 	workflows.register(definitions.occurrence);
 	const dispatcher = new PrismaRoutineTurnCompilerUnitOfWork(prisma, { routines: runRoutines, occurrences: occurrenceHistory, history, cipher, membership, maximumTurnCostUsdMicros: profile.maximumTurnCostUsdMicros });
 	const startup = new RoutineScheduleStartupRecovery(persistence, siloId);
-	return { authority, dispatcher, progress: persistence, startup };
+	return { authority, dispatcher, progress: persistence, proposals: authority, proposalNotifications: persistence, startup };
 }

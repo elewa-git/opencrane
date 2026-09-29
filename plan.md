@@ -24,7 +24,8 @@ remain open until their source, focused tests, SQL tests and live qualification 
   that joined subchat, but receives no implicit access to the parent conversation or private
   resources. Current conversation access and explicit resource grants still govern every read.
 - **Per-tool approval settings:** replace the proposed read-only certification flow with simple
-  per-tool human controls: **Allow automatically**, **Ask**, or **Block**. The interaction should
+  human controls per installed connection and tool: **Allow automatically**, **Ask**, or **Block**.
+  The user confirmed this scope on 28 September. The interaction should
   use OpenCrane's own style and icons, with the supplied image serving only as a visual reference.
   Execution permissions, owner identity and revocation remain separate; automatic mode is an
   explicit human policy choice and never means every tool is allowed. Selecting **Allow
@@ -45,6 +46,248 @@ unresolved numeric live-test-cap and first-write/Always-policy text only where t
 conflict. Historical evidence is retained below.
 
 ## Conversational routine proposals — execution wave
+
+### Work-in-progress publication — 29 September 2026
+
+The user explicitly requested publication of the local joined-proposal changes to draft #916.
+Publish this snapshot for review, not as a completed or merge-ready slice. The protected
+database-ownership correction remains unapproved and unapplied: the known 16 Prisma-boundary
+errors, fresh PostgreSQL proof, visual-reference approval and live acceptance remain open.
+This publication does not waive those gates or authorize any deployment, live permission change,
+provider call or database mutation.
+
+The publication check reuses the independently reviewed backend and dispatch/UI manifests:
+the dispatch/UI aggregate is unchanged, and the sole backend-manifest difference is the already
+recorded enum documentation correction. No additional Critical/High publication finding or
+unrelated source file was found. The production UI build passed on the unchanged source on
+28 September; it is not live qualification. Release-baseline binding and whitespace checks pass.
+The live PR graph retains #908 → #910 → #914 → #915 → #916, with no predecessor absorbed,
+closed or retargeted.
+
+### Remaining frontend CI repairs — 28 September 2026
+
+Run `36352538223` completed with failure on head `274c111e191241dac04ec6c8f2bce62915f92d4b`.
+Database, KurrentDB, service-image and Cognee jobs passed. The remaining build job failed the
+production UI template check because the routine timezone select received a readonly array where
+PrimeNG requires mutable options, and the settings route-composition test exceeded its five-second
+cold-import allowance. These are distinct failures; the passing focused checks did not cover AOT
+template checking under the complete production build.
+
+The narrow PDF screenshot test also required a card taller than its scroll viewport to be fully
+visible at once. Its replacement proves top- and bottom-edge reachability, horizontal containment,
+the fixed shell and absence of document scrolling. The focused behavior checks pass without any
+header/style or reference-image changes; the unapproved screenshot mismatch remains visible.
+The timezone fix retains its readonly public input and creates a computed options copy inside the
+existing form. The route check retains its actual lazy imports and assertions, with a bounded
+ten-second allowance for that test alone. The five-file repair is independently reviewed and
+published to draft #916 at `9580a0a5da9f94fd2ac924c5797a21b3ec071a05`. All 47 owning routine
+tests, 24 application tests, the production Angular AOT build and three focused PDF/browser
+behavior checks pass. Routine lint, source style, module-growth and diff checks pass; integrated
+source and component post-diff review found no remaining findings. The committed binary diff
+matches `158f3608f34d0f94ea8264531028126408a1f6bb9ab1b132d418271c47d79b9f`, and all five
+committed file hashes match the reviewed manifest. The frozen routine-proposal WIP is excluded.
+
+Live stack snapshot `72f1427b92fe7ffe99f8053b77bf0ae0700cbb7d3ef8cf9b84550d35a952f377`
+preserves #908 → #910 → #914 → #915 → #916. The direct-parent range now contains 440 files;
+the cumulative develop range contains 579 files and merges cleanly in a read-only simulation
+against `10abd0ef6182f36bec13d8f1358e43b15ead7cd5`. Remote CI on the new head remains a
+separate gate, as does human approval of missing/changed visual references. No baseline was
+accepted or replaced, no provider call ran, and no deployment or VM was changed in this wave.
+
+The new-head run `36391647059` now passes both PostgreSQL authority and KurrentDB history jobs,
+plus the agent-controller, artifact-scanner, MCP file-generator, LiteLLM, PostgreSQL and
+skill-authoring image checks. API/generated-client verification also passes. Build/test/lint,
+Storybook and Cognee were still running at the bounded 28 September checkpoint; k3d was skipped.
+These results do not claim the full pipeline or a real-account journey has passed.
+
+The same run finished with failure at 07:41:56 UTC. Cognee's provider-contract job passed.
+Storybook still failed its reference-image comparisons. Build/test/lint failed only the
+conversation test target: two `_RecoverWriteFailure` cases in
+`conversation-computer-model-progression.test.ts` expected two recovery-entry calls but
+observed three; 1,038 other conversation tests passed. The cases cover a saved-status recovery
+and a caught late response. Their cause is under focused diagnosis; no assertion has been
+weakened and no production behavior change is claimed yet.
+
+The focused reproduction confirmed both failures. The authority's `start()` already awaited
+run recovery and routine progress, then the workflow redundantly called `advance()` and repeated
+those acknowledgements. The three-file repair returns the recovered unavailable outcome only
+after existing causation and receipt checks, preserving failed-write retry and stale-work refusal.
+All 81 focused checks and the complete 107-file, 1,043-test conversation suite pass locally;
+local listener restrictions required a scoped-permission rerun. Style and diff checks pass.
+Independent integrated review reports no findings. The repair changes no schema, permission,
+provider dispatch or saved-run format, and excludes all paused proposal work.
+
+It is published to draft #916 at `70b5aacc087f7c09c6294021e22ea5e6675fddf6`; all three
+reviewed, staged and committed file hashes match, with binary diff
+`b589a20a13081e74aaa0944345483eed5cb5bb8ef2f581d4c9bba7ad5c2e07d6`.
+Live stack snapshot `b8260b06f1bd04e062086577f599987ac3be7a3e5b2312b38c7559409ebf6172`
+preserves #908 → #910 → #914 → #915 → #916. The incremental range has 441 files and the
+cumulative develop range has 580; the non-checkout merge simulation is clean against
+`10abd0ef6182f36bec13d8f1358e43b15ead7cd5`. New-head CI run `36394602431` is queued;
+the local pass is not a remote or live-journey claim. No paid provider call, deployment or VM ran.
+
+The self-contained visual review gallery is available locally at
+`.nx/routine-ci-repair/VISUAL-GALLERY.html`: 80 missing references, 31 before/after/diff changes,
+and one historical PDF timeout, matching the 112 failed cases in run `36350716879` exactly.
+Its 173 embedded PNGs are fixture evidence from `7f46cc1b`, not captures of the new repair or
+live product proof. Human baseline approval remains required; no baseline has been changed.
+
+### Shared-assistant hard-budget preflight — 28 September 2026
+
+The independent architecture preflight passes for a coordinated production slice, recorded in
+`.nx/routine-ci-repair/EUR-HARD-BUDGET-PREFLIGHT.md`. The user's shared-assistant scope leaves
+personal-agent charging unchanged. Managed roots require an explicit authorized paying group,
+which children inherit; versioned operator-owned EUR tariffs provide admission bounds and
+missing/unusable prices refuse paid dispatch. These are implementation decisions within the
+accepted policy, not additional questions for the user.
+
+The slice must join monthly accounts, per-physical-attempt reservations, model usage, root
+admission, real model dispatch and system-owned descendant cancellation. A full worst-case
+reservation must not falsely cancel a cheap first call; settled/terminal-unknown exhaustion or
+a lowered hard cap must still stop unclaimed work. Unknown paid attempts cannot fund retries.
+The preflight does not implement this feature. Its schema/baseline/recovery risk review remains
+required, and the existing saved-run safety pause must not be bypassed through budget work.
+
+### Autonomous delegation reachability — 28 September 2026
+
+A separate read-only call-site check at committed head
+`9580a0a5da9f94fd2ac924c5797a21b3ec071a05`, excluding the dirty proposal overlay, confirms
+`PrismaRunTreeRepository` has no production construction or callers: root initialization,
+child allocation, tree reservation and closure are exercised only by its tests. The owning
+execution-runs README already identifies the missing integration. Ordinary AgentRun/snapshot
+admission and model dispatch are wired, but they do not create run-tree accounts or expose
+autonomous delegation to the model. The existing human-mediated group-child workflow is not
+autonomous delegation and does not supply child budget allocation or result brokering.
+
+D1 is therefore source-foundation-only, not a completed product capability or live-qualified
+journey. Production root/child admission, selected child context, narrower capabilities,
+durable child results and root-driven recursive cancellation remain required, together with
+the shared budget/deadline. No arbitrary nesting, spawn or parallel-execution caps are allowed.
+The budget and delegation implementation must join these real execution paths; tests of the
+currently unused repository are not evidence of production enforcement.
+
+### Current-candidate qualification repairs
+
+Exact-head CI on `7f46cc1b289e63ae86d583805e695a8fa64df5d0` exposed a malformed PL/pgSQL
+comparison in the existing fresh baseline and missing routine-calendar runtime dependencies in
+three images. The isolated repair parenthesizes the existing `CASE` expression without changing
+storage shape, updates the release baseline digest, and declares the already-pinned `cron-parser`
+and `luxon` dependencies in agent-controller, mcp-file-generator and artifact-scanner. Their app-owned
+regression checks now cover those declarations. No snapshot-v4 or proposal-schema change is included.
+
+Local authority regeneration/verification and release binding pass. Agent-controller's six tests
+and Helm contract, mcp-file-generator's image contract, and artifact-scanner's two tests and image
+contract pass; lock entries, shell syntax, style and diff checks pass. Actual fresh PostgreSQL
+application and container image smokes still require the repaired commit's remote CI. Existing
+Storybook screenshot mismatches remain under investigation; no visual baseline was replaced.
+
+The nine-file repair is independently reviewed and published at draft #916 head
+`274c111e191241dac04ec6c8f2bce62915f92d4b`. Its exact reviewed, staged and committed binary diff
+matches `5f0476fddc0662e0ada87d07c568010dd9e8475b77546143135195be17aa703c`; unfinished proposal
+work remains uncommitted. Live stack snapshot
+`fbd6a5451a3b1a81c7da3f3697740d308cd657bfa7685077fed8fd0278758e00` preserves
+#908 → #910 → #914 → #915 → #916. The direct-parent range contains 438 files and the cumulative
+develop range contains 577 files; the latter has a clean merge simulation against
+`10abd0ef6182f36bec13d8f1358e43b15ead7cd5`. No predecessor was merged, retargeted or closed, and
+no provider call, deployment or local VM ran. The €5 paid-test envelope remains unspent in these
+source waves. These are repair-publication facts, not remote qualification or MVP acceptance.
+
+Current Storybook artifact `10942356703` from run `36350716879` confirms 112 failures:
+80 missing reference screenshots (including all 18 routine stories), 31 changed screenshots and
+one timeout in `conversations-workspace-shell--pdf-informed-answer-narrow`; 118 stories pass.
+The tools controls changed to PrimeNG buttons, and the narrow child header now contains the
+Schedule routine action. These are current candidate images requiring deliberate visual review,
+not permission to replace every baseline. The downloaded artifact is 37,325,966 bytes and the
+extracted evidence is approximately 41 MB; no local VM or full rebuild was needed for diagnosis.
+The repair commit's subsequent single CI snapshot, around 21:44–21:45 UTC on 27 September,
+confirms success for PostgreSQL fresh-baseline/application and authority suites (job `108714232658`),
+KurrentDB fresh-baseline/history proofs (`108714232710`), and image smokes for agent-controller
+(`108714232807`), artifact-scanner (`108714232810`) and mcp-file-generator (`108714232824`), all in
+run `36352538223` on the exact repair head. Build/test/lint, Cognee and Storybook were still running;
+k3d was skipped. This is actual remote database/image proof for those repaired paths, not a whole
+pipeline pass or a live scheduled-user journey.
+
+The next read-only CI checkpoint confirms Cognee's pinned provider contract also passed in job
+`108714232730` at 21:46:48 UTC, while build/test/lint and Storybook were still running. This is
+provider-contract proof, not completion of the remember/recall/correct/forget real-account journey.
+
+A focused narrow PDF replay against the existing Storybook build reproduced the remaining layout
+predicate failure without a rebuild or baseline edit: the PDF card is 112.25 px high while its
+scroll owner is 107.8125 px high. Scroll position remained stable across later samples. Full-card
+containment therefore cannot pass in that measured render; whether to revise the narrow layout or
+its intended scrolling assertion remains a visual-contract decision, not a proven network flake.
+The temporary loopback renderer was stopped after measurement.
+
+### Joined proposal implementation
+
+The callable prerequisite is published at draft #916 head
+`7f46cc1b289e63ae86d583805e695a8fa64df5d0`. The joined proposal implementation now uses that
+immutable wave base and live stack snapshot
+`7f866732392d5745a5fc93c9264f9432d71d455384dae4b1dc5dfd3c57e74ec5`; develop and the direct parent
+remain unchanged. Execution-input snapshot selection and scheduling-owned encrypted proposal
+persistence are independent implementation lanes. Their shared schema/client/baseline generation
+is serialized, followed by first-party dispatch, requester notification and existing-form integration.
+The target is the working human-reviewed journey, not another dormant-only contract publication.
+
+The edit safety gate initially paused snapshot storage/recovery/digest and database-schema changes
+pending explicit confirmation of the v4 compatibility break. On 28 September the user approved A:
+the source-only v4 snapshot and routine-proposal changes may proceed, with older saved snapshots
+refused and a fresh test installation required instead of preserving old test-run continuity. No
+live database, deployment or backup change is included in this approval. The joined candidate still
+requires completed persistence, dispatch, human review, validation and independent review before
+publication; the approval itself is not implementation or test evidence.
+
+The same reply settled B: Auto / Ask / Block is scoped to each installed connection and tool.
+Ask is the default; Auto may approve the first permitted write immediately, while current IAM,
+connection/tool access and final-claim revocation checks remain mandatory. The policy work follows
+the accepted capability-owned handoff in `.nx/routine-ci-repair/AUTO-TOOL-POLICY-HANDOFF.md` and
+shares the serialized schema/baseline lane rather than racing the proposal changes.
+
+The resumed source checkpoint starts from published head
+`70b5aacc087f7c09c6294021e22ea5e6675fddf6`; live stack inspection passes with snapshot
+`a962da0fccf9789d1b952a30668c3495886246292d912a1f9f5d3e7b10557ba3` and unchanged review order
+#908 → #910 → #914 → #915 → #916. Exact-head Actions run `36394602431` has completed: build,
+test and lint passed at 08:11:07 UTC on 28 September, including the repaired conversations target.
+Database authority, KurrentDB/history, API/client, Cognee and image jobs also passed; k3d was
+skipped. Storybook remains failed on screenshot comparisons (119 passed, 112 failed); its logs
+show no separate behavior or accessibility failure. Those references remain unapproved. None of
+these results qualifies the uncommitted joined-proposal work or a live MVP journey.
+
+Local joined-proposal work now connects snapshot v4 and encrypted proposal persistence to a distinct
+`request_routine` dispatch arm, a requester-only notification, the existing prefilled review form,
+and authenticated accept/cancel routes. Backend source review found no critical, high or medium
+findings. Component review passed. Independent UI review found two cancellation races; both now
+have independently verified fixes and regression coverage. The final dispatch/application source
+review also passed, excluding the known blocked database ownership correction. Focused results
+include 191 run tests (13 skipped), 310 scheduling tests, 42 scheduling
+contract tests, 54 routine UI tests, 11 routine state tests, 16 API adapter tests and 143 workspace
+tests. These counts describe separate suites, not a single end-to-end run.
+
+The full conversation rerun passed 1,054 of 1,055 tests; the single review-router socket failure
+passed its isolated eight-test rerun. Dispatch/protocol/source/notification, application composition
+and shared validator checks also passed. The omitted-dispatcher case now fails closed and has a
+regression test. The generated API client and website API document are synchronized, and the website
+build passed. The first production UI compilation failed with an esbuild Go deadlock. One bounded
+retry with task-local `NG_BUILD_MAX_WORKERS=1` passed on the unchanged source overlay at
+09:19:51 UTC on 28 September, producing fresh output in this worktree. There were no source, package
+or configuration edits. This verifies production compilation, not the live user journey; the
+earlier build failure remains recorded rather than being recast as a source defect or a proven
+upstream cause.
+
+Publication is held at the protected database-boundary gate. A registry edit for three new
+routine-proposal responsibilities was rejected by the tool safety reviewer and was not retried.
+The current checker reports 16 errors. Architecture review requires separating two transaction-bound
+repositories from their root-client units of work and registering five exact owners/constructions,
+without broad exemptions. Explicit user approval for that narrow correction is requested; the
+earlier scheduling registry additions remain independently reviewed and unchanged. No new commit,
+push, live database change or paid provider call occurred during this checkpoint. Fresh PostgreSQL,
+visual approval and live acceptance remain distinct unfinished gates.
+
+Remote qualification on `7f46cc1b289e63ae86d583805e695a8fa64df5d0`, Actions run `36350716879`,
+has failed the fresh-baseline application step in both database and KurrentDB jobs. Three image
+smokes and Storybook also report failure; the run is still in progress. Exact failed-job logs are
+being retrieved before assigning repairs. These failures invalidate any inference of deployability
+from the local focused checks; no whole-candidate CI pass is claimed.
 
 This wave starts from published draft #916 head
 `0d73e53b86e478f68b330d46fb3c87b92c93124f`. Live stack inspection preserves

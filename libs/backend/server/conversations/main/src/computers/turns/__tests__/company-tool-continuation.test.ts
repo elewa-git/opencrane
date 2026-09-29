@@ -68,7 +68,7 @@ async function _AssertCompleted(f: Awaited<ReturnType<typeof _CompanyHarness>>)
 	expect(turn.protocol.steps.map(step => step.reservation.authorityExpiresAtEpochMs)).toEqual(Array(9).fill(turn.budget.wallClockDeadlineEpochMs));
 	expect(turn.protocol.accounting).toEqual({ reservedModelCalls: 9, reservedCompletionTokens: 32_000, reservedToolInvocations: 8, toolResultCyclesFed: 8 });
 	expect(requests[8].history.map((exchange: { readonly call: { readonly arguments: string } }) => JSON.parse(exchange.call.arguments).query)).toEqual(["discover-records", ...Array.from({ length: 7 }, (_, index) => `private-result-${index + 1}`)]);
-	expect(new Set(turn.protocol.steps.slice(0, 8).map(step => step.selection!.toolInvocationId)).size).toBe(8);
+	expect(new Set(turn.protocol.steps.slice(0, 8).map(step => step.selection?.kind === "mcp" ? step.selection.toolInvocationId : null)).size).toBe(8);
 	expect(f.toolFlags).toMatchObject({ executions: 8, acknowledgements: 8 });
 	expect(f.proposals.admit).toHaveBeenCalledTimes(8);
 	expect(f.credentials.issueOnce).toHaveBeenCalledOnce();

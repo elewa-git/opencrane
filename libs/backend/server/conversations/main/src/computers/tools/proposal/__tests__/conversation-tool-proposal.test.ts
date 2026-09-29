@@ -105,7 +105,7 @@ describe("one frozen conversation tool proposal", function _Suite()
 	{
 		const f = _Fixture();
 		const prepared = _PrepareConversationToolProposal(f.turn, f.candidate, f.proposal);
-		const selected = { ...f.turn, protocol: { ...f.turn.protocol, state: ConversationComputerTurnProtocolStates.ToolPending, steps: [{ ...f.turn.protocol.steps[0]!, state: ConversationComputerTurnProtocolStates.ToolPending, selection: { ordinal: 1, modelInvocationFence: "model-1", proposalId: prepared.proposalId, toolInvocationId: prepared.proposalId, requestFingerprint: prepared.requestFingerprint, declaration: { payloadRef: "payload", ciphertextDigest: `sha256:${"1".repeat(64)}` } }, result: null }] } } as FrozenConversationComputerTurn;
+		const selected = { ...f.turn, protocol: { ...f.turn.protocol, state: ConversationComputerTurnProtocolStates.ToolPending, steps: [{ ...f.turn.protocol.steps[0]!, state: ConversationComputerTurnProtocolStates.ToolPending, selection: { kind: "mcp" as const, ordinal: 1, modelInvocationFence: "model-1", proposalId: prepared.proposalId, toolInvocationId: prepared.proposalId, requestFingerprint: prepared.requestFingerprint, declaration: { payloadRef: "payload", ciphertextDigest: `sha256:${"1".repeat(64)}` } }, result: null }] } } as FrozenConversationComputerTurn;
 		const advanced = { ...f.candidate, binding: { ...f.candidate.binding, expectedRevision: 3n } };
 		expect(_PrepareConversationToolProposal(selected, advanced, f.proposal)).toEqual(prepared);
 	});
@@ -113,7 +113,7 @@ describe("one frozen conversation tool proposal", function _Suite()
 	{
 		const f = _Fixture();
 		const prepared = _PrepareConversationToolProposal(f.turn, f.candidate, f.proposal);
-		const selected = { ...f.turn, protocol: { ...f.turn.protocol, state: ConversationComputerTurnProtocolStates.ToolPending, steps: [{ ...f.turn.protocol.steps[0]!, state: ConversationComputerTurnProtocolStates.ToolPending, selection: { ordinal: 1, modelInvocationFence: "model-1", proposalId: prepared.proposalId, toolInvocationId: prepared.proposalId, requestFingerprint: prepared.requestFingerprint, declaration: { payloadRef: "payload", ciphertextDigest: `sha256:${"1".repeat(64)}` } }, result: null }] } } as FrozenConversationComputerTurn;
+		const selected = { ...f.turn, protocol: { ...f.turn.protocol, state: ConversationComputerTurnProtocolStates.ToolPending, steps: [{ ...f.turn.protocol.steps[0]!, state: ConversationComputerTurnProtocolStates.ToolPending, selection: { kind: "mcp" as const, ordinal: 1, modelInvocationFence: "model-1", proposalId: prepared.proposalId, toolInvocationId: prepared.proposalId, requestFingerprint: prepared.requestFingerprint, declaration: { payloadRef: "payload", ciphertextDigest: `sha256:${"1".repeat(64)}` } }, result: null }] } } as FrozenConversationComputerTurn;
 		const stale = { ...f.candidate, binding: { ...f.candidate.binding, expectedRevision: 1n } };
 		expect(() => _PrepareConversationToolProposal(selected, stale, f.proposal)).toThrow("invalid");
 		const advanced = { ...f.candidate, binding: { ...f.candidate.binding, expectedRevision: 3n } };

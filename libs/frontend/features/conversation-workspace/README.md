@@ -75,6 +75,11 @@ retry, or execution control. Repeated facts for one call coalesce at the newest 
 tool-call coordinates, result coordinates, arguments, nor result payloads enter the presentation. This same
 history contract applies to personal Agent sessions and shared company-child chats; personal Recent activity
 remains a separate private run index.
+
+A typed `routine_proposal` history log renders as a requester-facing **Routine proposal ready for
+review** status with one named **Review routine** link. The link carries only the opaque proposal
+reference to the existing routine-create route; the transcript never copies the suggestion,
+`detailsRef`, identity, audience, or permission data into browser navigation.
 Immutable artifact blocks render through the existing asset card only when the current authorized
 asset projection matches artifact id, artifact revision id, and message id. Missing or conflicting
 coordinates produce a non-actionable unavailable card rather than a filename-based join.

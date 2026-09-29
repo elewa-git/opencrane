@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, injec
 import { toSignal } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import { ButtonModule } from "primeng/button";
+import { RoutineProposalStates } from "@opencrane/contracts";
 
 import { ResourceFeedbackComponent, SectionHeadingComponent, SectionHeadingLevels } from "@opencrane/elements/ui";
 import { ROUTINE_SESSION } from "@opencrane/state/routines";
@@ -23,10 +24,13 @@ export class RoutineCreateRouteComponent
 	protected readonly store = inject(RoutineEditorStore);
 	private readonly _query = toSignal(this._route.queryParamMap, { initialValue: this._route.snapshot.queryParamMap });
 	protected readonly destination = computed(this._Destination.bind(this));
+	protected readonly proposalRef = computed(this._ProposalRef.bind(this));
+	protected readonly hasCreationContext = computed(() => this.destination() !== null || this.proposalRef() !== null);
 	private _generation = 0;
 	private readonly _destinationEffect = effect(this._DestinationChanged.bind(this));
 	protected readonly states = RoutineReadStates;
 	protected readonly headingLevel = SectionHeadingLevels.Page;
+	protected readonly proposalStates = RoutineProposalStates;
 
 	public constructor() { this._destroyRef.onDestroy(this._Destroyed.bind(this)); }
 
@@ -44,8 +48,24 @@ export class RoutineCreateRouteComponent
 	/** Returns to the originating chat when it remains a valid opaque coordinate. */
 	protected async cancel(): Promise<void>
 	{
-		const destination = this.destination();
+		const generation = this._generation;
+		const session = this._session();
+		const proposalPending = this.proposalRef() !== null && this.store.proposalState() === RoutineProposalStates.Pending;
+		const destination = this.store.destinationConversationId() ?? this.destination();
+		if (proposalPending && !(await this.store.cancelProposal()))
+			return;
+		if (generation !== this._generation || session !== this._session())
+			return;
 		await this._router.navigate(destination === null ? ["/routines"] : ["/chats", destination]);
+	}
+
+	/** Retries a failed proposal read or ordinary creation-options read without changing route input. */
+	protected retry(): void
+	{
+		if (this.proposalRef() !== null)
+			this.store.retryProposal();
+		else
+			this.store.retryOptions();
 	}
 
 	private _Destination(): string | null
@@ -54,7 +74,13 @@ export class RoutineCreateRouteComponent
 		return values.length === 1 ? _RouteCoordinate(values[0] ?? null) : null;
 	}
 
-	private _DestinationChanged(): void { this._generation += 1; this.store.startCreate(this.destination()); }
+	private _ProposalRef(): string | null
+	{
+		const values = this._query().getAll("proposalRef");
+		return values.length === 1 ? _RouteCoordinate(values[0] ?? null) : null;
+	}
+
+	private _DestinationChanged(): void { this._generation += 1; this.store.startCreate(this.destination(), this.proposalRef()); }
 
 	private _Destroyed(): void { this._generation += 1; }
 }

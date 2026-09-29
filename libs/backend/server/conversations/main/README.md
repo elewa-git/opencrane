@@ -39,6 +39,7 @@ signed-in participant ──► main ◄── HERE ──► history
 | `computers/turns/workflow/` | Absurd task admission, saved run receipt binding, durable waits, tool-result wakeups and generated-file outcome wakeups. |
 | `computers/turns/output/` | Validate complete read-only results, prepare adjacent answer/display entries, and compare the whole saved output receipt during recovery. |
 | `computers/turns/approval-notifications/` | Recheck the assigned participant and publish one receipt-backed requested-approval history fact before the durable wait. |
+| `request-routine/` | Derive the human requester from frozen run evidence, recheck the current interactive source, and publish one opaque requester-only routine-proposal history fact with receipt recovery. |
 | `computers/turns/tool-progress-notifications/` | Publish ordered requested/running facts with exact recovery receipts; history never grants permission to execute. |
 | `computers/tools/progress/` | Recheck saved admission and the current execution claim before exposing safe progress. |
 | `computers/turns/tool-result-notifications/` | Publish a terminal tool status and its private recovery receipt before the remaining model call is reserved. |
@@ -98,6 +99,7 @@ signed-in participant ──► main ◄── HERE ──► history
   rechecks current read access, the visible position and the encrypted payload coordinates in the
   caller's transaction. Later conversation entries do not invalidate an unchanged selected message.
 - Ordinary message activation atomically admits the existing Absurd turn task when it publishes an active lease. Routine activation saves only its lease and receipt; it must wait for root-run admission before a turn task exists. The turn workflow advances saved model, tool-result, continuation and completion state; the only Pod-facing turn route returns its lease-derived review credential.
+- A frozen `request_routine` declaration dispatches only through the complete first-party proposal composition. The server derives its interactive run, attempt, ordinal and original human requester; the model supplies only the validated instruction and schedule. Scheduling persists an encrypted, expiring proposal while conversation history records only its opaque reference and a constant requester-only summary. The proposal may outlive its source run for human review, but it never extends the run budget, model credential, lease or current execution authority.
 - Stop handling reloads the immutable causation message to derive its requester and never enters activation. Its Kurrent publisher gives final output and cancellation one checked turn-stream winner; cancellation commits the private receipt, safe interrupted log and active-turn settlement together.
   The turn store constructs and validates cancellation and settlement appends at the revision it
   decoded. The Stop publisher composes that pair with its receipt and log; it cannot substitute a

@@ -57,9 +57,9 @@ async function _Selected(f: ReturnType<typeof _Fixture>)
 {
 	const declaration = await f.custody.storeDeclaration(_TURN, _DECLARATION);
 	const proposalId = "61c1f1dc-0010-4f13-9c2f-d3841ffd6651";
-	const selection = { ordinal: 1, modelInvocationFence: _DECLARATION.modelInvocationFence, declaration, proposalId, toolInvocationId: proposalId, requestFingerprint: _DIGEST };
+	const selection = { kind: "mcp" as const, ordinal: 1, modelInvocationFence: _DECLARATION.modelInvocationFence, declaration, proposalId, toolInvocationId: proposalId, requestFingerprint: _DIGEST };
 	const turn: FrozenConversationComputerTurn = { ..._TURN, protocol: { ..._TURN.protocol, state: ConversationComputerTurnProtocolStates.ToolPending, revision: 2n, steps: [{ ..._TURN.protocol.steps[0]!, state: ConversationComputerTurnProtocolStates.ToolPending, selection, result: null }], accounting: { ..._TURN.protocol.accounting, reservedToolInvocations: 1 } } };
-	const exchange: ConversationComputerToolExchange = { bootstrapId: turn.bootstrapId, runId: turn.compile.runId, attempt: 1, compiledInputDigest: _DIGEST, ordinal: 1, modelInvocationFence: _DECLARATION.modelInvocationFence, declaration, proposalId, toolInvocationId: proposalId, resultDigest: _DIGEST, call: _DECLARATION.call, resultContent: "{\"order\":\"private-result-42\"}" };
+	const exchange: ConversationComputerToolExchange = { kind: "mcp", bootstrapId: turn.bootstrapId, runId: turn.compile.runId, attempt: 1, compiledInputDigest: _DIGEST, ordinal: 1, modelInvocationFence: _DECLARATION.modelInvocationFence, declaration, proposalId, toolInvocationId: proposalId, resultDigest: _DIGEST, call: _DECLARATION.call, resultContent: "{\"order\":\"private-result-42\"}" };
 	return { turn, exchange };
 }
 
@@ -67,7 +67,9 @@ async function _Selected(f: ReturnType<typeof _Fixture>)
 function _ResultReady(turn: FrozenConversationComputerTurn, reference: { readonly payloadRef: string; readonly ciphertextDigest: string }, exchange: ConversationComputerToolExchange): FrozenConversationComputerTurn
 {
 	const previous = turn.protocol.steps[0]!;
-	return { ...turn, protocol: { ...turn.protocol, state: ConversationComputerTurnProtocolStates.ResultReady, revision: 3n, steps: [{ state: ConversationComputerTurnProtocolStates.ResultReady, reservation: previous.reservation, selection: previous.selection!, result: { ordinal: exchange.ordinal, proposalId: exchange.proposalId, toolInvocationId: exchange.toolInvocationId, resultDigest: exchange.resultDigest, exchange: reference, authorityExpiresAtEpochMs: _NOW + 20_000 } }] } };
+	if (exchange.kind !== "mcp")
+		throw new Error("fixture requires MCP exchange");
+	return { ...turn, protocol: { ...turn.protocol, state: ConversationComputerTurnProtocolStates.ResultReady, revision: 3n, steps: [{ state: ConversationComputerTurnProtocolStates.ResultReady, reservation: previous.reservation, selection: previous.selection!, result: { kind: "mcp" as const, ordinal: exchange.ordinal, proposalId: exchange.proposalId, toolInvocationId: exchange.toolInvocationId, resultDigest: exchange.resultDigest, exchange: reference, authorityExpiresAtEpochMs: _NOW + 20_000 } }] } };
 }
 
 describe("conversation model encrypted custody", function _ModelCustody()

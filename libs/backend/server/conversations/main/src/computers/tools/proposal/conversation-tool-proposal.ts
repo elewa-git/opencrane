@@ -5,7 +5,7 @@ import { __ValidateDeferredToolArguments } from "@opencrane/backend/server/iam/a
 import { ___CloneCanonicalJson, ___DigestCanonicalJson } from "@opencrane/util";
 
 import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "../../turns/conversation-computer-turn.types";
-import { ConversationComputerTurnProtocolStates } from "../../turns/conversation-computer-turn-protocol.types";
+import { ConversationComputerTurnProtocolStates, ConversationComputerTurnToolKinds } from "../../turns/conversation-computer-turn-protocol.types";
 import { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
 import { ConversationToolProposalRefusals, type PreparedConversationToolProposal } from "./conversation-tool-proposal.types";
 
@@ -46,7 +46,7 @@ export function _PrepareConversationToolProposal(turn: FrozenConversationCompute
 	// output position. Current run, approval and lease checks still decide whether it may execute.
 	if (candidate.binding.expectedRevision < turn.binding.expectedRevision
 		|| savedSelection === null && candidate.binding.expectedRevision !== turn.binding.expectedRevision
-		|| savedSelection !== null && (savedSelection.proposalId !== proposalId || savedSelection.requestFingerprint !== requestFingerprint))
+		|| savedSelection !== null && (savedSelection.kind !== ConversationComputerTurnToolKinds.Mcp || savedSelection.proposalId !== proposalId || savedSelection.requestFingerprint !== requestFingerprint))
 		throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Invalid);
 	return { proposalId, tool, arguments: argumentsValue, argumentsDigest, assignmentDigest, requestFingerprint };
 }

@@ -2,7 +2,7 @@ import { Injectable, inject } from "@angular/core";
 import type { z } from "zod";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { ___RoutineCreationOptionsSchema, ___RoutineDefinitionResponseSchema, ___RoutineDetailsResponseSchema, ___RoutineFiringPageSchema, ___RoutineFiringResponseSchema, ___RoutineListPageSchema, ___RoutineSchedulePreviewSchema, RoutineGatewayError, RoutineGatewayErrorKinds, type RoutineControlCommand, type RoutineCreateCommand, type RoutineDefinition, type RoutineDetails, type RoutineFiring, type RoutineFiringPage, type RoutineFiringQuery, type RoutineGateway, type RoutineListPage, type RoutineListQuery, type RoutineReviseCommand, type RoutineSchedule, type RoutineSchedulePreview } from "@opencrane/state/routines";
+import { ___RoutineCreationOptionsSchema, ___RoutineDefinitionResponseSchema, ___RoutineDetailsResponseSchema, ___RoutineFiringPageSchema, ___RoutineFiringResponseSchema, ___RoutineListPageSchema, ___RoutineProposalReadResponseSchema, ___RoutineSchedulePreviewSchema, RoutineGatewayError, RoutineGatewayErrorKinds, type RoutineControlCommand, type RoutineCreateCommand, type RoutineDefinition, type RoutineDetails, type RoutineFiring, type RoutineFiringPage, type RoutineFiringQuery, type RoutineGateway, type RoutineListPage, type RoutineListQuery, type RoutineProposalReadResponse, type RoutineReviseCommand, type RoutineSchedule, type RoutineSchedulePreview } from "@opencrane/state/routines";
 
 type RoutineApiResult = { readonly data?: unknown; readonly response: Pick<Response, "status">; readonly error?: unknown };
 
@@ -41,6 +41,22 @@ export class OpenCraneRoutineGateway implements RoutineGateway
 	{
 		const result = await this._Read(() => this._api.client.GET("/me/routines/creation-options", { params: { query: { destinationConversationId } }, signal }), 200, ___RoutineCreationOptionsSchema, signal);
 		this._AssertIdentity(result.destinationConversationId, destinationConversationId);
+		return result;
+	}
+
+	/** Reads one requester-only proposal projection. */
+	public async proposal(proposalRef: string, signal?: AbortSignal): Promise<RoutineProposalReadResponse>
+	{
+		const result = await this._Read(() => this._api.client.GET("/me/routines/proposals/{proposalRef}", { params: { path: { proposalRef } }, signal }), 200, ___RoutineProposalReadResponseSchema, signal);
+		this._AssertIdentity(result.proposalRef, proposalRef);
+		return result;
+	}
+
+	/** Cancels one requester-owned proposal or returns its durable terminal winner. */
+	public async cancelProposal(proposalRef: string, signal?: AbortSignal): Promise<RoutineProposalReadResponse>
+	{
+		const result = await this._Read(() => this._api.client.DELETE("/me/routines/proposals/{proposalRef}", { params: { path: { proposalRef } }, signal }), 200, ___RoutineProposalReadResponseSchema, signal);
+		this._AssertIdentity(result.proposalRef, proposalRef);
 		return result;
 	}
 

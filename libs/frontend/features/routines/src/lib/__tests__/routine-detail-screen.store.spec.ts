@@ -150,7 +150,7 @@ function _Screen(gateway: RoutineGateway, session = signal<string | null>("sessi
 function _Gateway(overrides: Partial<RoutineGateway>): RoutineGateway
 {
 	const unavailable = vi.fn().mockRejectedValue(new Error("Unexpected gateway call"));
-	return { list: unavailable, read: unavailable, firings: unavailable, creationOptions: unavailable, preview: unavailable, create: unavailable, revise: unavailable, pause: unavailable, resume: unavailable, retire: unavailable, runNow: unavailable, ...overrides };
+	return { list: unavailable, read: unavailable, firings: unavailable, creationOptions: unavailable, proposal: unavailable, cancelProposal: unavailable, preview: unavailable, create: unavailable, revise: unavailable, pause: unavailable, resume: unavailable, retire: unavailable, runNow: unavailable, ...overrides };
 }
 
 async function _Settled(): Promise<void> { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); }

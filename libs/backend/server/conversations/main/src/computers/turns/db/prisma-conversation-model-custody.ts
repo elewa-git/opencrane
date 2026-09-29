@@ -6,6 +6,7 @@ import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma
 import type { ConversationComputerModelCustody, ConversationComputerToolDeclaration, ConversationComputerToolExchange } from "../conversation-computer-continuation.types";
 import { _ConversationToolDeclarationSchema, _ConversationToolExchangeSchema } from "../conversation-computer-continuation.validator";
 import type { ConversationComputerPrivateModelReference } from "../conversation-computer-turn-protocol.types";
+import { ConversationComputerTurnToolKinds } from "../conversation-computer-turn-protocol.types";
 import type { FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 import type { ConversationPrivatePayloadCipher } from "@opencrane/backend/server/conversations/history";
 
@@ -152,6 +153,17 @@ function _AssertExchange(turn: FrozenConversationComputerTurn, value: Conversati
 	const step = turn.protocol.steps.find(candidate => candidate.reservation.ordinal === value.ordinal);
 	const selection = step?.selection;
 	if (step === undefined || selection === null || selection === undefined || value.bootstrapId !== turn.bootstrapId || value.runId !== turn.compile.runId || value.attempt !== turn.compile.attempt || value.compiledInputDigest !== turn.compile.digest
-		|| value.modelInvocationFence !== step.reservation.invocationFence || value.proposalId !== selection.proposalId || value.toolInvocationId !== selection.toolInvocationId || step.result !== null && value.resultDigest !== step.result.resultDigest || value.declaration.payloadRef !== selection.declaration.payloadRef || value.declaration.ciphertextDigest !== selection.declaration.ciphertextDigest)
+		|| value.modelInvocationFence !== step.reservation.invocationFence || !_ExchangeMatchesSelection(value, selection) || step.result !== null && value.resultDigest !== step.result.resultDigest || value.declaration.payloadRef !== selection.declaration.payloadRef || value.declaration.ciphertextDigest !== selection.declaration.ciphertextDigest)
 		throw new Error("Conversation model exchange crossed its original tool selection");
+}
+
+/** Keeps encrypted custody on the same closed authority arm as its durable selection. */
+function _ExchangeMatchesSelection(value: ConversationComputerToolExchange, selection: import("../conversation-computer-turn-protocol.types").ConversationComputerTurnToolSelection): boolean
+{
+	if (value.kind !== selection.kind)
+		return false;
+	if (value.kind === ConversationComputerTurnToolKinds.Mcp && selection.kind === ConversationComputerTurnToolKinds.Mcp)
+		return value.proposalId === selection.proposalId && value.toolInvocationId === selection.toolInvocationId;
+	return value.kind === ConversationComputerTurnToolKinds.RequestRoutine && selection.kind === ConversationComputerTurnToolKinds.RequestRoutine
+		&& value.proposalRef === selection.proposalRef && value.expiresAt === selection.expiresAt && value.resultDigest === selection.resultDigest;
 }

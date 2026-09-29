@@ -57,7 +57,7 @@ export async function _ToolContinuationHarness(toolCount = 1, maxCompletionToken
 	const proposals = { admit: vi.fn(async function _Admit(turn: FrozenConversationComputerTurn)
 	{
 		const selection = turn.protocol.steps.at(-1)?.selection;
-		if (selection === null || selection === undefined)
+		if (selection === null || selection === undefined || selection.kind !== "mcp")
 			throw new Error("tool selection is missing");
 		if (!admitted.has(selection.proposalId))
 		{
@@ -82,7 +82,7 @@ export async function _ToolContinuationHarness(toolCount = 1, maxCompletionToken
 			if (flags.pending)
 				return { outcome: ConversationComputerToolResultOutcomes.Pending } as const;
 			const selection = turn.protocol.steps.at(-1)?.selection ?? [...turn.protocol.steps].reverse().find(step => step.result !== null)?.selection;
-			if (selection === null || selection === undefined)
+			if (selection === null || selection === undefined || selection.kind !== "mcp")
 				throw new Error("tool selection is missing");
 			return resultFor(selection);
 		}),
@@ -90,7 +90,7 @@ export async function _ToolContinuationHarness(toolCount = 1, maxCompletionToken
 		{
 			const saved = (await f.store.load(turn.bootstrapId))!;
 			const resultStep = [...saved.protocol.steps].reverse().find(step => step.result !== null);
-			if (resultStep === undefined || resultStep.result === null || turn.protocol.state !== ConversationComputerTurnProtocolStates.ModelReserved)
+			if (resultStep === undefined || resultStep.result === null || resultStep.selection.kind !== "mcp" || turn.protocol.state !== ConversationComputerTurnProtocolStates.ModelReserved)
 				throw new Error("acknowledgement requires durable continuation evidence");
 			const resultTurn = { ...turn, protocol: { ...saved.protocol, state: ConversationComputerTurnProtocolStates.ResultReady, steps: saved.protocol.steps.slice(0, -1) } } as FrozenConversationComputerTurn;
 			const result = await results.read(resultTurn);

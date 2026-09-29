@@ -18,12 +18,12 @@ function _Reservation(protocol: ConversationComputerTurnProtocolProjection, over
 
 function _Selection(ordinal = 1, overrides: Partial<ConversationComputerTurnToolSelection> = {}): ConversationComputerTurnToolSelection
 {
-	return { ordinal, modelInvocationFence: `00000000-0000-4000-8000-${String(ordinal).padStart(12, "0")}`, declaration: { payloadRef: `declaration-${ordinal}`, ciphertextDigest: _DIGEST_A }, proposalId: `proposal-${ordinal}`, toolInvocationId: `proposal-${ordinal}`, requestFingerprint: _DIGEST_B, ...overrides };
+	return { ordinal, modelInvocationFence: `00000000-0000-4000-8000-${String(ordinal).padStart(12, "0")}`, declaration: { payloadRef: `declaration-${ordinal}`, ciphertextDigest: _DIGEST_A }, proposalId: `proposal-${ordinal}`, toolInvocationId: `proposal-${ordinal}`, requestFingerprint: _DIGEST_B, ...overrides, kind: "mcp" };
 }
 
 function _Result(ordinal = 1, overrides: Partial<ConversationComputerTurnToolResult> = {}): ConversationComputerTurnToolResult
 {
-	return { ordinal, proposalId: `proposal-${ordinal}`, toolInvocationId: `proposal-${ordinal}`, resultDigest: _DIGEST_C, exchange: { payloadRef: `exchange-${ordinal}`, ciphertextDigest: _DIGEST_B }, authorityExpiresAtEpochMs: 1_850_000_000_000, ...overrides };
+	return { ordinal, proposalId: `proposal-${ordinal}`, toolInvocationId: `proposal-${ordinal}`, resultDigest: _DIGEST_C, exchange: { payloadRef: `exchange-${ordinal}`, ciphertextDigest: _DIGEST_B }, authorityExpiresAtEpochMs: 1_850_000_000_000, ...overrides, kind: "mcp" };
 }
 
 function _ToolCycle(): ConversationComputerTurnProtocolProjection
@@ -71,6 +71,20 @@ describe("ordered conversation turn protocol", function ()
 		{
 			_ReduceConversationComputerTurnProtocol(selected, { kind: ConversationComputerTurnProtocolEvents.ToolResultRecorded, result: _Result(2, { exchange: first.steps[0]!.result!.exchange, authorityExpiresAtEpochMs: 1_830_000_000_000 }) }, _BUDGET);
 		}).toThrow();
+	});
+
+	it("records request_routine receipts without manufacturing MCP proposal or invocation identifiers", function _RequestRoutineArm()
+	{
+		const open = _InitialConversationComputerTurnProtocol();
+		const reserved = _ReduceConversationComputerTurnProtocol(open, { kind: ConversationComputerTurnProtocolEvents.ModelReserved, reservation: _Reservation(open) }, _BUDGET);
+		const selection: ConversationComputerTurnToolSelection = { kind: "request_routine", ordinal: 1, modelInvocationFence: reserved.steps[0]!.reservation.invocationFence, declaration: { payloadRef: "declaration-routine", ciphertextDigest: _DIGEST_A }, proposalRef: "routine-proposal-1", expiresAt: "2028-01-01T00:00:00.000Z", resultDigest: _DIGEST_B };
+		const selected = _ReduceConversationComputerTurnProtocol(reserved, { kind: ConversationComputerTurnProtocolEvents.ToolSelected, selection }, _BUDGET);
+		const result: ConversationComputerTurnToolResult = { kind: "request_routine", ordinal: 1, proposalRef: selection.proposalRef, expiresAt: selection.expiresAt, resultDigest: selection.resultDigest, exchange: { payloadRef: "exchange-routine", ciphertextDigest: _DIGEST_C }, authorityExpiresAtEpochMs: 1_850_000_000_000 };
+		const ready = _ReduceConversationComputerTurnProtocol(selected, { kind: ConversationComputerTurnProtocolEvents.ToolResultRecorded, result }, _BUDGET);
+
+		expect(ready.steps[0]).toMatchObject({ selection: { kind: "request_routine", proposalRef: "routine-proposal-1" }, result: { kind: "request_routine", proposalRef: "routine-proposal-1" } });
+		expect(ready.steps[0]!.selection).not.toHaveProperty("toolInvocationId");
+		expect(ready.steps[0]!.result).not.toHaveProperty("proposalId");
 	});
 
 	it("rejects a tool selection that leaves no final model allowance", function ()

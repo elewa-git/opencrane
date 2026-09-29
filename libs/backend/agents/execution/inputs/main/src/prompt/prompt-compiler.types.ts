@@ -1,4 +1,4 @@
-import type { CompiledMcpToolDefinition, CompiledMessage, CompiledModelRoute, RunInputSnapshotMcpTool } from "@opencrane/contracts";
+import type { CompiledFirstPartyToolDefinition, CompiledMcpToolDefinition, CompiledMessage, CompiledModelRoute, RunInputFirstPartyCapabilitySelection, RunInputSnapshotMcpTool } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
 /**
@@ -51,6 +51,13 @@ export interface ConversationPromptMessageSource
 	load(messageIds: readonly string[]): Promise<readonly ConversationPromptMessageRead[]>;
 }
 
+/** Resolves digest-bound built-in capability coordinates without inventing post-admission tools. */
+export interface FirstPartyToolDefinitionResolver
+{
+	/** Return only descriptors whose revision and parameter-schema digest match the saved selections. */
+	resolve(selections: readonly RunInputFirstPartyCapabilitySelection[]): readonly CompiledFirstPartyToolDefinition[];
+}
+
 /** Control-plane repositories that resolve every immutable reference named by one run snapshot. */
 export interface PromptCompilerRepositories extends ConversationPromptMessageRepository
 {
@@ -64,6 +71,8 @@ export interface PromptCompilerRepositories extends ConversationPromptMessageRep
 	 * payload or its digest.
 	 */
 	loadToolDefinitions(mcpTools: readonly RunInputSnapshotMcpTool[]): Promise<readonly CompiledMcpToolDefinition[]>;
+	/** Resolve exactly the built-in capabilities that admission froze into this snapshot. */
+	loadFirstPartyToolDefinitions(selections: readonly RunInputFirstPartyCapabilitySelection[]): Promise<readonly CompiledFirstPartyToolDefinition[]>;
 	/** Resolve one-line availability summaries for the immutable artifact revisions offered to the run. */
 	loadArtifactSummaries(artifactRevisionIds: readonly string[]): Promise<readonly string[]>;
 	/** Resolve one-line availability summaries for the immutable skill revisions offered to the run. */

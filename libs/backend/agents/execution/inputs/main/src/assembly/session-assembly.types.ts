@@ -1,4 +1,4 @@
-import type { RunBudgetPolicy, RunInputSnapshotMcpTool } from "@opencrane/contracts";
+import type { RunBudgetPolicy, RunInputFirstPartyCapabilitySelection, RunInputSnapshotMcpTool } from "@opencrane/contracts";
 import type { InitialRunAuthority, RunAdmissionCommand, RunAdmissionMessageAuthor, RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { ExecutionSubject, PersonaRevisionId } from "@opencrane/models/agents";
 import type { MessageId } from "@opencrane/models/conversations";
@@ -130,6 +130,13 @@ export interface ProductResourceAuthorizationSource
 	load(command: SessionAssemblyCommand, executionSubject: ExecutionSubject, persona: ApprovedPersonaInput, memory: MemoryScopeInput, tools: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>;
 	/** Rechecks only current Conversation Use before an existing immutable snapshot is returned. */
 	verifyExisting(command: SessionAssemblyCommand, executionSubject: ExecutionSubject, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>;
+}
+
+/** Selects built-in capabilities only after the run's current product permissions have passed. */
+export interface FirstPartyCapabilitySelectionSource
+{
+	/** Return the closed capability coordinates to freeze, or deny without changing product state. */
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject, conversation: ConversationContextInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<readonly RunInputFirstPartyCapabilitySelection[]>>;
 }
 
 /** Effective run limits resolved from service, silo, and policy. */
@@ -471,6 +478,8 @@ export interface SessionAssemblyAuthorities
 	skillEligibility: SkillRevisionEligibilitySource;
 	/** Batch-checks current Use grants for every resource selected by the preceding sources. */
 	productAuthorization: ProductResourceAuthorizationSource;
+	/** Selects built-in capabilities after the subject, conversation, and product grants are current. */
+	firstPartyCapabilities: FirstPartyCapabilitySelectionSource;
 	/** Reads the run's token, turn, and deadline limits. */
 	budgetPolicy: BudgetPolicySource;
 	/** Loads one verified AgentIdentity-and-Principal subject before identity-scoped sources run. */

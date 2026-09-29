@@ -76,6 +76,20 @@ export enum ConversationComputerTurnUnavailableReasons
 	ToolResultUnavailable = "tool_result_unavailable",
 }
 
+/**
+ * Selects the authority that owns one durable model-selected operation.
+ *
+ * The discriminant is stored in KurrentDB and encrypted model custody. MCP keeps its invocation
+ * coordinates, while request_routine keeps only the scheduling-owned proposal receipt.
+ */
+export enum ConversationComputerTurnToolKinds
+{
+	/** A governed MCP proposal, approval, dispatch, and result delivery owns the operation. */
+	Mcp = "mcp",
+	/** Scheduling owns an inactive proposal that requires later human review. */
+	RequestRoutine = "request_routine",
+}
+
 /** Refers to encrypted model content without placing arguments or results in KurrentDB. */
 export interface ConversationComputerPrivateModelReference
 {
@@ -117,7 +131,7 @@ export interface ConversationComputerTurnModelReservation
 }
 
 /** Reserves one exact tool identity after its declaration enters encrypted custody. */
-export interface ConversationComputerTurnToolSelection
+export interface ConversationComputerTurnToolSelectionBase
 {
 	/** Identifies the model step that produced the declaration. */
 	readonly ordinal: number;
@@ -125,6 +139,13 @@ export interface ConversationComputerTurnToolSelection
 	readonly modelInvocationFence: string;
 	/** References the encrypted declaration accepted from the model. */
 	readonly declaration: ConversationComputerPrivateModelReference;
+}
+
+/** Reserves one exact MCP invocation after its declaration enters encrypted custody. */
+export interface ConversationComputerTurnMcpToolSelection extends ConversationComputerTurnToolSelectionBase
+{
+	/** Selects MCP proposal and result authority. */
+	readonly kind: `${ConversationComputerTurnToolKinds.Mcp}`;
 	/** Identifies the stable per-step proposal and SQL candidate. */
 	readonly proposalId: string;
 	/** Identifies the invocation carried through approval, dispatch and result delivery. */
@@ -133,15 +154,27 @@ export interface ConversationComputerTurnToolSelection
 	readonly requestFingerprint: string;
 }
 
+/** Reserves one exact requester-only routine proposal after scheduling persists it. */
+export interface ConversationComputerTurnRequestRoutineSelection extends ConversationComputerTurnToolSelectionBase
+{
+	/** Selects the scheduling-owned proposal path. */
+	readonly kind: `${ConversationComputerTurnToolKinds.RequestRoutine}`;
+	/** Carries the opaque scheduling-owned proposal reference. */
+	readonly proposalRef: string;
+	/** Preserves the database-clock expiry returned by proposal admission. */
+	readonly expiresAt: string;
+	/** Binds the exact safe proposal receipt supplied to the model. */
+	readonly resultDigest: string;
+}
+
+/** One closed durable model-selected operation. */
+export type ConversationComputerTurnToolSelection = ConversationComputerTurnMcpToolSelection | ConversationComputerTurnRequestRoutineSelection;
+
 /** Records one terminal result and its encrypted assistant/tool exchange. */
-export interface ConversationComputerTurnToolResult
+export interface ConversationComputerTurnToolResultBase
 {
 	/** Identifies the model step whose selected tool produced this result. */
 	readonly ordinal: number;
-	/** Requires the result to match the proposal retained by the selection event. */
-	readonly proposalId: string;
-	/** Requires the result to match the exact admitted invocation. */
-	readonly toolInvocationId: string;
 	/** Binds the immutable terminal delivery payload. */
 	readonly resultDigest: string;
 	/** References the encrypted assistant/tool pair used in later model history. */
@@ -149,6 +182,31 @@ export interface ConversationComputerTurnToolResult
 	/** Prevents later model work from extending the result's accepted authority. */
 	readonly authorityExpiresAtEpochMs: number;
 }
+
+/** Records one terminal MCP delivery and its encrypted assistant/tool exchange. */
+export interface ConversationComputerTurnMcpToolResult extends ConversationComputerTurnToolResultBase
+{
+	/** Selects MCP result authority. */
+	readonly kind: `${ConversationComputerTurnToolKinds.Mcp}`;
+	/** Requires the result to match the proposal retained by the selection event. */
+	readonly proposalId: string;
+	/** Requires the result to match the exact admitted invocation. */
+	readonly toolInvocationId: string;
+}
+
+/** Records one scheduling-owned proposal receipt as the terminal built-in result. */
+export interface ConversationComputerTurnRequestRoutineResult extends ConversationComputerTurnToolResultBase
+{
+	/** Selects the scheduling-owned proposal result. */
+	readonly kind: `${ConversationComputerTurnToolKinds.RequestRoutine}`;
+	/** Requires the result to match the opaque proposal retained by the selection event. */
+	readonly proposalRef: string;
+	/** Requires the result to retain the scheduling-owned database-clock expiry. */
+	readonly expiresAt: string;
+}
+
+/** One closed terminal result for the selected operation. */
+export type ConversationComputerTurnToolResult = ConversationComputerTurnMcpToolResult | ConversationComputerTurnRequestRoutineResult;
 
 /** One ordered model step at its latest replayed stage. */
 export type ConversationComputerTurnStep =

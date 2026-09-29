@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/angular";
+import { applicationConfig } from "@storybook/angular";
+import { provideRouter, withDisabledInitialNavigation } from "@angular/router";
 import { expect, within } from "storybook/test";
 import { ConversationMessageTones, ConversationStatusTones } from "@opencrane/elements/conversation";
 import { AvatarTones } from "@opencrane/elements/ui";
@@ -34,7 +36,7 @@ const _RECOVERY_ENTRIES: readonly ConversationWorkspaceTranscriptEntry[] = [{ ki
 const _PDF: ConversationAssetPresentation = { id: "asset-pdf", messageId: "question", artifactId: "artifact-pdf", artifactRevisionId: "revision-pdf", provenance: ConversationAssetProvenance.ParticipantUpload, displayName: "supplier-brief.pdf", mediaType: "application/pdf", byteLength: 42_000, disposition: ConversationAssetDisposition.Preview, state: ConversationAssetPresentationStates.Ready, detail: "Ready", canRetry: false, canRemove: false, uploadProgressPercent: null, contentState: ConversationAssetContentCommandStates.Idle, contentDetail: null };
 
 /** Transcript's empty state; routed workspace stories retain long-content and group action coverage. */
-const meta: Meta<ConversationWorkspaceTranscriptComponent> = { title: "Conversations/Workspace transcript", component: ConversationWorkspaceTranscriptComponent, tags: ["autodocs"] };
+const meta: Meta<ConversationWorkspaceTranscriptComponent> = { title: "Conversations/Workspace transcript", component: ConversationWorkspaceTranscriptComponent, decorators: [applicationConfig({ providers: [provideRouter([], withDisabledInitialNavigation())] })], tags: ["autodocs"] };
 export default meta;
 type Story = StoryObj<ConversationWorkspaceTranscriptComponent>;
 /** A selected conversation without messages invites the first contribution. */
@@ -84,4 +86,14 @@ export const ToolRecoveryNarrow: Story = { tags: ["visual-test", "visual-test-na
 	expect(canvas.getByText("Tool needs attention", { exact: true })).toBeVisible();
 	expect(canvas.getByText(/will not repeat it automatically/u)).toBeVisible();
 	expect(canvas.queryByRole("button")).not.toBeInTheDocument();
+} };
+
+/** A typed proposal log becomes one named review link and carries no suggestion payload. */
+export const RoutineProposalReady: Story = { tags: ["visual-test", "visual-test-narrow"], args: { entries: [{ kind: ConversationWorkspaceTranscriptEntryKinds.RoutineProposal, id: "proposal-entry", proposalRef: "proposal-opaque", status: { label: "Routine proposal ready for review", detail: "Review the suggested schedule before creating it.", tone: ConversationStatusTones.Attention } }] }, play: async function _ReviewLink({ canvasElement })
+{
+	const canvas = within(canvasElement);
+	const link = canvas.getByRole("link", { name: "Review routine" });
+	expect(link).toBeVisible();
+	expect(link).toHaveAttribute("href", "/routines/new?proposalRef=proposal-opaque");
+	expect(canvas.getByText("Routine proposal ready for review", { exact: true })).toBeVisible();
 } };

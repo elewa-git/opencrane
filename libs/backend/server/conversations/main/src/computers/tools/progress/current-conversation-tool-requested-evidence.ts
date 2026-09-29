@@ -4,7 +4,7 @@ import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma
 import { CompiledToolDefinitionKinds, ConversationLogToolKinds } from "@opencrane/contracts";
 
 import type { ConversationComputerTurnCandidateResolver, ConversationComputerTurnStore } from "../../turns/conversation-computer-turn.types";
-import { ConversationComputerTurnProtocolStates } from "../../turns/conversation-computer-turn-protocol.types";
+import { ConversationComputerTurnProtocolStates, ConversationComputerTurnToolKinds } from "../../turns/conversation-computer-turn-protocol.types";
 import type { ConversationToolProgressNotificationEvidence, ConversationToolRequestedNotificationCommand, ConversationToolRequestedNotificationEvidenceReader } from "../../turns/tool-progress-notifications/conversation-tool-progress-notification.types";
 import type { ConversationToolRequestedNotificationRecord, ConversationToolRequestedNotificationRepository } from "./conversation-tool-progress-notification-persistence.types";
 
@@ -55,7 +55,7 @@ class _CurrentConversationToolRequestedNotificationEvidenceUnitOfWork implements
 		if (turn === null || turn.siloId !== command.siloId || turn.binding.conversationId !== command.conversationId
 			|| turn.compile.runId !== command.runId || turn.compile.attempt !== command.attempt
 			|| current?.state !== ConversationComputerTurnProtocolStates.ToolPending
-			|| selection === null || reservation === null || selection.ordinal !== reservation.ordinal || selection.proposalId !== selection.toolInvocationId
+			|| selection === null || selection.kind !== ConversationComputerTurnToolKinds.Mcp || reservation === null || selection.ordinal !== reservation.ordinal || selection.proposalId !== selection.toolInvocationId
 			|| selection.toolInvocationId !== command.toolInvocationId || turn.protocol.output !== null || turn.protocol.unavailable !== null || turn.protocol.cancellation !== null)
 			return null;
 		const execution = await this._candidates.assertCurrentForWorkflow(turn);

@@ -57,6 +57,20 @@ result therefore stops before scheduling binds a run identifier or advances the 
 - `RoutineRunProgressObservation`, its strict parser and `RoutineRunProgressSink` carry verified
   progress back from the conversation owner. The observation includes the exact attempt, snapshot,
   source state, terminal/Stop fields and newly checked evidence, but no answer or tool content.
+- `RequestRoutineSuggestion`, `___RequestRoutineSuggestionSchema` and `REQUEST_ROUTINE_TOOL` define
+  the strict `{ instruction, schedule }` model suggestion and its first-party provider descriptor.
+  The descriptor has proposal-only, human-review-required semantics and no MCP identity or approval
+  fields; scheduling admission must decide when it may be offered.
+- `RequestRoutineProposalPort` accepts the exact source run, attempt and ordered first-party
+  selection and returns only an opaque proposal reference and its database-clock expiry. The
+  conversation owner can publish those safe coordinates without receiving ciphertext or a routine.
+- `RequestRoutineProposalNotificationEvidenceReader` lets the conversation notification owner
+  recover only an exact pending and unexpired proposal. It returns source coordinates, opaque
+  reference and expiry, never the encrypted or plaintext suggestion.
+- `RequestRoutineProposalSourceAuthority` and its factory let the conversation owner prove current
+  requester membership, source readability and the exact active interactive request inside the
+  scheduling proposal transaction. Later human access uses a separate check that deliberately does
+  not require the original run to remain active, because a proposal outlives that run.
 
 ## Boundary
 
@@ -74,17 +88,18 @@ not its external effect. Scheduling rereads current source facts before saving p
 its first evidence pair; later verified evidence can differ without replacing that original pair.
 Revoking execution access must not prevent reporting work already completed or cancelled.
 
-The package contains no lifecycle rules, encrypted instruction envelope, database adapter, workflow
-handler or application wiring. Activation and run admission cannot receive plaintext or an
-encrypted instruction through this contract. Any later prompt compilation must reread checked,
-service-attested history through the dedicated routine path; activation uses only content-free facts
-and the saved preparation receipt.
+The occurrence hand-off contains no lifecycle rules, encrypted instruction envelope, database adapter,
+workflow handler or application wiring. Activation and run admission cannot receive plaintext or an
+encrypted instruction through that hand-off. `RequestRoutineSuggestion` is a separate proposal
+payload for the scheduling-owned review flow; it does not authorize activation or prompt compilation.
+Any later prompt compilation must reread checked, service-attested history through the dedicated
+routine path; activation uses only content-free facts and the saved preparation receipt.
 
 ## Dependency direction
 
-This `scope:scheduling-contract` library depends only on agent models and the public workflow
-contract. Scheduling and conversation implementations may depend on it; it never imports either
-implementation package.
+This `scope:scheduling-contract` library depends on agent models, shared contracts and the public
+workflow contract. Scheduling and conversation implementations may depend on it; it never imports
+either implementation package.
 
 ## See also
 

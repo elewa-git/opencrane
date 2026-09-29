@@ -26,6 +26,13 @@
 				"constructs": []
 			},
 			{
+				"path": "libs/backend/server/agents/scheduling/main/src/prisma-routine-proposal-repository.ts",
+				"adapter": "PrismaRoutineProposalRepository",
+				"contract": "RoutineProposalPersistence",
+				"contractImportPath": "./routine-proposal.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/agents/execution/runs/main/src/prisma-routine-run-progress-repository.ts",
 				"adapter": "PrismaRoutineRunProgressFactsRepository",
 				"contract": "RoutineRunProgressFactsRepository",
@@ -1821,6 +1828,7 @@
 					{ "adapter": "PrismaRoutineFactsRepository", "importPath": "./routine-prisma-facts" },
 					{ "adapter": "PrismaRoutineCommandRepository", "importPath": "./prisma-routine-command-repository" },
 					{ "adapter": "PrismaRoutineFiringRepository", "importPath": "./prisma-routine-firing-repository" },
+					{ "adapter": "PrismaRoutineProposalRepository", "importPath": "./prisma-routine-proposal-repository" },
 					{ "adapter": "PrismaRoutineRunProgressRepository", "importPath": "./prisma-routine-run-progress-repository" },
 					{ "adapter": "PrismaRoutineReadRepository", "importPath": "./prisma-routine-read-repository" }
 				]

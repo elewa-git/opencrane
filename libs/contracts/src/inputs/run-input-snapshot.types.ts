@@ -4,6 +4,7 @@ import type { ConversationId, MessageId } from "@opencrane/models/conversations"
 import type { JsonValue } from "@opencrane/util";
 
 import type { RunBudgetPolicy } from "./run-budget-policy.types";
+import type { RunInputFirstPartyCapabilitySelection } from "./run-input-first-party-capability.types";
 
 /** Provenance frozen for a browser-triggered conversation run. */
 export interface InteractiveRunInputOrigin
@@ -96,6 +97,8 @@ export interface RunInputSnapshot
   memoryQueryPolicy: JsonValue;
   /** Exact immutable MCP tool revisions selected by the AgentRevision. */
   mcpTools: readonly RunInputSnapshotMcpTool[];
+	/** Built-in capabilities selected by server-owned admission, or an empty array when none are available. */
+	firstPartyCapabilities: readonly RunInputFirstPartyCapabilitySelection[];
   /** Server-selected model route without provider credentials. */
   modelRoute: JsonValue;
   /** Immutable token, cost, time, and tool limits. */

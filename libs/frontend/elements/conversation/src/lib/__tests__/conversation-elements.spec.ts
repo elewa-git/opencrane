@@ -90,6 +90,7 @@ describe("conversation elements", function _ConversationElements()
 		const statusComponent = TestBed.runInInjectionContext(function _ConstructStatus() { return new ConversationStatusLineComponent(); });
 		_SetInput(statusComponent.status, status);
 		expect(statusComponent.status()).toEqual(status);
+		expect(_RESOURCES["conversation-status-line.component.html"]).toContain('select="[conversation-status-action]"');
 	});
 
 	it("does not render an empty plain body before projected rich content", function _NoEmptyMessageBody()

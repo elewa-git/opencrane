@@ -5,7 +5,7 @@ import type { RequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import type { RoutineAuthority } from "../routine-authority";
 
 /** Operations exposed by the authenticated routine HTTP boundary. */
-export type RoutineHttpAuthority = Pick<RoutineAuthority, "create" | "read" | "revise" | "pause" | "resume" | "retire" | "runNow" | "list" | "firings" | "creationOptions" | "preview">;
+export type RoutineHttpAuthority = Pick<RoutineAuthority, "create" | "read" | "revise" | "pause" | "resume" | "retire" | "runNow" | "list" | "firings" | "creationOptions" | "preview" | "readProposal" | "cancelProposal">;
 
 /** Resolves a Principal from server-authenticated request state, never from request input. */
 export type RoutineRequestPrincipalResolver = (request: Request) => RequestPrincipal | null;

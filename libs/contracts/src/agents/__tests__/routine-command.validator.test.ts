@@ -18,6 +18,7 @@ describe("routine command contracts", function _Suite()
 	it("normalizes bounded create fields and schedule", function _NormalizesCreate()
 	{
 		expect(___RoutineCreateRequestSchema.parse({ ..._CREATE, idempotencyKey: "  retry-1  " })).toEqual({ ..._CREATE, instruction: "Review the latest report.", idempotencyKey: "retry-1" });
+		expect(___RoutineCreateRequestSchema.parse({ ..._CREATE, proposalRef: "proposal-1" }).proposalRef).toBe("proposal-1");
 	});
 
 	it.each([
@@ -30,6 +31,7 @@ describe("routine command contracts", function _Suite()
 		{ idempotencyKey: "   " },
 		{ caller: "forged" },
 		{ budget: 10 },
+		{ proposalRef: " proposal-1" },
 	])("rejects duplicate, blank, or authority-bearing create input", function _RejectsCreate(overrides)
 	{
 		expect(___RoutineCreateRequestSchema.safeParse({ ..._CREATE, ...overrides }).success).toBe(false);

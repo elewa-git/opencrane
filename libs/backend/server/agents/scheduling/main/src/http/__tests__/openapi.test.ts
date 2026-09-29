@@ -12,6 +12,7 @@ describe("routine OpenAPI fragment", function _Suite()
 			"/me/routines",
 			"/me/routines/creation-options",
 			"/me/routines/schedule-preview",
+			"/me/routines/proposals/{proposalRef}",
 			"/me/routines/{routineId}",
 			"/me/routines/{routineId}/firings",
 			"/me/routines/{routineId}/revise",
@@ -21,6 +22,8 @@ describe("routine OpenAPI fragment", function _Suite()
 			"/me/routines/{routineId}/run-now",
 		]);
 		expect(_RoutineOpenapiPaths["/me/routines"]).toHaveProperty("get");
+		expect(_RoutineOpenapiPaths["/me/routines"].post.requestBody.content["application/json"].schema.properties).toHaveProperty("proposalRef");
+		expect(_RoutineOpenapiPaths["/me/routines/proposals/{proposalRef}"]).toHaveProperty("delete");
 		const firing = _RoutineOpenapiPaths["/me/routines/{routineId}/run-now"].post.responses[200].content["application/json"].schema.properties.firing;
 		expect(firing.properties.reason.enum).toEqual([...Object.values(RoutineFiringReasons), null]);
 		expect(firing.properties).not.toHaveProperty("outcome");

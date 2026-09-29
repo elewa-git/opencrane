@@ -75,6 +75,17 @@ describe("routine routes", function _RoutineRoutesSuite()
 		expect(destination()).toBeNull();
 	});
 
+	it("passes the opaque proposal reference while retaining the query destination only as a hint", function _ProposalRouteInput()
+	{
+		const store = { optionsState: signal(RoutineReadStates.Idle), proposalState: signal(null), acceptedRoutineId: signal(null), proposalError: signal(null), destinationConversationId: signal(null), retryOptions: vi.fn(), retryProposal: vi.fn(), cancelProposal: vi.fn(), startCreate: vi.fn() } as unknown as RoutineEditorStore;
+		TestBed.overrideComponent(RoutineCreateRouteComponent, { set: { templateUrl: undefined, template: "", styleUrl: undefined, styleUrls: [], styles: [], imports: [], providers: [{ provide: RoutineEditorStore, useValue: store }] } });
+		TestBed.configureTestingModule({ imports: [RoutineCreateRouteComponent], providers: _Providers(["query-conversation"], ["proposal-opaque"]) });
+		const fixture = TestBed.createComponent(RoutineCreateRouteComponent);
+		fixture.detectChanges();
+
+		expect(store.startCreate).toHaveBeenCalledWith("query-conversation", "proposal-opaque");
+	});
+
 	it("does not navigate after a pending create resolves after route destruction", async function _DestroyedCreateDoesNotNavigate()
 	{
 		const pending = _Deferred<{ readonly outcome: RoutineSubmitOutcomes; readonly routineId?: string }>();
@@ -96,7 +107,7 @@ describe("routine routes", function _RoutineRoutesSuite()
 	it("does not describe an idle purged creation screen as still preparing", function _PurgedCreationCopy()
 	{
 		const template = readFileSync(join(process.cwd(), "src/lib/routes/routine-create-route.component.html"), "utf8");
-		const store = { optionsState: signal(RoutineReadStates.Idle), startCreate: vi.fn() } as unknown as RoutineEditorStore;
+		const store = { optionsState: signal(RoutineReadStates.Idle), proposalState: signal(null), acceptedRoutineId: signal(null), proposalError: signal(null), destinationConversationId: signal(null), retryOptions: vi.fn(), retryProposal: vi.fn(), cancelProposal: vi.fn(), startCreate: vi.fn() } as unknown as RoutineEditorStore;
 		TestBed.overrideComponent(RoutineCreateRouteComponent, { set: { templateUrl: undefined, template, styleUrl: undefined, styleUrls: [], styles: [], imports: [], schemas: [NO_ERRORS_SCHEMA], providers: [{ provide: RoutineEditorStore, useValue: store }] } });
 		TestBed.configureTestingModule({ imports: [RoutineCreateRouteComponent], providers: _Providers(["conversation-1"]) });
 		const fixture = TestBed.createComponent(RoutineCreateRouteComponent);
@@ -118,11 +129,11 @@ describe("routine routes", function _RoutineRoutesSuite()
 	});
 });
 
-function _Providers(destinationValues: readonly string[] = []): unknown[]
+function _Providers(destinationValues: readonly string[] = [], proposalValues: readonly string[] = []): unknown[]
 {
 	const unavailable = vi.fn().mockRejectedValue(new Error("Unexpected route test gateway call"));
-	const gateway: RoutineGateway = { list: unavailable, read: unavailable, firings: unavailable, creationOptions: unavailable, preview: unavailable, create: unavailable, revise: unavailable, pause: unavailable, resume: unavailable, retire: unavailable, runNow: unavailable };
-	const queryParamMap = convertToParamMap(destinationValues.length === 0 ? {} : { destination: destinationValues });
+	const gateway: RoutineGateway = { list: unavailable, read: unavailable, firings: unavailable, creationOptions: unavailable, proposal: unavailable, cancelProposal: unavailable, preview: unavailable, create: unavailable, revise: unavailable, pause: unavailable, resume: unavailable, retire: unavailable, runNow: unavailable };
+	const queryParamMap = convertToParamMap({ ...(destinationValues.length === 0 ? {} : { destination: destinationValues }), ...(proposalValues.length === 0 ? {} : { proposalRef: proposalValues }) });
 	const route: Partial<ActivatedRoute> = { paramMap: of(convertToParamMap({})), queryParamMap: of(queryParamMap), snapshot: { paramMap: convertToParamMap({}), queryParamMap } as ActivatedRoute["snapshot"] };
 
 	return [{ provide: ROUTINE_GATEWAY, useValue: gateway }, { provide: ROUTINE_SESSION, useValue: () => null }, { provide: Router, useValue: { navigate: vi.fn() } }, { provide: ActivatedRoute, useValue: route }];

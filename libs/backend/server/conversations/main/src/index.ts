@@ -28,11 +28,18 @@ export { ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityS
 export { ActiveConversationComputerTurnCandidateResolver } from "./computers/turns/conversation-computer-turn-candidate-resolver";
 export { KurrentConversationComputerTurnStore } from "./computers/turns/conversation-computer-turn-store";
 export { ConversationComputerTurnProtocolStates, ConversationComputerTurnUnavailableReasons } from "./computers/turns/conversation-computer-turn-protocol.types";
+export { ConversationComputerTurnToolKinds } from "./computers/turns/conversation-computer-turn-protocol.types";
 export type { ConversationComputerPrivateModelReference, ConversationComputerTurnAccounting, ConversationComputerTurnBudget, ConversationComputerTurnCancellationReceipt, ConversationComputerTurnModelReservation, ConversationComputerTurnOutputReceipt, ConversationComputerTurnProtocolProjection, ConversationComputerTurnStep, ConversationComputerTurnToolResult, ConversationComputerTurnToolSelection, ConversationComputerTurnUnavailableReceipt } from "./computers/turns/conversation-computer-turn-protocol.types";
 export { PrismaConversationComputerTurnUnitOfWork } from "./computers/turns/db/prisma-conversation-computer-turn-unit-of-work";
 export { PrismaConversationComputerCredentialUnitOfWork } from "./computers/turns/db/prisma-conversation-computer-credential-issuer";
 export type { ConversationComputerBoundWriterFactory, ConversationComputerCredentialIssueCommand, ConversationComputerCredentialIssuer, ConversationComputerCredentialReceipt, ConversationComputerCredentialReuseCommand, ConversationComputerOutputPayloadStore, ConversationComputerPendingTurnCompiler, ConversationComputerPrePersistedMessageInput, ConversationComputerRunAdmissionCommand, ConversationComputerRunAdmissionPort, ConversationComputerRunLifecycleCommand, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, ConversationComputerTurnCandidateResolver, ConversationComputerTurnCompileAnchor, ConversationComputerTurnCompileCommand, ConversationComputerTurnCoordinates, ConversationComputerTurnProjectionRepository, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "./computers/turns/conversation-computer-turn.types";
 export type { ConversationComputerRawCredentialAuthority } from "./computers/turns/conversation-computer-turn.types";
+export { ConversationRoutineProposalNotificationOutcomes } from "./computers/turns/request-routine/conversation-request-routine.types";
+export type { ConversationRequestRoutineDependencies, ConversationRequestRoutineSourceResolver, ConversationRoutineProposalNotificationCommand, ConversationRoutineProposalNotificationPort, ConversationRoutineProposalRecipientReader } from "./computers/turns/request-routine/conversation-request-routine.types";
+export { KurrentConversationRoutineProposalNotificationPublisher } from "./request-routine/kurrent-conversation-routine-proposal-notification";
+export { PrismaConversationRequestRoutineSourceResolver } from "./request-routine/prisma-conversation-request-routine-source";
+export { PrismaConversationRoutineProposalRecipientReader } from "./request-routine/prisma-conversation-routine-proposal-recipient";
+export { PrismaRequestRoutineProposalSourceAuthority } from "./request-routine/prisma-request-routine-proposal-source-authority";
 export { _SelfConversationHistoryOpenapiPaths } from "./http/openapi";
 export { PrismaSelfConversationHistoryUnitOfWork } from "./messages/prisma-self-conversation-history";
 export { PrismaConversationMessageAdmissionUnitOfWork } from "./messages/prisma-conversation-message-admission-unit-of-work";

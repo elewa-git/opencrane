@@ -1,6 +1,6 @@
 import { __SameMembershipBinding } from "@opencrane/backend/server/iam/membership";
 import { __DigestRunInputSnapshot, RunAdmissionBuildOutcomes, RunAdmissionExistingVerificationOutcomes, RunAdmissionMessageInputModes, RunAdmissionOutcomes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type InitialRunAuthority, type RunAdmissionCommit, type RunAdmissionPrepare, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
-import { AgentRunTriggers, RUN_INPUT_SNAPSHOT_VERSION, ___ParseRunBudgetPolicy, type RunBudgetPolicy, type RunInputOrigin, type RunInputSnapshot } from "@opencrane/contracts";
+import { AgentRunTriggers, RUN_INPUT_SNAPSHOT_VERSION, ___ParseRunBudgetPolicy, ___RunInputFirstPartyCapabilitySelectionsSchema, type RunBudgetPolicy, type RunInputFirstPartyCapabilitySelection, type RunInputOrigin, type RunInputSnapshot } from "@opencrane/contracts";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, ___SortBy } from "@opencrane/util";
 
@@ -118,12 +118,15 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		const productAuthorization = await authorities.productAuthorization.load(command, executionSubject.value, persona.value, memory.value, tools.value, transaction);
 		if (productAuthorization.outcome === SessionAssemblyLoadOutcomes.Denied)
 			return { outcome: RunAdmissionBuildOutcomes.Denied, reason: productAuthorization.reason } as const;
+		const firstPartyCapabilities = await _SelectFirstPartyCapabilities(command, authorities, run.value, executionSubject.value, conversation.value, transaction);
+		if (firstPartyCapabilities.outcome === SessionAssemblyLoadOutcomes.Denied)
+			return { outcome: RunAdmissionBuildOutcomes.Denied, reason: firstPartyCapabilities.reason } as const;
 		const budget = await authorities.budgetPolicy.load(command, run.value, transaction);
 		if (budget.outcome === SessionAssemblyLoadOutcomes.Denied)
 			return { outcome: RunAdmissionBuildOutcomes.Denied, reason: budget.reason } as const;
 		// 8. Compile the immutable snapshot only after every source has re-checked its data inside this transaction.
 		checked.subject = executionSubject.value;
-		return { outcome: RunAdmissionBuildOutcomes.Ready, value: { authority: run.value, snapshot: _compileSnapshot(command, transaction.admittedAt, run.value, persona.value, conversation.value, preferences.value, memory.value, tools.value, budget.value.budgetPolicy, executionSubject.value) } } as const;
+		return { outcome: RunAdmissionBuildOutcomes.Ready, value: { authority: run.value, snapshot: _compileSnapshot(command, transaction.admittedAt, run.value, persona.value, conversation.value, preferences.value, memory.value, tools.value, firstPartyCapabilities.value, budget.value.budgetPolicy, executionSubject.value) } } as const;
 	}, commit, prepare);
 	if (admitted.outcome === RunAdmissionOutcomes.Denied)
 		return { outcome: SessionAssemblyOutcomes.Denied, reason: _publicReason(admitted.reason) };
@@ -241,7 +244,7 @@ function _publicReason(reason: SessionAssemblyRefusalReason | "authority_conflic
 }
 
 /** Compiles sorted source outputs into the one canonical shape and digests it without self-reference. */
-function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, run: InitialRunAuthority, persona: ApprovedPersonaInput, conversation: ConversationContextInput, preferences: readonly { readonly id: string }[], memory: MemoryScopeInput, tools: ToolPolicyInput, budgetPolicy: RunBudgetPolicy, executionSubject: ExecutionSubject): RunInputSnapshot
+function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, run: InitialRunAuthority, persona: ApprovedPersonaInput, conversation: ConversationContextInput, preferences: readonly { readonly id: string }[], memory: MemoryScopeInput, tools: ToolPolicyInput, firstPartyCapabilities: readonly RunInputFirstPartyCapabilitySelection[], budgetPolicy: RunBudgetPolicy, executionSubject: ExecutionSubject): RunInputSnapshot
 {
 	const withoutDigest = {
 		runId: command.runId,
@@ -259,6 +262,7 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 		skillRevisionIds: ___SortBy([...tools.skillRevisionIds]),
 		memoryQueryPolicy: ___CloneCanonicalJson(memory.memoryQueryPolicy),
 		mcpTools: _canonicalMcpTools(tools.mcpTools),
+		firstPartyCapabilities,
 		modelRoute: ___CloneCanonicalJson(tools.modelRoute),
 		budgetPolicy: ___ParseRunBudgetPolicy(___CloneCanonicalJson(budgetPolicy)),
 		executionSubject,
@@ -267,6 +271,21 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 	};
 	const digest = __DigestRunInputSnapshot(withoutDigest);
 	return { ...withoutDigest, digest };
+}
+
+/** Select capabilities only for a human-origin conversation and freeze one canonical coordinate set. */
+async function _SelectFirstPartyCapabilities(command: SessionAssemblyCommand, authorities: SessionAssemblyAuthorities, run: InitialRunAuthority, executionSubject: ExecutionSubject, conversation: ConversationContextInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<readonly RunInputFirstPartyCapabilitySelection[]>>
+{
+	if (command.trigger !== AgentRunTriggers.Interactive || command.conversationId === null)
+		return { outcome: SessionAssemblyLoadOutcomes.Loaded, value: [] };
+	const selected = await authorities.firstPartyCapabilities.load(command, run, executionSubject, conversation, transaction);
+	if (selected.outcome === SessionAssemblyLoadOutcomes.Denied)
+		return selected;
+	const canonical = [...selected.value].sort(function _ByCapability(left, right): number { return _compareText(left.capability, right.capability); });
+	const parsed = ___RunInputFirstPartyCapabilitySelectionsSchema.safeParse(canonical);
+	return parsed.success
+		? { outcome: SessionAssemblyLoadOutcomes.Loaded, value: parsed.data }
+		: { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "tool_policy_unavailable" };
 }
 
 /** Freeze only the provenance arm that the validated admission command selected. */
@@ -301,6 +320,16 @@ function _canonicalMcpTools(tools: ToolPolicyInput["mcpTools"]): ToolPolicyInput
 			return { toolRevisionId: tool.toolRevisionId, name: tool.name, description: tool.description, inputSchema: ___CloneCanonicalJson(tool.inputSchema), inputSchemaDigest: tool.inputSchemaDigest };
 		})
 		.sort(function _ByRevision(left, right): number { return left.toolRevisionId.localeCompare(right.toolRevisionId); });
+}
+
+/** Compare stable identifiers without host-locale ordering. */
+function _compareText(left: string, right: string): number
+{
+	if (left < right)
+		return -1;
+	if (left > right)
+		return 1;
+	return 0;
 }
 
 /** Checks that the injected subject fences the exact admitted run and a non-empty active computer lease. */

@@ -1,9 +1,10 @@
 import { DestroyRef, Injectable, computed, effect, inject, signal } from "@angular/core";
+import { RoutineProposalStates, type RoutineProposalPayload } from "@opencrane/contracts";
 
 import { ROUTINE_GATEWAY, ROUTINE_SESSION, RoutineGatewayError, RoutineGatewayErrorKinds, type RoutineCreateCommand, type RoutineCreationOptions, type RoutineDefinition, type RoutineDetails, type RoutineReviseCommand, type RoutineSchedule, type RoutineSchedulePreview } from "@opencrane/state/routines";
 
 import { _RoutineCreationChoices } from "../routine-presentation.mapper";
-import { RoutineCommandStates, RoutineEditorModes, RoutineReadStates, RoutineSubmitOutcomes, type RoutineDefinitionDraft } from "../routine-presentation.types";
+import { RoutineCommandStates, RoutineEditorModes, RoutineReadStates, RoutineScheduleModes, RoutineSubmitOutcomes, type RoutineDefinitionDraft } from "../routine-presentation.types";
 import { _NewRoutineDraft, _RoutinePreviewView, _RoutineRevisionDraft, _RoutineScheduleFromDraft, _RoutineTimezones } from "../routine-schedule";
 import { RoutineCommandAdmission, RoutineCommandOwners } from "./routine-command-admission";
 
@@ -37,6 +38,8 @@ export class RoutineEditorStore
 	private _previewSignature: string | null = null;
 	/** Read cancellation owner for choices or preview. */
 	private _readAbort: AbortController | null = null;
+	/** Proposal read cancellation owner, kept separate from choices and preview reads. */
+	private _proposalAbort: AbortController | null = null;
 	/** Mutation cancellation owner for route or session changes. */
 	private _commandAbort: AbortController | null = null;
 	/** Session captured by the current editor. */
@@ -45,6 +48,24 @@ export class RoutineEditorStore
 	private _savedCreate: SavedCreateCommand | null = null;
 	/** Revise command retained for an explicit uncertain retry. */
 	private _savedRevise: SavedReviseCommand | null = null;
+	/** Opaque proposal currently being reviewed, never copied into browser display text. */
+	private _proposalRef: string | null = null;
+	/** Whether the route loaded a requester-only proposal, hidden immediately outside its session scope. */
+	private readonly _proposalState = signal<RoutineProposalStates | null>(null);
+	public readonly proposalState = computed(() => this._session() === this._scope ? this._proposalState() : null);
+	/** Safe terminal routine coordinate returned by the accepted projection, hidden outside its session scope. */
+	private readonly _acceptedRoutineId = signal<string | null>(null);
+	public readonly acceptedRoutineId = computed(() => this._session() === this._scope ? this._acceptedRoutineId() : null);
+	/** Safe proposal-read failure copy. */
+	public readonly proposalError = signal<string | null>(null);
+	/** Prevents duplicate proposal cancellation before the first request settles. */
+	public readonly proposalCanceling = signal(false);
+	/** Whether the current form still carries a pending proposal reference for create. */
+	public readonly proposalRef = computed(() => this._session() === this._scope ? this._proposalRef : null);
+	/** Current server-authorized source conversation, hidden when the session no longer matches. */
+	public readonly destinationConversationId = computed(() => this._session() === this._scope ? this._destinationConversationId : null);
+	/** Whether an edit has happened before choices or proposal reads finish. */
+	private _draftTouched = false;
 	/** Removes protected editor state when the signed-in session changes. */
 	private readonly _sessionEffect = effect(this._SessionChanged.bind(this));
 	/** Whether the editor creates or revises. */
@@ -82,13 +103,16 @@ export class RoutineEditorStore
 	public constructor() { this._destroyRef.onDestroy(this._Dispose.bind(this)); }
 
 	/** Starts creation for a destination and loads its authorized choices. */
-	public startCreate(destinationConversationId: string | null): void
+	public startCreate(destinationConversationId: string | null, proposalRef: string | null = null): void
 	{
 		this._ResetEditor();
 		this._scope = this._session();
 		this.mode.set(RoutineEditorModes.Create);
 		this._destinationConversationId = destinationConversationId;
-		if (destinationConversationId !== null && this._session() !== null)
+		this._proposalRef = proposalRef;
+		if (proposalRef !== null && this._session() !== null)
+			void this._LoadProposal(proposalRef);
+		else if (destinationConversationId !== null && this._session() !== null)
 			void this._LoadOptions(destinationConversationId);
 	}
 
@@ -121,6 +145,51 @@ export class RoutineEditorStore
 	{
 		if (this._destinationConversationId !== null && this._session() === this._scope && this.optionsState() !== RoutineReadStates.Loading)
 			void this._LoadOptions(this._destinationConversationId);
+	}
+
+	/** Retries the current proposal read using the same opaque route reference. */
+	public retryProposal(): void
+	{
+		if (this._proposalRef !== null && this._session() === this._scope && this.optionsState() !== RoutineReadStates.Loading)
+			void this._LoadProposal(this._proposalRef);
+	}
+
+	/** Cancels the current proposal once, without treating navigation as cancellation. */
+	public async cancelProposal(): Promise<boolean>
+	{
+		const proposalRef = this._proposalRef;
+		const session = this._session();
+		if (proposalRef === null || session === null || this.proposalState() !== RoutineProposalStates.Pending || this.proposalCanceling())
+			return false;
+		const abort = new AbortController();
+		this._proposalAbort = abort;
+		this.proposalCanceling.set(true);
+		try
+		{
+			const result = await this._gateway.cancelProposal(proposalRef, abort.signal);
+			if (this._session() !== session || this._scope !== session || this._proposalAbort !== abort || abort.signal.aborted)
+				return false;
+			const acceptedRoutineId = result.state === RoutineProposalStates.Accepted ? result.acceptedRoutineId : null;
+			const state = _ProposalState(result.state);
+			this._proposalState.set(state);
+			this._acceptedRoutineId.set(acceptedRoutineId ?? null);
+			this._PurgeEditorDraft();
+			return state === RoutineProposalStates.Cancelled;
+		}
+		catch (error)
+		{
+			if (this._session() === session && this._proposalAbort === abort && !_Aborted(error))
+				this.proposalError.set("The proposal could not be cancelled. Return to the conversation and try again.");
+			return false;
+		}
+		finally
+		{
+			if (this._proposalAbort === abort)
+			{
+				this._proposalAbort = null;
+				this.proposalCanceling.set(false);
+			}
+		}
 	}
 
 	/** Replaces the schedule mode and clears retry state tied to the previous draft. */
@@ -201,7 +270,7 @@ export class RoutineEditorStore
 		const selectedManagedServiceId = this.draft().selectedManagedServiceId;
 		if (session === null || schedule === null || destinationConversationId === null || selectedManagedServiceId === null || !this.canSubmit() || this.commandState() === RoutineCommandStates.Submitting)
 			return { outcome: RoutineSubmitOutcomes.Rejected };
-		const input = { destinationConversationId, audienceParticipantRefs: [...this.draft().audienceParticipantRefs], selectedManagedServiceId, schedule, instruction: this.draft().instruction.trim() };
+		const input = { destinationConversationId, audienceParticipantRefs: [...this.draft().audienceParticipantRefs], selectedManagedServiceId, schedule, instruction: this.draft().instruction.trim(), ...(this._proposalRef === null ? {} : { proposalRef: this._proposalRef }) };
 		if (!this._admission.admit(RoutineCommandOwners.Editor))
 			return { outcome: RoutineSubmitOutcomes.Rejected };
 		const signature = JSON.stringify(input);
@@ -228,7 +297,7 @@ export class RoutineEditorStore
 	}
 
 	/** Reads creation choices and starts with the requester selected exactly once. */
-	private async _LoadOptions(destinationConversationId: string): Promise<void>
+	private async _LoadOptions(destinationConversationId: string, suggestion: RoutineProposalPayload | null = null): Promise<void>
 	{
 		const session = this._session();
 		if (session === null)
@@ -246,7 +315,8 @@ export class RoutineEditorStore
 			if (self.length !== 1)
 				throw new RoutineGatewayError(RoutineGatewayErrorKinds.InvalidResponse);
 			this._options.set(options);
-			this._draft.set(_NewRoutineDraft(self[0]!.participantRef));
+			if (!this._draftTouched)
+				this._draft.set(_DraftFromSuggestion(self[0]!.participantRef, suggestion));
 			this.optionsState.set(RoutineReadStates.Ready);
 		}
 		catch (error)
@@ -268,6 +338,52 @@ export class RoutineEditorStore
 		{
 			if (this._readAbort === abort)
 				this._readAbort = null;
+		}
+	}
+
+	/** Reads a proposal before choices so its server-authorized source chat wins over query hints. */
+	private async _LoadProposal(proposalRef: string): Promise<void>
+	{
+		const session = this._session();
+		const reader = this._gateway.proposal;
+		if (session === null)
+			return;
+		const abort = new AbortController();
+		this._proposalAbort = abort;
+		this.optionsState.set(RoutineReadStates.Loading);
+		this.proposalError.set(null);
+		try
+		{
+			const projection = await reader.call(this._gateway, proposalRef, abort.signal);
+			if (this._session() !== session || this._scope !== session || this._proposalAbort !== abort || abort.signal.aborted || this._proposalRef !== proposalRef)
+				return;
+			this._proposalState.set(_ProposalState(projection.state));
+			this._acceptedRoutineId.set(projection.state === RoutineProposalStates.Accepted ? projection.acceptedRoutineId : null);
+			if (projection.state !== RoutineProposalStates.Pending)
+			{
+				this._destinationConversationId = null;
+				this.optionsState.set(RoutineReadStates.Unavailable);
+				return;
+			}
+			this._destinationConversationId = projection.sourceConversationId;
+			await this._LoadOptions(projection.sourceConversationId, projection.suggestion);
+		}
+		catch (error)
+		{
+			if (this._session() !== session || this._proposalAbort !== abort || _Aborted(error))
+				return;
+			if (_AccessLost(error))
+				this._Purge();
+			else
+			{
+				this.proposalError.set("This routine proposal could not be loaded. Return to the conversation and try again.");
+				this.optionsState.set(RoutineReadStates.Unavailable);
+			}
+		}
+		finally
+		{
+			if (this._proposalAbort === abort)
+				this._proposalAbort = null;
 		}
 	}
 
@@ -375,6 +491,7 @@ export class RoutineEditorStore
 		this._preview.set(null);
 		this._previewSignature = null;
 		this._draft.set(draft);
+		this._draftTouched = true;
 		this.commandState.set(RoutineCommandStates.Idle);
 		this.commandError.set(null);
 	}
@@ -413,8 +530,10 @@ export class RoutineEditorStore
 	private _ResetEditor(): void
 	{
 		this._readAbort?.abort();
+		this._proposalAbort?.abort();
 		this._commandAbort?.abort();
 		this._readAbort = null;
+		this._proposalAbort = null;
 		this._commandAbort = null;
 		this._options.set(null);
 		this._preview.set(null);
@@ -423,6 +542,12 @@ export class RoutineEditorStore
 		this._destinationConversationId = null;
 		this._savedCreate = null;
 		this._savedRevise = null;
+		this._proposalRef = null;
+		this._proposalState.set(null);
+		this._acceptedRoutineId.set(null);
+		this.proposalError.set(null);
+		this.proposalCanceling.set(false);
+		this._draftTouched = false;
 		this._admission.release(RoutineCommandOwners.Editor);
 		this._draft.set(_NewRoutineDraft(null));
 		this.optionsState.set(RoutineReadStates.Idle);
@@ -436,8 +561,27 @@ export class RoutineEditorStore
 	/** Clears the editor after access or session loss. */
 	private _Purge(): void { this._ResetEditor(); }
 
+	/** Hides editable values after a terminal proposal result without discarding its lifecycle state. */
+	private _PurgeEditorDraft(): void
+	{
+		this._options.set(null);
+		this._preview.set(null);
+		this._previewSignature = null;
+		this._draft.set(_NewRoutineDraft(null));
+		this.optionsState.set(RoutineReadStates.Unavailable);
+		this._draftTouched = false;
+	}
+
 	/** Cancels route-owned work without interpreting whether the server committed a request. */
-	private _Dispose(): void { this._readAbort?.abort(); this._commandAbort?.abort(); this._readAbort = null; this._commandAbort = null; this._admission.release(RoutineCommandOwners.Editor); }
+	private _Dispose(): void { this._readAbort?.abort(); this._proposalAbort?.abort(); this._commandAbort?.abort(); this._readAbort = null; this._proposalAbort = null; this._commandAbort = null; this._admission.release(RoutineCommandOwners.Editor); }
+}
+
+/** Projects only the editable suggestion fields into a normal creation draft. */
+function _DraftFromSuggestion(selfReference: string, suggestion: RoutineProposalPayload | null): RoutineDefinitionDraft
+{
+	if (suggestion === null)
+		return _NewRoutineDraft(selfReference);
+	return { ..._NewRoutineDraft(selfReference), scheduleMode: RoutineScheduleModes.Advanced, expression: suggestion.schedule.expression, timezone: suggestion.schedule.timezone, instruction: suggestion.instruction };
 }
 
 /** Serializes a normalized schedule for preview-to-command matching. */
@@ -450,4 +594,17 @@ function _Aborted(error: unknown): boolean { return error instanceof DOMExceptio
 function _AccessLost(error: unknown): boolean
 {
 	return error instanceof RoutineGatewayError && (error.kind === RoutineGatewayErrorKinds.Unauthenticated || error.kind === RoutineGatewayErrorKinds.AccessDenied || error.kind === RoutineGatewayErrorKinds.NotFound);
+}
+
+/** Reuses the shared lifecycle vocabulary after the generated client has validated its string union. */
+function _ProposalState(value: string): RoutineProposalStates
+{
+	switch (value)
+	{
+		case RoutineProposalStates.Pending: return RoutineProposalStates.Pending;
+		case RoutineProposalStates.Accepted: return RoutineProposalStates.Accepted;
+		case RoutineProposalStates.Cancelled: return RoutineProposalStates.Cancelled;
+		case RoutineProposalStates.Expired: return RoutineProposalStates.Expired;
+		default: throw new Error(`Unsupported routine proposal state: ${value}`);
+	}
 }

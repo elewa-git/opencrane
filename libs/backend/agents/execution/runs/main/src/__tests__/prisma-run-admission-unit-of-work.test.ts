@@ -1,7 +1,7 @@
 import { AgentRoutineFiringDisposition, AgentRoutineFiringTrigger, Prisma, type PrismaClient, type AgentRoutineFiring, type AgentRun, type AuthorizationGrant, type RunInputSnapshot as StoredSnapshot } from "@prisma/client";
 
 import type { Logger } from "@opencrane/backend/observability";
-import { RUN_INPUT_SNAPSHOT_VERSION, type RunInputSnapshot } from "@opencrane/contracts";
+import { FIRST_PARTY_TOOL_CAPABILITY_CONTRACTS, FirstPartyToolCapabilities, RUN_INPUT_SNAPSHOT_VERSION, type RunInputFirstPartyCapabilitySelection, type RunInputSnapshot } from "@opencrane/contracts";
 import { ExecutionSubjectMembershipKinds, type ExecutionSubject } from "@opencrane/models/agents";
 import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { PrismaSelfRunStatusRepository } from "../prisma-self-run-status-repository";
 import { PrismaRunAdmissionUnitOfWork } from "../prisma-run-admission-unit-of-work";
 import { RunAdmissionDenialReasons, RunAdmissionMessageInputModes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type InteractiveRunAdmissionCommand, type RoutineRunAdmissionCommand } from "../run-admission.types";
+import { __DigestRunInputSnapshot } from "../run-input-snapshot-digest";
 
 /** Create one complete lease-bound execution subject for the admitted personal run. */
 function _ExecutionSubject(): ExecutionSubject
@@ -44,7 +45,20 @@ function _ManagedSubject(): ExecutionSubject
 /** Create the immutable first-attempt snapshot persisted by every successful test admission. */
 function _Snapshot(subject: ExecutionSubject = _ExecutionSubject()): RunInputSnapshot
 {
-	return { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION, origin: { kind: "interactive", messageId: "message-1", historyRevision: "7" }, conversationId: "conversation-1", messageIds: ["message-1"], personaRevisionId: "persona-1", preferenceFactIds: ["preference-1"], artifactRevisionIds: ["artifact-1"], skillRevisionIds: ["skill-1"], memoryQueryPolicy: { scope: "personal" }, mcpTools: [], modelRoute: { alias: "target" }, budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 1000, maxCostUsdMicros: null, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: 2_000_000_000_000 }, executionSubject: subject, promptCompilerVersion: "prompt-v1", digest: `sha256:${"e".repeat(64)}`, compiledAt: "2026-09-01T00:00:00.000Z" };
+	const firstPartyCapabilities = [_FirstPartyCapability(FirstPartyToolCapabilities.RequestRoutine)];
+	return _WithDigest({ runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION, origin: { kind: "interactive", messageId: "message-1", historyRevision: "7" }, conversationId: "conversation-1", messageIds: ["message-1"], personaRevisionId: "persona-1", preferenceFactIds: ["preference-1"], artifactRevisionIds: ["artifact-1"], skillRevisionIds: ["skill-1"], memoryQueryPolicy: { scope: "personal" }, mcpTools: [], firstPartyCapabilities, modelRoute: { alias: "target" }, budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 1000, maxCostUsdMicros: null, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: 2_000_000_000_000 }, executionSubject: subject, promptCompilerVersion: "prompt-v1", compiledAt: "2026-09-01T00:00:00.000Z" });
+}
+
+/** Build one valid built-in capability coordinate for persistence tests. */
+function _FirstPartyCapability(capability: FirstPartyToolCapabilities): RunInputFirstPartyCapabilitySelection
+{
+	return { capability, capabilityRevision: FIRST_PARTY_TOOL_CAPABILITY_CONTRACTS[capability].capabilityRevision, parametersSchemaDigest: `sha256:${"f".repeat(64)}` };
+}
+
+/** Recompute a test snapshot digest after changing any frozen field. */
+function _WithDigest(content: Omit<RunInputSnapshot, "digest">): RunInputSnapshot
+{
+	return { ...content, digest: __DigestRunInputSnapshot(content) };
 }
 
 /** Create one browser-derived admission command with no caller-controlled authority evidence. */
@@ -70,7 +84,8 @@ function _RoutineSubject(): ExecutionSubject
 function _RoutineSnapshot(): RunInputSnapshot
 {
 	const snapshot = _Snapshot(_RoutineSubject());
-	return { ...snapshot, runId: "run-routine-1", conversationId: "conversation-routine-1", messageIds: ["service-prompt-1"], origin: { kind: "scheduled", routineId: "routine-1", routineRevision: 3, firingId: "firing-1", scheduledSlot: "2026-09-01T01:00:00.000Z", requesterPrincipalId: "principal-1", requesterIssuer: "https://issuer.example", requesterSubjectId: "subject-1", requesterAuthenticatedAt: "2026-08-20T00:00:00.000Z", workflowTaskId: "task-1", workflowTaskName: "routine-occurrence", workflowTaskKey: "firing-1" } };
+	const { digest: _digest, ...content } = snapshot;
+	return _WithDigest({ ...content, runId: "run-routine-1", conversationId: "conversation-routine-1", messageIds: ["service-prompt-1"], firstPartyCapabilities: [], origin: { kind: "scheduled", routineId: "routine-1", routineRevision: 3, firingId: "firing-1", scheduledSlot: "2026-09-01T01:00:00.000Z", requesterPrincipalId: "principal-1", requesterIssuer: "https://issuer.example", requesterSubjectId: "subject-1", requesterAuthenticatedAt: "2026-08-20T00:00:00.000Z", workflowTaskId: "task-1", workflowTaskName: "routine-occurrence", workflowTaskKey: "firing-1" } });
 }
 
 /** Create authority facts re-read by the input compiler inside the transaction. */
@@ -221,6 +236,7 @@ describe("PrismaRunAdmissionUnitOfWork", function _Suite()
 		const f = _ActivityFixture();
 		const command = _RoutineCommand();
 		await expect(f.admission.admit(command, _VerifyExisting, _BuildRoutine)).resolves.toMatchObject({ outcome: "accepted", snapshot: { origin: _RoutineSnapshot().origin } });
+		expect(f.snapshots[0].firstPartyCapabilities).toEqual([]);
 		expect(f.runs).toEqual([expect.objectContaining({ id: "run-routine-1", trigger: "Scheduled", routineFiringId: "firing-1", routineId: "routine-1", routineRevision: 3, routineScheduledSlot: new Date("2026-09-01T01:00:00.000Z") })]);
 		expect(f.routineFirings[0].runId).toBe("run-routine-1");
 		expect(f.grants).toEqual([]);
@@ -286,7 +302,9 @@ describe("PrismaRunAdmissionUnitOfWork", function _Suite()
 	it.each(["personal", "company"])("persists and retries a %s run under its execution identity and human requester", async function _FirstAndDuplicate(kind)
 	{
 		const subject = kind === "company" ? _ManagedSubject() : _ExecutionSubject();
-		const snapshot = { ..._Snapshot(subject), preferenceFactIds: [], memoryQueryPolicy: { scope: "none" } };
+		const original = _Snapshot(subject);
+		const { digest: _digest, ...content } = original;
+		const snapshot = _WithDigest({ ...content, preferenceFactIds: [], memoryQueryPolicy: { scope: "none" } });
 		const transaction = { ..._GrantDelegates().transaction, agentRun: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() }, runInputSnapshot: { findUnique: vi.fn(), create: vi.fn() } };
 		const prisma = { $transaction: vi.fn(async function _Transaction(operation: (client: typeof transaction) => Promise<unknown>) { return operation(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaRunAdmissionUnitOfWork(prisma, undefined, _Logger());
@@ -354,7 +372,7 @@ describe("PrismaRunAdmissionUnitOfWork", function _Suite()
 
 		await expect(repository.admit(_Command(), _VerifyExisting, async function _Build() { return { outcome: "ready", value: { authority: _Authority(), snapshot } } as const; })).resolves.toEqual({ outcome: "accepted", snapshot });
 		expect(transaction.agentRun.create).toHaveBeenCalledWith({ data: expect.objectContaining({ id: "run-1", agentIdentityId: "identity-1", principalId: "principal-1", executionSubject: snapshot.executionSubject, inputSnapshotDigest: snapshot.digest }) });
-		expect(transaction.runInputSnapshot.create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: "run-1", attempt: 1, agentIdentityId: "identity-1", principalId: "principal-1", executionSubject: snapshot.executionSubject, digest: snapshot.digest }) });
+		expect(transaction.runInputSnapshot.create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: "run-1", attempt: 1, agentIdentityId: "identity-1", principalId: "principal-1", executionSubject: snapshot.executionSubject, firstPartyCapabilities: snapshot.firstPartyCapabilities, digest: snapshot.digest }) });
 	});
 
 	it("returns the current immutable snapshot for an exact idempotent duplicate", async function _ReturnsDuplicate()
@@ -367,6 +385,45 @@ describe("PrismaRunAdmissionUnitOfWork", function _Suite()
 
 		await expect(repository.admit({ ..._Command(), runId: "retry-generated-run-id" }, _VerifyExisting, async function _UnexpectedBuild() { throw new Error("duplicate must not rebuild"); })).resolves.toEqual({ outcome: "idempotent", snapshot });
 		expect(transaction.runInputSnapshot.findUnique).toHaveBeenCalledWith({ where: { runId_attempt_digest: { runId: "run-1", attempt: 1, digest: snapshot.digest } } });
+	});
+
+	it("fails closed when a saved built-in capability was changed without changing the snapshot digest", async function _RejectsCapabilityTampering()
+	{
+		const snapshot = _Snapshot();
+		const row = { ...snapshot, firstPartyCapabilities: [_FirstPartyCapability(FirstPartyToolCapabilities.UpgradeSession)], agentIdentityId: "identity-1", principalId: "principal-1", executionSubject: snapshot.executionSubject, compiledAt: new Date(snapshot.compiledAt), retiredMemoryFacts: [] };
+		const transaction = { agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", trigger: "Interactive", routineFiringId: null, routineId: null, routineRevision: null, routineScheduledSlot: null, inputSnapshotDigest: snapshot.digest }) }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue(row) } };
+		const prisma = { $transaction: vi.fn(async function _Transaction(operation: (client: typeof transaction) => Promise<unknown>) { return operation(transaction); }) } as unknown as PrismaClient;
+		const repository = new PrismaRunAdmissionUnitOfWork(prisma, undefined, _Logger());
+		const verify = vi.fn(_VerifyExisting);
+
+		await expect(repository.admit({ ..._Command(), runId: "retry-generated-run-id" }, verify, async function _UnexpectedBuild() { throw new Error("tampered duplicate must not rebuild"); })).resolves.toEqual({ outcome: "denied", reason: RunAdmissionDenialReasons.PersistenceUnavailable });
+		expect(verify).not.toHaveBeenCalled();
+	});
+
+	it("fails closed when a saved built-in capability array is malformed", async function _RejectsMalformedCapabilities()
+	{
+		const snapshot = _Snapshot();
+		const row = { ...snapshot, firstPartyCapabilities: [{ capability: FirstPartyToolCapabilities.RequestRoutine }], agentIdentityId: "identity-1", principalId: "principal-1", executionSubject: snapshot.executionSubject, compiledAt: new Date(snapshot.compiledAt), retiredMemoryFacts: [] };
+		const transaction = { agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", trigger: "Interactive", routineFiringId: null, routineId: null, routineRevision: null, routineScheduledSlot: null, inputSnapshotDigest: snapshot.digest }) }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue(row) } };
+		const prisma = { $transaction: vi.fn(async function _Transaction(operation: (client: typeof transaction) => Promise<unknown>) { return operation(transaction); }) } as unknown as PrismaClient;
+		const repository = new PrismaRunAdmissionUnitOfWork(prisma, undefined, _Logger());
+		const verify = vi.fn(_VerifyExisting);
+
+		await expect(repository.admit({ ..._Command(), runId: "retry-generated-run-id" }, verify, async function _UnexpectedBuild() { throw new Error("malformed duplicate must not rebuild"); })).resolves.toEqual({ outcome: "denied", reason: RunAdmissionDenialReasons.PersistenceUnavailable });
+		expect(verify).not.toHaveBeenCalled();
+	});
+
+	it("refuses a saved version-three snapshot instead of applying a compatibility default", async function _RejectsOlderSnapshotVersion()
+	{
+		const snapshot = _Snapshot();
+		const row = { ...snapshot, snapshotVersion: 3, firstPartyCapabilities: undefined, agentIdentityId: "identity-1", principalId: "principal-1", executionSubject: snapshot.executionSubject, compiledAt: new Date(snapshot.compiledAt), retiredMemoryFacts: [] };
+		const transaction = { agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", trigger: "Interactive", routineFiringId: null, routineId: null, routineRevision: null, routineScheduledSlot: null, inputSnapshotDigest: snapshot.digest }) }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue(row) } };
+		const prisma = { $transaction: vi.fn(async function _Transaction(operation: (client: typeof transaction) => Promise<unknown>) { return operation(transaction); }) } as unknown as PrismaClient;
+		const repository = new PrismaRunAdmissionUnitOfWork(prisma, undefined, _Logger());
+		const verify = vi.fn(_VerifyExisting);
+
+		await expect(repository.admit({ ..._Command(), runId: "retry-generated-run-id" }, verify, async function _UnexpectedBuild() { throw new Error("older duplicate must not rebuild"); })).resolves.toEqual({ outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict });
+		expect(verify).not.toHaveBeenCalled();
 	});
 
 	it.each([

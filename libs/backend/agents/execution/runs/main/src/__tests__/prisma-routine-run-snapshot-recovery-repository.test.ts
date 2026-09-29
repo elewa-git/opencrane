@@ -1,6 +1,6 @@
 import { AgentRoutineFiringDisposition, AgentRoutineFiringTrigger, AgentRunState, AgentRunTrigger, type AgentRoutineFiring, type AgentRun, type Prisma, type RunInputSnapshot as PrismaRunInputSnapshot } from "@prisma/client";
 
-import { RUN_INPUT_SNAPSHOT_VERSION, type RunInputSnapshot } from "@opencrane/contracts";
+import { FIRST_PARTY_TOOL_CAPABILITY_CONTRACTS, FirstPartyToolCapabilities, RUN_INPUT_SNAPSHOT_VERSION, type RunInputSnapshot } from "@opencrane/contracts";
 import { ExecutionSubjectMembershipKinds, type ExecutionSubject } from "@opencrane/models/agents";
 import { describe, expect, it, vi } from "vitest";
 
@@ -39,7 +39,7 @@ function _Snapshot(command: RoutineRunAdmissionCommand): RunInputSnapshot
 	const content: Omit<RunInputSnapshot, "digest"> = {
 		runId: command.runId, attempt: 1, siloId: command.siloId, agentServiceId: command.agentServiceId, agentRevisionId: "revision-1", snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION,
 		origin: { kind: command.trigger, routineId: command.routineInput.routineId, routineRevision: command.routineInput.routineRevision, firingId: command.routineInput.firingId, scheduledSlot: command.routineInput.scheduledSlot, requesterPrincipalId: command.routineInput.requesterPrincipalId, requesterIssuer: command.routineInput.requesterIssuer, requesterSubjectId: command.routineInput.requesterSubjectId, requesterAuthenticatedAt: command.routineInput.requesterAuthenticatedAt, workflowTaskId: command.routineInput.workflowTaskId, workflowTaskName: command.routineInput.workflowTaskName, workflowTaskKey: command.routineInput.workflowTaskKey },
-		conversationId: command.conversationId, messageIds: ["service-prompt-1"], personaRevisionId: "persona-1", preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: { scope: "none" }, mcpTools: [], modelRoute: { alias: "target" }, budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 1000, maxCostUsdMicros: null, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: 2_000_000_000_000 }, executionSubject: _ExecutionSubject(command), promptCompilerVersion: "prompt-v1", compiledAt: "2026-09-01T00:00:00.000Z",
+		conversationId: command.conversationId, messageIds: ["service-prompt-1"], personaRevisionId: "persona-1", preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: { scope: "none" }, mcpTools: [], firstPartyCapabilities: [], modelRoute: { alias: "target" }, budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 1000, maxCostUsdMicros: null, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: 2_000_000_000_000 }, executionSubject: _ExecutionSubject(command), promptCompilerVersion: "prompt-v1", compiledAt: "2026-09-01T00:00:00.000Z",
 	};
 	return { ...content, digest: __DigestRunInputSnapshot(content) };
 }
@@ -48,7 +48,7 @@ function _Snapshot(command: RoutineRunAdmissionCommand): RunInputSnapshot
 function _StoredSnapshot(snapshot: RunInputSnapshot): PrismaRunInputSnapshot
 {
 	return {
-		id: "snapshot-1", runId: snapshot.runId, attempt: snapshot.attempt, snapshotVersion: snapshot.snapshotVersion, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, agentRevisionId: snapshot.agentRevisionId, agentIdentityId: snapshot.executionSubject.agentIdentityId, principalId: snapshot.executionSubject.principalId, executionSubject: snapshot.executionSubject, personaRevisionId: snapshot.personaRevisionId, conversationId: snapshot.conversationId, messageIds: [...snapshot.messageIds], preferenceFactIds: [...snapshot.preferenceFactIds], artifactRevisionIds: [...snapshot.artifactRevisionIds], retiredMemoryFacts: [], modelRoute: snapshot.modelRoute, mcpTools: snapshot.mcpTools, skillRevisionIds: [...snapshot.skillRevisionIds], memoryQueryPolicy: snapshot.memoryQueryPolicy, budgetPolicy: snapshot.budgetPolicy, promptCompilerVersion: snapshot.promptCompilerVersion, origin: snapshot.origin, digest: snapshot.digest, compiledAt: new Date(snapshot.compiledAt),
+		id: "snapshot-1", runId: snapshot.runId, attempt: snapshot.attempt, snapshotVersion: snapshot.snapshotVersion, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, agentRevisionId: snapshot.agentRevisionId, agentIdentityId: snapshot.executionSubject.agentIdentityId, principalId: snapshot.executionSubject.principalId, executionSubject: snapshot.executionSubject, personaRevisionId: snapshot.personaRevisionId, conversationId: snapshot.conversationId, messageIds: [...snapshot.messageIds], preferenceFactIds: [...snapshot.preferenceFactIds], artifactRevisionIds: [...snapshot.artifactRevisionIds], retiredMemoryFacts: [], modelRoute: snapshot.modelRoute, mcpTools: snapshot.mcpTools, firstPartyCapabilities: snapshot.firstPartyCapabilities, skillRevisionIds: [...snapshot.skillRevisionIds], memoryQueryPolicy: snapshot.memoryQueryPolicy, budgetPolicy: snapshot.budgetPolicy, promptCompilerVersion: snapshot.promptCompilerVersion, origin: snapshot.origin, digest: snapshot.digest, compiledAt: new Date(snapshot.compiledAt),
 	} as unknown as PrismaRunInputSnapshot;
 }
 
@@ -95,6 +95,7 @@ describe("PrismaRoutineRunSnapshotRecoveryRepository", function _RoutineRunSnaps
 		const fixture = _Fixture(_Command(trigger));
 
 		await expect(fixture.repository.recover(fixture.command, 1)).resolves.toEqual(fixture.snapshot);
+		expect(fixture.snapshot.firstPartyCapabilities).toEqual([]);
 		expect(fixture.transaction.agentRun.findUnique).toHaveBeenCalledWith({ where: { id: fixture.command.runId } });
 		expect(fixture.transaction.agentRoutineFiring.findUnique).toHaveBeenCalledWith({ where: { id: fixture.command.routineInput.firingId } });
 		expect(fixture.transaction.runInputSnapshot.findUnique).toHaveBeenCalledWith({ where: { runId_attempt_digest: { runId: fixture.command.runId, attempt: 1, digest: fixture.snapshot.digest } } });
@@ -164,6 +165,31 @@ describe("PrismaRoutineRunSnapshotRecoveryRepository", function _RoutineRunSnaps
 		fixture.state.snapshot = { ...fixture.state.snapshot!, modelRoute: { alias: "tampered" } } as PrismaRunInputSnapshot;
 
 		await expect(fixture.repository.recover(fixture.command, 1)).rejects.toThrow("Recovered routine snapshot digest is invalid");
+	});
+
+	it("rejects a valid built-in capability coordinate added after routine admission", async function _RejectsCapabilityTampering()
+	{
+		const fixture = _Fixture();
+		const contract = FIRST_PARTY_TOOL_CAPABILITY_CONTRACTS[FirstPartyToolCapabilities.RequestRoutine];
+		fixture.state.snapshot = { ...fixture.state.snapshot!, firstPartyCapabilities: [{ capability: FirstPartyToolCapabilities.RequestRoutine, capabilityRevision: contract.capabilityRevision, parametersSchemaDigest: `sha256:${"f".repeat(64)}` }] } as PrismaRunInputSnapshot;
+
+		await expect(fixture.repository.recover(fixture.command, 1)).rejects.toThrow("Recovered routine snapshot digest is invalid");
+	});
+
+	it("rejects malformed built-in capability JSON", async function _RejectsMalformedCapabilities()
+	{
+		const fixture = _Fixture();
+		fixture.state.snapshot = { ...fixture.state.snapshot!, firstPartyCapabilities: [{ capability: FirstPartyToolCapabilities.RequestRoutine }] } as PrismaRunInputSnapshot;
+
+		await expect(fixture.repository.recover(fixture.command, 1)).rejects.toThrow();
+	});
+
+	it("rejects a version-three snapshot instead of applying an empty-capability compatibility default", async function _RejectsOlderSnapshotVersion()
+	{
+		const fixture = _Fixture();
+		fixture.state.snapshot = { ...fixture.state.snapshot!, snapshotVersion: 3, firstPartyCapabilities: undefined } as unknown as PrismaRunInputSnapshot;
+
+		await expect(fixture.repository.recover(fixture.command, 1)).rejects.toThrow("Stored routine snapshot does not match");
 	});
 
 	it("fails closed when a stored snapshot field cannot be parsed", async function _RejectsCorruptSnapshot()

@@ -8,7 +8,7 @@ import { CompiledFinalOutputModes, ___ConversationFinalTextSchema, type Compiled
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { ConversationComputerOutputCommand, ConversationComputerPodLeaseCommand, ConversationComputerReviewCredentialGrant, ConversationComputerRunLifecycleCommand, ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityPort, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, ConversationComputerTurnWorkflowCommand, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
-import { _InitialConversationComputerTurnProtocol } from "./conversation-computer-turn-protocol";
+import { _ConversationComputerSelectionIdentity, _InitialConversationComputerTurnProtocol } from "./conversation-computer-turn-protocol";
 import { ConversationComputerTurnProtocolStates, ConversationComputerTurnUnavailableReasons } from "./conversation-computer-turn-protocol.types";
 import type { ConversationComputerTurnUnavailableReceipt } from "./conversation-computer-turn-protocol.types";
 import { ConversationComputerOutputPositionConflictError } from "./conversation-computer-turn-store";
@@ -326,7 +326,7 @@ function _UnavailableReceipt(turn: FrozenConversationComputerTurn): Conversation
 	if ((turn.protocol.state === ConversationComputerTurnProtocolStates.ModelReserved || turn.protocol.state === ConversationComputerTurnProtocolStates.ModelRetryWaiting) && step?.state === ConversationComputerTurnProtocolStates.ModelReserved)
 		return { ordinal: step.reservation.ordinal, sourceCommandId: step.reservation.invocationFence, reason: ConversationComputerTurnUnavailableReasons.ModelResponseUnavailable };
 	if (turn.protocol.state === ConversationComputerTurnProtocolStates.ToolPending && step?.state === ConversationComputerTurnProtocolStates.ToolPending)
-		return { ordinal: step.reservation.ordinal, sourceCommandId: step.selection.toolInvocationId, reason: ConversationComputerTurnUnavailableReasons.ToolResultUnavailable };
+		return { ordinal: step.reservation.ordinal, sourceCommandId: _ConversationComputerSelectionIdentity(step.selection), reason: ConversationComputerTurnUnavailableReasons.ToolResultUnavailable };
 	if (turn.protocol.state === ConversationComputerTurnProtocolStates.Open)
 		return { ordinal: null, sourceCommandId: _Uuid("allowance-unavailable", [turn.bootstrapId, "1"]), reason: ConversationComputerTurnUnavailableReasons.AllowanceExhausted };
 	if (turn.protocol.state === ConversationComputerTurnProtocolStates.ResultReady && step?.state === ConversationComputerTurnProtocolStates.ResultReady)

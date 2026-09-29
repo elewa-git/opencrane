@@ -10,7 +10,7 @@ import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { ConversationComputerToolResultOutcomes, type ConversationComputerToolResult, type ConversationComputerToolResults } from "../../turns/conversation-computer-continuation.types";
 import type { ConversationComputerTurnCandidateResolver, ConversationComputerTurnStore, FrozenConversationComputerTurn } from "../../turns/conversation-computer-turn.types";
 import { _ConversationComputerTurnHistoryDigest } from "../../turns/conversation-computer-turn-protocol";
-import { ConversationComputerTurnProtocolStates } from "../../turns/conversation-computer-turn-protocol.types";
+import { ConversationComputerTurnProtocolStates, ConversationComputerTurnToolKinds } from "../../turns/conversation-computer-turn-protocol.types";
 import type { ConversationToolDispatchDependencies } from "../dispatch/conversation-tool-dispatch.types";
 import { ConversationGeneratedFileResultStates, type ConversationGeneratedFileResultRepository, type ConversationGeneratedFileResultRepositoryFactory } from "./conversation-generated-file-result.types";
 import { PrismaConversationToolDispatchAuthority } from "../dispatch/prisma-conversation-tool-dispatch-authority";
@@ -51,6 +51,8 @@ function _SameToolStep(expected: ReturnType<typeof _ToolStep>, stored: ReturnTyp
 {
 	if (expected === null || stored === null)
 		return false;
+	if (expected.selection.kind !== ConversationComputerTurnToolKinds.Mcp || stored.selection.kind !== ConversationComputerTurnToolKinds.Mcp)
+		return false;
 	return expected.reservation.ordinal === stored.reservation.ordinal
 		&& expected.reservation.invocationFence === stored.reservation.invocationFence
 		&& expected.selection.proposalId === stored.selection.proposalId
@@ -90,6 +92,8 @@ export class PrismaConversationToolResultsRepository implements ConversationComp
 		if (step === null)
 			return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
 		const selection = step.selection;
+		if (selection.kind !== ConversationComputerTurnToolKinds.Mcp)
+			return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
 		const command = { siloId: turn.siloId, runId: turn.compile.runId, attempt: turn.compile.attempt, toolInvocationId: selection.toolInvocationId, runtimeInstanceId: turn.computerId, commandId: turn.bootstrapId, requestFingerprint: selection.requestFingerprint };
 		let result = await __ReadRunToolResultInTransaction(this.transaction, command);
 		if (result.outcome !== RunToolResultReadOutcomes.Available)
@@ -100,7 +104,7 @@ export class PrismaConversationToolResultsRepository implements ConversationComp
 			return { outcome: ConversationComputerToolResultOutcomes.Pending, waitFor, waitUntilEpochMs: result.pendingUntilEpochMs };
 		}
 		const resultReservation = step.reservation;
-		if (step.result !== null && (step.result.proposalId !== selection.proposalId || step.result.resultDigest !== result.payloadDigest))
+		if (step.result !== null && (step.result.kind !== ConversationComputerTurnToolKinds.Mcp || step.result.proposalId !== selection.proposalId || step.result.resultDigest !== result.payloadDigest))
 			return { outcome: ConversationComputerToolResultOutcomes.Unavailable };
 		if (consume && (currentModel === null || currentModel.historyDigest !== _ConversationComputerTurnHistoryDigest(turn.protocol.steps)))
 			return { outcome: ConversationComputerToolResultOutcomes.Unavailable };

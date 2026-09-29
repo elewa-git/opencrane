@@ -1,4 +1,4 @@
-import { RoutineFiringReasons } from "@opencrane/contracts";
+import { RoutineFiringReasons, RoutineProposalStates } from "@opencrane/contracts";
 import { AgentRunTerminalReasons, RoutineFiringDisposition, RoutineFiringTrigger, RoutineStatus } from "@opencrane/models/agents";
 
 /** Opaque public identifier shared by routine paths and payloads. */
@@ -45,8 +45,16 @@ const _CreationOptionsSchema = { type: "object", additionalProperties: false, re
 const _PreviewRequestSchema = { type: "object", additionalProperties: false, required: ["schedule"], properties: { schedule: _ScheduleSchema } } as const;
 const _PreviewResponseSchema = { type: "object", additionalProperties: false, required: ["schedule", "calculatedAt", "nextOccurrences"], properties: { schedule: _ScheduleSchema, calculatedAt: { type: "string", format: "date-time" }, nextOccurrences: { type: "array", minItems: 5, maxItems: 5, items: { type: "string", format: "date-time" } } } } as const;
 
+/** Requester-only proposal projection with accepted routine identity constrained to its state. */
+const _ProposalBaseProperties = { proposalRef: _IdentifierSchema, sourceConversationId: _IdentifierSchema, suggestion: { type: "object", additionalProperties: false, required: ["instruction", "schedule"], properties: { instruction: { type: "string", minLength: 1, maxLength: 20_000 }, schedule: _ScheduleSchema } }, expiresAt: { type: "string", format: "date-time" } } as const;
+const _ProposalSchema = { oneOf: [
+	{ type: "object", additionalProperties: false, required: [...Object.keys(_ProposalBaseProperties), "state"], properties: { ..._ProposalBaseProperties, state: { const: RoutineProposalStates.Pending } } },
+	{ type: "object", additionalProperties: false, required: [...Object.keys(_ProposalBaseProperties), "state", "acceptedRoutineId"], properties: { ..._ProposalBaseProperties, state: { const: RoutineProposalStates.Accepted }, acceptedRoutineId: _IdentifierSchema } },
+	{ type: "object", additionalProperties: false, required: [...Object.keys(_ProposalBaseProperties), "state"], properties: { ..._ProposalBaseProperties, state: { enum: [RoutineProposalStates.Cancelled, RoutineProposalStates.Expired] } } },
+], discriminator: { propertyName: "state" } } as const;
+
 /** Request that creates a reviewed routine. */
-const _CreateRequestSchema = { type: "object", additionalProperties: false, required: ["destinationConversationId", "audienceParticipantRefs", "selectedManagedServiceId", "schedule", "instruction", "idempotencyKey"], properties: { destinationConversationId: _IdentifierSchema, audienceParticipantRefs: { type: "array", minItems: 1, maxItems: 100, uniqueItems: true, items: _IdentifierSchema }, selectedManagedServiceId: _IdentifierSchema, schedule: _ScheduleSchema, instruction: { type: "string", minLength: 1, maxLength: 20_000 }, idempotencyKey: _IdempotencyKeySchema } } as const;
+const _CreateRequestSchema = { type: "object", additionalProperties: false, required: ["destinationConversationId", "audienceParticipantRefs", "selectedManagedServiceId", "schedule", "instruction", "idempotencyKey"], properties: { destinationConversationId: _IdentifierSchema, audienceParticipantRefs: { type: "array", minItems: 1, maxItems: 100, uniqueItems: true, items: _IdentifierSchema }, selectedManagedServiceId: _IdentifierSchema, schedule: _ScheduleSchema, instruction: { type: "string", minLength: 1, maxLength: 20_000 }, idempotencyKey: _IdempotencyKeySchema, proposalRef: _IdentifierSchema } } as const;
 
 /** Request that replaces a routine schedule and instruction. */
 const _ReviseRequestSchema = { type: "object", additionalProperties: false, required: ["expectedRevision", "expectedLifecycleRevision", "schedule", "instruction", "idempotencyKey"], properties: { expectedRevision: _RevisionSchema, expectedLifecycleRevision: _RevisionSchema, schedule: _ScheduleSchema, instruction: { type: "string", minLength: 1, maxLength: 20_000 }, idempotencyKey: _IdempotencyKeySchema } } as const;
@@ -71,6 +79,7 @@ function _ControlOperation(operationId: string, summary: string)
 
 /** Routine identifier supplied by every resource-specific operation. */
 const _RoutineIdParameter = { name: "routineId", in: "path", required: true, schema: _IdentifierSchema, description: "Stable routine identifier returned by creation." } as const;
+const _ProposalRefParameter = { name: "proposalRef", in: "path", required: true, schema: _IdentifierSchema, description: "Opaque routine proposal reference from the requester notification." } as const;
 
 /** Authenticated routine paths contributed to the complete API specification. */
 export const _RoutineOpenapiPaths = {
@@ -96,6 +105,18 @@ export const _RoutineOpenapiPaths = {
 		post: {
 			operationId: "previewRoutineSchedule", summary: "Preview upcoming routine slots", tags: ["Routines"], requestBody: { required: true, content: { "application/json": { schema: _PreviewRequestSchema } } },
 			responses: { 200: { description: "Five upcoming schedule slots.", content: { "application/json": { schema: _PreviewResponseSchema } } }, ..._Errors },
+		},
+	},
+	"/me/routines/proposals/{proposalRef}": {
+		get: {
+			operationId: "getRoutineProposal", summary: "Read a routine proposal", tags: ["Routines"], parameters: [_ProposalRefParameter],
+			description: "Returns decrypted suggestion content only to the original requester while current source-conversation access remains valid. A database-clock expiry is committed before return.",
+			responses: { 200: { description: "Current requester-owned proposal.", content: { "application/json": { schema: _ProposalSchema } } }, 400: _Errors[400], 401: _Errors[401], 404: _Errors[404], 503: _Errors[503] },
+		},
+		delete: {
+			operationId: "cancelRoutineProposal", summary: "Cancel a routine proposal", tags: ["Routines"], parameters: [_ProposalRefParameter],
+			description: "Closes a pending proposal without creating a routine, or returns the durable terminal winner after concurrent acceptance, cancellation or expiry.",
+			responses: { 200: { description: "Durable proposal state.", content: { "application/json": { schema: _ProposalSchema } } }, 400: _Errors[400], 401: _Errors[401], 404: _Errors[404], 503: _Errors[503] },
 		},
 	},
 	"/me/routines/{routineId}": {

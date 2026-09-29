@@ -33,11 +33,31 @@ function _ManagedServices()
 /** Composes the real command repository from inspectable transaction doubles. */
 function _Repository(transaction: Record<string, unknown>, facts = _Facts(), grants = _Grants(), tasks = _TaskAdmission(), conversations = _Conversations(), managedServices = _ManagedServices())
 {
-	return { repository: new PrismaRoutineCommandRepository(transaction as unknown as Prisma.TransactionClient, facts as unknown as RoutineFactsRepository, grants as unknown as ManagedAuthorizationGrantRepository & ManagedAuthorizationGrantRestrictionRepository, tasks as unknown as RoutineTaskAdmissionPort<Prisma.TransactionClient>, conversations as never, managedServices as never), facts, grants, tasks };
+	const proposals = { prepareAcceptance: vi.fn(), acceptPrepared: vi.fn() };
+	return { repository: new PrismaRoutineCommandRepository(transaction as unknown as Prisma.TransactionClient, facts as unknown as RoutineFactsRepository, grants as unknown as ManagedAuthorizationGrantRepository & ManagedAuthorizationGrantRestrictionRepository, tasks as unknown as RoutineTaskAdmissionPort<Prisma.TransactionClient>, conversations as never, managedServices as never, proposals as never), facts, grants, tasks, proposals };
 }
 
 describe("PrismaRoutineCommandRepository", function _Suite()
 {
+	it("accepts one reviewed proposal in the same routine creation transaction", async function _AcceptProposal()
+	{
+		const transaction = {
+			agentRoutine: { create: vi.fn().mockResolvedValue({}), update: vi.fn().mockResolvedValue({}) },
+			agentRoutineRevision: { create: vi.fn().mockResolvedValue({}) },
+			agentRoutineCommandReceipt: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({}) },
+		};
+		const fixture = _Repository(transaction);
+		const proposal = { id: "proposal-1", state: "Pending", acceptedRoutineId: null };
+		fixture.proposals.prepareAcceptance.mockResolvedValue(proposal);
+		const command = { caller: _CALLER, destinationConversationId: "destination-1", audienceParticipantRefs: ["participant-1", "participant-2"], selectedManagedServiceId: "service-1", schedule: { expression: "0 * * * *", timezone: "UTC" }, idempotencyKey: "create-key-1", proposalRef: "proposal-1", routineId: "routine-created", revisionId: "revision-created", commandReceiptId: "receipt-created", instruction: _INSTRUCTION, commandDigest: `sha256:${"b".repeat(64)}` as const };
+
+		await fixture.repository.create(command);
+
+		expect(fixture.proposals.prepareAcceptance).toHaveBeenCalledWith(_CALLER, "proposal-1", _NOW);
+		expect(fixture.proposals.acceptPrepared).toHaveBeenCalledWith(proposal, "routine-created", _NOW);
+		expect(transaction.agentRoutine.create).toHaveBeenCalledOnce();
+	});
+
 	it("creates and exactly replays the fixed audience, task, grants, and receipt", async function _CreateReplay()
 	{
 		let savedReceipt: { routineId: string; commandDigest: string; result: Prisma.JsonValue; routineRevision: number | null; firingId: string | null } | null = null;

@@ -84,7 +84,7 @@ function _Store(gateway: RoutineGateway, session: ReturnType<typeof signal<strin
 function _Gateway(overrides: Partial<RoutineGateway>): RoutineGateway
 {
 	const unavailable = vi.fn().mockRejectedValue(new Error("Unexpected gateway call"));
-	return { list: unavailable, read: unavailable, firings: unavailable, creationOptions: unavailable, preview: unavailable, create: unavailable, revise: unavailable, pause: unavailable, resume: unavailable, retire: unavailable, runNow: unavailable, ...overrides };
+	return { list: unavailable, read: unavailable, firings: unavailable, creationOptions: unavailable, proposal: unavailable, cancelProposal: unavailable, preview: unavailable, create: unavailable, revise: unavailable, pause: unavailable, resume: unavailable, retire: unavailable, runNow: unavailable, ...overrides };
 }
 
 function _Page(nextCursor?: string): RoutineListPage

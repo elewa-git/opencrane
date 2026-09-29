@@ -1,4 +1,4 @@
-import { AgentRoutineCommandKind, AgentRoutineFiringTrigger, AgentRoutineStatus, Prisma } from "@prisma/client";
+import { AgentRoutineCommandKind, AgentRoutineFiringTrigger, AgentRoutineProposalState, AgentRoutineStatus, Prisma } from "@prisma/client";
 
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 import type { ManagedAuthorizationGrantRepository, ManagedAuthorizationGrantRestrictionRepository } from "@opencrane/backend/server/iam/authorization";
@@ -15,6 +15,7 @@ import type { CurrentRoutineRows, RoutineFactsRepository, RoutineFiringActor } f
 import { _PRISMA_FIRING_DISPOSITION, _PRISMA_ROUTINE_STATUS } from "./routine-prisma-mapping";
 import type { ChangeRoutineStatusPersistenceCommand, CreateRoutinePersistenceCommand, ReviseRoutinePersistenceCommand, RoutineCommandPersistence, RunRoutineNowPersistenceCommand } from "./routine-persistence.types";
 import type { RoutineConversationDirectory, RoutineManagedServiceDirectory } from "./routine-read.types";
+import type { PrismaRoutineProposalRepository } from "./prisma-routine-proposal-repository";
 import { RoutineLifecycleDecisionKind, RoutineLifecycleEvent } from "./routine-lifecycle.types";
 import { __DecideRoutineLifecycle } from "./routine-lifecycle";
 import type { RoutineOccurrenceTaskInput, RoutineScheduleTaskInput, RoutineTaskAdmissionPort } from "./routine-workflow.types";
@@ -34,9 +35,11 @@ export class PrismaRoutineCommandRepository implements RoutineCommandPersistence
 	private readonly conversations: RoutineConversationDirectory<Prisma.TransactionClient>;
 	/** Agent-service-owned current eligibility reader. */
 	private readonly managedServices: RoutineManagedServiceDirectory;
+	/** Scheduling-owned proposal state sharing this exact transaction. */
+	private readonly proposals: PrismaRoutineProposalRepository;
 
 	/** Stores every transaction-bound collaborator. */
-	constructor(transaction: Prisma.TransactionClient, facts: RoutineFactsRepository, managedGrants: ManagedAuthorizationGrantRepository & ManagedAuthorizationGrantRestrictionRepository, taskAdmission: RoutineTaskAdmissionPort<Prisma.TransactionClient>, conversations: RoutineConversationDirectory<Prisma.TransactionClient>, managedServices: RoutineManagedServiceDirectory)
+	constructor(transaction: Prisma.TransactionClient, facts: RoutineFactsRepository, managedGrants: ManagedAuthorizationGrantRepository & ManagedAuthorizationGrantRestrictionRepository, taskAdmission: RoutineTaskAdmissionPort<Prisma.TransactionClient>, conversations: RoutineConversationDirectory<Prisma.TransactionClient>, managedServices: RoutineManagedServiceDirectory, proposals: PrismaRoutineProposalRepository)
 	{
 		this.transaction = transaction;
 		this.facts = facts;
@@ -44,18 +47,25 @@ export class PrismaRoutineCommandRepository implements RoutineCommandPersistence
 		this.taskAdmission = taskAdmission;
 		this.conversations = conversations;
 		this.managedServices = managedServices;
+		this.proposals = proposals;
 	}
 
 	/** @inheritdoc */
 	async create(command: CreateRoutinePersistenceCommand): Promise<RoutineCommandResult>
 	{
 		const now = await this.facts.databaseNow();
+		const proposal = command.proposalRef === undefined ? null : await this.proposals.prepareAcceptance(command.caller, command.proposalRef, now);
 		await this.facts.requirePrincipalAction(command.caller.principalId, command.caller.siloId, ProductAuthorizationResourceKinds.RoutineCollection, command.caller.siloId, ProductAuthorizationActions.Create, now, true, { commandDigest: command.commandDigest });
 		const existing = await this._commandReceipt(command.caller.siloId, command.caller.principalId, AgentRoutineCommandKind.Create, command.idempotencyKey, command.commandDigest);
 		if (existing !== null)
 		{
-			return _ParseRoutineCommandResult(existing.result, existing);
+			const replay = _ParseRoutineCommandResult(existing.result, existing);
+			if (proposal !== null && (proposal.state !== AgentRoutineProposalState.Accepted || proposal.acceptedRoutineId !== replay.routineId))
+				throw new RoutineCommandConflictError("routine proposal does not match the recovered routine");
+			return replay;
 		}
+		if (proposal !== null && proposal.state !== AgentRoutineProposalState.Pending)
+			throw new RoutineCommandConflictError("routine proposal is already accepted");
 
 		const audience = await this.conversations.resolveAudience(command.caller, command.destinationConversationId, command.audienceParticipantRefs, now);
 		if (audience === null || audience.participantRefs.length !== command.audienceParticipantRefs.length || audience.participantRefs.some((reference, index) => reference !== command.audienceParticipantRefs[index]))
@@ -90,6 +100,8 @@ export class PrismaRoutineCommandRepository implements RoutineCommandPersistence
 		await this.transaction.agentRoutine.update({ where: { id: command.routineId }, data: { scheduleTaskId: scheduleTask.taskId, scheduleTaskName: scheduleTask.taskName, scheduleTaskKey: scheduleTask.idempotencyKey } });
 		const result = _DefinitionResult(command.routineId, 1, RoutineStatus.Active, 1, new Date(nextEpochMs));
 		await this._saveCommandReceipt(command.commandReceiptId, command.caller.siloId, command.routineId, command.caller.principalId, AgentRoutineCommandKind.Create, command.idempotencyKey, command.commandDigest, result, 1, null, now);
+		if (proposal !== null)
+			await this.proposals.acceptPrepared(proposal, command.routineId, now);
 		return result;
 	}
 

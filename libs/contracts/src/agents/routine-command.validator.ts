@@ -18,6 +18,7 @@ export const ___RoutineCreateRequestSchema: z.ZodType<RoutineCreateRequest> = z.
 	schedule: __RoutineScheduleSchema,
 	instruction: z.string().trim().min(1).max(20_000),
 	idempotencyKey: _IdempotencyKeySchema,
+	proposalRef: ___RoutineIdentifierSchema.optional(),
 }).strict();
 
 /** Validates the exact routine revision request accepted by the public API. */

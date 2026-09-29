@@ -100,6 +100,48 @@ export function __CreateRoutineRouter(authority: RoutineHttpAuthority, logger: R
 		}
 	});
 
+	router.get("/proposals/:proposalRef", async function _ReadProposal(request, response)
+	{
+		const caller = _Caller(request, resolvePrincipal);
+		if (caller === null)
+			return void response.status(401).json({ error: "routine_authentication_required" });
+		const proposalRef = _ProposalRef(request);
+		if (proposalRef === null)
+			return void response.status(400).json({ error: "invalid_routine_command" });
+		try
+		{
+			const result = await authority.readProposal({ caller, proposalRef });
+			if (result === null)
+				return void response.status(404).json({ error: "routine_unavailable" });
+			response.json(result);
+		}
+		catch (error)
+		{
+			_RespondError(response, logger, caller, error);
+		}
+	});
+
+	router.delete("/proposals/:proposalRef", async function _CancelProposal(request, response)
+	{
+		const caller = _Caller(request, resolvePrincipal);
+		if (caller === null)
+			return void response.status(401).json({ error: "routine_authentication_required" });
+		const proposalRef = _ProposalRef(request);
+		if (proposalRef === null)
+			return void response.status(400).json({ error: "invalid_routine_command" });
+		try
+		{
+			const result = await authority.cancelProposal({ caller, proposalRef });
+			if (result === null)
+				return void response.status(404).json({ error: "routine_unavailable" });
+			response.json(result);
+		}
+		catch (error)
+		{
+			_RespondError(response, logger, caller, error);
+		}
+	});
+
 	router.get("/:routineId/firings", async function _Firings(request, response)
 	{
 		const caller = _Caller(request, resolvePrincipal);
@@ -233,6 +275,13 @@ function _Caller(request: Request, resolvePrincipal: RoutineRequestPrincipalReso
 function _RoutineId(request: Request): string | null
 {
 	const result = ___RoutineIdentifierSchema.safeParse(request.params["routineId"]);
+	return result.success ? result.data : null;
+}
+
+/** Parses an opaque proposal reference without accepting it from a query or body. */
+function _ProposalRef(request: Request): string | null
+{
+	const result = ___RoutineIdentifierSchema.safeParse(request.params["proposalRef"]);
 	return result.success ? result.data : null;
 }
 

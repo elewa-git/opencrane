@@ -9,6 +9,10 @@ from an existing readable conversation, chooses one managed agent and confirms a
 the current participants. That destination, agent and audience stay fixed. Later revisions replace only the
 schedule and encrypted instruction.
 
+An interactive assistant may also save one encrypted `request_routine` suggestion for 24 hours.
+That proposal cannot execute: it only opens the existing human routine form, where the requester
+can edit every final value before accepting one routine.
+
 ```text
  reviewed human command
           │ current grants, destination participants and managed agent
@@ -48,6 +52,10 @@ central authorization and an atomic compare-and-set. `NoOp` does not grant permi
 | Active | Proceed → Active | Proceed → Paused | NoOp | Proceed → Retired | Proceed | Proceed |
 | Paused | Proceed → Paused | NoOp | Proceed → Active | Proceed → Retired | Proceed | NoOp |
 | Retired | NoOp | NoOp | NoOp | NoOp | Refuse | NoOp |
+
+Proposal state is separate from routine lifecycle. Pending proposals may be read, cancelled or
+accepted; database-time expiry wins at the deadline. Accepted, cancelled and expired states are
+terminal. A compare-and-set loser rereads and returns the durable winner.
 
 Firing progress is separate. `Preparing`, `Running`, `Waiting` and `Uncertain` are unfinished and
 block automatic overlap. `Uncertain` preserves its saved provider evidence and can resolve only to
@@ -89,6 +97,12 @@ actor from the persisted trigger rather than accepting it from a worker request.
 - `RoutineAuthority` validates commands, encrypts instructions and invokes transactional
   persistence. Authorized reads decrypt only after their read transaction completes. Caller-bound
   encrypted cursors reveal no inaccessible candidate identifiers.
+- `RoutineAuthority.propose` implements the first-party dispatch port. It validates and encrypts
+  the suggestion before persistence; requester reads and cancellation repeat current membership and
+  source-conversation access without requiring the originating run to remain active.
+- `RoutineProposalCipherAdapter` uses a separate encryption purpose bound to the silo, source
+  conversation, requester and proposal identifier. Its ciphertext cannot be moved into a routine
+  revision or another proposal.
 - `PrismaRoutineUnitOfWork` opens bounded Serializable transactions and constructs the facts,
   command and firing repositories from the exact transaction callback.
 - `RoutineScheduleStartupRecovery` consumes the typed `RoutineScheduleRepairPage` contract to
@@ -140,6 +154,12 @@ firing rechecks all fixed audience members, current managed-agent authority, Rou
 AgentService Invoke. Retired routines cannot be revised or fired. A snapshot, saved status or
 ownership flag never substitutes for current authorization.
 
+Proposal creation uses the conversation owner's transaction-bound authority to prove the active
+run, attempt and ordered frozen `request_routine` selection. Later read, cancel and acceptance use
+persisted source evidence to recheck only current requester membership and source readability, so a
+proposal outlives its run without outliving access. Acceptance validates and encrypts final human
+edits first, then creates the routine and accepts the proposal in the same Serializable unit of work.
+
 ## Dependency direction
 
 The app composition root injects transaction-bound authorization, managed-grant and workflow-task
@@ -189,6 +209,9 @@ the same transaction; this package then validates that exact link before moving 
 `AgentRoutineFiring` stores one occurrence, task fence, preparation receipts, admitted run and result
 evidence. `AgentRoutineCommandReceipt` owns requester-command replay. PostgreSQL constraints and
 deferred commit checks enforce the same aggregate invariants beneath Prisma.
+`AgentRoutineProposal` stores immutable source coordinates, an exact argument digest and a
+purpose-separated encrypted suggestion. Database authority stamps its 24-hour lifetime and permits
+only one terminal transition; an accepted proposal has exactly one requester-owned routine.
 
 ## See also
 

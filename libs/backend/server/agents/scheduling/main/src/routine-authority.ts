@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import { ___RequestRoutineSuggestionSchema, type RequestRoutineProposalCommand, type RequestRoutineProposalReceipt } from "@opencrane/backend/server/agents/scheduling/contract";
+import { RoutineProposalStates, type RoutineProposalReadResponse } from "@opencrane/contracts";
 import { __ParseRoutineSchedule, __PreviewRoutineOccurrences, type RoutineSchedule } from "@opencrane/models/agents";
 import { ProductAuthorizationActions } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson } from "@opencrane/util";
@@ -10,6 +12,7 @@ import type { RoutineInstructionCipher, RoutineInstructionContext } from "./rout
 import type { RoutineCommandPersistence } from "./routine-persistence.types";
 import { RoutineLifecycleEvent } from "./routine-lifecycle.types";
 import { RoutinePageCursorEndpoints, type RoutinePageCursorCodec, type RoutineReadPersistence } from "./routine-read.types";
+import type { EncryptedRoutineProposalProjection, RoutineProposalAccessCommand, RoutineProposalCipher, RoutineProposalIdFactory, RoutineProposalPersistence } from "./routine-proposal.types";
 
 /** Maximum plaintext size accepted before mounted encryption. */
 const _MAXIMUM_INSTRUCTION_LENGTH = 20_000;
@@ -18,21 +21,63 @@ const _MAXIMUM_INSTRUCTION_LENGTH = 20_000;
 export class RoutineAuthority
 {
 	/** Transactional product authority that never receives plaintext. */
-	private readonly persistence: RoutineCommandPersistence & RoutineReadPersistence;
+	private readonly persistence: RoutineCommandPersistence & RoutineReadPersistence & RoutineProposalPersistence;
 	/** Mounted AES-GCM adapter invoked only outside retryable database transactions. */
 	private readonly cipher: RoutineInstructionCipher;
 	/** Opaque id source invoked before retryable database transactions. */
 	private readonly ids: RoutineIdFactory;
 	/** Encrypts and decrypts continuation positions outside database transactions. */
 	private readonly cursors: RoutinePageCursorCodec;
+	/** Purpose-separated cipher for suggestions awaiting human review. */
+	private readonly proposalCipher: RoutineProposalCipher;
+	/** Stable opaque identifier source for proposal retries. */
+	private readonly proposalIds: RoutineProposalIdFactory;
 
 	/** Stores the persistence authority and external encryption boundary. */
-	constructor(persistence: RoutineCommandPersistence & RoutineReadPersistence, cipher: RoutineInstructionCipher, ids: RoutineIdFactory, cursors: RoutinePageCursorCodec)
+	constructor(persistence: RoutineCommandPersistence & RoutineReadPersistence & RoutineProposalPersistence, cipher: RoutineInstructionCipher, ids: RoutineIdFactory, cursors: RoutinePageCursorCodec, proposalCipher: RoutineProposalCipher, proposalIds: RoutineProposalIdFactory)
 	{
 		this.persistence = persistence;
 		this.cipher = cipher;
 		this.ids = ids;
 		this.cursors = cursors;
+		this.proposalCipher = proposalCipher;
+		this.proposalIds = proposalIds;
+	}
+
+	/** Saves or recovers one exact first-party suggestion without creating a routine. */
+	async propose(command: RequestRoutineProposalCommand): Promise<RequestRoutineProposalReceipt>
+	{
+		_Identifier(command.siloId, "routine proposal silo");
+		_Identifier(command.sourceConversationId, "routine proposal source conversation");
+		_Identifier(command.runId, "routine proposal run");
+		_PositiveInteger(command.attempt, "routine proposal attempt");
+		_PositiveInteger(command.ordinal, "routine proposal ordinal");
+		_Identifier(command.requesterPrincipalId, "routine proposal requester");
+		const suggestion = ___RequestRoutineSuggestionSchema.safeParse(command.suggestion);
+		if (!suggestion.success)
+			throw new RoutineCommandValidationError("routine proposal suggestion is invalid");
+		const proposalId = this.proposalIds.proposalId();
+		const context = _ProposalContext(command.siloId, command.sourceConversationId, command.requesterPrincipalId, proposalId);
+		const encrypted = await this.proposalCipher.encrypt(suggestion.data, context);
+		return await this.persistence.propose({ ...command, suggestion: encrypted, proposalId, argumentsDigest: ___DigestCanonicalJson(suggestion.data as never) });
+	}
+
+	/** Returns one requester-owned proposal after current source access and external decryption. */
+	async readProposal(command: RoutineProposalAccessCommand): Promise<RoutineProposalReadResponse | null>
+	{
+		_ValidateCaller(command.caller.authenticatedAt);
+		_Identifier(command.proposalRef, "routine proposal");
+		const encrypted = await this.persistence.readProposal(command);
+		return encrypted === null ? null : await this._DecryptProposal(encrypted);
+	}
+
+	/** Cancels a pending proposal or returns the durable terminal winner after a compare-and-set loss. */
+	async cancelProposal(command: RoutineProposalAccessCommand): Promise<RoutineProposalReadResponse | null>
+	{
+		_ValidateCaller(command.caller.authenticatedAt);
+		_Identifier(command.proposalRef, "routine proposal");
+		const encrypted = await this.persistence.cancelProposal(command);
+		return encrypted === null ? null : await this._DecryptProposal(encrypted);
 	}
 
 	/** Creates one reviewed routine after encrypting its instruction outside the transaction. */
@@ -41,6 +86,8 @@ export class RoutineAuthority
 		_ValidateCaller(command.caller.authenticatedAt);
 		_Identifier(command.destinationConversationId, "routine destination conversation");
 		_Identifier(command.selectedManagedServiceId, "routine selected managed service");
+		if (command.proposalRef !== undefined)
+			_Identifier(command.proposalRef, "routine proposal");
 		const instruction = _Instruction(command.instruction);
 		const schedule = _Schedule(command.schedule);
 		const idempotencyKey = _IdempotencyKey(command.idempotencyKey);
@@ -48,7 +95,7 @@ export class RoutineAuthority
 		const routineId = this.ids.routineId();
 		const context = _InstructionContext(command.caller.siloId, command.destinationConversationId, command.caller.subjectId, routineId, 1);
 		const envelope = await this.cipher.encrypt(instruction, context);
-		const commandDigest = _CommandDigest({ operation: ProductAuthorizationActions.Create, destinationConversationId: command.destinationConversationId, selectedManagedServiceId: command.selectedManagedServiceId, audienceParticipantRefs, schedule, instructionDigest: _PlaintextDigest(instruction), idempotencyKey });
+		const commandDigest = _CommandDigest({ operation: ProductAuthorizationActions.Create, destinationConversationId: command.destinationConversationId, selectedManagedServiceId: command.selectedManagedServiceId, audienceParticipantRefs, schedule, instructionDigest: _PlaintextDigest(instruction), idempotencyKey, proposalRef: command.proposalRef ?? null });
 		return await this.persistence.create({ ...command, audienceParticipantRefs, idempotencyKey, schedule, instruction: envelope, routineId, revisionId: this.ids.revisionId(), commandReceiptId: this.ids.commandReceiptId(), commandDigest });
 	}
 
@@ -170,12 +217,35 @@ export class RoutineAuthority
 		const commandDigest = _CommandDigest({ operation: event, routineId: command.routineId, expectedLifecycleRevision: command.expectedLifecycleRevision, idempotencyKey });
 		return await this.persistence.changeStatus({ ...command, idempotencyKey, event, commandReceiptId: this.ids.commandReceiptId(), commandDigest });
 	}
+
+	/** Decrypts the immutable suggestion only after requester authorization commits. */
+	private async _DecryptProposal(encrypted: EncryptedRoutineProposalProjection): Promise<RoutineProposalReadResponse>
+	{
+		const context = _ProposalContext(encrypted.siloId, encrypted.sourceConversationId, encrypted.requesterPrincipalId, encrypted.proposalRef);
+		const suggestion = await this.proposalCipher.decrypt(encrypted.suggestion, context);
+		const base = { proposalRef: encrypted.proposalRef, sourceConversationId: encrypted.sourceConversationId, suggestion, expiresAt: encrypted.expiresAt };
+		if (encrypted.state === RoutineProposalStates.Accepted)
+		{
+			if (encrypted.acceptedRoutineId === null)
+				throw new Error("Accepted routine proposal omitted its routine");
+			return { ...base, state: RoutineProposalStates.Accepted, acceptedRoutineId: encrypted.acceptedRoutineId };
+		}
+		if (encrypted.state === RoutineProposalStates.Pending)
+			return { ...base, state: RoutineProposalStates.Pending };
+		return { ...base, state: encrypted.state };
+	}
 }
 
 /** Builds instruction additional authenticated data from immutable product coordinates. */
 function _InstructionContext(siloId: string, destinationConversationId: string, requesterSubjectId: string, routineId: string, routineRevision: number): RoutineInstructionContext
 {
 	return { siloId, destinationConversationId, requesterSubjectId, routineId, routineRevision };
+}
+
+/** Builds proposal authenticated data from its immutable source and requester. */
+function _ProposalContext(siloId: string, sourceConversationId: string, requesterPrincipalId: string, proposalId: string)
+{
+	return { siloId, sourceConversationId, requesterPrincipalId, proposalId } as const;
 }
 
 /** Normalizes and bounds plaintext before it can reach the mounted cipher. */

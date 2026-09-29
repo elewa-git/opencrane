@@ -1,11 +1,11 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, CompiledToolDefinitionKinds, ConversationModelResponseKinds, ConversationModelToolModes, ___ConversationModelToolExchangeSchema, ___ConversationToolProposalSchema, ___ParseRunBudgetPolicy, type ConversationModelDelivery, type ConversationModelToolCall } from "@opencrane/contracts";
+import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, CompiledToolDefinitionKinds, ConversationModelResponseKinds, ConversationModelToolModes, FirstPartyToolCapabilities, ___ConversationModelToolExchangeSchema, ___ConversationToolProposalSchema, ___ParseRunBudgetPolicy, type CompiledToolDefinition, type ConversationModelDelivery, type ConversationModelToolCall } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, ___ParseAndValidateJson, type JsonValue } from "@opencrane/util";
 
 import { _ConversationToolResultContent } from "./conversation-tool-result-content";
 import { _ConversationComputerTurnHistoryDigest } from "./conversation-computer-turn-protocol";
 import { _ConversationModelRequestDigest } from "./conversation-computer-model-reservation";
-import { ConversationComputerTurnProtocolStates } from "./conversation-computer-turn-protocol.types";
+import { ConversationComputerTurnProtocolStates, ConversationComputerTurnToolKinds } from "./conversation-computer-turn-protocol.types";
 import { ConversationComputerModelProgressOutcomes, type ConversationComputerModelProgress } from "./conversation-computer-model.types";
 import { ConversationComputerToolResultOutcomes, type ConversationComputerToolDeclaration, type ConversationComputerToolExchange } from "./conversation-computer-continuation.types";
 import type { ConversationComputerPrivateModelReference, ConversationComputerTurnModelReservation, ConversationComputerTurnStep, ConversationComputerTurnToolSelection } from "./conversation-computer-turn-protocol.types";
@@ -16,6 +16,8 @@ import { ConversationToolProgressNotificationOutcomes } from "./tool-progress-no
 import { ConversationToolProposalRefusal } from "../tools/proposal/conversation-tool-proposal-refusal";
 import { _CONVERSATION_MODEL_MAX_RETRIES, _ConversationModelInitialNonce, _ConversationModelLogicalFence } from "./conversation-computer-model-retry";
 import type { ConversationComputerModelRetryClaim } from "./conversation-computer-model-retry.types";
+import { _ConversationRequestRoutineResult, _ParseConversationRequestRoutineSuggestion } from "./request-routine/conversation-request-routine";
+import { ConversationRoutineProposalNotificationOutcomes } from "./request-routine/conversation-request-routine.types";
 
 /**
  * Advances bounded model/tool cycles and a final text answer within the original attempt.
@@ -69,11 +71,16 @@ async function _ContinueResultReady(turn: FrozenConversationComputerTurn, step: 
 	if (!await dependencies.store.reserveModel(turn.bootstrapId, reservation))
 		return _ConversationModelReservationStatus((await dependencies.store.load(turn.bootstrapId))?.protocol.steps.at(-1)?.reservation ?? reservation);
 	const reserved = (await dependencies.store.load(turn.bootstrapId))!;
-	const consumed = await dependencies.toolResults.consume(reserved, current.workload);
-	if (consumed.outcome !== ConversationComputerToolResultOutcomes.Available || consumed.payloadDigest !== step.result.resultDigest)
-		throw new Error("Conversation tool result could not acknowledge its saved exchange");
 	const savedExchange = await dependencies.modelCustody.loadExchange(reserved, step.result.exchange);
-	if (savedExchange.resultContent !== _ConversationToolResultContent(consumed) || ___DigestCanonicalJson(savedExchange.call as unknown as JsonValue) !== ___DigestCanonicalJson(saved.declaration.call as unknown as JsonValue))
+	if (step.result.kind === ConversationComputerTurnToolKinds.Mcp)
+	{
+		const consumed = await dependencies.toolResults.consume(reserved, current.workload);
+		if (consumed.outcome !== ConversationComputerToolResultOutcomes.Available || consumed.payloadDigest !== step.result.resultDigest || savedExchange.resultContent !== _ConversationToolResultContent(consumed))
+			throw new Error("Conversation tool result could not acknowledge its saved exchange");
+	}
+	else if (savedExchange.kind !== ConversationComputerTurnToolKinds.RequestRoutine || savedExchange.resultDigest !== step.result.resultDigest)
+		throw new Error("Conversation routine proposal exchange differs from its saved result");
+	if (___DigestCanonicalJson(savedExchange.call as unknown as JsonValue) !== ___DigestCanonicalJson(saved.declaration.call as unknown as JsonValue))
 		throw new Error("Conversation model exchange differs from its acknowledged tool result");
 	const credential = await dependencies.credentials.reuseExact({ ..._CredentialCommand(reserved, current.candidate), expectedCredentialDigest: firstDeclaration.declaration.credentialDigest, expectedExpiresAt: firstDeclaration.declaration.credentialExpiresAt });
 	return _DispatchReservedModel(reserved, reservation, credential, dependencies, appendOutput);
@@ -112,7 +119,7 @@ async function _DispatchReservedModel(turn: FrozenConversationComputerTurn, rese
 	if (acceptedAtEpochMs >= notAfter)
 		throw new Error("Conversation model declaration missed its dispatch deadline");
 	const accepted = await _Current(turn, dependencies);
-	_Proposal(turn, accepted.candidate, response.call);
+	_ValidateToolDeclaration(turn, accepted.candidate, response.call);
 	const declaration: ConversationComputerToolDeclaration = { bootstrapId: turn.bootstrapId, runId: turn.compile.runId, attempt: turn.compile.attempt, compiledInputDigest: turn.compile.digest, ordinal: reservation.ordinal, modelInvocationFence: reservation.invocationFence, acceptedAtEpochMs, requestNotAfterEpochMs: notAfter, credentialDigest: credential.credentialDigest, credentialExpiresAt: credential.expiresAt, call: response.call };
 	const reference = await dependencies.modelCustody.storeDeclaration(turn, declaration);
 	return _ContinueTool(turn, declaration, reference, dependencies, appendOutput);
@@ -167,6 +174,19 @@ export function _ConversationModelRetryStatus(turn: FrozenConversationComputerTu
 async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: ConversationComputerToolDeclaration, reference: ConversationComputerPrivateModelReference, dependencies: ConversationComputerTurnAuthorityDependencies, appendOutput: (command: ConversationComputerOutputCommand) => Promise<unknown>): Promise<ConversationComputerModelProgress>
 {
 	const currentExecution = await _Current(turn, dependencies);
+	const tool = _ToolDefinition(currentExecution.candidate, declaration.call);
+	if (tool.kind === CompiledToolDefinitionKinds.FirstParty)
+	{
+		if (tool.capability !== FirstPartyToolCapabilities.RequestRoutine || dependencies.requestRoutine === null || dependencies.requestRoutine === undefined)
+			return { outcome: ConversationComputerModelProgressOutcomes.ResponseUnavailable };
+		return _ContinueRequestRoutine(turn, declaration, reference, dependencies, appendOutput);
+	}
+	return _ContinueMcpTool(turn, declaration, reference, dependencies, appendOutput, currentExecution);
+}
+
+/** Recover or finish the existing MCP proposal, dispatch and result path. */
+async function _ContinueMcpTool(turn: FrozenConversationComputerTurn, declaration: ConversationComputerToolDeclaration, reference: ConversationComputerPrivateModelReference, dependencies: ConversationComputerTurnAuthorityDependencies, appendOutput: (command: ConversationComputerOutputCommand) => Promise<unknown>, currentExecution: Awaited<ReturnType<typeof _Current>>): Promise<ConversationComputerModelProgress>
+{
 	let proposal;
 	try
 	{
@@ -186,9 +206,11 @@ async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: 
 	{
 		if (currentStep?.state !== ConversationComputerTurnProtocolStates.ModelReserved)
 			throw new Error("Conversation model tool declaration is not at an open model step");
-		selection = { ordinal: declaration.ordinal, modelInvocationFence: declaration.modelInvocationFence, declaration: reference, proposalId: proposal.prepared.proposalId, toolInvocationId: proposal.prepared.proposalId, requestFingerprint: proposal.prepared.requestFingerprint };
+		selection = { kind: ConversationComputerTurnToolKinds.Mcp, ordinal: declaration.ordinal, modelInvocationFence: declaration.modelInvocationFence, declaration: reference, proposalId: proposal.prepared.proposalId, toolInvocationId: proposal.prepared.proposalId, requestFingerprint: proposal.prepared.requestFingerprint };
 		await dependencies.store.selectTool(turn.bootstrapId, selection);
 	}
+	if (selection.kind !== ConversationComputerTurnToolKinds.Mcp)
+		throw new Error("Conversation MCP declaration crossed a built-in selection");
 	const selected = (await dependencies.store.load(turn.bootstrapId))!;
 	const workload = currentExecution.workload;
 	let admitted;
@@ -217,7 +239,7 @@ async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: 
 	if (___DigestCanonicalJson(result.payload) !== result.payloadDigest)
 		throw new Error("Conversation tool result differs from its immutable digest");
 	const pair = ___ConversationModelToolExchangeSchema.parse({ call: declaration.call, resultContent: _ConversationToolResultContent(result) });
-	const exchange: ConversationComputerToolExchange = { bootstrapId: selected.bootstrapId, runId: selected.compile.runId, attempt: selected.compile.attempt, compiledInputDigest: selected.compile.digest, ordinal: selection.ordinal, modelInvocationFence: selection.modelInvocationFence, declaration: reference, proposalId: selection.proposalId, toolInvocationId: selection.toolInvocationId, resultDigest: result.payloadDigest, ...pair };
+	const exchange: ConversationComputerToolExchange = { kind: ConversationComputerTurnToolKinds.Mcp, bootstrapId: selected.bootstrapId, runId: selected.compile.runId, attempt: selected.compile.attempt, compiledInputDigest: selected.compile.digest, ordinal: selection.ordinal, modelInvocationFence: selection.modelInvocationFence, declaration: reference, proposalId: selection.proposalId, toolInvocationId: selection.toolInvocationId, resultDigest: result.payloadDigest, ...pair };
 	await _Current(selected, dependencies);
 	const exchangeReference = await dependencies.modelCustody.storeExchange(selected, exchange);
 	await _Current(selected, dependencies);
@@ -226,11 +248,54 @@ async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: 
 		return { outcome: ConversationComputerModelProgressOutcomes.AuthorityEnded };
 	await _Current(selected, dependencies);
 	const selectedAuthorityExpiresAtEpochMs = selected.protocol.steps.at(-1)?.reservation.authorityExpiresAtEpochMs ?? selected.budget.wallClockDeadlineEpochMs;
-	await dependencies.store.recordToolResult(selected.bootstrapId, { ordinal: selection.ordinal, proposalId: selection.proposalId, toolInvocationId: selection.toolInvocationId, resultDigest: result.payloadDigest, exchange: exchangeReference, authorityExpiresAtEpochMs: Math.min(result.notAfterEpochMs, selectedAuthorityExpiresAtEpochMs, Date.parse(declaration.credentialExpiresAt), selected.budget.wallClockDeadlineEpochMs) });
+	await dependencies.store.recordToolResult(selected.bootstrapId, { kind: ConversationComputerTurnToolKinds.Mcp, ordinal: selection.ordinal, proposalId: selection.proposalId, toolInvocationId: selection.toolInvocationId, resultDigest: result.payloadDigest, exchange: exchangeReference, authorityExpiresAtEpochMs: Math.min(result.notAfterEpochMs, selectedAuthorityExpiresAtEpochMs, Date.parse(declaration.credentialExpiresAt), selected.budget.wallClockDeadlineEpochMs) });
 	const ready = await dependencies.store.load(selected.bootstrapId);
 	const readyStep = ready?.protocol.steps.at(-1);
 	if (ready === null || readyStep?.state !== ConversationComputerTurnProtocolStates.ResultReady)
 		throw new Error("Conversation tool result did not reach its ordered ready state");
+	return _ContinueResultReady(ready, readyStep, dependencies, appendOutput);
+}
+
+/** Persist and announce one scheduling-owned proposal without entering MCP authority. */
+async function _ContinueRequestRoutine(turn: FrozenConversationComputerTurn, declaration: ConversationComputerToolDeclaration, reference: ConversationComputerPrivateModelReference, dependencies: ConversationComputerTurnAuthorityDependencies, appendOutput: (command: ConversationComputerOutputCommand) => Promise<unknown>): Promise<ConversationComputerModelProgress>
+{
+	const dispatcher = dependencies.requestRoutine!;
+	const suggestion = _ParseConversationRequestRoutineSuggestion(declaration.call.arguments);
+	const source = await dispatcher.sources.resolve(turn, declaration.ordinal);
+	if (source === null)
+		return { outcome: ConversationComputerModelProgressOutcomes.ResponseUnavailable };
+	const receipt = await dispatcher.proposals.propose({ ...source, suggestion });
+	const safeResult = _ConversationRequestRoutineResult(receipt.proposalRef, receipt.expiresAt);
+	const currentStep = turn.protocol.steps.at(-1);
+	let selection: ConversationComputerTurnToolSelection;
+	if (currentStep?.state === ConversationComputerTurnProtocolStates.ToolPending)
+		selection = currentStep.selection;
+	else
+	{
+		if (currentStep?.state !== ConversationComputerTurnProtocolStates.ModelReserved)
+			throw new Error("Conversation request_routine declaration is not at an open model step");
+		selection = { kind: ConversationComputerTurnToolKinds.RequestRoutine, ordinal: declaration.ordinal, modelInvocationFence: declaration.modelInvocationFence, declaration: reference, proposalRef: receipt.proposalRef, expiresAt: receipt.expiresAt, resultDigest: safeResult.resultDigest };
+		await dependencies.store.selectTool(turn.bootstrapId, selection);
+	}
+	if (selection.kind !== ConversationComputerTurnToolKinds.RequestRoutine || selection.proposalRef !== receipt.proposalRef || selection.expiresAt !== receipt.expiresAt || selection.resultDigest !== safeResult.resultDigest)
+		throw new Error("Conversation request_routine recovery differs from its saved selection");
+	const selected = await dependencies.store.load(turn.bootstrapId);
+	if (selected === null)
+		throw new Error("Conversation request_routine selection was not recoverable");
+	const notified = await dispatcher.notifications.publish({ bootstrapId: selected.bootstrapId, ...source, proposalRef: receipt.proposalRef, expiresAt: receipt.expiresAt });
+	if (notified !== ConversationRoutineProposalNotificationOutcomes.Published)
+		return { outcome: ConversationComputerModelProgressOutcomes.AuthorityEnded };
+	const pair = ___ConversationModelToolExchangeSchema.parse({ call: declaration.call, resultContent: safeResult.resultContent });
+	const exchange: ConversationComputerToolExchange = { kind: ConversationComputerTurnToolKinds.RequestRoutine, bootstrapId: selected.bootstrapId, runId: selected.compile.runId, attempt: selected.compile.attempt, compiledInputDigest: selected.compile.digest, ordinal: selection.ordinal, modelInvocationFence: selection.modelInvocationFence, declaration: reference, proposalRef: selection.proposalRef, expiresAt: selection.expiresAt, resultDigest: selection.resultDigest, ...pair };
+	await _Current(selected, dependencies);
+	const exchangeReference = await dependencies.modelCustody.storeExchange(selected, exchange);
+	await _Current(selected, dependencies);
+	const selectedExpiry = selected.protocol.steps.at(-1)?.reservation.authorityExpiresAtEpochMs ?? selected.budget.wallClockDeadlineEpochMs;
+	await dependencies.store.recordToolResult(selected.bootstrapId, { kind: ConversationComputerTurnToolKinds.RequestRoutine, ordinal: selection.ordinal, proposalRef: selection.proposalRef, expiresAt: selection.expiresAt, resultDigest: selection.resultDigest, exchange: exchangeReference, authorityExpiresAtEpochMs: Math.min(Date.parse(selection.expiresAt), selectedExpiry, Date.parse(declaration.credentialExpiresAt), selected.budget.wallClockDeadlineEpochMs) });
+	const ready = await dependencies.store.load(selected.bootstrapId);
+	const readyStep = ready?.protocol.steps.at(-1);
+	if (ready === null || readyStep?.state !== ConversationComputerTurnProtocolStates.ResultReady)
+		throw new Error("Conversation request_routine result did not reach its ordered ready state");
 	return _ContinueResultReady(ready, readyStep, dependencies, appendOutput);
 }
 
@@ -240,14 +305,34 @@ async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: 
  */
 function _Proposal(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, call: ConversationModelToolCall)
 {
-	const matching = candidate.compiledInput.tools.filter(tool => tool.kind === CompiledToolDefinitionKinds.Mcp && tool.modelName === call.name);
-	if (matching.length !== 1)
-		throw new Error("Conversation model selected an unavailable or ambiguous tool");
-	const tool = matching[0]!;
+	const tool = _ToolDefinition(candidate, call);
 	if (tool.kind !== CompiledToolDefinitionKinds.Mcp)
 		throw new Error("Conversation model selected a non-MCP callable at the MCP proposal boundary");
 	const command = ___ParseAndValidateJson(call.arguments, "Conversation tool arguments", argumentsValue => ___ConversationToolProposalSchema.parse({ bootstrapId: turn.bootstrapId, toolRevisionId: tool.toolRevisionId, arguments: argumentsValue }));
 	return { command, prepared: _PrepareConversationToolProposal(turn, candidate, command) };
+}
+
+/** Validate one declaration against the exact closed authority arm before saving private custody. */
+function _ValidateToolDeclaration(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, call: ConversationModelToolCall): void
+{
+	const tool = _ToolDefinition(candidate, call);
+	if (tool.kind === CompiledToolDefinitionKinds.Mcp)
+	{
+		_Proposal(turn, candidate, call);
+		return;
+	}
+	if (tool.capability !== FirstPartyToolCapabilities.RequestRoutine)
+		throw new Error("Conversation model selected an unsupported first-party callable");
+	_ParseConversationRequestRoutineSuggestion(call.arguments);
+}
+
+/** Resolve one exact frozen callable by its provider wire name. */
+function _ToolDefinition(candidate: ConversationComputerTurnCandidate, call: ConversationModelToolCall): CompiledToolDefinition
+{
+	const matching = candidate.compiledInput.tools.filter(tool => tool.modelName === call.name);
+	if (matching.length !== 1)
+		throw new Error("Conversation model selected an unavailable or ambiguous tool");
+	return matching[0]!;
 }
 
 /** Recompile without changing the original history revision, run attempt or digest. */

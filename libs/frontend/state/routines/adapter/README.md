@@ -8,6 +8,10 @@ This package maps the generated signed-in control-plane client onto the routine 
 validates every successful response, sends no retries or cache writes, and converts HTTP status
 categories into safe typed errors without exposing server prose.
 
+The proposal operations use generated requester-only GET and DELETE routes. They validate the
+projection and never decode or persist the suggested instruction or schedule outside the feature's
+editable form.
+
 An `Unavailable`, `Unknown` or `InvalidResponse` from a mutation does not prove that the command
 was not committed. The owning feature must reread current state and recover with the same
 idempotency key and same payload where the endpoint supports recovery. This adapter never
