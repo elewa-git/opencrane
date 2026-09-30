@@ -1,5 +1,5 @@
 import { ConversationChildRequestState, ConversationLifecycle, ConversationMode, OrgMemberStatus, type Prisma } from "@prisma/client";
-import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import type { GroupChildAccessPort, GroupChildAgentResolver, GroupChildRequest, GroupChildOrigin } from "../group-child.types";
 import type { ConversationCaller } from "../../authorization/conversation-caller.types";
 import { _GroupChildCaller } from "../group-child.mapper";
@@ -95,6 +95,19 @@ export class PrismaGroupChildAccessRepository implements GroupChildAccessPort<Pr
 		if (candidate === null || candidate.agentRevisionId !== request.agentRevisionId || candidate.agentIdentityId !== request.agentIdentityId || candidate.principalId !== request.agentPrincipalId || candidate.profileRevisionId !== request.profileRevisionId)
 			return false;
 		const authorization = this.authorization;
-		return await authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Conversation, id: request.parentConversationId }, ProductAuthorizationActions.Delegate, { requestId: request.id, commandDigest: request.commandDigest }) && await authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.ConversationCollection, id: request.siloId }, ProductAuthorizationActions.Create, { requestId: request.id, commandDigest: request.commandDigest });
+		return await this.payerAdmitted(request) && await authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Conversation, id: request.parentConversationId }, ProductAuthorizationActions.Delegate, { requestId: request.id, commandDigest: request.commandDigest }) && await authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.ConversationCollection, id: request.siloId }, ProductAuthorizationActions.Create, { requestId: request.id, commandDigest: request.commandDigest });
+	}
+
+	/** Rechecks only the selected Group budget permission using current database time. */
+	public async payerAdmitted(request: GroupChildRequest): Promise<boolean>
+	{
+		if (request.payingGroupId === null)
+			return false;
+		const clock = await this.transaction.agentRunAuthorityClock.findUnique({ where: { singleton: 1 }, select: { now: true } });
+		if (clock === null || Number.isNaN(clock.now.getTime()))
+			return false;
+		const caller = _GroupChildCaller(request);
+		const payer = await this.authorization.admitGroupBudget(caller, request.payingGroupId, request.commandDigest as `sha256:${string}`, clock.now.getTime());
+		return payer.outcome === AuthorizationDecisionOutcomes.Allow && payer.evidence !== null;
 	}
 }

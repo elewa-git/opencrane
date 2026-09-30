@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ___GroupChildCreateCommandSchema } from "@opencrane/models/conversations";
 import { _ParseGroupChildCreate, _ParseGroupChildShare } from "../group-child.validator";
 
 const _UUID = "772340d2-5718-40c4-bca9-24d47d63ba9b";
@@ -7,7 +8,7 @@ describe("group child command boundaries", function ()
 {
 	it("binds an exact source and explicit recipient references without accepting browser authority", function ()
 	{
-		const command = { parentMessageId: _UUID, parentMessagePosition: "1", agentServiceId: "assistant-1", participantRefs: [], idempotencyKey: _UUID };
+		const command = { payingGroupId: "group-1", parentMessageId: _UUID, parentMessagePosition: "1", agentServiceId: "assistant-1", participantRefs: [], idempotencyKey: _UUID };
 		expect(_ParseGroupChildCreate(command)).toEqual(command);
 		for (const extra of [{ principalId: "admin" }, { participantIds: ["peer"] }, { siloId: "foreign" }])
 			expect(_ParseGroupChildCreate({ ...command, ...extra })).toBeNull();
@@ -17,6 +18,13 @@ describe("group child command boundaries", function ()
 		expect(_ParseGroupChildCreate(missing)).toBeNull();
 		expect(_ParseGroupChildCreate({ ...command, participantRefs: ["member-b", "member-a"] })?.participantRefs).toEqual(["member-a", "member-b"]);
 		expect(_ParseGroupChildCreate({ ...command, participantRefs: ["member-a", "member-a"] })).toBeNull();
+	});
+
+	it("requires an explicit payer and rejects surrounding whitespace", function _RequiresPayer()
+	{
+		const command = { payingGroupId: "group-1", parentMessageId: _UUID, parentMessagePosition: "1", agentServiceId: "assistant-1", participantRefs: [], idempotencyKey: _UUID };
+		expect(___GroupChildCreateCommandSchema.safeParse({ ...command, payingGroupId: " group-1" }).success).toBe(false);
+		expect(___GroupChildCreateCommandSchema.safeParse({ ...command, payingGroupId: undefined }).success).toBe(false);
 	});
 
 	it("preserves the exact reviewed text and bounds encoded bytes", function ()

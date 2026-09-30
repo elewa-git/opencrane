@@ -1,8 +1,8 @@
 import { AgentRoutineCommandKind, AgentRoutineFiringTrigger, AgentRoutineProposalState, AgentRoutineStatus, Prisma } from "@prisma/client";
 
 import type { IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
-import type { ManagedAuthorizationGrantRepository, ManagedAuthorizationGrantRestrictionRepository } from "@opencrane/backend/server/iam/authorization";
-import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+import type { AuthorizationAuthority, ManagedAuthorizationGrantRepository, ManagedAuthorizationGrantRestrictionRepository } from "@opencrane/backend/server/iam/authorization";
+import { AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { RoutineFiringDisposition, RoutineFiringTrigger, RoutineStatus, __NextRoutineOccurrence, __PlanRoutineFiring, type RoutineSchedule } from "@opencrane/models/agents";
 
 import { _ProjectRoutineGrants, _RetireRoutineGrants } from "./routine-authorization";
@@ -37,9 +37,11 @@ export class PrismaRoutineCommandRepository implements RoutineCommandPersistence
 	private readonly managedServices: RoutineManagedServiceDirectory;
 	/** Scheduling-owned proposal state sharing this exact transaction. */
 	private readonly proposals: PrismaRoutineProposalRepository;
+	/** Central authorization authority bound to this creation transaction. */
+	private readonly authorization: AuthorizationAuthority;
 
 	/** Stores every transaction-bound collaborator. */
-	constructor(transaction: Prisma.TransactionClient, facts: RoutineFactsRepository, managedGrants: ManagedAuthorizationGrantRepository & ManagedAuthorizationGrantRestrictionRepository, taskAdmission: RoutineTaskAdmissionPort<Prisma.TransactionClient>, conversations: RoutineConversationDirectory<Prisma.TransactionClient>, managedServices: RoutineManagedServiceDirectory, proposals: PrismaRoutineProposalRepository)
+	constructor(transaction: Prisma.TransactionClient, facts: RoutineFactsRepository, managedGrants: ManagedAuthorizationGrantRepository & ManagedAuthorizationGrantRestrictionRepository, taskAdmission: RoutineTaskAdmissionPort<Prisma.TransactionClient>, conversations: RoutineConversationDirectory<Prisma.TransactionClient>, managedServices: RoutineManagedServiceDirectory, proposals: PrismaRoutineProposalRepository, authorization: AuthorizationAuthority)
 	{
 		this.transaction = transaction;
 		this.facts = facts;
@@ -48,6 +50,7 @@ export class PrismaRoutineCommandRepository implements RoutineCommandPersistence
 		this.conversations = conversations;
 		this.managedServices = managedServices;
 		this.proposals = proposals;
+		this.authorization = authorization;
 	}
 
 	/** @inheritdoc */
@@ -75,6 +78,12 @@ export class PrismaRoutineCommandRepository implements RoutineCommandPersistence
 		{
 			throw new RoutineCommandUnavailableError("routine selected managed service is unavailable");
 		}
+		const payingGroup = await this.transaction.group.findUnique({ where: { id_siloId: { id: command.payingGroupId, siloId: command.caller.siloId } }, select: { id: true, siloId: true } });
+		if (payingGroup === null || payingGroup.id !== command.payingGroupId || payingGroup.siloId !== command.caller.siloId)
+			throw new RoutineCommandUnavailableError("routine paying group is unavailable");
+		const payingGroupAdmission = await this.authorization.admit({ siloId: command.caller.siloId, principalId: command.caller.principalId, actorKind: "user", actorId: command.caller.principalId, boundary: { kind: AuthorizationBoundaryKinds.Group, groupId: command.payingGroupId }, resource: { kind: ProductAuthorizationResourceKinds.Budget, id: `group:${command.payingGroupId}` }, action: ProductAuthorizationActions.Use, argumentsDigest: command.commandDigest, nowEpochMs: now.getTime() });
+		if (payingGroupAdmission.outcome !== AuthorizationDecisionOutcomes.Allow || payingGroupAdmission.evidence === null)
+			throw new RoutineCommandUnavailableError("routine paying group is not currently authorized");
 		const nextEpochMs = __NextRoutineOccurrence(command.schedule, now.getTime());
 		await this.transaction.agentRoutine.create({ data: {
 			id: command.routineId,
@@ -85,6 +94,10 @@ export class PrismaRoutineCommandRepository implements RoutineCommandPersistence
 			requesterAuthenticatedAt: new Date(command.caller.authenticatedAt),
 			destinationConversationId: command.destinationConversationId,
 			selectedManagedServiceId: command.selectedManagedServiceId,
+			payingGroupId: command.payingGroupId,
+			payingGroupAuthorizationDecisionDigest: payingGroupAdmission.evidence.decisionDigest,
+			payingGroupAuthorizationPolicyRevisionHash: payingGroupAdmission.evidence.policyRevisionHash,
+			payingGroupEffectiveAuthorizationDigest: payingGroupAdmission.evidence.effectiveAuthorizationDigest,
 			status: AgentRoutineStatus.Active,
 			currentRevision: 1,
 			lifecycleRevision: 1,

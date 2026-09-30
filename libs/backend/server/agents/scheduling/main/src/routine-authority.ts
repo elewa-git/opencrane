@@ -84,6 +84,7 @@ export class RoutineAuthority
 	async create(command: CreateRoutineCommand): Promise<RoutineCommandResult>
 	{
 		_ValidateCaller(command.caller.authenticatedAt);
+		_Identifier(command.payingGroupId, "routine paying group");
 		_Identifier(command.destinationConversationId, "routine destination conversation");
 		_Identifier(command.selectedManagedServiceId, "routine selected managed service");
 		if (command.proposalRef !== undefined)
@@ -95,7 +96,7 @@ export class RoutineAuthority
 		const routineId = this.ids.routineId();
 		const context = _InstructionContext(command.caller.siloId, command.destinationConversationId, command.caller.subjectId, routineId, 1);
 		const envelope = await this.cipher.encrypt(instruction, context);
-		const commandDigest = _CommandDigest({ operation: ProductAuthorizationActions.Create, destinationConversationId: command.destinationConversationId, selectedManagedServiceId: command.selectedManagedServiceId, audienceParticipantRefs, schedule, instructionDigest: _PlaintextDigest(instruction), idempotencyKey, proposalRef: command.proposalRef ?? null });
+		const commandDigest = _CommandDigest({ operation: ProductAuthorizationActions.Create, payingGroupId: command.payingGroupId, destinationConversationId: command.destinationConversationId, selectedManagedServiceId: command.selectedManagedServiceId, audienceParticipantRefs, schedule, instructionDigest: _PlaintextDigest(instruction), idempotencyKey, proposalRef: command.proposalRef ?? null });
 		return await this.persistence.create({ ...command, audienceParticipantRefs, idempotencyKey, schedule, instruction: envelope, routineId, revisionId: this.ids.revisionId(), commandReceiptId: this.ids.commandReceiptId(), commandDigest });
 	}
 

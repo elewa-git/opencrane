@@ -21,6 +21,7 @@ function _Authorization()
 		decidePrincipal: vi.fn().mockResolvedValue(_Allowed()),
 		admitPrincipal: vi.fn().mockResolvedValue(_Allowed()),
 		admitPrincipalBatch: vi.fn().mockResolvedValue([_Allowed(), _Allowed()]),
+		admit: vi.fn().mockResolvedValue(_Allowed()),
 	};
 }
 
@@ -90,5 +91,16 @@ describe("PrismaRoutineFactsRepository", function _Suite()
 			expect.objectContaining({ actorKind: actor.actorKind, actorId: actor.actorId, principalId: "principal-1", resource: { kind: ProductAuthorizationResourceKinds.Routine, id: "routine-1" }, action: ProductAuthorizationActions.Use }),
 			expect.objectContaining({ actorKind: actor.actorKind, actorId: actor.actorId, principalId: "principal-1", resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: "service-1" }, action: ProductAuthorizationActions.Invoke }),
 		]);
+		expect(authorization.admit).toHaveBeenCalledWith(expect.objectContaining({ actorKind: actor.actorKind, actorId: actor.actorId, principalId: "principal-1", boundary: { kind: "group", groupId: "group-1" }, resource: { kind: ProductAuthorizationResourceKinds.Budget, id: "group:group-1" }, action: ProductAuthorizationActions.Use, argumentsDigest: expect.stringMatching(/^sha256:/u), nowEpochMs: _NOW.getTime() }));
+	});
+
+	it("refuses firing when the selected payer loses current Budget Use", async function _RevokedPayer()
+	{
+		const authorization = _Authorization();
+		authorization.admit.mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Deny, evidence: null });
+		const repository = new PrismaRoutineFactsRepository({} as Prisma.TransactionClient, authorization as unknown as AuthorizationAuthority);
+
+		await expect(repository.admitFiringActions(_Current().routine, { actorKind: "system", actorId: "opencrane-server/routine-schedule/v1" }, _NOW, { firingId: "firing-1" })).resolves.toBe(false);
+		expect(authorization.admit).toHaveBeenCalledWith(expect.objectContaining({ boundary: { kind: "group", groupId: "group-1" }, resource: { kind: ProductAuthorizationResourceKinds.Budget, id: "group:group-1" }, action: ProductAuthorizationActions.Use }));
 	});
 });

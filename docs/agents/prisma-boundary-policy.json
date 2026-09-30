@@ -3,6 +3,13 @@
 	"owners": {
 		"repositories": [
 			{
+				"path": "libs/backend/agents/execution/runs/main/src/monthly-budget/prisma-managed-monthly-budget-repository.ts",
+				"adapter": "PrismaManagedMonthlyBudgetRepository",
+				"contract": "ManagedMonthlyBudgetAuthority",
+				"contractImportPath": "./monthly-budget.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/request-routine/prisma-request-routine-proposal-source-authority.ts",
 				"adapter": "PrismaRequestRoutineProposalSourceAuthority",
 				"contract": "RequestRoutineProposalSourceAuthority",
@@ -1783,6 +1790,18 @@
 			}
 		],
 		"unitsOfWork": [
+			{
+				"path": "libs/backend/agents/execution/runs/main/src/monthly-budget/prisma-managed-monthly-budget-unit-of-work.ts",
+				"adapter": "PrismaManagedMonthlyBudgetUnitOfWork",
+				"contract": "ManagedMonthlyBudgetAuthority",
+				"contractImportPath": "./monthly-budget.types",
+				"constructs": [
+					{
+						"adapter": "PrismaManagedMonthlyBudgetRepository",
+						"importPath": "./prisma-managed-monthly-budget-repository"
+					}
+				]
+			},
 			{
 				"path": "libs/backend/server/conversations/main/src/request-routine/prisma-conversation-request-routine-source.ts",
 				"adapter": "PrismaConversationRequestRoutineSourceUnitOfWork",

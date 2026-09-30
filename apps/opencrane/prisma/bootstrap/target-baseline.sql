@@ -275,6 +275,15 @@ CREATE TYPE "AgentRunCancellationDecision" AS ENUM ('cancellation_won', 'output_
 CREATE TYPE "WorkloadKind" AS ENUM ('pod', 'job', 'deployment');
 
 -- CreateEnum
+CREATE TYPE "ManagedBudgetScope" AS ENUM ('global', 'group', 'agent_service');
+
+-- CreateEnum
+CREATE TYPE "ManagedBudgetEffectState" AS ENUM ('reserved', 'claimed', 'settled', 'unknown', 'price_integrity_breach', 'cancelled');
+
+-- CreateEnum
+CREATE TYPE "ManagedBudgetAttemptState" AS ENUM ('claimed', 'pre_forward_rejected', 'settled', 'unknown');
+
+-- CreateEnum
 CREATE TYPE "AgentRunTreeClosureReason" AS ENUM ('authorized_stop', 'terminal_run', 'deadline');
 
 -- CreateEnum
@@ -827,6 +836,10 @@ CREATE TABLE "conversations" (
     "silo_id" TEXT NOT NULL,
     "mode" "ConversationMode" NOT NULL,
     "agent_service_id" TEXT,
+    "paying_group_id" TEXT,
+    "paying_group_authorization_decision_digest" TEXT,
+    "paying_group_authorization_policy_revision_hash" TEXT,
+    "paying_group_effective_authorization_digest" TEXT,
     "computer_id" TEXT,
     "computer_agent_identity_id" TEXT,
     "computer_profile_revision_id" TEXT,
@@ -853,6 +866,10 @@ CREATE TABLE "conversation_child_requests" (
     "requester_issuer" TEXT NOT NULL,
     "requester_authenticated_at" TIMESTAMP(3) NOT NULL,
     "agent_service_id" TEXT NOT NULL,
+    "paying_group_id" TEXT,
+    "paying_group_authorization_decision_digest" TEXT,
+    "paying_group_authorization_policy_revision_hash" TEXT,
+    "paying_group_effective_authorization_digest" TEXT,
     "agent_revision_id" TEXT NOT NULL,
     "agent_identity_id" TEXT NOT NULL,
     "agent_principal_id" TEXT NOT NULL,
@@ -1835,6 +1852,24 @@ CREATE TABLE "model_definitions" (
 );
 
 -- CreateTable
+CREATE TABLE "model_eur_tariff_revisions" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "model_definition_id" TEXT NOT NULL,
+    "revision" INTEGER NOT NULL,
+    "digest" TEXT NOT NULL,
+    "token_unit" BIGINT NOT NULL,
+    "max_input_tokens" INTEGER NOT NULL,
+    "input_eur_micros_per_unit" BIGINT NOT NULL,
+    "output_eur_micros_per_unit" BIGINT NOT NULL,
+    "effective_at" TIMESTAMP(3) NOT NULL,
+    "valid_until" TIMESTAMP(3) NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "model_eur_tariff_revisions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "provider_effect_commands" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -1910,6 +1945,10 @@ CREATE TABLE "agent_routines" (
     "requester_authenticated_at" TIMESTAMP(3) NOT NULL,
     "destination_conversation_id" TEXT NOT NULL,
     "selected_managed_service_id" TEXT NOT NULL,
+    "paying_group_id" TEXT NOT NULL,
+    "paying_group_authorization_decision_digest" TEXT NOT NULL,
+    "paying_group_authorization_policy_revision_hash" TEXT NOT NULL,
+    "paying_group_effective_authorization_digest" TEXT NOT NULL,
     "status" "AgentRoutineStatus" NOT NULL DEFAULT 'active',
     "current_revision" INTEGER NOT NULL DEFAULT 1,
     "lifecycle_revision" INTEGER NOT NULL DEFAULT 1,
@@ -2029,6 +2068,10 @@ CREATE TABLE "agent_runs" (
     "routine_scheduled_slot" TIMESTAMP(3),
     "agent_identity_id" TEXT NOT NULL,
     "principal_id" TEXT NOT NULL,
+    "paying_group_id" TEXT,
+    "paying_group_authorization_decision_digest" TEXT,
+    "paying_group_authorization_policy_revision_hash" TEXT,
+    "paying_group_effective_authorization_digest" TEXT,
     "execution_subject" JSONB NOT NULL,
     "request_idempotency_key" TEXT NOT NULL,
     "attempt" INTEGER NOT NULL DEFAULT 1,
@@ -2088,6 +2131,99 @@ CREATE TABLE "run_input_snapshots" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "run_input_snapshots_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "managed_budget_policies" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "scope" "ManagedBudgetScope" NOT NULL,
+    "scope_key" TEXT NOT NULL,
+    "group_id" TEXT,
+    "agent_service_id" TEXT,
+    "limit_eur_micros" BIGINT NOT NULL,
+    "revision" INTEGER NOT NULL DEFAULT 1,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "managed_budget_policies_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "managed_budget_policy_fences" (
+    "policy_id" TEXT NOT NULL,
+    "revision" INTEGER NOT NULL DEFAULT 0,
+
+    CONSTRAINT "managed_budget_policy_fences_pkey" PRIMARY KEY ("policy_id")
+);
+
+-- CreateTable
+CREATE TABLE "managed_budget_monthly_accounts" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "policy_id" TEXT NOT NULL,
+    "period_start" TIMESTAMP(3) NOT NULL,
+    "policy_revision" INTEGER NOT NULL,
+    "limit_eur_micros" BIGINT NOT NULL,
+    "settled_eur_micros" BIGINT NOT NULL DEFAULT 0,
+    "unknown_eur_micros" BIGINT NOT NULL DEFAULT 0,
+    "claimed_eur_micros" BIGINT NOT NULL DEFAULT 0,
+    "reserved_eur_micros" BIGINT NOT NULL DEFAULT 0,
+    "revision" INTEGER NOT NULL DEFAULT 0,
+    "admission_closed_at" TIMESTAMP(3),
+
+    CONSTRAINT "managed_budget_monthly_accounts_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "managed_budget_effects" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "run_id" TEXT NOT NULL,
+    "run_attempt" INTEGER NOT NULL,
+    "paying_group_id" TEXT NOT NULL,
+    "agent_service_id" TEXT NOT NULL,
+    "logical_fence" TEXT NOT NULL,
+    "model_alias" TEXT NOT NULL,
+    "period_start" TIMESTAMP(3) NOT NULL,
+    "tariff_revision_id" TEXT NOT NULL,
+    "tariff_revision" INTEGER NOT NULL,
+    "tariff_digest" TEXT NOT NULL,
+    "quote_digest" TEXT NOT NULL,
+    "max_input_tokens" INTEGER NOT NULL,
+    "max_completion_tokens" INTEGER NOT NULL,
+    "worst_case_eur_micros" BIGINT NOT NULL,
+    "actual_eur_micros" BIGINT,
+    "actual_input_tokens" BIGINT,
+    "actual_output_tokens" BIGINT,
+    "state" "ManagedBudgetEffectState" NOT NULL DEFAULT 'reserved',
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "terminal_at" TIMESTAMP(3),
+
+    CONSTRAINT "managed_budget_effects_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "managed_budget_physical_attempts" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "effect_id" TEXT NOT NULL,
+    "physical_nonce" TEXT NOT NULL,
+    "request_body_sha256" TEXT NOT NULL,
+    "deadline_epoch_ms" BIGINT NOT NULL,
+    "state" "ManagedBudgetAttemptState" NOT NULL DEFAULT 'claimed',
+    "claimed_at" TIMESTAMP(3) NOT NULL,
+    "terminal_at" TIMESTAMP(3),
+
+    CONSTRAINT "managed_budget_physical_attempts_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "managed_budget_scope_impacts" (
+    "effect_id" TEXT NOT NULL,
+    "account_id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+
+    CONSTRAINT "managed_budget_scope_impacts_pkey" PRIMARY KEY ("effect_id","account_id")
 );
 
 -- CreateTable
@@ -2661,6 +2797,9 @@ CREATE INDEX "conversations_silo_id_mode_lifecycle_updated_at_idx" ON "conversat
 CREATE INDEX "conversations_silo_id_agent_service_id_lifecycle_idx" ON "conversations"("silo_id", "agent_service_id", "lifecycle");
 
 -- CreateIndex
+CREATE INDEX "conversations_paying_group_id_silo_id_idx" ON "conversations"("paying_group_id", "silo_id");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "conversations_id_silo_id_key" ON "conversations"("id", "silo_id");
 
 -- CreateIndex
@@ -2677,6 +2816,9 @@ CREATE UNIQUE INDEX "conversation_child_requests_computer_id_key" ON "conversati
 
 -- CreateIndex
 CREATE INDEX "conversation_child_requests_parent_conversation_id_state_idx" ON "conversation_child_requests"("parent_conversation_id", "state");
+
+-- CreateIndex
+CREATE INDEX "conversation_child_requests_paying_group_id_silo_id_idx" ON "conversation_child_requests"("paying_group_id", "silo_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "conversation_child_requests_silo_id_requested_by_principal__key" ON "conversation_child_requests"("silo_id", "requested_by_principal_id", "idempotency_key");
@@ -3130,6 +3272,18 @@ CREATE UNIQUE INDEX "model_definitions_global_default_key" ON "model_definitions
 CREATE UNIQUE INDEX "model_routing_defaults_global_key" ON "model_routing_defaults"("silo_id") WHERE "scope" = 'global' AND "cluster_tenant" IS NULL;
 
 -- CreateIndex
+CREATE INDEX "model_eur_tariff_revisions_silo_id_model_definition_id_effe_idx" ON "model_eur_tariff_revisions"("silo_id", "model_definition_id", "effective_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "model_eur_tariff_revisions_model_definition_id_revision_key" ON "model_eur_tariff_revisions"("model_definition_id", "revision");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "model_eur_tariff_revisions_id_silo_id_key" ON "model_eur_tariff_revisions"("id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "model_eur_tariff_revisions_silo_id_digest_key" ON "model_eur_tariff_revisions"("silo_id", "digest");
+
+-- CreateIndex
 CREATE INDEX "provider_effect_commands_silo_id_resource_kind_resource_id__idx" ON "provider_effect_commands"("silo_id", "resource_kind", "resource_id", "desired_generation" DESC);
 
 -- CreateIndex
@@ -3167,6 +3321,9 @@ CREATE INDEX "agent_routines_silo_id_next_automatic_occurrence_status_idx" ON "a
 
 -- CreateIndex
 CREATE INDEX "agent_routines_destination_conversation_id_silo_id_idx" ON "agent_routines"("destination_conversation_id", "silo_id");
+
+-- CreateIndex
+CREATE INDEX "agent_routines_paying_group_id_silo_id_idx" ON "agent_routines"("paying_group_id", "silo_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "agent_routines_id_silo_id_key" ON "agent_routines"("id", "silo_id");
@@ -3250,10 +3407,16 @@ CREATE UNIQUE INDEX "agent_runs_cancellation_workflow_task_id_key" ON "agent_run
 CREATE INDEX "agent_runs_agent_service_id_state_idx" ON "agent_runs"("agent_service_id", "state");
 
 -- CreateIndex
+CREATE INDEX "agent_runs_paying_group_id_silo_id_idx" ON "agent_runs"("paying_group_id", "silo_id");
+
+-- CreateIndex
 CREATE INDEX "agent_runs_conversation_id_accepted_at_idx" ON "agent_runs"("conversation_id", "accepted_at");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "agent_runs_silo_id_request_idempotency_key_key" ON "agent_runs"("silo_id", "request_idempotency_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_id_silo_id_key" ON "agent_runs"("id", "silo_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "agent_runs_id_agent_service_id_agent_revision_id_key" ON "agent_runs"("id", "agent_service_id", "agent_revision_id");
@@ -3302,6 +3465,45 @@ CREATE UNIQUE INDEX "run_input_snapshots_run_id_attempt_input_digest_key" ON "ru
 
 -- CreateIndex
 CREATE UNIQUE INDEX "run_input_snapshot_run_identity_key" ON "run_input_snapshots"("run_id", "attempt", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "agent_identity_id", "principal_id");
+
+-- CreateIndex
+CREATE INDEX "managed_budget_policies_group_id_silo_id_idx" ON "managed_budget_policies"("group_id", "silo_id");
+
+-- CreateIndex
+CREATE INDEX "managed_budget_policies_agent_service_id_silo_id_idx" ON "managed_budget_policies"("agent_service_id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "managed_budget_policies_id_silo_id_key" ON "managed_budget_policies"("id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "managed_budget_policies_silo_id_scope_key_key" ON "managed_budget_policies"("silo_id", "scope_key");
+
+-- CreateIndex
+CREATE INDEX "managed_budget_monthly_accounts_silo_id_period_start_idx" ON "managed_budget_monthly_accounts"("silo_id", "period_start");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "managed_budget_monthly_accounts_policy_id_period_start_key" ON "managed_budget_monthly_accounts"("policy_id", "period_start");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "managed_budget_monthly_accounts_id_silo_id_key" ON "managed_budget_monthly_accounts"("id", "silo_id");
+
+-- CreateIndex
+CREATE INDEX "managed_budget_effects_silo_id_period_start_state_idx" ON "managed_budget_effects"("silo_id", "period_start", "state");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "managed_budget_effects_run_id_logical_fence_key" ON "managed_budget_effects"("run_id", "logical_fence");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "managed_budget_effects_id_silo_id_key" ON "managed_budget_effects"("id", "silo_id");
+
+-- CreateIndex
+CREATE INDEX "managed_budget_physical_attempts_silo_id_state_idx" ON "managed_budget_physical_attempts"("silo_id", "state");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "managed_budget_physical_attempts_effect_id_physical_nonce_key" ON "managed_budget_physical_attempts"("effect_id", "physical_nonce");
+
+-- CreateIndex
+CREATE INDEX "managed_budget_scope_impacts_account_id_idx" ON "managed_budget_scope_impacts"("account_id");
 
 -- CreateIndex
 CREATE INDEX "agent_run_tree_accounts_parent_run_id_run_id_idx" ON "agent_run_tree_accounts"("parent_run_id", "run_id");
@@ -3559,7 +3761,13 @@ ALTER TABLE "conversation_generated_file_chunks" ADD CONSTRAINT "conversation_ge
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_paying_group_id_silo_id_fkey" FOREIGN KEY ("paying_group_id", "silo_id") REFERENCES "groups"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "conversation_child_requests" ADD CONSTRAINT "conversation_child_requests_parent_conversation_id_silo_id_fkey" FOREIGN KEY ("parent_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_child_requests" ADD CONSTRAINT "conversation_child_requests_paying_group_id_silo_id_fkey" FOREIGN KEY ("paying_group_id", "silo_id") REFERENCES "groups"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "conversation_computer_active_leases" ADD CONSTRAINT "conversation_computer_active_leases_conversation_id_silo_i_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3760,6 +3968,9 @@ ALTER TABLE "persona_insights" ADD CONSTRAINT "persona_insights_persona_revision
 ALTER TABLE "model_definitions" ADD CONSTRAINT "model_definitions_provider_credential_id_silo_id_fkey" FOREIGN KEY ("provider_credential_id", "silo_id") REFERENCES "provider_credentials"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "model_eur_tariff_revisions" ADD CONSTRAINT "model_eur_tariff_revisions_model_definition_id_silo_id_fkey" FOREIGN KEY ("model_definition_id", "silo_id") REFERENCES "model_definitions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "provider_effect_commands" ADD CONSTRAINT "provider_effect_commands_follow_up_command_id_fkey" FOREIGN KEY ("follow_up_command_id") REFERENCES "provider_effect_commands"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -3773,6 +3984,9 @@ ALTER TABLE "agent_routines" ADD CONSTRAINT "agent_routines_selected_managed_ser
 
 -- AddForeignKey
 ALTER TABLE "agent_routines" ADD CONSTRAINT "agent_routines_destination_conversation_id_silo_id_fkey" FOREIGN KEY ("destination_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_routines" ADD CONSTRAINT "agent_routines_paying_group_id_silo_id_fkey" FOREIGN KEY ("paying_group_id", "silo_id") REFERENCES "groups"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "agent_routine_proposals" ADD CONSTRAINT "agent_routine_proposals_requester_principal_id_silo_id_fkey" FOREIGN KEY ("requester_principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3808,6 +4022,9 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_agent_revis
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_paying_group_id_silo_id_fkey" FOREIGN KEY ("paying_group_id", "silo_id") REFERENCES "groups"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -3815,6 +4032,33 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_routine_firing_id_fkey" FORE
 
 -- AddForeignKey
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "managed_budget_policies" ADD CONSTRAINT "managed_budget_policies_group_id_silo_id_fkey" FOREIGN KEY ("group_id", "silo_id") REFERENCES "groups"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "managed_budget_policies" ADD CONSTRAINT "managed_budget_policies_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "managed_budget_policy_fences" ADD CONSTRAINT "managed_budget_policy_fences_policy_id_fkey" FOREIGN KEY ("policy_id") REFERENCES "managed_budget_policies"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "managed_budget_monthly_accounts" ADD CONSTRAINT "managed_budget_monthly_accounts_policy_id_silo_id_fkey" FOREIGN KEY ("policy_id", "silo_id") REFERENCES "managed_budget_policies"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "managed_budget_effects" ADD CONSTRAINT "managed_budget_effects_run_id_silo_id_fkey" FOREIGN KEY ("run_id", "silo_id") REFERENCES "agent_runs"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "managed_budget_effects" ADD CONSTRAINT "managed_budget_effects_tariff_revision_id_silo_id_fkey" FOREIGN KEY ("tariff_revision_id", "silo_id") REFERENCES "model_eur_tariff_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "managed_budget_physical_attempts" ADD CONSTRAINT "managed_budget_physical_attempts_effect_id_silo_id_fkey" FOREIGN KEY ("effect_id", "silo_id") REFERENCES "managed_budget_effects"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "managed_budget_scope_impacts" ADD CONSTRAINT "managed_budget_scope_impacts_effect_id_silo_id_fkey" FOREIGN KEY ("effect_id", "silo_id") REFERENCES "managed_budget_effects"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "managed_budget_scope_impacts" ADD CONSTRAINT "managed_budget_scope_impacts_account_id_silo_id_fkey" FOREIGN KEY ("account_id", "silo_id") REFERENCES "managed_budget_monthly_accounts"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "agent_run_tree_accounts" ADD CONSTRAINT "agent_run_tree_accounts_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -5534,6 +5778,10 @@ BEGIN
         OR NEW."routine_scheduled_slot" IS DISTINCT FROM OLD."routine_scheduled_slot"
         OR NEW."agent_identity_id" IS DISTINCT FROM OLD."agent_identity_id"
         OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id"
+        OR NEW."paying_group_id" IS DISTINCT FROM OLD."paying_group_id"
+        OR NEW."paying_group_authorization_decision_digest" IS DISTINCT FROM OLD."paying_group_authorization_decision_digest"
+        OR NEW."paying_group_authorization_policy_revision_hash" IS DISTINCT FROM OLD."paying_group_authorization_policy_revision_hash"
+        OR NEW."paying_group_effective_authorization_digest" IS DISTINCT FROM OLD."paying_group_effective_authorization_digest"
         OR NEW."request_idempotency_key" IS DISTINCT FROM OLD."request_idempotency_key" THEN
         RAISE EXCEPTION 'AgentRun identity and accepted inputs are immutable';
     END IF;
@@ -12918,3 +13166,147 @@ END;
 $$;
 CREATE TRIGGER "agent_routine_proposals_authority" BEFORE INSERT OR UPDATE OR DELETE ON "agent_routine_proposals"
     FOR EACH ROW EXECUTE FUNCTION "enforce_agent_routine_proposal_lifecycle"();
+
+-- Managed monthly EUR ledger rows keep exact scope, payer, price and lifecycle evidence.
+ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_paying_group_evidence_check" CHECK (
+    ("paying_group_id" IS NULL AND "paying_group_authorization_decision_digest" IS NULL
+        AND "paying_group_authorization_policy_revision_hash" IS NULL AND "paying_group_effective_authorization_digest" IS NULL)
+    OR ("paying_group_id" IS NOT NULL AND btrim("paying_group_id") <> ''
+        AND "paying_group_authorization_decision_digest" IS NOT NULL
+        AND "paying_group_authorization_decision_digest" ~ '^sha256:[0-9a-f]{64}$'
+        AND "paying_group_authorization_policy_revision_hash" IS NOT NULL
+        AND "paying_group_authorization_policy_revision_hash" ~ '^sha256:[0-9a-f]{64}$'
+        AND "paying_group_effective_authorization_digest" IS NOT NULL
+        AND "paying_group_effective_authorization_digest" ~ '^sha256:[0-9a-f]{64}$')
+);
+
+ALTER TABLE "model_eur_tariff_revisions" ADD CONSTRAINT "model_eur_tariff_revisions_values_check" CHECK (
+    "revision" > 0 AND "token_unit" = 1000000 AND "max_input_tokens" > 0
+    AND "input_eur_micros_per_unit" >= 0 AND "output_eur_micros_per_unit" >= 0
+    AND "effective_at" < "valid_until" AND "digest" ~ '^sha256:[0-9a-f]{64}$'
+);
+
+ALTER TABLE "managed_budget_policies" ADD CONSTRAINT "managed_budget_policies_scope_check" CHECK (
+    "limit_eur_micros" >= 0 AND "revision" > 0 AND btrim("silo_id") <> ''
+    AND (("scope" = 'global' AND "scope_key" = 'global' AND "group_id" IS NULL AND "agent_service_id" IS NULL)
+        OR ("scope" = 'group' AND "scope_key" = "group_id" AND "group_id" IS NOT NULL AND "agent_service_id" IS NULL)
+        OR ("scope" = 'agent_service' AND "scope_key" = "agent_service_id" AND "group_id" IS NULL AND "agent_service_id" IS NOT NULL))
+);
+
+CREATE FUNCTION "enforce_managed_budget_policy_identity"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."scope" IS DISTINCT FROM OLD."scope" OR NEW."scope_key" IS DISTINCT FROM OLD."scope_key"
+        OR NEW."group_id" IS DISTINCT FROM OLD."group_id" OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id" THEN
+        RAISE EXCEPTION 'ManagedBudgetPolicy scope identity is immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "managed_budget_policy_identity" BEFORE UPDATE ON "managed_budget_policies"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_managed_budget_policy_identity"();
+ALTER TABLE "managed_budget_policy_fences" ADD CONSTRAINT "managed_budget_policy_fences_revision_check" CHECK ("revision" >= 0);
+
+ALTER TABLE "managed_budget_monthly_accounts" ADD CONSTRAINT "managed_budget_monthly_accounts_values_check" CHECK (
+    "policy_revision" > 0 AND "limit_eur_micros" >= 0 AND "settled_eur_micros" >= 0
+    AND "unknown_eur_micros" >= 0 AND "claimed_eur_micros" >= 0 AND "reserved_eur_micros" >= 0
+    AND "revision" >= 0 AND "period_start" = date_trunc('month', "period_start")
+);
+
+ALTER TABLE "managed_budget_effects" ADD CONSTRAINT "managed_budget_effects_values_check" CHECK (
+    "run_attempt" > 0 AND btrim("paying_group_id") <> '' AND btrim("agent_service_id") <> ''
+    AND btrim("logical_fence") <> '' AND btrim("model_alias") <> '' AND "tariff_revision" > 0
+    AND "tariff_digest" ~ '^sha256:[0-9a-f]{64}$' AND "quote_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND "max_input_tokens" > 0 AND "max_completion_tokens" > 0 AND "worst_case_eur_micros" >= 0
+    AND ("actual_eur_micros" IS NULL OR "actual_eur_micros" >= 0)
+    AND "period_start" = date_trunc('month', "period_start")
+    AND (("state" IN ('reserved', 'claimed') AND "terminal_at" IS NULL AND "actual_eur_micros" IS NULL
+            AND "actual_input_tokens" IS NULL AND "actual_output_tokens" IS NULL)
+        OR ("state" = 'settled' AND "terminal_at" IS NOT NULL AND "actual_eur_micros" IS NOT NULL
+            AND "actual_input_tokens" IS NOT NULL AND "actual_input_tokens" >= 0
+            AND "actual_output_tokens" IS NOT NULL AND "actual_output_tokens" >= 0)
+        OR ("state" = 'price_integrity_breach' AND "terminal_at" IS NOT NULL
+            AND "actual_input_tokens" IS NOT NULL AND "actual_input_tokens" >= 0
+            AND "actual_output_tokens" IS NOT NULL AND "actual_output_tokens" >= 0)
+        OR ("state" IN ('unknown', 'cancelled') AND "terminal_at" IS NOT NULL AND "actual_eur_micros" IS NULL
+            AND "actual_input_tokens" IS NULL AND "actual_output_tokens" IS NULL))
+);
+
+ALTER TABLE "managed_budget_physical_attempts" ADD CONSTRAINT "managed_budget_physical_attempts_values_check" CHECK (
+    "physical_nonce" ~ '^[0-9a-f]{64}$' AND "request_body_sha256" ~ '^[0-9a-f]{64}$' AND "deadline_epoch_ms" > 0
+    AND (("state" = 'claimed' AND "terminal_at" IS NULL)
+        OR ("state" IN ('pre_forward_rejected', 'settled', 'unknown') AND "terminal_at" IS NOT NULL))
+);
+
+CREATE FUNCTION "enforce_managed_budget_tariff_immutability"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'ModelEurTariffRevision rows are immutable';
+END;
+$$;
+CREATE TRIGGER "managed_budget_tariff_immutability" BEFORE UPDATE OR DELETE ON "model_eur_tariff_revisions"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_managed_budget_tariff_immutability"();
+
+CREATE FUNCTION "enforce_managed_budget_effect_transition"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ManagedBudgetEffect rows cannot be deleted'; END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."run_id" IS DISTINCT FROM OLD."run_id" OR NEW."run_attempt" IS DISTINCT FROM OLD."run_attempt"
+        OR NEW."paying_group_id" IS DISTINCT FROM OLD."paying_group_id" OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
+        OR NEW."logical_fence" IS DISTINCT FROM OLD."logical_fence" OR NEW."model_alias" IS DISTINCT FROM OLD."model_alias"
+        OR NEW."period_start" IS DISTINCT FROM OLD."period_start" OR NEW."tariff_revision_id" IS DISTINCT FROM OLD."tariff_revision_id"
+        OR NEW."tariff_revision" IS DISTINCT FROM OLD."tariff_revision" OR NEW."tariff_digest" IS DISTINCT FROM OLD."tariff_digest"
+        OR NEW."quote_digest" IS DISTINCT FROM OLD."quote_digest" OR NEW."max_input_tokens" IS DISTINCT FROM OLD."max_input_tokens"
+        OR NEW."max_completion_tokens" IS DISTINCT FROM OLD."max_completion_tokens"
+        OR NEW."worst_case_eur_micros" IS DISTINCT FROM OLD."worst_case_eur_micros" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+        RAISE EXCEPTION 'ManagedBudgetEffect monetary coordinates are immutable';
+    END IF;
+    IF OLD."state" IN ('settled', 'unknown', 'price_integrity_breach', 'cancelled') THEN
+        RAISE EXCEPTION 'ManagedBudgetEffect terminal rows are immutable';
+    END IF;
+    IF NOT ((OLD."state" = 'reserved' AND NEW."state" IN ('claimed', 'cancelled'))
+        OR (OLD."state" = 'claimed' AND NEW."state" IN ('reserved', 'settled', 'unknown', 'price_integrity_breach', 'cancelled'))) THEN
+        RAISE EXCEPTION 'ManagedBudgetEffect lifecycle transition is invalid';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "managed_budget_effect_transition" BEFORE UPDATE OR DELETE ON "managed_budget_effects"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_managed_budget_effect_transition"();
+
+CREATE FUNCTION "enforce_managed_budget_attempt_transition"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ManagedBudgetPhysicalAttempt rows cannot be deleted'; END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."effect_id" IS DISTINCT FROM OLD."effect_id" OR NEW."physical_nonce" IS DISTINCT FROM OLD."physical_nonce"
+        OR NEW."request_body_sha256" IS DISTINCT FROM OLD."request_body_sha256"
+        OR NEW."deadline_epoch_ms" IS DISTINCT FROM OLD."deadline_epoch_ms" OR NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at"
+        OR OLD."state" <> 'claimed' OR NEW."state" NOT IN ('pre_forward_rejected', 'settled', 'unknown') THEN
+        RAISE EXCEPTION 'ManagedBudgetPhysicalAttempt transition must preserve its exact claim';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "managed_budget_attempt_transition" BEFORE UPDATE OR DELETE ON "managed_budget_physical_attempts"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_managed_budget_attempt_transition"();
+
+CREATE FUNCTION "enforce_managed_budget_account_transition"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."policy_id" IS DISTINCT FROM OLD."policy_id" OR NEW."period_start" IS DISTINCT FROM OLD."period_start"
+        OR NEW."settled_eur_micros" < OLD."settled_eur_micros" OR NEW."unknown_eur_micros" < OLD."unknown_eur_micros"
+        OR (OLD."admission_closed_at" IS NOT NULL AND NEW."admission_closed_at" IS DISTINCT FROM OLD."admission_closed_at") THEN
+        RAISE EXCEPTION 'ManagedBudgetMonthlyAccount ownership, incurred liability and durable closure cannot be reversed';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "managed_budget_account_transition" BEFORE UPDATE ON "managed_budget_monthly_accounts"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_managed_budget_account_transition"();
+
+CREATE FUNCTION "reject_managed_budget_scope_impact_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'ManagedBudgetScopeImpact rows are immutable';
+END;
+$$;
+CREATE TRIGGER "managed_budget_scope_impact_immutability" BEFORE UPDATE OR DELETE ON "managed_budget_scope_impacts"
+    FOR EACH ROW EXECUTE FUNCTION "reject_managed_budget_scope_impact_mutation"();

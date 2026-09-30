@@ -2,7 +2,7 @@ import { AgentRevisionState, AgentServiceKind, AgentServiceState, ConversationLi
 import type { Prisma } from "@prisma/client";
 
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
-import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+import { AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import { RoutineFiringDisposition, type RoutineStatus, type RoutineUnfinishedFiringDisposition } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -188,7 +188,8 @@ export class PrismaRoutineFactsRepository implements RoutineFactsRepository
 			{ ...common, resource: { kind: ProductAuthorizationResourceKinds.Routine, id: routine.id }, action: ProductAuthorizationActions.Use },
 			{ ...common, resource: { kind: ProductAuthorizationResourceKinds.AgentService, id: routine.selectedManagedServiceId }, action: ProductAuthorizationActions.Invoke },
 		]);
-		return results.length === 2 && results.every(result => result.outcome === AuthorizationDecisionOutcomes.Allow && result.evidence !== null);
+		const payer = await this.authorization.admit({ siloId: routine.siloId, principalId: routine.originalRequesterPrincipalId, actorKind: actor.actorKind, actorId: actor.actorId, boundary: { kind: AuthorizationBoundaryKinds.Group, groupId: routine.payingGroupId }, resource: { kind: ProductAuthorizationResourceKinds.Budget, id: `group:${routine.payingGroupId}` }, action: ProductAuthorizationActions.Use, argumentsDigest, nowEpochMs: now.getTime() });
+		return results.length === 2 && results.every(result => result.outcome === AuthorizationDecisionOutcomes.Allow && result.evidence !== null) && payer.outcome === AuthorizationDecisionOutcomes.Allow && payer.evidence !== null;
 	}
 
 	/** Returns the unfinished firing that blocks automatic overlap, or null when none exists. */

@@ -49,6 +49,20 @@ describe("PrismaRoutineFiringRepository automatic selection", function _Automati
 		expect(f.facts.admitFiringActions).toHaveBeenCalledWith(expect.any(Object), { actorKind: "system", actorId: "opencrane-server/routine-schedule/v1" }, _NOW, expect.objectContaining({ firingKey: expect.stringMatching(/^sha256:/u) }));
 		expect(f.tasks.admitOccurrence).toHaveBeenCalledOnce();
 	});
+
+	it("refuses a scheduled firing when current payer Budget Use is denied", async function _RevokedPayer()
+	{
+		const transaction = {
+			agentRoutineFiring: { create: vi.fn().mockResolvedValue({}), update: vi.fn().mockResolvedValue({}) },
+			agentRoutine: { updateMany: vi.fn().mockResolvedValue({ count: 1 }), update: vi.fn().mockResolvedValue({}) },
+		};
+		const facts = _Facts();
+		facts.admitFiringActions.mockResolvedValue(false);
+		const f = _Repository(transaction, facts);
+
+		await expect(f.repository.fireAutomatic({ siloId: "silo-1", routineId: "routine-1", routineRevision: 2, scheduleTask: _SCHEDULE_TASK, firingId: "firing-denied", conversationId: "conversation-denied" })).resolves.toMatchObject({ disposition: RoutineFiringDisposition.Refused, reason: "current_authority_or_audience_refused" });
+		expect(f.tasks.admitOccurrence).not.toHaveBeenCalled();
+	});
 });
 
 describe("PrismaRoutineFiringRepository stage and receipt fences", function _StageSuite()

@@ -213,6 +213,11 @@ deferred commit checks enforce the same aggregate invariants beneath Prisma.
 purpose-separated encrypted suggestion. Database authority stamps its 24-hour lifetime and permits
 only one terminal transition; an accepted proposal has exactly one requester-owned routine.
 
+Managed routines also retain the explicitly selected same-silo paying Group and the three central
+authorization evidence digests. Creation and every firing recheck the current Group-bound Budget
+Use decision; saved evidence records why the routine was admitted but never replaces that current
+check. This records payer authority only; it does not claim balance reservation or settlement.
+
 ## See also
 
 - [Scheduling packages](../README.md)

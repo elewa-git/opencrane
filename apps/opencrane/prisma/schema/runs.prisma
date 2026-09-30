@@ -62,6 +62,11 @@ model AgentRun {
   routineScheduledSlot              DateTime?                             @map("routine_scheduled_slot")
   agentIdentityId                   String                                @map("agent_identity_id")
   principalId                       String                                @map("principal_id")
+  /// Paying group selected under current authority for a managed root and inherited by its descendants.
+  payingGroupId                     String?                               @map("paying_group_id")
+  payingGroupAuthorizationDecisionDigest String?                          @map("paying_group_authorization_decision_digest")
+  payingGroupAuthorizationPolicyRevisionHash String?                      @map("paying_group_authorization_policy_revision_hash")
+  payingGroupEffectiveAuthorizationDigest String?                         @map("paying_group_effective_authorization_digest")
   executionSubject                  Json                                  @map("execution_subject")
   requestIdempotencyKey             String                                @map("request_idempotency_key")
   attempt                           Int                                   @default(1)
@@ -100,6 +105,7 @@ model AgentRun {
   costCurrency                      String?                               @map("cost_currency")
   revision                          AgentRevision                         @relation(fields: [agentServiceId, agentRevisionId], references: [agentServiceId, id], onDelete: Restrict)
   service                           AgentService                          @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
+  payingGroup                       Group?                                @relation("RunPayingGroup", fields: [payingGroupId, siloId], references: [id, siloId], onDelete: Restrict)
   conversation                      Conversation?                         @relation(fields: [conversationId], references: [id], onDelete: Restrict)
   scheduledFiring                   AgentRoutineFiring?                   @relation("ScheduledFiringRun", fields: [routineFiringId], references: [id], onDelete: Restrict)
   inputSnapshots                    RunInputSnapshot[]
@@ -110,8 +116,10 @@ model AgentRun {
   treeAccount                       AgentRunTreeAccount?                  @relation("RunTreeAccountRun")
   closedTreeAccounts                AgentRunTreeAccount[]                 @relation("RunTreeClosureSource")
   routineProposals                  AgentRoutineProposal[]                @relation("RoutineProposalSourceRun")
+  managedBudgetEffects              ManagedBudgetEffect[]
 
   @@unique([siloId, requestIdempotencyKey])
+  @@unique([id, siloId])
   @@unique([id, agentServiceId, agentRevisionId])
   @@unique([id, attempt])
   @@unique([id, attempt, inputSnapshotDigest], map: "agent_run_attempt_snapshot_key")
@@ -124,6 +132,7 @@ model AgentRun {
   @@unique([id, conversationId, siloId, agentServiceId], map: "agent_runs_thread_authority_key")
   @@unique([id, inputSnapshotDigest, conversationId, siloId, agentServiceId, agentRevisionId, agentIdentityId, principalId], map: "agent_run_snapshot_identity_key")
   @@index([agentServiceId, state])
+  @@index([payingGroupId, siloId])
   @@index([conversationId, acceptedAt])
   @@map("agent_runs")
 }
@@ -172,6 +181,166 @@ view AgentRunAuthorityClock {
   now       DateTime
 
   @@map("agent_run_authority_clock")
+}
+
+/// Scope whose monthly managed-assistant spend is limited by one operator policy.
+enum ManagedBudgetScope {
+  /// The ceiling applies to all managed-assistant spend in one silo.
+  Global       @map("global")
+  /// The ceiling applies to work charged to one paying group.
+  Group        @map("group")
+  /// The ceiling applies to one managed assistant and is optional.
+  AgentService @map("agent_service")
+}
+
+/// Lifecycle of one logical paid model effect.
+enum ManagedBudgetEffectState {
+  /// Capacity is held, but no provider request has been claimed.
+  Reserved             @map("reserved")
+  /// One physical provider request owns the held capacity.
+  Claimed              @map("claimed")
+  /// Authenticated usage settled the effect to a known EUR amount.
+  Settled              @map("settled")
+  /// A dispatched request has no usable usage receipt, so its worst case remains held.
+  Unknown              @map("unknown")
+  /// Known usage exceeded the admitted bound or the signed storage range.
+  PriceIntegrityBreach @map("price_integrity_breach")
+  /// The undispatched reservation was cancelled after admission closed.
+  Cancelled            @map("cancelled")
+}
+
+/// Outcome of one physical attempt against a logical paid model effect.
+enum ManagedBudgetAttemptState {
+  /// The exact provider request fence is currently allowed to dispatch.
+  Claimed            @map("claimed")
+  /// The request was proven not to have reached the provider and returned to its reservation.
+  PreForwardRejected @map("pre_forward_rejected")
+  /// Authenticated usage settled the logical effect.
+  Settled            @map("settled")
+  /// Dispatch may have occurred but its cost cannot be established.
+  Unknown            @map("unknown")
+}
+
+/// Operator-owned hard ceiling for one managed-assistant spending scope.
+model ManagedBudgetPolicy {
+  id             String             @id @default(cuid())
+  siloId         String             @map("silo_id")
+  scope          ManagedBudgetScope
+  scopeKey       String             @map("scope_key")
+  groupId        String?            @map("group_id")
+  agentServiceId String?            @map("agent_service_id")
+  limitEurMicros BigInt             @map("limit_eur_micros")
+  revision       Int                @default(1)
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  group          Group?             @relation(fields: [groupId, siloId], references: [id, siloId], onDelete: Restrict)
+  agentService   AgentService?      @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
+  accounts       ManagedBudgetMonthlyAccount[]
+  fence          ManagedBudgetPolicyFence?
+
+  @@unique([id, siloId])
+  @@unique([siloId, scopeKey])
+  @@index([groupId, siloId])
+  @@index([agentServiceId, siloId])
+  @@map("managed_budget_policies")
+}
+
+/// Internal lock row shared by policy writes and dispatch claims without changing policy history.
+model ManagedBudgetPolicyFence {
+  policyId String              @id @map("policy_id")
+  revision Int                 @default(0)
+  policy   ManagedBudgetPolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+
+  @@map("managed_budget_policy_fences")
+}
+
+/// UTC-month counters for one policy and the current limit used by admission.
+model ManagedBudgetMonthlyAccount {
+  id                String              @id @default(cuid())
+  siloId            String              @map("silo_id")
+  policyId          String              @map("policy_id")
+  periodStart       DateTime            @map("period_start")
+  policyRevision    Int                 @map("policy_revision")
+  limitEurMicros    BigInt              @map("limit_eur_micros")
+  settledEurMicros  BigInt              @default(0) @map("settled_eur_micros")
+  unknownEurMicros  BigInt              @default(0) @map("unknown_eur_micros")
+  claimedEurMicros  BigInt              @default(0) @map("claimed_eur_micros")
+  reservedEurMicros BigInt              @default(0) @map("reserved_eur_micros")
+  revision          Int                 @default(0)
+  admissionClosedAt DateTime?           @map("admission_closed_at")
+  policy            ManagedBudgetPolicy @relation(fields: [policyId, siloId], references: [id, siloId], onDelete: Restrict)
+  impacts           ManagedBudgetScopeImpact[]
+
+  @@unique([policyId, periodStart])
+  @@unique([id, siloId])
+  @@index([siloId, periodStart])
+  @@map("managed_budget_monthly_accounts")
+}
+
+/// One logical paid model call charged once across every applicable ceiling.
+model ManagedBudgetEffect {
+  id                      String                   @id @default(cuid())
+  siloId                  String                   @map("silo_id")
+  runId                   String                   @map("run_id")
+  runAttempt              Int                      @map("run_attempt")
+  payingGroupId           String                   @map("paying_group_id")
+  agentServiceId          String                   @map("agent_service_id")
+  logicalFence            String                   @map("logical_fence")
+  modelAlias              String                   @map("model_alias")
+  periodStart             DateTime                 @map("period_start")
+  tariffRevisionId        String                   @map("tariff_revision_id")
+  tariffRevision          Int                      @map("tariff_revision")
+  tariffDigest            String                   @map("tariff_digest")
+  /// Digest of the tariff, model and request ceilings used for this reservation.
+  quoteDigest             String                   @map("quote_digest")
+  maxInputTokens          Int                      @map("max_input_tokens")
+  maxCompletionTokens     Int                      @map("max_completion_tokens")
+  worstCaseEurMicros      BigInt                   @map("worst_case_eur_micros")
+  actualEurMicros         BigInt?                  @map("actual_eur_micros")
+  actualInputTokens       BigInt?                  @map("actual_input_tokens")
+  actualOutputTokens      BigInt?                  @map("actual_output_tokens")
+  state                   ManagedBudgetEffectState @default(Reserved)
+  createdAt               DateTime                 @default(now()) @map("created_at")
+  terminalAt              DateTime?                @map("terminal_at")
+  run                     AgentRun                 @relation(fields: [runId, siloId], references: [id, siloId], onDelete: Restrict)
+  tariff                  ModelEurTariffRevision   @relation(fields: [tariffRevisionId, siloId], references: [id, siloId], onDelete: Restrict)
+  attempts                ManagedBudgetPhysicalAttempt[]
+  impacts                 ManagedBudgetScopeImpact[]
+
+  @@unique([runId, logicalFence])
+  @@unique([id, siloId])
+  @@index([siloId, periodStart, state])
+  @@map("managed_budget_effects")
+}
+
+/// Immutable evidence for one physical provider request under a logical effect.
+model ManagedBudgetPhysicalAttempt {
+  id                    String                    @id @default(cuid())
+  siloId                String                    @map("silo_id")
+  effectId              String                    @map("effect_id")
+  physicalNonce         String                    @map("physical_nonce")
+  requestBodySha256     String                    @map("request_body_sha256")
+  deadlineEpochMs       BigInt                    @map("deadline_epoch_ms")
+  state                 ManagedBudgetAttemptState @default(Claimed)
+  claimedAt             DateTime                  @map("claimed_at")
+  terminalAt            DateTime?                 @map("terminal_at")
+  effect                ManagedBudgetEffect       @relation(fields: [effectId, siloId], references: [id, siloId], onDelete: Restrict)
+
+  @@unique([effectId, physicalNonce])
+  @@index([siloId, state])
+  @@map("managed_budget_physical_attempts")
+}
+
+/// Applies one effect's amount to one monthly account without duplicating the charged amount.
+model ManagedBudgetScopeImpact {
+  effectId  String                      @map("effect_id")
+  accountId String                      @map("account_id")
+  siloId    String                      @map("silo_id")
+  effect    ManagedBudgetEffect         @relation(fields: [effectId, siloId], references: [id, siloId], onDelete: Restrict)
+  account   ManagedBudgetMonthlyAccount @relation(fields: [accountId, siloId], references: [id, siloId], onDelete: Restrict)
+
+  @@id([effectId, accountId])
+  @@index([accountId])
+  @@map("managed_budget_scope_impacts")
 }
 
 /// Records why an account stopped accepting work. It never means physical cleanup has finished.

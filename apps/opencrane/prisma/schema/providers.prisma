@@ -70,12 +70,37 @@ model ModelDefinition {
 
   providerCredential ProviderCredential? @relation(fields: [providerCredentialId, siloId], references: [id, siloId], onDelete: Restrict)
   agentRevisions     AgentRevision[]
+  eurTariffRevisions ModelEurTariffRevision[]
 
   @@unique([id, siloId])
   @@unique([siloId, litellmModelId], map: "model_definitions_silo_id_litellm_model_id_key")
   @@unique([siloId, scope, clusterTenant, publicModelName])
   @@index([siloId, clusterTenant])
   @@map("model_definitions")
+}
+
+/// Immutable EUR pricing for one model revision and a bounded validity window.
+model ModelEurTariffRevision {
+  id                              String          @id @default(cuid())
+  siloId                          String          @map("silo_id")
+  modelDefinitionId               String          @map("model_definition_id")
+  revision                        Int
+  digest                          String
+  tokenUnit                       BigInt          @map("token_unit")
+  maxInputTokens                  Int             @map("max_input_tokens")
+  inputEurMicrosPerUnit           BigInt          @map("input_eur_micros_per_unit")
+  outputEurMicrosPerUnit          BigInt          @map("output_eur_micros_per_unit")
+  effectiveAt                     DateTime         @map("effective_at")
+  validUntil                      DateTime         @map("valid_until")
+  createdAt                       DateTime         @default(now()) @map("created_at")
+  modelDefinition                 ModelDefinition @relation(fields: [modelDefinitionId, siloId], references: [id, siloId], onDelete: Restrict)
+  effects                         ManagedBudgetEffect[]
+
+  @@unique([modelDefinitionId, revision])
+  @@unique([id, siloId])
+  @@unique([siloId, digest])
+  @@index([siloId, modelDefinitionId, effectiveAt])
+  @@map("model_eur_tariff_revisions")
 }
 
 /// One authorization-bound instruction for the control plane to change provider custody or LiteLLM.

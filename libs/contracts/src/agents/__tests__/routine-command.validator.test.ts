@@ -5,6 +5,7 @@ import { ___RoutineControlRequestSchema, ___RoutineCreateRequestSchema, ___Routi
 const _SCHEDULE = { expression: "0 9 * * 1", timezone: "UTC" };
 
 const _CREATE = {
+	payingGroupId: "group-1",
 	destinationConversationId: "conversation-1",
 	audienceParticipantRefs: ["participant-1", "participant-2"],
 	selectedManagedServiceId: "service-1",
@@ -22,6 +23,8 @@ describe("routine command contracts", function _Suite()
 	});
 
 	it.each([
+		{ payingGroupId: "" },
+		{ payingGroupId: " group-1" },
 		{ audienceParticipantRefs: ["participant-1", "participant-1"] },
 		{ destinationConversationId: " conversation-1" },
 		{ selectedManagedServiceId: "service-1 " },
@@ -35,6 +38,12 @@ describe("routine command contracts", function _Suite()
 	])("rejects duplicate, blank, or authority-bearing create input", function _RejectsCreate(overrides)
 	{
 		expect(___RoutineCreateRequestSchema.safeParse({ ..._CREATE, ...overrides }).success).toBe(false);
+	});
+
+	it("requires an explicit paying group and never supplies a default", function _RequiresPayer()
+	{
+		const { payingGroupId: _ignored, ...withoutPayer } = _CREATE;
+		expect(___RoutineCreateRequestSchema.safeParse(withoutPayer).success).toBe(false);
 	});
 
 	it("accepts revision and control commands only with positive safe revisions", function _AcceptsCommands()

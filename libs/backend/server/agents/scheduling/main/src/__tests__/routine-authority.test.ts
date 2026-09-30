@@ -18,6 +18,7 @@ const _ENVELOPE: RoutineInstructionEnvelope = { keyId: "key-1", nonce: new Uint8
 function _command(): CreateRoutineCommand
 {
 	return {
+		payingGroupId: "group-1",
 		caller: { siloId: "silo-1", principalId: "principal-1", issuer: "https://issuer.example", subjectId: "subject-1", authenticatedAt: "2026-09-25T08:00:00.000Z" },
 		destinationConversationId: "conversation-source",
 		audienceParticipantRefs: ["participant-2", "participant-1"],

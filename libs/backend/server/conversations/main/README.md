@@ -445,6 +445,11 @@ Owns operations over `Conversation`, `ConversationParticipant`, `ConversationPri
 evidence; KurrentDB owns conversation and computer history. Ciphertext is stored before its opaque
 reference is appended. Serializable writes retain their existing retry and conflict semantics.
 
+Managed group-child roots retain their explicitly selected same-silo paying Group and central
+authorization evidence. Recovery and projection recheck current Group-bound Budget Use authority,
+so a revoked payer cannot resume or project a child. The saved evidence is admission history, not a
+balance reservation or settlement result.
+
 Run `nx run backend-server-conversations:test:integration` with `KURRENTDB_INTEGRATION_URL` to
 exercise approval, tool-result and answer recovery against a real history server. Ordinary package
 tests use controlled ports.

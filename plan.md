@@ -1,5 +1,101 @@
 # OpenCrane — Active Plan
 
+## Direct source checkpoints — 30 September 2026
+
+The user now requests actual commits instead of suggested commit messages. Commit each coherent,
+reviewed source slice and report its real commit ID. The EUR-ledger checkpoint below remains a
+source foundation: its PostgreSQL qualification and live integration are still pending, so a local
+commit must not be presented as release readiness. No push, merge, tag or deployment is implied.
+
+## Renewed ledger approval — 30 September 2026
+
+The user explicitly approved the source-only financial ledger after the scope and risk of
+spending reservations, actual and uncertain charges, and hard-limit closure were explained.
+This resolves the later ledger-specific safety pause below; it does not approve unrelated
+paused scopes, live database changes, provider calls, permission grants or deployment.
+The overnight window has ended and its heartbeat remains paused. The MVP goal is active.
+
+The resumed ledger increment starts at `70d91cb3f58a14a2970329a5d2b58909e0ec201b` in the
+existing budget worktree. The cumulative branch review base remains
+`2248132e49054734e53023f6fe0e6c9f1459859f`; existing payer and schema overlays are preserved.
+Live PR ancestry was refreshed at 08:32 Europe/Brussels with unchanged snapshot
+`743fa14fcf29075e99fec582317b66f3c11b8fe38eaa86b3689faf0b40afff47`.
+
+Sol owns production ledger persistence and Luna owns focused tests, with independent architecture
+and integrated review. The root coordinates the plan, shared client generation and joined checks.
+The ledger must recheck closed accounts before every physical claim, including previously
+reserved work, and preserve incurred and uncertain liability. It may not directly mark other
+runs or conversations terminal or invent requester Stop evidence. The current run owner has no
+system-originated budget-stop port; active-run and descendant cleanup remain an explicit integration
+gap until that ownership boundary is implemented and reviewed. A ledger-only checkpoint must not
+be described as operational end-to-end hard-budget enforcement.
+
+The independent architecture preflight passes this ledger-only boundary. New `ManagedBudget*`
+models belong in execution-owned `runs.prisma`, not reporting-owned `spend.prisma`; immutable
+model tariffs remain provider-owned. Reservation, claim, release and settlement share one
+Serializable unit of work. A reservation may exactly fill available capacity without closing
+the account. Claimed worst-case liability can temporarily exhaust capacity, but must not permanently
+close a month: authenticated no-forward proof or cheaper known usage can restore available capacity.
+Durable closure occurs when settled plus retained unknown liability reaches the current limit, or
+when actual charges breach the admitted price bound. Once genuinely closed, previously reserved
+work cannot claim. Exact replays cannot dispatch or charge twice.
+
+The ledger implementation now passes 34 money-math tests and 19 repository-authority tests using
+transaction doubles. The complete runs package passes 244 tests, with 15 real-SQL tests
+explicitly skipped (13 existing run-tree cases and two new ledger cases). Its lint/type check passes.
+The earlier five router failures were caused by
+denied temporary local listeners; the full suite passes with that local test permission. These
+results do not establish PostgreSQL concurrency or provider-dispatch behavior. Conversations
+lint/type checking also now passes. The independent integrated production review and architecture
+post-diff review pass for manifest
+`a22ee2bb36c1f51365a438165fcdad807fbbe8779fb3ec647b65831bea05567c`, with no confirmed findings.
+The final manifest `758e1bb8b02f23b6525af23e4a6a253657de7c05f6a8e8642067d1a1d1006354`
+differs only by adding the separate `test:monthly-budget:sql` target and its README instructions.
+Removing those two test-only additions in memory reproduces the reviewed manifest exactly; ledger
+production, schema, baseline, release binding and ownership declarations are unchanged.
+The two style warnings are deliberate schema-backed categorical projections in the Prisma-free
+state helper; the reviewer accepted their explicit exhaustive mapping. Module-growth candidates
+have distinct persistence, lifecycle, contract and execution-schema responsibilities.
+The repaired database-constraint fixture passes a separate source review at SHA-256
+`ef5700c3e777e05b325191d6c9285aace8b062487662519259b8994a86b032df` but has not been executed.
+It checks exact named constraints and trigger errors, valid settlement, payer evidence and
+monotonic liability/closure rather than accepting any database failure. Two independent-client ledger
+tests are authored at SHA-256 `4fc62ceb5fe6e74b23cd9a116245696bfd2e423c01495291a29a2abb713f30f3`.
+Root source review and ordinary skip/lint checks pass; PostgreSQL execution and deterministic
+transaction-overlap proof are still pending. The separate target requires an explicitly selected fresh
+baseline through `OPENCRANE_MONTHLY_BUDGET_SQL_DATABASE_URL`. A later proposal to use the general
+database variable was safety-rejected and was not applied; the dedicated safeguard remains intact.
+The mock-authority fixture received a type-only inference correction (final hash
+`8b9f9fb37f25b4010f6fe46e73db0df320d82ae613c58e4a04957f9d83b129e2`), and the full suite was rerun.
+
+Prisma generation, target-baseline regeneration, authority-baseline static checks, release binding,
+Prisma boundaries and module-growth checks pass. The regenerated baseline digest is
+`caef3155d00bdc5e75907d1ecc99c69fc6db8c6cb1fcb58aa3fcc99a734f3d91` and matches
+`releases/0.11.0.json`. No empty-database installation or ledger SQL race was executed. The unused
+new run-tree `BudgetExhausted` closure enum was deferred rather than inventing a system-stop mapping;
+the existing run terminal reason is unchanged. The original overlay remains in the recovery archive.
+Agent-domain ownership and its negative tests also pass. Fresh-database qualification remains
+outstanding for this source checkpoint. Its pre-commit source backup is retained in the main checkout at
+`.nx/mvp-source-checkpoints/20260930.eur-ledger-source-reviewed.tar.gz`; it excludes dependencies,
+credentials and build output and is not a qualified release artifact.
+
+Remaining work includes real-database qualification, copying the authorized payer into admitted
+runs, protected policy/tariff configuration, physical model-dispatch integration, and system-owned
+root/descendant budget-stop cleanup. No paid provider call, live database change, deployment,
+publication or release is part of this checkpoint. The live PR-stack refresh remains green with
+the same 19-PR snapshot. A merge simulation of the committed head against current `origin/develop`
+is clean (tree `01a1f05a6e4cc5f388bcfc380edbaf7fb944d1f1`); this does not qualify the uncommitted overlay.
+
+## Source recovery checkpoint — 30 September 2026
+
+The MCP, budget and descendant-Stop worktrees were captured consistently in the main checkout at
+`.nx/mvp-source-checkpoints/20260930.mcp-budget-stop-source-recovery.tar.gz`, SHA-256
+`33e9390b75e43edfa1577bc40dae808e330eee11492e77299c3fc6d1d4c79f58` (1,001,559 bytes).
+Source manifests matched before/after capture and after extraction. The archive excludes keys,
+dependencies, build output and Git internals. It preserves the approved payer/type work and the
+unfinished schema without treating rejected accounting authority as approved. It is not a
+release-qualified checkpoint; subsequent plan-only updates are outside the captured manifests.
+
 ## Overnight resumption — 29 September 2026
 
 The user explicitly approved both source-only repairs: MCP execution must retain current
@@ -9,7 +105,7 @@ run/cancellation owner, preserving incurred and uncertain charges. The earlier p
 resolved by this approval, not by automatic goal continuation. The rejected drafts remain rejected.
 
 Resume the implementation with Luna/Sol lanes and independent review. Keep schema/client generation
-serialized across the two working trees. The overnight heartbeat is active in this task through
+serialized across all working trees. The overnight heartbeat is active in this task through
 30 September 08:00 Europe/Brussels, when it must checkpoint and report rather than start a new
 slice. The full MVP goal remains active and is not claimed complete. The EUR 5 total paid-test
 allowance, no-laptop-VM rule and existing publication/deployment/side-effect boundaries remain.
@@ -27,6 +123,22 @@ focused tests and the downstream response fixtures. Previously passing focused c
 still apply to these unchanged files; four recorded fixture/validator/test hashes were rechecked.
 No database schema, payer authorization, budget ledger or paid dispatch gate is included in this
 checkpoint. The SQL proposal fixture remains reviewed but not database-executed in this wave.
+The resulting local commit is `70d91cb3f58a14a2970329a5d2b58909e0ec201b`; it has not been pushed.
+
+The unfinished monthly-budget type declaration now imports the committed `ModelTariffQuote`
+contract instead of its removed earlier name. This is a type-reference repair only; no accounting
+repository, dispatch integration or database change was added. Whitespace validation passes, but
+no test or full budget type-check claim is made for this paused overlay.
+
+Accepted descendant-stop implementation continues independently in
+`/private/tmp/opencrane-descendant-stop.TlTDD5`, based on the committed checkpoint above, without
+copying this checkout's uncommitted schema or payer work. Its architecture preflight keeps cleanup
+with the existing run, workflow, credential and IAM owners; it does not resume rejected accounting.
+
+A separate recoverable WIP archive lives under the main checkout at
+`.nx/mvp-source-checkpoints/overnight-20260929.41pevx/`; its `CHECKPOINT.md` identifies source heads,
+archive checksums and outstanding gates. It is not a build/release checkpoint and must not overwrite
+newer source during recovery. The archives contain no dependency trees or credentials.
 
 ## Preserved administration design — 29 September 2026
 
@@ -125,12 +237,26 @@ Actual delegated run children must instead inherit the paying group. Copying evi
 runs, the fresh baseline and release binding remain unfinished. The three broken dependency links
 were repaired from the exact lockfile versions after archive-integrity checks, using 5.9 MB; source
 package and lockfiles were unchanged. Prisma generation then passed against the final schema.
-Routine repository tests passed 50 tests, and group-child validator tests passed 19. The lifecycle
-tests still needed new group/clock doubles (18 of 34 failed), and three router tests were blocked
-by sandbox socket permissions. Independent review then found missing payer rechecks on delayed
-projection and routine firing. Their source correction is in progress with focused revocation
-tests; the earlier passing tests do not qualify the changed lifecycle behavior. The post-correction
-style/Prisma boundary checks passed, but behavioral execution and independent re-review remain open.
+Initial lifecycle tests needed group/clock doubles, and router tests required scoped localhost
+permission. Independent review found and the implementation corrected missing payer rechecks on
+delayed projection and routine firing. Final focused results are 84 routine repository/facts/firing
+tests, 38 group-child validator/lifecycle tests, and 3 router tests, all passing. Scheduling lint and
+type checks pass. Final independent payer source review passes, including current payer checks on
+recovery while preserving current child access for an already-created Ready child. The reviewed
+request/access repository hashes are `48698b47ec72386475a003dfe10dc830582bb0d2c9d4b0646c36ce1138ddb8cd`
+and `76e56c19a021e64422c180d04d63726eae4f7a8524eef0349139614cd2e741b5`.
+The schema remains excluded from that review. Conversations lint is not green: the separate budget
+WIP adds `BudgetExhausted` without completing the existing run-tree closure-reason mapping. No
+behavior was invented to silence that unfinished integration. Boundary checks (336 files), style
+checks (19 files) and diff checks pass for the payer slice. Its source remains uncommitted.
+
+Independent read-only review of the unfinished budget schema found two same-silo FK corrections
+for the eventual accounting slice: bind `ManagedBudgetEffect` to `AgentRun` by both run ID and silo,
+and bind `ManagedBudgetMonthlyAccount` to `ManagedBudgetPolicy` by both policy ID and silo. The
+referenced models need the corresponding composite unique keys. The current ID-only relations do
+not prevent a stored silo from disagreeing with its referenced owner. The reviewed SQL also needs
+all-or-none payer/evidence checks and exact budget-scope/target tuple checks. These are recorded
+future corrections, not a passing schema review or authorization to retry the rejected ledger.
 This source is uncommitted and must not be published as operational enforcement. No provider call,
 live database change, deployment or VM was started.
 
@@ -4078,11 +4204,11 @@ their own completion track; they are not silently bundled into the first tool PR
 | T2 | IN PROGRESS: personal and requester-only company approval/resume are implemented with PostgreSQL proof. Real requester accounts, provider execution and recovery/cancellation acceptance remain. |
 | U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
 | M1 | IN PROGRESS: persistence, transaction-bound Absurd admission and catalog completion are implemented, and the current #899 run passes the Cognee provider contract and database-authority suites. First-dataset permission, fresh authenticated composition and complete isolated Remember/Recall/Correct/Forget journeys remain; provider CI is not live product-memory acceptance. Cognee runs in access-control mode with one gateway service user per silo ([ADR 0017](docs/adr/0017-cognee-access-control-mode-and-gateway-service-user.md)). |
-| U2 | IN PROGRESS: structured results, collaborative clarification response authority, pending-question notifications and explicit initial subchat audience have reviewed source checkpoints above. Complete model-question/answer continuation, visual approval and authenticated participant/isolation proof remain; earlier approval pauses are superseded by the recorded decisions. |
+| U2 | IN PROGRESS: structured results, collaborative clarification response authority, pending-question notifications and explicit initial subchat audience have reviewed source checkpoints above. Complete model-question/answer continuation, visual approval and authenticated participant/isolation proof remain. Participant policy is accepted; the separately rejected model Ask-validator replacement still awaits explicit renewed approval. The 28 September A approval concerned saved-run format, not this validator; the earlier blanket supersession statement was unsupported. |
 | F1 | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV capture, scanning and answer-link recovery are implemented in #879 and pass four real-store cases in #880. The pending SQL guard and complete hosted execution/download qualification remain. |
 | D1 | IN PROGRESS; recursive source accepted 23 September with no fixed depth, child-count or concurrency caps. Run-tree accounting is published; its ten initial SQL cases passed CI. The actual credential-custody correction passes 121 run and 844 conversation tests locally; thirteen revised SQL cases await fresh-baseline CI. Per-call cost authority, spawn/join, narrowed context/permissions and recursive cleanup remain unjoined. This is not a working or qualified delegation journey. |
 | S1 | REQUIRED FOR MVP; scheduling persistence, protected commands, browser controls and conversational proposals are published in draft #916. Narrow failed-CI fixture repairs are committed locally at `2248132e4`; all four repaired authority fixtures pass on fresh native PostgreSQL. Exact-candidate CI, visual review and real automatic/manual/recovery journeys remain. The earlier product-decision pause is resolved. |
-| A2 | PARTIAL: protected audit/usage read screens and controlled tests exist. Owners/Admins are the accepted default readers. An isolated, uncommitted EUR-budget wave contains draft schema, payer-request and usage/pricing contracts. Production enforcement is paused for revised scoped approval; settlement, protected settings and real-account proof remain. |
+| A2 | PARTIAL: protected audit/usage read screens and controlled tests exist. Owners/Admins are the accepted default readers. The source-only EUR ledger was reapproved on 30 September; payer selection, pricing contracts and reservation/claim/settlement source exist in an isolated source-checkpoint wave. Ledger source and architecture review pass; the runs suite passes 244 tests with 15 SQL tests skipped. Real-database qualification, admitted-run payer wiring, protected settings, dispatch enforcement and system-owned budget-stop cleanup remain. Default-reader permission bootstrap is a separate unresolved scope. |
 | T3 | PLANNED, with separate acceptance for its journey. |
 | Q1 — operational acceptance | CONTINUOUS — source checks and CI do not replace fresh-install or real-account acceptance. |
 

@@ -86,6 +86,35 @@ personal activity API; canonical participant receipts belong to conversation his
 The status projection exposes `cancelling` while durable arbitration or cleanup remains active and
 `cancelled` only after provider claims no longer hold a fence.
 
+### Managed monthly EUR ledger
+
+`PrismaManagedMonthlyBudgetUnitOfWork` owns the durable money transitions for managed model
+requests. It reserves one conservative EUR-micro hold across the global, paying-group and optional
+assistant monthly accounts, claims one exact physical request, and then either settles verified
+usage, retains the worst case for an unknown outcome, or releases a transport-authenticated request
+that provably never reached the provider. Every transition uses the database clock and one bounded
+Serializable transaction. Exact replays return the saved winner and cannot dispatch or charge twice.
+
+Reservations freeze the admitted run attempt, payer, model, input/output ceilings, immutable tariff
+row and quote digest. A physical claim additionally freezes the request nonce, body digest and
+original deadline. Current policies and the frozen tariff are checked again immediately before a
+claim, so an older hold cannot bypass a new optional assistant ceiling, a lowered limit, a closed
+account, an expired tariff or an elapsed run deadline. Known charges below the hold restore unused
+capacity. Unknown outcomes retain the full hold. A representable above-quote charge is recorded as
+known settled liability; an unrepresentable charge keeps the hold while retaining exact token and
+tariff evidence. Both integrity failures close further admission.
+
+This is a ledger boundary, not operational dispatch enforcement. No current model-request caller is
+wired to it yet, and this package does not mark runs, conversations or descendants terminal when a
+ceiling closes. A future reviewed system-stop owner must perform that cleanup without fabricating a
+human Stop decision. Personal runs return a distinct outcome only when their saved service and
+execution subject prove the personal ownership path.
+
+The separate `test:monthly-budget:sql` target checks competing reservations and physical claims
+using two PostgreSQL clients. It requires `OPENCRANE_MONTHLY_BUDGET_SQL_DATABASE_URL` to name a
+fresh test database loaded with the reviewed baseline; it does not use the general `DATABASE_URL`.
+Ordinary tests skip these cases. The test source exists, but database qualification is still pending.
+
 ### Run-tree accounting foundation
 
 `PrismaRunTreeRepository` is a transaction-bound foundation for recursive delegation. It is not yet
@@ -150,7 +179,11 @@ shared backend libraries. It never imports an application or Kubernetes client.
 
 ## Data and persistence
 
-The main records are `AgentRun` and its append-only `RunInputSnapshot` rows. Initial admission saves
+The main records are `AgentRun` and its append-only `RunInputSnapshot` rows. Managed monthly money
+uses `ManagedBudgetPolicy`, `ManagedBudgetMonthlyAccount`, `ManagedBudgetEffect`,
+`ManagedBudgetPhysicalAttempt`, and `ManagedBudgetScopeImpact`; provider-owned
+`ModelEurTariffRevision` remains immutable pricing input rather than ledger-owned configuration.
+Initial admission saves
 the run and attempt-one snapshot together, plus a personal-owner read grant only for a personal
 interactive run. Interactive snapshots bind exact final-human-message provenance. Automatic and
 manual routine snapshots instead bind the exact routine, revision, firing, slot and original

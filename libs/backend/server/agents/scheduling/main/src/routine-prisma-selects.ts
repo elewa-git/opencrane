@@ -8,6 +8,7 @@ export const _ROUTINE_SELECT = {
 	requesterAuthenticatedAt: true,
 	destinationConversationId: true,
 	selectedManagedServiceId: true,
+	payingGroupId: true,
 	status: true,
 	currentRevision: true,
 	lifecycleRevision: true,

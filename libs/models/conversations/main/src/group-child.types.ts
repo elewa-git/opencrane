@@ -17,6 +17,8 @@ export enum GroupChildStates
 /** Selects an existing group message and a company assistant for a separate child conversation. */
 export interface GroupChildCreateCommand
 {
+	/** Explicit same-silo group whose EUR budget pays this managed child root. */
+	readonly payingGroupId: string;
 	/** Identifies the submitted parent message whose content starts the child. */
 	readonly parentMessageId: string;
 	/** Gives the message's stream revision so the server can read and verify it directly. */

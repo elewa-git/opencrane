@@ -69,6 +69,14 @@ export interface GroupChildRequest
 	/** Retains untrusted JSON until the access repository validates the frozen string audience. */
 	readonly participantSubjectIds: unknown;
 	readonly commandDigest: string;
+	/** Same-silo group selected to pay this independently managed child root. */
+	readonly payingGroupId: string | null;
+	/** Central authorization decision evidence for the selected payer. */
+	readonly payingGroupAuthorizationDecisionDigest: string | null;
+	/** Policy revision evidence for the selected payer. */
+	readonly payingGroupAuthorizationPolicyRevisionHash: string | null;
+	/** Effective grant-set evidence for the selected payer. */
+	readonly payingGroupEffectiveAuthorizationDigest: string | null;
 	readonly state: "Pending" | "Ready" | "Unavailable";
 	readonly createdAt: Date;
 }
@@ -84,6 +92,8 @@ export interface GroupChildAccessPort<TTransaction>
 	/** Rechecks only the exact selected or previously frozen subjects. */
 	audience(caller: ConversationCaller, parentId: string, position: bigint, subjects: readonly string[]): Promise<readonly string[] | null>;
 	stillAdmitted(request: GroupChildRequest, agents: GroupChildAgentResolver<TTransaction>): Promise<boolean>;
+	/** Rechecks only the selected payer before replaying an accepted request. */
+	payerAdmitted(request: GroupChildRequest): Promise<boolean>;
 }
 
 /** Defines creation and recovery without giving history an ORM model. */

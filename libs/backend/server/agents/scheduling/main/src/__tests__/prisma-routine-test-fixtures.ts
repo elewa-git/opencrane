@@ -35,6 +35,7 @@ export function _Routine(overrides: Partial<RoutineRow> = {}): RoutineRow
 		requesterAuthenticatedAt: new Date(_CALLER.authenticatedAt),
 		destinationConversationId: "destination-1",
 		selectedManagedServiceId: "service-1",
+		payingGroupId: "group-1",
 		status: AgentRoutineStatus.Active,
 		currentRevision: 2,
 		lifecycleRevision: 4,
