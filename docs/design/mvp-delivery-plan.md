@@ -1,9 +1,10 @@
 # Deliver useful assistant work
 
-> Current direction: [computer-owned execution plan](computer-owned-execution-plan.md). The
-> computer harness owns the execution loop, checkpoints and local artifacts; the server remains
-> the admission, authorization, KurrentDB and provider-boundary authority. This document records
-> product sequencing, not a claim that that runtime replacement is complete.
+> Current direction: [computer-owned execution plan](computer-owned-execution-plan.md). OpenCrane's
+> extracted TypeScript engine in the computer owns the execution loop, checkpoints and local
+> artifacts; the server remains the admission, authorization, KurrentDB and provider-boundary
+> authority. This document records product sequencing, not a claim that that runtime replacement
+> is complete.
 
 ## Accepted product decisions — updated 30 September 2026
 
@@ -99,7 +100,7 @@ Complete administration, rich interaction and action recovery keep their later p
 
 | Priority / ID | User outcome and owner | Required contract | Completion evidence |
 | --- | --- | --- | --- |
-| 1 / T1 | Retrieve real company information and explain it. Agent services own assignment; input assembly freezes definitions; the computer harness owns progression while the server and MCP own invocation/results. | Current company or personal identity, exact tool revision, authorized connection custody, shared reported EUR cutoff and existing tool dispatch. | A standard remote MCP and a hosted MCP each complete discovery, authenticated invocation and a real read. Personal and company-child chats retain the answer and durable result after reload/restart. Wrong silo, withdrawn tool, revoked grant, stale lease/generation and unavailable credentials fail closed. Recovery cannot repeat dispatch or bypass the shared cutoff. |
+| 1 / T1 | Retrieve real company information and explain it. Agent services own assignment; input assembly freezes definitions; the in-computer TypeScript engine owns progression while the server and MCP own invocation/results. | Current company or personal identity, exact tool revision, authorized connection custody, shared reported EUR cutoff and existing tool dispatch. | A standard remote MCP and a hosted MCP each complete discovery, authenticated invocation and a real read. Personal and company-child chats retain the answer and durable result after reload/restart. Wrong silo, withdrawn tool, revoked grant, stale lease/generation and unavailable credentials fail closed. Recovery cannot repeat dispatch or bypass the shared cutoff. |
 | 2 / T2 | Review and approve a precise external change. IAM owns the decision and effect admission; elicitation owns the participant interaction; MCP owns execution. | T1 dispatch and connection binding; an authorized human approver, exact saved arguments and current permission at execution. | Show target, arguments/changed fields, consequences and connection owner before approval. One approval permits one exact effect. Reject, cancel, expiry, changed arguments, revoked membership/grant/connection and stale attempts prevent dispatch. A timeout after submission is durably uncertain and is never blindly retried. |
 | 3 / M1 | Remember, recall, correct and forget information across conversations. The memory gateway owns fact content; the personal catalog owns metadata, consent and provenance. | Verified gateway-native dataset and stable deletion identity frozen in admitted authority; recoverable correction. | Remember a fact, recall it in a new conversation, correct it and forget it. Show consent/provenance/sensitivity. Other employees, silos and unentitled groups cannot recall it. Failed corrections/deletions can finish safely after restart. Never infer the dataset from a subject ID or rewrite an old run snapshot. |
 | 4 / U1 | Follow and control assistant work. Existing conversation events, workspace stores and reusable components own the experience. | Durable activity/result events and the supported decision/cancellation contracts from T1/T2. | Proposed, running, waiting, failed, cancelled and completed work survives reload and SSE resume. Relevant decisions, result links and cancellation are accessible on desktop and narrow screens. Current access governs every read; projections never authorize work. |
@@ -150,7 +151,7 @@ stops when the shared threshold is exhausted. Current requester and target permi
 selected readable context and narrowing capability ceilings remain independent gates.
 
 The detailed executor/reservation narratives below are **HISTORICAL** and superseded by the
-computer-owned harness and reported-spend policy. Preserve their lineage, Stop-race, idempotency,
+computer-owned TypeScript engine and reported-spend policy. Preserve their lineage, Stop-race, idempotency,
 unknown-outcome and recovery evidence when implementing the replacement; do not carry forward their
 financial reservation instructions.
 
@@ -265,7 +266,7 @@ MCP endpoint and never copied into model input, conversation history or sandbox 
 and authorization discovery must reject unintended internal targets and credential-bearing redirects.
 
 In the target architecture, the remote MCP server owns its provider implementation. OpenCrane owns
-permission, approval, spend and invocation evidence; the computer harness selects the next agent
+permission, approval, spend and invocation evidence; the in-computer engine selects the next agent
 step. A lost response after a call is not permission to replay an external effect. Use the existing
 invocation evidence and recovery owners; do not introduce another orchestration mechanism.
 
@@ -279,7 +280,7 @@ process and the ConversationComputer. Reuse the existing MCP executor where its 
 Remote and hosted MCPs share the catalogue, tool discovery, immutable definitions, assignment,
 permissions, approval, invocation evidence and results. They have explicit transport and execution
 policies; neither mode is a fallback for the other. Durable hosted-executor workflows remain separate
-from the harness's agent loop. Hosting an
+from the computer's agent loop. Hosting an
 MCP server does not give it authority to schedule model work or acquire new spending authority.
 
 The hosted slice must make scoped credentials and provider connectivity usable by an ordinary MCP
@@ -298,7 +299,7 @@ this hosted slice or imply that arbitrary uploaded executables have authenticate
 ## Approved external actions — historical checkpoint and retained acceptance
 
 The next paragraph records the previous executor's source state, not the implementation status of
-the new harness or reported-spend cutoff. Its model-step ownership and run allowance are superseded
+the new in-computer engine or reported-spend cutoff. Its model-step ownership and run allowance are superseded
 by the computer-owned execution plan; the approval and external-effect acceptance below survives.
 
 The personal model and proposal path now uses the existing IAM deferred-approval owner and waits
@@ -325,9 +326,10 @@ proof that the provider completed the change. Broad provider-specific reconcilia
 
 ## Ownership and delivery gates
 
-The in-computer harness owns agent progression, checkpoints, waits and local artifact generation;
-Absurd owns routine/cleanup workflows and their recovery, not agent-step selection. AgentSandbox owns the
-isolated execution environment under current lease and generation coordinates. The server enforces
+The extracted in-computer TypeScript engine owns agent progression, checkpoints, waits and local
+artifact generation; Absurd owns routine/cleanup workflows and their recovery, not agent-step
+selection. AgentSandbox owns the isolated execution environment under current lease and generation
+coordinates. The server enforces
 model authority, credentials, shared reported spend, tool permission and admission gates; KurrentDB
 stores immutable bidirectional history, PostgreSQL remains current authorization authority, and the
 memory gateway owns long-term fact access. Do not add another scheduler, queue, outbox, broker,

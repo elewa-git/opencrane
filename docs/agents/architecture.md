@@ -27,11 +27,12 @@ authoritative for memberships, grants, approvals, budgets, and transaction-bound
 See [ADR 0016](../adr/0016-conversation-history-and-computers.md). Artifact bytes live behind
 `ArtifactStore`; database records own their identity, version, authorization, and lineage.
 
-The target computer is the assistant's managed laptop. One pinned, mature harness inside the
-conversation-computer Pod owns the live reasoning and tool loop, context and checkpoints, local code
-and files, and its persistent browser session. OpenCrane does not schedule each thought or authorize
-each local file write. It admits and supervises the session, constrains protected capabilities and
-spend, and owns durable user-visible lifecycle and decisions through service boundaries.
+The target computer is the assistant's managed laptop. OpenCrane's extracted TypeScript execution
+engine inside the conversation-computer Pod owns the live reasoning and tool loop, context and
+checkpoints, local code and files, and its persistent browser session. OpenCrane does not schedule
+each thought or authorize each local file write. It admits and supervises the session, constrains
+protected capabilities and spend, and owns durable user-visible lifecycle and decisions through
+service boundaries.
 
 `AgentRun` remains a small trusted registration outside the Pod: it binds identity, lineage, payer,
 current authorization, assignment, attempt and lifecycle. Approval decisions, external-effect

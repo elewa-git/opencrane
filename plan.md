@@ -2,16 +2,19 @@
 
 ## Current direction: computer-owned execution — 30 September 2026
 
-The computer is the working assistant with a managed laptop. Its harness owns reasoning, tool
-sequencing, code, files, browser and checkpoints. OpenCrane constrains access and spending and
-supervises lifecycle; it does not control each internal step. The authoritative next sequence is
-[computer-owned execution](docs/design/computer-owned-execution-plan.md), with the change/impact
-table, compatibility checkpoint, survivor/replacement boundaries and exact acceptance requirements.
+The computer is the working assistant with a managed laptop. The selected direction extracts and
+adapts OpenCrane's existing TypeScript execution engine into the existing conversation-computer Pod;
+that engine owns reasoning, tool sequencing, code, files, browser and checkpoints. OpenCrane
+constrains access and spending and supervises lifecycle; it does not control each internal step. The
+authoritative next sequence is [computer-owned execution](docs/design/computer-owned-execution-plan.md),
+with the change/impact table, replacement preflight, survivor/replacement boundaries and exact
+acceptance requirements.
 
-Start with a time-boxed evaluation of a pinned Codex harness, then one fake-provider computer-owned
-journey before reconnecting budgets, protected tools, memory, artifacts, delegation and schedules.
-Codex is a candidate, not an installed or qualified runtime. Preserve the current product foundations
-and delete the old server loop only with its direct replacement. No dual agent executor is planned.
+Start with dependency and direct-replacement preflight, then one meaningful computer-owned task:
+model response → local code/tool → observed result → model → report, with checkpoint recovery and
+Stop. Codex and OpenHands adoption are not prerequisites or the selected implementation. Preserve
+the current product foundations and delete the old server loop only with its direct replacement.
+No dual agent executor or compatibility bridge is planned.
 
 Personal spending uses a real private group of one. All children inherit the selected paying group;
 no request-cost reservations or run/child wallets. Reported-spend cutoff stops active work and
@@ -23,9 +26,14 @@ computer/gate boundary. Its tests and unresolved SQL constraint remain evidence,
 of the new path. Do not finish qualifying the obsolete server executor as the next milestone.
 
 This is a documentation-only steering change on the implementation branch. No source, database,
-provider, VM or deployment behavior changed. The 18–32 engineering-day transition forecast is
-provisional work effort, not an MVP completion date. Re-estimate after the 1–2 day compatibility
-proof; all existing product acceptance gaps remain visible in the MVP plan.
+provider, VM or deployment behavior changed. The earlier 18–32 engineering-day forecast belonged
+to an unselected external-harness path and is superseded. Re-estimate the extraction only after the
+replacement preflight; all existing product acceptance gaps remain visible in the MVP plan.
+
+After this planning checkpoint is committed and published for review, start the implementation track
+in a separate task from that committed checkpoint. Do not carry the preserved uncommitted descendant-
+Stop overlay into its base. Publication, CI, merge, deployment and live proof remain distinct states;
+this paragraph authorizes preparation of the PR, not a claim that it already exists.
 
 The dated checkpoints below preserve historical source and validation evidence. This section and
 its linked plan supersede their conflicting executor, reservation and personal-budget directions.
