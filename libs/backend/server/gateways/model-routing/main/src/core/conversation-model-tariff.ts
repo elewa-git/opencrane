@@ -1,7 +1,16 @@
-import { ___ModelTariffLookupSchema, ___ModelTariffQuoteSchema, type ModelTariffLookup, type ModelTariffLookupPort, type ModelTariffQuote } from "@opencrane/contracts";
+import { ___ModelTariffLookupSchema, ___ModelTariffQuoteSchema, ___ModelTariffSchema, type ModelTariff, type ModelTariffLookup, type ModelTariffLookupPort, type ModelTariffQuote } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { ConversationModelTariffResolver } from "./conversation-model-tariff.types";
+
+/** Calculates one completion-bound quote from validated immutable tariff evidence. */
+export function __QuoteConversationModelTariff(tariff: ModelTariff, maxCompletionTokens: number): ModelTariffQuote
+{
+	const checkedTariff = ___ModelTariffSchema.parse(tariff);
+	const unit = BigInt(checkedTariff.tokenUnit);
+	const total = BigInt(checkedTariff.maxInputTokens) * BigInt(checkedTariff.inputEurMicrosPerUnit) + BigInt(maxCompletionTokens) * BigInt(checkedTariff.outputEurMicrosPerUnit);
+	return ___ModelTariffQuoteSchema.parse({ tariff: checkedTariff, maxCompletionTokens, worstCaseEurMicros: ((total + unit - 1n) / unit).toString() });
+}
 
 /** Wraps a tariff resolver with strict request, quote and model-binding validation. */
 export function __CreateConversationModelTariffLookup(resolver: ConversationModelTariffResolver): ModelTariffLookupPort
@@ -21,10 +30,8 @@ export function __CreateConversationModelTariffLookup(resolver: ConversationMode
 			const { digest, ...identity } = quote.tariff;
 			if (___DigestCanonicalJson(identity as unknown as JsonValue) !== digest)
 				throw new Error("Conversation model tariff digest does not match its identity");
-			const unit = BigInt(quote.tariff.tokenUnit);
-			const total = BigInt(quote.tariff.maxInputTokens) * BigInt(quote.tariff.inputEurMicrosPerUnit) + BigInt(checkedInput.maxCompletionTokens) * BigInt(quote.tariff.outputEurMicrosPerUnit);
-			const expectedWorstCase = ((total + unit - 1n) / unit).toString();
-			if (quote.worstCaseEurMicros !== expectedWorstCase)
+			const expectedQuote = __QuoteConversationModelTariff(quote.tariff, checkedInput.maxCompletionTokens);
+			if (quote.worstCaseEurMicros !== expectedQuote.worstCaseEurMicros)
 				throw new Error("Conversation model tariff worst-case quote does not match its rates");
 			return quote;
 		},

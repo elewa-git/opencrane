@@ -1,5 +1,42 @@
 # OpenCrane — Active Plan
 
+## Trusted EUR tariff lookup — 30 September 2026
+
+This source increment starts at `b25862bc2d34e0f39a6740d4ab9ad21ca0916032`;
+the cumulative review base remains `2248132e49054734e53023f6fe0e6c9f1459859f`.
+Live PR ancestry still passes at snapshot
+`743fa14fcf29075e99fec582317b66f3c11b8fe38eaa86b3689faf0b40afff47`.
+
+The dispatch trace found no production reader for the stored immutable EUR tariff. The provider
+owner now supplies `_CreateProviderModelTariffLookup` over the caller's database transaction. It
+resolves the admitted silo and public model alias without choosing between ambiguous definitions,
+refuses pending registration and absent or overlapping active pricing, and returns the quote through
+the existing strict model-routing validator. Shared quote arithmetic stays with model-routing;
+the reader preserves the stored unit and digest rather than replacing invalid evidence. It does not
+invent prices, create grants or settings, or expose a new route. Separate Sol lanes implemented the
+reader and its focused tests. No schema, live database, paid provider or infrastructure change ran.
+
+Architecture preflight and independent integrated/architecture post-review pass. A review concern
+about application/database clock skew was resolved by retaining and documenting the conservative
+existing policy: the database selects active pricing, and the strict wrapper can additionally refuse
+a quote when the application clock disagrees. It cannot widen admission. Two regression cases prove
+that refusal; deployment clock skew remains an availability risk, not permission to bypass the check.
+
+The model-routing suite passes 267 tests and the provider suite passes 108. The final focused tariff
+file passes all 17 cases, including the later window and skew additions; these counts overlap and
+must not be added together as a total. Both owning type checks and changed-file ESLint pass. Style
+checks five production files with zero errors or warnings; Prisma ownership checks 330 files with
+zero errors; module-growth reports no candidate. The initial repository-name registration failure
+was corrected to the existing policy rather than weakening it. Whitespace checks pass. These are
+source/unit results, not PostgreSQL or paid-provider qualification.
+The final nine-file source/test/package-documentation/ownership manifest, excluding this plan, is
+`6e3aeadb02bf33f94b7f047d3a7fa74ec6c57eb7c24e4d33b82b901a0a1e5cca`.
+
+Physical dispatch integration remains separate. Its admission must occur after canonical request
+preparation and before the send, using the exact request bytes and original deadline. The input
+token bound, reserve/claim/settlement recovery and system-owned cancellation still need their own
+implementation and evidence. This reader alone does not enforce the product hard limit.
+
 ## Run payer admission — 30 September 2026
 
 The reviewed ledger/payer foundation is committed locally as

@@ -7,7 +7,7 @@ export { __RequestConversationModel } from "./core/conversation-model";
 export { __CreateConversationModelTransport } from "./retry/conversation-model-transport";
 export type { ConversationModelTransport } from "./retry/conversation-model-proxy.types";
 export { ConversationModelError, ConversationModelFailureCodes } from "./core/conversation-model.types";
-export { __CreateConversationModelTariffLookup } from "./core/conversation-model-tariff";
+export { __CreateConversationModelTariffLookup, __QuoteConversationModelTariff } from "./core/conversation-model-tariff";
 export type { ConversationModelTariffLookupPort, ConversationModelTariffQuote, ConversationModelTariffResolver } from "./core/conversation-model-tariff.types";
 export * from "./core/byok-default-models";
 export type * from "./core/byok-default-models.types";
