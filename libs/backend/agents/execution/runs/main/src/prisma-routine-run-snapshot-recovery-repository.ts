@@ -2,8 +2,8 @@ import type { AgentRun, Prisma, RunInputSnapshot as PrismaRunInputSnapshot } fro
 
 import type { RunInputSnapshot } from "@opencrane/contracts";
 
-import { _MatchesRoutineFiring, _MatchesRun, _MatchesSnapshot, _RunInputSnapshot } from "./prisma-run-admission-unit-of-work";
-import type { RoutineRunSnapshotRecovery } from "./routine-run-snapshot-recovery.types";
+import { _MatchesRoutineFiring, _MatchesRun, _MatchesSnapshot, _RunAdmissionPayer, _RunInputSnapshot } from "./prisma-run-admission-unit-of-work";
+import type { RoutineRunSnapshotRecovery, RoutineRunSnapshotRecoveryResult } from "./routine-run-snapshot-recovery.types";
 import type { RoutineRunAdmissionCommand } from "./run-admission.types";
 import { __DigestRunInputSnapshot } from "./run-input-snapshot-digest";
 
@@ -25,7 +25,7 @@ export class PrismaRoutineRunSnapshotRecoveryRepository implements RoutineRunSna
 	}
 
 	/** Recover an exact admitted routine snapshot without invoking admission or persistence. */
-	async recover(command: RoutineRunAdmissionCommand, expectedAttempt: 1): Promise<RunInputSnapshot | null>
+	async recover(command: RoutineRunAdmissionCommand, expectedAttempt: 1): Promise<RoutineRunSnapshotRecoveryResult | null>
 	{
 		if (expectedAttempt !== 1)
 			throw new Error("Routine run recovery only supports the admitted first attempt");
@@ -34,6 +34,9 @@ export class PrismaRoutineRunSnapshotRecoveryRepository implements RoutineRunSna
 			return null;
 		if (!_MatchesRecoveredRun(run, command, expectedAttempt))
 			throw new Error("Stored routine run does not match the expected admission");
+		const payer = _RunAdmissionPayer(run);
+		if (payer === null || payer === undefined)
+			throw new Error("Stored routine run does not have complete managed payer evidence");
 
 		const firing = await this._transaction.agentRoutineFiring.findUnique({ where: { id: command.routineInput.firingId } });
 		if (!_MatchesRoutineFiring(firing, run.id, command))
@@ -48,7 +51,7 @@ export class PrismaRoutineRunSnapshotRecoveryRepository implements RoutineRunSna
 		const { digest, ...content } = snapshot;
 		if (__DigestRunInputSnapshot(content) !== digest)
 			throw new Error("Recovered routine snapshot digest is invalid");
-		return snapshot;
+		return { payer, snapshot };
 	}
 }
 

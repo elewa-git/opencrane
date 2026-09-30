@@ -1,4 +1,4 @@
-import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
+import type { AuthorizationAuthority, ProductAuthorizationAdmissionEvidence } from "@opencrane/backend/server/iam/authorization";
 import { AgentRunTriggers, type RunInputSnapshot } from "@opencrane/contracts";
 import type { AgentRevisionId, AgentRunId, AgentServiceId, SiloId } from "@opencrane/models/agents";
 import type { ConversationId, MessageId } from "@opencrane/models/conversations";
@@ -16,6 +16,21 @@ export interface InitialRunAuthority
 	readonly promptCompilerVersion: string;
 	/** Trigger accepted for the initial logical run. */
 	readonly trigger: `${AgentRunTriggers}`;
+}
+
+/**
+ * Records the paying group selected before a managed conversation began.
+ *
+ * The group and all three authorization digests are copied to `AgentRun` together. They identify
+ * the original selection; current Budget Use is admitted again before a fresh or duplicate run may
+ * leave the transaction. Personal runs carry null instead of this value.
+ */
+export interface RunAdmissionPayer
+{
+	/** Group whose monthly budget pays for the managed run. */
+	readonly payingGroupId: string;
+	/** Authorization evidence saved when the conversation or routine selected that group. */
+	readonly authorization: ProductAuthorizationAdmissionEvidence;
 }
 
 /** States whether the current immutable execution policy requires a persona revision. */
@@ -212,6 +227,8 @@ export interface RunAdmissionBuild
 {
 	/** Authoritative initial-run facts revalidated while the service lock is held. */
 	readonly authority: InitialRunAuthority;
+	/** Original managed payer evidence, or null for a personal run. */
+	readonly payer: RunAdmissionPayer | null;
 	/** Complete immutable runtime input whose digest will be bound to the logical run. */
 	readonly snapshot: RunInputSnapshot;
 }
@@ -324,7 +341,7 @@ export enum RunAdmissionOutcomes
  * their owning reason contract.
  * @see RunAdmissionDenialReasons
  */
-export type RunAdmissionResult<TDenial> = { readonly outcome: `${RunAdmissionOutcomes.Accepted}` | `${RunAdmissionOutcomes.Idempotent}`; readonly snapshot: RunInputSnapshot } | { readonly outcome: `${RunAdmissionOutcomes.Denied}`; readonly reason: TDenial | RunAdmissionDenialReasons };
+export type RunAdmissionResult<TDenial> = { readonly outcome: `${RunAdmissionOutcomes.Accepted}` | `${RunAdmissionOutcomes.Idempotent}`; readonly payer: RunAdmissionPayer | null; readonly snapshot: RunInputSnapshot } | { readonly outcome: `${RunAdmissionOutcomes.Denied}`; readonly reason: TDenial | RunAdmissionDenialReasons };
 
 /**
  * Extra rows the caller writes in the same transaction as the run, after the run exists.
@@ -373,7 +390,7 @@ export enum RunAdmissionExistingVerificationOutcomes
 }
 
 /** Rechecks current authority before an existing snapshot may leave the admission transaction. */
-export type RunAdmissionExistingVerifier<TDenial> = (snapshot: RunInputSnapshot, transaction: RunAdmissionTransaction) => Promise<{ readonly outcome: `${RunAdmissionExistingVerificationOutcomes.Verified}` } | { readonly outcome: `${RunAdmissionExistingVerificationOutcomes.Denied}`; readonly reason: TDenial }>;
+export type RunAdmissionExistingVerifier<TDenial> = (snapshot: RunInputSnapshot, payer: RunAdmissionPayer | null, transaction: RunAdmissionTransaction) => Promise<{ readonly outcome: `${RunAdmissionExistingVerificationOutcomes.Verified}` } | { readonly outcome: `${RunAdmissionExistingVerificationOutcomes.Denied}`; readonly reason: TDenial }>;
 
 /**
  * The single transaction in which a logical run becomes real.

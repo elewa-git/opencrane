@@ -1,7 +1,7 @@
 import { AgentRoutineFiringDisposition, Prisma } from "@prisma/client";
 import { isDeepStrictEqual } from "node:util";
 
-import { ___ParseRoutineOccurrencePreparationReceipt, type RoutineOccurrenceCommand, type RoutineOccurrencePreparationAuthorization, type RoutineOccurrencePreparationReceipt, type RoutineOccurrencePreparationRepository } from "@opencrane/backend/server/agents/scheduling/contract";
+import { ___ParseRoutineOccurrencePreparationReceipt, type RoutineOccurrenceCommand, type RoutineOccurrencePreparationAuthorization, type RoutineOccurrencePreparationPayer, type RoutineOccurrencePreparationReceipt, type RoutineOccurrencePreparationRepository } from "@opencrane/backend/server/agents/scheduling/contract";
 
 import { PrismaRoutineFiringRepository } from "./prisma-routine-firing-repository";
 import { PrismaRoutineFactsRepository } from "./routine-prisma-facts";
@@ -26,7 +26,7 @@ const _PREPARATION_SELECT = {
 	workflowTaskName: true,
 	workflowTaskKey: true,
 	preparationReceipt: true,
-	routine: { select: { destinationConversationId: true, selectedManagedServiceId: true, originalRequesterPrincipalId: true, requesterIssuer: true, requesterSubjectId: true, requesterAuthenticatedAt: true } },
+	routine: { select: { destinationConversationId: true, selectedManagedServiceId: true, originalRequesterPrincipalId: true, requesterIssuer: true, requesterSubjectId: true, requesterAuthenticatedAt: true, payingGroupId: true, payingGroupAuthorizationDecisionDigest: true, payingGroupAuthorizationPolicyRevisionHash: true, payingGroupEffectiveAuthorizationDigest: true } },
 	revision: { select: { audiencePrincipalIds: true } },
 } as const satisfies Prisma.AgentRoutineFiringSelect;
 
@@ -56,9 +56,10 @@ export class PrismaRoutineOccurrencePreparationRepository implements RoutineOccu
 	async authorize(command: RoutineOccurrenceCommand): Promise<RoutineOccurrencePreparationAuthorization | null>
 	{
 		const firing = await this._fenced(command);
+		const payer = _PreparationPayer(firing);
 		if (firing.preparationReceipt !== null)
 		{
-			return { preparation: ___ParseRoutineOccurrencePreparationReceipt(firing.preparationReceipt) };
+			return { payer, preparation: ___ParseRoutineOccurrencePreparationReceipt(firing.preparationReceipt) };
 		}
 		if (firing.disposition === AgentRoutineFiringDisposition.Refused)
 		{
@@ -72,7 +73,7 @@ export class PrismaRoutineOccurrencePreparationRepository implements RoutineOccu
 		{
 			return null;
 		}
-		return { preparation: null };
+		return { payer, preparation: null };
 	}
 
 	/** @inheritdoc */
@@ -140,6 +141,21 @@ export class PrismaRoutineOccurrencePreparationRepository implements RoutineOccu
 		}
 		return firing;
 	}
+}
+
+/** Returns the complete original payer tuple selected when the routine was admitted. */
+function _PreparationPayer(firing: RoutinePreparationRow): RoutineOccurrencePreparationPayer
+{
+	const { payingGroupId, payingGroupAuthorizationDecisionDigest: decisionDigest, payingGroupAuthorizationPolicyRevisionHash: policyRevisionHash, payingGroupEffectiveAuthorizationDigest: effectiveAuthorizationDigest } = firing.routine;
+	if (!_IsDigest(decisionDigest) || !_IsDigest(policyRevisionHash) || !_IsDigest(effectiveAuthorizationDigest))
+		throw new Error("routine occurrence preparation has invalid saved payer evidence");
+	return { payingGroupId, decisionDigest, policyRevisionHash, effectiveAuthorizationDigest };
+}
+
+/** Narrows persisted authorization evidence after checking its canonical representation. */
+function _IsDigest(value: string): value is `sha256:${string}`
+{
+	return /^sha256:[0-9a-f]{64}$/u.test(value);
 }
 
 /** Checks the saved workflow task tuple against the caller's exact command. */

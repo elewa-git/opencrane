@@ -28,6 +28,8 @@ vi.mock("@opencrane/backend/agents/execution/inputs", async function _MockInputs
 });
 
 const _PROFILE_REVISION = `sha256:${"a".repeat(64)}`;
+/** Original group payer retained by the routine conversation and admitted run. */
+const _PAYER = { payingGroupId: "group-1", authorization: { decisionDigest: `sha256:${"1".repeat(64)}` as const, policyRevisionHash: `sha256:${"2".repeat(64)}` as const, effectiveAuthorizationDigest: `sha256:${"3".repeat(64)}` as const } };
 const _RECORD: RoutineOccurrenceHistoryRecord = {
 	siloId: "silo-1", conversationId: "conversation-1",
 	origin: { kind: ConversationGenesisOriginKinds.RoutineOccurrence, routineId: "routine-1", routineRevision: 2, firingId: "firing-1", destinationConversationId: "destination-1", trigger: RoutineFiringTrigger.Automatic, scheduledSlot: "2026-09-25T10:00:00.000Z" },
@@ -104,7 +106,7 @@ function _Authorities(admission: RunAdmissionRepository, currentExecutionAuthori
 		memoryScope: { load: async function _LoadMemory() { return loaded({ memoryQueryPolicy: { scope: "none" }, datasetId: null }); } },
 		toolPolicy: { load: async function _LoadTools() { return loaded({ modelDefinitionId: "model-1", modelRoute: { alias: "target" }, mcpTools: [], skillRevisionIds: [], artifactRevisionIds: [] }); } },
 		skillEligibility: { load: async function _LoadSkills() { return loaded(null); } },
-		productAuthorization: { load: async function _LoadAuthorization() { return loaded(null); }, verifyExisting: async function _VerifyAuthorization() { return loaded(null); } },
+		productAuthorization: { load: async function _LoadAuthorization() { return loaded(_PAYER); }, verifyExisting: async function _VerifyAuthorization() { return loaded(_PAYER); } },
 		budgetPolicy: { load: async function _LoadBudget() { return loaded({ budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 1000, maxCostUsdMicros: null, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: 4_102_444_800_000 } }); } },
 	};
 }
@@ -259,6 +261,7 @@ describe("PrismaRoutineRunAdmissionUnitOfWork", function _Suite()
 
 		expect(receipt).toMatchObject({ runId: _RoutineEventId("run", _RECORD.conversationId), runTask: { taskName: CONVERSATION_COMPUTER_TURN_TASK.taskName, idempotencyKey: _RoutineActivationCommand(_RECORD).activationEventId } });
 		expect(fixture.state.runs).toHaveLength(1);
+		expect(fixture.state.runs[0]).toMatchObject({ payingGroupId: _PAYER.payingGroupId, payingGroupAuthorizationDecisionDigest: _PAYER.authorization.decisionDigest, payingGroupAuthorizationPolicyRevisionHash: _PAYER.authorization.policyRevisionHash, payingGroupEffectiveAuthorizationDigest: _PAYER.authorization.effectiveAuthorizationDigest });
 		expect(fixture.state.snapshots).toHaveLength(1);
 		expect(fixture.state.tasks).toHaveLength(1);
 		expect(fixture.state.firingRunId).toBe(receipt?.runId);

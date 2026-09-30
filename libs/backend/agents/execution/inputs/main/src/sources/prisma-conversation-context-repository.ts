@@ -1,6 +1,6 @@
 import { AgentRunState, ConversationLifecycle, ConversationMode, OrgMemberStatus, Prisma } from "@prisma/client";
 
-import { RunAdmissionDenialReasons, RunAdmissionMessageInputModes, type InitialRunAuthority } from "@opencrane/backend/agents/execution/runs";
+import { RunAdmissionDenialReasons, RunAdmissionMessageInputModes, type InitialRunAuthority, type RunAdmissionPayer } from "@opencrane/backend/agents/execution/runs";
 import { AgentRunTriggers } from "@opencrane/contracts";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 
@@ -79,6 +79,22 @@ export class PrismaConversationContextRepository implements ConversationContextR
 		return { outcome: SessionAssemblyLoadOutcomes.Loaded, value: { messageIds: [...history.orderedMessageIds] } };
 	}
 
+	/** Reads the original payer tuple without treating partial evidence as personal work. */
+	async payer(command: SessionAssemblyCommand): Promise<RunAdmissionPayer | null | undefined>
+	{
+		if (command.conversationId === null)
+			return null;
+		const row = await this.transaction.conversation.findFirst({ where: { id: command.conversationId, siloId: command.siloId }, select: { payingGroupId: true, payingGroupAuthorizationDecisionDigest: true, payingGroupAuthorizationPolicyRevisionHash: true, payingGroupEffectiveAuthorizationDigest: true } });
+		if (row === null)
+			return undefined;
+		const values = [row.payingGroupId, row.payingGroupAuthorizationDecisionDigest, row.payingGroupAuthorizationPolicyRevisionHash, row.payingGroupEffectiveAuthorizationDigest];
+		if (values.every(value => value === null))
+			return null;
+		if (row.payingGroupId === null || row.payingGroupId.trim().length === 0 || !_IsDigest(row.payingGroupAuthorizationDecisionDigest) || !_IsDigest(row.payingGroupAuthorizationPolicyRevisionHash) || !_IsDigest(row.payingGroupEffectiveAuthorizationDigest))
+			return undefined;
+		return { payingGroupId: row.payingGroupId, authorization: { decisionDigest: row.payingGroupAuthorizationDecisionDigest, policyRevisionHash: row.payingGroupAuthorizationPolicyRevisionHash, effectiveAuthorizationDigest: row.payingGroupEffectiveAuthorizationDigest } };
+	}
+
 	/** Load an occurrence's service-authored prompt without manufacturing a human requester message. */
 	private async _LoadRoutinePrompt(command: Exclude<SessionAssemblyCommand, { readonly trigger: `${AgentRunTriggers.Interactive}` }>, run: InitialRunAuthority): Promise<SessionAssemblyLoad<ConversationContextInput>>
 	{
@@ -97,6 +113,12 @@ export class PrismaConversationContextRepository implements ConversationContextR
 			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "conversation_unavailable" };
 		return { outcome: SessionAssemblyLoadOutcomes.Loaded, value: { messageIds: [...prompt.orderedMessageIds] } };
 	}
+}
+
+/** Recognize one canonical SHA-256 authorization digest. */
+function _IsDigest(value: string | null): value is `sha256:${string}`
+{
+	return value !== null && /^sha256:[0-9a-f]{64}$/u.test(value);
 }
 
 /** Checks the history revision, order and human requester even when a company Principal executes the run. */

@@ -1,5 +1,5 @@
 import type { RunBudgetPolicy, RunInputFirstPartyCapabilitySelection, RunInputSnapshotMcpTool } from "@opencrane/contracts";
-import type { InitialRunAuthority, RunAdmissionCommand, RunAdmissionMessageAuthor, RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import type { InitialRunAuthority, RunAdmissionCommand, RunAdmissionMessageAuthor, RunAdmissionPayer, RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { ExecutionSubject, PersonaRevisionId } from "@opencrane/models/agents";
 import type { MessageId } from "@opencrane/models/conversations";
 import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/artifacts";
@@ -126,10 +126,10 @@ export interface ToolPolicyInput
 /** Rechecks every exact product resource selected before the snapshot can commit. */
 export interface ProductResourceAuthorizationSource
 {
-	/** Batch-checks current Use grants through the transaction-bound central authority. */
-	load(command: SessionAssemblyCommand, executionSubject: ExecutionSubject, persona: ApprovedPersonaInput, memory: MemoryScopeInput, tools: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>;
-	/** Rechecks only current Conversation Use before an existing immutable snapshot is returned. */
-	verifyExisting(command: SessionAssemblyCommand, executionSubject: ExecutionSubject, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>;
+	/** Batch-checks current Use grants and returns the original managed payer selected by the conversation. */
+	load(command: SessionAssemblyCommand, executionSubject: ExecutionSubject, persona: ApprovedPersonaInput, memory: MemoryScopeInput, tools: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<RunAdmissionPayer | null>>;
+	/** Rechecks current Conversation and payer Use before an existing immutable snapshot is returned. */
+	verifyExisting(command: SessionAssemblyCommand, executionSubject: ExecutionSubject, expectedPayer: RunAdmissionPayer | null, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<RunAdmissionPayer | null>>;
 }
 
 /** Selects built-in capabilities only after the run's current product permissions have passed. */
@@ -263,6 +263,8 @@ export interface ConversationContextRepository
 	 * @returns The same outcomes as {@link ConversationContextSource.load}.
 	 */
 	load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject): Promise<SessionAssemblyLoad<ConversationContextInput>>;
+	/** Reads the conversation's complete original payer tuple, null for personal, or undefined for invalid data. */
+	payer(command: SessionAssemblyCommand): Promise<RunAdmissionPayer | null | undefined>;
 }
 
 /**

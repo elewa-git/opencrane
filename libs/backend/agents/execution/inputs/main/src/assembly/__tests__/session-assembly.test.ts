@@ -30,7 +30,7 @@ function _subject(): RunInputSnapshot["executionSubject"]
 function _authorities(): SessionAssemblyAuthorities
 {
 	return {
-		admission: { admit: async function _admit(_command, _verifyExisting, build) { const compiled = await build({ prisma: {} as never, admittedAt: "2026-07-20T00:00:00.000Z", admittedAtEpochMs: 1 }); return compiled.outcome === "denied" ? { outcome: "denied", reason: compiled.reason } : { outcome: "accepted", snapshot: compiled.value.snapshot }; } },
+		admission: { admit: async function _admit(_command, _verifyExisting, build) { const compiled = await build({ prisma: {} as never, admittedAt: "2026-07-20T00:00:00.000Z", admittedAtEpochMs: 1 }); return compiled.outcome === "denied" ? { outcome: "denied", reason: compiled.reason } : { outcome: "accepted", payer: compiled.value.payer, snapshot: compiled.value.snapshot }; } },
 		runAuthority: { load: async function _load() { return { outcome: "loaded", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", executionPolicy: { persona: RunExecutionPersonaPolicies.Required, personalMemory: RunExecutionPersonalMemoryPolicies.None }, promptCompilerVersion: "v1", trigger: "interactive" } } as const; } },
 		executionSubject: { load: async function _load() { return { outcome: "loaded", value: _subject() } as const; } },
 		approvedPersona: { load: async function _load() { return { outcome: "loaded", value: { personaRevisionId: "persona-1", personaId: "persona-1" } } as const; } },
@@ -64,8 +64,8 @@ async function _DuplicateFixture(memoryQueryPolicy: RunInputSnapshot["memoryQuer
 	authorities.executionSubject = { load: executionSubject };
 	authorities.admission = { admit: async function _Replay(_command, verifyExisting)
 	{
-		const verified = await verifyExisting(snapshot, { prisma: {} as never, admittedAt: "2026-07-20T00:00:00.000Z", admittedAtEpochMs: 1 });
-		return verified.outcome === "denied" ? verified : { outcome: "idempotent", snapshot };
+		const verified = await verifyExisting(snapshot, null, { prisma: {} as never, admittedAt: "2026-07-20T00:00:00.000Z", admittedAtEpochMs: 1 });
+		return verified.outcome === "denied" ? verified : { outcome: "idempotent", payer: null, snapshot };
 	} };
 	return { authorities, executionSubject, snapshot };
 }
@@ -133,8 +133,8 @@ describe("__AssembleRunInputSnapshot", function _DescribeSessionAssembly()
 		authorities.firstPartyCapabilities = { load: select };
 		authorities.admission = { admit: async function _Replay(_command, verifyExisting)
 		{
-			const verified = await verifyExisting(admitted.snapshot, { prisma: {} as never, admittedAt: "2026-07-20T00:00:00.000Z", admittedAtEpochMs: 1 });
-			return verified.outcome === "denied" ? verified : { outcome: "idempotent", snapshot: admitted.snapshot };
+			const verified = await verifyExisting(admitted.snapshot, null, { prisma: {} as never, admittedAt: "2026-07-20T00:00:00.000Z", admittedAtEpochMs: 1 });
+			return verified.outcome === "denied" ? verified : { outcome: "idempotent", payer: null, snapshot: admitted.snapshot };
 		} };
 
 		await expect(__AssembleRunInputSnapshot(_command(), authorities)).resolves.toMatchObject({ outcome: "assembled", admissionOutcome: "idempotent", snapshot: { firstPartyCapabilities: [_FirstPartySelection(FirstPartyToolCapabilities.RequestRoutine)] } });
@@ -178,14 +178,14 @@ describe("__AssembleRunInputSnapshot", function _DescribeSessionAssembly()
 	{
 		let persisted = false;
 		const authorities = _authorities();
-		authorities.productAuthorization = new TransactionBoundProductResourceAuthorizationSource();
+		authorities.productAuthorization = new TransactionBoundProductResourceAuthorizationSource(function _Conversation() { return { load: vi.fn(), payer: vi.fn().mockResolvedValue(null) }; });
 		authorities.admission = { admit: async function _Admit(_command, _verifyExisting, build)
 		{
 			const compiled = await build({ prisma: {} as never, authorization: { admitPrincipal: async function _Deny() { return { outcome: "deny", evidence: null } as never; }, admitPrincipalBatch: async function _Unexpected() { throw new Error("resource batch must not run"); } }, admittedAt: "2026-07-20T00:00:00.000Z", admittedAtEpochMs: 1 } as never);
 			if (compiled.outcome === "denied")
 				return { outcome: "denied", reason: compiled.reason };
 			persisted = true;
-			return { outcome: "accepted", snapshot: compiled.value.snapshot };
+			return { outcome: "accepted", payer: compiled.value.payer, snapshot: compiled.value.snapshot };
 		} };
 		await expect(__AssembleRunInputSnapshot(_command(), authorities)).resolves.toEqual({ outcome: "denied", reason: "product_authorization_unavailable" });
 		expect(persisted).toBe(false);

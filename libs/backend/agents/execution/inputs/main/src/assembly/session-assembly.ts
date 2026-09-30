@@ -1,5 +1,5 @@
 import { __SameMembershipBinding } from "@opencrane/backend/server/iam/membership";
-import { __DigestRunInputSnapshot, RunAdmissionBuildOutcomes, RunAdmissionExistingVerificationOutcomes, RunAdmissionMessageInputModes, RunAdmissionOutcomes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type InitialRunAuthority, type RunAdmissionCommit, type RunAdmissionPrepare, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import { __DigestRunInputSnapshot, RunAdmissionBuildOutcomes, RunAdmissionExistingVerificationOutcomes, RunAdmissionMessageInputModes, RunAdmissionOutcomes, RunExecutionPersonalMemoryPolicies, RunExecutionPersonaPolicies, type InitialRunAuthority, type RunAdmissionCommit, type RunAdmissionPayer, type RunAdmissionPrepare, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { AgentRunTriggers, RUN_INPUT_SNAPSHOT_VERSION, ___ParseRunBudgetPolicy, ___RunInputFirstPartyCapabilitySelectionsSchema, type RunBudgetPolicy, type RunInputFirstPartyCapabilitySelection, type RunInputOrigin, type RunInputSnapshot } from "@opencrane/contracts";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, ___SortBy } from "@opencrane/util";
@@ -61,9 +61,9 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 	// 2. Resolve a duplicate before compilation, or hold the service lock while every input is
 	// revalidated. `prepare` runs first inside that same transaction when the caller passed one, so a
 	// source below can read a conversation the caller has only just created.
-	const admitted = await authorities.admission.admit<SessionAssemblyRefusalReason>(command, async function _VerifyExisting(snapshot, transaction)
+	const admitted = await authorities.admission.admit<SessionAssemblyRefusalReason>(command, async function _VerifyExisting(snapshot, payer, transaction)
 	{
-		const current = await __RevalidateRunInputSnapshot(command, snapshot, authorities, transaction);
+		const current = await __RevalidateRunInputSnapshot(command, snapshot, payer, authorities, transaction);
 		if (current.outcome === SessionAssemblyLoadOutcomes.Denied)
 			return { outcome: RunAdmissionExistingVerificationOutcomes.Denied, reason: current.reason } as const;
 		checked.subject = current.value;
@@ -126,7 +126,7 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 			return { outcome: RunAdmissionBuildOutcomes.Denied, reason: budget.reason } as const;
 		// 8. Compile the immutable snapshot only after every source has re-checked its data inside this transaction.
 		checked.subject = executionSubject.value;
-		return { outcome: RunAdmissionBuildOutcomes.Ready, value: { authority: run.value, snapshot: _compileSnapshot(command, transaction.admittedAt, run.value, persona.value, conversation.value, preferences.value, memory.value, tools.value, firstPartyCapabilities.value, budget.value.budgetPolicy, executionSubject.value) } } as const;
+		return { outcome: RunAdmissionBuildOutcomes.Ready, value: { authority: run.value, payer: productAuthorization.value, snapshot: _compileSnapshot(command, transaction.admittedAt, run.value, persona.value, conversation.value, preferences.value, memory.value, tools.value, firstPartyCapabilities.value, budget.value.budgetPolicy, executionSubject.value) } } as const;
 	}, commit, prepare);
 	if (admitted.outcome === RunAdmissionOutcomes.Denied)
 		return { outcome: SessionAssemblyOutcomes.Denied, reason: _publicReason(admitted.reason) };
@@ -141,7 +141,7 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
  * execution-runs owner. This method never admits a run, refreshes the saved requester login, or
  * replays the model and tool resource admissions frozen into the snapshot.
  */
-export async function __RevalidateRunInputSnapshot(command: SessionAssemblyCommand, snapshot: RunInputSnapshot, authorities: Pick<SessionAssemblyAuthorities, "executionSubject" | "productAuthorization">, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ExecutionSubject>>
+export async function __RevalidateRunInputSnapshot(command: SessionAssemblyCommand, snapshot: RunInputSnapshot, payer: RunAdmissionPayer | null, authorities: Pick<SessionAssemblyAuthorities, "executionSubject" | "productAuthorization">, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ExecutionSubject>>
 {
 	const personalMemory = _ExistingPersonalMemoryPolicy(snapshot);
 	if (personalMemory === null)
@@ -152,7 +152,7 @@ export async function __RevalidateRunInputSnapshot(command: SessionAssemblyComma
 		return current;
 	if (!_IsExecutionSubjectBound(command, authority, current.value) || !_SameExistingSubject(snapshot.executionSubject, current.value))
 		return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "identity_unavailable" };
-	const conversation = await authorities.productAuthorization.verifyExisting(command, current.value, transaction);
+	const conversation = await authorities.productAuthorization.verifyExisting(command, current.value, payer, transaction);
 	return conversation.outcome === SessionAssemblyLoadOutcomes.Denied ? conversation : current;
 }
 

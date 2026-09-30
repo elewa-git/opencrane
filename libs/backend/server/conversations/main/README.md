@@ -122,7 +122,9 @@ History and computer snapshot classes are imported directly from their sibling p
 `PrismaRoutineOccurrencePreparationUnitOfWork` implements the scheduling preparation port. It
 checks the persisted firing through an injected transaction-bound scheduling repository, resolves
 current managed-agent eligibility without fabricating a human action, and saves a participant-free
-conversation plus encrypted instruction. The existing payload repository's attested method fixes
+conversation plus encrypted instruction. The hidden conversation copies the routine's paying group
+and three authorization digests. Every retry compares all four fields before it reads or publishes
+the instruction, so recovery cannot substitute a different payer. The existing payload repository's attested method fixes
 the author to OpenCrane; it never takes a browser identity. Its recovery mode refuses missing rows
 instead of recreating content after a saved preparation.
 
@@ -200,7 +202,9 @@ Both fresh and duplicate responses reread saved stage receipts and the bound tur
 
 `PrismaRoutineTurnCompilerUnitOfWork` uses a read-only admitted-run reader, not interactive
 admission. It verifies the computer, lease, task, stage receipts and instruction; rechecks current
-managed and requester authority; and compiles the existing frozen snapshot. Ordinary turn
+managed, requester and saved paying-group authority; and compiles the existing frozen snapshot.
+It receives the original payer from the admitted run and never rebuilds it from current conversation
+configuration. Ordinary turn
 compilation dispatches from the durable routine genesis and checked first instruction. After the
 selected managed agent's initial run answers, later human messages use normal interactive admission.
 The typed dispatch result keeps absent routine candidates from causing fallback. A missing routine compiler fails

@@ -46,7 +46,7 @@ export class PrismaRoutineOccurrencePreparationUnitOfWork implements RoutineOccu
 			if (authorization === null)
 				return null;
 			const published = authorization.preparation !== null;
-			const record = await projection.stage({ command, payload, requireExisting: published, published });
+			const record = await projection.stage({ command, payer: authorization.payer, payload, requireExisting: published, published });
 			if (record === null)
 			{
 				await routines.refuse(occurrence);
@@ -74,7 +74,7 @@ export class PrismaRoutineOccurrencePreparationUnitOfWork implements RoutineOccu
 			if (authorization === null)
 				return null;
 			const published = authorization.preparation !== null;
-			const current = await projection.stage({ command, payload, requireExisting: true, published });
+			const current = await projection.stage({ command, payer: authorization.payer, payload, requireExisting: true, published });
 			if (current === null)
 			{
 				await routines.refuse(occurrence);

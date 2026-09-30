@@ -20,7 +20,7 @@ vi.mock("@opencrane/backend/agents/execution/runs", function _Runs()
 });
 vi.mock("@opencrane/backend/agents/execution/inputs", function _Inputs()
 {
-	return { __CompileRunInput: _MOCKS.compile, __RevalidateRunInputSnapshot: _MOCKS.revalidate, __RunInputAuthorityExpiresAt: vi.fn(function _Expires() { return "2099-09-25T10:00:00.000Z"; }), SessionAssemblyLoadOutcomes: { Denied: "denied" }, TransactionBoundProductResourceAuthorizationSource: class {} };
+	return { __CompileRunInput: _MOCKS.compile, __CreateTransactionBoundProductResourceAuthorizationSource: vi.fn().mockReturnValue({}), __RevalidateRunInputSnapshot: _MOCKS.revalidate, __RunInputAuthorityExpiresAt: vi.fn(function _Expires() { return "2099-09-25T10:00:00.000Z"; }), SessionAssemblyLoadOutcomes: { Denied: "denied" } };
 });
 vi.mock("../routine-run-input-composition", function _Composition()
 {
@@ -38,6 +38,8 @@ const _LEASE = { schemaVersion: 1 as const, id: "lease-1", computerId: "computer
 const _COMMAND = { computer: { siloId: "silo-1", conversationId: "occurrence-1", computerId: "computer-1", agentIdentityId: "identity-1" }, profileRevisionId: "profile-1", lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" } };
 const _RUN_ID = _RoutineEventId("run", _RECORD.conversationId);
 const _SNAPSHOT = { runId: _RUN_ID, attempt: 1, inputSnapshotDigest: `sha256:${"b".repeat(64)}`, digest: `sha256:${"c".repeat(64)}` };
+/** Original payer recovered with the admitted routine snapshot. */
+const _PAYER = { payingGroupId: "group-1", authorization: { decisionDigest: `sha256:${"1".repeat(64)}`, policyRevisionHash: `sha256:${"2".repeat(64)}`, effectiveAuthorizationDigest: `sha256:${"3".repeat(64)}` } };
 const _COMPILED = { runId: _RUN_ID, attempt: 1, promptCompilerVersion: "routine-test", digest: `sha256:${"d".repeat(64)}`, model: { modelAlias: "model-1" } };
 
 /** Stores the exact computer and conversation streams needed by the compiler. */
@@ -70,7 +72,7 @@ class _History implements Pick<HistoryStore, "readStream">
 function _Fixture(record: RoutineOccurrenceHistoryRecord | null = _RECORD)
 {
 	vi.clearAllMocks();
-	_MOCKS.recover.mockResolvedValue(_SNAPSHOT);
+	_MOCKS.recover.mockResolvedValue({ payer: _PAYER, snapshot: _SNAPSHOT });
 	_MOCKS.revalidate.mockResolvedValue({ outcome: "loaded", value: { executionSubject: { runScope: { runId: _RUN_ID } } } });
 	_MOCKS.compile.mockResolvedValue(_COMPILED);
 	const history = new _History();
@@ -92,6 +94,7 @@ describe("PrismaRoutineTurnCompilerRepository", function _Suite()
 		await expect(fixture.repository.compile(_COMMAND)).resolves.toMatchObject({ binding: { runId: _RUN_ID, leaseGeneration: 1 }, compiledInput: _COMPILED, latestPendingEntryId: _RoutineEventId("instruction", _RECORD.conversationId) });
 		expect(fixture.routines.recover).toHaveBeenCalledOnce();
 		expect(_MOCKS.compile).toHaveBeenCalledWith(_SNAPSHOT, 1, undefined);
+		expect(_MOCKS.revalidate).toHaveBeenCalledWith(expect.anything(), _SNAPSHOT, _PAYER, expect.anything(), expect.anything());
 	});
 
 	it("returns null when the prepared occurrence or admitted run is absent", async function _Absent()

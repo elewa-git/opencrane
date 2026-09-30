@@ -10,6 +10,9 @@ import { PrismaRoutineOccurrencePreparationRepository } from "../prisma-routine-
 import type { RoutineTaskAdmissionPort } from "../routine-workflow.types";
 import { _CALLER, _FiringRow, _IDENTITY, _NOW, _OCCURRENCE_TASK, _Revision, _Routine, _TaskAdmission } from "./prisma-routine-test-fixtures";
 
+/** Original payer stored on the routine and handed to conversation preparation. */
+const _PAYER = { payingGroupId: "group-1", decisionDigest: `sha256:${"a".repeat(64)}`, policyRevisionHash: `sha256:${"b".repeat(64)}`, effectiveAuthorizationDigest: `sha256:${"c".repeat(64)}` };
+
 /** Builds the exact content-free command represented by the default firing row. */
 function _Command(overrides: Partial<RoutineOccurrenceCommand> = {}): RoutineOccurrenceCommand
 {
@@ -48,6 +51,7 @@ function _Authorization()
 {
 	return {
 		decidePrincipal: vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow }),
+		admit: vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { operationId: "operation-budget" } }),
 		admitPrincipalBatch: vi.fn().mockResolvedValue([
 			{ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { operationId: "operation-routine" } },
 			{ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { operationId: "operation-service" } },
@@ -100,11 +104,12 @@ describe("PrismaRoutineOccurrencePreparationRepository", function _Suite()
 		const transaction = _Transaction();
 		const f = _Repository(transaction);
 
-		await expect(f.repository.authorize(_Command())).resolves.toEqual({ preparation: null });
+		await expect(f.repository.authorize(_Command())).resolves.toEqual({ payer: _PAYER, preparation: null });
 		expect(f.authorization.admitPrincipalBatch).toHaveBeenCalledWith([
 			expect.objectContaining({ actorKind: "system", actorId: "opencrane-server/routine-schedule/v1" }),
 			expect.objectContaining({ actorKind: "system", actorId: "opencrane-server/routine-schedule/v1" }),
 		]);
+		expect(f.authorization.admit).toHaveBeenCalledWith(expect.objectContaining({ action: "use", boundary: { kind: "group", groupId: "group-1" }, resource: { kind: "budget", id: "group:group-1" } }));
 	});
 
 	it.each([
@@ -158,8 +163,17 @@ describe("PrismaRoutineOccurrencePreparationRepository", function _Suite()
 		const transaction = _Transaction(_FiringRow({ disposition: AgentRoutineFiringDisposition.Running, runId: "run-1", preparationReceipt: saved }));
 		const f = _Repository(transaction);
 
-		await expect(f.repository.authorize(_Command())).resolves.toEqual({ preparation: saved });
+		await expect(f.repository.authorize(_Command())).resolves.toEqual({ payer: _PAYER, preparation: saved });
 		expect(transaction.agentRoutine.findFirst).not.toHaveBeenCalled();
+		expect(f.authorization.admitPrincipalBatch).not.toHaveBeenCalled();
+	});
+
+	it("rejects incomplete saved payer evidence before current authority admission", async function _InvalidPayer()
+	{
+		const transaction = _Transaction(_FiringRow({ routine: { ..._FiringRow().routine, payingGroupAuthorizationPolicyRevisionHash: "invalid" } }));
+		const f = _Repository(transaction);
+
+		await expect(f.repository.authorize(_Command())).rejects.toThrow("invalid saved payer evidence");
 		expect(f.authorization.admitPrincipalBatch).not.toHaveBeenCalled();
 	});
 

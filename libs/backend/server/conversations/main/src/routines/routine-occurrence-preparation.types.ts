@@ -1,5 +1,5 @@
 import type { ManagedAgentConversationDependencies } from "@opencrane/backend/server/agents/agent-services";
-import type { PrepareRoutineOccurrenceCommand, RoutineOccurrencePreparationReceipt, RoutineOccurrencePreparationRepositoryFactory } from "@opencrane/backend/server/agents/scheduling/contract";
+import type { PrepareRoutineOccurrenceCommand, RoutineOccurrencePreparationPayer, RoutineOccurrencePreparationReceipt, RoutineOccurrencePreparationRepositoryFactory } from "@opencrane/backend/server/agents/scheduling/contract";
 import type { ConversationPrivatePayloadCipher, EncryptedConversationPrivatePayload } from "@opencrane/backend/server/conversations/history";
 
 import type { RoutineOccurrenceHistory } from "./routine-occurrence-history";
@@ -32,6 +32,8 @@ export interface RoutineOccurrenceProjectionStage
 {
 	/** Frozen firing, audience and instruction supplied by the scheduling workflow. */
 	readonly command: PrepareRoutineOccurrenceCommand;
+	/** Original routine payer copied without substituting the current re-admission evidence. */
+	readonly payer: RoutineOccurrencePreparationPayer;
 	/** Ciphertext created before entering the database retry callback. */
 	readonly payload: EncryptedConversationPrivatePayload;
 	/** Prevents final publication and historical replay from recreating missing rows. */

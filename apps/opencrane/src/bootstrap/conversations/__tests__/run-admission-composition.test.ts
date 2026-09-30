@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { PrismaRunAdmissionUnitOfWork, type RunAdmissionCommand, type RunAdmissionExistingVerifier, type RunAdmissionResult, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import { PrismaRunAdmissionUnitOfWork, type RunAdmissionCommand, type RunAdmissionExistingVerifier, type RunAdmissionPayer, type RunAdmissionResult, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { PrismaPromptCompilerRepository, type ExecutionSubjectAuthority } from "@opencrane/backend/agents/execution/inputs";
 import { ConversationComputerTurnAuthorityService, type ConversationComputerRunAdmissionCommand, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { FleetMembershipDeploymentModes, PrismaHumanMembershipEvidenceRepository, type HumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
@@ -60,6 +60,11 @@ describe("conversation run admission composition", function _ConversationRunAdmi
 		const company = _subject();
 		const subject: ExecutionSubject = kind === AgentServiceKind.Personal ? { ...company, principalId: "human-principal", identity: { ...company.identity, principalId: "human-principal" }, membership: company.requester.membership } : company;
 		const command = _command();
+		let payerColumns = { payingGroupId: null, payingGroupAuthorizationDecisionDigest: null, payingGroupAuthorizationPolicyRevisionHash: null, payingGroupEffectiveAuthorizationDigest: null };
+		if (kind === AgentServiceKind.Managed)
+		{
+			payerColumns = { payingGroupId: "group-1", payingGroupAuthorizationDecisionDigest: `sha256:${"e".repeat(64)}`, payingGroupAuthorizationPolicyRevisionHash: `sha256:${"f".repeat(64)}`, payingGroupEffectiveAuthorizationDigest: `sha256:${"1".repeat(64)}` };
+		}
 		const model = { id: "model-1", siloId: "silo-1", scope: ModelRoutingScope.ClusterTenant, clusterTenant: "silo-1", publicModelName: "test-model", litellmModelId: "provider-model", generatedOutputCapabilities: [] };
 		const transaction = {
 			agentRun: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
@@ -74,7 +79,7 @@ describe("conversation run admission composition", function _ConversationRunAdmi
 			}) },
 			personaRevision: { findFirst: vi.fn().mockResolvedValue({ compiledInstructions: "Answer in plain English." }) },
 			orgMembership: { findFirst: vi.fn().mockResolvedValue({ clusterTenant: "silo-1" }) },
-			conversation: { findFirst: vi.fn().mockResolvedValue({ id: "child-1", runs: [] }) },
+			conversation: { findFirst: vi.fn().mockResolvedValue({ id: "child-1", runs: [], ...payerColumns }) },
 			agentRevision: { findFirst: vi.fn().mockResolvedValue({ modelDefinition: model, mcpToolAssignments: [], skillAssignments: [], budget: { maxTurns: 64, maxTokens: 256_000, maxCostUsdMicros: null, maxToolInvocations: 0, maxDurationMs: 3_600_000, maxLoopIterations: 1 } }) },
 			mcpToolAdmissionClaim: { upsert: vi.fn() },
 			skillRevision: { findMany: vi.fn().mockResolvedValue([]) },
@@ -87,6 +92,7 @@ describe("conversation run admission composition", function _ConversationRunAdmi
 		// Identity and grant decisions are supplied at their ports; persistence and input sources run unchanged.
 		vi.spyOn(PrismaAuthorizationAuthority.prototype, "admitPrincipal").mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: `sha256:${"d".repeat(64)}` } } as never);
 		const resources = vi.spyOn(PrismaAuthorizationAuthority.prototype, "admitPrincipalBatch").mockImplementation(async function _AdmitResources(commands) { return commands.map(function _Allowed() { return {} as never; }); });
+		const budget = vi.spyOn(PrismaAuthorizationAuthority.prototype, "admit").mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: `sha256:${"e".repeat(64)}` } } as never);
 		const messages = { loadMessages: vi.fn().mockResolvedValue([{ role: "user", content: "Please help with this group request." }]) };
 		const compilers = { prepare: vi.fn().mockResolvedValue(_Prepared(command)), create: function _Compiler(_command: ConversationComputerRunAdmissionCommand, _prepared: ReturnType<typeof _Prepared>, transaction: ConstructorParameters<typeof PrismaPromptCompilerRepository>[0]) { return new PrismaPromptCompilerRepository(transaction, messages, "silo-1"); }, compile: vi.fn() };
 		const history = { read: vi.fn().mockResolvedValue({ historyRevision: "1", orderedMessageIds: ["message-1"], finalMessageAuthor: { principalId: "human-principal", issuer: command.requesterIssuer, subjectId: command.requesterSubjectId, authenticatedAt: command.requesterAuthenticatedAt } }) };
@@ -102,7 +108,7 @@ describe("conversation run admission composition", function _ConversationRunAdmi
 		expect(result.compiledInput.model.modelAlias).toBe("test-model");
 		expect(result.compiledInput.model.maxOutputTokens).toBe(4096);
 		expect(result.compiledInput.budget.maxCompletionTokens).toBe(256_000);
-		expect(transaction.agentRun.create).toHaveBeenCalledWith({ data: expect.objectContaining({ principalId: subject.principalId, executionSubject: subject }) });
+		expect(transaction.agentRun.create).toHaveBeenCalledWith({ data: expect.objectContaining({ principalId: subject.principalId, executionSubject: subject, ...payerColumns }) });
 		expect(transaction.runInputSnapshot.create).toHaveBeenCalledWith({ data: expect.objectContaining({ memoryQueryPolicy: { scope: "none" }, preferenceFactIds: [], messageIds: ["message-1"] }) });
 		expect(resources.mock.calls[0][0].every(function _ExecutionPrincipal(resource) { return resource.principalId === subject.principalId; })).toBe(true);
 		expect(transaction.memoryDataset.findFirst).not.toHaveBeenCalled();
@@ -118,6 +124,10 @@ describe("conversation run admission composition", function _ConversationRunAdmi
 			expect(transaction.authorizationGrant.create).not.toHaveBeenCalled();
 			expect(result.compiledInput.instructions).toMatch(/^Final conversation answer format:\n/);
 			expect(result.compiledInput.instructions).not.toContain("Answer in plain English.");
+			budget.mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Deny, evidence: null } as never);
+			const createdRuns = transaction.agentRun.create.mock.calls.length;
+			await expect(port.admit(command)).rejects.toThrow(/^Conversation run admission was denied$/);
+			expect(transaction.agentRun.create).toHaveBeenCalledTimes(createdRuns);
 		}
 	});
 
@@ -152,14 +162,15 @@ describe("conversation run admission composition", function _ConversationRunAdmi
 		const current: ExecutionSubject = { ...subject, membership: { ...subject.membership, trustedUntil: executionExpiry }, requester: { ...subject.requester, membership: { ...subject.requester.membership, revision: 2, trustedUntil: requesterExpiry } } };
 		const load = vi.fn<ExecutionSubjectAuthority["load"]>().mockResolvedValue({ outcome: "loaded", value: current });
 		const admitPrincipal = vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: `sha256:${"d".repeat(64)}` } });
-		const transaction: RunAdmissionTransaction = { prisma: {}, authorization: { admitPrincipal } as never, admittedAt: "2026-09-07T00:01:00.000Z", admittedAtEpochMs: Date.parse("2026-09-07T00:01:00.000Z") };
+			const payer: RunAdmissionPayer = { payingGroupId: "group-1", authorization: { decisionDigest: `sha256:${"e".repeat(64)}`, policyRevisionHash: `sha256:${"f".repeat(64)}`, effectiveAuthorizationDigest: `sha256:${"1".repeat(64)}` } };
+		const transaction: RunAdmissionTransaction = { prisma: { conversation: { findFirst: vi.fn().mockResolvedValue({ payingGroupId: payer.payingGroupId, payingGroupAuthorizationDecisionDigest: payer.authorization.decisionDigest, payingGroupAuthorizationPolicyRevisionHash: payer.authorization.policyRevisionHash, payingGroupEffectiveAuthorizationDigest: payer.authorization.effectiveAuthorizationDigest }) } } as never, authorization: { admitPrincipal, admit: vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: payer.authorization }) } as never, admittedAt: "2026-09-07T00:01:00.000Z", admittedAtEpochMs: Date.parse("2026-09-07T00:01:00.000Z") };
 		// The persistence boundary supplies the saved row; the real assembler must verify it again.
 		const persistence = vi.spyOn(PrismaRunAdmissionUnitOfWork.prototype, "admit").mockImplementation(async function _Duplicate<TDenial>(_admission: RunAdmissionCommand, verifyExisting: RunAdmissionExistingVerifier<TDenial>): Promise<RunAdmissionResult<TDenial>>
 		{
-			const verified = await verifyExisting(snapshot, transaction);
+			const verified = await verifyExisting(snapshot, payer, transaction);
 			if (verified.outcome === "denied")
 				return { outcome: "denied", reason: verified.reason };
-			return { outcome: "idempotent", snapshot };
+			return { outcome: "idempotent", payer, snapshot };
 		});
 		const compilers = { prepare: vi.fn().mockResolvedValue(_Prepared()), create: vi.fn(), compile: vi.fn().mockResolvedValue(compiled) };
 		const port = _CreateConversationRunAdmission({} as never, { create: function _ExecutionSubject() { return { load }; } }, { create: vi.fn() }, compilers, { maxConcurrentAdmissions: 1, maxQueuedAdmissions: 1 }, _log);
@@ -190,7 +201,7 @@ function _StandaloneComputerFixture()
 	snapshot = { ...snapshot, executionSubject: { ...snapshot.executionSubject, requester: { ...snapshot.executionSubject.requester, membership: human } } };
 	const row = { id: "local-1", clusterTenant: "silo-1", subject: "human-subject", status: "Active", updatedAt: new Date(observed) };
 	const principal = { id: "human-principal", siloId: "silo-1", issuer: "https://issuer.test", subject: "human-subject", provenance: "External" };
-	const database = { principal: { findFirst: vi.fn().mockResolvedValue(principal) }, orgMembership: { findUnique: vi.fn().mockResolvedValue(row) }, verifiedFleetMembershipRevision: { findFirst: vi.fn().mockResolvedValue(null) } };
+	const database = { principal: { findFirst: vi.fn().mockResolvedValue(principal) }, orgMembership: { findUnique: vi.fn().mockResolvedValue(row) }, verifiedFleetMembershipRevision: { findFirst: vi.fn().mockResolvedValue(null) }, conversation: { findFirst: vi.fn().mockResolvedValue({ payingGroupId: "group-1", payingGroupAuthorizationDecisionDigest: `sha256:${"e".repeat(64)}`, payingGroupAuthorizationPolicyRevisionHash: `sha256:${"f".repeat(64)}`, payingGroupEffectiveAuthorizationDigest: `sha256:${"1".repeat(64)}` }) } };
 	let config: HumanMembershipEvidenceConfig = { mode: FleetMembershipDeploymentModes.Standalone, siloId: "silo-1", trustedOidcIssuer: "https://issuer.test", maximumStalenessMs: 300_000 };
 	const load: ExecutionSubjectAuthority["load"] = async function _CurrentMembership()
 	{
@@ -203,9 +214,10 @@ function _StandaloneComputerFixture()
 	const admitPrincipal = vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: `sha256:${"d".repeat(64)}` } });
 	vi.spyOn(PrismaRunAdmissionUnitOfWork.prototype, "admit").mockImplementation(async function _Duplicate<TDenial>(_admission: RunAdmissionCommand, verifyExisting: RunAdmissionExistingVerifier<TDenial>): Promise<RunAdmissionResult<TDenial>>
 	{
-		const transaction: RunAdmissionTransaction = { prisma: database, authorization: { admitPrincipal } as never, admittedAt: new Date(now).toISOString(), admittedAtEpochMs: now };
-		const verified = await verifyExisting(snapshot, transaction);
-		return verified.outcome === "denied" ? { outcome: "denied", reason: verified.reason } : { outcome: "idempotent", snapshot };
+		const payer: RunAdmissionPayer = { payingGroupId: "group-1", authorization: { decisionDigest: `sha256:${"e".repeat(64)}`, policyRevisionHash: `sha256:${"f".repeat(64)}`, effectiveAuthorizationDigest: `sha256:${"1".repeat(64)}` } };
+		const transaction: RunAdmissionTransaction = { prisma: database, authorization: { admitPrincipal, admit: vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: payer.authorization }) } as never, admittedAt: new Date(now).toISOString(), admittedAtEpochMs: now };
+		const verified = await verifyExisting(snapshot, payer, transaction);
+		return verified.outcome === "denied" ? { outcome: "denied", reason: verified.reason } : { outcome: "idempotent", payer, snapshot };
 	});
 	const compilers = { prepare: vi.fn().mockResolvedValue(_Prepared()), create: vi.fn(), compile: vi.fn().mockResolvedValue(compiled) };
 	const port = _CreateConversationRunAdmission({} as never, { create: function _Subject() { return { load }; } }, { create: vi.fn() }, compilers, { maxConcurrentAdmissions: 1, maxQueuedAdmissions: 1 }, _log);

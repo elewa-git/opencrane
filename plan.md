@@ -1,5 +1,67 @@
 # OpenCrane — Active Plan
 
+## Run payer admission — 30 September 2026
+
+The reviewed ledger/payer foundation is committed locally as
+`69adf9b384c35815f2f462e505a040327c952c13`. This admission increment starts at that immutable SHA;
+the cumulative branch review base remains `2248132e49054734e53023f6fe0e6c9f1459859f`.
+Live PR ancestry remains green at snapshot
+`743fa14fcf29075e99fec582317b66f3c11b8fe38eaa86b3689faf0b40afff47`, and the foundation's
+merge simulation against `origin/develop` is clean (tree
+`95aac53453df5ae74350c13603a827bef1ae713e`). No remote branch or PR was changed.
+
+The accepted paying-group decision in `docs/design/mvp-delivery-plan.md` now reaches managed run
+admission in source. Conversations and routines already retained the four payer/evidence fields,
+and AgentRun had the columns, but the admission flow dropped them. This increment extends the
+existing input, scheduling, conversation and run owners without adding a policy engine or granting
+access. It requires current group-budget Use authority within the admission transaction, preserves
+the personal path, and binds duplicate/recovery behavior to the saved payer. No new schema, provider
+dispatch, protected settings or system-stop implementation is included in this increment.
+
+Sol and Luna implemented the bounded source and test work; a separate Luna lane completed the final
+independent review. The root owns plan, joined checks and actual commits. Acceptance covers managed
+and routine success, incomplete or wrong-silo payer refusal, permission loss before delayed admission,
+unchanged personal admission, and replay without payer substitution. Architecture preflight passed:
+run admission
+owns the complete payer value; the existing transaction-bound input authorization source reads the
+conversation payer and rechecks current requester Group Budget Use through the central authorization
+authority. It retains the original saved evidence rather than substituting fresh check evidence.
+Duplicate and unique-conflict recovery must compare the saved run payer with the conversation payer
+and reauthorize current Use before returning a snapshot; refusal cannot change the saved payer.
+Routine preparation carries the saved routine payer into its hidden occurrence conversation in the
+same transaction, so initial admission and later human follow-up use the same payer source. No event
+history/checkpoint expansion was needed. Existing ledger SQL
+qualification and live MVP acceptance remain outstanding and must not be inferred from this source
+integration.
+
+The completed overlay passes independent integrated review and architecture postflight with no findings.
+Concrete conversation-repository construction stays in the execution-inputs factory; the temporary
+repository barrel export was removed. Style reports zero errors/warnings, Prisma boundaries report
+zero errors across 333 files, and the agent-domain guard plus negative tests pass. The three
+module-growth candidates retain cohesive admission contract/transaction/persistence ownership.
+The final production manifest is
+`37d83f488d975439134b1281363c5acfcb629d199ee71f34a9024c18a9573a36`; it includes the missing existing
+history-reader import found and corrected during type checking. The complete
+36-file source/test/package-documentation manifest, excluding this plan, is
+`7f1a8f7c1297a78a027970fb925a0cb18a75d9a92114bac614b3f82a04891b7a`.
+
+The five owning library suites pass: execution-runs 245 tests, execution-inputs 204, conversations
+1,059, scheduling 313 and scheduling-contract 42. Their type checks pass. The app composition's
+12 focused tests and app type check also pass: 1,875 passing tests in total. The fifteen existing
+real-SQL cases remain explicitly skipped. Initial HTTP-router failures were the sandbox's denied
+local listeners; the full suites passed with scoped local test-listener permission. One old managed
+payer expectation and stale scheduling authority doubles were corrected without changing product
+permissions. The final mechanical fixture rewrite was rechecked with its 18 focused tests. Final
+style and Prisma checks pass with zero errors; module-growth retains the same reviewed inventories.
+The full test/documentation delta also passes final independent review at the manifest above.
+No paid provider or live-database operation, schema regeneration, VM, deployment or publication ran.
+
+A read-only CI ownership check found an additional ledger qualification gap: the fresh PostgreSQL
+jobs in `.github/workflows/docker.yml` and `nightly.yml` run `test:sql`, which does not select the
+separate `test:monthly-budget:sql` target. That target still needs explicit fresh-database CI wiring
+and an executed result. Preserve its dedicated database URL safeguard; no workflow, database,
+publication or paid-provider operation was changed during this check.
+
 ## Direct source checkpoints — 30 September 2026
 
 The user now requests actual commits instead of suggested commit messages. Commit each coherent,

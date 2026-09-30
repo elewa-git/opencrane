@@ -35,6 +35,9 @@ does not grant permission to use a run.
 ## Main rules
 
 - A duplicate admission returns the first saved input only when the caller and request match.
+- A managed run stores the paying group and three authorization digests selected by its conversation.
+  Personal runs store all four fields as null. Duplicate and unique-key-race recovery return that
+  saved tuple only after the input owner has rechecked current authority; they never adopt a new payer.
 - The human requester must match the input message's author. A company assistant keeps its own
   execution identity and permissions; it does not become the human who asked for help.
 - Admission creates an exact `AgentRun/Read` grant for the verified personal owner. Retrying an
@@ -51,6 +54,13 @@ does not grant permission to use a run.
 - Competing writes use serializable database transactions and typed compare-and-set updates.
 
 ## Public surface
+
+- `RunAdmissionPayer` carries the original managed paying group and authorization evidence into
+  admission. `PrismaRunAdmissionUnitOfWork` persists it with the run and supplies it to duplicate
+  verification before releasing the immutable snapshot.
+- `PrismaRoutineRunSnapshotRecoveryRepository` returns the saved payer with the checked first
+  snapshot, so later routine compilation can recheck current group authority without rebuilding
+  admission or changing the payer.
 
 - `PrismaConversationRunLifecycleUnitOfWork` records start, recovery and completion for the admitted
   run attempt and computer lease. A model response that cannot be recovered moves the running
