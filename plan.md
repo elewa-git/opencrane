@@ -1,5 +1,83 @@
 # OpenCrane — Active Plan
 
+## Current direction: computer-owned execution — 30 September 2026
+
+The computer is the working assistant with a managed laptop. Its harness owns reasoning, tool
+sequencing, code, files, browser and checkpoints. OpenCrane constrains access and spending and
+supervises lifecycle; it does not control each internal step. The authoritative next sequence is
+[computer-owned execution](docs/design/computer-owned-execution-plan.md), with the change/impact
+table, compatibility checkpoint, survivor/replacement boundaries and exact acceptance requirements.
+
+Start with a time-boxed evaluation of a pinned Codex harness, then one fake-provider computer-owned
+journey before reconnecting budgets, protected tools, memory, artifacts, delegation and schedules.
+Codex is a candidate, not an installed or qualified runtime. Preserve the current product foundations
+and delete the old server loop only with its direct replacement. No dual agent executor is planned.
+
+Personal spending uses a real private group of one. All children inherit the selected paying group;
+no request-cost reservations or run/child wallets. Reported-spend cutoff stops active work and
+refuses further paid calls, while retaining in-flight/late charges. The final bill can overshoot.
+Recursive delegation and schedules remain mandatory MVP capabilities, without fixed spawn caps.
+
+Hold the dirty descendant-Stop integration unchanged until its effects are rewired to the new
+computer/gate boundary. Its tests and unresolved SQL constraint remain evidence, not qualification
+of the new path. Do not finish qualifying the obsolete server executor as the next milestone.
+
+This is a documentation-only steering change on the implementation branch. No source, database,
+provider, VM or deployment behavior changed. The 18–32 engineering-day transition forecast is
+provisional work effort, not an MVP completion date. Re-estimate after the 1–2 day compatibility
+proof; all existing product acceptance gaps remain visible in the MVP plan.
+
+The dated checkpoints below preserve historical source and validation evidence. This section and
+its linked plan supersede their conflicting executor, reservation and personal-budget directions.
+
+## Shared spending cutoff direction — 30 September 2026
+
+The user rejected advance request-cost estimation for decision B: children may run concurrently
+against the same EUR spending limit without estimated per-request reservations or fixed spawn and
+parallelism limits. When reported spending reaches an applicable global, group or agent limit,
+stop the affected active work and descendants and refuse further dispatch; already-running work
+has no exemption. This supersedes the provider-counted hard-invoice-ceiling proposal, not the
+existing permission, payer, deadline or duplicate-dispatch safeguards. Charges for requests already
+in flight can arrive after cancellation, so this is a spending-triggered cutoff, not a guaranteed
+maximum final bill. Accounting must retain late and uncertain charges rather than erase them.
+
+This direction is recorded, not implemented by the adjacent human Stop source slice. The current
+reservation-based ledger and provider-counting proposal need a separately reviewed replacement
+plan before being represented as matching this policy. No paid tests or live settings changed.
+
+## Approved descendant Stop integration — 30 September 2026
+
+The user explicitly approved decision A: source-only propagation of a requester-authorized parent
+Stop to its actual descendants, including cancellation of saved work, temporary credential
+revocation and terminal cleanup records while retaining incurred and uncertain charges. This
+resolves the earlier edit-safety pause for that human Stop integration only. Decision B is still
+under explanation, not approved; decision C (draft publication and fresh-database CI) is pending.
+
+The integration starts at `1a40f0166dadf5b7ef19ebfa1c5675d33477e36d`; the cumulative review base
+remains `2248132e49054734e53023f6fe0e6c9f1459859f`. Sol owns the production port from the preserved
+descendant-stop worktree, Luna owns its test port, and root owns current-schema generation,
+validation and commit. The existing payer fields, monthly EUR ledger and BudgetExhausted reason
+must survive. This does not implement system-origin budget Stop, autonomous spawn/join, or live
+recursive cancellation. No live task, database, provider, VM, publication or deployment is in scope.
+
+The port is applied but not committed or database-qualified. Focused descendant repository and
+Stop workflow tests each pass six cases; the state-transition file passes three. The full models
+suite passes 163 cases. The execution-runs ordinary run passes 246 cases and skips 15 SQL cases,
+with five router cases initially blocked by local-listener permissions; those five pass in a
+separate authorized rerun. The payer-admission fixture passes 12 cases. Review found and the
+implementer fixed the additional scheduling and history terminal-reason mappings; the history
+file now passes 23 cases with a valid Cancelled/AncestorStopped fixture. These counts overlap.
+The final execution-runs, scheduling and opencrane type checks pass after those mapping and fixture
+corrections; the conversations and models type checks had already passed for unchanged source.
+
+Review also found that the Failed-state database constraint must exclude AncestorStopped, which
+belongs only to cancelled descendants. The source-only tightening was rejected atomically by
+the edit-safety check, which interpreted the added NOT IN exclusion as a broadening. No retry or
+workaround was attempted; renewed explicit approval was requested. A SQL negative regression
+is added but unexecuted. The Prisma client was generated once from the approved additive schema;
+baseline regeneration, release digest update, final review and commit wait for this correction.
+No PostgreSQL, provider or live-product qualification is claimed.
+
 ## Provider deadline regression — 30 September 2026
 
 This test-only increment starts at `451f68dd83a2ff1b7bfb67cf58febb739c2af443`.
