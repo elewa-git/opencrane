@@ -1,5 +1,24 @@
 # OpenCrane — Active Plan
 
+## Provider deadline regression — 30 September 2026
+
+This test-only increment starts at `451f68dd83a2ff1b7bfb67cf58febb739c2af443`.
+The reported slow-credential risk does not permit an expired model dispatch: the existing model
+flow checks the frozen deadline after credential issuance and records unavailable recovery before
+calling the provider. A new public-authority regression advances the clock to that deadline during
+issuance, checks that no model request is sent, and proves the saved unavailable state survives a
+restart without redispatch. All 29 focused model-progression tests pass, as does the whitespace check.
+Independent review confirms the regression reaches the deadline guard and passes with no findings.
+A broader package run was also attempted: 999 tests passed and 61 router tests failed on forbidden
+local socket listeners (`EPERM`). That attempt is not a green package qualification.
+
+This evidence does not qualify live latency, credential expiry after long approval waits, or the
+complete recovery journey. No production deadline, credential, permission, provider, database or
+deployment behavior changed. The descendant integration, provider-counted budget path and draft
+publication decisions remain pending. Live PR ancestry still passes at snapshot
+`743fa14fcf29075e99fec582317b66f3c11b8fe38eaa86b3689faf0b40afff47`; the starting HEAD merges
+cleanly with develop `10abd0ef6182f36bec13d8f1358e43b15ead7cd5`.
+
 ## Descendant-cleanup integration paused — 30 September 2026
 
 The source checkpoint is `7d4e1a140c1356e27ede8f64529b2a607683f9c9`. Live PR ancestry still

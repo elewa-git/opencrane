@@ -137,6 +137,24 @@ describe("one server-owned model request across process restarts", function _Sui
 		expect((await f.store.load(f.output.bootstrapId))!.protocol.steps.at(-1)!.reservation.dispatchDeadlineEpochMs).toBeGreaterThan(shorter);
 	});
 
+	it("does not dispatch after credential issuance crosses the frozen request deadline", async function _CredentialIssuanceCrossesDeadline()
+	{
+		const f = await _OutputRecoveryHarness(false);
+		f.credentials.issueOnce.mockImplementationOnce(async function _SlowCredentialIssuance()
+		{
+			const reservation = (await f.store.load(f.output.bootstrapId))!.protocol.steps.at(-1)!.reservation;
+			vi.spyOn(Date, "now").mockReturnValue(reservation.dispatchDeadlineEpochMs);
+			return { key: "test-only-key", credentialDigest: `sha256:${"d".repeat(64)}`, expiresAt: "2099-01-01T00:00:00.000Z" };
+		});
+
+		expect(await f.authority.advance(f.output.bootstrapId)).toEqual({ outcome: "response_unavailable" });
+		expect(f.model.request).not.toHaveBeenCalled();
+		expect(f.runLifecycle.enterRecoveryRequired).toHaveBeenCalledOnce();
+		expect((await f.store.load(f.output.bootstrapId))!.protocol.state).toBe(ConversationComputerTurnProtocolStates.ResponseUnavailable);
+		expect(await f.restart().advance(f.output.bootstrapId)).toEqual({ outcome: "response_unavailable" });
+		expect(f.model.request).not.toHaveBeenCalled();
+	});
+
 	it("keeps the shorter dispatch bound after later authority renewal and a slow payload write", async function _NoRenewedOutputDeadline()
 	{
 		const f = await _OutputRecoveryHarness(false);
