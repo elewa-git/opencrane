@@ -1,5 +1,36 @@
 # OpenCrane — Active Plan
 
+## Admit new work after a completed Stop — 30 September 2026
+
+This increment starts at `f16d47c4ec5c479012110ac0c4b48ccd51d4b5b5`; the cumulative review
+base remains `2248132e49054734e53023f6fe0e6c9f1459859f`. Live PR ancestry passes at unchanged
+snapshot `743fa14fcf29075e99fec582317b66f3c11b8fe38eaa86b3689faf0b40afff47`.
+
+Current source confirms a concrete continuation defect identified in the separate MVP assessment:
+the interactive and routine conversation-context queries exclude Completed and Failed runs but
+still return Cancelled runs as active. A fully stopped run therefore prevents a later admission.
+Sol corrected those two existing queries. Query-aware public repository tests cover all ten states
+in both branches: Completed, Cancelled and Failed allow the next context load, while the other seven
+states, including Cancelling and RecoveryRequired, still block it. The new tests failed against the
+old source in exactly the two Cancelled cases; after the correction, all 32 focused cases pass.
+The complete input package passes 224 tests and its type check. Changed-file ESLint, style (one
+production file, zero errors/warnings), Prisma ownership (327 files, zero errors), module-growth
+(one file, no errors or candidates), and whitespace checks pass. No cancellation authority, account
+charging, history check, membership, routine lease check, or database baseline was changed.
+Luna's independent integrated review passes with no findings. The final three-file source, test
+and package-documentation manifest is
+`ffa55520d313bbb059359fb13c7a3a6fd4aa8c7056156b2b12b1c782af42a858`.
+Root owns validation coordination and the actual commit. Live Stop-to-next-message qualification
+remains separate.
+
+The hard-budget input-bound prerequisite remains open. Official OpenAI documentation describes
+[chat counting as potentially approximate](https://developers.openai.com/api/docs/guides/advanced-usage#managing-tokens)
+and demonstrates [server-side counting for the Responses protocol](https://developers.openai.com/cookbook/articles/per_run_spending_controller_responses_api).
+The current Chat Completions transport cannot claim that guarantee. A source-only
+provider-counted path has been proposed to the user; no protocol migration, paid request or live
+setting change is authorized by that proposal alone. Continue independent accepted work while
+that decision is pending.
+
 ## Monthly-budget CI qualification wiring — 30 September 2026
 
 This increment starts at `1e6d1e0743325ac7c7532a85dc9da91fe4e2a537`; the cumulative review

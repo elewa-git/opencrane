@@ -33,6 +33,19 @@ function _Transaction()
 	};
 }
 
+/** Apply the repository's active-run query to one saved run state. */
+function _TransactionWithRunState(state: AgentRunState)
+{
+	const transaction = _Transaction();
+	transaction.conversation.findFirst.mockImplementation(async function _FindConversation(query)
+	{
+		const input = query as { readonly where: { readonly id: string }; readonly select: { readonly runs: { readonly where: { readonly state: { readonly notIn: readonly AgentRunState[] } } } } };
+		const runs = input.select.runs.where.state.notIn.includes(state) ? [] : [{ id: "run-existing", state }];
+		return { id: input.where.id, activeComputerLease: { leaseId: "lease-1" }, runs } as never;
+	});
+	return transaction;
+}
+
 /** Create the current published run authority expected by the conversation. */
 function _Run()
 {
@@ -97,6 +110,21 @@ describe("PrismaConversationContextRepository", function _Suite()
 		await expect(repository.load(_Command(), _Run(), _Subject())).resolves.toEqual({ outcome: "denied", reason: "active_run" });
 	});
 
+	it.each([AgentRunState.Completed, AgentRunState.Cancelled, AgentRunState.Failed])("admits interactive history after a %s run", async function _AllowsTerminalInteractiveRun(state)
+	{
+		const history = { read: vi.fn().mockResolvedValue({ historyRevision: "8", orderedMessageIds: ["message-1", "message-2"], finalMessageAuthor: _Command().messageInput!.author }) };
+		const repository = new PrismaConversationContextRepository(_TransactionWithRunState(state) as never, history);
+
+		await expect(repository.load(_Command(), _Run(), _Subject())).resolves.toEqual({ outcome: "loaded", value: { messageIds: ["message-1", "message-2"] } });
+	});
+
+	it.each([AgentRunState.Accepted, AgentRunState.Queued, AgentRunState.Assigned, AgentRunState.Running, AgentRunState.WaitingForInput, AgentRunState.RecoveryRequired, AgentRunState.Cancelling])("keeps interactive admission blocked by a %s run", async function _RefusesNonTerminalInteractiveRun(state)
+	{
+		const repository = new PrismaConversationContextRepository(_TransactionWithRunState(state) as never, { read: vi.fn() });
+
+		await expect(repository.load(_Command(), _Run(), _Subject())).resolves.toEqual({ outcome: "denied", reason: "active_run" });
+	});
+
 	it("loads a service-attested routine prompt without reading browser membership or human history", async function _LoadsRoutinePrompt()
 	{
 		const transaction = _Transaction();
@@ -109,6 +137,23 @@ describe("PrismaConversationContextRepository", function _Suite()
 		expect(routinePrompt.read).toHaveBeenCalledWith({ siloId: "silo-1", conversationId: "conversation-routine-1", agentServiceId: "service-1", trigger: "scheduled", routine: _RoutineCommand().routineInput });
 		expect(history.read).not.toHaveBeenCalled();
 		expect(transaction.orgMembership.findFirst).not.toHaveBeenCalled();
+	});
+
+	it.each([AgentRunState.Completed, AgentRunState.Cancelled, AgentRunState.Failed])("admits a routine prompt after a %s run", async function _AllowsTerminalRoutineRun(state)
+	{
+		const transaction = _TransactionWithRunState(state);
+		const routinePrompt = { read: vi.fn().mockResolvedValue({ historyRevision: "1", orderedMessageIds: ["service-prompt-1"] }) };
+		const repository = new PrismaConversationContextRepository(transaction as never, { read: vi.fn() }, routinePrompt);
+
+		await expect(repository.load(_RoutineCommand(), _Run(), _Subject("company-principal"))).resolves.toEqual({ outcome: "loaded", value: { messageIds: ["service-prompt-1"] } });
+	});
+
+	it.each([AgentRunState.Accepted, AgentRunState.Queued, AgentRunState.Assigned, AgentRunState.Running, AgentRunState.WaitingForInput, AgentRunState.RecoveryRequired, AgentRunState.Cancelling])("keeps routine admission blocked by a %s run", async function _RefusesNonTerminalRoutineRun(state)
+	{
+		const transaction = _TransactionWithRunState(state);
+		const repository = new PrismaConversationContextRepository(transaction as never, { read: vi.fn() }, { read: vi.fn() });
+
+		await expect(repository.load(_RoutineCommand(), _Run(), _Subject("company-principal"))).resolves.toEqual({ outcome: "denied", reason: "active_run" });
 	});
 
 	it("refuses a routine prompt until its occurrence computer has an active lease", async function _RefusesRoutineWithoutLease()

@@ -61,7 +61,7 @@ export class PrismaConversationContextRepository implements ConversationContextR
 		// 3. Bind the conversation to its silo, service, mode, open lifecycle, and participant.
 		const conversation = await this.transaction.conversation.findFirst({
 			where: { id: command.conversationId, siloId: command.siloId, agentServiceId: run.agentServiceId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, participants: { some: { userId: command.requester.subjectId, accessEndedPosition: null } } },
-			select: { id: true, runs: { where: { state: { notIn: [AgentRunState.Completed, AgentRunState.Failed] } }, take: 1, select: { id: true } } },
+			select: { id: true, runs: { where: { state: { notIn: [AgentRunState.Completed, AgentRunState.Cancelled, AgentRunState.Failed] } }, take: 1, select: { id: true } } },
 		});
 		if (conversation === null)
 		{
@@ -102,7 +102,7 @@ export class PrismaConversationContextRepository implements ConversationContextR
 			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "conversation_unavailable" };
 		const conversation = await this.transaction.conversation.findFirst({
 			where: { id: command.conversationId, siloId: command.siloId, agentServiceId: run.agentServiceId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open },
-			select: { id: true, activeComputerLease: { select: { leaseId: true } }, runs: { where: { state: { notIn: [AgentRunState.Completed, AgentRunState.Failed] } }, take: 1, select: { id: true } } },
+			select: { id: true, activeComputerLease: { select: { leaseId: true } }, runs: { where: { state: { notIn: [AgentRunState.Completed, AgentRunState.Cancelled, AgentRunState.Failed] } }, take: 1, select: { id: true } } },
 		});
 		if (conversation === null || conversation.activeComputerLease === null || conversation.runs.length > 0)
 			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: conversation?.runs.length ? RunAdmissionDenialReasons.ActiveRun : "conversation_unavailable" };

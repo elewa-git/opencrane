@@ -63,6 +63,10 @@ revision, firing, automatic slot or manual trigger, and original approval proven
 conversation must already have an active computer lease, and current conversation access is still
 checked through the central authorization authority before admission commits.
 
+Conversation admission permits a new interactive or routine run after an earlier run is Completed,
+Cancelled or Failed. Nonterminal runs, including Cancelling and RecoveryRequired, still own the
+conversation and block a competing run until that lifecycle reaches a terminal state.
+
 Interactive human conversation admission can also freeze a closed built-in capability selection.
 The selector runs after current conversation and product authorization, and the snapshot stores only
 the capability, its semantic revision and the digest of its parameter schema. Scheduled and manual
