@@ -9,8 +9,13 @@ calling the provider. A new public-authority regression advances the clock to th
 issuance, checks that no model request is sent, and proves the saved unavailable state survives a
 restart without redispatch. All 29 focused model-progression tests pass, as does the whitespace check.
 Independent review confirms the regression reaches the deadline guard and passes with no findings.
-A broader package run was also attempted: 999 tests passed and 61 router tests failed on forbidden
-local socket listeners (`EPERM`). That attempt is not a green package qualification.
+The first broader package run passed 999 tests but failed 61 router tests on forbidden local socket
+listeners (`EPERM`). With scoped permission for those test servers, the uncached ordinary Nx target
+passes all 1,060 tests across 109 files on `c7949a6e67c11254f3e381e00be719bb5c4b5a42`, with no
+failures or skips. It ran with one worker, dependency tasks disabled and database/integration URLs
+unset; it did not regenerate the shared client or run SQL, external-provider or live-product tests.
+The current release-manifest check also passes. These results qualify the conversation unit suite,
+not the missing fresh-database or authenticated end-to-end acceptance.
 
 This evidence does not qualify live latency, credential expiry after long approval waits, or the
 complete recovery journey. No production deadline, credential, permission, provider, database or
