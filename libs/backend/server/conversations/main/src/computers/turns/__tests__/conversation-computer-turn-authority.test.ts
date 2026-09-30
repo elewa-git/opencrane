@@ -1,4 +1,4 @@
-import { CompiledFinalOutputModes } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ConversationModelUsageKinds, ConversationModelUsageUnknownReasons } from "@opencrane/contracts";
 import { _ReserveConversationOutputFixture } from "./conversation-output-intent.fixture";
 import { _PrepareBoundDraft } from "./conversation-output-intent.fixture";
 import type { BoundConversationWriterAppend } from "@opencrane/backend/server/conversations/history";
@@ -59,7 +59,7 @@ function _Harness() {
   let active = false;
   const append = vi.fn().mockResolvedValue({});
   const dependencies = {
-    logger: { warn: vi.fn() }, model: { request: vi.fn().mockResolvedValue({ kind: "text", text: "Hi" }) },
+    logger: { warn: vi.fn() }, model: { request: vi.fn().mockResolvedValue({ kind: "text", text: "Hi", usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } }) },
     siloId: "testv5",
     toolProposals: { admit: vi.fn() },
     toolRequestedNotifications: { publishRequested: vi.fn().mockResolvedValue("published") },

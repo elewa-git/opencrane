@@ -1,6 +1,6 @@
 import { ConversationMode, type Prisma } from "@prisma/client";
 
-import { PrismaAuthorizationAuthority, PrismaManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
+import { PrismaAuthorizationAuthority, PrismaManagedAuthorizationGrantRepository, type AdmitProductAuthorizationResult } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -40,6 +40,12 @@ export class PrismaConversationProductAuthorizationRepository implements Convers
 	{
 		const result = await this.authority.admitPrincipal({ siloId: caller.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId, resource, action, argumentsDigest: ___DigestCanonicalJson(argumentsValue), nowEpochMs: Date.now() });
 		return result.outcome === AuthorizationDecisionOutcomes.Allow;
+	}
+
+	/** Admits one selected Group budget through the caller's transaction-bound central authority. */
+	async admitGroupBudget(caller: ConversationCaller, groupId: string, argumentsDigest: `sha256:${string}`, nowEpochMs: number): Promise<AdmitProductAuthorizationResult>
+	{
+		return await this.authority.admit({ siloId: caller.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId, boundary: { kind: AuthorizationBoundaryKinds.Group, groupId }, resource: { kind: ProductAuthorizationResourceKinds.Budget, id: `group:${groupId}` }, action: ProductAuthorizationActions.Use, argumentsDigest, nowEpochMs });
 	}
 
 	/** Filters exact conversation ids through one transaction-bound catalogue decision. */

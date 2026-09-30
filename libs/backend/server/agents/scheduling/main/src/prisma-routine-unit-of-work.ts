@@ -176,7 +176,7 @@ export class PrismaRoutineUnitOfWork implements RoutineCommandPersistence, Routi
 				const conversations = self.dependencies.conversations(transaction);
 				const managedServices = self.dependencies.managedServices(transaction);
 				const proposals = new PrismaRoutineProposalRepository(transaction, facts, self.dependencies.proposalSources(transaction));
-				const repository = new PrismaRoutineCommandRepository(transaction, facts, grants, self.dependencies.taskAdmission, conversations, managedServices, proposals);
+				const repository = new PrismaRoutineCommandRepository(transaction, facts, grants, self.dependencies.taskAdmission, conversations, managedServices, proposals, authorization);
 				return await operation(repository);
 			}, { operation: operationName, isolationLevel: Prisma.TransactionIsolationLevel.Serializable, attemptLimit: 3 });
 		});

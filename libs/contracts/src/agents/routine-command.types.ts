@@ -16,6 +16,8 @@ export enum RoutineFiringReasons
 /** Browser request for creating one reviewed routine. */
 export interface RoutineCreateRequest
 {
+	/** Explicit same-silo group whose EUR budget pays every managed firing; never inferred. */
+	readonly payingGroupId: string;
 	/** Existing conversation whose reviewed audience will be retained. */
 	readonly destinationConversationId: string;
 	/** Exact reviewed audience participant references selected by the caller. */

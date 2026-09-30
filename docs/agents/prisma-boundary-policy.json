@@ -3,6 +3,13 @@
 	"owners": {
 		"repositories": [
 			{
+				"path": "libs/backend/agents/execution/runs/main/src/monthly-budget/prisma-managed-monthly-budget-repository.ts",
+				"adapter": "PrismaManagedMonthlyBudgetRepository",
+				"contract": "ManagedMonthlyBudgetAuthority",
+				"contractImportPath": "./monthly-budget.types",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/server/conversations/main/src/request-routine/prisma-request-routine-proposal-source-authority.ts",
 				"adapter": "PrismaRequestRoutineProposalSourceAuthority",
 				"contract": "RequestRoutineProposalSourceAuthority",
@@ -1155,6 +1162,13 @@
 				"constructs": []
 			},
 			{
+				"path": "libs/backend/server/gateways/providers/main/src/models/prisma-provider-model-tariff-repository.ts",
+				"adapter": "PrismaProviderModelTariffRepository",
+				"contract": "ConversationModelTariffResolver",
+				"contractImportPath": "@opencrane/backend/server/gateways/model-routing",
+				"constructs": []
+			},
+			{
 				"path": "libs/backend/agents/execution/runs/main/src/prisma-run-admission-unit-of-work.ts",
 				"adapter": "PrismaRunAdmissionRepository",
 				"contract": "RunAdmissionPersistenceRepository",
@@ -1783,6 +1797,18 @@
 			}
 		],
 		"unitsOfWork": [
+			{
+				"path": "libs/backend/agents/execution/runs/main/src/monthly-budget/prisma-managed-monthly-budget-unit-of-work.ts",
+				"adapter": "PrismaManagedMonthlyBudgetUnitOfWork",
+				"contract": "ManagedMonthlyBudgetAuthority",
+				"contractImportPath": "./monthly-budget.types",
+				"constructs": [
+					{
+						"adapter": "PrismaManagedMonthlyBudgetRepository",
+						"importPath": "./prisma-managed-monthly-budget-repository"
+					}
+				]
+			},
 			{
 				"path": "libs/backend/server/conversations/main/src/request-routine/prisma-conversation-request-routine-source.ts",
 				"adapter": "PrismaConversationRequestRoutineSourceUnitOfWork",
@@ -3063,6 +3089,7 @@
 			"libs/backend/server/gateways/providers/main/src/commands/provider-effect-command-composition.ts",
 			"libs/backend/server/gateways/providers/main/src/commands/provider-effect-command-repository.factory.ts",
 			"libs/backend/server/gateways/providers/main/src/byok/provider-byok-repository.factory.ts",
+			"libs/backend/server/gateways/providers/main/src/models/provider-model-tariff.factory.ts",
 			"libs/backend/server/gateways/providers/main/src/models/model-registry-composition.ts",
 			"libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
 			"libs/backend/agents/personal/personas/main/src/http/prisma-persona-onboarding.router.ts",

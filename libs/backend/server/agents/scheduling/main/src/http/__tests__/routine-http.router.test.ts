@@ -51,7 +51,7 @@ describe("routine HTTP router", function _Suite()
 	{
 		const authority = _Authority();
 		const fixture = _App(authority);
-		const createBody = { destinationConversationId: "conversation-source", audienceParticipantRefs: ["participant-1"], selectedManagedServiceId: "service-1", schedule: { expression: "0 8 * * *", timezone: "UTC" }, instruction: "Prepare a summary.", idempotencyKey: "create-1" };
+		const createBody = { payingGroupId: "group-1", destinationConversationId: "conversation-source", audienceParticipantRefs: ["participant-1"], selectedManagedServiceId: "service-1", schedule: { expression: "0 8 * * *", timezone: "UTC" }, instruction: "Prepare a summary.", idempotencyKey: "create-1" };
 
 		const created = await request(fixture.app).post("/").send(createBody).expect(201).expect("cache-control", "no-store");
 		const read = await request(fixture.app).get("/routine-1").expect(200).expect("cache-control", "no-store");

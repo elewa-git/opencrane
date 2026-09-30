@@ -26,6 +26,8 @@ const _COMMAND: PrepareRoutineOccurrenceCommand = {
 	requesterAuthenticatedAt: "2026-09-24T12:00:00.000Z", audiencePrincipalIds: ["principal-1", "principal-2"],
 	instruction: "Prepare the weekly report",
 };
+/** Original routine payer copied through both preparation transactions. */
+const _PAYER = { payingGroupId: "group-1", decisionDigest: `sha256:${"a".repeat(64)}` as const, policyRevisionHash: `sha256:${"b".repeat(64)}` as const, effectiveAuthorizationDigest: `sha256:${"c".repeat(64)}` as const };
 /** Current managed service identity and deployment profile. */
 const _CANDIDATE = { agentServiceId: "service-1", agentRevisionId: "revision-1", agentIdentityId: "identity-1", principalId: "service-principal", name: "Company", workloadProfile: "company", profileRevisionId: "profile-1" };
 
@@ -58,7 +60,7 @@ function _Cipher(): AesGcmConversationPrivatePayloadCipher
 /** Builds the hidden occurrence projection. */
 function _Conversation(overrides: Record<string, unknown> = {})
 {
-	return { id: _COMMAND.conversationId, siloId: _COMMAND.siloId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, agentServiceId: _COMMAND.selectedManagedServiceId, computerId: _RoutineComputerId(_COMMAND.conversationId), computerAgentIdentityId: _CANDIDATE.agentIdentityId, computerProfileRevisionId: _CANDIDATE.profileRevisionId, createdAt: _CREATED, participants: [], ...overrides };
+	return { id: _COMMAND.conversationId, siloId: _COMMAND.siloId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, agentServiceId: _COMMAND.selectedManagedServiceId, computerId: _RoutineComputerId(_COMMAND.conversationId), computerAgentIdentityId: _CANDIDATE.agentIdentityId, computerProfileRevisionId: _CANDIDATE.profileRevisionId, createdAt: _CREATED, payingGroupId: _PAYER.payingGroupId, payingGroupAuthorizationDecisionDigest: _PAYER.decisionDigest, payingGroupAuthorizationPolicyRevisionHash: _PAYER.policyRevisionHash, payingGroupEffectiveAuthorizationDigest: _PAYER.effectiveAuthorizationDigest, participants: [], ...overrides };
 }
 
 /** Builds one stored OpenCrane-authored encrypted row. */
@@ -96,13 +98,13 @@ function _Routines(state: _State, controls: _Controls, events: string[], authori
 			controls.authorizeCalls += 1;
 			events.push(`authorize:${controls.authorizeCalls}`);
 			if (state.preparation !== null)
-				return { preparation: state.preparation };
+				return { payer: _PAYER, preparation: state.preparation };
 			if (controls.authorityLossAt === controls.authorizeCalls)
 			{
 				state.refused = true;
 				return null;
 			}
-			return { preparation: null };
+			return { payer: _PAYER, preparation: null };
 		}),
 		record: vi.fn(async function _Record(_command, receipt)
 		{
@@ -243,6 +245,7 @@ describe("PrismaRoutineOccurrencePreparationUnitOfWork", function _Suite()
 		expect(fixture.state.participants).toEqual(["subject-1", "subject-2"]);
 		expect(fixture.state.grants).toEqual(["participants", "creator"]);
 		expect(fixture.state.preparation).not.toBeNull();
+		expect(fixture.state.conversation).toMatchObject({ payingGroupId: _PAYER.payingGroupId, payingGroupAuthorizationDecisionDigest: _PAYER.decisionDigest, payingGroupAuthorizationPolicyRevisionHash: _PAYER.policyRevisionHash, payingGroupEffectiveAuthorizationDigest: _PAYER.effectiveAuthorizationDigest });
 		expect(fixture.authorizationCommands).toHaveLength(2);
 		expect(JSON.stringify(fixture.authorizationCommands)).not.toContain(_COMMAND.instruction);
 	});

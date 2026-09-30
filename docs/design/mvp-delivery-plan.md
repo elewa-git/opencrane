@@ -1,22 +1,26 @@
 # Deliver useful assistant work
 
-## Accepted product decisions — 27 September 2026
+> Current direction: [computer-owned execution plan](computer-owned-execution-plan.md). OpenCrane's
+> extracted TypeScript engine in the computer owns the execution loop, checkpoints and local
+> artifacts; the server remains the admission, authorization, KurrentDB and provider-boundary
+> authority. This document records product sequencing, not a claim that that runtime replacement
+> is complete.
+
+## Accepted product decisions — updated 30 September 2026
 
 The following decisions are accepted for the remaining MVP design and are deliberately recorded
 as **not yet implemented**. They refine the open budget, shared-work, interaction, qualification
 and execution-policy items below without rewriting their historical evidence.
 
-- One paying group is selected when shared work is created or scheduled, and children inherit it.
-  Spend counts against the global ceiling, that group's ceiling and any optional assistant ceiling,
-  while one effect receives one charge rather than duplicate attribution.
-- Budgets are EUR monthly limits resetting at 00:00 UTC on the first day of the month. Reserve
-  before each model/provider call. A hard cap stops new work, including reserved remaining work,
-  and cancellation cascades through descendants; there is no graceful-finishing exemption. A
-  provider charge already dispatched cannot be undone, so reservations use a trustworthy worst-case
-  price; unknown cost is never zero. Separately, the live OpenAI MVP qualification envelope is €5
-  total across all test attempts, retries and models, using cheap models; it is not €5 per run and
-  does not change monthly product-budget semantics. Reserve a conservative bound across that whole
-  envelope before paid dispatch; unknown cost is never free.
+- One private group of one or an explicitly selected paying group owns shared reported EUR spend;
+  children inherit that payer and never create a per-run or per-child wallet. Concurrent children
+  consume the same reported-spend threshold; exhaustion stops affected active work, while any late
+  provider bill beyond the cutoff is disclosed. There are no upfront estimates or per-request
+  reservations. The live OpenAI MVP qualification envelope remains €5 total across all attempts,
+  retries and models; it is a test cap, not product-budget semantics.
+- Product limits remain monthly EUR ceilings, resetting at 00:00 UTC on the first day of each
+  month. One charge counts against applicable global, selected-group and optional assistant limits
+  without duplicate billing. Unknown usage is not zero; existing work gets no finishing exemption.
 - Late invitees may see all existing history in the joined subchat, but never gain implicit parent
   conversation or private-resource grants.
 - Per-tool approval settings use explicit **Allow automatically / Ask / Block** controls. The
@@ -96,14 +100,14 @@ Complete administration, rich interaction and action recovery keep their later p
 
 | Priority / ID | User outcome and owner | Required contract | Completion evidence |
 | --- | --- | --- | --- |
-| 1 / T1 | Retrieve real company information and explain it. Agent services own assignment; input assembly freezes definitions; conversation turns and MCP own invocation/results. | Current company or personal identity, exact tool revision, authorized connection custody, saved run budget and existing tool dispatch. | A standard remote MCP and a hosted MCP each complete discovery, authenticated invocation and a real read. Personal and company-child chats retain the answer and durable result after reload/restart. Wrong silo, withdrawn tool, revoked grant, stale lease/generation and unavailable credentials fail closed. Recovery cannot repeat dispatch or refresh the continuation allowance. |
+| 1 / T1 | Retrieve real company information and explain it. Agent services own assignment; input assembly freezes definitions; the in-computer TypeScript engine owns progression while the server and MCP own invocation/results. | Current company or personal identity, exact tool revision, authorized connection custody, shared reported EUR cutoff and existing tool dispatch. | A standard remote MCP and a hosted MCP each complete discovery, authenticated invocation and a real read. Personal and company-child chats retain the answer and durable result after reload/restart. Wrong silo, withdrawn tool, revoked grant, stale lease/generation and unavailable credentials fail closed. Recovery cannot repeat dispatch or bypass the shared cutoff. |
 | 2 / T2 | Review and approve a precise external change. IAM owns the decision and effect admission; elicitation owns the participant interaction; MCP owns execution. | T1 dispatch and connection binding; an authorized human approver, exact saved arguments and current permission at execution. | Show target, arguments/changed fields, consequences and connection owner before approval. One approval permits one exact effect. Reject, cancel, expiry, changed arguments, revoked membership/grant/connection and stale attempts prevent dispatch. A timeout after submission is durably uncertain and is never blindly retried. |
 | 3 / M1 | Remember, recall, correct and forget information across conversations. The memory gateway owns fact content; the personal catalog owns metadata, consent and provenance. | Verified gateway-native dataset and stable deletion identity frozen in admitted authority; recoverable correction. | Remember a fact, recall it in a new conversation, correct it and forget it. Show consent/provenance/sensitivity. Other employees, silos and unentitled groups cannot recall it. Failed corrections/deletions can finish safely after restart. Never infer the dataset from a subject ID or rewrite an old run snapshot. |
 | 4 / U1 | Follow and control assistant work. Existing conversation events, workspace stores and reusable components own the experience. | Durable activity/result events and the supported decision/cancellation contracts from T1/T2. | Proposed, running, waiting, failed, cancelled and completed work survives reload and SSE resume. Relevant decisions, result links and cancellation are accessible on desktop and narrow screens. Current access governs every read; projections never authorize work. |
 | 5 / U2 | Use rich choices, forms and results in a conversation. Existing elicitation, A2UI and approved presenters own interaction. | Server-issued interaction identity, permitted audience, expiry and durable accepted responses. | Single/multiple choice, free text and structured results remain accessible after refresh. Stale, duplicate, modified and unauthorized submissions fail safely. Reuse component states, behavioural tests and visual fixtures rather than embedding complex interaction in routed pages. |
 | 6 / F1 | Read documents and receive generated files. Artifact upload, quarantine/scan, input compilation and finalisation retain their owners. | Current artifact grants and scan result; model-readable content and lease-bound output finalisation. | Upload an allowed document, answer from its content, produce a downloadable file and reopen it after reload/closure. Unscanned/infected content stays unavailable. Other users and stale workers cannot read or finalise the artifact. |
-| 7 / D1 | Delegate recursively to other assistants. Extend execution-runs for lineage and shared allowances, execution-inputs for selected context, and conversations for child orchestration and result return. Human-created group children are not autonomous delegation. | T1 tool dispatch, current delegation grants, narrowed context/capabilities, shared root budget/deadline and ancestor cancellation. No fixed nesting, child-count or parallel-execution caps. Memory/files are prerequisites only when selected context uses them. | Authorized children can run in parallel and return durable terminal results or explicit failures. Prove operation beyond the rejected two-level/four-child/two-active defaults, aggregate budget conservation, sibling isolation, cancellation/spawn races, restart and target revocation. The child never implicitly inherits private tools, memory, files or credentials. |
-| 8 / S1 | Create and manage scheduled work from a conversation. Product routine records, revisions and firing admission still need implementation; reuse Absurd for durable waits and execution. | Reviewed immutable routine, timezone/destination, current authority for each firing, overlap/missed-run policy and bounded retry. | Confirm a routine and its next firing; prove scheduled execution, run now, pause/resume, revision and retirement. Duplicate sweeps/restarts cannot repeat a firing. Revocation prevents the next protected effect; results/refusals remain linked to the exact routine. |
+| 7 / D1 | Delegate recursively to other assistants. Extend execution-runs for lineage, execution-inputs for selected context, and conversations for child orchestration and result return. Human-created group children are not autonomous delegation. | T1 tool dispatch, current delegation grants, narrowed context/capabilities, inherited payer, parent Stop scope and absolute deadline. No fixed nesting, child-count, parallel-execution cap or root monetary allowance. Memory/files are prerequisites only when selected context uses them. | Authorized children can run in parallel and return durable terminal results or explicit failures. Prove arbitrary-depth lineage, sibling isolation, cancellation/spawn races, restart and target revocation. The child never implicitly inherits private tools, memory, files or credentials. |
+| 8 / S1 | Create and manage scheduled work from a conversation. Routine/run admission foundations already exist; integrate and qualify them with Absurd for durable waits and execution. | Reviewed immutable routine, timezone/destination, current authority for each firing, inherited payer, overlap/missed-run policy and bounded retry. | Confirm a routine and its next firing; prove scheduled execution, run now, pause/resume, revision and retirement. Duplicate sweeps/restarts cannot repeat a firing. Revocation prevents the next protected effect; results/refusals remain linked to the exact routine. Source foundations are not live qualification. |
 | 9 / A2 | Administer the company through the product. Existing protected APIs and settings owners remain authoritative. | The capability contracts introduced by T1/T2/M1/S1 and current membership/permission checks. | Configure one agent, connection, provider/model, tool selection and budget; inspect effective access/audit and actual recorded usage; revoke access. Employees cannot make admin changes or inspect secrets. Unknown costs are stated as unknown. |
 | 10 / T3 | Resolve interrupted or uncertain actions. The invocation owner preserves receipts; protected user/operator controls request reconciliation and supported repair. | Durable exact effect identity, provider receipts/status lookup and a provider-specific safe retry contract. | Reconcile an uncertain effect without duplicating it, explain cancellation races, preserve every attempt and resolution, and expose supported safe retry or explicit manual resolution. Reload/restart does not erase uncertainty or invent success. |
 
@@ -123,8 +127,8 @@ The user's latest decision supersedes the numerical depth, fan-out and concurren
 and #320. The architecture must support arbitrary-depth recursion and parallel children without an
 application-level child-count or active-child ceiling. Available infrastructure and provider capacity
 still determine how much work can physically run; those constraints are not a replacement product
-policy cap. All work retains the original root budget and absolute deadline, with no new allowance
-merely because a child is created or restarted.
+policy cap. All work retains the inherited payer and absolute deadline; creating or restarting a
+child does not create a new financial owner.
 
 Spawning returns a durable child handle without waiting for that child's final result. Collecting or
 waiting for results is a separate step, so the parent can start siblings concurrently. Every child
@@ -141,11 +145,15 @@ are interrupted where supported; uncertain or already-completed writes remain vi
 undone by cancellation. Confirmed stopped requires descendants and owned work to have settled, not
 merely delivery of a cancellation signal.
 
-Implementation must partition spending authority before issuing model credentials. The current
-full-attempt key cannot safely remain valid while a child receives a second copy of its allowance.
-Reservations must conserve the root allowance across concurrent children, retries and lost responses;
-uncertain issued spending cannot be refunded on restart. Current requester and target permissions,
-explicitly selected readable context and narrowing capability ceilings remain independent gates.
+Children inherit the admitted payer and parent Stop scope; there is no per-run, child or root
+monetary allowance. Shared reported spend is enforced at the model boundary, and concurrent work
+stops when the shared threshold is exhausted. Current requester and target permissions, explicitly
+selected readable context and narrowing capability ceilings remain independent gates.
+
+The detailed executor/reservation narratives below are **HISTORICAL** and superseded by the
+computer-owned TypeScript engine and reported-spend policy. Preserve their lineage, Stop-race, idempotency,
+unknown-outcome and recovery evidence when implementing the replacement; do not carry forward their
+financial reservation instructions.
 
 This decision authorizes source changes and their reviewed clean baseline only. It does not create
 live delegation grants, approve an external action, deploy a silo, or establish completed MVP proof.
@@ -158,13 +166,13 @@ the race between already-saved output and cancellation; Absurd resumes admitted 
 
 | Observed tree/subtree state | Event | Required outcome and guard |
 | --- | --- | --- |
-| Accepting work; every ancestor still eligible | Spawn | Recheck target, selected context and Delegate authority; reserve within the original budget; commit immutable lineage and the child task receipt under the same tree fence. No depth or child-count check. |
-| Accepting work | Model or external-tool admission | Reserve from the shared pool and check every ancestor's eligibility. Issue only the credential allowed by that saved reservation. |
+| Accepting work; every ancestor still eligible | Spawn | Recheck target, selected context and Delegate authority; commit immutable lineage and the child task receipt under the same tree fence. No depth or child-count check. |
+| Accepting work | Model or external-tool admission | Check every ancestor's eligibility and the inherited payer at the owning server boundary. Issue only the credential allowed by that saved authority. |
 | Accepting work | Authorized Stop | Atomically close new admissions for the selected subtree and persist recoverable cleanup. Root Stop selects the entire tree; a branch Stop leaves siblings eligible. |
 | Accepting work | Parent final output, terminal failure or deadline | Close the subtree to new admissions and start descendant cleanup. Preserve committed output; do not expose terminal tree completion while owned descendants still run. |
 | Stopping or finishing | Concurrent/replayed spawn or new effect | Refuse new work. A child committed before the closing fence belongs to cleanup; one losing that race cannot escape it. |
 | Stopping or finishing | Descendant output or provider completion arrives | Retain its exact outcome/recovery evidence without restarting its parent or refunding uncertain spend. Cancel pending approvals and provider-free work through their existing owners. |
-| Stopping or finishing | Worker replacement or repeated Stop | Resume the saved task and per-descendant receipts. Do not create another stop decision, credential, allowance or child. |
+| Stopping or finishing | Worker replacement or repeated Stop | Resume the saved task and per-descendant receipts. Do not create another stop decision, credential, financial owner or child. |
 | Stopping or finishing | All descendant workflows, credentials and active claims settle | Finalize once. Report any uncertain external outcome separately from the fact that no further owned work may run. |
 | Terminal | Replayed spawn, Stop or terminal result | Return the saved outcome or refuse a new command; never reopen the tree. |
 
@@ -179,15 +187,15 @@ At source `39432f27351b1193092dabc553520291481d9729`, runs have no parent/root f
 run only, credentials cover a complete attempt, and turn admission requires a human-authored
 trigger. Therefore removing settings or adding a Stop button would not deliver this capability.
 
-1. **Tree and reservation authority:** extend `execution/runs` contracts, schema, reviewed baseline
-   and repositories with immutable lineage, conserved reservations and inherited cancellation
-   evidence. A child references its ancestor's authorized Stop; it must not pretend to have received
-   a separate browser command. Register actual transaction-bound repositories in Prisma policy.
-2. **Independent owners, in parallel after those contracts:** extend reservation-scoped credential
+1. **Tree and Stop authority:** extend `execution/runs` contracts, schema, reviewed baseline and
+   repositories with immutable lineage, inherited payer and cancellation evidence. A child
+   references its ancestor's authorized Stop; it must not pretend to have received a separate
+   browser command. Register actual transaction-bound repositories in Prisma policy.
+2. **Independent owners, in parallel after those contracts:** extend attempt-scoped credential
    custody and per-effect fences; extend the existing Stop workflow and terminal finalization to
    settle descendants; extend `execution/inputs` with delegated provenance, selected context and
-   narrowing permissions. No branch may mint keys against both the old full-attempt allowance and
-   a fresh child allocation. No child message may impersonate a human author.
+   narrowing permissions. No branch may bypass the inherited payer or parent Stop scope. No child
+   message may impersonate a human author.
 3. **Complete the product path:** offer first-party spawn and join/read tools through focused
    capability types, admit independent child history/activation through existing Absurd ownership,
    and return each durable terminal result once. Keep delegation operations distinct from MCP
@@ -201,7 +209,7 @@ The existing admission gate is not an active-child execution policy. Do not intr
 Temporary capacity shortages must retain admitted work for recovery under its original deadline,
 not discard children or silently reduce a requested parallel tree to serial execution.
 
-## First execution wave: real tool retrieval
+## First execution wave: real tool retrieval (HISTORICAL source narrative)
 
 The review stack is `develop` → #831 (member access) → #843 (library/component decomposition)
 → #849 (Absurd turns) → [#850](https://github.com/elewa-git/opencrane/pull/850) (company tool selection). The first slice starts from immutable
@@ -257,9 +265,9 @@ generation, current tool permission and saved arguments. Credentials are used on
 MCP endpoint and never copied into model input, conversation history or sandbox commands. Endpoint
 and authorization discovery must reject unintended internal targets and credential-bearing redirects.
 
-The remote MCP server owns its own provider implementation. OpenCrane owns permission, approval,
-budget, invocation evidence and conversation output, with Absurd selecting durable steps and handling
-restart. A lost response after a call is not permission to replay an external effect. Use the existing
+In the target architecture, the remote MCP server owns its provider implementation. OpenCrane owns
+permission, approval, spend and invocation evidence; the in-computer engine selects the next agent
+step. A lost response after a call is not permission to replay an external effect. Use the existing
 invocation evidence and recovery owners; do not introduce another orchestration mechanism.
 
 ### Hosted MCP execution
@@ -271,8 +279,9 @@ process and the ConversationComputer. Reuse the existing MCP executor where its 
 
 Remote and hosted MCPs share the catalogue, tool discovery, immutable definitions, assignment,
 permissions, approval, invocation evidence and results. They have explicit transport and execution
-policies; neither mode is a fallback for the other. Absurd remains the workflow owner. Hosting an
-MCP server does not give it authority to schedule model work or acquire a new budget.
+policies; neither mode is a fallback for the other. Durable hosted-executor workflows remain separate
+from the computer's agent loop. Hosting an
+MCP server does not give it authority to schedule model work or acquire new spending authority.
 
 The hosted slice must make scoped credentials and provider connectivity usable by an ordinary MCP
 server without exposing unrelated connections. The current uploaded-image sandbox has neither;
@@ -287,7 +296,11 @@ revocation before dispatch, stale lease/generation rejection, bounded resource u
 blind replay of an uncertain effect, and cleanup. First-journey remote qualification does not close
 this hosted slice or imply that arbitrary uploaded executables have authenticated egress.
 
-## Next wave: approved external actions
+## Approved external actions — historical checkpoint and retained acceptance
+
+The next paragraph records the previous executor's source state, not the implementation status of
+the new in-computer engine or reported-spend cutoff. Its model-step ownership and run allowance are superseded
+by the computer-owned execution plan; the approval and external-effect acceptance below survives.
 
 The personal model and proposal path now uses the existing IAM deferred-approval owner and waits
 through Absurd with the original run allowance. It saves reviewed arguments, schema, action identity,
@@ -313,12 +326,14 @@ proof that the provider completed the change. Broad provider-specific reconcilia
 
 ## Ownership and delivery gates
 
-Absurd owns durable progression, checkpoints, waiting and restart selection of saved steps.
-AgentSandbox owns the isolated execution environment under current lease and generation coordinates.
-The server owns model authority, credentials, budgets, tool permission, model calls, continuation and
-conversation output. KurrentDB stores immutable history; PostgreSQL remains the current authorization
-authority; the memory gateway owns long-term fact access. Do not add another scheduler, queue, outbox,
-broker, credential store or Pod model scheduler. Replaced code is deleted completely.
+The extracted in-computer TypeScript engine owns agent progression, checkpoints, waits and local
+artifact generation; Absurd owns routine/cleanup workflows and their recovery, not agent-step
+selection. AgentSandbox owns the isolated execution environment under current lease and generation
+coordinates. The server enforces
+model authority, credentials, shared reported spend, tool permission and admission gates; KurrentDB
+stores immutable bidirectional history, PostgreSQL remains current authorization authority, and the
+memory gateway owns long-term fact access. Do not add another scheduler, queue, outbox, broker,
+credential store or Pod model scheduler. Replaced code is deleted completely.
 
 For every coherent slice:
 
@@ -352,9 +367,11 @@ or compatibility scaffolding. Release scope and tags require their own explicit 
 
 ## Later work
 
-Published applications, mini-app previews, internal CodeService and general code work are deferred
-until after the ten priorities. Internal Git, broad marketplaces, warm pooling and extra compute tiers
-are not prerequisites. Optional external-agent protocol compatibility does not transfer server
+Managed-computer local code and artifact generation are now part of MVP delivery. Published
+applications, general desktop marketplace distribution, a standalone mini-app hosting product and
+internal CodeService remain later work. Local browser previews are part of the managed computer.
+Internal Git, broad marketplaces, warm pooling and extra compute
+tiers are not prerequisites. Optional external-agent protocol compatibility does not transfer server
 model/tool authority or durable ownership to external agents.
 
 See also: [Active plan](../../plan.md), [product contract](personal-agent-platform-product-contract.md),

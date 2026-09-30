@@ -44,7 +44,7 @@ function _Authorization(): AuthorizationAuthority
 	return {
 		decide: vi.fn(),
 		decidePrincipal: vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow }),
-		admit: vi.fn(),
+		admit: vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { operationId: "operation-budget" } }),
 		admitPrincipal: vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { operationId: "operation" } }),
 		admitPrincipalBatch: vi.fn().mockResolvedValue([
 			{ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { operationId: "operation-routine" } },
@@ -87,6 +87,7 @@ describe("PrismaRoutineOccurrenceRunAdmissionRepository", function _Suite()
 		await expect(f.repository.authorize(_Command())).resolves.toBe(true);
 		expect(f.transaction.agentRoutineFiring.findFirst).toHaveBeenCalled();
 		expect(f.transaction.agentRoutineFiring.updateMany).not.toHaveBeenCalled();
+		expect(f.authorization.admit).toHaveBeenCalledWith(expect.objectContaining({ action: "use", boundary: { kind: "group", groupId: "group-1" }, resource: { kind: "budget", id: "group:group-1" } }));
 	});
 
 	it.each([

@@ -35,6 +35,7 @@ export function _Routine(overrides: Partial<RoutineRow> = {}): RoutineRow
 		requesterAuthenticatedAt: new Date(_CALLER.authenticatedAt),
 		destinationConversationId: "destination-1",
 		selectedManagedServiceId: "service-1",
+		payingGroupId: "group-1",
 		status: AgentRoutineStatus.Active,
 		currentRevision: 2,
 		lifecycleRevision: 4,
@@ -133,7 +134,7 @@ export function _FiringRow(overrides: Record<string, unknown> = {})
 		workflowTaskKey: _OCCURRENCE_TASK.idempotencyKey,
 		preparationReceipt: null,
 		activationReceipt: null,
-		routine: { destinationConversationId: "destination-1", selectedManagedServiceId: "service-1", originalRequesterPrincipalId: "principal-1", requesterIssuer: _CALLER.issuer, requesterSubjectId: _CALLER.subjectId, requesterAuthenticatedAt: new Date(_CALLER.authenticatedAt) },
+		routine: { destinationConversationId: "destination-1", selectedManagedServiceId: "service-1", originalRequesterPrincipalId: "principal-1", requesterIssuer: _CALLER.issuer, requesterSubjectId: _CALLER.subjectId, requesterAuthenticatedAt: new Date(_CALLER.authenticatedAt), payingGroupId: "group-1", payingGroupAuthorizationDecisionDigest: `sha256:${"a".repeat(64)}`, payingGroupAuthorizationPolicyRevisionHash: `sha256:${"b".repeat(64)}`, payingGroupEffectiveAuthorizationDigest: `sha256:${"c".repeat(64)}` },
 		revision: { instructionKeyId: _INSTRUCTION.keyId, instructionNonce: _INSTRUCTION.nonce, instructionAuthTag: _INSTRUCTION.authTag, instructionCiphertext: _INSTRUCTION.ciphertext, instructionCiphertextDigest: _INSTRUCTION.ciphertextDigest, audiencePrincipalIds: ["principal-1", "principal-2"] },
 		...overrides,
 	};

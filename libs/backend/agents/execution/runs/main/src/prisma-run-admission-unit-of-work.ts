@@ -8,7 +8,7 @@ import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, Authorizati
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { RunAdmissionPersistenceRepository } from "./run-admission-persistence.types";
-import { RunAdmissionBuildOutcomes, RunAdmissionDenialReasons, RunAdmissionExistingVerificationOutcomes, RunAdmissionMessageInputModes, RunAdmissionOutcomes, type InitialRunAuthority, type RunAdmissionBuild, type RunAdmissionBuildResult, type RunAdmissionClock, type RunAdmissionCommand, type RunAdmissionCommit, type RunAdmissionExistingVerifier, type RunAdmissionPrepare, type RunAdmissionRepository, type RunAdmissionResult, type RunAdmissionTransaction } from "./run-admission.types";
+import { RunAdmissionBuildOutcomes, RunAdmissionDenialReasons, RunAdmissionExistingVerificationOutcomes, RunAdmissionMessageInputModes, RunAdmissionOutcomes, type InitialRunAuthority, type RunAdmissionBuild, type RunAdmissionBuildResult, type RunAdmissionClock, type RunAdmissionCommand, type RunAdmissionCommit, type RunAdmissionExistingVerifier, type RunAdmissionPayer, type RunAdmissionPrepare, type RunAdmissionRepository, type RunAdmissionResult, type RunAdmissionTransaction } from "./run-admission.types";
 import { __DigestRunInputSnapshot } from "./run-input-snapshot-digest";
 
 /** Forces Prisma to roll back authority writes whenever later admission checks refuse the run. */
@@ -65,7 +65,7 @@ export class PrismaRunAdmissionUnitOfWork implements RunAdmissionRepository
 					if (duplicate.outcome === RunAdmissionOutcomes.Denied)
 						return duplicate;
 					const verifiedAt = clock.now();
-					const verified = await verifyExisting(duplicate.snapshot, { prisma: transaction, authorization, admittedAt: verifiedAt.toISOString(), admittedAtEpochMs: verifiedAt.getTime() });
+					const verified = await verifyExisting(duplicate.snapshot, duplicate.payer, { prisma: transaction, authorization, admittedAt: verifiedAt.toISOString(), admittedAtEpochMs: verifiedAt.getTime() });
 					if (verified.outcome === RunAdmissionExistingVerificationOutcomes.Denied)
 						throw new _AdmissionDenied(verified.reason);
 					return duplicate;
@@ -88,7 +88,7 @@ export class PrismaRunAdmissionUnitOfWork implements RunAdmissionRepository
 				await persistence.persist(command, compiled.value, admittedAt);
 				if (commit !== undefined)
 					await commit(transactionContext, compiled.value);
-				return { outcome: RunAdmissionOutcomes.Accepted, snapshot: compiled.value.snapshot };
+				return { outcome: RunAdmissionOutcomes.Accepted, payer: compiled.value.payer, snapshot: compiled.value.snapshot };
 			});
 		}
 		catch (error)
@@ -118,7 +118,7 @@ export class PrismaRunAdmissionUnitOfWork implements RunAdmissionRepository
 				if (recovered === null || recovered.outcome === RunAdmissionOutcomes.Denied)
 					return recovered;
 				const verifiedAt = clock.now();
-				const verified = await verifyExisting(recovered.snapshot, { prisma: transaction, authorization, admittedAt: verifiedAt.toISOString(), admittedAtEpochMs: verifiedAt.getTime() });
+				const verified = await verifyExisting(recovered.snapshot, recovered.payer, { prisma: transaction, authorization, admittedAt: verifiedAt.toISOString(), admittedAtEpochMs: verifiedAt.getTime() });
 				return verified.outcome === RunAdmissionExistingVerificationOutcomes.Denied ? { outcome: RunAdmissionOutcomes.Denied, reason: verified.reason } : recovered;
 			});
 		}
@@ -169,7 +169,8 @@ class PrismaRunAdmissionRepository implements RunAdmissionPersistenceRepository
 		const run = await this._transaction.agentRun.findUnique({ where: { siloId_requestIdempotencyKey: { siloId: command.siloId, requestIdempotencyKey: command.requestIdempotencyKey } } });
 		if (run === null)
 			return null;
-		if (!_MatchesRun(run, command))
+		const payer = _RunAdmissionPayer(run);
+		if (!_MatchesRun(run, command) || payer === undefined)
 			return { outcome: RunAdmissionOutcomes.Denied, reason: RunAdmissionDenialReasons.AuthorityConflict };
 		if (command.trigger !== AgentRunTriggers.Interactive && !await this._MatchesRoutineFiring(run.id, command))
 			return { outcome: RunAdmissionOutcomes.Denied, reason: RunAdmissionDenialReasons.AuthorityConflict };
@@ -179,7 +180,7 @@ class PrismaRunAdmissionRepository implements RunAdmissionPersistenceRepository
 		const snapshot = _RunInputSnapshot(row);
 		if (!_HasValidSnapshotDigest(snapshot))
 			throw new Error("Recovered run input snapshot digest is invalid");
-		return { outcome: RunAdmissionOutcomes.Idempotent, snapshot };
+		return { outcome: RunAdmissionOutcomes.Idempotent, payer, snapshot };
 	}
 
 	/** Persist the logical run and its first append-only snapshot as one deferred-relation pair. */
@@ -187,7 +188,8 @@ class PrismaRunAdmissionRepository implements RunAdmissionPersistenceRepository
 	{
 		const subject = _ExecutionSubject(value.snapshot.executionSubject, value.snapshot.executionSubject.agentIdentityId, value.snapshot.executionSubject.principalId);
 		const routine = command.trigger === AgentRunTriggers.Interactive ? null : command.routineInput;
-		const data: Prisma.AgentRunUncheckedCreateInput = { id: command.runId, siloId: command.siloId, agentServiceId: value.authority.agentServiceId, agentRevisionId: value.authority.agentRevisionId, conversationId: command.conversationId, trigger: _PrismaRunTrigger(command), routineFiringId: routine?.firingId ?? null, routineId: routine?.routineId ?? null, routineRevision: routine?.routineRevision ?? null, routineScheduledSlot: routine?.scheduledSlot === null || routine === null ? null : new Date(routine.scheduledSlot), agentIdentityId: subject.agentIdentityId, principalId: subject.principalId, executionSubject: _Json(subject), requestIdempotencyKey: command.requestIdempotencyKey, inputSnapshotDigest: value.snapshot.digest, acceptedAt: admittedAt };
+		const payer = value.payer;
+		const data: Prisma.AgentRunUncheckedCreateInput = { id: command.runId, siloId: command.siloId, agentServiceId: value.authority.agentServiceId, agentRevisionId: value.authority.agentRevisionId, conversationId: command.conversationId, trigger: _PrismaRunTrigger(command), routineFiringId: routine?.firingId ?? null, routineId: routine?.routineId ?? null, routineRevision: routine?.routineRevision ?? null, routineScheduledSlot: routine?.scheduledSlot === null || routine === null ? null : new Date(routine.scheduledSlot), agentIdentityId: subject.agentIdentityId, principalId: subject.principalId, payingGroupId: payer?.payingGroupId ?? null, payingGroupAuthorizationDecisionDigest: payer?.authorization.decisionDigest ?? null, payingGroupAuthorizationPolicyRevisionHash: payer?.authorization.policyRevisionHash ?? null, payingGroupEffectiveAuthorizationDigest: payer?.authorization.effectiveAuthorizationDigest ?? null, executionSubject: _Json(subject), requestIdempotencyKey: command.requestIdempotencyKey, inputSnapshotDigest: value.snapshot.digest, acceptedAt: admittedAt };
 		await this._transaction.agentRun.create({ data });
 		await this._transaction.runInputSnapshot.create({ data: _RunInputSnapshotData(value.snapshot) });
 		if (command.trigger !== AgentRunTriggers.Interactive)
@@ -265,6 +267,8 @@ function _MatchesAdmission(value: RunAdmissionBuild, command: RunAdmissionComman
 	const parsed = ___ExecutionSubjectSchema.safeParse(value.snapshot.executionSubject);
 	if (!parsed.success)
 		return false;
+	if (!_MatchesPayerKind(value.payer, parsed.data.membership.kind))
+		return false;
 	return value.authority.agentServiceId === command.agentServiceId
 		&& value.authority.agentRevisionId === value.snapshot.agentRevisionId
 		&& value.authority.trigger === command.trigger
@@ -284,6 +288,52 @@ function _MatchesAdmission(value: RunAdmissionBuild, command: RunAdmissionComman
 		&& parsed.data.runScope.agentServiceId === command.agentServiceId
 		&& parsed.data.runScope.agentRevisionId === value.authority.agentRevisionId
 		&& parsed.data.computerScope.siloId === command.siloId;
+}
+
+/** Require all four stored payer fields together and valid digest encodings. */
+function _HasValidStoredPayer(run: AgentRun): boolean
+{
+	const values = [run.payingGroupId, run.payingGroupAuthorizationDecisionDigest, run.payingGroupAuthorizationPolicyRevisionHash, run.payingGroupEffectiveAuthorizationDigest];
+	if (values.every(value => value === null))
+		return true;
+	return typeof run.payingGroupId === "string" && run.payingGroupId.trim().length > 0
+		&& _IsDigest(run.payingGroupAuthorizationDecisionDigest)
+		&& _IsDigest(run.payingGroupAuthorizationPolicyRevisionHash)
+		&& _IsDigest(run.payingGroupEffectiveAuthorizationDigest);
+}
+
+/** Map an all-null or complete AgentRun payer tuple and reject partial stored evidence. */
+export function _RunAdmissionPayer(run: AgentRun): RunAdmissionPayer | null | undefined
+{
+	if (!_HasValidStoredPayer(run))
+		return undefined;
+	if (run.payingGroupId === null)
+		return null;
+	return {
+		payingGroupId: run.payingGroupId,
+		authorization: {
+			decisionDigest: run.payingGroupAuthorizationDecisionDigest as `sha256:${string}`,
+			policyRevisionHash: run.payingGroupAuthorizationPolicyRevisionHash as `sha256:${string}`,
+			effectiveAuthorizationDigest: run.payingGroupEffectiveAuthorizationDigest as `sha256:${string}`,
+		},
+	};
+}
+
+/** Require managed execution to carry one complete payer and personal execution to carry none. */
+function _MatchesPayerKind(payer: RunAdmissionPayer | null, membershipKind: ExecutionSubjectMembershipKinds): boolean
+{
+	if (membershipKind !== ExecutionSubjectMembershipKinds.Managed)
+		return payer === null;
+	return payer !== null && payer.payingGroupId.trim().length > 0
+		&& _IsDigest(payer.authorization.decisionDigest)
+		&& _IsDigest(payer.authorization.policyRevisionHash)
+		&& _IsDigest(payer.authorization.effectiveAuthorizationDigest);
+}
+
+/** Recognize one canonical SHA-256 authorization digest. */
+function _IsDigest(value: string | null): value is `sha256:${string}`
+{
+	return value !== null && /^sha256:[0-9a-f]{64}$/u.test(value);
 }
 
 /** Require one exact final message provenance for a conversation and no message input for non-conversational work. */

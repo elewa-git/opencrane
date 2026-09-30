@@ -27,12 +27,27 @@ authoritative for memberships, grants, approvals, budgets, and transaction-bound
 See [ADR 0016](../adr/0016-conversation-history-and-computers.md). Artifact bytes live behind
 `ArtifactStore`; database records own their identity, version, authorization, and lineage.
 
-The server freezes the run snapshot and owns model selection, tool continuation, and canonical
-conversation output. A conversation-computer Pod receives none of that material; it prepares the
-isolated workspace and review surface and owns no durable product authority. Agent Sandbox starts
-or replaces the Pod after the server admits a claim for the configured profile. The active computer
-lease fences the current generation. Kubernetes objects project that admitted work; their existence
-does not authorise a run.
+The target computer is the assistant's managed laptop. OpenCrane's extracted TypeScript execution
+engine inside the conversation-computer Pod owns the live reasoning and tool loop, context and
+checkpoints, local code and files, and its persistent browser session. OpenCrane does not schedule
+each thought or authorize each local file write. It admits and supervises the session, constrains
+protected capabilities and spend, and owns durable user-visible lifecycle and decisions through
+service boundaries.
+
+`AgentRun` remains a small trusted registration outside the Pod: it binds identity, lineage, payer,
+current authorization, assignment, attempt and lifecycle. Approval decisions, external-effect
+receipts, published artifacts and memory remain with their existing OpenCrane owners. The Pod has no
+full Prisma credentials and cannot turn possession of a run, lease or network address into product
+authority. Agent Sandbox starts or replaces the admitted Pod, and the active computer lease fences
+its current generation. Kubernetes objects project that admission; their existence does not
+authorise a run.
+
+The current source still runs the model/tool continuation loop in the server and exposes only a
+bounded workspace and review surface from the Pod. That is implementation evidence, not the target
+architecture. Replace the server loop directly only after the computer-owned counterpart proves
+restart, Stop and protected-effect behavior; do not retain two active loops or a runtime fallback.
+The phased replacement and qualification gates are recorded in the
+[computer-owned execution plan](../design/computer-owned-execution-plan.md).
 
 ## Organisation boundary
 
@@ -103,21 +118,30 @@ generation; the server admits serial run attempts only after that lease exists. 
 Pod lifecycle. Runtime service accounts have no Kubernetes API permission. Cooling and replacement
 preserve workspace checkpoints and ordered conversation history, as described in ADR 0016.
 
-Runtime commands and output candidates must bind the current run, attempt, assignment, sequence,
-expiry, and proof key. Cancellation closes command, approval, and output admission before workload
-cleanup completes.
+KurrentDB carries durable, bidirectional session commands, progress, decisions and results through
+the existing authenticated gateway. It is not a per-token or per-step approval protocol and must not
+become a second reasoning loop. Runtime commands and output candidates bind the current run,
+attempt, assignment, sequence, expiry, and proof key. Cancellation closes new protected effects and
+output admission before workload cleanup completes. Root and branch Stop remain race-safe durable
+platform commands; timeouts and leases remain lifecycle fences rather than fixed reasoning limits.
 
 ## External actions
 
 Model, tool, memory, and artifact access passes through OpenCrane-owned ports:
 
-- LiteLLM provides model access under attempt-scoped policy;
+- the model gateway enforces the selected provider/model policy and reported-spend cutoff without
+  exposing provider master keys;
 - admitted immutable OCI images execute Model Context Protocol calls in isolated executor Jobs;
 - memory access uses explicit organisation and subject scopes;
-- artifact bytes use short-lived, purpose-bound leases.
+- artifact bytes use short-lived, purpose-bound leases; and
+- external tools apply current connection-and-tool **Allow automatically / Ask / Block** policy and
+  preserve one-use effect evidence before a business write.
 
 A runtime never receives provider master keys, integration credentials, storage master keys, or
-direct database access.
+direct database access. Network reachability is not authorization: every protected service derives
+the caller's projected workload identity and rechecks the exact admitted coordinates. Local browser
+automation also cannot bypass governed MCP business-write policy through raw browser debugging
+access or uncontrolled credentials.
 
 ## Artifacts and OCI images
 

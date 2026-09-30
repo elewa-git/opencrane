@@ -1,5 +1,447 @@
 # OpenCrane — Active Plan
 
+## Current direction: computer-owned execution — 30 September 2026
+
+The computer is the working assistant with a managed laptop. The selected direction extracts and
+adapts OpenCrane's existing TypeScript execution engine into the existing conversation-computer Pod;
+that engine owns reasoning, tool sequencing, code, files, browser and checkpoints. OpenCrane
+constrains access and spending and supervises lifecycle; it does not control each internal step. The
+authoritative next sequence is [computer-owned execution](docs/design/computer-owned-execution-plan.md),
+with the change/impact table, replacement preflight, survivor/replacement boundaries and exact
+acceptance requirements.
+
+Start with dependency and direct-replacement preflight, then one meaningful computer-owned task:
+model response → local code/tool → observed result → model → report, with checkpoint recovery and
+Stop. Codex and OpenHands adoption are not prerequisites or the selected implementation. Preserve
+the current product foundations and delete the old server loop only with its direct replacement.
+No dual agent executor or compatibility bridge is planned.
+
+Personal spending uses a real private group of one. All children inherit the selected paying group;
+no request-cost reservations or run/child wallets. Reported-spend cutoff stops active work and
+refuses further paid calls, while retaining in-flight/late charges. The final bill can overshoot.
+Recursive delegation and schedules remain mandatory MVP capabilities, without fixed spawn caps.
+
+Hold the dirty descendant-Stop integration unchanged until its effects are rewired to the new
+computer/gate boundary. Its tests and unresolved SQL constraint remain evidence, not qualification
+of the new path. Do not finish qualifying the obsolete server executor as the next milestone.
+
+This is a documentation-only steering change on the implementation branch. No source, database,
+provider, VM or deployment behavior changed. The earlier 18–32 engineering-day forecast belonged
+to an unselected external-harness path and is superseded. Re-estimate the extraction only after the
+replacement preflight; all existing product acceptance gaps remain visible in the MVP plan.
+
+After this planning checkpoint is committed and published for review, start the implementation track
+in a separate task from that committed checkpoint. Do not carry the preserved uncommitted descendant-
+Stop overlay into its base. Publication, CI, merge, deployment and live proof remain distinct states;
+this paragraph authorizes preparation of the PR, not a claim that it already exists.
+
+The dated checkpoints below preserve historical source and validation evidence. This section and
+its linked plan supersede their conflicting executor, reservation and personal-budget directions.
+
+## Shared spending cutoff direction — 30 September 2026
+
+The user rejected advance request-cost estimation for decision B: children may run concurrently
+against the same EUR spending limit without estimated per-request reservations or fixed spawn and
+parallelism limits. When reported spending reaches an applicable global, group or agent limit,
+stop the affected active work and descendants and refuse further dispatch; already-running work
+has no exemption. This supersedes the provider-counted hard-invoice-ceiling proposal, not the
+existing permission, payer, deadline or duplicate-dispatch safeguards. Charges for requests already
+in flight can arrive after cancellation, so this is a spending-triggered cutoff, not a guaranteed
+maximum final bill. Accounting must retain late and uncertain charges rather than erase them.
+
+This direction is recorded, not implemented by the adjacent human Stop source slice. The current
+reservation-based ledger and provider-counting proposal need a separately reviewed replacement
+plan before being represented as matching this policy. No paid tests or live settings changed.
+
+## Approved descendant Stop integration — 30 September 2026
+
+The user explicitly approved decision A: source-only propagation of a requester-authorized parent
+Stop to its actual descendants, including cancellation of saved work, temporary credential
+revocation and terminal cleanup records while retaining incurred and uncertain charges. This
+resolves the earlier edit-safety pause for that human Stop integration only. Decision B is still
+under explanation, not approved; decision C (draft publication and fresh-database CI) is pending.
+
+The integration starts at `1a40f0166dadf5b7ef19ebfa1c5675d33477e36d`; the cumulative review base
+remains `2248132e49054734e53023f6fe0e6c9f1459859f`. Sol owns the production port from the preserved
+descendant-stop worktree, Luna owns its test port, and root owns current-schema generation,
+validation and commit. The existing payer fields, monthly EUR ledger and BudgetExhausted reason
+must survive. This does not implement system-origin budget Stop, autonomous spawn/join, or live
+recursive cancellation. No live task, database, provider, VM, publication or deployment is in scope.
+
+The port is applied but not committed or database-qualified. Focused descendant repository and
+Stop workflow tests each pass six cases; the state-transition file passes three. The full models
+suite passes 163 cases. The execution-runs ordinary run passes 246 cases and skips 15 SQL cases,
+with five router cases initially blocked by local-listener permissions; those five pass in a
+separate authorized rerun. The payer-admission fixture passes 12 cases. Review found and the
+implementer fixed the additional scheduling and history terminal-reason mappings; the history
+file now passes 23 cases with a valid Cancelled/AncestorStopped fixture. These counts overlap.
+The final execution-runs, scheduling and opencrane type checks pass after those mapping and fixture
+corrections; the conversations and models type checks had already passed for unchanged source.
+
+Review also found that the Failed-state database constraint must exclude AncestorStopped, which
+belongs only to cancelled descendants. The source-only tightening was rejected atomically by
+the edit-safety check, which interpreted the added NOT IN exclusion as a broadening. No retry or
+workaround was attempted; renewed explicit approval was requested. A SQL negative regression
+is added but unexecuted. The Prisma client was generated once from the approved additive schema;
+baseline regeneration, release digest update, final review and commit wait for this correction.
+No PostgreSQL, provider or live-product qualification is claimed.
+
+## Provider deadline regression — 30 September 2026
+
+This test-only increment starts at `451f68dd83a2ff1b7bfb67cf58febb739c2af443`.
+The reported slow-credential risk does not permit an expired model dispatch: the existing model
+flow checks the frozen deadline after credential issuance and records unavailable recovery before
+calling the provider. A new public-authority regression advances the clock to that deadline during
+issuance, checks that no model request is sent, and proves the saved unavailable state survives a
+restart without redispatch. All 29 focused model-progression tests pass, as does the whitespace check.
+Independent review confirms the regression reaches the deadline guard and passes with no findings.
+The first broader package run passed 999 tests but failed 61 router tests on forbidden local socket
+listeners (`EPERM`). With scoped permission for those test servers, the uncached ordinary Nx target
+passes all 1,060 tests across 109 files on `c7949a6e67c11254f3e381e00be719bb5c4b5a42`, with no
+failures or skips. It ran with one worker, dependency tasks disabled and database/integration URLs
+unset; it did not regenerate the shared client or run SQL, external-provider or live-product tests.
+The current release-manifest check also passes. These results qualify the conversation unit suite,
+not the missing fresh-database or authenticated end-to-end acceptance.
+
+This evidence does not qualify live latency, credential expiry after long approval waits, or the
+complete recovery journey. No production deadline, credential, permission, provider, database or
+deployment behavior changed. The descendant integration, provider-counted budget path and draft
+publication decisions remain pending. Live PR ancestry still passes at snapshot
+`743fa14fcf29075e99fec582317b66f3c11b8fe38eaa86b3689faf0b40afff47`; the starting HEAD merges
+cleanly with develop `10abd0ef6182f36bec13d8f1358e43b15ead7cd5`.
+
+## Descendant-cleanup integration paused — 30 September 2026
+
+The source checkpoint is `7d4e1a140c1356e27ede8f64529b2a607683f9c9`. Live PR ancestry still
+passes at snapshot `743fa14fcf29075e99fec582317b66f3c11b8fe38eaa86b3689faf0b40afff47`.
+The current architecture review confirms that automatic budget Stop needs durable system-origin
+cleanup evidence; the requester-bound human Stop fields cannot be reused to invent a human
+decision. The existing descendant-cleanup foundation remains the first integration prerequisite.
+
+An attempted source-only port of the reviewed human descendant-Stop implementation from
+`/private/tmp/opencrane-descendant-stop.TlTDD5` was rejected atomically by the edit safety gate.
+The gate requires renewed explicit approval acknowledging recursive child cancellation, temporary
+credential revocation, branch closure and terminal-state writes. No production patch was applied,
+and no split or alternative retry is authorized by automatic goal continuation. The original source
+worktree is preserved. Test-only port edits were removed from this branch so it does not retain
+tests for an absent implementation. No client or baseline regeneration, database change, provider
+call, VM operation, workflow dispatch or publication ran.
+
+Three scoped decisions have been requested: this descendant Stop source integration; a trustworthy
+provider-counted request path for hard budgets; and draft publication after #916 plus fresh-database
+CI qualification once the source passes review. None is implicit in this status note. The full MVP
+goal remains active, with source completion and live acceptance still distinct.
+
+## Admit new work after a completed Stop — 30 September 2026
+
+This increment starts at `f16d47c4ec5c479012110ac0c4b48ccd51d4b5b5`; the cumulative review
+base remains `2248132e49054734e53023f6fe0e6c9f1459859f`. Live PR ancestry passes at unchanged
+snapshot `743fa14fcf29075e99fec582317b66f3c11b8fe38eaa86b3689faf0b40afff47`.
+
+Current source confirms a concrete continuation defect identified in the separate MVP assessment:
+the interactive and routine conversation-context queries exclude Completed and Failed runs but
+still return Cancelled runs as active. A fully stopped run therefore prevents a later admission.
+Sol corrected those two existing queries. Query-aware public repository tests cover all ten states
+in both branches: Completed, Cancelled and Failed allow the next context load, while the other seven
+states, including Cancelling and RecoveryRequired, still block it. The new tests failed against the
+old source in exactly the two Cancelled cases; after the correction, all 32 focused cases pass.
+The complete input package passes 224 tests and its type check. Changed-file ESLint, style (one
+production file, zero errors/warnings), Prisma ownership (327 files, zero errors), module-growth
+(one file, no errors or candidates), and whitespace checks pass. No cancellation authority, account
+charging, history check, membership, routine lease check, or database baseline was changed.
+Luna's independent integrated review passes with no findings. The final three-file source, test
+and package-documentation manifest is
+`ffa55520d313bbb059359fb13c7a3a6fd4aa8c7056156b2b12b1c782af42a858`.
+Root owns validation coordination and the actual commit. Live Stop-to-next-message qualification
+remains separate.
+
+The hard-budget input-bound prerequisite remains open. Official OpenAI documentation describes
+[chat counting as potentially approximate](https://developers.openai.com/api/docs/guides/advanced-usage#managing-tokens)
+and demonstrates [server-side counting for the Responses protocol](https://developers.openai.com/cookbook/articles/per_run_spending_controller_responses_api).
+The current Chat Completions transport cannot claim that guarantee. A source-only
+provider-counted path has been proposed to the user; no protocol migration, paid request or live
+setting change is authorized by that proposal alone. Continue independent accepted work while
+that decision is pending.
+
+## Monthly-budget CI qualification wiring — 30 September 2026
+
+This increment starts at `1e6d1e0743325ac7c7532a85dc9da91fe4e2a537`; the cumulative review
+base remains `2248132e49054734e53023f6fe0e6c9f1459859f`. The MVP goal remains active.
+
+The existing PostgreSQL 17 jobs ran `test:sql` but omitted the separate monthly-budget target.
+The pull-request and nightly workflows now create `monthly_budget_qualification` in their own
+ephemeral PostgreSQL service, load the reviewed baseline, and explicitly pass that database's
+localhost URL to `backend-agents-execution-runs:test:monthly-budget:sql`. They do not reuse the
+general test database or weaken the dedicated-URL safeguard. Nightly freshness conditions and
+fatal SQL errors remain intact. This is CI source wiring, not an executed database qualification.
+No local database, VM, provider request, workflow dispatch, publication or deployment ran.
+
+The workflow contract test is included in the existing `test:workflow-boundary` command, with a
+regression check for its removal. All four workflow tests, 24 affected-deployable tests and 27
+Prisma-boundary tests pass (55 total), as do the workflow-boundary source and whitespace checks.
+The resolved Nx target is uncached; CI generates the database client earlier in the same job.
+Live PR ancestry passes at snapshot
+`743fa14fcf29075e99fec582317b66f3c11b8fe38eaa86b3689faf0b40afff47`.
+The six-file workflow/test/package-documentation manifest, excluding this plan, is
+`a03b06d19046ccddea5097ddd8f1faf386d5f706399c8abd061dae19f84fb5b3`.
+Independent integrated review passes with no remaining findings. Its orphaned-test finding was
+fixed before the final review; the production Prisma check also reports zero errors across 327 files.
+
+The independent architecture preflight paused the physical paid-request join: the canonical
+request's byte cap does not prove its maximum billable input tokens. A trusted provider/model-bound
+input upper bound must precede monetary reserve/claim. Exact counting is one possible solution;
+a conservative upper bound also needs evidence covering the exact payload and billing behavior.
+Current LiteLLM image-contract evidence does not qualify such a bound. Do not add a placeholder
+counter, optional production gate, or an estimate presented as hard-limit enforcement.
+
+Once that prerequisite is established, the joined slice must prepare the exact payload, recover
+the existing ledger effect or classify personal work before looking up a new tariff, claim once,
+recheck the original deadline immediately before send, and settle or retain liability before
+returning. Personal work stays tariff-independent; recovery retains its original quote rather
+than selecting a replacement. Conversations own the join between current authorization, provider
+pricing and execution-owned accounting; model-routing must not import execution-runs. Account
+closure must prevent tool continuation. System-originated stopping of affected runs and descendants
+still belongs to the run owner and must not fabricate a human cancellation request.
+
+## Trusted EUR tariff lookup — 30 September 2026
+
+This source increment starts at `b25862bc2d34e0f39a6740d4ab9ad21ca0916032`;
+the cumulative review base remains `2248132e49054734e53023f6fe0e6c9f1459859f`.
+Live PR ancestry still passes at snapshot
+`743fa14fcf29075e99fec582317b66f3c11b8fe38eaa86b3689faf0b40afff47`.
+
+The dispatch trace found no production reader for the stored immutable EUR tariff. The provider
+owner now supplies `_CreateProviderModelTariffLookup` over the caller's database transaction. It
+resolves the admitted silo and public model alias without choosing between ambiguous definitions,
+refuses pending registration and absent or overlapping active pricing, and returns the quote through
+the existing strict model-routing validator. Shared quote arithmetic stays with model-routing;
+the reader preserves the stored unit and digest rather than replacing invalid evidence. It does not
+invent prices, create grants or settings, or expose a new route. Separate Sol lanes implemented the
+reader and its focused tests. No schema, live database, paid provider or infrastructure change ran.
+
+Architecture preflight and independent integrated/architecture post-review pass. A review concern
+about application/database clock skew was resolved by retaining and documenting the conservative
+existing policy: the database selects active pricing, and the strict wrapper can additionally refuse
+a quote when the application clock disagrees. It cannot widen admission. Two regression cases prove
+that refusal; deployment clock skew remains an availability risk, not permission to bypass the check.
+
+The model-routing suite passes 267 tests and the provider suite passes 108. The final focused tariff
+file passes all 17 cases, including the later window and skew additions; these counts overlap and
+must not be added together as a total. Both owning type checks and changed-file ESLint pass. Style
+checks five production files with zero errors or warnings; Prisma ownership checks 330 files with
+zero errors; module-growth reports no candidate. The initial repository-name registration failure
+was corrected to the existing policy rather than weakening it. Whitespace checks pass. These are
+source/unit results, not PostgreSQL or paid-provider qualification.
+The final nine-file source/test/package-documentation/ownership manifest, excluding this plan, is
+`6e3aeadb02bf33f94b7f047d3a7fa74ec6c57eb7c24e4d33b82b901a0a1e5cca`.
+
+Physical dispatch integration remains separate. Its admission must occur after canonical request
+preparation and before the send, using the exact request bytes and original deadline. The input
+token bound, reserve/claim/settlement recovery and system-owned cancellation still need their own
+implementation and evidence. This reader alone does not enforce the product hard limit.
+
+## Run payer admission — 30 September 2026
+
+The reviewed ledger/payer foundation is committed locally as
+`69adf9b384c35815f2f462e505a040327c952c13`. This admission increment starts at that immutable SHA;
+the cumulative branch review base remains `2248132e49054734e53023f6fe0e6c9f1459859f`.
+Live PR ancestry remains green at snapshot
+`743fa14fcf29075e99fec582317b66f3c11b8fe38eaa86b3689faf0b40afff47`, and the foundation's
+merge simulation against `origin/develop` is clean (tree
+`95aac53453df5ae74350c13603a827bef1ae713e`). No remote branch or PR was changed.
+
+The accepted paying-group decision in `docs/design/mvp-delivery-plan.md` now reaches managed run
+admission in source. Conversations and routines already retained the four payer/evidence fields,
+and AgentRun had the columns, but the admission flow dropped them. This increment extends the
+existing input, scheduling, conversation and run owners without adding a policy engine or granting
+access. It requires current group-budget Use authority within the admission transaction, preserves
+the personal path, and binds duplicate/recovery behavior to the saved payer. No new schema, provider
+dispatch, protected settings or system-stop implementation is included in this increment.
+
+Sol and Luna implemented the bounded source and test work; a separate Luna lane completed the final
+independent review. The root owns plan, joined checks and actual commits. Acceptance covers managed
+and routine success, incomplete or wrong-silo payer refusal, permission loss before delayed admission,
+unchanged personal admission, and replay without payer substitution. Architecture preflight passed:
+run admission
+owns the complete payer value; the existing transaction-bound input authorization source reads the
+conversation payer and rechecks current requester Group Budget Use through the central authorization
+authority. It retains the original saved evidence rather than substituting fresh check evidence.
+Duplicate and unique-conflict recovery must compare the saved run payer with the conversation payer
+and reauthorize current Use before returning a snapshot; refusal cannot change the saved payer.
+Routine preparation carries the saved routine payer into its hidden occurrence conversation in the
+same transaction, so initial admission and later human follow-up use the same payer source. No event
+history/checkpoint expansion was needed. Existing ledger SQL
+qualification and live MVP acceptance remain outstanding and must not be inferred from this source
+integration.
+
+The completed overlay passes independent integrated review and architecture postflight with no findings.
+Concrete conversation-repository construction stays in the execution-inputs factory; the temporary
+repository barrel export was removed. Style reports zero errors/warnings, Prisma boundaries report
+zero errors across 333 files, and the agent-domain guard plus negative tests pass. The three
+module-growth candidates retain cohesive admission contract/transaction/persistence ownership.
+The final production manifest is
+`37d83f488d975439134b1281363c5acfcb629d199ee71f34a9024c18a9573a36`; it includes the missing existing
+history-reader import found and corrected during type checking. The complete
+36-file source/test/package-documentation manifest, excluding this plan, is
+`7f1a8f7c1297a78a027970fb925a0cb18a75d9a92114bac614b3f82a04891b7a`.
+
+The five owning library suites pass: execution-runs 245 tests, execution-inputs 204, conversations
+1,059, scheduling 313 and scheduling-contract 42. Their type checks pass. The app composition's
+12 focused tests and app type check also pass: 1,875 passing tests in total. The fifteen existing
+real-SQL cases remain explicitly skipped. Initial HTTP-router failures were the sandbox's denied
+local listeners; the full suites passed with scoped local test-listener permission. One old managed
+payer expectation and stale scheduling authority doubles were corrected without changing product
+permissions. The final mechanical fixture rewrite was rechecked with its 18 focused tests. Final
+style and Prisma checks pass with zero errors; module-growth retains the same reviewed inventories.
+The full test/documentation delta also passes final independent review at the manifest above.
+No paid provider or live-database operation, schema regeneration, VM, deployment or publication ran.
+
+A read-only CI ownership check found an additional ledger qualification gap: the fresh PostgreSQL
+jobs in `.github/workflows/docker.yml` and `nightly.yml` run `test:sql`, which does not select the
+separate `test:monthly-budget:sql` target. That target still needs explicit fresh-database CI wiring
+and an executed result. Preserve its dedicated database URL safeguard; no workflow, database,
+publication or paid-provider operation was changed during this check.
+
+## Direct source checkpoints — 30 September 2026
+
+The user now requests actual commits instead of suggested commit messages. Commit each coherent,
+reviewed source slice and report its real commit ID. The EUR-ledger checkpoint below remains a
+source foundation: its PostgreSQL qualification and live integration are still pending, so a local
+commit must not be presented as release readiness. No push, merge, tag or deployment is implied.
+
+## Renewed ledger approval — 30 September 2026
+
+The user explicitly approved the source-only financial ledger after the scope and risk of
+spending reservations, actual and uncertain charges, and hard-limit closure were explained.
+This resolves the later ledger-specific safety pause below; it does not approve unrelated
+paused scopes, live database changes, provider calls, permission grants or deployment.
+The overnight window has ended and its heartbeat remains paused. The MVP goal is active.
+
+The resumed ledger increment starts at `70d91cb3f58a14a2970329a5d2b58909e0ec201b` in the
+existing budget worktree. The cumulative branch review base remains
+`2248132e49054734e53023f6fe0e6c9f1459859f`; existing payer and schema overlays are preserved.
+Live PR ancestry was refreshed at 08:32 Europe/Brussels with unchanged snapshot
+`743fa14fcf29075e99fec582317b66f3c11b8fe38eaa86b3689faf0b40afff47`.
+
+Sol owns production ledger persistence and Luna owns focused tests, with independent architecture
+and integrated review. The root coordinates the plan, shared client generation and joined checks.
+The ledger must recheck closed accounts before every physical claim, including previously
+reserved work, and preserve incurred and uncertain liability. It may not directly mark other
+runs or conversations terminal or invent requester Stop evidence. The current run owner has no
+system-originated budget-stop port; active-run and descendant cleanup remain an explicit integration
+gap until that ownership boundary is implemented and reviewed. A ledger-only checkpoint must not
+be described as operational end-to-end hard-budget enforcement.
+
+The independent architecture preflight passes this ledger-only boundary. New `ManagedBudget*`
+models belong in execution-owned `runs.prisma`, not reporting-owned `spend.prisma`; immutable
+model tariffs remain provider-owned. Reservation, claim, release and settlement share one
+Serializable unit of work. A reservation may exactly fill available capacity without closing
+the account. Claimed worst-case liability can temporarily exhaust capacity, but must not permanently
+close a month: authenticated no-forward proof or cheaper known usage can restore available capacity.
+Durable closure occurs when settled plus retained unknown liability reaches the current limit, or
+when actual charges breach the admitted price bound. Once genuinely closed, previously reserved
+work cannot claim. Exact replays cannot dispatch or charge twice.
+
+The ledger implementation now passes 34 money-math tests and 19 repository-authority tests using
+transaction doubles. The complete runs package passes 244 tests, with 15 real-SQL tests
+explicitly skipped (13 existing run-tree cases and two new ledger cases). Its lint/type check passes.
+The earlier five router failures were caused by
+denied temporary local listeners; the full suite passes with that local test permission. These
+results do not establish PostgreSQL concurrency or provider-dispatch behavior. Conversations
+lint/type checking also now passes. The independent integrated production review and architecture
+post-diff review pass for manifest
+`a22ee2bb36c1f51365a438165fcdad807fbbe8779fb3ec647b65831bea05567c`, with no confirmed findings.
+The final manifest `758e1bb8b02f23b6525af23e4a6a253657de7c05f6a8e8642067d1a1d1006354`
+differs only by adding the separate `test:monthly-budget:sql` target and its README instructions.
+Removing those two test-only additions in memory reproduces the reviewed manifest exactly; ledger
+production, schema, baseline, release binding and ownership declarations are unchanged.
+The two style warnings are deliberate schema-backed categorical projections in the Prisma-free
+state helper; the reviewer accepted their explicit exhaustive mapping. Module-growth candidates
+have distinct persistence, lifecycle, contract and execution-schema responsibilities.
+The repaired database-constraint fixture passes a separate source review at SHA-256
+`ef5700c3e777e05b325191d6c9285aace8b062487662519259b8994a86b032df` but has not been executed.
+It checks exact named constraints and trigger errors, valid settlement, payer evidence and
+monotonic liability/closure rather than accepting any database failure. Two independent-client ledger
+tests are authored at SHA-256 `4fc62ceb5fe6e74b23cd9a116245696bfd2e423c01495291a29a2abb713f30f3`.
+Root source review and ordinary skip/lint checks pass; PostgreSQL execution and deterministic
+transaction-overlap proof are still pending. The separate target requires an explicitly selected fresh
+baseline through `OPENCRANE_MONTHLY_BUDGET_SQL_DATABASE_URL`. A later proposal to use the general
+database variable was safety-rejected and was not applied; the dedicated safeguard remains intact.
+The mock-authority fixture received a type-only inference correction (final hash
+`8b9f9fb37f25b4010f6fe46e73db0df320d82ae613c58e4a04957f9d83b129e2`), and the full suite was rerun.
+
+Prisma generation, target-baseline regeneration, authority-baseline static checks, release binding,
+Prisma boundaries and module-growth checks pass. The regenerated baseline digest is
+`caef3155d00bdc5e75907d1ecc99c69fc6db8c6cb1fcb58aa3fcc99a734f3d91` and matches
+`releases/0.11.0.json`. No empty-database installation or ledger SQL race was executed. The unused
+new run-tree `BudgetExhausted` closure enum was deferred rather than inventing a system-stop mapping;
+the existing run terminal reason is unchanged. The original overlay remains in the recovery archive.
+Agent-domain ownership and its negative tests also pass. Fresh-database qualification remains
+outstanding for this source checkpoint. Its pre-commit source backup is retained in the main checkout at
+`.nx/mvp-source-checkpoints/20260930.eur-ledger-source-reviewed.tar.gz`; it excludes dependencies,
+credentials and build output and is not a qualified release artifact.
+
+Remaining work includes real-database qualification, copying the authorized payer into admitted
+runs, protected policy/tariff configuration, physical model-dispatch integration, and system-owned
+root/descendant budget-stop cleanup. No paid provider call, live database change, deployment,
+publication or release is part of this checkpoint. The live PR-stack refresh remains green with
+the same 19-PR snapshot. A merge simulation of the committed head against current `origin/develop`
+is clean (tree `01a1f05a6e4cc5f388bcfc380edbaf7fb944d1f1`); this does not qualify the uncommitted overlay.
+
+## Source recovery checkpoint — 30 September 2026
+
+The MCP, budget and descendant-Stop worktrees were captured consistently in the main checkout at
+`.nx/mvp-source-checkpoints/20260930.mcp-budget-stop-source-recovery.tar.gz`, SHA-256
+`33e9390b75e43edfa1577bc40dae808e330eee11492e77299c3fc6d1d4c79f58` (1,001,559 bytes).
+Source manifests matched before/after capture and after extraction. The archive excludes keys,
+dependencies, build output and Git internals. It preserves the approved payer/type work and the
+unfinished schema without treating rejected accounting authority as approved. It is not a
+release-qualified checkpoint; subsequent plan-only updates are outside the captured manifests.
+
+## Overnight resumption — 29 September 2026
+
+The user explicitly approved both source-only repairs: MCP execution must retain current
+permissions and lease checks and acquire a real invocation claim before provider dispatch; a hard
+budget stop must affect only runs proved to use the exhausted account and use the existing
+run/cancellation owner, preserving incurred and uncertain charges. The earlier pauses below are
+resolved by this approval, not by automatic goal continuation. The rejected drafts remain rejected.
+
+Resume the implementation with Luna/Sol lanes and independent review. Keep schema/client generation
+serialized across all working trees. The overnight heartbeat is active in this task through
+30 September 08:00 Europe/Brussels, when it must checkpoint and report rather than start a new
+slice. The full MVP goal remains active and is not claimed complete. The EUR 5 total paid-test
+allowance, no-laptop-VM rule and existing publication/deployment/side-effect boundaries remain.
+
+A subsequent safety rejection stopped the proposed production financial-ledger repository for
+reserve, claim, settlement, unknown-charge retention and account closure. That file was not created.
+The approval above covers the corrected run-owner stop routing; the broader accounting authority
+now needs explicit renewed approval after its risk is explained. Do not retry or split the rejected
+implementation. Unaffected MCP repair and safe checks continue. Schema and payer-selection changes
+remain incomplete, uncommitted source rather than operational budget enforcement.
+
+The independent normalized-usage and EUR-tariff contract slice is checkpointed separately from
+that unfinished accounting integration. It includes transport parsing, strict quote validation,
+focused tests and the downstream response fixtures. Previously passing focused checks and review
+still apply to these unchanged files; four recorded fixture/validator/test hashes were rechecked.
+No database schema, payer authorization, budget ledger or paid dispatch gate is included in this
+checkpoint. The SQL proposal fixture remains reviewed but not database-executed in this wave.
+The resulting local commit is `70d91cb3f58a14a2970329a5d2b58909e0ec201b`; it has not been pushed.
+
+The unfinished monthly-budget type declaration now imports the committed `ModelTariffQuote`
+contract instead of its removed earlier name. This is a type-reference repair only; no accounting
+repository, dispatch integration or database change was added. Whitespace validation passes, but
+no test or full budget type-check claim is made for this paused overlay.
+
+Accepted descendant-stop implementation continues independently in
+`/private/tmp/opencrane-descendant-stop.TlTDD5`, based on the committed checkpoint above, without
+copying this checkout's uncommitted schema or payer work. Its architecture preflight keeps cleanup
+with the existing run, workflow, credential and IAM owners; it does not resume rejected accounting.
+
+A separate recoverable WIP archive lives under the main checkout at
+`.nx/mvp-source-checkpoints/overnight-20260929.41pevx/`; its `CHECKPOINT.md` identifies source heads,
+archive checksums and outstanding gates. It is not a build/release checkpoint and must not overwrite
+newer source during recovery. The archives contain no dependency trees or credentials.
+
 ## Preserved administration design — 29 September 2026
 
 The user requested preservation of the administration design package during cleanup of the older
@@ -59,7 +501,198 @@ These decisions supersede older pending group-attribution/history, “no deploy 
 unresolved numeric live-test-cap and first-write/Always-policy text only where those statements
 conflict. Historical evidence is retained below.
 
+## Shared EUR hard budgets — independent implementation wave
+
+The budget wave uses the clean worktree `/private/tmp/opencrane-eur-budget.s85x4O`, branch
+`feat/eur-hard-budgets`, and immutable review base
+`2248132e49054734e53023f6fe0e6c9f1459859f`. The approved tool-policy repair now runs in
+`/private/tmp/opencrane-policy-recovery.wcVJfL`, branch `feat/tool-approval-policy-repair`.
+The old `/private/tmp/opencrane-visual-fixture.yuENw5` was found missing 4,171 tracked baseline
+files. All 50 surviving modified/new source files were copied into the clean checkout and matched
+by SHA-256; the original is retained without mass restoration or deletion. The cause is unproven.
+The architecture dependency check confirms that monthly model-spend enforcement does not depend
+on that policy change. The earlier snapshot-v4 source pause was resolved by the user's 28 September
+approval and is not a reason to hold this independent work. Live PR ancestry passes at snapshot
+`743fa14fcf29075e99fec582317b66f3c11b8fe38eaa86b3689faf0b40afff47`.
+
+Sol owns the coordinated budget schema, baseline, persistence, protected budget settings and real
+model-dispatch gate. Separate Luna lanes own normalized usage/tariff contracts and explicit
+authorized payer selection for managed conversations and routines. They share the approved hard
+EUR monthly policy above, preserve personal-agent charging, and make no live database, provider
+or deployment changes. Source implementation, database race tests and independent review remain
+required; this assignment is not a claim that hard limits are operational. Later integration with
+the tool-policy wave requires fresh conflict and boundary review.
+
+The first production budget UnitOfWork patch was rejected by the edit safety check and was not
+applied. Its proposed shared-ceiling handler could cancel reserved effects and directly mark
+other runs Failed/BudgetExhausted inside the money repository without a proven run-cleanup scope.
+Production persistence, dispatch, limit-lowering and cancellation integration were paused. Revised
+source-only approval is now granted: close the budget, identify only proven affected roots,
+and let the existing run/cancellation owner stop those roots and their descendants without
+discarding charges. Implement this reviewed ownership correction, not the rejected direct writes.
+
+The isolated worktree retains incomplete schema/type/math and payer-request changes. Payer-selection
+source now verifies the same-silo group and uses central authorization with an exact group-budget
+Use decision at database time. Routine creation persists the four payer/evidence fields; a human
+assistant-subchat stores them on its durable request and copies them during conversation projection.
+Actual delegated run children must instead inherit the paying group. Copying evidence into admitted
+runs, the fresh baseline and release binding remain unfinished. The three broken dependency links
+were repaired from the exact lockfile versions after archive-integrity checks, using 5.9 MB; source
+package and lockfiles were unchanged. Prisma generation then passed against the final schema.
+Initial lifecycle tests needed group/clock doubles, and router tests required scoped localhost
+permission. Independent review found and the implementation corrected missing payer rechecks on
+delayed projection and routine firing. Final focused results are 84 routine repository/facts/firing
+tests, 38 group-child validator/lifecycle tests, and 3 router tests, all passing. Scheduling lint and
+type checks pass. Final independent payer source review passes, including current payer checks on
+recovery while preserving current child access for an already-created Ready child. The reviewed
+request/access repository hashes are `48698b47ec72386475a003dfe10dc830582bb0d2c9d4b0646c36ce1138ddb8cd`
+and `76e56c19a021e64422c180d04d63726eae4f7a8524eef0349139614cd2e741b5`.
+The schema remains excluded from that review. Conversations lint is not green: the separate budget
+WIP adds `BudgetExhausted` without completing the existing run-tree closure-reason mapping. No
+behavior was invented to silence that unfinished integration. Boundary checks (336 files), style
+checks (19 files) and diff checks pass for the payer slice. Its source remains uncommitted.
+
+Independent read-only review of the unfinished budget schema found two same-silo FK corrections
+for the eventual accounting slice: bind `ManagedBudgetEffect` to `AgentRun` by both run ID and silo,
+and bind `ManagedBudgetMonthlyAccount` to `ManagedBudgetPolicy` by both policy ID and silo. The
+referenced models need the corresponding composite unique keys. The current ID-only relations do
+not prevent a stored silo from disagreeing with its referenced owner. The reviewed SQL also needs
+all-or-none payer/evidence checks and exact budget-scope/target tuple checks. These are recorded
+future corrections, not a passing schema review or authorization to retry the rejected ledger.
+This source is uncommitted and must not be published as operational enforcement. No provider call,
+live database change, deployment or VM was started.
+
+Independent usage-contract work distinguishes known token counts from missing or malformed usage
+and validates versioned EUR price quotes. The model flow still discards that usage before any
+accounting owner receives it; these contracts do not yet enforce or settle a budget. Downstream
+typed test fixtures have been updated without changing production dispatch. The money ledger's
+database-clock pricing check and durable binding of the quote to the admitted request remain part
+of the paused integration, not claims made by the transport's local validation.
+
+The source-only usage/pricing checks pass: contracts have 270 passing tests, the complete
+model-routing suite has 267 passing tests across 13 files, and their type checks pass. The tariff
+regressions cover malformed rates, signed-integer overflow, request binding and validity boundaries
+with a controlled clock. After allowing temporary local test listeners, the conversation rerun
+cleared the earlier router failures but is not green: 1,050 tests passed, one company-continuation
+deadline test timed out, and the routine-admission test worker failed to start. The two affected
+files now pass isolated Nx runs with `--maxWorkers=1`: company-tool continuation has 8 passing
+tests (1.76 seconds), and routine run admission has 6 (1.34 seconds). No source, fixture or timeout
+change was needed, and the earlier timeout cause is not proven. These targeted results do not
+replace a complete green conversation-suite run or fresh-database budget qualification. The changed
+SQL tool-proposal fixture expectation was reviewed against its mock but was not executed on a
+database in this wave. The source overlay remains unstaged and uncommitted.
+
+The earlier continuation revalidated the unchanged live PR snapshot above and immutable local base.
+The user's explicit overnight approval resolved the two earlier source-only enforcement pauses;
+the later financial-ledger rejection at the top is a distinct outstanding decision.
+
+## Per-tool approval settings — execution wave
+
+The active wave is `feat/tool-approval-policy`, with immutable review base
+`fadaf5c2f884890c315a32be9bc795c69aa70a65`. The reviewed shared contracts are committed at
+`76ebdcf55399f5471ed74186ddb1539891aba5b1`; they are not yet operational settings.
+
+The backend lane owns policy persistence, authenticated personal/company APIs, proposal admission,
+final provider-claim checks, the fresh-install baseline and generated API. The frontend lane owns
+the feature-local Auto / Ask / Block control, retry-aware state, typed adapter and personal/company
+consumers. Reuse the existing organization company-assistant tools read for the company target;
+do not require conversation-invocation permission merely to administer its tool policies. The
+architecture preflight keeps these responsibilities in existing MCP, conversation and IAM owners.
+
+Acceptance requires Auto on the first permitted write without changing a frozen approval flag,
+Ask and Block enforced at the real invocation path, current policy/IAM checks at claim, exact
+retry and revision-conflict handling, protected personal/company settings, and controlled UI
+states. Source tests and fresh PostgreSQL proof remain distinct from real-provider acceptance.
+
+The generated personal/company policy API is available for frontend integration. The runtime
+claim edit is paused after an automated safety rejection; that patch was not applied. Independent
+caller inspection shows that returning a nonterminal `Winner` would not dispatch, but could leave
+the call pending without a valid claim. The proposed replacement retains the existing current
+authority and lease checks, closes denied work through its existing lifecycle owner, and lets
+only a real claim reach provider dispatch. Revised source-only approval has been requested.
+Settings and frontend implementation continue separately and are not operational proof.
+
+The settings/UI source is now independently reviewed in the working overlay above
+`4178a539a0cd0f6217098ea0a2424977b6ad2bfe`. Current-authority checks precede policy replay,
+and immutable receipts preserve the original mode, revision and timestamp. Thirteen focused
+backend tests pass. The frontend has personal and company controls, server/tool labels, exact
+uncertain retries, conflict refresh, and protection against late responses after scope loss.
+Its feature suite passes 47 tests and the MCP adapter suite passes 46; their type checks and
+scoped style checks pass. Independent review includes the repaired retry/error paths.
+
+The final Storybook build passes. Ten policy states render, but all ten screenshot comparisons
+fail because approved macOS references are absent; updates were explicitly disabled and no
+baseline was written. Three separately captured review images are in
+`/private/tmp/opencrane-tool-policy-candidates.oIk3en/` (Ask, uncertain response, narrow long name).
+They are fixture evidence only, not authenticated or provider execution proof. The database
+ownership constraints, fresh-install baseline/release binding, proposal/claim enforcement and
+real-provider journey remain unfinished. No paid provider call or VM was started.
+
+The fixture repair is committed at `4178a539a`; the policy settings/UI overlay remains uncommitted
+until its execution and database contract form a coherent, validated product change. No new PR,
+merge or release tag was created for this unfinished slice.
+
 ## Conversational routine proposals — execution wave
+
+### Published-head CI result — 29 September 2026
+
+Run `36584939916` completed with failure on published head
+`fadaf5c2f884890c315a32be9bc795c69aa70a65`. Mechanical TypeScript style, PostgreSQL authority
+suites and Storybook component contracts failed; the narrow fixture repairs are described below. API,
+KurrentDB history, Cognee provider-contract and service-image checks passed. k3d and image
+publication were skipped. These failures remain acceptance gates; no screenshot baseline or
+database proof is treated as approved merely because the focused source checks passed.
+
+The diagnosed source repairs are isolated from the policy implementation: three authority suites
+now use accepted snapshot version 4 in their positive fixtures, and the alternate-requester
+routine fixture is created active before a valid transition to paused. The subject-mismatch
+negative case still tests the intended binding failure. The routine route fixture now satisfies
+the inline-conditional rule; its 16 focused tests and the conditional check pass. Diff whitespace
+checks pass. No production authority was weakened. PostgreSQL execution needs a fresh CI run;
+the broad Storybook reference differences still require visual review, not automatic replacement.
+
+The four repaired SQL fixtures now also pass on a newly initialized native PostgreSQL 17.11
+database in UTC, using baseline SHA-256
+`511cdecb759cce8fdf8316e8705308da4d523fa05e3e22bb7caec3ed5a7105db`.
+That run exposed one further test-setup error: the alternate-requester routine needed a valid
+schedule receipt and revision before it could be paused. The corrected fixture preserves the
+cross-requester rejection assertion and changes no production constraint. All four transactions
+complete and roll back. Logs remain under `/private/tmp/opencrane-native-fixtures.w3EDFg/`;
+the disposable server was stopped after testing. This focused native check does not replace
+exact-SHA CI or deployed fresh-install qualification.
+
+The hosted generated-file verifier now tries a new activation after membership removal and
+requires `403 MEMBERSHIP_REQUIRED`; it rejects logged-out and successful responses. Its existing
+post-verification model-call ledger must remain unchanged. The focused harness passes 28 tests.
+This is source coverage, not a live hosted run, exact tool-grant revocation or in-flight Stop proof.
+
+A current source audit reconfirms that root Stop does not yet clean up active descendants.
+The execution-runs owner needs durable system-owned propagation receipts and a descendant cleanup
+barrier; it must not imitate separate child requester approvals. Shared EUR hard budgets likewise
+still need a connected payer, tariff, reservation, usage and real-dispatch implementation. Payer
+selection must persist on managed conversations and routines as well as admitted runs. These
+remain MVP requirements, not completed features. Their coordinated schema work must not bypass
+the pending tool-execution approval or overlap the unfinished policy baseline lane.
+
+### Published joined proposal — 29 September 2026
+
+Draft #916 now contains the joined proposal, preserved design references and ownership repair at
+`fadaf5c2f884890c315a32be9bc795c69aa70a65`; the remote head matches the reviewed local head.
+Live stack snapshot `743fa14fcf29075e99fec582317b66f3c11b8fe38eaa86b3689faf0b40afff47`
+retains #908 → #910 → #914 → #915 → #916, with no predecessor absorbed, closed or retargeted.
+The incremental parent range contains 571 files and the cumulative develop range 710. A
+non-checkout merge simulation against develop `10abd0ef6182f36bec13d8f1358e43b15ead7cd5`
+passes. The PR body now describes the joined tool/form flow and its remaining acceptance gates;
+it no longer describes `request_routine` as dormant. New-head CI remains separate evidence.
+
+The next wave uses `feat/tool-approval-policy`, based on that published head. Its shared contract
+foundation defines Auto / Ask / Block per installed connection and exact tool revision, strict
+idempotent commands, revision-aware projections and safe change outcomes. Eleven focused tests,
+the contracts TypeScript target, changed-source style and independent review pass. This is not
+operational tool approval: persistence, current-IAM policy changes, invocation/claim admission,
+authenticated APIs and frontend controls still need wiring. The existing implementation handoff
+remains `.nx/routine-ci-repair/AUTO-TOOL-POLICY-HANDOFF.md`; schema/baseline changes must have one
+owner and preserve frozen tool declarations and current permission checks.
 
 ### Database-boundary repair — 29 September 2026
 
@@ -3873,11 +4506,11 @@ their own completion track; they are not silently bundled into the first tool PR
 | T2 | IN PROGRESS: personal and requester-only company approval/resume are implemented with PostgreSQL proof. Real requester accounts, provider execution and recovery/cancellation acceptance remain. |
 | U1 | IN PROGRESS: requester-only personal Stop passes source review and exact-head CI in #862; live qualification and wider participant controls remain separate. |
 | M1 | IN PROGRESS: persistence, transaction-bound Absurd admission and catalog completion are implemented, and the current #899 run passes the Cognee provider contract and database-authority suites. First-dataset permission, fresh authenticated composition and complete isolated Remember/Recall/Correct/Forget journeys remain; provider CI is not live product-memory acceptance. Cognee runs in access-control mode with one gateway service user per silo ([ADR 0017](docs/adr/0017-cognee-access-control-mode-and-gateway-service-user.md)). |
-| U2 | Structured-result production/replay passes source review, controlled checks and real-Kurrent paired-output recovery. Visual approval and authenticated live proof remain. Runtime-question source is separately PAUSED pending explicit approval. |
+| U2 | IN PROGRESS: structured results, collaborative clarification response authority, pending-question notifications and explicit initial subchat audience have reviewed source checkpoints above. Complete model-question/answer continuation, visual approval and authenticated participant/isolation proof remain. Participant policy is accepted; the separately rejected model Ask-validator replacement still awaits explicit renewed approval. The 28 September A approval concerned saved-run format, not this validator; the earlier blanket supersession statement was unsupported. |
 | F1 | IN PROGRESS: Ready-file access and PDF-informed answers pass CI in #868–#869. Generated CSV capture, scanning and answer-link recovery are implemented in #879 and pass four real-store cases in #880. The pending SQL guard and complete hosted execution/download qualification remain. |
 | D1 | IN PROGRESS; recursive source accepted 23 September with no fixed depth, child-count or concurrency caps. Run-tree accounting is published; its ten initial SQL cases passed CI. The actual credential-custody correction passes 121 run and 844 conversation tests locally; thirteen revised SQL cases await fresh-baseline CI. Per-call cost authority, spawn/join, narrowed context/permissions and recursive cleanup remain unjoined. This is not a working or qualified delegation journey. |
-| S1 | REQUIRED FOR MVP; source activation remains paused for the private-scheduling decisions. |
-| A2 | PARTIAL: protected audit/usage read screens and their controlled tests are implemented. Governance-reader policy, actual usage collection/pricing/attribution and real-account administration acceptance remain open. |
+| S1 | REQUIRED FOR MVP; scheduling persistence, protected commands, browser controls and conversational proposals are published in draft #916. Narrow failed-CI fixture repairs are committed locally at `2248132e4`; all four repaired authority fixtures pass on fresh native PostgreSQL. Exact-candidate CI, visual review and real automatic/manual/recovery journeys remain. The earlier product-decision pause is resolved. |
+| A2 | PARTIAL: protected audit/usage read screens and controlled tests exist. Owners/Admins are the accepted default readers. The source-only EUR ledger was reapproved on 30 September; payer selection, pricing contracts and reservation/claim/settlement source exist in an isolated source-checkpoint wave. Ledger source and architecture review pass; the runs suite passes 244 tests with 15 SQL tests skipped. Real-database qualification, admitted-run payer wiring, protected settings, dispatch enforcement and system-owned budget-stop cleanup remain. Default-reader permission bootstrap is a separate unresolved scope. |
 | T3 | PLANNED, with separate acceptance for its journey. |
 | Q1 — operational acceptance | CONTINUOUS — source checks and CI do not replace fresh-install or real-account acceptance. |
 

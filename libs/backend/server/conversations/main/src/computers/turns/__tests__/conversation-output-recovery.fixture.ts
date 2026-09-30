@@ -3,7 +3,7 @@ import { _ReserveConversationOutputFixture } from "./conversation-output-intent.
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { vi } from "vitest";
 
-import { CompiledFinalOutputModes, ConversationModelResponseKinds, ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ConversationModelResponseKinds, ConversationModelUsageKinds, ConversationModelUsageUnknownReasons, ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryAtomicAppend, type HistoryReadRequest, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
 import { BoundConversationWriter, _ConfirmBoundConversationWriterIntent } from "@opencrane/backend/server/conversations/history";
@@ -110,7 +110,7 @@ export async function _OutputRecoveryHarness(reserveOutput = true, overrides: Pa
 		const saved = payloads.get(source)!;
 		return { blockId: saved.blockId, payloadRef: saved.payloadRef, ciphertextDigest: saved.ciphertextDigest, display: display === null ? null : { payloadRef: "display-payload-1", ciphertextDigest: "sha256:display-ciphertext" } };
 	}) };
-	const model = { request: vi.fn().mockResolvedValue({ kind: ConversationModelResponseKinds.Text, text: "A private chosen answer" }) };
+	const model = { request: vi.fn().mockResolvedValue({ kind: ConversationModelResponseKinds.Text, text: "A private chosen answer", usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } }) };
 	const credentials = { issueOnce: vi.fn().mockResolvedValue({ key: "test-only-key", credentialDigest: `sha256:${"d".repeat(64)}`, expiresAt: "2099-01-01T00:00:00.000Z" }), reuseExact: vi.fn().mockResolvedValue({ key: "test-only-key", credentialDigest: `sha256:${"d".repeat(64)}`, expiresAt: "2099-01-01T00:00:00.000Z" }), revoke: vi.fn().mockResolvedValue(undefined) };
 	const runLifecycle = { start: vi.fn().mockResolvedValue(undefined), enterRecoveryRequired: vi.fn().mockResolvedValue(undefined), complete: vi.fn(async function _Complete()
 	{

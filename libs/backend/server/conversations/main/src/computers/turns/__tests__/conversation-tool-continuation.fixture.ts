@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { vi } from "vitest";
-import { CompiledToolDefinitionKinds, ConversationModelResponseKinds, ConversationToolProposalOutcomes } from "@opencrane/contracts";
+import { CompiledToolDefinitionKinds, ConversationModelResponseKinds, ConversationModelUsageKinds, ConversationModelUsageUnknownReasons, ConversationToolProposalOutcomes } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { ConversationComputerToolResultOutcomes, type ConversationComputerToolResult } from "../conversation-computer-continuation.types";
@@ -37,8 +37,8 @@ export async function _ToolContinuationHarness(toolCount = 1, maxCompletionToken
 	f.model.request.mockImplementation(async function _Model(input)
 	{
 		if (input.history.length >= calls.length)
-			return { kind: ConversationModelResponseKinds.Text, text: "A private chosen answer" };
-		return { kind: ConversationModelResponseKinds.Tool, call: calls[input.history.length]! };
+			return { kind: ConversationModelResponseKinds.Text, text: "A private chosen answer", usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } };
+		return { kind: ConversationModelResponseKinds.Tool, call: calls[input.history.length]!, usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } };
 	});
 	const rows = new Map<string, Record<string, any>>();
 	const transaction = { conversationPrivatePayload: { findUnique: vi.fn(async ({ where }) => rows.get(where.id) ?? null), create: vi.fn(async ({ data }) =>

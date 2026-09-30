@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { ConversationModelResponseKinds, type ConversationModelToolCall } from "../conversation-model.types";
-import { ___ConversationModelResponseSchema, ___ConversationModelToolCallSchema, ___ConversationModelToolExchangeSchema, ___ConversationModelToolHistorySchema } from "../conversation-model.validator";
+import { ConversationModelResponseKinds, ConversationModelUsageKinds, ConversationModelUsageUnknownReasons, type ConversationModelToolCall } from "../conversation-model.types";
+import { ___ConversationModelResponseSchema, ___ConversationModelToolCallSchema, ___ConversationModelToolExchangeSchema, ___ConversationModelToolHistorySchema, ___ParseConversationModelUsage } from "../conversation-model.validator";
 
 /** Supplies a saved declaration whose original argument formatting matters on replay. */
 function _call(overrides: Partial<ConversationModelToolCall> = {}): ConversationModelToolCall
@@ -27,6 +27,15 @@ describe("conversation model saved content", function _schemas()
 	])("rejects malformed declaration %#", function _invalidCall(change)
 	{
 		expect(___ConversationModelToolCallSchema.safeParse({ ..._call(), ...change }).success).toBe(false);
+	});
+
+	it("normalizes usage with an explicit unknown state instead of zero", function _Usage()
+	{
+		expect(___ParseConversationModelUsage(undefined)).toEqual({ kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing });
+		expect(___ParseConversationModelUsage({ completion_tokens: 4 })).toEqual({ kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Malformed });
+		expect(___ParseConversationModelUsage({ prompt_tokens: 7, completion_tokens: 4 })).toEqual({ kind: ConversationModelUsageKinds.Known, inputTokens: 7, outputTokens: 4 });
+		expect(___ParseConversationModelUsage({ input_tokens: 7, prompt_tokens: 8, completion_tokens: 4 })).toEqual({ kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Malformed });
+		expect(___ParseConversationModelUsage({ input_tokens: 2_147_483_648, output_tokens: 1 })).toEqual({ kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Malformed });
 	});
 
 	it("rejects excessive argument nesting without recursively walking an unbounded tree", function _deepArguments()

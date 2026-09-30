@@ -38,6 +38,9 @@ export * from "./run-admission.types";
 export type { RoutineRunSnapshotRecovery, RoutineRunSnapshotRecoveryFactory } from "./routine-run-snapshot-recovery.types";
 export type { RunAdmissionPersistenceRepository } from "./run-admission-persistence.types";
 export * from "./run-input-snapshot-digest";
+export { PrismaManagedMonthlyBudgetUnitOfWork } from "./monthly-budget/prisma-managed-monthly-budget-unit-of-work";
+export { ManagedMonthlyBudgetReservationStates, ManagedMonthlyBudgetReserveResultKinds } from "./monthly-budget/monthly-budget.types";
+export type { ManagedMonthlyBudgetAttemptCommand, ManagedMonthlyBudgetAuthority, ManagedMonthlyBudgetClaimResult, ManagedMonthlyBudgetPreForwardReleaseCommand, ManagedMonthlyBudgetReservation, ManagedMonthlyBudgetReserveCommand, ManagedMonthlyBudgetReserveResult, ManagedMonthlyBudgetSettlementCommand, ManagedMonthlyBudgetSettlementResult } from "./monthly-budget/monthly-budget.types";
 
 export * from "./conversation-run-cancellation.types";
 export { ConversationRunCancellationDenied } from "./conversation-run-cancellation-denied";

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { CompiledFinalOutputModes, ___CompiledToolDefinitionSchema, ___ConversationModelDeliverySchema, ___ConversationModelResponseSchema, ___ConversationModelToolHistorySchema, ConversationModelResponseKinds, ConversationModelToolModes, type CompiledToolDefinition, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ___CompiledToolDefinitionSchema, ___ConversationModelDeliverySchema, ___ConversationModelResponseSchema, ___ConversationModelToolHistorySchema, ___ParseConversationModelUsage, ConversationModelResponseKinds, ConversationModelToolModes, type CompiledToolDefinition, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
 import { ___CanonicalizeJson, ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { ConversationModelError, ConversationModelFailureCodes, type PreparedConversationModelRequest } from "./conversation-model.types";
@@ -153,11 +153,17 @@ export function _ValidateConversationModelResponse(candidate: unknown, offeredTo
 	if (!_isRecord(choice) || choice["index"] !== 0 || !_isRecord(choice["message"]))
 		throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);
 	const message = choice["message"];
+	const usage = ___ParseConversationModelUsage(candidate["usage"]);
 	const supportedFields = ["role", "content", "tool_calls", "function_call", "refusal", "audio", "reasoning_content"];
 	if (message["role"] !== "assistant" || Object.keys(message).some(key => !supportedFields.includes(key)) || supportedFields.slice(3).some(key => message[key] != null))
 		throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);
 	if (choice["finish_reason"] === "stop" && message["tool_calls"] == null)
-		return _DecodeConversationModelFinalOutput(message["content"], finalOutput);
+	{
+		const decoded = _DecodeConversationModelFinalOutput(message["content"], finalOutput);
+		if (decoded.kind !== ConversationModelResponseKinds.Text)
+			throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);
+		return { ...decoded, usage };
+	}
 	const calls = message["tool_calls"];
 	if (choice["finish_reason"] !== "tool_calls" || !Array.isArray(calls) || calls.length !== 1 || offeredToolNames.length === 0)
 		throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);
@@ -167,5 +173,5 @@ export function _ValidateConversationModelResponse(candidate: unknown, offeredTo
 	const tool = call["function"];
 	if (typeof tool["name"] !== "string" || !offeredToolNames.includes(tool["name"]) || Object.keys(tool).some(key => !["name", "arguments"].includes(key)))
 		throw new ConversationModelError(ConversationModelFailureCodes.UnsupportedResponse);
-	return ___ConversationModelResponseSchema.parse({ kind: ConversationModelResponseKinds.Tool, call: { id: call["id"], name: tool["name"], arguments: tool["arguments"], content: message["content"] } });
+	return ___ConversationModelResponseSchema.parse({ kind: ConversationModelResponseKinds.Tool, call: { id: call["id"], name: tool["name"], arguments: tool["arguments"], content: message["content"] }, usage });
 }

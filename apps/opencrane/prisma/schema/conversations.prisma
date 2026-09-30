@@ -14,6 +14,10 @@ model Conversation {
   siloId                        String                          @map("silo_id")
   mode                          ConversationMode
   agentServiceId                String?                         @map("agent_service_id")
+  payingGroupId                 String?                         @map("paying_group_id")
+  payingGroupAuthorizationDecisionDigest String?                @map("paying_group_authorization_decision_digest")
+  payingGroupAuthorizationPolicyRevisionHash String?            @map("paying_group_authorization_policy_revision_hash")
+  payingGroupEffectiveAuthorizationDigest String?               @map("paying_group_effective_authorization_digest")
   /// Rebuildable pointer to the logical computer stream for an agent session.
   computerId                    String?                         @map("computer_id")
   /// Rebuildable identity coordinate required to validate the computer stream.
@@ -37,6 +41,7 @@ model Conversation {
   destinationRoutines           AgentRoutine[]                    @relation("RoutineDestinationConversation")
   routineProposals              AgentRoutineProposal[]            @relation("RoutineProposalSourceConversation")
   service                       AgentService?                   @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
+  payingGroup                   Group?                          @relation("ConversationPayingGroup", fields: [payingGroupId, siloId], references: [id, siloId], onDelete: Restrict)
 
   @@unique([id, siloId])
   @@unique([id, siloId, agentServiceId], map: "conversations_exact_service_key")
@@ -44,6 +49,7 @@ model Conversation {
   @@unique([siloId, computerId])
   @@index([siloId, mode, lifecycle, updatedAt])
   @@index([siloId, agentServiceId, lifecycle])
+  @@index([payingGroupId, siloId])
   @@map("conversations")
 }
 
@@ -70,6 +76,10 @@ model ConversationChildRequest {
   requesterIssuer          String                        @map("requester_issuer")
   requesterAuthenticatedAt DateTime                      @map("requester_authenticated_at")
   agentServiceId           String                        @map("agent_service_id")
+  payingGroupId            String?                       @map("paying_group_id")
+  payingGroupAuthorizationDecisionDigest String?        @map("paying_group_authorization_decision_digest")
+  payingGroupAuthorizationPolicyRevisionHash String?    @map("paying_group_authorization_policy_revision_hash")
+  payingGroupEffectiveAuthorizationDigest String?       @map("paying_group_effective_authorization_digest")
   agentRevisionId          String                        @map("agent_revision_id")
   agentIdentityId          String                        @map("agent_identity_id")
   agentPrincipalId         String                        @map("agent_principal_id")
@@ -80,9 +90,11 @@ model ConversationChildRequest {
   state                    ConversationChildRequestState @default(Pending)
   createdAt                DateTime                      @default(now()) @map("created_at")
   parent                   Conversation                  @relation(fields: [parentConversationId, siloId], references: [id, siloId], onDelete: Restrict)
+  payingGroup              Group?                        @relation("ConversationChildRequestPayingGroup", fields: [payingGroupId, siloId], references: [id, siloId], onDelete: Restrict)
 
   @@unique([siloId, requestedByPrincipalId, idempotencyKey])
   @@index([parentConversationId, state])
+  @@index([payingGroupId, siloId])
   @@map("conversation_child_requests")
 }
 

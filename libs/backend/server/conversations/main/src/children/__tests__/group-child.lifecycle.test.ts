@@ -6,18 +6,20 @@ import { AesGcmConversationPrivatePayloadCipher } from "@opencrane/backend/serve
 import { PrismaGroupChildAccessRepository } from "../db/prisma-group-child-access-repository";
 import type { ConversationCaller } from "../../authorization/conversation-caller.types";
 
-const _authorization = vi.hoisted(() => ({ canAccess: vi.fn(), isCurrentlyEligible: vi.fn(), admit: vi.fn(), reconcileParticipants: vi.fn(), reconcileCreator: vi.fn() }));
-vi.mock("../../authorization/db/conversation-product-authorization", () => ({ PrismaConversationProductAuthorizationRepository: class { canAccess = _authorization.canAccess; isCurrentlyEligible = _authorization.isCurrentlyEligible; admit = _authorization.admit; reconcileParticipants = _authorization.reconcileParticipants; reconcileCreator = _authorization.reconcileCreator; } }));
+const _authorization = vi.hoisted(() => ({ canAccess: vi.fn(), isCurrentlyEligible: vi.fn(), admit: vi.fn(), admitGroupBudget: vi.fn(), reconcileParticipants: vi.fn(), reconcileCreator: vi.fn() }));
+vi.mock("../../authorization/db/conversation-product-authorization", () => ({ PrismaConversationProductAuthorizationRepository: class { canAccess = _authorization.canAccess; isCurrentlyEligible = _authorization.isCurrentlyEligible; admit = _authorization.admit; admitGroupBudget = _authorization.admitGroupBudget; reconcileParticipants = _authorization.reconcileParticipants; reconcileCreator = _authorization.reconcileCreator; } }));
 const _CALLER: ConversationCaller = { siloId: "silo", principalId: "principal", subjectId: "subject", externalIssuer: "https://issuer.test", verifiedAuthenticationAt: "2026-09-07T00:00:00.000Z" };
 const _KEY = "31c1f1dc-0010-4f13-9c2f-d3841ffd6651";
 const _SOURCE = "41c1f1dc-0010-4f13-9c2f-d3841ffd6651";
-const _COMMAND = { parentMessageId: _SOURCE, parentMessagePosition: "5", agentServiceId: "company", participantRefs: ["member-peer"], idempotencyKey: _KEY };
+const _COMMAND = { payingGroupId: "group-1", parentMessageId: _SOURCE, parentMessagePosition: "5", agentServiceId: "company", participantRefs: ["member-peer"], idempotencyKey: _KEY };
 
 /** Models committed request, projection and encrypted payload stages so retries observe the prior writes. */
 function _Fixture()
 {
-	const state = { request: null as any, child: null as any, payload: null as any, joinedAt: 1n, callerJoinedAt: 1n, lateJoinedAt: null as bigint | null, inactiveRefs: [] as string[], peerRemoved: false, active: true, parentExists: true, sourceVisible: true, sourceAuthor: "principal", sourceAudience: "conversation" };
+	const state = { request: null as any, child: null as any, payload: null as any, joinedAt: 1n, callerJoinedAt: 1n, lateJoinedAt: null as bigint | null, inactiveRefs: [] as string[], peerRemoved: false, payerAllowed: true, active: true, parentExists: true, sourceVisible: true, sourceAuthor: "principal", sourceAudience: "conversation" };
 	const transaction = {
+		group: { findUnique: vi.fn(async () => ({ id: "group-1", siloId: "silo" })) },
+		agentRunAuthorityClock: { findUnique: vi.fn(async () => ({ now: new Date("2026-09-07T00:00:00.000Z") })) },
 		principal: { findFirst: vi.fn(async () => ({ id: "principal" })), findMany: vi.fn(async () => [{ id: "principal", subject: "subject" }, { id: "peer-principal", subject: "peer" }, { id: "third-principal", subject: "third" }]) },
 		orgMembership: { findMany: vi.fn(async ({ where }: any) =>
 		{
@@ -64,7 +66,7 @@ function _Fixture()
 
 describe("shared group child lifecycle", () =>
 {
-	beforeEach(() => { vi.clearAllMocks(); _authorization.canAccess.mockResolvedValue(true); _authorization.isCurrentlyEligible.mockResolvedValue(true); _authorization.admit.mockResolvedValue(true); });
+	beforeEach(() => { vi.clearAllMocks(); _authorization.canAccess.mockResolvedValue(true); _authorization.isCurrentlyEligible.mockResolvedValue(true); _authorization.admit.mockResolvedValue(true); _authorization.admitGroupBudget.mockImplementation(async () => ({ outcome: "allow", evidence: { decisionDigest: `sha256:${"d".repeat(64)}`, policyRevisionHash: `sha256:${"p".repeat(64)}`, effectiveAuthorizationDigest: `sha256:${"e".repeat(64)}` } })); });
 	it("creates a requester-only child without involving unselected parent members", async () =>
 	{
 		const f = _Fixture(); f.state.joinedAt = 6n;
@@ -73,6 +75,7 @@ describe("shared group child lifecycle", () =>
 		expect(f.state.request.participantSubjectIds).toEqual(["subject"]);
 		expect(f.state.child.participants.map((participant: { userId: string }) => participant.userId)).toEqual(["subject"]);
 		expect(_authorization.reconcileParticipants).toHaveBeenCalledWith("silo", f.state.request.childConversationId, ["subject"], "principal", f.state.request.createdAt);
+		expect(f.state.child).toMatchObject({ payingGroupId: "group-1", payingGroupAuthorizationDecisionDigest: `sha256:${"d".repeat(64)}` });
 	});
 	it("grants child participation only to the requester and explicitly selected parent members", async () =>
 	{
@@ -95,6 +98,7 @@ describe("shared group child lifecycle", () =>
 		expect(f.workflows.spawn).toHaveBeenCalledTimes(1);
 		const reads = f.participantHistory.read.mock.calls.length;
 		await expect(f.lifecycle.create(_CALLER, "parent", _COMMAND)).rejects.toBeInstanceOf(GroupChildConflictError);
+		await expect(f.lifecycle.create(_CALLER, "parent", { ..._COMMAND, payingGroupId: "group-2" })).rejects.toBeInstanceOf(GroupChildConflictError);
 		expect(f.participantHistory.read).toHaveBeenCalledTimes(reads);
 	});
 	it.each([
@@ -171,6 +175,17 @@ describe("shared group child lifecycle", () =>
 		expect(f.workflows.spawn).toHaveBeenCalledTimes(1);
 		expect(_authorization.reconcileParticipants).not.toHaveBeenCalled();
 		expect(_authorization.reconcileCreator).not.toHaveBeenCalled();
+	});
+	it("does not project or recover a child after payer authority is revoked", async () =>
+	{
+		const f = _Fixture();
+		await f.lifecycle.create(_CALLER, "parent", _COMMAND);
+		f.state.payerAllowed = false;
+		_authorization.admitGroupBudget.mockImplementation(async () => f.state.payerAllowed ? { outcome: "allow", evidence: { decisionDigest: `sha256:${"d".repeat(64)}`, policyRevisionHash: `sha256:${"p".repeat(64)}`, effectiveAuthorizationDigest: `sha256:${"e".repeat(64)}` } } : { outcome: "deny", evidence: null });
+		await f.lifecycle.run({ siloId: "silo", requestId: f.state.request.id });
+		expect(f.transaction.conversation.create).not.toHaveBeenCalled();
+		expect(f.state.request.state).toBe(ConversationChildRequestState.Unavailable);
+		expect(await f.lifecycle.create(_CALLER, "parent", _COMMAND)).toBeNull();
 	});
 	it("records the failed creation stage without copying upstream text or credentials", async () =>
 	{

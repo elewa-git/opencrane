@@ -1,5 +1,5 @@
 import { ConversationChildRequestState, ConversationMode, type Prisma } from "@prisma/client";
-import { ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
+import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 import type { ConversationPrivatePayloadCipher } from "@opencrane/backend/server/conversations/history";
 import type { GroupChildAgentResolver, GroupChildCreateCommand, GroupChildShareCommand, GroupChildRequest, GroupChildView } from "../group-child.types";
@@ -38,8 +38,17 @@ export class PrismaGroupChildRequestRepository implements GroupChildRequestRepos
 		const authorization = this.authorization;
 		if (!await authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.Conversation, id: parentConversationId }, ProductAuthorizationActions.Delegate, { commandDigest }) || !await authorization.admit(caller, { kind: ProductAuthorizationResourceKinds.ConversationCollection, id: caller.siloId }, ProductAuthorizationActions.Create, { commandDigest }))
 			return null;
+		const payingGroup = await this.transaction.group.findUnique({ where: { id_siloId: { id: command.payingGroupId, siloId: caller.siloId } }, select: { id: true, siloId: true } });
+		if (payingGroup === null || payingGroup.id !== command.payingGroupId || payingGroup.siloId !== caller.siloId)
+			return null;
+		const clock = await this.transaction.agentRunAuthorityClock.findUnique({ where: { singleton: 1 }, select: { now: true } });
+		if (clock === null || Number.isNaN(clock.now.getTime()))
+			return null;
+		const payerAdmission = await this.authorization.admitGroupBudget(caller, command.payingGroupId, commandDigest as `sha256:${string}`, clock.now.getTime());
+		if (payerAdmission.outcome !== AuthorizationDecisionOutcomes.Allow || payerAdmission.evidence === null)
+			return null;
 		const childConversationId = _DeterministicUuid("group-child-conversation", id);
-		const request = await this.transaction.conversationChildRequest.create({ data: { id, siloId: caller.siloId, idempotencyKey: command.idempotencyKey, parentConversationId, parentMessageId: command.parentMessageId, parentMessagePosition: BigInt(command.parentMessagePosition), childConversationId, computerId: `computer-${_DeterministicUuid("group-child-computer", id)}`, requestedByPrincipalId: caller.principalId, requesterSubjectId: caller.subjectId, requesterIssuer: caller.externalIssuer!, requesterAuthenticatedAt: new Date(caller.verifiedAuthenticationAt!), agentServiceId: agent.agentServiceId, agentRevisionId: agent.agentRevisionId, agentIdentityId: agent.agentIdentityId, agentPrincipalId: agent.principalId, agentName: agent.name, profileRevisionId: agent.profileRevisionId, participantSubjectIds: [...audience], commandDigest } });
+		const request = await this.transaction.conversationChildRequest.create({ data: { id, siloId: caller.siloId, idempotencyKey: command.idempotencyKey, parentConversationId, parentMessageId: command.parentMessageId, parentMessagePosition: BigInt(command.parentMessagePosition), childConversationId, computerId: `computer-${_DeterministicUuid("group-child-computer", id)}`, requestedByPrincipalId: caller.principalId, requesterSubjectId: caller.subjectId, requesterIssuer: caller.externalIssuer!, requesterAuthenticatedAt: new Date(caller.verifiedAuthenticationAt!), agentServiceId: agent.agentServiceId, agentRevisionId: agent.agentRevisionId, agentIdentityId: agent.agentIdentityId, agentPrincipalId: agent.principalId, agentName: agent.name, profileRevisionId: agent.profileRevisionId, participantSubjectIds: [...audience], commandDigest, payingGroupId: command.payingGroupId, payingGroupAuthorizationDecisionDigest: payerAdmission.evidence.decisionDigest, payingGroupAuthorizationPolicyRevisionHash: payerAdmission.evidence.policyRevisionHash, payingGroupEffectiveAuthorizationDigest: payerAdmission.evidence.effectiveAuthorizationDigest } });
 		await this.workflows.spawn({ client: this.transaction }, { taskName: GROUP_CHILD_TASK.taskName, idempotencyKey: request.id, input: { requestId: request.id, siloId: request.siloId } });
 		return _GroupChildView(request);
 
@@ -74,7 +83,7 @@ export class PrismaGroupChildRequestRepository implements GroupChildRequestRepos
 			return true;
 		}
 		const subjects = request.participantSubjectIds as string[];
-		await this.transaction.conversation.create({ data: { id: request.childConversationId, siloId: request.siloId, mode: ConversationMode.AgentSession, agentServiceId: request.agentServiceId, computerId: request.computerId, computerAgentIdentityId: request.agentIdentityId, computerProfileRevisionId: request.profileRevisionId, participants: { create: subjects.map(userId => ({ userId, visibleFromPosition: 1n, readThroughPosition: 0n })) } } });
+		await this.transaction.conversation.create({ data: { id: request.childConversationId, siloId: request.siloId, mode: ConversationMode.AgentSession, agentServiceId: request.agentServiceId, payingGroupId: request.payingGroupId, payingGroupAuthorizationDecisionDigest: request.payingGroupAuthorizationDecisionDigest, payingGroupAuthorizationPolicyRevisionHash: request.payingGroupAuthorizationPolicyRevisionHash, payingGroupEffectiveAuthorizationDigest: request.payingGroupEffectiveAuthorizationDigest, computerId: request.computerId, computerAgentIdentityId: request.agentIdentityId, computerProfileRevisionId: request.profileRevisionId, participants: { create: subjects.map(userId => ({ userId, visibleFromPosition: 1n, readThroughPosition: 0n })) } } });
 		const authorization = this.authorization;
 		await authorization.reconcileParticipants(request.siloId, request.childConversationId, subjects, request.requestedByPrincipalId, request.createdAt);
 		await authorization.reconcileCreator(request.siloId, request.childConversationId, request.requestedByPrincipalId, request.createdAt);
@@ -156,6 +165,6 @@ export class PrismaGroupChildRequestRepository implements GroupChildRequestRepos
 			throw new GroupChildConflictError();
 		if (await this.access.audience(caller, request.parentConversationId, request.parentMessagePosition, [caller.subjectId]) === null)
 			return false;
-		return request.state !== ConversationChildRequestState.Ready || await this.access.mayAccess(caller, request.childConversationId);
+		return await this.access.payerAdmitted(request) && (request.state !== ConversationChildRequestState.Ready || await this.access.mayAccess(caller, request.childConversationId));
 	}
 }

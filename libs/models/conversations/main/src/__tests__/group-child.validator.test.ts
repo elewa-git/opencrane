@@ -6,7 +6,7 @@ import { ___GroupChildCreateCommandSchema, ___ParseGroupChildOrigin, ___ParseGro
 /** Supplies the server's public creation progress without authority or runtime metadata. */
 const _CHILD = { conversationId: "child", parentConversationId: "group", parentMessageId: "57de859d-1fb6-4782-aa0b-2b3d4dfd2292", parentMessagePosition: "2", state: GroupChildStates.Pending, agentName: "Research assistant" };
 /** Selects no additional recipients until the caller explicitly adds membership references. */
-const _CREATE = { parentMessageId: _CHILD.parentMessageId, parentMessagePosition: "2", agentServiceId: "assistant", participantRefs: [] as string[], idempotencyKey: "772340d2-5718-40c4-bca9-24d47d63ba9b" };
+const _CREATE = { payingGroupId: "group-1", parentMessageId: _CHILD.parentMessageId, parentMessagePosition: "2", agentServiceId: "assistant", participantRefs: [] as string[], idempotencyKey: "772340d2-5718-40c4-bca9-24d47d63ba9b" };
 
 describe("explicit group child creation", function _Creation()
 {

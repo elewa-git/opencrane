@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ConversationModelPreForwardContracts, ConversationModelPreForwardReasons, ConversationModelResponseKinds, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
+import { ConversationModelPreForwardContracts, ConversationModelPreForwardReasons, ConversationModelResponseKinds, ConversationModelUsageKinds, ConversationModelUsageUnknownReasons, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
 
 import { _OutputRecoveryHarness } from "./conversation-output-recovery.fixture";
 import { _ToolContinuationHarness } from "./conversation-tool-continuation.fixture";
@@ -12,7 +12,7 @@ const _BODY_DIGEST = "c".repeat(64);
 /** Represents a transport-authenticated rejection; cryptographic verification is tested by its owner. */
 function _rejection(input: ConversationModelRequest): ConversationModelResponse
 {
-	return { kind: ConversationModelResponseKinds.PreForwardRejected, receipt: {
+	return { kind: ConversationModelResponseKinds.PreForwardRejected, usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.PreForwardRejected }, receipt: {
 		version: ConversationModelPreForwardContracts.V1, reason: ConversationModelPreForwardReasons.LocalRateLimit,
 		physicalNonce: input.delivery!.physicalNonce, logicalFence: input.delivery!.logicalFence,
 		requestBodySha256: _BODY_DIGEST, deadlineEpochMs: input.notAfterEpochMs, retryAtEpochMs: Date.now() + 1_000,
@@ -198,7 +198,7 @@ describe("saved model retry orchestration", function _suite()
 	it("preserves the earlier encrypted tool result when a later model step is rejected", async function _laterModelRetry()
 	{
 		const f = await _ToolContinuationHarness(1);
-		f.model.request.mockImplementationOnce(async function _tool() { return { kind: ConversationModelResponseKinds.Tool, call: f.call }; }).mockImplementationOnce(_rejection);
+		f.model.request.mockImplementationOnce(async function _tool() { return { kind: ConversationModelResponseKinds.Tool, call: f.call, usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } }; }).mockImplementationOnce(_rejection);
 		await expect(f.authority.advance(f.step)).resolves.toMatchObject({ outcome: "model_retry_waiting", ordinal: 2 });
 		const before = (await f.store.load(f.step))!;
 		vi.setSystemTime(_NOW + 1_000);

@@ -20,7 +20,7 @@ describe("group child participant router", () =>
 {
 	it("binds exact source coordinates and explicit references without accepting subject authority", async () =>
 	{
-		const f = _Fixture(); const command = { parentMessageId: _KEY, parentMessagePosition: "2", agentServiceId: "company", participantRefs: [], idempotencyKey: _KEY };
+		const f = _Fixture(); const command = { payingGroupId: "group-1", parentMessageId: _KEY, parentMessagePosition: "2", agentServiceId: "company", participantRefs: [], idempotencyKey: _KEY };
 		const admitted = await request(f.app).post("/me/conversations/parent/children").send(command);
 		expect(admitted.status).toBe(202); expect(admitted.body).toEqual({ child: { state: "pending" } });
 		expect(admitted.headers["cache-control"]).toBe("no-store");

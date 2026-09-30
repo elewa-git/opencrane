@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CompiledToolDefinitionKinds, ConversationModelResponseKinds, ConversationModelToolModes, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
+import { CompiledToolDefinitionKinds, ConversationModelResponseKinds, ConversationModelToolModes, ConversationModelUsageKinds, ConversationModelUsageUnknownReasons, type ConversationModelRequest, type ConversationModelResponse } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { ConversationComputerToolResultOutcomes } from "../conversation-computer-continuation.types";
@@ -14,18 +14,18 @@ afterEach(function _restore() { vi.restoreAllMocks(); });
 async function _scriptedInventoryModel(input: ConversationModelRequest): Promise<ConversationModelResponse>
 {
 	if (input.history.length === 0)
-		return { kind: ConversationModelResponseKinds.Tool, call: { id: "inventory-discovery-call", name: "discover_inventory", arguments: "{}", content: "Discover the inventory feed." } };
+		return { kind: ConversationModelResponseKinds.Tool, call: { id: "inventory-discovery-call", name: "discover_inventory", arguments: "{}", content: "Discover the inventory feed." }, usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } };
 	if (JSON.parse(input.history.at(-1)!.resultContent).result.nextCursor === null)
 	{
 		const items = input.history.slice(1).flatMap(exchange => JSON.parse(exchange.resultContent).result.items);
 		const quantity = items.reduce((total, item) => total + item.quantity, 0);
-		return { kind: ConversationModelResponseKinds.Text, text: `Counted ${items.length} inventory records totaling ${quantity} units.` };
+		return { kind: ConversationModelResponseKinds.Text, text: `Counted ${items.length} inventory records totaling ${quantity} units.`, usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } };
 	}
 	const discovery = JSON.parse(input.history[0]!.resultContent).result;
 	const previous = input.history.at(-1)!;
 	const filter = input.history.length === 1 ? discovery.filter : JSON.parse(previous.call.arguments).filter;
 	const cursor = input.history.length === 1 ? discovery.cursor : JSON.parse(previous.resultContent).result.nextCursor;
-	return { kind: ConversationModelResponseKinds.Tool, call: { id: `inventory-page-call-${input.history.length}`, name: discovery.pageTool, arguments: JSON.stringify({ filter, cursor }), content: "Read the next inventory page." } };
+	return { kind: ConversationModelResponseKinds.Tool, call: { id: `inventory-page-call-${input.history.length}`, name: discovery.pageTool, arguments: JSON.stringify({ filter, cursor }), content: "Read the next inventory page." }, usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } };
 }
 
 /** Supplies controlled inventory results to the real turn store and encrypted exchange custody. */

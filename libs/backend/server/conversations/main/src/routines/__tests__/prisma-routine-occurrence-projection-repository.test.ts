@@ -23,6 +23,8 @@ const _COMMAND: PrepareRoutineOccurrenceCommand = {
 	requesterAuthenticatedAt: "2026-09-24T12:00:00.000Z", audiencePrincipalIds: ["principal-1", "principal-2"],
 	instruction: "Prepare the weekly report",
 };
+/** Original routine payer copied into the hidden occurrence conversation. */
+const _PAYER = { payingGroupId: "group-1", decisionDigest: `sha256:${"a".repeat(64)}` as const, policyRevisionHash: `sha256:${"b".repeat(64)}` as const, effectiveAuthorizationDigest: `sha256:${"c".repeat(64)}` as const };
 /** Current managed service identity and profile resolved inside the transaction. */
 const _CANDIDATE = { agentServiceId: "service-1", agentRevisionId: "revision-1", agentIdentityId: "identity-1", principalId: "service-principal", name: "Company", workloadProfile: "company", profileRevisionId: "profile-1" };
 
@@ -37,7 +39,7 @@ function _Cipher(): AesGcmConversationPrivatePayloadCipher
 /** Builds the hidden occurrence row selected by the production repository. */
 function _Conversation(overrides: Record<string, unknown> = {})
 {
-	return { id: _COMMAND.conversationId, siloId: _COMMAND.siloId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, agentServiceId: _COMMAND.selectedManagedServiceId, computerId: _RoutineComputerId(_COMMAND.conversationId), computerAgentIdentityId: _CANDIDATE.agentIdentityId, computerProfileRevisionId: _CANDIDATE.profileRevisionId, createdAt: _CREATED, participants: [], ...overrides };
+	return { id: _COMMAND.conversationId, siloId: _COMMAND.siloId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, agentServiceId: _COMMAND.selectedManagedServiceId, computerId: _RoutineComputerId(_COMMAND.conversationId), computerAgentIdentityId: _CANDIDATE.agentIdentityId, computerProfileRevisionId: _CANDIDATE.profileRevisionId, createdAt: _CREATED, payingGroupId: _PAYER.payingGroupId, payingGroupAuthorizationDecisionDigest: _PAYER.decisionDigest, payingGroupAuthorizationPolicyRevisionHash: _PAYER.policyRevisionHash, payingGroupEffectiveAuthorizationDigest: _PAYER.effectiveAuthorizationDigest, participants: [], ...overrides };
 }
 
 /** Creates narrow stateful Prisma delegates used by the actual projection and payload repositories. */
@@ -84,8 +86,8 @@ describe("PrismaRoutineOccurrenceProjectionRepository", function _Suite()
 		const coordinates = _RoutineInstructionCoordinates(_COMMAND.siloId, _COMMAND.conversationId);
 		const encrypted = fixture.cipher.encrypt(_COMMAND.instruction, coordinates);
 
-		await expect(fixture.repository.stage({ command: _COMMAND, payload: encrypted, requireExisting: false, published: false })).resolves.toMatchObject({ siloId: _COMMAND.siloId, conversationId: _COMMAND.conversationId, payloadRef: coordinates.payloadRef, agentIdentityId: _CANDIDATE.agentIdentityId, profileRevisionId: _CANDIDATE.profileRevisionId });
-		expect(fixture.transaction.conversation.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ id: _COMMAND.conversationId, siloId: _COMMAND.siloId, mode: ConversationMode.AgentSession }) }));
+		await expect(fixture.repository.stage({ command: _COMMAND, payer: _PAYER, payload: encrypted, requireExisting: false, published: false })).resolves.toMatchObject({ siloId: _COMMAND.siloId, conversationId: _COMMAND.conversationId, payloadRef: coordinates.payloadRef, agentIdentityId: _CANDIDATE.agentIdentityId, profileRevisionId: _CANDIDATE.profileRevisionId });
+		expect(fixture.transaction.conversation.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ id: _COMMAND.conversationId, siloId: _COMMAND.siloId, mode: ConversationMode.AgentSession, payingGroupId: _PAYER.payingGroupId, payingGroupAuthorizationDecisionDigest: _PAYER.decisionDigest, payingGroupAuthorizationPolicyRevisionHash: _PAYER.policyRevisionHash, payingGroupEffectiveAuthorizationDigest: _PAYER.effectiveAuthorizationDigest }) }));
 		expect(fixture.transaction.conversationPrivatePayload.create).toHaveBeenCalledWith({ data: expect.objectContaining({ id: coordinates.payloadRef, siloId: _COMMAND.siloId, conversationId: _COMMAND.conversationId, authorSubject: "opencrane", ciphertextDigest: encrypted.ciphertextDigest }) });
 		expect(fixture.transaction.conversation.update).toHaveBeenCalledOnce();
 		expect(fixture.participants).toEqual([]);
@@ -103,11 +105,22 @@ describe("PrismaRoutineOccurrenceProjectionRepository", function _Suite()
 		const coordinates = _RoutineInstructionCoordinates(_COMMAND.siloId, _COMMAND.conversationId);
 		const retryPayload = fixture.cipher.encrypt(_COMMAND.instruction, coordinates);
 
-		await expect(fixture.repository.stage({ command: _COMMAND, payload: retryPayload, requireExisting: false, published: false })).resolves.toMatchObject({ ciphertextDigest: fixture.payload()!.ciphertextDigest });
+		await expect(fixture.repository.stage({ command: _COMMAND, payer: _PAYER, payload: retryPayload, requireExisting: false, published: false })).resolves.toMatchObject({ ciphertextDigest: fixture.payload()!.ciphertextDigest });
 		expect(fixture.transaction.conversationPrivatePayload.create).not.toHaveBeenCalled();
 		expect(fixture.transaction.conversation.update).not.toHaveBeenCalled();
 		const changed = { ..._COMMAND, instruction: "Substituted instruction" };
-		await expect(fixture.repository.stage({ command: changed, payload: fixture.cipher.encrypt(changed.instruction, coordinates), requireExisting: true, published: false })).rejects.toThrow("differs from its saved ciphertext");
+		await expect(fixture.repository.stage({ command: changed, payer: _PAYER, payload: fixture.cipher.encrypt(changed.instruction, coordinates), requireExisting: true, published: false })).rejects.toThrow("differs from its saved ciphertext");
+	});
+
+	it("rejects a hidden conversation whose saved payer differs from the routine", async function _PayerMismatch()
+	{
+		const fixture = _Fixture(_Conversation({ payingGroupId: "group-other" }));
+		const coordinates = _RoutineInstructionCoordinates(_COMMAND.siloId, _COMMAND.conversationId);
+		const payload = fixture.cipher.encrypt(_COMMAND.instruction, coordinates);
+
+		await expect(fixture.repository.stage({ command: _COMMAND, payer: _PAYER, payload, requireExisting: false, published: false })).rejects.toThrow("conflicting payer evidence");
+		expect(fixture.eligible).not.toHaveBeenCalled();
+		expect(fixture.transaction.conversationPrivatePayload.create).not.toHaveBeenCalled();
 	});
 
 	it("never recreates a missing payload in required-existing recovery mode", async function _RequireExisting()
@@ -115,7 +128,7 @@ describe("PrismaRoutineOccurrenceProjectionRepository", function _Suite()
 		const fixture = _Fixture(_Conversation());
 		const coordinates = _RoutineInstructionCoordinates(_COMMAND.siloId, _COMMAND.conversationId);
 
-		await expect(fixture.repository.stage({ command: _COMMAND, payload: fixture.cipher.encrypt(_COMMAND.instruction, coordinates), requireExisting: true, published: true })).rejects.toThrow("recovery requires its stored ciphertext");
+		await expect(fixture.repository.stage({ command: _COMMAND, payer: _PAYER, payload: fixture.cipher.encrypt(_COMMAND.instruction, coordinates), requireExisting: true, published: true })).rejects.toThrow("recovery requires its stored ciphertext");
 		expect(fixture.transaction.conversationPrivatePayload.create).not.toHaveBeenCalled();
 		expect(fixture.transaction.conversation.update).not.toHaveBeenCalled();
 		expect(fixture.eligible).not.toHaveBeenCalled();
@@ -126,11 +139,11 @@ describe("PrismaRoutineOccurrenceProjectionRepository", function _Suite()
 		const absent = _Fixture();
 		absent.eligible.mockResolvedValueOnce(null);
 		const encrypted = absent.cipher.encrypt(_COMMAND.instruction, _RoutineInstructionCoordinates(_COMMAND.siloId, _COMMAND.conversationId));
-		await expect(absent.repository.stage({ command: _COMMAND, payload: encrypted, requireExisting: false, published: false })).resolves.toBeNull();
+		await expect(absent.repository.stage({ command: _COMMAND, payer: _PAYER, payload: encrypted, requireExisting: false, published: false })).resolves.toBeNull();
 		expect(absent.transaction.conversation.create).not.toHaveBeenCalled();
 
 		const changed = _Fixture(_Conversation({ computerProfileRevisionId: "profile-old" }));
-		await expect(changed.repository.stage({ command: _COMMAND, payload: encrypted, requireExisting: false, published: false })).resolves.toBeNull();
+		await expect(changed.repository.stage({ command: _COMMAND, payer: _PAYER, payload: encrypted, requireExisting: false, published: false })).resolves.toBeNull();
 		expect(changed.transaction.conversationPrivatePayload.create).not.toHaveBeenCalled();
 	});
 
@@ -139,7 +152,7 @@ describe("PrismaRoutineOccurrenceProjectionRepository", function _Suite()
 		const fixture = _Fixture(_Conversation());
 		fixture.setPayload(_PayloadRow());
 		const encrypted = fixture.cipher.encrypt(_COMMAND.instruction, _RoutineInstructionCoordinates(_COMMAND.siloId, _COMMAND.conversationId));
-		const record = await fixture.repository.stage({ command: _COMMAND, payload: encrypted, requireExisting: true, published: true });
+		const record = await fixture.repository.stage({ command: _COMMAND, payer: _PAYER, payload: encrypted, requireExisting: true, published: true });
 
 		await fixture.repository.publish(record!);
 
@@ -158,7 +171,7 @@ describe("PrismaRoutineOccurrenceProjectionRepository", function _Suite()
 		const fixture = _Fixture(_Conversation());
 		fixture.setPayload(_PayloadRow());
 		fixture.principals.splice(0, fixture.principals.length, ...principals);
-		const record = await fixture.repository.stage({ command: _COMMAND, payload: fixture.cipher.encrypt(_COMMAND.instruction, _RoutineInstructionCoordinates(_COMMAND.siloId, _COMMAND.conversationId)), requireExisting: true, published: true });
+		const record = await fixture.repository.stage({ command: _COMMAND, payer: _PAYER, payload: fixture.cipher.encrypt(_COMMAND.instruction, _RoutineInstructionCoordinates(_COMMAND.siloId, _COMMAND.conversationId)), requireExisting: true, published: true });
 
 		await expect(fixture.repository.publish(record!)).rejects.toThrow("missing or ambiguous");
 		expect(fixture.participants).toEqual([]);

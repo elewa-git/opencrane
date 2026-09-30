@@ -28,8 +28,17 @@ the provider-native image tool.
  └────────────────────────────────────┘
         │  registered models + credential status  (the key itself is never echoed back)
         ▼
- model-routing resolves which model each request uses
+model-routing resolves which model each request uses
 ```
+
+The same model registry owns immutable EUR tariff revisions. `_CreateProviderModelTariffLookup`
+reads one registered model and one active tariff revision from the caller's database transaction,
+then returns the model-routing validator rather than exposing stored rates directly. Missing or
+ambiguous aliases and tariff windows fail closed. The database clock selects the stored revision;
+the existing validator also checks the application clock and conservatively refuses the quote if
+those clocks disagree across the validity boundary. This reader does not create tariff revisions,
+reserve budget, or grant model access. Its caller must retain current run and model authority, and
+the later physical budget claim performs its own database checks.
 
 **In this flow:** [model-routing](../../model-routing/main/README.md) *(owns external LiteLLM adapters and resolves models)* · providers *(owns durable command and final product projections)* · LiteLLM *(the proxy the key is registered into)*
 
@@ -95,6 +104,10 @@ keeps its contracts and tests beside its implementation. `src/index.ts` remains 
   `/api/v1/providers/byok` and `/api/v1/models`.
 - `_ProvidersOpenapiPaths` — the OpenAPI (REST API description) path fragments for this surface.
 - `_CreateProviderEffectCommandExecutor` — the shared route and background-reconciler composition.
+- `_CreateProviderModelTariffLookup` — a transaction-bound reader for one validated, model-bound EUR
+  quote. Callers supply only silo, model alias, and the completion ceiling; rates come from immutable
+  provider-owned rows. A quote is evidence for reservation, not authority to dispatch or skip the
+  live database checks at physical claim time.
 
 The application root constructs that executor once and injects the same instance into both routers
 and the background reconciler. Routes cannot construct a local executor or silently omit durable
@@ -125,7 +138,7 @@ domains.
 
 ## Data & persistence
 
-Owns `ProviderCredential`, `ModelDefinition`, and `ProviderEffectCommand` in
+Owns `ProviderCredential`, `ModelDefinition`, `ModelEurTariffRevision`, and `ProviderEffectCommand` in
 `apps/opencrane/prisma/schema/providers.prisma`.
 
 ## See also

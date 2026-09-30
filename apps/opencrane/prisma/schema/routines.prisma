@@ -52,6 +52,10 @@ model AgentRoutine {
   requesterAuthenticatedAt     DateTime           @map("requester_authenticated_at")
   destinationConversationId    String             @map("destination_conversation_id")
   selectedManagedServiceId     String             @map("selected_managed_service_id")
+  payingGroupId                String             @map("paying_group_id")
+  payingGroupAuthorizationDecisionDigest String   @map("paying_group_authorization_decision_digest")
+  payingGroupAuthorizationPolicyRevisionHash String @map("paying_group_authorization_policy_revision_hash")
+  payingGroupEffectiveAuthorizationDigest String  @map("paying_group_effective_authorization_digest")
   status                       AgentRoutineStatus  @default(Active)
   currentRevision              Int                @default(1) @map("current_revision")
   lifecycleRevision            Int                @default(1) @map("lifecycle_revision")
@@ -66,6 +70,7 @@ model AgentRoutine {
   requester                    Principal           @relation("RoutineOriginalRequester", fields: [originalRequesterPrincipalId, siloId], references: [id, siloId], onDelete: Restrict)
   selectedManagedService       AgentService        @relation("RoutineSelectedManagedService", fields: [selectedManagedServiceId, siloId], references: [id, siloId], onDelete: Restrict)
   destinationConversation      Conversation        @relation("RoutineDestinationConversation", fields: [destinationConversationId, siloId], references: [id, siloId], onDelete: Restrict)
+  payingGroup                  Group               @relation("RoutinePayingGroup", fields: [payingGroupId, siloId], references: [id, siloId], onDelete: Restrict)
   revisions                    AgentRoutineRevision[]
   firings                      AgentRoutineFiring[]
   commandReceipts              AgentRoutineCommandReceipt[]
@@ -76,6 +81,7 @@ model AgentRoutine {
   @@index([siloId, originalRequesterPrincipalId, status])
   @@index([siloId, nextAutomaticOccurrence, status])
   @@index([destinationConversationId, siloId])
+  @@index([payingGroupId, siloId])
   @@map("agent_routines")
 }
 

@@ -35,6 +35,9 @@ does not grant permission to use a run.
 ## Main rules
 
 - A duplicate admission returns the first saved input only when the caller and request match.
+- A managed run stores the paying group and three authorization digests selected by its conversation.
+  Personal runs store all four fields as null. Duplicate and unique-key-race recovery return that
+  saved tuple only after the input owner has rechecked current authority; they never adopt a new payer.
 - The human requester must match the input message's author. A company assistant keeps its own
   execution identity and permissions; it does not become the human who asked for help.
 - Admission creates an exact `AgentRun/Read` grant for the verified personal owner. Retrying an
@@ -51,6 +54,13 @@ does not grant permission to use a run.
 - Competing writes use serializable database transactions and typed compare-and-set updates.
 
 ## Public surface
+
+- `RunAdmissionPayer` carries the original managed paying group and authorization evidence into
+  admission. `PrismaRunAdmissionUnitOfWork` persists it with the run and supplies it to duplicate
+  verification before releasing the immutable snapshot.
+- `PrismaRoutineRunSnapshotRecoveryRepository` returns the saved payer with the checked first
+  snapshot, so later routine compilation can recheck current group authority without rebuilding
+  admission or changing the payer.
 
 - `PrismaConversationRunLifecycleUnitOfWork` records start, recovery and completion for the admitted
   run attempt and computer lease. A model response that cannot be recovered moves the running
@@ -85,6 +95,36 @@ result does not mean the assistant has finished its answer. Company-child runs r
 personal activity API; canonical participant receipts belong to conversation history.
 The status projection exposes `cancelling` while durable arbitration or cleanup remains active and
 `cancelled` only after provider claims no longer hold a fence.
+
+### Managed monthly EUR ledger
+
+`PrismaManagedMonthlyBudgetUnitOfWork` owns the durable money transitions for managed model
+requests. It reserves one conservative EUR-micro hold across the global, paying-group and optional
+assistant monthly accounts, claims one exact physical request, and then either settles verified
+usage, retains the worst case for an unknown outcome, or releases a transport-authenticated request
+that provably never reached the provider. Every transition uses the database clock and one bounded
+Serializable transaction. Exact replays return the saved winner and cannot dispatch or charge twice.
+
+Reservations freeze the admitted run attempt, payer, model, input/output ceilings, immutable tariff
+row and quote digest. A physical claim additionally freezes the request nonce, body digest and
+original deadline. Current policies and the frozen tariff are checked again immediately before a
+claim, so an older hold cannot bypass a new optional assistant ceiling, a lowered limit, a closed
+account, an expired tariff or an elapsed run deadline. Known charges below the hold restore unused
+capacity. Unknown outcomes retain the full hold. A representable above-quote charge is recorded as
+known settled liability; an unrepresentable charge keeps the hold while retaining exact token and
+tariff evidence. Both integrity failures close further admission.
+
+This is a ledger boundary, not operational dispatch enforcement. No current model-request caller is
+wired to it yet, and this package does not mark runs, conversations or descendants terminal when a
+ceiling closes. A future reviewed system-stop owner must perform that cleanup without fabricating a
+human Stop decision. Personal runs return a distinct outcome only when their saved service and
+execution subject prove the personal ownership path.
+
+The separate `test:monthly-budget:sql` target checks competing reservations and physical claims
+using two PostgreSQL clients. It requires `OPENCRANE_MONTHLY_BUDGET_SQL_DATABASE_URL` to name a
+fresh test database loaded with the reviewed baseline; it does not use the general `DATABASE_URL`.
+Ordinary tests skip these cases. Pull-request and nightly validation create a separate qualification
+database, apply the reviewed baseline there and pass its URL explicitly to this target.
 
 ### Run-tree accounting foundation
 
@@ -150,7 +190,11 @@ shared backend libraries. It never imports an application or Kubernetes client.
 
 ## Data and persistence
 
-The main records are `AgentRun` and its append-only `RunInputSnapshot` rows. Initial admission saves
+The main records are `AgentRun` and its append-only `RunInputSnapshot` rows. Managed monthly money
+uses `ManagedBudgetPolicy`, `ManagedBudgetMonthlyAccount`, `ManagedBudgetEffect`,
+`ManagedBudgetPhysicalAttempt`, and `ManagedBudgetScopeImpact`; provider-owned
+`ModelEurTariffRevision` remains immutable pricing input rather than ledger-owned configuration.
+Initial admission saves
 the run and attempt-one snapshot together, plus a personal-owner read grant only for a personal
 interactive run. Interactive snapshots bind exact final-human-message provenance. Automatic and
 manual routine snapshots instead bind the exact routine, revision, firing, slot and original

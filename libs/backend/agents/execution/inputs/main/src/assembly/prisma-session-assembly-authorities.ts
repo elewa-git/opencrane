@@ -15,7 +15,7 @@ import type { RoutineOccurrencePromptAdmissionReader } from "../sources/routine-
 import { PrismaSkillRevisionEligibilityRepository, PrismaSkillRevisionEligibilitySource } from "../sources/prisma-skill-revision-eligibility-source";
 import { TransactionBoundProductResourceAuthorizationSource } from "../sources/product-resource-authorization-source";
 import { RunPolicyMemoryScopeSource } from "../memory/run-policy-memory-scope-source";
-import type { ApprovedPersonaInput, ApprovedPersonaSource, BudgetPolicySource, ConversationHistoryAdmissionReader, ExecutionSubjectAuthority, FirstPartyCapabilitySelectionSource, RunAuthoritySource, SessionAssemblyAuthorities, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicySource } from "./session-assembly.types";
+import type { ApprovedPersonaInput, ApprovedPersonaSource, BudgetPolicySource, ConversationContextRepositoryFactory, ConversationHistoryAdmissionReader, ExecutionSubjectAuthority, FirstPartyCapabilitySelectionSource, RunAuthoritySource, SessionAssemblyAuthorities, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicySource } from "./session-assembly.types";
 
 /** Keeps built-in callables unavailable until composition injects an admission-owned selector. */
 const _NO_FIRST_PARTY_CAPABILITIES: FirstPartyCapabilitySelectionSource = {
@@ -26,20 +26,28 @@ const _NO_FIRST_PARTY_CAPABILITIES: FirstPartyCapabilitySelectionSource = {
 export function __CreatePrismaSessionAssemblyAuthorities(admission: RunAdmissionRepository, executionSubject: ExecutionSubjectAuthority, conversationHistory: ConversationHistoryAdmissionReader, routinePrompt?: RoutineOccurrencePromptAdmissionReader, firstPartyCapabilities: FirstPartyCapabilitySelectionSource = _NO_FIRST_PARTY_CAPABILITIES): SessionAssemblyAuthorities
 {
 	const personalMemoryScope = new PersonalMemoryScopeSource(_CreatePersonalMemory);
+	const createConversation: ConversationContextRepositoryFactory = function _CreateConversation(transaction): PrismaConversationContextRepository { return _CreateConversationContextRepository(transaction, conversationHistory, routinePrompt); };
 	return {
 		admission,
 		runAuthority: new TransactionBoundRunAuthoritySource(),
 		approvedPersona: new TransactionBoundApprovedPersonaSource(),
-		conversationContext: new TransactionBoundConversationContextSource(function _CreateConversationContext(transaction): PrismaConversationContextRepository { return _CreateConversationContextRepository(transaction, conversationHistory, routinePrompt); }),
+		conversationContext: new TransactionBoundConversationContextSource(createConversation),
 		preferenceFacts: new PersonalMemoryPreferenceFactSource(_CreatePersonalMemory),
 		memoryScope: new RunPolicyMemoryScopeSource(personalMemoryScope),
 		toolPolicy: new TransactionBoundRevisionToolPolicySource(),
 		skillEligibility: new PrismaSkillRevisionEligibilitySource(_CreateSkillRevisionEligibilityRepository),
-		productAuthorization: new TransactionBoundProductResourceAuthorizationSource(),
+		productAuthorization: __CreateTransactionBoundProductResourceAuthorizationSource(conversationHistory, routinePrompt),
 		firstPartyCapabilities,
 		budgetPolicy: new TransactionBoundRevisionBudgetPolicySource(),
 		executionSubject,
 	};
+}
+
+/** Builds the current conversation and payer authorization source without exposing its Prisma reader. */
+export function __CreateTransactionBoundProductResourceAuthorizationSource(conversationHistory: ConversationHistoryAdmissionReader, routinePrompt?: RoutineOccurrencePromptAdmissionReader): TransactionBoundProductResourceAuthorizationSource
+{
+	const createConversation: ConversationContextRepositoryFactory = function _CreateConversation(transaction): PrismaConversationContextRepository { return _CreateConversationContextRepository(transaction, conversationHistory, routinePrompt); };
+	return new TransactionBoundProductResourceAuthorizationSource(createConversation);
 }
 
 /** Binds each run-authority read to the active admission transaction. */

@@ -8,6 +8,9 @@ import { PrismaRoutineRunSnapshotRecoveryRepository } from "../prisma-routine-ru
 import type { RoutineRunAdmissionCommand } from "../run-admission.types";
 import { __DigestRunInputSnapshot } from "../run-input-snapshot-digest";
 
+/** Original payer retained by the admitted routine run. */
+const _PAYER = { payingGroupId: "group-1", authorization: { decisionDigest: `sha256:${"1".repeat(64)}` as const, policyRevisionHash: `sha256:${"2".repeat(64)}` as const, effectiveAuthorizationDigest: `sha256:${"3".repeat(64)}` as const } };
+
 /** Build one exact automatic or manual routine admission command. */
 function _Command(trigger: "scheduled" | "manual" = "scheduled"): RoutineRunAdmissionCommand
 {
@@ -60,7 +63,7 @@ function _Run(command: RoutineRunAdmissionCommand, snapshot: RunInputSnapshot): 
 		trigger: command.trigger === "scheduled" ? AgentRunTrigger.Scheduled : AgentRunTrigger.Manual,
 		routineFiringId: command.routineInput.firingId, routineId: command.routineInput.routineId, routineRevision: command.routineInput.routineRevision,
 		routineScheduledSlot: command.routineInput.scheduledSlot === null ? null : new Date(command.routineInput.scheduledSlot),
-		agentIdentityId: snapshot.executionSubject.agentIdentityId, principalId: snapshot.executionSubject.principalId, executionSubject: snapshot.executionSubject, requestIdempotencyKey: command.requestIdempotencyKey, attempt: 1, state: AgentRunState.Accepted, inputSnapshotDigest: snapshot.digest, acceptedAt: new Date("2026-09-01T00:00:00.000Z"),
+		agentIdentityId: snapshot.executionSubject.agentIdentityId, principalId: snapshot.executionSubject.principalId, payingGroupId: _PAYER.payingGroupId, payingGroupAuthorizationDecisionDigest: _PAYER.authorization.decisionDigest, payingGroupAuthorizationPolicyRevisionHash: _PAYER.authorization.policyRevisionHash, payingGroupEffectiveAuthorizationDigest: _PAYER.authorization.effectiveAuthorizationDigest, executionSubject: snapshot.executionSubject, requestIdempotencyKey: command.requestIdempotencyKey, attempt: 1, state: AgentRunState.Accepted, inputSnapshotDigest: snapshot.digest, acceptedAt: new Date("2026-09-01T00:00:00.000Z"),
 	} as unknown as AgentRun;
 }
 
@@ -94,11 +97,20 @@ describe("PrismaRoutineRunSnapshotRecoveryRepository", function _RoutineRunSnaps
 	{
 		const fixture = _Fixture(_Command(trigger));
 
-		await expect(fixture.repository.recover(fixture.command, 1)).resolves.toEqual(fixture.snapshot);
+		await expect(fixture.repository.recover(fixture.command, 1)).resolves.toEqual({ payer: _PAYER, snapshot: fixture.snapshot });
 		expect(fixture.snapshot.firstPartyCapabilities).toEqual([]);
 		expect(fixture.transaction.agentRun.findUnique).toHaveBeenCalledWith({ where: { id: fixture.command.runId } });
 		expect(fixture.transaction.agentRoutineFiring.findUnique).toHaveBeenCalledWith({ where: { id: fixture.command.routineInput.firingId } });
 		expect(fixture.transaction.runInputSnapshot.findUnique).toHaveBeenCalledWith({ where: { runId_attempt_digest: { runId: fixture.command.runId, attempt: 1, digest: fixture.snapshot.digest } } });
+	});
+
+	it("rejects partial payer evidence before reading the linked firing", async function _RejectsPartialPayer()
+	{
+		const fixture = _Fixture();
+		fixture.state.run = { ...fixture.state.run!, payingGroupAuthorizationPolicyRevisionHash: null };
+
+		await expect(fixture.repository.recover(fixture.command, 1)).rejects.toThrow("complete managed payer evidence");
+		expect(fixture.transaction.agentRoutineFiring.findUnique).not.toHaveBeenCalled();
 	});
 
 	it("returns null only when the expected run does not exist", async function _ReturnsMissingRun()

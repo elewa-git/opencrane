@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ConversationComputerTurnAuthorityService, ConversationComputerToolResultOutcomes, type ConversationComputerTurnModelReservation, type ConversationComputerTurnToolSelection, type ConversationComputerTurnCandidate, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { McpInvocationDispatchOutcomes, RemoteMcpInvocationExecutor } from "@opencrane/backend/server/gateways/mcp";
-import { CompiledFinalOutputModes, CompiledToolDefinitionKinds, ConversationModelResponseKinds, ConversationToolProposalOutcomes, McpConnectionCredentialKinds } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, CompiledToolDefinitionKinds, ConversationModelResponseKinds, ConversationModelUsageKinds, ConversationModelUsageUnknownReasons, ConversationToolProposalOutcomes, McpConnectionCredentialKinds } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { _OpenConversationTurnProtocol, _ReserveConversationTurnModel, _SelectConversationTurnTool } from "./conversation-turn-protocol.fixture";
@@ -60,7 +60,7 @@ function _ModelSelectionHarness(callName: string)
 		return { proposalId: selection.proposalId, outcome: ConversationToolProposalOutcomes.Existing };
 	}) };
 	const logger = { warn: vi.fn() };
-	const model = { request: vi.fn().mockResolvedValue({ kind: ConversationModelResponseKinds.Tool, call: { id: "model-call-1", name: callName, arguments: JSON.stringify({ query: "private-query" }), content: null } }) };
+	const model = { request: vi.fn().mockResolvedValue({ kind: ConversationModelResponseKinds.Tool, call: { id: "model-call-1", name: callName, arguments: JSON.stringify({ query: "private-query" }), content: null }, usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } }) };
 	const modelCustody = { storeDeclaration: vi.fn().mockResolvedValue({ payloadRef: "payload-1", ciphertextDigest: `sha256:${"d".repeat(64)}` }) };
 	const toolResults = { read: vi.fn().mockResolvedValue({ outcome: ConversationComputerToolResultOutcomes.Pending, waitFor: "result" }) };
 	const toolRequestedNotifications = { publishRequested: vi.fn().mockResolvedValue("published") };

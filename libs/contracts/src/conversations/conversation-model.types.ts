@@ -31,6 +31,31 @@ export enum ConversationModelResponseKinds
 	PreForwardRejected = "pre_forward_rejected",
 }
 
+/** Distinguishes provider token evidence from an exchange whose usage is unavailable. */
+export enum ConversationModelUsageKinds
+{
+	/** Carries validated provider input and completion token counts. */
+	Known = "known",
+	/** Records why token evidence cannot be priced; it is never interpreted as zero. */
+	Unknown = "unknown",
+}
+
+/** Closed reasons for an unavailable provider usage projection. */
+export enum ConversationModelUsageUnknownReasons
+{
+	/** The provider response omitted usage fields. */
+	Missing = "missing",
+	/** The provider supplied usage fields that failed structural validation. */
+	Malformed = "malformed",
+	/** No provider usage exists because the request was rejected before forwarding. */
+	PreForwardRejected = "pre_forward_rejected",
+}
+
+/** Normalized token evidence used by the budget owner; counts are bounded signed database integers. */
+export type ConversationModelUsage =
+	| { readonly kind: ConversationModelUsageKinds.Known; readonly inputTokens: number; readonly outputTokens: number }
+	| { readonly kind: ConversationModelUsageKinds.Unknown; readonly reason: ConversationModelUsageUnknownReasons };
+
 /** Preserves the assistant declaration required to pair a later tool result with this call. */
 export interface ConversationModelToolCall
 {
@@ -53,7 +78,7 @@ export interface ConversationModelToolExchange
 	readonly resultContent: string;
 }
 
-/** Contains an answer, tool proposal or authenticated no-forward proof, without provider usage metadata. */
+/** Contains an answer, tool proposal or authenticated no-forward proof with normalized usage evidence. */
 export type ConversationModelResponse =
 	| {
 		/** Distinguishes a completed text response from a proposed tool. */
@@ -62,18 +87,24 @@ export type ConversationModelResponse =
 		readonly text: string;
 		/** Carries an optional complete display decoded only when the frozen output mode permits it. */
 		readonly display?: ConversationA2uiDisplay;
+		/** Normalized provider usage, or an explicit unknown reason. */
+		readonly usage: ConversationModelUsage;
 	}
 	| {
 		/** Requires the caller to retain and admit the proposal before executing it. */
 		readonly kind: ConversationModelResponseKinds.Tool;
 		/** Supplies the declaration needed to pair a later result with this proposal. */
 		readonly call: ConversationModelToolCall;
+		/** Normalized provider usage, or an explicit unknown reason. */
+		readonly usage: ConversationModelUsage;
 	}
 	| {
 		/** Indicates that the transport verified no provider dispatch for this physical request. */
 		readonly kind: ConversationModelResponseKinds.PreForwardRejected;
 		/** Supplies non-secret evidence, not permission to renew credentials or allowances. */
 		readonly receipt: ConversationModelPreForwardReceipt;
+		/** Pre-forward rejection has no provider usage. */
+		readonly usage: { readonly kind: ConversationModelUsageKinds.Unknown; readonly reason: ConversationModelUsageUnknownReasons.PreForwardRejected };
 	};
 
 /**

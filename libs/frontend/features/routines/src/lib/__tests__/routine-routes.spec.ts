@@ -133,10 +133,18 @@ function _Providers(destinationValues: readonly string[] = [], proposalValues: r
 {
 	const unavailable = vi.fn().mockRejectedValue(new Error("Unexpected route test gateway call"));
 	const gateway: RoutineGateway = { list: unavailable, read: unavailable, firings: unavailable, creationOptions: unavailable, proposal: unavailable, cancelProposal: unavailable, preview: unavailable, create: unavailable, revise: unavailable, pause: unavailable, resume: unavailable, retire: unavailable, runNow: unavailable };
-	const queryParamMap = convertToParamMap({ ...(destinationValues.length === 0 ? {} : { destination: destinationValues }), ...(proposalValues.length === 0 ? {} : { proposalRef: proposalValues }) });
+	const queryParamMap = convertToParamMap({ ..._OptionalQuery("destination", destinationValues), ..._OptionalQuery("proposalRef", proposalValues) });
 	const route: Partial<ActivatedRoute> = { paramMap: of(convertToParamMap({})), queryParamMap: of(queryParamMap), snapshot: { paramMap: convertToParamMap({}), queryParamMap } as ActivatedRoute["snapshot"] };
 
 	return [{ provide: ROUTINE_GATEWAY, useValue: gateway }, { provide: ROUTINE_SESSION, useValue: () => null }, { provide: Router, useValue: { navigate: vi.fn() } }, { provide: ActivatedRoute, useValue: route }];
+}
+
+/** Adds one route query only when its fixture supplies values. */
+function _OptionalQuery(key: string, values: readonly string[]): Record<string, readonly string[]>
+{
+	if (values.length === 0)
+		return {};
+	return { [key]: values };
 }
 
 function _Deferred<T>(): { readonly promise: Promise<T>; resolve(value: T): void }

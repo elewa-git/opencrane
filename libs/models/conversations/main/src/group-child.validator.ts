@@ -19,6 +19,7 @@ const _CreatePosition = z.string().regex(/^[1-9][0-9]{0,19}$/u).refine(value => 
  * audience, including the requester. It does not limit delegated work or parallel execution.
  */
 export const ___GroupChildCreateCommandSchema: z.ZodType<GroupChildCreateCommand> = z.object({
+	payingGroupId: _CommandIdentifier,
 	parentMessageId: _CommandUuid,
 	parentMessagePosition: _CreatePosition,
 	agentServiceId: _CommandIdentifier,

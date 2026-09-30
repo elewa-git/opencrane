@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { ArtifactScannerVerdict, ConversationModelResponseKinds, ConversationModelToolModes } from "@opencrane/contracts";
+import { ArtifactScannerVerdict, ConversationModelResponseKinds, ConversationModelToolModes, ConversationModelUsageKinds, ConversationModelUsageUnknownReasons } from "@opencrane/contracts";
 import type { PrismaClient, Prisma } from "@prisma/client";
 
 import { PrismaConversationRunLifecycleUnitOfWork } from "@opencrane/backend/agents/execution/runs";
@@ -151,7 +151,7 @@ function _AuthorityDependencies(prisma: PrismaClient, capture: _ActualGeneratedF
 			if (input.tools !== ConversationModelToolModes.None || input.history.length !== 1)
 				throw new Error("Generated output integration permits only the saved continuation call");
 			modelDispatches.maxCompletionTokens.push(input.maxCompletionTokens);
-			return { kind: ConversationModelResponseKinds.Text, text: "I created the requested county totals file." };
+			return { kind: ConversationModelResponseKinds.Text, text: "I created the requested county totals file.", usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } };
 		} },
 		modelCustody: custody,
 		toolResults,

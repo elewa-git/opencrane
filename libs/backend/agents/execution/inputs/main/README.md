@@ -63,6 +63,10 @@ revision, firing, automatic slot or manual trigger, and original approval proven
 conversation must already have an active computer lease, and current conversation access is still
 checked through the central authorization authority before admission commits.
 
+Conversation admission permits a new interactive or routine run after an earlier run is Completed,
+Cancelled or Failed. Nonterminal runs, including Cancelling and RecoveryRequired, still own the
+conversation and block a competing run until that lifecycle reaches a terminal state.
+
 Interactive human conversation admission can also freeze a closed built-in capability selection.
 The selector runs after current conversation and product authorization, and the snapshot stores only
 the capability, its semantic revision and the digest of its parameter schema. Scheduled and manual
@@ -111,6 +115,12 @@ Conversational admission records an exact `Conversation / Use` decision for the 
 that final transaction, using the same membership witness digest, run arguments, and admission
 instant. The earlier participant check remains defense-in-depth; it cannot replace this final fence
 because membership or grants may change before persistence.
+
+A managed conversation also carries the paying group and the three authorization digests selected
+when that conversation was created. Final admission reads those fields in the run transaction,
+checks the requester still has `Budget / Use` in that group, and returns the original tuple for the
+`AgentRun`. Personal conversations must keep all four fields null. A duplicate rechecks current
+conversation and group authority but never replaces the payer with a newer selection.
 
 Resource-use decisions record the execution Principal: `user` for a personal agent acting through
 its human owner, or `agent-service` for a company agent acting through its own Principal. The
@@ -187,6 +197,9 @@ ceiling or substitutes a different allowance.
   Admission never stores a recall query, reads fact content, or calls Cognee, the knowledge store
   behind the memory gateway. The current text-chat policy disables personal memory; a usable
   `memory_recall` flow and content delivery remain deferred to #601.
+- `__CreateTransactionBoundProductResourceAuthorizationSource` — builds the current conversation
+  and payer authorization source while keeping its Prisma reader inside this package. Routine
+  recovery uses it to recheck the saved payer without importing the concrete repository.
 - `PrismaSkillRevisionEligibilitySource` — locks the AgentRevision's skill assignments
   at admission and refuses an invented, foreign, revoked, or unpublished revision with
   `skill_unavailable`.

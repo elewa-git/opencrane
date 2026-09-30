@@ -82,6 +82,11 @@ unadmitted firing to `Refused` and retains any earlier stage receipts.
 The external adapters must repeat the relevant check at their authoritative write because a database
 check cannot remain atomic with later external I/O.
 
+Preparation also reads the payer fields saved on the routine and hands them directly to the
+conversation projection. A saved preparation receipt returns the same tuple without repeating
+publication. The payer does not enter the workflow task or occurrence history, and scheduling does
+not replace it with authorization evidence from a later retry.
+
 Effect admissions keep the original requester as the entitled Principal while recording the actor
 that actually caused the stage. A manual firing records the saved human command as a `user` actor;
 an automatic firing records the stable routine-scheduler `system` actor. Stage rechecks derive that
@@ -110,7 +115,8 @@ actor from the persisted trigger rather than accepting it from a worker request.
   nextCursor}` and a full page must provide continuation.
 - `PrismaRoutineOccurrencePreparationRepository` adopts the conversation owner's transaction so
   authority, final audience grants and the immutable preparation marker commit together. App
-  composition injects it through the narrow scheduling-contract factory.
+  composition injects it through the narrow scheduling-contract factory. It also returns the
+  routine's saved payer tuple for the hidden conversation projection.
 - `PrismaRoutineOccurrenceActivationRepository` adopts the computer owner's transaction, matches
   the exact saved preparation and repeats current activation authority before first activation or
   receipt recovery. It records or refuses only an unadmitted preparing firing.
@@ -212,6 +218,11 @@ deferred commit checks enforce the same aggregate invariants beneath Prisma.
 `AgentRoutineProposal` stores immutable source coordinates, an exact argument digest and a
 purpose-separated encrypted suggestion. Database authority stamps its 24-hour lifetime and permits
 only one terminal transition; an accepted proposal has exactly one requester-owned routine.
+
+Managed routines also retain the explicitly selected same-silo paying Group and the three central
+authorization evidence digests. Creation and every firing recheck the current Group-bound Budget
+Use decision; saved evidence records why the routine was admitted but never replaces that current
+check. This records payer authority only; it does not claim balance reservation or settlement.
 
 ## See also
 

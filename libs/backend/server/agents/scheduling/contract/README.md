@@ -35,6 +35,9 @@ result therefore stops before scheduling binds a run identifier or advances the 
 - `RoutineFiringIdentity` binds work to its silo, routine revision, firing and workflow task.
 - `RoutineOccurrenceCommand` carries immutable execution facts without instruction content.
 - `PrepareRoutineOccurrenceCommand` adds plaintext only for conversation-history preparation.
+- `RoutineOccurrencePreparationPayer` carries the routine's original paying group and three
+  authorization digests directly into hidden-conversation preparation. It is an in-process handoff,
+  not part of the workflow task, history record or public receipt.
 - `RoutineOccurrencePreparationPort` and `RoutineOccurrencePreparationReceipt` cover conversation
   history creation or recovery.
 - `RoutineOccurrencePreparationRepository` and its factory let the conversation owner reuse the

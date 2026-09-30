@@ -38,6 +38,8 @@ export interface RoutineIdFactory
 /** User command that creates a routine from an existing readable conversation. */
 export interface CreateRoutineCommand
 {
+	/** Explicit same-silo group whose EUR budget pays every managed occurrence. */
+	readonly payingGroupId: string;
 	/** Authenticated creator; browser input must not supply these coordinates. */
 	readonly caller: RoutineCaller;
 	/** Existing conversation whose current participants become the fixed explicit audience. */

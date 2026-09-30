@@ -53,6 +53,7 @@ function _Authorization()
 {
 	return {
 		decidePrincipal: vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow }),
+		admit: vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { operationId: "operation-budget" } }),
 		admitPrincipalBatch: vi.fn().mockResolvedValue([
 			{ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { operationId: "operation-routine" } },
 			{ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { operationId: "operation-service" } },
@@ -109,6 +110,7 @@ describe("PrismaRoutineOccurrenceActivationRepository", function _Suite()
 			expect.objectContaining({ actorKind: "system", actorId: "opencrane-server/routine-schedule/v1" }),
 			expect.objectContaining({ actorKind: "system", actorId: "opencrane-server/routine-schedule/v1" }),
 		]);
+		expect(f.authorization.admit).toHaveBeenCalledWith(expect.objectContaining({ action: "use", boundary: { kind: "group", groupId: "group-1" }, resource: { kind: "budget", id: "group:group-1" } }));
 	});
 
 	it.each([
@@ -156,6 +158,7 @@ describe("PrismaRoutineOccurrenceActivationRepository", function _Suite()
 
 		await expect(f.repository.authorize(_Command(), _PREPARATION)).resolves.toEqual({ activation: _ACTIVATION });
 		expect(f.authorization.admitPrincipalBatch).toHaveBeenCalledOnce();
+		expect(f.authorization.admit).toHaveBeenCalledWith(expect.objectContaining({ action: "use", boundary: { kind: "group", groupId: "group-1" }, resource: { kind: "budget", id: "group:group-1" } }));
 
 		transaction.agentRoutine.findFirst.mockResolvedValue(null);
 		await expect(f.repository.authorize(_Command(), _PREPARATION)).resolves.toBeNull();

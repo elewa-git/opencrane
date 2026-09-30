@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CompiledFinalOutputModes, ConversationEntryKinds, ConversationModelResponseKinds, type ConversationA2uiDisplay } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ConversationEntryKinds, ConversationModelResponseKinds, ConversationModelUsageKinds, ConversationModelUsageUnknownReasons, type ConversationA2uiDisplay } from "@opencrane/contracts";
 
 import { _OutputRecoveryHarness } from "../../__tests__/conversation-output-recovery.fixture";
 import { _ConversationComputerOutputIntents, _ConversationStructuredOutputId } from "../conversation-computer-output-receipt";
@@ -22,7 +22,7 @@ describe("production structured conversation output", function _Suite()
 	{
 		const f = await _harness(false);
 		const display = _StructuredInventoryResult();
-		f.model.request.mockResolvedValue({ kind: ConversationModelResponseKinds.Text, text: f.output.text, display });
+		f.model.request.mockResolvedValue({ kind: ConversationModelResponseKinds.Text, text: f.output.text, display, usage: { kind: ConversationModelUsageKinds.Unknown, reason: ConversationModelUsageUnknownReasons.Missing } });
 		const participantAppends: number[] = [];
 		f.history.beforeAppend = async function _Inspect(command)
 		{

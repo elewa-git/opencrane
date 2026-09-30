@@ -23,7 +23,7 @@
     "check:prisma-boundaries": "node scripts/prisma-boundary-check.mjs",
     "test:prisma-boundaries": "node --test scripts/__tests__/prisma-boundary-check.test.mjs",
     "check:workflow-boundary": "node scripts/workflow-boundary-check.mjs",
-    "test:workflow-boundary": "node --test scripts/__tests__/workflow-boundary-check.test.mjs",
+    "test:workflow-boundary": "node --test scripts/__tests__/workflow-boundary-check.test.mjs scripts/__tests__/monthly-budget-ci-wiring.test.mjs",
     "check:authorization-enforcement": "node scripts/authorization-enforcement-check.mjs",
     "test:authorization-enforcement": "node --test scripts/__tests__/authorization-enforcement-check.test.mjs",
     "test:affected-deployables": "node --test scripts/__tests__/affected-deployables.test.mjs",

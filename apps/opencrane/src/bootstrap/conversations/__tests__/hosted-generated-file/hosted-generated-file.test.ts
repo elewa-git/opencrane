@@ -171,17 +171,31 @@ describe("hosted generated-file public client", function _PublicClientSuite()
 	it("requires every revoked read to fail at the exact membership gate", async function _MembershipDenial()
 	{
 		const paths: string[] = [];
-		const client = new HostedGeneratedFilePublicClient(new URL("https://smoke.opencrane.test"), null, vi.fn<HostedGeneratedFileFetch>(async function _Denied(input)
+		const activationRequests: RequestInit[] = [];
+		const client = new HostedGeneratedFilePublicClient(new URL("https://smoke.opencrane.test"), null, vi.fn<HostedGeneratedFileFetch>(async function _Denied(input, init = {})
 		{
-			paths.push(new URL(String(input)).pathname);
+			const path = new URL(String(input)).pathname;
+			paths.push(path);
+			if (path.endsWith("/messages"))
+				activationRequests.push(init);
 			return _Response(403, { code: "MEMBERSHIP_REQUIRED", error: "Active membership is required." });
 		}));
 		await client.assertMembershipDenied(["/api/v1/me/conversations/conversation-1/history", "/api/v1/me/conversations/conversation-1/assets", "/api/v1/me/runs", "/api/v1/me/runs/run-1"]);
+		await client.assertActivationDenied("conversation-1", "Create the CSV after revocation.");
+		const activationBody = JSON.parse(String(activationRequests[0]!.body));
+		expect(activationBody).toMatchObject({ text: "Create the CSV after revocation.", assetIds: [], activation: "start" });
+		expect(activationBody.idempotencyKey).toMatch(/^[0-9a-f-]{36}$/u);
 		await client.assertDownloadDenied("conversation-1", "asset-1");
-		expect(paths).toEqual(["/api/v1/me/conversations/conversation-1/history", "/api/v1/me/conversations/conversation-1/assets", "/api/v1/me/runs", "/api/v1/me/runs/run-1", "/api/v1/me/conversations/conversation-1/assets/asset-1/content"]);
+		expect(paths).toEqual(["/api/v1/me/conversations/conversation-1/history", "/api/v1/me/conversations/conversation-1/assets", "/api/v1/me/runs", "/api/v1/me/runs/run-1", "/api/v1/me/conversations/conversation-1/messages", "/api/v1/me/conversations/conversation-1/assets/asset-1/content"]);
 
 		const unauthorized = new HostedGeneratedFilePublicClient(new URL("https://smoke.opencrane.test"), null, vi.fn<HostedGeneratedFileFetch>(async function _Unauthorized() { return _Response(401, { code: "AUTHENTICATION_REQUIRED" }); }));
 		await expect(unauthorized.assertMembershipDenied(["/api/v1/me/runs"])).rejects.toThrow("returned 401");
+		const unauthorizedActivation = new HostedGeneratedFilePublicClient(new URL("https://smoke.opencrane.test"), null, vi.fn<HostedGeneratedFileFetch>(async function _UnauthorizedActivation() { return _Response(401, { code: "AUTHENTICATION_REQUIRED" }); }));
+		await expect(unauthorizedActivation.assertActivationDenied("conversation-1", "Create the CSV.")).rejects.toThrow("returned 401");
+		const admittedActivation = new HostedGeneratedFilePublicClient(new URL("https://smoke.opencrane.test"), null, vi.fn<HostedGeneratedFileFetch>(async function _AdmittedActivation() { return _Response(202, { outcome: "accepted", position: "1" }); }));
+		await expect(admittedActivation.assertActivationDenied("conversation-1", "Create the CSV.")).rejects.toThrow("returned 202");
+		const successfulActivation = new HostedGeneratedFilePublicClient(new URL("https://smoke.opencrane.test"), null, vi.fn<HostedGeneratedFileFetch>(async function _SuccessfulActivation() { return _Response(200, { outcome: "accepted", position: "1" }); }));
+		await expect(successfulActivation.assertActivationDenied("conversation-1", "Create the CSV.")).rejects.toThrow("returned 200");
 	});
 
 	it("uses the public model, persona, and three-answer onboarding owners in order", async function _PublicPrerequisiteOrder()

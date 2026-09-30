@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { __CompileRunInput, __RevalidateRunInputSnapshot, __RunInputAuthorityExpiresAt, SessionAssemblyLoadOutcomes, TransactionBoundProductResourceAuthorizationSource } from "@opencrane/backend/agents/execution/inputs";
+import { __CompileRunInput, __CreateTransactionBoundProductResourceAuthorizationSource, __RevalidateRunInputSnapshot, __RunInputAuthorityExpiresAt, SessionAssemblyLoadOutcomes } from "@opencrane/backend/agents/execution/inputs";
 import { PrismaRoutineRunSnapshotRecoveryRepository } from "@opencrane/backend/agents/execution/runs";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ConversationAuthorKinds, ConversationEntryKinds, MessageStates, type ConversationEntry } from "@opencrane/contracts";
@@ -14,10 +14,12 @@ import { ___RunInPrismaUnitOfWork } from "@opencrane/backend/server/infra/prisma
 import type { ConversationComputerTurnCandidate, ConversationComputerTurnCompileCommand, ConversationComputerTurnHistoryAnchor } from "../computers/turns/conversation-computer-turn.types";
 import { CONVERSATION_COMPUTER_TURN_TASK } from "../computers/turns/workflow/conversation-computer-turn-task";
 import { PrismaConversationComputerTurnWorkflowReceiptRepository } from "../computers/turns/workflow/prisma-conversation-computer-turn-workflow-receipt-repository";
+import { KurrentConversationHistoryAdmissionReader } from "../messages/kurrent-conversation-history-admission-reader";
 import { _AssertRoutineActivationComputer, _RoutineActivationCommand, _RoutineActivationEnded, _RoutineActivationReceipt, _RoutineOccurrenceCommand } from "./routine-computer-activation.mapper";
 import { _RoutineEventId, _RoutineInstructionEntry, _RoutinePreparationReceipt } from "./routine-occurrence-history.mapper";
 import { _RoutineRunCommand } from "./routine-run-coordinates";
 import { _RoutineExecutionSubject, _RoutinePromptCompiler } from "./routine-run-input-composition";
+import { RoutineOccurrencePromptHistoryReader } from "./routine-occurrence-prompt-history-reader";
 import { RoutineTurnDispatchKinds, type RoutineTurnCompilerDependencies, type RoutineTurnDispatcher, type RoutineTurnDispatchResult } from "./routine-turn-compiler.types";
 import type { RoutineOccurrenceHistoryRecord } from "./routine-occurrence-history.types";
 
@@ -78,9 +80,10 @@ export class PrismaRoutineTurnCompilerRepository implements RoutineTurnDispatche
 		const activation = _RoutineActivationReceipt(record, preparation, current, publication);
 		const admission = _RoutineRunCommand(record);
 		const runs = new PrismaRoutineRunSnapshotRecoveryRepository(this.transaction);
-		const snapshot = await runs.recover(admission, 1);
-		if (snapshot === null)
+		const recovered = await runs.recover(admission, 1);
+		if (recovered === null)
 			return null;
+		const { payer, snapshot } = recovered;
 		const routines = dependencies.routines(this.transaction);
 		if (!await routines.recover({ ..._RoutineOccurrenceCommand(record), preparation, activation }, snapshot.runId))
 			throw new Error("Routine compilation has no matching saved stage receipts");
@@ -100,8 +103,8 @@ export class PrismaRoutineTurnCompilerRepository implements RoutineTurnDispatche
 			return null;
 		const now = new Date();
 		const context = { prisma: this.transaction, authorization: new PrismaAuthorizationAuthority(this.transaction), admittedAt: now.toISOString(), admittedAtEpochMs: now.getTime() };
-		const authorities = { executionSubject: _RoutineExecutionSubject(dependencies, record, admission, current), productAuthorization: new TransactionBoundProductResourceAuthorizationSource() };
-		const subject = await __RevalidateRunInputSnapshot(admission, snapshot, authorities, context);
+		const authorities = { executionSubject: _RoutineExecutionSubject(dependencies, record, admission, current), productAuthorization: __CreateTransactionBoundProductResourceAuthorizationSource(new KurrentConversationHistoryAdmissionReader(dependencies.history), new RoutineOccurrencePromptHistoryReader(dependencies.occurrences)) };
+		const subject = await __RevalidateRunInputSnapshot(admission, snapshot, payer, authorities, context);
 		if (subject.outcome === SessionAssemblyLoadOutcomes.Denied)
 			throw new Error("Routine compilation no longer has current execution authority");
 		const compiler = _RoutinePromptCompiler(this.transaction, dependencies, admission);

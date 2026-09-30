@@ -6,6 +6,18 @@ import { describe, expect, it, vi } from "vitest";
 
 import { TransactionBoundProductResourceAuthorizationSource } from "../product-resource-authorization-source";
 
+/** Managed payer selected before run admission begins. */
+const _PAYER = { payingGroupId: "group-1", authorization: { decisionDigest: `sha256:${"1".repeat(64)}` as const, policyRevisionHash: `sha256:${"2".repeat(64)}` as const, effectiveAuthorizationDigest: `sha256:${"3".repeat(64)}` as const } };
+
+/** Builds the transaction-bound conversation reader used by the product source. */
+function _ConversationFactory(payer: typeof _PAYER | null)
+{
+	return function _Conversation()
+	{
+		return { load: vi.fn(), payer: vi.fn().mockResolvedValue(payer) } as never;
+	};
+}
+
 /** Runs the central grant evaluator and audit writer with separate human and company Principals. */
 function _RecordedFixture(kind: ExecutionSubjectMembershipKinds, trigger: "interactive" | "scheduled" | "manual" = "interactive")
 {
@@ -13,21 +25,28 @@ function _RecordedFixture(kind: ExecutionSubjectMembershipKinds, trigger: "inter
 	const resources = [
 		{ principalId: "human-1", resourceKind: ProductAuthorizationResourceKinds.Conversation, resourceId: "conversation-1" },
 		{ principalId, resourceKind: ProductAuthorizationResourceKinds.ModelDefinition, resourceId: "model-1" },
+		...(kind === ExecutionSubjectMembershipKinds.Managed ? [{ principalId: "human-1", resourceKind: ProductAuthorizationResourceKinds.Budget, resourceId: "group:group-1" }] : []),
 	];
 	const grants = resources.map(function _Grant(resource)
 	{
 		const capability = __ProductAuthorizationCapability(resource.resourceKind, ProductAuthorizationActions.Use)!;
-		return { id: `grant-${resource.resourceKind}`, siloId: "silo-1", subjectKind: "Principal", subjectPrincipalId: resource.principalId, subjectGroupId: null, boundaryKind: "Personal", boundaryPrincipalId: resource.principalId, boundaryGroupId: null, boundaryCoverage: "Exact", catalogId: capability.catalog.catalogId, catalogRevision: capability.catalog.revision, catalogDigest: capability.catalog.digest, capabilityId: capability.capabilityId, resourceKind: resource.resourceKind, resourceId: resource.resourceId, effect: "Allow", priority: 0, validFrom: new Date(0), expiresAt: null, revokedAt: null };
+		const groupBudget = resource.resourceKind === ProductAuthorizationResourceKinds.Budget;
+		const boundary = groupBudget
+			? { boundaryKind: "Group" as const, boundaryPrincipalId: null, boundaryGroupId: "group-1" }
+			: { boundaryKind: "Personal" as const, boundaryPrincipalId: resource.principalId, boundaryGroupId: null };
+		return { id: `grant-${resource.resourceKind}`, siloId: "silo-1", subjectKind: "Principal", subjectPrincipalId: resource.principalId, subjectGroupId: null, ...boundary, boundaryCoverage: "Exact", catalogId: capability.catalog.catalogId, catalogRevision: capability.catalog.revision, catalogDigest: capability.catalog.digest, capabilityId: capability.capabilityId, resourceKind: resource.resourceKind, resourceId: resource.resourceId, effect: "Allow", priority: 0, validFrom: new Date(0), expiresAt: null, revokedAt: null };
 	});
 	const transaction = {
 		principal: { findUnique: vi.fn(async function _Principal(query: { where: { id_siloId: { id: string } } }) { const id = query.where.id_siloId.id; return { id, subject: id, provenance: id === "human-1" ? "External" : "Internal" }; }) },
 		orgMembership: { findFirst: vi.fn().mockResolvedValue({ id: "membership-1" }) },
 		groupMembership: { findMany: vi.fn().mockResolvedValue([]) },
+		group: { findMany: vi.fn().mockResolvedValue([{ id: "group-1", parentId: null }]) },
 		authorizationGrant: { findMany: vi.fn().mockResolvedValue(grants) },
 		auditDecision: { create: vi.fn(async function _Persist(_command: { data: Prisma.AuditDecisionUncheckedCreateInput }) { return {}; }) },
 	};
 	const authorization = new PrismaAuthorizationAuthority(transaction as never);
-	const source = new TransactionBoundProductResourceAuthorizationSource();
+	const payer = kind === ExecutionSubjectMembershipKinds.Managed ? _PAYER : null;
+	const source = new TransactionBoundProductResourceAuthorizationSource(_ConversationFactory(payer));
 	const command = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1", trigger } as never;
 	const subject = { principalId, agentIdentityId: "identity-1", membership: { kind, revision: 7 }, requester: { requesterPrincipalId: "human-1", membership: { kind: ExecutionSubjectMembershipKinds.Fleet, revision: 7 } }, runScope: { agentRevisionId: "revision-1" } } as never;
 	const admission = { authorization, admittedAtEpochMs: 1_000 } as never;
@@ -37,7 +56,7 @@ function _RecordedFixture(kind: ExecutionSubjectMembershipKinds, trigger: "inter
 	}
 	async function _VerifyExisting()
 	{
-		return source.verifyExisting(command, subject, admission);
+		return source.verifyExisting(command, subject, payer, admission);
 	}
 	return { principalId, grants, transaction, load: _Load, verifyExisting: _VerifyExisting };
 }
@@ -47,18 +66,20 @@ describe("TransactionBoundProductResourceAuthorizationSource", function _Suite()
 	it("admits exact Conversation Use for the requester inside the run transaction", async function _AdmitsConversation()
 	{
 		const admitPrincipal = vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: "sha256:conversation" } });
+		const admit = vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, evidence: { decisionDigest: "sha256:budget" } });
 		const admitPrincipalBatch = vi.fn().mockResolvedValue([{ outcome: AuthorizationDecisionOutcomes.Allow }]);
-		const source = new TransactionBoundProductResourceAuthorizationSource();
-		const result = await source.load({ runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1", trigger: "interactive" } as never, { principalId: "company-principal", agentIdentityId: "identity-1", membership: { kind: "managed" }, requester: { requesterPrincipalId: "principal-1", membership: { kind: ExecutionSubjectMembershipKinds.Fleet, revision: 7 } }, runScope: { agentRevisionId: "revision-1" } } as never, { personaId: null, personaRevisionId: null }, { datasetId: null, memoryQueryPolicy: {} }, { modelDefinitionId: "model-1", modelRoute: {}, mcpTools: [], skillRevisionIds: [], artifactRevisionIds: [] }, { authorization: { admitPrincipal, admitPrincipalBatch }, admittedAtEpochMs: 1_000 } as never);
-		expect(result).toEqual({ outcome: "loaded", value: null });
+		const source = new TransactionBoundProductResourceAuthorizationSource(_ConversationFactory(_PAYER));
+		const result = await source.load({ runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1", trigger: "interactive" } as never, { principalId: "company-principal", agentIdentityId: "identity-1", membership: { kind: "managed" }, requester: { requesterPrincipalId: "principal-1", membership: { kind: ExecutionSubjectMembershipKinds.Fleet, revision: 7 } }, runScope: { agentRevisionId: "revision-1" } } as never, { personaId: null, personaRevisionId: null }, { datasetId: null, memoryQueryPolicy: {} }, { modelDefinitionId: "model-1", modelRoute: {}, mcpTools: [], skillRevisionIds: [], artifactRevisionIds: [] }, { authorization: { admit, admitPrincipal, admitPrincipalBatch }, admittedAtEpochMs: 1_000 } as never);
+		expect(result).toEqual({ outcome: "loaded", value: _PAYER });
 		expect(admitPrincipalBatch).toHaveBeenCalledWith([expect.objectContaining({ principalId: "company-principal", actorKind: "agent-service", actorId: "company-principal", membershipRevision: undefined })]);
 		expect(admitPrincipal).toHaveBeenCalledWith(expect.objectContaining({ siloId: "silo-1", principalId: "principal-1", actorKind: "user", actorId: "principal-1", action: ProductAuthorizationActions.Use, resource: { kind: ProductAuthorizationResourceKinds.Conversation, id: "conversation-1" }, membershipRevision: 7, nowEpochMs: 1_000 }));
+		expect(admit).toHaveBeenCalledWith(expect.objectContaining({ principalId: "principal-1", boundary: { kind: "group", groupId: "group-1" }, resource: { kind: ProductAuthorizationResourceKinds.Budget, id: "group:group-1" } }));
 	});
 
 	it("denies before resource admission when Conversation Use is refused", async function _DeniesConversation()
 	{
 		const admitPrincipalBatch = vi.fn();
-		const source = new TransactionBoundProductResourceAuthorizationSource();
+		const source = new TransactionBoundProductResourceAuthorizationSource(_ConversationFactory(null));
 		const result = await source.load({ runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1", trigger: "interactive" } as never, { principalId: "principal-1", agentIdentityId: "identity-1", membership: { kind: "fleet", revision: 7 }, requester: { requesterPrincipalId: "principal-1", membership: { kind: ExecutionSubjectMembershipKinds.Fleet, revision: 7 } }, runScope: { agentRevisionId: "revision-1" } } as never, { personaId: null, personaRevisionId: null }, { datasetId: null, memoryQueryPolicy: {} }, { modelDefinitionId: "model-1", modelRoute: {}, mcpTools: [], skillRevisionIds: [], artifactRevisionIds: [] }, { authorization: { admitPrincipal: vi.fn().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Deny, evidence: null }), admitPrincipalBatch }, admittedAtEpochMs: 1_000 } as never);
 		expect(result).toEqual({ outcome: "denied", reason: "product_authorization_unavailable" });
 		expect(admitPrincipalBatch).not.toHaveBeenCalled();
@@ -67,30 +88,35 @@ describe("TransactionBoundProductResourceAuthorizationSource", function _Suite()
 	it.each([ExecutionSubjectMembershipKinds.Fleet, ExecutionSubjectMembershipKinds.Standalone, ExecutionSubjectMembershipKinds.Managed])("persists %s resource evidence through the real central recorder without claiming a workload", async function _RecordsPrincipal(kind)
 	{
 		const f = _RecordedFixture(kind);
-		await expect(f.load()).resolves.toEqual({ outcome: "loaded", value: null });
+		const payer = kind === ExecutionSubjectMembershipKinds.Managed ? _PAYER : null;
+		await expect(f.load()).resolves.toEqual({ outcome: "loaded", value: payer });
 		const records = f.transaction.auditDecision.create.mock.calls.map(call => call[0].data);
 		const actorKind = kind === ExecutionSubjectMembershipKinds.Managed ? AuditDecisionActorKind.AgentService : AuditDecisionActorKind.User;
 		const membershipRevision = kind === ExecutionSubjectMembershipKinds.Fleet ? 7 : undefined;
-		expect(records).toEqual([
+		const expected = [
 			expect.objectContaining({ actorKind: AuditDecisionActorKind.User, actorId: "human-1", resourceKind: ProductAuthorizationResourceKinds.Conversation, membershipRevision: 7 }),
+			...(kind === ExecutionSubjectMembershipKinds.Managed ? [expect.objectContaining({ actorKind: AuditDecisionActorKind.User, actorId: "human-1", resourceKind: ProductAuthorizationResourceKinds.Budget, membershipRevision: 7 })] : []),
 			expect.objectContaining({ actorKind, actorId: f.principalId, resourceKind: ProductAuthorizationResourceKinds.ModelDefinition, membershipRevision, decidedAt: new Date(1_000) }),
-		]);
-		expect(records[1]).toMatchObject({ audience: undefined, namespace: undefined, serviceAccountName: undefined, workloadKind: undefined, workloadUid: undefined, podUid: undefined });
+		];
+		expect(records).toEqual(expected);
+		expect(records.at(-1)).toMatchObject({ audience: undefined, namespace: undefined, serviceAccountName: undefined, workloadKind: undefined, workloadUid: undefined, podUid: undefined });
 	});
 
 	it.each(["interactive", "scheduled", "manual"] as const)("records the %s Conversation Use actor on fresh admission and recovery without borrowing resource grants", async function _RoutineActor(trigger)
 	{
 		const fixture = _RecordedFixture(ExecutionSubjectMembershipKinds.Managed, trigger);
-		await expect(fixture.load()).resolves.toEqual({ outcome: "loaded", value: null });
-		await expect(fixture.verifyExisting()).resolves.toEqual({ outcome: "loaded", value: null });
+		await expect(fixture.load()).resolves.toEqual({ outcome: "loaded", value: _PAYER });
+		await expect(fixture.verifyExisting()).resolves.toEqual({ outcome: "loaded", value: _PAYER });
 		const records = fixture.transaction.auditDecision.create.mock.calls.map(call => call[0].data);
 		const actorKind = trigger === "scheduled" ? AuditDecisionActorKind.System : AuditDecisionActorKind.User;
 		const actorId = trigger === "scheduled" ? "opencrane-server/routine-schedule/v1" : "human-1";
 		const conversation = expect.objectContaining({ actorKind, actorId, resourceKind: ProductAuthorizationResourceKinds.Conversation, membershipRevision: 7 });
 		expect(records).toEqual([
 			conversation,
+			expect.objectContaining({ actorKind, actorId, resourceKind: ProductAuthorizationResourceKinds.Budget, membershipRevision: 7 }),
 			expect.objectContaining({ actorKind: AuditDecisionActorKind.AgentService, actorId: "company-principal", resourceKind: ProductAuthorizationResourceKinds.ModelDefinition }),
 			conversation,
+			expect.objectContaining({ actorKind, actorId, resourceKind: ProductAuthorizationResourceKinds.Budget, membershipRevision: 7 }),
 		]);
 	});
 
@@ -99,7 +125,7 @@ describe("TransactionBoundProductResourceAuthorizationSource", function _Suite()
 		const fixture = _RecordedFixture(ExecutionSubjectMembershipKinds.Managed, trigger);
 		fixture.transaction.authorizationGrant.findMany.mockResolvedValue(fixture.grants.map(grant => grant.resourceKind === ProductAuthorizationResourceKinds.ModelDefinition ? { ...grant, subjectPrincipalId: "human-1", boundaryPrincipalId: "human-1" } : grant));
 		await expect(fixture.load()).resolves.toEqual({ outcome: "denied", reason: "product_authorization_unavailable" });
-		expect(fixture.transaction.auditDecision.create.mock.calls.map(call => call[0].data.resourceKind)).toEqual([ProductAuthorizationResourceKinds.Conversation]);
+		expect(fixture.transaction.auditDecision.create.mock.calls.map(call => call[0].data.resourceKind)).toEqual([ProductAuthorizationResourceKinds.Conversation, ProductAuthorizationResourceKinds.Budget]);
 	});
 
 	it.each(["scheduled", "manual"] as const)("denies %s recovery when the requester loses Conversation Use", async function _RoutineConversationRevoked(trigger)
@@ -116,7 +142,8 @@ describe("TransactionBoundProductResourceAuthorizationSource", function _Suite()
 		const otherPrincipalId = kind === ExecutionSubjectMembershipKinds.Managed ? "human-1" : "company-principal";
 		f.transaction.authorizationGrant.findMany.mockResolvedValue(f.grants.map(grant => grant.resourceKind === ProductAuthorizationResourceKinds.ModelDefinition ? { ...grant, subjectPrincipalId: otherPrincipalId, boundaryPrincipalId: otherPrincipalId } : grant));
 		await expect(f.load()).resolves.toEqual({ outcome: "denied", reason: "product_authorization_unavailable" });
-		expect(f.transaction.auditDecision.create.mock.calls.map(call => call[0].data.resourceKind)).toEqual([ProductAuthorizationResourceKinds.Conversation]);
+		const expected = kind === ExecutionSubjectMembershipKinds.Managed ? [ProductAuthorizationResourceKinds.Conversation, ProductAuthorizationResourceKinds.Budget] : [ProductAuthorizationResourceKinds.Conversation];
+		expect(f.transaction.auditDecision.create.mock.calls.map(call => call[0].data.resourceKind)).toEqual(expected);
 	});
 
 	it.each([ExecutionSubjectMembershipKinds.Fleet, ExecutionSubjectMembershipKinds.Standalone, ExecutionSubjectMembershipKinds.Managed])("denies %s admission when the requesting human is no longer active", async function _PreservesRequester(kind)

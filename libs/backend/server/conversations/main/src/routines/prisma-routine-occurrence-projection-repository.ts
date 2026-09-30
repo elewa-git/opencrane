@@ -15,6 +15,7 @@ import type { RoutineOccurrenceProjectionRepository, RoutineOccurrenceProjection
 const _PROJECTION_SELECT = {
 	id: true, siloId: true, mode: true, lifecycle: true, agentServiceId: true,
 	computerId: true, computerAgentIdentityId: true, computerProfileRevisionId: true, createdAt: true,
+	payingGroupId: true, payingGroupAuthorizationDecisionDigest: true, payingGroupAuthorizationPolicyRevisionHash: true, payingGroupEffectiveAuthorizationDigest: true,
 	participants: { select: { userId: true } },
 } satisfies Prisma.ConversationSelect;
 
@@ -38,6 +39,8 @@ export class PrismaRoutineOccurrenceProjectionRepository implements RoutineOccur
 			throw new Error("Routine occurrence projection is missing after preparation");
 		if (projection !== null && (projection.siloId !== command.siloId || projection.mode !== ConversationMode.AgentSession || projection.agentServiceId !== command.selectedManagedServiceId || projection.computerId !== _RoutineComputerId(command.conversationId)))
 			throw new Error("Routine occurrence projection has conflicting ownership");
+		if (projection !== null && !_PayerMatches(projection, input.payer))
+			throw new Error("Routine occurrence projection has conflicting payer evidence");
 		if (!input.published)
 		{
 			if (projection !== null && projection.participants.length !== 0)
@@ -52,7 +55,7 @@ export class PrismaRoutineOccurrenceProjectionRepository implements RoutineOccur
 				return null;
 			if (projection === null)
 			{
-				projection = await this.transaction.conversation.create({ data: { id: command.conversationId, siloId: command.siloId, mode: ConversationMode.AgentSession, agentServiceId: command.selectedManagedServiceId, computerId: _RoutineComputerId(command.conversationId), computerAgentIdentityId: candidate.agentIdentityId, computerProfileRevisionId: candidate.profileRevisionId }, select: _PROJECTION_SELECT });
+				projection = await this.transaction.conversation.create({ data: { id: command.conversationId, siloId: command.siloId, mode: ConversationMode.AgentSession, agentServiceId: command.selectedManagedServiceId, computerId: _RoutineComputerId(command.conversationId), computerAgentIdentityId: candidate.agentIdentityId, computerProfileRevisionId: candidate.profileRevisionId, payingGroupId: input.payer.payingGroupId, payingGroupAuthorizationDecisionDigest: input.payer.decisionDigest, payingGroupAuthorizationPolicyRevisionHash: input.payer.policyRevisionHash, payingGroupEffectiveAuthorizationDigest: input.payer.effectiveAuthorizationDigest }, select: _PROJECTION_SELECT });
 			}
 		}
 		if (projection === null || projection.computerId === null || projection.computerAgentIdentityId === null || projection.computerProfileRevisionId === null)
@@ -89,4 +92,13 @@ export class PrismaRoutineOccurrenceProjectionRepository implements RoutineOccur
 		await authorization.reconcileParticipants(record.siloId, record.conversationId, subjects, record.requesterPrincipalId, now);
 		await authorization.reconcileCreator(record.siloId, record.conversationId, record.requesterPrincipalId, now);
 	}
+}
+
+/** Checks the hidden conversation retained the exact payer selected on the routine. */
+function _PayerMatches(projection: Prisma.ConversationGetPayload<{ readonly select: typeof _PROJECTION_SELECT }>, payer: RoutineOccurrenceProjectionStage["payer"]): boolean
+{
+	return projection.payingGroupId === payer.payingGroupId
+		&& projection.payingGroupAuthorizationDecisionDigest === payer.decisionDigest
+		&& projection.payingGroupAuthorizationPolicyRevisionHash === payer.policyRevisionHash
+		&& projection.payingGroupEffectiveAuthorizationDigest === payer.effectiveAuthorizationDigest;
 }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CompiledFinalOutputModes, CompiledToolDefinitionKinds, CONVERSATION_A2UI_SURFACE_PLACEHOLDER, ConversationModelResponseKinds, ConversationModelToolModes, type ConversationModelRequest } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, CompiledToolDefinitionKinds, CONVERSATION_A2UI_SURFACE_PLACEHOLDER, ConversationModelResponseKinds, ConversationModelToolModes, ConversationModelUsageKinds, type ConversationModelRequest } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __RequestConversationModel } from "../core/conversation-model";
@@ -18,11 +18,14 @@ function _request(mode = CompiledFinalOutputModes.Conversation): ConversationMod
 	return { ...request, compiledInput: { ...request.compiledInput, finalOutput: mode } };
 }
 
-/** Wraps final content in the supported provider envelope without metadata authority. */
+/** Wraps final content in the supported provider envelope with normalized usage evidence. */
 function _response(content: string): Response
 {
-	return new Response(JSON.stringify({ choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content } }], usage: { ignored: true } }), { headers: { "content-type": "application/json" } });
+	return new Response(JSON.stringify({ choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content } }], usage: { prompt_tokens: 5, completion_tokens: 10 } }), { headers: { "content-type": "application/json" } });
 }
+
+/** Expresses the provider usage fixture after shared normalization. */
+const _KNOWN_USAGE = { kind: ConversationModelUsageKinds.Known, inputTokens: 5, outputTokens: 10 };
 
 /** Uses one complete official static display alongside its ordinary answer. */
 function _answer()
@@ -40,7 +43,7 @@ describe("explicit final output format", function _Suite()
 		const answer = _answer();
 		const fetch = vi.fn().mockResolvedValue(_response(JSON.stringify(answer)));
 		vi.stubGlobal("fetch", fetch);
-		expect(await __RequestConversationModel(_request())).toEqual({ kind: ConversationModelResponseKinds.Text, ...answer });
+		expect(await __RequestConversationModel(_request())).toEqual({ kind: ConversationModelResponseKinds.Text, ...answer, usage: _KNOWN_USAGE });
 		expect(fetch).toHaveBeenCalledOnce();
 		expect(JSON.parse(String(fetch.mock.calls[0][1].body))).not.toHaveProperty("response_format");
 	});
@@ -48,14 +51,14 @@ describe("explicit final output format", function _Suite()
 	it("accepts ordinary envelope text without synthesizing a display", async function _Ordinary()
 	{
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(_response('{"text":"  Answer\\n"}')));
-		expect(await __RequestConversationModel(_request())).toEqual({ kind: ConversationModelResponseKinds.Text, text: "  Answer\n" });
+		expect(await __RequestConversationModel(_request())).toEqual({ kind: ConversationModelResponseKinds.Text, text: "  Answer\n", usage: _KNOWN_USAGE });
 	});
 
 	it("preserves JSON-looking literal text when the frozen mode is Text", async function _LiteralJson()
 	{
 		const text = `  ${JSON.stringify(_answer())}\n`;
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(_response(text)));
-		expect(await __RequestConversationModel(_request(CompiledFinalOutputModes.Text))).toEqual({ kind: ConversationModelResponseKinds.Text, text });
+		expect(await __RequestConversationModel(_request(CompiledFinalOutputModes.Text))).toEqual({ kind: ConversationModelResponseKinds.Text, text, usage: _KNOWN_USAGE });
 	});
 
 	it.each(["plain text is not an envelope", '```json\n{"text":"ok"}\n```', '{"text":" "}', '{"text":"\\ud800"}', '{"text":"private-value","execute":"private-command"}', '{"text":"ok","display":null}', '{"text":"ok","display":[]}'])("rejects malformed final content without retaining raw diagnostics", async function _Malformed(content)
@@ -85,7 +88,7 @@ describe("explicit final output format", function _Suite()
 			Object.assign(request.compiledInput, { finalOutput: CompiledFinalOutputModes.Text });
 			return _response(JSON.stringify({ text: "accepted envelope" }));
 		}));
-		expect(await __RequestConversationModel(request)).toEqual({ kind: ConversationModelResponseKinds.Text, text: "accepted envelope" });
+		expect(await __RequestConversationModel(request)).toEqual({ kind: ConversationModelResponseKinds.Text, text: "accepted envelope", usage: _KNOWN_USAGE });
 	});
 
 	it("keeps tool declarations unchanged in Conversation mode", async function _ToolProtocol()
@@ -94,7 +97,7 @@ describe("explicit final output format", function _Suite()
 		const parametersSchema = { type: "object", additionalProperties: false };
 		const tool = { kind: CompiledToolDefinitionKinds.Mcp as const, name: "records.lookup", modelName: "lookup", toolRevisionId: "tool-revision", description: "Look up records", requiresApproval: false, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
 		const call = { id: "call_lookup", name: "lookup", arguments: "  {} ", content: "Looking up records" };
-		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ index: 0, finish_reason: "tool_calls", message: { role: "assistant", content: call.content, tool_calls: [{ id: call.id, type: "function", function: { name: call.name, arguments: call.arguments } }] } }] }), { headers: { "content-type": "application/json" } })));
-		expect(await __RequestConversationModel({ ...request, tools: ConversationModelToolModes.Select, compiledInput: { ...request.compiledInput, tools: [tool] } })).toEqual({ kind: ConversationModelResponseKinds.Tool, call });
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ index: 0, finish_reason: "tool_calls", message: { role: "assistant", content: call.content, tool_calls: [{ id: call.id, type: "function", function: { name: call.name, arguments: call.arguments } }] } }], usage: { prompt_tokens: 5, completion_tokens: 10 } }), { headers: { "content-type": "application/json" } })));
+		expect(await __RequestConversationModel({ ...request, tools: ConversationModelToolModes.Select, compiledInput: { ...request.compiledInput, tools: [tool] } })).toEqual({ kind: ConversationModelResponseKinds.Tool, call, usage: _KNOWN_USAGE });
 	});
 });
