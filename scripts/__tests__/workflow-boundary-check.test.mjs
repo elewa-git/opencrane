@@ -59,6 +59,8 @@ test("rejects engine imports outside the adapter and domain imports inside workf
 
 test("keeps pull-request and nightly CI on the workflow boundary check", function _VerifiesPipeline()
 {
+	const packageJson = JSON.parse(readFileSync(join(_ROOT, "package.json"), "utf8"));
+	assert.match(packageJson.scripts["test:workflow-boundary"], /monthly-budget-ci-wiring\.test\.mjs/u);
 	for (const path of [".github/workflows/docker.yml", ".github/workflows/nightly.yml"])
 	{
 		const source = readFileSync(join(_ROOT, path), "utf8");

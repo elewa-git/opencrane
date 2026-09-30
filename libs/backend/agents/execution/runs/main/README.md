@@ -123,7 +123,8 @@ execution subject prove the personal ownership path.
 The separate `test:monthly-budget:sql` target checks competing reservations and physical claims
 using two PostgreSQL clients. It requires `OPENCRANE_MONTHLY_BUDGET_SQL_DATABASE_URL` to name a
 fresh test database loaded with the reviewed baseline; it does not use the general `DATABASE_URL`.
-Ordinary tests skip these cases. The test source exists, but database qualification is still pending.
+Ordinary tests skip these cases. Pull-request and nightly validation create a separate qualification
+database, apply the reviewed baseline there and pass its URL explicitly to this target.
 
 ### Run-tree accounting foundation
 

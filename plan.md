@@ -1,5 +1,45 @@
 # OpenCrane — Active Plan
 
+## Monthly-budget CI qualification wiring — 30 September 2026
+
+This increment starts at `1e6d1e0743325ac7c7532a85dc9da91fe4e2a537`; the cumulative review
+base remains `2248132e49054734e53023f6fe0e6c9f1459859f`. The MVP goal remains active.
+
+The existing PostgreSQL 17 jobs ran `test:sql` but omitted the separate monthly-budget target.
+The pull-request and nightly workflows now create `monthly_budget_qualification` in their own
+ephemeral PostgreSQL service, load the reviewed baseline, and explicitly pass that database's
+localhost URL to `backend-agents-execution-runs:test:monthly-budget:sql`. They do not reuse the
+general test database or weaken the dedicated-URL safeguard. Nightly freshness conditions and
+fatal SQL errors remain intact. This is CI source wiring, not an executed database qualification.
+No local database, VM, provider request, workflow dispatch, publication or deployment ran.
+
+The workflow contract test is included in the existing `test:workflow-boundary` command, with a
+regression check for its removal. All four workflow tests, 24 affected-deployable tests and 27
+Prisma-boundary tests pass (55 total), as do the workflow-boundary source and whitespace checks.
+The resolved Nx target is uncached; CI generates the database client earlier in the same job.
+Live PR ancestry passes at snapshot
+`743fa14fcf29075e99fec582317b66f3c11b8fe38eaa86b3689faf0b40afff47`.
+The six-file workflow/test/package-documentation manifest, excluding this plan, is
+`a03b06d19046ccddea5097ddd8f1faf386d5f706399c8abd061dae19f84fb5b3`.
+Independent integrated review passes with no remaining findings. Its orphaned-test finding was
+fixed before the final review; the production Prisma check also reports zero errors across 327 files.
+
+The independent architecture preflight paused the physical paid-request join: the canonical
+request's byte cap does not prove its maximum billable input tokens. A trusted provider/model-bound
+input upper bound must precede monetary reserve/claim. Exact counting is one possible solution;
+a conservative upper bound also needs evidence covering the exact payload and billing behavior.
+Current LiteLLM image-contract evidence does not qualify such a bound. Do not add a placeholder
+counter, optional production gate, or an estimate presented as hard-limit enforcement.
+
+Once that prerequisite is established, the joined slice must prepare the exact payload, recover
+the existing ledger effect or classify personal work before looking up a new tariff, claim once,
+recheck the original deadline immediately before send, and settle or retain liability before
+returning. Personal work stays tariff-independent; recovery retains its original quote rather
+than selecting a replacement. Conversations own the join between current authorization, provider
+pricing and execution-owned accounting; model-routing must not import execution-runs. Account
+closure must prevent tool continuation. System-originated stopping of affected runs and descendants
+still belongs to the run owner and must not fabricate a human cancellation request.
+
 ## Trusted EUR tariff lookup — 30 September 2026
 
 This source increment starts at `b25862bc2d34e0f39a6740d4ab9ad21ca0916032`;
