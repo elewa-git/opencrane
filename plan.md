@@ -1,5 +1,27 @@
 # OpenCrane — Active Plan
 
+## Descendant-cleanup integration paused — 30 September 2026
+
+The source checkpoint is `7d4e1a140c1356e27ede8f64529b2a607683f9c9`. Live PR ancestry still
+passes at snapshot `743fa14fcf29075e99fec582317b66f3c11b8fe38eaa86b3689faf0b40afff47`.
+The current architecture review confirms that automatic budget Stop needs durable system-origin
+cleanup evidence; the requester-bound human Stop fields cannot be reused to invent a human
+decision. The existing descendant-cleanup foundation remains the first integration prerequisite.
+
+An attempted source-only port of the reviewed human descendant-Stop implementation from
+`/private/tmp/opencrane-descendant-stop.TlTDD5` was rejected atomically by the edit safety gate.
+The gate requires renewed explicit approval acknowledging recursive child cancellation, temporary
+credential revocation, branch closure and terminal-state writes. No production patch was applied,
+and no split or alternative retry is authorized by automatic goal continuation. The original source
+worktree is preserved. Test-only port edits were removed from this branch so it does not retain
+tests for an absent implementation. No client or baseline regeneration, database change, provider
+call, VM operation, workflow dispatch or publication ran.
+
+Three scoped decisions have been requested: this descendant Stop source integration; a trustworthy
+provider-counted request path for hard budgets; and draft publication after #916 plus fresh-database
+CI qualification once the source passes review. None is implicit in this status note. The full MVP
+goal remains active, with source completion and live acceptance still distinct.
+
 ## Admit new work after a completed Stop — 30 September 2026
 
 This increment starts at `f16d47c4ec5c479012110ac0c4b48ccd51d4b5b5`; the cumulative review
