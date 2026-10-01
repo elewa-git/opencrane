@@ -787,7 +787,8 @@ _start_phase "validate hosted server trust"
 bash "$HOSTED_FIXTURE_DIR/require-server-trust.sh" "$ROOT_DIR"
 _pass_phase "hosted server trust validated"
 
-echo "[develop-smoke] Creating disposable k3d cluster '$CLUSTER_NAME'"
+_start_phase "replace owned Tier 3 resources"
+echo "[develop-smoke] Replacing owned Tier 3 resources for '$CLUSTER_NAME'"
 _assert_owned_resource_set
 if docker inspect "k3d-${CLUSTER_NAME}-server-0" >/dev/null 2>&1; then
   _assert_owned_resource_set
@@ -804,18 +805,26 @@ fi
 _assert_owned_resource_set
 _prune_owned_smoke_images
 _prepare_smoke_host_storage
+_pass_phase "owned Tier 3 resources replaced"
 
+_start_phase "qualify hosted generated-file source"
+npx nx run opencrane:test:hosted-generated-file-qualification
+_pass_phase "hosted generated-file source qualified"
+
+_start_phase "prepare hosted generated-file fixture"
 HOSTED_RUN_DIR="$(mktemp -d)"
-npx nx run opencrane:test:hosted-generated-file-qualification --excludeTaskDependencies
 bash "$HOSTED_FIXTURE_DIR/hosted-services.sh" prepare "$HOSTED_RUN_DIR" "$CLUSTER_NAME" "$ROOT_DIR" \
   "$CONTROL_PLANE_HOST" "$SMOKE_FIRST_USER_EMAIL" "$NAMESPACE"
 # The helper writes only shell-escaped generated paths and synthetic fixture values.
 # shellcheck disable=SC1090
 source "$HOSTED_RUN_DIR/hosted-services.env"
+_pass_phase "hosted generated-file fixture prepared"
 
 # Image preparation is the longest independent lane. Start it before k3d so cluster creation and
 # external-controller readiness consume the same wall-clock time without serialising all builds
 # against the runner's small Docker daemon. Prior owner images are gone before this lane starts.
+_start_phase "create disposable Tier 3 cluster"
+echo "[develop-smoke] Creating disposable k3d cluster '$CLUSTER_NAME'"
 _prepare_images &
 IMAGE_PREPARATION_PID=$!
 
@@ -835,6 +844,7 @@ cluster_create_arguments+=(
 k3d "${cluster_create_arguments[@]}"
 SMOKE_CLUSTER_CREATED=1
 bash "$HOSTED_FIXTURE_DIR/hosted-services.sh" start-registry "$HOSTED_RUN_DIR" "$CLUSTER_NAME" "$ROOT_DIR"
+_pass_phase "disposable Tier 3 cluster created"
 
 _start_phase "install external cluster prerequisites"
 if [[ "$SMOKE_STORAGE_MODE" == "full" ]]; then

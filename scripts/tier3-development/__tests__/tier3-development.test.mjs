@@ -572,6 +572,7 @@ test("removes every Codespaces provider key before Tier 3 child work", async fun
 test("keeps the shared smoke defaults compatible with CI", async function _SmokeContract()
 {
 	const source = await readFile(new URL("../../../apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh", import.meta.url), "utf8");
+	const opencrane = JSON.parse(await readFile(new URL("../../../apps/opencrane/package.json", import.meta.url), "utf8"));
 	assert.match(source, /SMOKE_INGRESS_PORT="\$\{SMOKE_INGRESS_PORT:-8443\}"/u);
 	assert.match(source, /SMOKE_INSTALL_TIMEOUT_SECONDS="\$\{SMOKE_INSTALL_TIMEOUT_SECONDS:-\$TIMEOUT_SECONDS\}"/u);
 	assert.match(source, /SMOKE_PREREQUISITE_TIMEOUT_SECONDS="\$\{SMOKE_PREREQUISITE_TIMEOUT_SECONDS:-\$TIMEOUT_SECONDS\}"/u);
@@ -610,6 +611,12 @@ test("keeps the shared smoke defaults compatible with CI", async function _Smoke
 	assert.match(source, /_start_phase "validate hosted server trust"/u);
 	assert.match(source, /_pass_phase "hosted server trust validated"/u);
 	assert.match(source, /_start_phase "validate Tier 3 workspace dependencies"/u);
+	assert.match(source, /_start_phase "replace owned Tier 3 resources"[\s\S]*_pass_phase "owned Tier 3 resources replaced"/u);
+	assert.match(source, /_start_phase "qualify hosted generated-file source"\nnpx nx run opencrane:test:hosted-generated-file-qualification\n_pass_phase "hosted generated-file source qualified"/u);
+	assert.match(source, /_start_phase "prepare hosted generated-file fixture"[\s\S]*_pass_phase "hosted generated-file fixture prepared"/u);
+	assert.match(source, /_start_phase "create disposable Tier 3 cluster"[\s\S]*_pass_phase "disposable Tier 3 cluster created"/u);
+	assert.doesNotMatch(source, /opencrane:test:hosted-generated-file-qualification --excludeTaskDependencies/u);
+	assert.deepEqual(opencrane.nx.targets["test:hosted-generated-file-qualification"].dependsOn, ["db:generate"]);
 });
 
 test("retains only a complete current or ownership-verified pre-existing cluster", function _SmokeRetentionPolicy()

@@ -305,7 +305,9 @@ leaves activations unread. Operator notes:
   `npm exec -- nx run opencrane:test:stop-sql` exercises the saved authority and cleanup against a
   disposable `DATABASE_URL`; the target uses UTC so fixture timestamps match database timestamps.
 - `npm exec -- nx run opencrane:test:hosted-generated-file-qualification` checks and bundles the
-  disposable hosted-file public client. Its preparation uses public invitation, model, persona and
+  disposable hosted-file public client. The target regenerates the package-local Prisma client
+  before Vitest collects the server import graph, so a fresh checkout never depends on generated
+  state left by another target. Its preparation uses public invitation, model, persona and
   onboarding operations. The personal tool-selection API owns the published selection; the fixture
   never manufactures a personal revision or starts a workflow worker. Its setup mutations end when
   it sends the first message. Restart verification uses the saved command and public reads, followed
