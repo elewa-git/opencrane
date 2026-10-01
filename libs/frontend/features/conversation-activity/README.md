@@ -8,9 +8,13 @@ This package renders the derived Activity index and emits canonical transcript d
 tool attempts stay visible even while retrying; bounded technical fields are available only after
 the participant opens the disclosure.
 Personal-work rows show the public run state as Accepted, Queued, Preparing, Working, Waiting for
-input, Needs attention, Completed or Failed. **Open answer** requires an explicit target supplied
+input, Stopping, Stopped, Needs attention, Completed or Failed. **Open answer** requires an explicit target supplied
 by the workspace. Loading, refreshing, empty and failed reads are separate from those run states;
 the feature forwards a refresh intent and never retries execution.
+When the latest tool phase is available, a separate chip says **Tool queued**, **Tool running**,
+**Tool result received** or **Tool needs attention**. Receiving a tool result does not mark the
+assistant work complete or create an answer link. These rows expose no tool name, input, result
+content or execution controls; a null phase adds no chip.
 
 ```
  canonical references + safe failure fields

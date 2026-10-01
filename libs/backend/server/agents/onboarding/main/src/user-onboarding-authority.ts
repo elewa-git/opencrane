@@ -16,7 +16,7 @@ import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingPerson
  *
  * Called by: __CreateUserOnboardingRouter and __UserOnboardingChatAuthority in this package, and
  * UserOnboardingPersonaWorkflowCoordinator; constructed in
- * apps/opencrane/src/app/user-onboarding-composition.ts.
+ * libs/backend/server/agents/onboarding/main/src/composition/user-onboarding-composition.ts.
  *
  * @see {@link UserOnboardingTransitionResult} for what the write methods report.
  */

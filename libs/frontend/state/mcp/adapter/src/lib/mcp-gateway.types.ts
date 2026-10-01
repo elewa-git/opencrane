@@ -1,39 +1,34 @@
 import { InjectionToken } from "@angular/core";
 
-import { McpCredentialField, McpInstalledServer, McpServer } from "@opencrane/core";
+import { McpInstalledServer, McpServer, type McpConnectionProjection } from "@opencrane/core";
+import type { paths } from "@opencrane/contracts";
 
-/** Wire shape of a catalogue server. */
-export interface McpServerWire
-{
-	/** Stable id / slug. */
-	id: string;
-	/** Display name. */
-	name?: string;
-	/** Short description. */
-	description?: string;
-	/** Publisher label. */
-	publisher?: string;
-	/** Tile glyph. */
-	glyph?: string;
-	/** Connection type (raw string). */
-	type?: string;
-	/** Lifecycle status (raw string). */
-	approvalStatus?: string;
-	/** Credential fields. */
-	credentialSchema?: McpCredentialField[];
-	/** Entitlement summary. */
-	entitlementSummary?: string;
-}
+/** Generated catalogue response interpreted by the MCP model mapper. */
+export type McpServerWire = paths["/mcp/catalog"]["get"]["responses"][200]["content"]["application/json"][number];
 
-/** Wire shape of an installed-server record. */
-export interface McpInstalledWire
+/** Generated installed-server response interpreted by the MCP model mapper. */
+export type McpInstalledWire = paths["/mcp/installed"]["get"]["responses"][200]["content"]["application/json"][number];
+
+/** Generated write-only command; retry the same key and material after an uncertain response. */
+export type McpConnectionCommand = paths["/mcp/installed/{serverId}/connection"]["put"]["requestBody"]["content"]["application/json"];
+
+/**
+ * Tells the command store whether it must retain an exact retry or discard private drafts.
+ * These adapter-only categories are not persisted or sent to the server. Unknown HTTP failures
+ * become Uncertain because they do not prove that the command was rejected.
+ */
+export enum McpConnectionCommandFailureKinds
 {
-	/** Catalogue server id. */
-	serverId: string;
-	/** Connection status (raw string). */
-	connectionStatus?: string;
-	/** Relative last-used label. */
-	lastUsed?: string | null;
+	/** The server rejected the command shape; discard this attempt before another user intent. */
+	Rejected = "rejected",
+	/** The server no longer exposes this connection to the caller; discard its draft and refresh. */
+	Unavailable = "unavailable",
+	/** Saved work conflicts with this command; discard its draft and refresh before a new intent. */
+	Conflict = "conflict",
+	/** Authentication or authorization changed; purge all private command state. */
+	AccessChanged = "access-changed",
+	/** The command may have committed; retain its key and material for an identical retry. */
+	Uncertain = "uncertain",
 }
 
 /**
@@ -45,8 +40,8 @@ export interface McpInstalledWire
  * Implementations live in this `adapter` lib; the binding is provided in the
  * app's `app.config.ts`.
  *
- * Credential and OAuth activation are absent until a verified custody boundary
- * is composed.
+ * Personal connection commands accept ephemeral write-only material. Responses never expose it.
+ * OAuth remains outside this port.
  */
 export interface McpGateway
 {
@@ -61,9 +56,8 @@ export interface McpGateway
 
 	/**
 	 * Install a server for the current user. Resolves with the new installed
-	 * record; its initial {@link McpInstalledServer.connectionStatus} depends on
-	 * the server type (a shared-key multi-user server is ready immediately; a
-	 * single-user or OAuth server remains pending external activation).
+	 * record. A ready credentialless OCI server can execute immediately. Every remote server,
+	 * including a credentialless one, needs a personal connection command and discovery before use.
 	 *
 	 * @param serverId - The catalogue server id to install.
 	 */
@@ -75,6 +69,12 @@ export interface McpGateway
 	 * @param serverId - The installed server id to remove.
 	 */
 	uninstall(serverId: string): Promise<void>;
+
+	/** Save a personal connection command through server custody; never cache its bearer token. */
+	activatePersonalConnection(serverId: string, command: McpConnectionCommand): Promise<McpConnectionProjection>;
+
+	/** Revoke the observed personal generation; an identical retry retains its key and generation. */
+	revokePersonalConnection(serverId: string, idempotencyKey: string, expectedGeneration: number): Promise<McpConnectionProjection>;
 
 	// --- Governance (the control plane requires the current Organization/Administer grant) ---
 

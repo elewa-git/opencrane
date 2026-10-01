@@ -86,6 +86,8 @@ export function _CreateLocalDevelopmentAssets(state: _LocalDevelopmentState): Co
 			id: request.idempotencyKey,
 			conversationId,
 			messageId: null,
+			artifactId: null,
+			artifactRevisionId: null,
 			provenance: ConversationAssetProvenance.ParticipantUpload,
 			state: ConversationAssetLifecycle.Uploading,
 			displayName: request.displayName,

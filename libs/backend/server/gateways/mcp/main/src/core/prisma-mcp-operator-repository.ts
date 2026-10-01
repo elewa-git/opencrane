@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 
-import { McpApprovalStatus, McpServerRevisionState, McpServerStatus, Prisma } from "@prisma/client";
-import type { McpEraProbeStatus } from "@prisma/client";
+import { McpApprovalStatus, McpConnectionState, McpConnectionStatus, McpCredentialRequirement as PrismaMcpCredentialRequirement, McpEraProbeStatus, McpExecutionTransport, McpInstallState, McpServerRevisionState, McpServerStatus, McpServerTransport, Prisma } from "@prisma/client";
 
+import { McpCredentialRequirement, McpInstallStates } from "@opencrane/contracts";
+
+import { __PlanMcpInstallLifecycle, McpInstallLifecycleActions, McpInstallLifecycleEvents } from "../connections/installs/mcp-install-lifecycle";
 import { McpEraProbeDecisions, McpEraProbeStates } from "../era-probe/mcp-era-probe.types";
 import type { McpEraProbeTaskResult } from "../era-probe/mcp-era-probe.types";
-import type { IMcpOperatorRepository, McpEraProbeRetryResult, McpEraProbeTargetRecord, McpEraProbeWriteResult, McpOperatorInstallRecord, McpOperatorServerRecord, McpRemoteServerCreateResult, McpRemoteServerRegistrationRecord } from "./mcp-operator-repository.types";
+import { McpOperatorInstallUpsertOutcomes, type IMcpOperatorRepository, type McpEraProbeRetryResult, type McpEraProbeTargetRecord, type McpEraProbeWriteResult, type McpOperatorInstallRecord, type McpOperatorInstallUpsertResult, type McpOperatorServerRecord, type McpRemoteServerCreateResult, type McpRemoteServerRegistrationRecord } from "./mcp-operator-repository.types";
 
 /** Fields shared by public catalogue mapping and era-probe state transitions. */
 const _SERVER_SELECT = {
@@ -15,8 +17,10 @@ const _SERVER_SELECT = {
 	publisher: true,
 	glyph: true,
 	serverType: true,
+	credentialRequirement: true,
 	approvalStatus: true,
 	status: true,
+	transport: true,
 	credentialSchema: true,
 	entitlementSummary: true,
 	endpoint: true,
@@ -42,14 +46,41 @@ const _SERVER_SELECT = {
 	},
 } as const satisfies Prisma.McpServerSelect;
 
+/** Select one caller's remote revision while keeping OCI revisions shared. */
+function _CatalogServerSelect(principalId: string)
+{
+	return {
+		..._SERVER_SELECT,
+		revisions: {
+			..._SERVER_SELECT.revisions,
+			where: {
+				state: McpServerRevisionState.Ready,
+				OR: [
+					{ transport: McpExecutionTransport.OciImage },
+					{ transport: McpExecutionTransport.RemoteHttp, connectionOwnerPrincipalId: principalId, connection: { is: { ownerPrincipalId: principalId, state: McpConnectionState.Active, install: { is: { principalId, lifecycleState: McpInstallState.Installed, connectionStatus: McpConnectionStatus.Active } } } } },
+				],
+			},
+		},
+	} as const satisfies Prisma.McpServerSelect;
+}
+
 /** Fields loaded by a worker before it makes an external request. */
 const _ERA_PROBE_TARGET_SELECT = { endpoint: true, registrationDigest: true, eraProbeStatus: true, eraProtocolVersion: true, eraProbeEvidenceDigest: true, eraProbeFailureCode: true, eraProbeAttempts: true } as const satisfies Prisma.McpServerSelect;
+const _INSTALL_STATE = { [McpInstallState.Installed]: McpInstallStates.Installed, [McpInstallState.Removing]: McpInstallStates.Removing, [McpInstallState.Removed]: McpInstallStates.Removed } as const satisfies Record<McpInstallState, McpInstallStates>;
+const _LATEST_INSTALL_CONNECTION = { orderBy: { generation: "desc" }, take: 1, select: { generation: true, credentialCustodiedAt: true, failureCode: true } } as const;
 
 /** Prisma projection returned for the complete MCP server selection. */
 type _ServerProjection = Prisma.McpServerGetPayload<{ select: typeof _SERVER_SELECT }>;
 
 /** Prisma projection returned when a protocol-check worker loads its target. */
 type _EraProbeTargetProjection = Prisma.McpServerGetPayload<{ select: typeof _ERA_PROBE_TARGET_SELECT }>;
+
+/** Maps the public credential vocabulary to Prisma's enum member names. */
+const _PRISMA_CREDENTIAL_REQUIREMENT: Readonly<Record<McpCredentialRequirement, PrismaMcpCredentialRequirement>> = {
+	[McpCredentialRequirement.Credentialless]: PrismaMcpCredentialRequirement.Credentialless,
+	[McpCredentialRequirement.PrincipalCredential]: PrismaMcpCredentialRequirement.PrincipalCredential,
+	[McpCredentialRequirement.SharedCredential]: PrismaMcpCredentialRequirement.SharedCredential,
+};
 
 /** Derive a fixed-width claim identity without retaining a server name or client key. */
 function _ClaimDigest(kind: "key" | "name", value: string): string
@@ -74,8 +105,14 @@ function _EraProbeState(value: McpEraProbeStatus): McpEraProbeStates
 /** Translate one Prisma server projection into the MCP repository contract. */
 function _ServerRecord(server: _ServerProjection): McpOperatorServerRecord
 {
-	const { revisions = [], ...fields } = server;
-	return { ...fields, latestReadyRevision: revisions[0] ?? null, eraProbeStatus: _EraProbeState(server.eraProbeStatus) };
+	const { revisions = [], transport, ...fields } = server;
+	return {
+		...fields,
+		supportsStandardInstall: transport === McpServerTransport.OciImage || transport === McpServerTransport.StreamableHttp,
+		requiresReadyRevisionForInstall: transport === McpServerTransport.OciImage,
+		latestReadyRevision: revisions[0] ?? null,
+		eraProbeStatus: _EraProbeState(server.eraProbeStatus),
+	};
 }
 
 /** Translate one Prisma worker target into the MCP repository contract. */
@@ -91,9 +128,21 @@ export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 
 	constructor(transaction: Prisma.TransactionClient) { this._transaction = transaction; }
 
-	async listPublishedServers(siloId: string): Promise<readonly McpOperatorServerRecord[]>
+	async listPublishedServers(siloId: string, principalId: string): Promise<readonly McpOperatorServerRecord[]>
 	{
-		return (await this._transaction.mcpServer.findMany({ where: { siloId, approvalStatus: McpApprovalStatus.Published, status: McpServerStatus.Active, revisions: { some: { state: McpServerRevisionState.Ready } } }, orderBy: { createdAt: "desc" }, select: _SERVER_SELECT })).map(_ServerRecord);
+		return (await this._transaction.mcpServer.findMany({
+			where: {
+				siloId,
+				approvalStatus: McpApprovalStatus.Published,
+				status: McpServerStatus.Active,
+				OR: [
+					{ transport: McpServerTransport.StreamableHttp, eraProbeStatus: McpEraProbeStatus.Accepted },
+					{ transport: McpServerTransport.OciImage, revisions: { some: { state: McpServerRevisionState.Ready, transport: McpExecutionTransport.OciImage } } },
+				],
+			},
+			orderBy: { createdAt: "desc" },
+			select: _CatalogServerSelect(principalId),
+		})).map(_ServerRecord);
 	}
 
 	async listAllServers(siloId: string): Promise<readonly McpOperatorServerRecord[]>
@@ -109,18 +158,34 @@ export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 
 	async listInstalls(principalId: string): Promise<readonly McpOperatorInstallRecord[]>
 	{
-		return this._transaction.mcpServerInstall.findMany({ where: { principalId }, orderBy: { createdAt: "asc" }, select: { mcpServerId: true, connectionStatus: true, lastUsedAt: true } });
+		const rows = await this._transaction.mcpServerInstall.findMany({ where: { principalId, lifecycleState: { not: McpInstallState.Removed } }, orderBy: { createdAt: "asc" }, select: { mcpServerId: true, lifecycleState: true, connectionStatus: true, lastUsedAt: true, connections: _LATEST_INSTALL_CONNECTION } });
+		return rows.map(function _Install(row)
+		{
+			const { connections, ...install } = row;
+			return { ...install, currentConnection: connections[0] ?? null };
+		});
 	}
 
-	async upsertInstall(serverId: string, principalId: string, connectionStatus: string): Promise<McpOperatorInstallRecord>
+	async upsertInstall(serverId: string, principalId: string, connectionStatus: string): Promise<McpOperatorInstallUpsertResult>
 	{
-		return this._transaction.mcpServerInstall.upsert({ where: { mcpServerId_principalId: { mcpServerId: serverId, principalId } }, create: { mcpServerId: serverId, principalId, connectionStatus: connectionStatus as Prisma.McpServerInstallCreateInput["connectionStatus"] }, update: {}, select: { mcpServerId: true, connectionStatus: true, lastUsedAt: true } });
-	}
-
-	async deleteInstall(serverId: string, principalId: string): Promise<boolean>
-	{
-		const result = await this._transaction.mcpServerInstall.deleteMany({ where: { mcpServerId: serverId, principalId } });
-		return result.count > 0;
+		const status = connectionStatus as McpConnectionStatus;
+		const current = await this._transaction.mcpServerInstall.upsert({
+			where: { mcpServerId_principalId: { mcpServerId: serverId, principalId } },
+			create: { mcpServerId: serverId, principalId, lifecycleState: McpInstallState.Installed, connectionStatus: status },
+			update: { updatedAt: new Date() },
+			select: { id: true, mcpServerId: true, lifecycleState: true, connectionStatus: true, lastUsedAt: true, connections: _LATEST_INSTALL_CONNECTION },
+		});
+		const lifecycle = __PlanMcpInstallLifecycle(_INSTALL_STATE[current.lifecycleState], McpInstallLifecycleEvents.Reinstall);
+		if (lifecycle.action === McpInstallLifecycleActions.Deny)
+			return { outcome: McpOperatorInstallUpsertOutcomes.RemovalInProgress };
+		if (lifecycle.action === McpInstallLifecycleActions.Advance)
+		{
+			const reactivated = await this._transaction.mcpServerInstall.updateMany({ where: { id: current.id, mcpServerId: serverId, principalId, lifecycleState: McpInstallState.Removed }, data: { lifecycleState: McpInstallState.Installed, connectionStatus: status, lastUsedAt: null } });
+			if (reactivated.count !== 1)
+				return { outcome: McpOperatorInstallUpsertOutcomes.RemovalInProgress };
+			return { outcome: McpOperatorInstallUpsertOutcomes.Installed, install: { mcpServerId: serverId, lifecycleState: McpInstallState.Installed, connectionStatus: status, lastUsedAt: null, currentConnection: current.connections[0] ?? null } };
+		}
+		return { outcome: McpOperatorInstallUpsertOutcomes.Installed, install: { mcpServerId: current.mcpServerId, lifecycleState: current.lifecycleState, connectionStatus: current.connectionStatus, lastUsedAt: current.lastUsedAt, currentConnection: current.connections[0] ?? null } };
 	}
 
 	async setApprovalStatus(siloId: string, serverId: string, approvalStatus: string, requiredEraProbeStatuses?: readonly McpEraProbeStates[], requiredApprovalStatus?: string): Promise<McpOperatorServerRecord | null>
@@ -168,7 +233,15 @@ export class PrismaMcpOperatorRepository implements IMcpOperatorRepository
 		if (existingByName)
 			return null;
 
-		const server = await this._transaction.mcpServer.create({ data: { ...registration, transport: "StreamableHttp", eraProbeStatus: McpEraProbeStates.Pending }, select: _SERVER_SELECT });
+		const server = await this._transaction.mcpServer.create({
+			data: {
+				...registration,
+				credentialRequirement: _PRISMA_CREDENTIAL_REQUIREMENT[registration.credentialRequirement],
+				transport: "StreamableHttp",
+				eraProbeStatus: McpEraProbeStates.Pending,
+			},
+			select: _SERVER_SELECT,
+		});
 		return { created: true, server: _ServerRecord(server) };
 	}
 

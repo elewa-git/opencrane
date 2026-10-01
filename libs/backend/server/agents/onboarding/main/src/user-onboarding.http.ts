@@ -19,7 +19,7 @@ import { __UserOnboardingAuthority } from "./user-onboarding-authority";
  * reaches the browser.
  *
  * Called by: _CreateUserOnboardingComposition in
- * apps/opencrane/src/app/user-onboarding-composition.ts, mounted in apps/opencrane/src/app/routes.ts.
+ * libs/backend/server/agents/onboarding/main/src/composition/user-onboarding-composition.ts, mounted in apps/opencrane/src/bootstrap/http/routes.ts.
  *
  * @param dependencies - Workflow authority, chat authority, session owner resolver, and logger.
  * @returns A router ready to mount; it registers no authentication middleware of its own.
@@ -69,7 +69,7 @@ export function __CreateUserOnboardingRouter(dependencies: UserOnboardingRouterD
  * sides disagreeing about the user's state.
  *
  * Called by: _CreatePersonaOnboardingWorkflow in
- * apps/opencrane/src/app/user-onboarding-composition.ts.
+ * libs/backend/server/agents/onboarding/main/src/composition/user-onboarding-composition.ts.
  *
  * @implements {UserOnboardingPersonaWorkflowPort}
  * @throws Error when the workflow denies the notification, with the denial reason in the message.

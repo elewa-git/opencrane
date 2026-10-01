@@ -4,6 +4,7 @@ import type { OrganizationMember, OrganizationMemberRoles } from "./directory.ty
 import type { OrganizationMembershipCaller } from "./authority.types";
 import type { OrganizationInvitationStatuses, OrganizationInviteRecipientValidation } from "./invitations.types";
 import type { OrganizationInvitationTokenCoordinates } from "./invitation-token.types";
+import type { RemoveStandaloneMemberCommand } from "./removal.types";
 
 /** Constructs the central authority over one organization-member transaction. */
 export type OrganizationMemberAuthorizationAuthorityFactory<Transaction> = (transaction: Transaction) => AuthorizationAuthority;
@@ -120,6 +121,8 @@ export interface OrganizationMemberRepository
 	hasActiveMembership(caller: Pick<OrganizationMembershipCaller, "siloId" | "subjectId">): Promise<boolean>;
 	/** Reads the directory after proving the caller's current organisation administration grant. */
 	directory(caller: OrganizationMembershipCaller): Promise<OrganizationMemberDirectoryRecords>;
+	/** Rechecks current administration and commits suspension with its admission and audit. */
+	remove(command: RemoveStandaloneMemberCommand): Promise<OrganizationMember>;
 	/** Validates recipients after proving the caller's current organisation administration grant. */
 	validate(caller: OrganizationMembershipCaller, emails: readonly string[], now: Date): Promise<readonly OrganizationInviteRecipientValidation[]>;
 	/** Creates or recovers one idempotent invitation batch and audit entry. */

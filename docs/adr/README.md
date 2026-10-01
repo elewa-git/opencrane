@@ -19,6 +19,7 @@ ground a published page, but it is not itself published.
 | [0014](0014-claimed-warm-runtime-pool.md) | Claimed warm runtime pool | Superseded by 0016 |
 | [0015](0015-central-durable-authorization-authority.md) | Central durable authorization authority | Accepted |
 | [0016](0016-conversation-history-and-computers.md) | Conversation history and computers | Accepted |
+| [0017](0017-cognee-access-control-mode-and-gateway-service-user.md) | Cognee access-control mode and gateway service user | Accepted |
 
 ## Writing a new ADR
 

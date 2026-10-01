@@ -176,7 +176,7 @@ test("application plans start only the current server and Tier 2 UI", function _
 {
 	const commands = createApplicationCommands(configuration, secrets);
 	assert.deepEqual(commands.map((command) => command.name), ["opencrane-server", "opencrane-ui"]);
-	assert.deepEqual(commands[0].arguments, ["tsx", "apps/opencrane/src/development/index.ts"]);
+	assert.deepEqual(commands[0].arguments, ["tsx", "apps/opencrane/src/bootstrap/development/index.ts"]);
 	assert.deepEqual(commands[1].arguments, [
 		"nx",
 		"run",

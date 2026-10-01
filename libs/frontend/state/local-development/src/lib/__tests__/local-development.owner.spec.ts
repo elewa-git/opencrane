@@ -252,6 +252,7 @@ describe("Tier 1 local-development owner", function _DescribeOwner()
 			conversationId: "conversation-agent",
 			idempotencyKey: "retry-command",
 			text: "Try once",
+			assetIds: [],
 			activation: "start" as const
 		};
 		await expect(retry.workspace.send(command)).rejects.toThrow("failed once");
@@ -285,7 +286,8 @@ describe("Tier 1 local-development owner", function _DescribeOwner()
 			archetype: PersonaFirstChatArchetypes.Commander,
 			scenario: LocalDevelopmentScenarios.FailedRun
 		});
-		expect((await failedRun.personalRuns.listPersonalRuns(new AbortController().signal))[0]?.state).toBe("failed");
+		expect((await failedRun.personalRuns.listPersonalRuns(new AbortController().signal))[0]).toMatchObject({ state: "failed", latestTool: null });
+		await expect(failedRun.personalRuns.requestStop({ conversationId: "conversation-agent", idempotencyKey: "stop-terminal-run" })).rejects.toMatchObject({ kind: ConversationWorkspaceGatewayErrorKinds.Unavailable });
 		const failedHistory = await failedRun.stream.stream({
 			conversationId: "conversation-agent",
 			signal: new AbortController().signal

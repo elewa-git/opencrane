@@ -1,6 +1,7 @@
-import { ExternalActionClaimKind, McpExecutorCommandState, McpExecutorWorkloadState, McpRuntimeExecutionKind, McpTaskState, Prisma, ToolInvocationState } from "@prisma/client";
+import { ExternalActionClaimKind, McpExecutionTransport, McpExecutorCommandState, McpExecutorWorkloadState, McpRuntimeExecutionKind, McpTaskState, Prisma, ToolInvocationState } from "@prisma/client";
 
 import { ExternalActionClaimKinds, ToolInvocationStates, type McpToolInvocationTransactionParticipant, type ToolInvocationClaim } from "@opencrane/backend/server/iam/authorization";
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _McpTerminalWorkloadState } from "../runtime/mcp-runtime-terminal-workload-state";
 import { McpTaskStates, type McpTaskWorkflowExhaustionRepository, type McpTaskWorkflowInput, type McpTaskWorkflowResult } from "./mcp-task.types";
@@ -78,15 +79,32 @@ export class PrismaMcpTaskWorkflowExhaustionRepository implements McpTaskWorkflo
 		const execution = invocation?.mcpRuntimeExecution ?? null;
 		if (invocation === null || invocation.state !== ToolInvocationState.Ready || invocation.claimKind !== null || invocation.claimExpiresAt !== null)
 			return null;
-		const workloadState = execution === null ? null : _McpTerminalWorkloadState(execution, McpExecutorWorkloadState);
-		if (execution !== null && (execution.siloId !== task.siloId || execution.kind !== McpRuntimeExecutionKind.Invocation || execution.commandState !== McpExecutorCommandState.Pending || workloadState === null || execution.toolInvocationId !== invocation.id || execution.companionClaimFence !== null || execution.toolInvocationClaimFence !== null || execution.toolInvocationClaimRevision !== null))
-			return null;
+		let workloadState = null;
+		if (execution !== null)
+		{
+			if (execution.siloId !== task.siloId || execution.kind !== McpRuntimeExecutionKind.Invocation || execution.commandState !== McpExecutorCommandState.Pending || execution.toolInvocationId !== invocation.id || execution.companionClaimFence !== null || execution.toolInvocationClaimFence !== null || execution.toolInvocationClaimRevision !== null)
+				return null;
+			if (execution.transport === McpExecutionTransport.RemoteHttp)
+			{
+				if (execution.workloadState !== null || execution.remoteClaimFence !== null || execution.remoteClaimExpiresAt !== null)
+					return null;
+			}
+			else
+			{
+				workloadState = _McpTerminalWorkloadState(execution, McpExecutorWorkloadState);
+				if (workloadState === null)
+					return null;
+			}
+		}
 		const closed = await this._toolInvocations.completeUnusedBeforeDispatch(invocation.id, invocation.revision, _FAILURE_CODE, now);
 		if (!closed.changed || closed.invocation?.state !== ToolInvocationStates.Failed || closed.invocation.failureCode !== _FAILURE_CODE)
 			return null;
 		if (execution !== null)
 		{
-			const updated = await this._transaction.mcpRuntimeExecution.updateMany({ where: { id: execution.id, siloId: task.siloId, toolInvocationId: invocation.id, kind: McpRuntimeExecutionKind.Invocation, workloadState: execution.workloadState, commandState: McpExecutorCommandState.Pending, workloadUid: execution.workloadUid, claimedAt: execution.claimedAt, claimExpiresAt: execution.claimExpiresAt, deliveryCount: execution.deliveryCount, companionClaimFence: null, toolInvocationClaimFence: null, toolInvocationClaimRevision: null }, data: { workloadState: workloadState as McpExecutorWorkloadState, commandState: McpExecutorCommandState.Failed, terminalOutcome: _FAILURE_CODE, completedAt: now } });
+			const terminalPayloadDigest = ___DigestCanonicalJson({ failureCode: _FAILURE_CODE } as JsonValue);
+			const updated = execution.transport === McpExecutionTransport.RemoteHttp
+				? await this._transaction.mcpRuntimeExecution.updateMany({ where: { id: execution.id, siloId: task.siloId, transport: McpExecutionTransport.RemoteHttp, toolInvocationId: invocation.id, kind: McpRuntimeExecutionKind.Invocation, workloadState: null, commandState: McpExecutorCommandState.Pending, remoteClaimFence: null, remoteClaimExpiresAt: null, toolInvocationClaimFence: null, toolInvocationClaimRevision: null }, data: { commandState: McpExecutorCommandState.Failed, terminalOutcome: _FAILURE_CODE, terminalPayloadDigest, completedAt: now } })
+				: await this._transaction.mcpRuntimeExecution.updateMany({ where: { id: execution.id, siloId: task.siloId, transport: McpExecutionTransport.OciImage, toolInvocationId: invocation.id, kind: McpRuntimeExecutionKind.Invocation, workloadState: execution.workloadState, commandState: McpExecutorCommandState.Pending, workloadUid: execution.workloadUid, claimedAt: execution.claimedAt, claimExpiresAt: execution.claimExpiresAt, deliveryCount: execution.deliveryCount, companionClaimFence: null, toolInvocationClaimFence: null, toolInvocationClaimRevision: null }, data: { workloadState: workloadState as McpExecutorWorkloadState, commandState: McpExecutorCommandState.Failed, terminalOutcome: _FAILURE_CODE, completedAt: now } });
 			if (updated.count !== 1)
 				throw new Error("exhausted MCP task lost its pre-dispatch runtime fence");
 		}
@@ -98,13 +116,21 @@ export class PrismaMcpTaskWorkflowExhaustionRepository implements McpTaskWorkflo
 	{
 		const invocation = task.toolInvocation;
 		const execution = invocation?.mcpRuntimeExecution ?? null;
-		if (invocation === null || execution === null || invocation.state !== ToolInvocationState.Claimed || invocation.claimKind !== ExternalActionClaimKind.Dispatch || execution.siloId !== task.siloId || execution.kind !== McpRuntimeExecutionKind.Invocation || execution.workloadState !== McpExecutorWorkloadState.Registered || execution.commandState !== McpExecutorCommandState.Claimed || execution.toolInvocationId !== invocation.id || execution.toolInvocationClaimFence !== invocation.claimFence || execution.toolInvocationClaimRevision !== invocation.revision || execution.companionClaimFence === null)
+		if (invocation === null || execution === null || invocation.state !== ToolInvocationState.Claimed || invocation.claimKind !== ExternalActionClaimKind.Dispatch || execution.siloId !== task.siloId || execution.kind !== McpRuntimeExecutionKind.Invocation || execution.commandState !== McpExecutorCommandState.Claimed || execution.toolInvocationId !== invocation.id || execution.toolInvocationClaimFence !== invocation.claimFence || execution.toolInvocationClaimRevision !== invocation.revision)
+			return null;
+		const remote = execution.transport === McpExecutionTransport.RemoteHttp;
+		if (remote
+			? execution.workloadState !== null || execution.remoteClaimFence === null || execution.remoteClaimExpiresAt === null || execution.companionClaimFence !== null
+			: execution.workloadState !== McpExecutorWorkloadState.Registered || execution.companionClaimFence === null)
 			return null;
 		const claim: ToolInvocationClaim = { invocationId: invocation.id, kind: ExternalActionClaimKinds.Dispatch, fence: invocation.claimFence, revision: invocation.revision };
 		const recovered = await this._toolInvocations.completeAmbiguous(claim, now);
 		if (recovered === null || recovered.state !== ToolInvocationStates.RecoveryRequired)
 			throw new Error("exhausted MCP task could not preserve its dispatched outcome");
-		const updated = await this._transaction.mcpRuntimeExecution.updateMany({ where: { id: execution.id, siloId: task.siloId, toolInvocationId: invocation.id, kind: McpRuntimeExecutionKind.Invocation, workloadState: McpExecutorWorkloadState.Registered, commandState: McpExecutorCommandState.Claimed, companionClaimFence: execution.companionClaimFence, toolInvocationClaimFence: invocation.claimFence, toolInvocationClaimRevision: invocation.revision }, data: { workloadState: McpExecutorWorkloadState.Closed, commandState: McpExecutorCommandState.RecoveryRequired, terminalOutcome: _FAILURE_CODE, completedAt: now } });
+		const terminalPayloadDigest = ___DigestCanonicalJson({ failureCode: _FAILURE_CODE } as JsonValue);
+		const updated = remote
+			? await this._transaction.mcpRuntimeExecution.updateMany({ where: { id: execution.id, siloId: task.siloId, transport: McpExecutionTransport.RemoteHttp, toolInvocationId: invocation.id, kind: McpRuntimeExecutionKind.Invocation, workloadState: null, commandState: McpExecutorCommandState.Claimed, remoteClaimFence: execution.remoteClaimFence, remoteClaimExpiresAt: execution.remoteClaimExpiresAt, toolInvocationClaimFence: invocation.claimFence, toolInvocationClaimRevision: invocation.revision }, data: { commandState: McpExecutorCommandState.RecoveryRequired, terminalOutcome: _FAILURE_CODE, terminalPayloadDigest, completedAt: now } })
+			: await this._transaction.mcpRuntimeExecution.updateMany({ where: { id: execution.id, siloId: task.siloId, transport: McpExecutionTransport.OciImage, toolInvocationId: invocation.id, kind: McpRuntimeExecutionKind.Invocation, workloadState: McpExecutorWorkloadState.Registered, commandState: McpExecutorCommandState.Claimed, companionClaimFence: execution.companionClaimFence, toolInvocationClaimFence: invocation.claimFence, toolInvocationClaimRevision: invocation.revision }, data: { workloadState: McpExecutorWorkloadState.Closed, commandState: McpExecutorCommandState.RecoveryRequired, terminalOutcome: _FAILURE_CODE, completedAt: now } });
 		if (updated.count !== 1)
 			throw new Error("exhausted MCP task lost its dispatched runtime fence");
 		return { mcpTaskId: task.id, state: McpTaskStates.RecoveryRequired };

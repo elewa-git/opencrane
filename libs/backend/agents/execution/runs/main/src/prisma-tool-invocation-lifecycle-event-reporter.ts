@@ -7,22 +7,22 @@ import type { ToolInvocationLifecycleEventAppendRepository, ToolInvocationLifecy
 /** Process-scoped transaction owner shared by the worker and its invocation unit of work. */
 export class PrismaToolInvocationLifecycleEventUnitOfWork implements ToolInvocationLifecycleEventUnitOfWork
 {
-	/** Canonical product-authority database client. */
-	private readonly prisma: PrismaClient;
-
-	/** Create one reporter over process-owned persistence. */
-	constructor(prisma: PrismaClient)
+	/** Create one reporter and optional same-transaction notification hook. */
+	constructor(private readonly prisma: PrismaClient, private readonly afterAppendInTransaction?: (transaction: Prisma.TransactionClient, event: ToolInvocationLifecycleEvent) => Promise<void>)
 	{
-		this.prisma = prisma;
 	}
 
 	/** Check a pre-dispatch event against the run fence in its own transaction or fail closed. */
 	async append(event: ToolInvocationLifecycleEvent): Promise<void>
 	{
+		const afterAppend = this.afterAppendInTransaction;
 		const appended = await this.prisma.$transaction(async function _append(transaction)
 		{
 			const unitOfWork = new PrismaToolInvocationLifecycleEventAppendUnitOfWork(transaction);
-			return unitOfWork.append(event);
+			const accepted = await unitOfWork.append(event);
+			if (accepted && afterAppend !== undefined)
+				await afterAppend(transaction, event);
+			return accepted;
 		});
 		if (!appended)
 		{
@@ -33,8 +33,12 @@ export class PrismaToolInvocationLifecycleEventUnitOfWork implements ToolInvocat
 	/** Check the event against the run fence within the invocation owner's exact state transaction. */
 	async appendInTransaction(transaction: unknown, event: ToolInvocationLifecycleEvent): Promise<boolean>
 	{
-		const unitOfWork = new PrismaToolInvocationLifecycleEventAppendUnitOfWork(transaction as Prisma.TransactionClient);
-		return unitOfWork.append(event);
+		const client = transaction as Prisma.TransactionClient;
+		const unitOfWork = new PrismaToolInvocationLifecycleEventAppendUnitOfWork(client);
+		const accepted = await unitOfWork.append(event);
+		if (accepted && this.afterAppendInTransaction !== undefined)
+			await this.afterAppendInTransaction(client, event);
+		return accepted;
 	}
 }
 

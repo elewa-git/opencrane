@@ -1,0 +1,33 @@
+import type { PrismaClient } from "@prisma/client";
+import type { Router } from "express";
+
+import { PROMPT_COMPILER_VERSION } from "@opencrane/contracts";
+import type { Logger } from "@opencrane/backend/observability";
+import { AgentIdentityHistory } from "@opencrane/backend/server/iam/identity";
+import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
+import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
+
+import { _CreateCompanyAssistantProvisioningRouter } from "./company-assistant-provisioning.router";
+import { PrismaCompanyAssistantProvisioningUnitOfWork } from "./db/prisma-company-assistant-provisioning-unit-of-work";
+
+/**
+ * Composes the administrator's company assistant setup under the deployed computer profile.
+ *
+ * Called by: public route composition after browser authentication is installed.
+ * New assistants allow eight tool-result cycles and a final answer under one token and time budget.
+ * Tool edits preserve each saved revision budget; personal memory and skills remain unavailable.
+ * @see PrismaCompanyAssistantProvisioningUnitOfWork for current permission checks and recoverable creation.
+ */
+export function _CreateCompanyAssistantComposition(prisma: PrismaClient, history: HistoryStore, profile: { readonly profileName: string }, logger: Logger): Router
+{
+	const authority = new PrismaCompanyAssistantProvisioningUnitOfWork(prisma, {
+		workloadProfile: profile.profileName,
+		promptPolicyVersion: PROMPT_COMPILER_VERSION,
+		budget: { maxTurns: 9, maxTokens: 32_000, maxCostUsdMicros: null, maxToolInvocations: 8, maxDurationMs: 120_000, maxLoopIterations: 8 },
+	}, new AgentIdentityHistory(history));
+	return _CreateCompanyAssistantProvisioningRouter(authority, function _ResolveAdministrator(request)
+	{
+		const principal = _ResolveRequestPrincipal(request);
+		return principal === null ? null : { siloId: principal.siloId, principalId: principal.principalId };
+	}, logger);
+}

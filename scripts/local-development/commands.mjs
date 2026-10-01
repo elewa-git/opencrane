@@ -198,7 +198,7 @@ export function createApplicationCommands(configuration, secrets)
 		{
 			name: "opencrane-server",
 			command: "npx",
-			arguments: ["tsx", "apps/opencrane/src/development/index.ts"],
+			arguments: ["tsx", "apps/opencrane/src/bootstrap/development/index.ts"],
 			environment: serverEnvironment
 		},
 		{

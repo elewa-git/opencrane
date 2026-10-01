@@ -4,6 +4,7 @@ import { OrganizationMemberRoles } from "../directory.types";
 import { FleetOrganizationMembershipAuthority } from "../fleet-organization-membership-authority";
 import type { FleetOrganizationMembershipTransport } from "../fleet-organization-membership-transport.types";
 import { OrganizationMembershipErrorKinds } from "../organization-members.errors";
+import { OrganizationMemberRemovalStates, OrganizationMemberRemovalUnavailableReasons } from "../removal.types";
 
 /** Verified caller fixture. */
 const _CALLER = { siloId: "acme", principalId: "principal-admin-1", subjectId: "admin-1", verifiedEmail: "admin@acme.test", displayName: "Admin" };
@@ -17,6 +18,20 @@ function _Authority(status: number, body: unknown, siloId = "acme")
 
 describe("FleetOrganizationMembershipAuthority", function _Suite()
 {
+	it("marks removal unsupported without changing the external directory contract", async function _RemovalCapability()
+	{
+		const member = { membershipId: "member-1", displayName: "Member", email: "member@acme.test", role: "member", status: "active", joinedAt: "2026-09-01T00:00:00.000Z", isCurrentUser: false };
+		const f = _Authority(200, { members: [member], invitations: [], activeCount: 1, pendingCount: 0 });
+		const result = await f.authority.directory(_CALLER);
+		expect(result.members[0]?.removal).toEqual({ state: OrganizationMemberRemovalStates.Unavailable, reason: OrganizationMemberRemovalUnavailableReasons.AuthorityUnsupported });
+	});
+
+	it("refuses removal without dispatching an invented Fleet operation", async function _UnsupportedRemoval()
+	{
+		const f = _Authority(200, {});
+		await expect(f.authority.remove({ caller: _CALLER, membershipId: "member-1" })).rejects.toMatchObject({ kind: OrganizationMembershipErrorKinds.Unavailable });
+		expect(f.transport.request).not.toHaveBeenCalled();
+	});
 	it("maps Fleet seat authority to the stable payment_required result", async function _Payment()
 	{
 		const { authority } = _Authority(402, { error: { code: "SEAT_OR_PAYMENT_REQUIRED" } });

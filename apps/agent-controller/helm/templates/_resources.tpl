@@ -565,6 +565,7 @@ spec:
         - protocol: TCP
           port: {{ .Values.observability.otel.collector.otlpPort }}
     {{- end }}
+---
 # The MCP controller may create only the fixed two-container envelope. The uploaded image is the
 # sole dynamic field and must remain an immutable registry digest; it receives no projected token.
 apiVersion: admissionregistration.k8s.io/v1

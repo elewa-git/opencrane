@@ -66,11 +66,7 @@ export function _ValidatedAgentIdentity(value: unknown): AgentIdentity
 {
 	if (!_Record(value))
 		throw new Error("Agent identity history requires a valid discriminated identity");
-	if (
-		value.kind !== AgentIdentityKinds.Proxied
-		&& value.kind !== AgentIdentityKinds.Managed
-		&& value.kind !== AgentIdentityKinds.ManagedSubChat
-	)
+	if (value.kind !== AgentIdentityKinds.Proxied && value.kind !== AgentIdentityKinds.Managed && value.kind !== AgentIdentityKinds.ManagedSubChat)
 		throw new Error("Agent identity history received an unsupported identity kind");
 	if (!_ExactKeys(value, _BaseKeys(value.kind)))
 		throw new Error("Agent identity history requires a valid discriminated identity");
@@ -117,7 +113,7 @@ export function _SameAgentIdentityCoordinates(first: AgentIdentity, current: Age
 }
 
 /** Builds the exact allowed key set for one closed identity kind. */
-function _BaseKeys(kind: AgentIdentityKinds): readonly string[]
+function _BaseKeys(kind: `${AgentIdentityKinds}`): readonly string[]
 {
 	const common = ["schemaVersion", "id", "siloId", "agentServiceId", "name", "avatarArtifactRevisionId", "state", "createdByPrincipalId", "createdAt", "kind"];
 	if (kind === AgentIdentityKinds.Proxied)

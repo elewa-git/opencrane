@@ -32,6 +32,12 @@ The process uses the release-local OpenCrane database credential only to claim d
 tasks. Its Kubernetes roles are scoped to the named worker namespaces and governed Job operations.
 Fail-closed admission policies constrain each created Job to its configured workload shape. The app
 never receives the LiteLLM master key and exposes no Service, Ingress, or public route.
+It uses the worker-only Absurd engine without Prisma transaction admission. The app-owned bundle
+test builds the real entrypoint in memory and rejects Prisma or undeclared runtime dependencies.
+
+The chart renders its network rules and MCP admission policy as separate Kubernetes resources.
+The app's test target parses the complete rendered manifest and checks those resources, so a broken
+YAML document boundary fails before deployment.
 
 ## Runtime configuration
 

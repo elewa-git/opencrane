@@ -115,17 +115,6 @@ const ClusterTenantUpdateSchema = {
   },
 };
 
-const AuditEntrySchema = {
-  type: "object" as const,
-  properties: {
-    timestamp: { type: "string", format: "date-time" },
-    tenant: { type: "string" },
-    action: { type: "string" },
-    resource: { type: "string" },
-    message: { type: "string" },
-  },
-};
-
 const ByokProviderKeyStatusSchema = {
   type: "object" as const,
   required: ["provider", "configured", "litellmRegistered"],
@@ -190,15 +179,6 @@ const ModelRoutingDefaultWriteSchema = {
 };
 
 
-const BudgetSchema = {
-  type: "object" as const,
-  properties: {
-    monthlyLimitUsd: { type: "number" },
-    currentSpendUsd: { type: "number" },
-    budgetAlertState: { type: "string", enum: ["ok", "warning", "exceeded"] },
-  },
-};
-
 const ThirdPartySourceSchema = {
   type: "object" as const,
   properties: {
@@ -211,18 +191,6 @@ const ThirdPartySourceSchema = {
   },
 };
 
-const TokenUsageSchema = {
-  type: "object" as const,
-  properties: {
-    tenant: { type: "string" },
-    model: { type: "string" },
-    inputTokens: { type: "integer" },
-    outputTokens: { type: "integer" },
-    totalCostUsd: { type: "number" },
-    recordedAt: { type: "string", format: "date-time" },
-  },
-};
-
 // ---------------------------------------------------------------------------
 // Spec document — Composed from domain path fragments
 // ---------------------------------------------------------------------------
@@ -232,7 +200,7 @@ const TokenUsageSchema = {
  * and meta routes.
  *
  * This one object has two consumers, which is why edits here are not cosmetic. It is served at
- * `/api/v1/openapi.json` (apps/opencrane/src/app/routes.ts), and it is emitted to a file that
+ * `/api/v1/openapi.json` (apps/opencrane/src/bootstrap/http/routes.ts), and it is emitted to a file that
  * generates the typed frontend client — so renaming a component or changing a required field
  * changes compiled frontend code, not just documentation. Regenerate the client in the same
  * change; see the note at the top of this file for the commands.
@@ -262,7 +230,6 @@ export const spec = {
       ClusterTenantWrite: ClusterTenantWriteSchema,
       ClusterTenantUpdate: ClusterTenantUpdateSchema,
       ClusterTenantResourceQuota: ClusterTenantResourceQuotaSchema,
-      AuditEntry: AuditEntrySchema,
       ByokProviderKeyStatus: ByokProviderKeyStatusSchema,
       ProviderKeySetRequest: ProviderKeySetRequestSchema,
       ModelDefinition: _ModelDefinitionSchema,
@@ -270,9 +237,7 @@ export const spec = {
       AutoRoutingConfig: AutoRoutingConfigSchema,
       ModelRoutingDefault: ModelRoutingDefaultSchema,
       ModelRoutingDefaultWrite: ModelRoutingDefaultWriteSchema,
-      Budget: BudgetSchema,
       ThirdPartySource: ThirdPartySourceSchema,
-      TokenUsage: TokenUsageSchema,
       SelfRunStatus: _SelfRunStatusSchema,
       AgentService: {
         type: "object",

@@ -1,0 +1,62 @@
+<section class="wo-mcp-connection" [attr.aria-label]="view().serverName + ' connection'">
+	@if (view().state === states.Connect || view().state === states.Replace || view().state === states.Ambiguous) {
+		<form class="wo-mcp-connection__form" (submit)="submit($event)">
+			@if (showsCredentialInput()) {
+				<label class="wo-mcp-connection__label" [for]="view().controlId + '-credential'">Access token for {{ view().serverName }}</label>
+				<input
+					#credentialInput
+					pInputText
+					class="wo-mcp-connection__input"
+					type="password"
+					[id]="view().controlId + '-credential'"
+					[attr.aria-describedby]="view().controlId + '-credential-help ' + view().controlId + '-error'"
+					autocomplete="off"
+					autocapitalize="none"
+					spellcheck="false"
+					maxlength="8192"
+					placeholder="Paste access token"
+					[disabled]="busy() || view().state === states.Ambiguous"
+					[value]="view().draft"
+					(input)="editDraft($event)"
+				/>
+				<p class="wo-mcp-connection__help" [id]="view().controlId + '-credential-help'">Stored securely. You cannot view it later.</p>
+			}
+			<div class="wo-mcp-connection__actions">
+				<button pButton type="submit" size="small" [text]="true" [disabled]="!canSubmit()">{{ submitLabel() }}</button>
+				@if (view().state === states.Replace) {
+					<button pButton type="button" size="small" [text]="true" severity="secondary" [disabled]="busy()" (click)="cancelDraftRequested.emit()">Cancel</button>
+				}
+			</div>
+		</form>
+	} @else if (view().state === states.Active) {
+		<div class="wo-mcp-connection__actions">
+			@if (view().canReplace) {
+				<button #replaceAction pButton type="button" size="small" [text]="true" [disabled]="busy()" (click)="replaceRequested.emit()">Replace</button>
+			}
+			@if (view().canRevoke) {
+				<button pButton type="button" size="small" [text]="true" severity="danger" [disabled]="busy()" (click)="revokeRequested.emit()">Disconnect</button>
+			}
+		</div>
+	} @else if (view().state === states.Activating) {
+		<p class="wo-mcp-connection__status">Connecting…</p>
+		@if (view().canRevoke) {
+			<div class="wo-mcp-connection__actions">
+				<button pButton type="button" size="small" [text]="true" severity="danger" [disabled]="busy()" (click)="revokeRequested.emit()">Disconnect</button>
+			</div>
+		}
+	} @else if (view().state === states.RecoveryRequired) {
+		<p class="wo-mcp-connection__status">{{ view().failureMessage ?? "Disconnect this connection before replacing it." }}</p>
+		@if (view().canRevoke) {
+			<div class="wo-mcp-connection__actions">
+				<button pButton type="button" size="small" [text]="true" severity="danger" [disabled]="busy()" (click)="revokeRequested.emit()">Disconnect</button>
+			</div>
+		}
+	} @else {
+		<p class="wo-mcp-connection__status">Connection removal is in progress.</p>
+	}
+	@if (error() !== null) {
+		<p class="wo-mcp-connection__error" role="alert" aria-live="assertive" [id]="view().controlId + '-error'">{{ error() }}</p>
+	} @else {
+		<span class="wo-mcp-connection__error-anchor" [id]="view().controlId + '-error'"></span>
+	}
+</section>

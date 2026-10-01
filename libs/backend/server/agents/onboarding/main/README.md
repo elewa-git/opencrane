@@ -4,6 +4,11 @@
 
 ## What it owns
 
+`src/composition/` connects persona evidence, initial model selection and personal-agent readiness
+inside the existing onboarding completion transaction. The app supplies the selected deployment
+profile, the complete profile list used by session admission, the caller resolver and logger;
+`src/http/` supplies the verified-session owner resolver.
+
 This package owns the server-tracked workflow that routes one authenticated person through persona
 survey and bootstrap chat before the main product. Authentication supplies the silo and stable OIDC
 subject; the persona package supplies interview, approval, display-name, and primary-colour
@@ -24,6 +29,11 @@ The package owns the survey hand-off and first guided exchange end to end:
 8. Repair older `bootstrap_concluded` rows idempotently on the next onboarding read. Repair keeps an
    existing owned personal service when present; creation uses the onboarding identifier as the
    deterministic identity only when no service exists.
+
+If that deterministic service has never admitted a conversation or run, agent-services may correct
+an old profile that is no longer configured. The owner's central Edit decision and the exact source
+comparison commit in this same transaction. The correction preserves onboarding answers, persona,
+identity and revision history. Any prior use or a still-configured old profile prevents this repair.
 
 ```text
  authenticated session       persona evidence authority
@@ -54,6 +64,11 @@ interview's persona becomes active; PostgreSQL closes the opposite side of that 
 single onboarding-first lock order and requires approval to match the current pin.
 
 ## Public surface
+
+`_ResolveUserOnboardingOwner` maps the verified browser principal to the domain caller in `src/http/user-onboarding-owner-resolver.ts`.
+
+- `_CreateUserOnboardingComposition` builds the onboarding routes and persona notifications.
+- `_CreatePersonaOnboardingWorkflow` translates persona lifecycle notifications into onboarding events.
 
 - `__UserOnboardingAuthority` reads/creates route state and admits interview-start and approved-persona transitions.
 - `__UserOnboardingChatAuthority` selects reviewed content, renders the deterministic transcript,
@@ -97,16 +112,17 @@ publication, audit row, and onboarding completion either commit together or all 
 Callers must derive `UserOnboardingOwner` from the verified request principal. Persona survey
 questions, scores, drafts, compiled instructions, and approval remain owned by the persona package.
 Bootstrap answers remain ordinary evidence: they grant no memory retention or action authority.
-The app may construct the exported agent-services bootstrap repository inside onboarding's
-transaction, but onboarding cannot reproduce model selection, AgentService/revision persistence,
-publication, or audit.
+The composition binds the exported agent-services bootstrap repository to onboarding's
+transaction. The agent-services package owns model selection, AgentService/revision persistence,
+publication, and audit.
 
 ## Dependency direction
 
-The project uses `scope:user-onboarding`. Its completion unit of work depends only on the narrow
-personal-bootstrap capability port owned by this package. The app constructs the agent-services
+The project uses `scope:user-onboarding`; its HTTP owner resolver consumes the narrow `scope:auth`
+request-principal seam. Its completion unit of work depends only on the narrow
+personal-bootstrap capability port owned by this package. The composition constructs the agent-services
 adapter with the current transaction client and composes the public HTTP boundary. This package
-never imports agent-services, app code, or frontend state.
+imports public agent-services ports and never imports app code or frontend state.
 
 ## Data & persistence
 

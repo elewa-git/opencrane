@@ -28,6 +28,8 @@ OpenCrane API.
 
 All shipped bindings are live. Tests can replace individual tokens with in-memory fakes without
 changing feature code.
+The MCP test fake derives installation status from the server's explicit credential requirement,
+so a multi-user presentation cannot become ready merely because of its type.
 
 ## Public surface
 

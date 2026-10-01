@@ -7,11 +7,13 @@ import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
 import { _RateLimit } from "@opencrane/backend/server/infra/http";
 
 /** Keep identity-route tests independent from mounted ArtifactStore credentials. */
-vi.mock("../infra/artifacts/artifact-upload.factory", function _MockArtifactUploadFactory()
+vi.mock("@opencrane/backend/server/agents/artifacts", async function _MockArtifactServiceFactories(importOriginal)
 {
+	const actual = await importOriginal<typeof import("@opencrane/backend/server/agents/artifacts")>();
 	return {
+		...actual,
 		_CreateArtifactPreprocessOutputBroker: function _CreateArtifactPreprocessOutputBroker() { return {}; },
-		_CreateSkillAuthoringArtifactReader: function _CreateSkillAuthoringArtifactReader() { return {}; },
+		_CreatePublishedArtifactReader: function _CreatePublishedArtifactReader() { return {}; },
 	};
 });
 

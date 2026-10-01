@@ -1,10 +1,10 @@
 import { Injectable, inject } from "@angular/core";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { ConversationAssetDisposition, ConversationAssetLifecycle, ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
 
 import type { ConversationAsset, ReserveConversationAssetUpload } from "./conversation-assets.types";
 import type { ConversationAssetsGateway } from "./conversation-assets-gateway.types";
+import { _ParseConversationAsset } from "./conversation-assets.validator";
 
 /** Generated-client adapter for safe conversation-file metadata and exact byte uploads. */
 @Injectable()
@@ -17,7 +17,7 @@ export class OpenCraneConversationAssetsGateway implements ConversationAssetsGat
 	{
 		const { data, error } = await this._api.client.GET("/me/conversations/{conversationId}/assets", { params: { path: { conversationId } } });
 		if (error !== undefined || data === undefined) throw new Error("Conversation files could not be loaded.");
-		return data.assets.map(_Asset);
+		return data.assets.map(_ParseConversationAsset);
 	}
 
 	/** @inheritdoc */
@@ -33,7 +33,7 @@ export class OpenCraneConversationAssetsGateway implements ConversationAssetsGat
 	{
 		const { data, error } = await this._api.client.POST("/me/conversations/{conversationId}/assets", { params: { path: { conversationId } }, body: request });
 		if (error !== undefined || data === undefined) throw new Error("The file upload could not be reserved.");
-		return _Asset(data.asset);
+		return _ParseConversationAsset(data.asset);
 	}
 
 	/** @inheritdoc */
@@ -46,7 +46,7 @@ export class OpenCraneConversationAssetsGateway implements ConversationAssetsGat
 			headers: { "Content-Type": file.type || "application/octet-stream" }
 		});
 		if (error !== undefined || data === undefined) throw new Error("The file upload failed.");
-		return _Asset(data.asset);
+		return _ParseConversationAsset(data.asset);
 	}
 
 	/** @inheritdoc */
@@ -54,12 +54,6 @@ export class OpenCraneConversationAssetsGateway implements ConversationAssetsGat
 	{
 		const { data, error } = await this._api.client.DELETE("/me/conversations/{conversationId}/assets/{assetId}", { params: { path: { conversationId, assetId } } });
 		if (error !== undefined || data === undefined) throw new Error("The file could not be removed.");
-		return _Asset(data.asset);
+		return _ParseConversationAsset(data.asset);
 	}
-}
-
-/** Convert generated literals to the owning string-backed enums after the schema validated them. */
-function _Asset(asset: { readonly id: string; readonly conversationId: string; readonly messageId: string | null; readonly provenance: "participant_upload" | "agent_output"; readonly state: "uploading" | "processing" | "ready" | "failed" | "removed"; readonly displayName: string; readonly mediaType: string; readonly byteLength: number | null; readonly disposition: "preview" | "download" | null; readonly failureCode: string | null; readonly canRemove: boolean; readonly createdAt: string }): ConversationAsset
-{
-	return { ...asset, provenance: asset.provenance as ConversationAssetProvenance, state: asset.state as ConversationAssetLifecycle, disposition: asset.disposition as ConversationAssetDisposition | null };
 }

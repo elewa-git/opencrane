@@ -2,8 +2,8 @@ import { posix } from "node:path";
 
 /** Canonical adapter-source pins reviewed as the only production raw Prisma procedures. */
 const _RAW_PROCEDURE_SOURCE_PINS = new Map([
-	["libs/backend/server/infra/workflows/infra_absurd/src/workflow-task-admission.ts\u0000WorkflowTaskAdmission", "eaaec9a78dc51cae458385b93640e85888a3032da656632022f3e6e892833acf"],
-	["libs/backend/server/infra/workflows/infra_absurd/src/workflow-task-event-admission.ts\u0000WorkflowTaskEventAdmission", "fd789bf1efe78a9b0134f75e9ef1446cd6eebbc295bd328b7c3451ea88b01625"],
+	["libs/backend/server/infra/workflows/infra_absurd/src/workflow-task-admission.ts\u0000WorkflowTaskAdmission", "43ccbb4f46162d88ae7a949a72c936e2ed24e0b28e5d525e1098b3d0d3394143"],
+	["libs/backend/server/infra/workflows/infra_absurd/src/workflow-task-event-admission.ts\u0000WorkflowTaskEventAdmission", "2a05d784125cdba92ccc6a7ab9ae485fed8c68a8d235543ca41a6d04a1cfb17e"],
 ]);
 
 /**
@@ -165,7 +165,7 @@ function _IsCurrentTaskEventProcedure(procedure)
 		&& procedure.contract === "IWorkflowTaskEventAdmission"
 		&& procedure.contractImportPath === "./workflow-task-event-admission.types"
 		&& procedure.method === "$queryRaw"
-		&& procedure.sqlTemplate === "SELECT absurd.emit_event(${this.queueName}, ${acceptedEventName}, ${serializedPayload}::jsonb)"
+		&& procedure.sqlTemplate === "SELECT 1 AS acknowledged FROM ( SELECT absurd.emit_event(${this.queueName}, ${acceptedEventName}, ${serializedPayload}::jsonb) AS invoked ) AS emitted"
 		&& procedure.sourceSha256 === rawProcedureSourcePin(procedure.path, procedure.adapter)
 		&& typeof procedure.reason === "string"
 		&& procedure.reason.trim().length >= 20;
@@ -174,6 +174,16 @@ function _IsCurrentTaskEventProcedure(procedure)
 /** Checks earlier exact declarations while a diff compares the current policy with its base. */
 function _IsHistoricalRawProcedure(procedure)
 {
+	if (_IsPreviousTaskEventProcedure(procedure))
+		return true;
+	if (procedure?.sourceSha256 === "eabc0843f3e395ec2bc2a03838d8806857537e933a92b21a4f4d0546179e6309")
+		return _IsCurrentTaskAdmissionProcedure({ ...procedure, sourceSha256: rawProcedureSourcePin(procedure.path, procedure.adapter) });
+	if (procedure?.sourceSha256 === "ec1ec85d8e6fbf15c4afa55ef5bcf282e2667e45b70749a222f94ba8f869b24f")
+		return _IsCurrentTaskEventProcedure({ ...procedure, sourceSha256: rawProcedureSourcePin(procedure.path, procedure.adapter) });
+	if (procedure?.sourceSha256 === "eaaec9a78dc51cae458385b93640e85888a3032da656632022f3e6e892833acf")
+		return _IsCurrentTaskAdmissionProcedure({ ...procedure, sourceSha256: rawProcedureSourcePin(procedure.path, procedure.adapter) });
+	if (procedure?.sourceSha256 === "12e9a4db34f7ff277e535cd260a9bd3f7765026293ece5768499b56e99b7293e")
+		return _IsCurrentTaskEventProcedure({ ...procedure, sourceSha256: rawProcedureSourcePin(procedure.path, procedure.adapter) });
 	if (procedure?.sourceSha256 === undefined)
 	{
 		const sourceSha256 = rawProcedureSourcePin(procedure?.path, procedure?.adapter);
@@ -181,6 +191,20 @@ function _IsHistoricalRawProcedure(procedure)
 		if (_IsCurrentTaskEventProcedure({ ...procedure, sourceSha256 })) return true;
 	}
 	return false;
+}
+
+/** Recognize the exact former event call only when inspecting an immutable Git comparison base. */
+function _IsPreviousTaskEventProcedure(procedure)
+{
+	return procedure?.path === "libs/backend/server/infra/workflows/infra_absurd/src/workflow-task-event-admission.ts"
+		&& procedure.adapter === "WorkflowTaskEventAdmission"
+		&& procedure.contract === "IWorkflowTaskEventAdmission"
+		&& procedure.contractImportPath === "./workflow-task-event-admission.types"
+		&& procedure.method === "$queryRaw"
+		&& procedure.sqlTemplate === "SELECT absurd.emit_event(${this.queueName}, ${acceptedEventName}, ${serializedPayload}::jsonb)"
+		&& procedure.sourceSha256 === "fd789bf1efe78a9b0134f75e9ef1446cd6eebbc295bd328b7c3451ea88b01625"
+		&& typeof procedure.reason === "string"
+		&& procedure.reason.trim().length >= 20;
 }
 
 /**

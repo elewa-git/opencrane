@@ -1,0 +1,21 @@
+--- a/cognee/modules/pipelines/operations/log_pipeline_run_error.py
++++ b/cognee/modules/pipelines/operations/log_pipeline_run_error.py
+@@ -25,0 +25 @@
++    run_evidence: Optional[dict[str, str]] = None,
+@@ -27,0 +28,8 @@
++
++    # Persist only the existing scrubbed summary; raw provider/model errors never enter evidence.
++    run_info = {
++        "data": data_info,
++        "error": scrub_error_message(e),
++    }
++    if run_evidence is not None:
++        run_info["opencrane_cognify"] = dict(run_evidence)
+@@ -34,6 +43 @@
+-        run_info={
+-            "data": data_info,
+-            # Scrubbed like error_message — persisting the raw text here would
+-            # defeat the redaction (and run_info growth is capped, COG-5359).
+-            "error": scrub_error_message(e),
+-        },
++        run_info=run_info,

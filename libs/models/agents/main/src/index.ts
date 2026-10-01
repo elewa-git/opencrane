@@ -1,5 +1,6 @@
 export { __DiffAgentRevisions } from "./agent-revision-diff";
 export { __DigestAgentRevisionContent } from "./agent-revision-content";
+export { __ParseAgentBudget } from "./agent-budget.validator";
 export type { AgentRevisionDiff, RevisionLineDiff, RevisionScalarChange, RevisionSetChange, RevisionWidening, RevisionWideningKind } from "./agent-revision-diff.types";
 export type { AgentBudget, AgentRevision, AgentRevisionContent, AgentRevisionState, SkillRevisionReference } from "./agent-revision.types";
 export { AgentRunStates, ExecutionSubjectMembershipKinds } from "./agent-run.types";

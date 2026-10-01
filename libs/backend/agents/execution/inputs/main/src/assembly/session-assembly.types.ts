@@ -1,0 +1,478 @@
+import type { RunBudgetPolicy, RunInputSnapshotMcpTool } from "@opencrane/contracts";
+import type { InitialRunAuthority, RunAdmissionCommand, RunAdmissionMessageAuthor, RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import type { ExecutionSubject, PersonaRevisionId } from "@opencrane/models/agents";
+import type { MessageId } from "@opencrane/models/conversations";
+import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/artifacts";
+import type { JsonValue } from "@opencrane/util";
+
+import type { SessionAssemblyRefusalReason } from "./session-assembly-result.types";
+
+/**
+ * The server-derived run coordinates that admission uses to load an execution subject.
+ *
+ * This is the complete list of what a caller may influence. Everything else in the snapshot is
+ * read by a source from the database, which is why a browser request cannot widen its own run:
+ * there is no field here for a persona, a tool, a budget, or a memory dataset.
+ *
+ * Re-exported shape of `RunAdmissionCommand` (execution/runs/main/src/run-admission.types.ts).
+ */
+export type SessionAssemblyCommand = RunAdmissionCommand;
+
+/**
+ * Outcomes owned by one input source while the admission transaction is assembled.
+ *
+ * These values are internal control-flow discriminants. They stay separate from the run
+ * admission transaction's build and final outcomes, even though all use the same denial word.
+ */
+export enum SessionAssemblyLoadOutcomes
+{
+	/** The source loaded the complete slice required by its authority. */
+	Loaded = "loaded",
+	/** The source could not prove its slice and the admission must refuse. */
+	Denied = "denied",
+}
+
+/**
+ * What one input source returns: either the value it loaded, or a refusal.
+ *
+ * A refusal from any single source aborts the whole admission with that reason — sources are not
+ * best-effort and there is no partial snapshot. So an implementation must refuse rather than
+ * return an empty or guessed value whenever it cannot prove what it read.
+ *
+ * The two reasons a source may NOT return are excluded by the type: `invalid_command` belongs to
+ * the command check that runs before any source, and `persistence_unavailable` belongs to the
+ * write at the end. A source that wants to say "I could not read" should use its own
+ * `*_unavailable` reason instead.
+ *
+ * @typeParam T - The slice of run input this source owns.
+ * @see SessionAssemblyRefusalReason
+ */
+export type SessionAssemblyLoad<T> = { readonly outcome: `${SessionAssemblyLoadOutcomes.Loaded}`; readonly value: T } | { readonly outcome: `${SessionAssemblyLoadOutcomes.Denied}`; readonly reason: Exclude<SessionAssemblyRefusalReason, "invalid_command" | "persistence_unavailable"> };
+
+/** Approved persona evidence available to a personal runtime. */
+export interface ApprovedPersonaInput
+{
+	/** The PersonaRevision that is currently active and approved, or null for a managed run. */
+	personaRevisionId: PersonaRevisionId | null;
+	/** Stable Persona profile resource authorized for Use, or null for a managed run. */
+	personaId: string | null;
+}
+
+/** Holds the conversation's messages in order, as the conversation source read them inside the admission transaction. */
+export interface ConversationContextInput
+{
+	/** Ordered message identifiers included in the runtime prompt. */
+	messageIds: readonly MessageId[];
+}
+
+/** Exact durable history facts re-read before the snapshot may freeze its message identifiers. */
+export interface ConversationHistoryAdmissionRead
+{
+	/** Kurrent stream revision that bounded this read. */
+	readonly historyRevision: string;
+	/** Canonical message identifiers in stream order. */
+	readonly orderedMessageIds: readonly MessageId[];
+	/** Immutable human author stored on the final triggering entry. */
+	readonly finalMessageAuthor: RunAdmissionMessageAuthor;
+}
+
+/** Infrastructure-neutral port for re-reading one exact durable conversation-history revision. */
+export interface ConversationHistoryAdmissionReader
+{
+	/** Read through the expected revision or return null when that exact stream boundary is unavailable. */
+	read(command: { readonly siloId: string; readonly conversationId: string; readonly expectedRevision: string }): Promise<ConversationHistoryAdmissionRead | null>;
+}
+
+/** Names one stored preference fact chosen to personalise the prompt. */
+export interface PreferenceFactInput
+{
+	/** Stable fact identifier. */
+	id: string;
+}
+
+/** Identifies the memory coordinates written by the input sources into a run snapshot. */
+export enum RunInputMemoryScopes
+{
+	/** The run carries no personal dataset or preference facts. */
+	None = "none",
+	/** The run freezes a verified personal dataset; a later effect still requires current permission. */
+	Personal = "personal",
+}
+
+/** Authorised memory dataset coordinates frozen for a single run. */
+export interface MemoryScopeInput
+{
+	/** Limits what the runtime may recall from memory later in the run. */
+	memoryQueryPolicy: JsonValue;
+	/** Exact Dataset and MemoryScope resource id, or null when this run has no personal memory. */
+	datasetId: string | null;
+}
+
+/** Holds the model, tools, skills, and artifacts the published revision assigned to this run. */
+export interface ToolPolicyInput
+{
+	/** Exact model definition selected by the published revision. */
+	modelDefinitionId: string;
+	/** Server-selected model route without provider credentials. */
+	modelRoute: JsonValue;
+	/** MCP tool revisions in the Ready state that the AgentRevision selected. */
+	mcpTools: readonly RunInputSnapshotMcpTool[];
+	/** Immutable skill revisions eligible for this run. */
+	skillRevisionIds: readonly SkillRevisionId[];
+	/** Immutable artifact revisions explicitly made available to the run. */
+	artifactRevisionIds: readonly ArtifactRevisionId[];
+}
+
+/** Rechecks every exact product resource selected before the snapshot can commit. */
+export interface ProductResourceAuthorizationSource
+{
+	/** Batch-checks current Use grants through the transaction-bound central authority. */
+	load(command: SessionAssemblyCommand, executionSubject: ExecutionSubject, persona: ApprovedPersonaInput, memory: MemoryScopeInput, tools: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>;
+	/** Rechecks only current Conversation Use before an existing immutable snapshot is returned. */
+	verifyExisting(command: SessionAssemblyCommand, executionSubject: ExecutionSubject, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>;
+}
+
+/** Effective run limits resolved from service, silo, and policy. */
+export interface BudgetPolicyInput
+{
+	/** Immutable, admitted limits used by every later compiler and runtime step. */
+	budgetPolicy: RunBudgetPolicy;
+}
+
+/**
+ * Loads the one already-verified execution subject that may exercise this admitted run.
+ *
+ * The authority is injected rather than reconstructed from request fields. It verifies the current
+ * AgentIdentity head, Principal membership, capability decision, fenced run, and active
+ * ConversationComputer lease in the admission fence. Requester provenance never becomes authority.
+ */
+export interface ExecutionSubjectAuthority
+{
+	/** Loads one current subject that exactly matches the admitted run and computer lease. */
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ExecutionSubject>>;
+}
+
+/**
+ * Reads the run, AgentService, and published-revision facts every later source depends on.
+ *
+ * This runs first inside the admission transaction, and it deliberately re-reads the service even
+ * though the caller already named one: between the caller's request and this transaction the
+ * service can be paused, retired, or have its active revision swapped, and admitting against the
+ * old revision would run the wrong instructions.
+ *
+ * Implemented by: {@link PrismaRunAuthority}. Wired in by
+ * `__CreatePrismaManagedSessionAssemblyAuthorities` and
+ * `__CreatePrismaPersonalSessionAssemblyAuthorities` (prisma-session-assembly-authorities.ts).
+ */
+export interface RunAuthoritySource
+{
+	/**
+	 * Loads the run, service, and revision facts needed to admit this run, and nothing more.
+	 *
+ * @param command - The admission command; only its server-derived coordinates are trusted.
+	 * @param transaction - The admission transaction. Read through this, never through a root client,
+	 * or the read will not see the locks admission is holding.
+	 * @returns `loaded` with the facts every later source builds on. `denied` with
+	 * `run_not_admittable` when the service is missing, inactive, or its kind does not match the
+	 * caller's identity kind, or `revision_unavailable` when the active-revision pointer and the
+	 * revision disagree. Either way the whole admission stops.
+	 */
+	load(command: SessionAssemblyCommand, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<InitialRunAuthority>>;
+}
+
+/**
+ * Reads the persona a personal run may use.
+ *
+ * It reads the persona profile directly rather than going through the code that approves personas,
+ * so an approval bug cannot also become an admission bug.
+ *
+ * Managed runs get no persona at all: their published revision already holds all their
+ * instructions. `__AssembleRunInputSnapshot` checks the explicit persona policy and refuses with
+ * `persona_unavailable` when the loaded value does not match it.
+ *
+ * Implemented by: {@link PrismaApprovedPersonaAuthority}.
+ */
+export interface ApprovedPersonaSource
+{
+	/**
+	 * Loads the active approved persona revision, or null for a managed service.
+	 *
+	 * @param command - The admission command; its subject must own the persona profile.
+	 * @param run - Facts from {@link RunAuthoritySource}; its explicit policy decides whether a persona is required.
+	 * @param executionSubject - The verified principal whose approved persona may be selected.
+	 * @param transaction - The admission transaction.
+	 * @returns `loaded` with `personaRevisionId` set for a personal run, or null for a managed run.
+	 * `denied` with `persona_unavailable` when the caller is not the profile's owner, or the active
+	 * revision is missing or not approved — an unapproved persona must never reach a saved run.
+	 */
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ApprovedPersonaInput>>;
+}
+
+/**
+ * Reads the conversation's messages, in order, and freezes them into the snapshot.
+ *
+ * Only completed messages go in. A message still being written stays out, so the snapshot can
+ * never name a message whose content later changes.
+ *
+ * This is also where the "one run at a time per conversation" rule is enforced: if another run on
+ * this conversation has not finished, it refuses with `active_run`.
+ *
+ * Implemented by: {@link TransactionBoundConversationContextSource}, over
+ * {@link ConversationContextRepository}.
+ */
+export interface ConversationContextSource
+{
+	/**
+	 * Loads this run's message ids in transcript order.
+	 *
+	 * @param command - The admission command. A null `conversationId` means non-conversational work
+	 * and returns an empty list without a lookup.
+	 * @param run - Facts from {@link RunAuthoritySource}; the conversation must belong to this service.
+	 * @param transaction - The admission transaction.
+	 * @returns `loaded` with the message ids and the pending user message. `denied` with
+	 * `conversation_unavailable` when the conversation is closed, the caller is not a participant, or
+	 * their org membership is gone; or `active_run` when another unfinished run already owns this
+	 * conversation — that one is worth retrying later, the others are not.
+	 */
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ConversationContextInput>>;
+}
+
+/**
+ * Reads conversation rows for {@link ConversationContextSource}, bound to one transaction.
+ *
+ * Split out from the source so the source itself holds no database client: the transaction arrives
+ * per call and a reader is built for it by {@link ConversationContextRepositoryFactory}. That is
+ * what stops a conversation read from escaping the admission transaction.
+ *
+ * Implemented by: {@link PrismaConversationContextRepository}.
+ */
+export interface ConversationContextRepository
+{
+	/**
+	 * Loads message ids in transcript order, using the transaction this reader was built for.
+	 *
+	 * @param command - The admission command.
+	 * @param run - Facts from {@link RunAuthoritySource}.
+	 * @returns The same outcomes as {@link ConversationContextSource.load}.
+	 */
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject): Promise<SessionAssemblyLoad<ConversationContextInput>>;
+}
+
+/**
+ * Builds a {@link ConversationContextRepository} for one admission transaction.
+ *
+ * Called once per admission, by {@link TransactionBoundConversationContextSource}. Keeping this a
+ * factory is what lets the source be constructed at startup while every read still happens inside
+ * the transaction that admission opened.
+ *
+ * @param transaction - The admission transaction to bind the reader to.
+ * @returns A reader that reads only through that transaction.
+ */
+export interface ConversationContextRepositoryFactory
+{
+	(transaction: RunAdmissionTransaction): ConversationContextRepository;
+}
+
+/**
+ * Reads the stored preference facts the execution subject has accepted.
+ *
+ * Ids only. Preference text never enters the snapshot, so nothing here widens what is stored in
+ * Postgres about a user.
+ *
+ * It takes the already-verified `identity` rather than the command's subject, so a preference can
+ * only ever be selected for the user whose signed membership was just checked.
+ *
+ * Implemented by: {@link PersonalMemoryPreferenceFactSource}. Managed admission substitutes an
+ * inline source that always returns an empty list (prisma-session-assembly-authorities.ts).
+ */
+export interface PreferenceFactSource
+{
+	/**
+	 * Loads the preference fact ids for the verified identity. An empty list is a normal result.
+	 *
+	 * @param command - The admission command.
+	 * @param run - Facts from {@link RunAuthoritySource}.
+	 * @param executionSubject - Already-verified subject from {@link ExecutionSubjectAuthority}. This, not the
+	 * command, decides whose preferences may be read.
+	 * @param transaction - The admission transaction.
+	 * @returns `loaded` with zero or more ids. `denied` with `memory_scope_unavailable` when the run
+	 * kind or identity kind is not one this source serves — that is a composition mistake, not
+	 * something a user can fix by retrying.
+	 */
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<readonly PreferenceFactInput[]>>;
+}
+
+/** Reads authorised memory dataset scope. */
+export interface MemoryScopeSource
+{
+	/**
+	 * Loads the memory this run may use, choosing it from the verified identity and frozen conversation.
+	 *
+	 * @param command - The admission command.
+	 * @param run - Facts from {@link RunAuthoritySource}.
+	 * @param executionSubject - Already-verified subject. The dataset is derived from this, never from caller
+	 * input.
+	 * @param conversation - The already-frozen transcript, used to build the recall query.
+	 * @param transaction - The admission transaction.
+	 * @returns `loaded` with the query policy and the fact references to freeze. `denied` with
+	 * `memory_scope_unavailable` when this run kind or identity is not one this source serves, or
+	 * `memory_unavailable` when the memory gateway failed — the second is safe to retry, and it
+	 * deliberately fails the admission rather than freezing an empty fact set that would be
+	 * indistinguishable from "this user has no memories".
+	 */
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, executionSubject: ExecutionSubject, conversation: ConversationContextInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<MemoryScopeInput>>;
+}
+
+/**
+ * Reads the model, MCP tools, skills, and artifacts assigned by the revision.
+ *
+ * It updates the MCP admission claim before reading inside the Serializable admission transaction.
+ * A concurrent publication change then conflicts with snapshot persistence.
+ *
+ * Implemented by: {@link PrismaRevisionToolPolicyAuthority}.
+ */
+export interface ToolPolicySource
+{
+	/**
+	 * Loads the model, tool, skill, and artifact inputs the runtime is allowed to use, and no others.
+	 *
+	 * @param command - The admission command; its silo bounds every row that may be returned.
+	 * @param run - Facts from {@link RunAuthoritySource}.
+		 * @param transaction - The Serializable admission transaction that owns every recheck and write.
+	 * @returns `loaded` with the run's tool policy. `denied` with `tool_policy_unavailable` when the
+	 * revision is no longer published, an MCP server revision is not Ready, its server is inactive or
+	 * unpublished, or an assigned skill or artifact is not published in this silo. An operator has to
+	 * fix the revision; retrying will not help.
+	 */
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ToolPolicyInput>>;
+}
+
+/** Serializes MCP policy reads for one agent revision inside run admission. */
+export interface McpToolAdmissionClaimRepository
+{
+	/** Updates the revision's claim row so another admission waits before reading its MCP policy. */
+	touch(agentRevisionId: string, siloId: string, admittedAt: Date): Promise<void>;
+}
+
+/** Builds an MCP admission-claim repository from the current run-admission transaction. */
+export type McpToolAdmissionClaimRepositoryFactory = (transaction: RunAdmissionTransaction) => McpToolAdmissionClaimRepository;
+
+/**
+ * Re-checks every skill revision the tool policy named, just before the snapshot is saved.
+ *
+ * This is a second pass over ground {@link ToolPolicySource} already covered, on purpose: it locks
+ * skills and then revisions in the same order revocation does, so a skill revoked while admission
+ * is running cannot slip into a snapshot. It returns no value — it exists only to refuse.
+ *
+ * Implemented by: {@link PrismaSkillRevisionEligibilitySource}.
+ */
+export interface SkillRevisionEligibilitySource
+{
+	/**
+	 * Refuses the run when a named skill revision is not usable.
+	 *
+	 * @param command - The admission command; its silo is what "same silo" is checked against.
+	 * @param run - Facts from {@link RunAuthoritySource}.
+	 * @param toolPolicy - The skills {@link ToolPolicySource} produced. Naming fewer skills than the
+	 * revision assigns is allowed; naming one it never assigned, or naming one twice, is not.
+	 * @param transaction - The admission transaction; the locks are taken on it.
+	 * @returns `loaded` with a null value, meaning "nothing to object to". `denied` with
+	 * `skill_unavailable` when a named revision was duplicated, never assigned, revoked, from another
+	 * silo, or not published.
+	 */
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, toolPolicy: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>;
+}
+
+/** Reads skill assignment and publication facts inside the active run-admission transaction. */
+export interface SkillRevisionEligibilityRepository
+{
+	/** Loads every skill revision assigned to one immutable agent revision. */
+	load(agentRevisionId: string): Promise<SkillRevisionEligibilityRead>;
+}
+
+/** Assignment facts plus proof that every assigned revision still exists. */
+export interface SkillRevisionEligibilityRead
+{
+	/** Current facts for every assigned revision that still exists. */
+	readonly revisions: readonly AssignedSkillRevision[];
+	/** Whether every assignment resolved to an existing revision. */
+	readonly isComplete: boolean;
+}
+
+/** Builds the skill reader from the active run-admission transaction. */
+export type SkillRevisionEligibilityRepositoryFactory = (transaction: RunAdmissionTransaction) => SkillRevisionEligibilityRepository;
+
+/** Facts used to decide whether one assigned skill revision can enter a run snapshot. */
+export interface AssignedSkillRevision
+{
+	/** Immutable SkillRevision assigned to the published AgentRevision. */
+	readonly skillRevisionId: string;
+	/** Whether the revision is published. */
+	readonly isPublished: boolean;
+	/** Server-owned revocation instant, if the revision has been withdrawn. */
+	readonly revokedAt: Date | null;
+	/** Silo of the skill that owns this revision. */
+	readonly siloId: string;
+}
+
+/**
+ * Reads the run's resource limits: turn count, token count, and a wall-clock deadline.
+ *
+ * The deadline is computed from the server's admission time plus the revision's duration limit, so
+ * a caller can never extend its own run by supplying one. Missing or malformed limits are refused
+ * rather than defaulted — an unbudgeted run could burn tokens without bound.
+ *
+ * Implemented by: {@link PrismaRevisionBudgetPolicyAuthority}.
+ */
+export interface BudgetPolicySource
+{
+	/**
+	 * Loads the immutable budget policy chosen for this run.
+	 *
+	 * @param command - The admission command.
+	 * @param run - Facts from {@link RunAuthoritySource}.
+	 * @param transaction - The admission transaction; its admission time fixes the deadline.
+	 * @returns `loaded` with the budget. `denied` with `budget_unavailable` when the revision is no
+	 * longer published, or its budget is missing, malformed, or holds values that cannot be
+	 * represented. An operator must fix the revision.
+	 */
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<BudgetPolicyInput>>;
+}
+
+/**
+ * Every source {@link __AssembleRunInputSnapshot} needs, and the order it calls them in.
+ *
+ * The fields below are listed in call order, and that order is a safety property, not a style
+ * choice: `runAuthority` first because everything else needs the run and revision;
+ * `executionSubject` before `preferenceFacts` and `memoryScope` so no identity-scoped source can
+ * read another organisation's data; `skillEligibility` last so its locks are the newest ones held
+ * when the snapshot commits.
+ *
+ * Do not assemble this by hand. Use {@link __CreatePrismaSessionAssemblyAuthorities}, which
+ * receives the authoritative subject and explicit run policy from the composition root.
+ */
+export interface SessionAssemblyAuthorities
+{
+	/** Opens the admission transaction, deduplicates by idempotency key, and saves the run and snapshot. */
+	admission: RunAdmissionRepository;
+	/** Re-reads the run, service, and revision inside the transaction. Called first; everything else depends on it. */
+	runAuthority: RunAuthoritySource;
+	/** Reads the approved persona for a personal run, or null for a managed one. */
+	approvedPersona: ApprovedPersonaSource;
+	/** Freezes the conversation's completed messages in order, and rejects a second concurrent run. */
+	conversationContext: ConversationContextSource;
+	/** Reads the ids of preference facts the user accepted. Needs a verified identity first. */
+	preferenceFacts: PreferenceFactSource;
+	/** Decides which memory the run may use. Needs a verified identity and the frozen conversation first. */
+	memoryScope: MemoryScopeSource;
+	/** Reads the revision's model, MCP tools, skills, and artifacts in the admission transaction. */
+	toolPolicy: ToolPolicySource;
+	/** Re-checks the named skill revisions last before the snapshot commits. */
+	skillEligibility: SkillRevisionEligibilitySource;
+	/** Batch-checks current Use grants for every resource selected by the preceding sources. */
+	productAuthorization: ProductResourceAuthorizationSource;
+	/** Reads the run's token, turn, and deadline limits. */
+	budgetPolicy: BudgetPolicySource;
+	/** Loads one verified AgentIdentity-and-Principal subject before identity-scoped sources run. */
+	executionSubject: ExecutionSubjectAuthority;
+}

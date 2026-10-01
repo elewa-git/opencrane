@@ -37,14 +37,33 @@ database transaction supplied by the product change and the parameterised `absur
 function. Product repositories may also emit a task event through that transaction with the fixed
 `absurd.emit_event` procedure. Absurd keeps the first payload for one task-scoped event name, so a
 replayed product write cannot replace the event that already woke the task.
+Server composition supplies the shared Prisma rollback checker through `isRolledBackConflict`.
+Both transactional procedure adapters preserve errors recognised by that checker unchanged, so
+the product's shared transaction runner can retry the complete operation. This includes Prisma
+P2010 with PostgreSQL SQLSTATE `40001`; other database and input-serialization failures remain
+wrapped. The adapters do not retry a procedure alone or change nontransactional worker behaviour.
+Worker-only processes omit the checker and do not load Prisma. Both transaction-bound methods
+refuse before SQL if their process did not supply it.
 Each declared or registered job also supplies its total attempt limit and retry delay. The adapter
 stores those limits with the Absurd task, including when the task is started inside a product database transaction.
 A retryable error lets Absurd schedule the next attempt. A terminal error is saved as failed before
 the SDK can apply that general retry policy, so work that cannot succeed unchanged stops immediately.
+Before an uncached checkpoint operation starts, the adapter extends the claimed task lease by the
+configured `checkpointOperationLeaseSeconds` bound (120 seconds by default). Absurd replays cached
+steps without invoking either the heartbeat or the operation, so a replay cannot repeat the effect.
+The opt-in `checkpoint-lease.integration.test.ts` qualification uses a one-second SQL claim to
+reclaim a run: the stale run's heartbeat rejects before its sentinel effect, and the replacement
+run commits the checkpoint. The uncached `test:sql` target sets
+`OPENCRANE_ABSURD_SQL_QUALIFICATION=1`; provide `DATABASE_URL` and run
+`npm exec -- nx run backend-server-infra-workflows-infra-absurd:test:sql --excludeTaskDependencies`
+against a database with the pinned Absurd SQL installed.
 
 ## Dependency direction
 
-This is a `type:lib`, `layer:infra`, `scope:workflows` package. It may depend only on the workflows contract and external engine/database types; it never imports a domain package or application.
+This is a `type:lib`, `layer:infra`, `scope:workflows` package. It depends on the workflows contract,
+and external engine/database types; its worker entrypoint has no runtime Prisma dependency. The
+server and separate SQL qualification entrypoint bind the Prisma-aware rollback checker. It never
+imports a domain package or application.
 
 ## Data & persistence
 

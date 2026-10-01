@@ -230,5 +230,5 @@ It does not infer ownership from historical messages or provide an upgrade migra
 
 - [`libs/models/authorization/main`](https://github.com/elewa-git/opencrane/blob/main/libs/models/authorization/main/README.md)
 - [`libs/backend/server/iam/authorization/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/iam/authorization/main/README.md)
-- [`prisma-authorization-transaction.ts`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/iam/authorization/main/src/prisma-authorization-transaction.ts)
+- [`prisma-authorization-transaction.ts`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/iam/authorization/main/src/authority/persistence/prisma-authorization-transaction.ts)
 - [`authorization.prisma`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/prisma/schema/authorization.prisma)

@@ -7,8 +7,7 @@ export type { RateLimitOptions } from "./rate-limit.types";
 
 /**
  * Per-IP request rate limiter for the OpenCrane API server. Mounted once, early in the
- * middleware chain so every authorization-gated or database-backed endpoint is covered
- * — a DoS backstop that also satisfies the `js/missing-rate-limiting` scanning rule.
+ * middleware chain so requests are limited before reaching identity checks or product routes.
  *
  * The default cap is deliberately generous (1000/min/IP): real opencrane-ui traffic stays well
  * under it, so this never shapes normal use — it only sheds a flood. Health probes (`/healthz`,
@@ -18,8 +17,8 @@ export type { RateLimitOptions } from "./rate-limit.types";
  * The counters live in this process's memory, so each replica enforces the cap on its own: with N
  * replicas behind the ingress, one client can reach N times the configured limit overall.
  *
- * Called by: apps/opencrane/src/app/public-app.ts (once, for the whole app) and
- * apps/opencrane/src/app/routes.ts (per-router, with the caller's overrides).
+ * Called by: apps/opencrane/src/bootstrap/http/public-app.ts (once, for the whole app) and
+ * apps/opencrane/src/bootstrap/http/routes.ts (per-router, with the caller's overrides).
  *
  * @param opts - Optional window/max overrides.
  * @returns An Express middleware enforcing the per-IP limit.

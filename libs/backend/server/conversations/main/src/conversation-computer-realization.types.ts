@@ -110,3 +110,10 @@ export interface ConversationComputerProcessAuthenticator
 	/** Returns the independently verified process identity, or null for a missing or invalid bearer. */
 	authenticate(bearer: string): Promise<ConversationComputerProcessIdentity | null>;
 }
+
+/** Resolves the live process selected by one current realized lease. */
+export interface ConversationComputerProcessResolver
+{
+	/** Returns the independently verified process identity, or null when the realization is absent. */
+	resolve(command: ConversationComputerRealizationCommand): Promise<ConversationComputerProcessIdentity | null>;
+}

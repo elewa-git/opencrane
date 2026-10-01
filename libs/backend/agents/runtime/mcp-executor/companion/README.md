@@ -1,6 +1,6 @@
 # @opencrane/backend/agents/runtime/mcp-executor/companion — one-shot MCP exchange
 
-> [backend](../../../../../README.md) › [agents](../../../../README.md) › [runtime](../../../README.md) › [MCP executor](../README.md) › companion
+> [backend](../../../../README.md) › [agents](../../../README.md) › [runtime](../../README.md) › [MCP executor](../README.md) › companion
 
 ## What it owns
 
@@ -20,10 +20,16 @@ OpenCrane execution authority .... exact discovery or invocation claim
 OpenCrane execution authority .... fenced terminal write
 ```
 
-**In this flow:** [MCP protocol](../protocol/README.md) · [Kubernetes launcher](../k8s-launcher/README.md)
+**In this flow:** the shared `@opencrane/contracts` MCP protocol helpers build and validate the
+standard requests and responses; the [Kubernetes launcher](../k8s-launcher/README.md) supplies the
+fixed loopback endpoint.
 
-The invariant is one claim, at most one tool call, and one terminal report. A malformed, expired,
-oversized, redirected, or timed-out exchange fails closed without exposing arguments or results.
+The invariant is one claim, at most one tool call, and one terminal report. Discovery reads all
+bounded pages under one deadline and rejects duplicate names or cursor loops. Calls use the frozen
+input schema from the claim and do not rediscover mutable server state. JSON and request-scoped SSE
+responses are bounded; a matching SSE result cancels the stream before the companion reports it.
+Malformed, expired, oversized, redirected, or timed-out exchanges fail closed without exposing
+arguments or results.
 
 ## Public surface
 

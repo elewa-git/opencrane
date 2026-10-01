@@ -1,0 +1,3 @@
+:host { display: block; min-width: 0; }
+.conversation-workspace__composer { display: grid; gap: var(--oc-conversation-composer-gap); padding: var(--oc-conversation-composer-padding); border-block-start: 1px solid var(--p-surface-200); background: var(--oc-conversation-composer-background); }
+@media (max-width: 52rem) { .conversation-workspace__composer { padding: var(--oc-conversation-composer-gap); } }

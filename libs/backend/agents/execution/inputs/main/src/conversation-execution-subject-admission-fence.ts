@@ -1,7 +1,7 @@
 import { ConversationComputerRealizationKinds, type ConversationComputerRealization } from "@opencrane/contracts";
 
 import type { ActiveConversationComputerLease, ConversationExecutionSubjectCoordinates } from "./conversation-execution-subject-admission.types";
-import type { ExecutionSubjectAuthority, SessionAssemblyCommand } from "./session-assembly.types";
+import type { ExecutionSubjectAuthority, SessionAssemblyCommand } from "./assembly/session-assembly.types";
 
 /**
  * Checks the caller-independent app and run coordinates before either authority reads identity state.

@@ -1,13 +1,13 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from "@angular/core";
 
-import { OrganizationInvitationCreateStore, OrganizationInvitationResendStore, OrganizationMemberDirectoryStore } from "@opencrane/state/organization/members";
+import { OrganizationInvitationCreateStore, OrganizationInvitationResendStore, OrganizationMemberRemovalStore, OrganizationMemberDirectoryStore } from "@opencrane/state/organization/members";
 
 import type { MemberInviteSubmitIntent } from "./member-directory.types";
 import { _MapMembersView } from "./members.mapper";
 import { MembersViewComponent } from "./members-view.component";
 
 /** Thin routed coordinator that composes independent read, create, resend, mapper, and view owners. */
-@Component({ selector: "wo-members-route", standalone: true, imports: [MembersViewComponent], providers: [OrganizationMemberDirectoryStore, OrganizationInvitationCreateStore, OrganizationInvitationResendStore], templateUrl: "./members-route.component.html", changeDetection: ChangeDetectionStrategy.OnPush })
+@Component({ selector: "wo-members-route", standalone: true, imports: [MembersViewComponent], providers: [OrganizationMemberDirectoryStore, OrganizationInvitationCreateStore, OrganizationInvitationResendStore, OrganizationMemberRemovalStore], templateUrl: "./members-route.component.html", changeDetection: ChangeDetectionStrategy.OnPush })
 export class MembersRouteComponent
 {
 	/** Independent directory read/refresh owner. */
@@ -16,22 +16,38 @@ export class MembersRouteComponent
 	protected readonly create = inject(OrganizationInvitationCreateStore);
 	/** Independent per-row resend owner. */
 	protected readonly resend = inject(OrganizationInvitationResendStore);
+	/** Exact membership command owner. */
+	protected readonly removal = inject(OrganizationMemberRemovalStore);
 	/** Controlled search text; filtering remains a pure mapper concern. */
 	protected readonly searchQuery = signal("");
 	/** One display-only projection assembled from the three narrow stores. */
 	protected readonly view = computed(this._View.bind(this));
 
+	/** Discards private search text when membership authority is lost. */
+	public constructor()
+	{
+		effect(() =>
+		{
+			if (this.directory.accessGeneration() > 0)
+				this.searchQuery.set("");
+		});
+	}
+
 	/** Delegate the form draft to the create store. */
 	protected async invite(intent: MemberInviteSubmitIntent): Promise<void>
 	{
+		const generation = this.directory.accessGeneration();
 		const result = await this.create.invite(intent.emails, intent.role);
-		if (result !== null) this.directory.refresh();
+		if (result !== null && generation === this.directory.accessGeneration())
+			this.directory.refresh();
 	}
 
 	/** Delegate one opaque row coordinate to the resend store. */
 	protected async resendInvitation(invitationId: string): Promise<void>
 	{
-		if (await this.resend.resend(invitationId)) this.directory.refresh();
+		const generation = this.directory.accessGeneration();
+		if (await this.resend.resend(invitationId) && generation === this.directory.accessGeneration())
+			this.directory.refresh();
 	}
 
 	/** Build presentation without changing any server-owned decision. */
@@ -50,7 +66,10 @@ export class MembersRouteComponent
 			resendingInvitationIds: this.resend.busyIds(),
 			returnedInvitations: [...(createResult?.invitations ?? []), ...this.resend.invitations()],
 			resentInviteLink: this.resend.link(),
-			resendError: this.resend.error()
+			resendError: this.resend.error(),
+			removingMembershipIds: this.removal.busyIds(),
+			removalMessage: this.removal.message(),
+			removalError: this.removal.error()
 		});
 	}
 }

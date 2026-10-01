@@ -12,7 +12,7 @@ import type { StandaloneFirstUserAdmissionAuditAppender, StandaloneFirstUserAudi
  * the row. The row records the claim (silo, subject, action) and deliberately does not keep the
  * bootstrap email that made the subject eligible.
  *
- * Called by: apps/opencrane/src/app/public-app.ts, which passes the result into
+ * Called by: apps/opencrane/src/bootstrap/http/public-app.ts, which passes the result into
  * ___CreateOidcAuthService.
  * @returns An appender that writes the first-owner row inside identity's own transaction.
  */

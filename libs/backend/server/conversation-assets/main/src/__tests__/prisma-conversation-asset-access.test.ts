@@ -1,7 +1,7 @@
-import { ArtifactRevisionState, ArtifactState, ArtifactUploadLeaseState, ConversationAssetState, ConversationLifecycle } from "@prisma/client";
+import { ArtifactRevisionState, ArtifactState, ArtifactUploadLeaseState, ConversationAssetProvenance as PersistedProvenance, ConversationAssetState, ConversationLifecycle } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { ConversationAssetDisposition } from "@opencrane/models/conversation-assets";
+import { ConversationAssetDisposition, ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
 
 import { PrismaConversationAssetRepository } from "../prisma-conversation-asset-repository";
 import { PrismaConversationAssetUnitOfWork } from "../prisma-conversation-asset-unit-of-work";
@@ -34,6 +34,29 @@ function _Access(active: boolean)
 
 describe("PrismaConversationAssetRepository access continuity", function _Suite()
 {
+	it("lists generated file provenance without exposing its upload lease or granting removal", async function _GeneratedFileView()
+	{
+		const generated = { id: "asset-generated", conversationId: "conversation-1", messageId: null, artifactId: "artifact-generated", revisionId: null, uploadLeaseId: "private-lease", provenance: PersistedProvenance.AgentOutput, state: ConversationAssetState.Uploading, displayName: "report.csv", mediaType: "text/csv;charset=utf-8", byteLength: 12n, failureCode: null, createdByUserId: _CALLER.subjectId, createdAt: new Date("2026-09-13T00:00:00.000Z") };
+		const transaction = { ..._Access(true), conversationAsset: { findMany: vi.fn().mockResolvedValue([generated]) } };
+		const repository = new PrismaConversationAssetRepository(transaction as never);
+		const files = await repository.list(_CALLER, "conversation-1");
+		expect(files).toEqual([expect.objectContaining({ provenance: ConversationAssetProvenance.AgentOutput, disposition: ConversationAssetDisposition.Download, canRemove: false, artifactRevisionId: null })]);
+		expect(files[0]).not.toHaveProperty("uploadLeaseId");
+		expect(transaction.conversationAsset.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ provenance: { in: [PersistedProvenance.ParticipantUpload, PersistedProvenance.AgentOutput] } }) }));
+	});
+
+	it("prevents the participant upload path from adopting a generated-file reservation", async function _SeparateUploadAuthority()
+	{
+		const transaction = { ..._Access(true), conversationAsset: { findUnique: vi.fn().mockResolvedValue({ provenance: PersistedProvenance.AgentOutput }), findFirst: vi.fn().mockResolvedValue(null) } };
+		const repository = new PrismaConversationAssetRepository(transaction as never);
+		const request = { idempotencyKey: "generated-operation", displayName: "report.csv", mediaType: "text/csv;charset=utf-8", byteLength: 12, contentAddress: _ADDRESS };
+		await expect(repository.reserve(_CALLER, "conversation-1", request)).resolves.toEqual({ outcome: "denied", reason: "idempotency_conflict" });
+		await expect(repository.readUploadTarget(_CALLER, "conversation-1", "asset-generated")).resolves.toBeNull();
+		await expect(repository.finalize(_CALLER, "conversation-1", "asset-generated", {} as never, "receipt-digest")).resolves.toEqual({ outcome: "denied", reason: "asset_unavailable" });
+		for (const [query] of transaction.conversationAsset.findFirst.mock.calls)
+			expect(query.where.provenance).toBe(PersistedProvenance.ParticipantUpload);
+	});
+
 	it("checks current access before resolving a reservation idempotency coordinate", async function _ChecksAccessFirst()
 	{
 		const transaction = { ..._Access(false), conversationAsset: { findUnique: vi.fn() } };

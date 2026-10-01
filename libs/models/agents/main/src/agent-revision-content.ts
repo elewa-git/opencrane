@@ -1,5 +1,6 @@
 import { ___DigestCanonicalJson, type CanonicalJsonSha256Digest, type JsonValue } from "@opencrane/util";
 
+import { __ParseAgentBudget } from "./agent-budget.validator";
 import type { AgentRevisionContent } from "./agent-revision.types";
 
 /**
@@ -19,11 +20,13 @@ import type { AgentRevisionContent } from "./agent-revision.types";
  * @param revision - Revision number within that service.
  * @param content - The exact content being stored on the revision.
  * @returns Lowercase `sha256:<hex>` digest over the service id, revision number, and content.
+ * @throws {Error} When the budget is incomplete or contains an invalid limit.
  * @see {@link AgentRevisionContent}
  * @see https://www.rfc-editor.org/rfc/rfc8785
  */
 export function __DigestAgentRevisionContent(agentServiceId: string, revision: number, content: AgentRevisionContent): CanonicalJsonSha256Digest
 {
+	const budget = __ParseAgentBudget(content.budget);
 	const canonical: JsonValue = {
 		agentServiceId,
 		revision,
@@ -31,9 +34,12 @@ export function __DigestAgentRevisionContent(agentServiceId: string, revision: n
 		personaRevisionId: content.personaRevisionId,
 		modelDefinitionId: content.modelDefinitionId,
 		budget: {
-			maxTurns: content.budget.maxTurns,
-			maxTokens: content.budget.maxTokens,
-			maxDurationMs: content.budget.maxDurationMs,
+			maxTurns: budget.maxTurns,
+			maxTokens: budget.maxTokens,
+			maxCostUsdMicros: budget.maxCostUsdMicros,
+			maxToolInvocations: budget.maxToolInvocations,
+			maxDurationMs: budget.maxDurationMs,
+			maxLoopIterations: budget.maxLoopIterations,
 		},
 		skills: content.skills.map(function _MapSkill(skill)
 		{

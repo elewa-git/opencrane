@@ -31,6 +31,8 @@ stored. A repeated call checks each blob first and safely writes the same manife
 
 ## Public surface
 
+- `_CreateOciRegistryAuthorizationReader` reloads a mounted authorization file for each exchange.
+
 - `__CreateOciRegistryClient(options)` creates a client fixed to one HTTPS registry and repository.
 - `OciRegistryClient.import(plan)` imports checked bytes and returns
   `host/repository@sha256:...` plus the manifest digest.

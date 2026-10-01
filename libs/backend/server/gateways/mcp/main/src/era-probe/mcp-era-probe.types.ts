@@ -1,4 +1,5 @@
 import type { IWorkflowEngine, IWorkflowTransaction, IWorkflowTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
+import type { McpCredentialRequirement } from "@opencrane/contracts";
 
 import type { McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
 import type { McpEraProbeFailureCodes } from "./mcp-era-probe-failure";
@@ -135,6 +136,8 @@ export interface McpRemoteServerRegistrationCommand
 	readonly description?: string;
 	/** Public HTTPS MCP endpoint that the worker will check. */
 	readonly endpoint: string;
+	/** Credential custody required before an installed tool can execute. */
+	readonly credentialRequirement: McpCredentialRequirement;
 }
 
 /** Draft server returned after its database row and task are admitted together. */

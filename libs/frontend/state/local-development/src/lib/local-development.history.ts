@@ -181,6 +181,7 @@ export function _AppendLocalDevelopmentReviewedShare(state: _LocalDevelopmentSta
 		conversationId: origin.parentConversationId,
 		idempotencyKey: command.idempotencyKey,
 		text: command.text,
+		assetIds: [],
 		activation: "none"
 	} as const;
 	const lineage = {

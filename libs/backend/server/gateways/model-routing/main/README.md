@@ -43,12 +43,9 @@ caller's transaction, then resolves the selected public name to exactly one tena
 definition. Missing, foreign-only, or ambiguous definitions fail closed. The
 off-policy-evaluation (OPE) and savings helpers are likewise pure estimators used to decide, in
 shadow mode, whether a cheaper candidate model would hold quality before it ever routes live
-traffic. The BYOK (bring-your-own-key) model catalogue (`_BYOK_PROVIDER_CATALOG`) is loaded from the
-package-root `byok-provider-catalog.json` public machine-readable authority. Production routing and
-local development both consume that artifact; neither keeps a private copy. Tune that one file as
-providers ship models.
+traffic. The BYOK (bring-your-own-key) model catalogue (`_BYOK_PROVIDER_CATALOG`) is data, tuned as providers ship models.
 
-Model registration reads LiteLLM inventory before creating anything. The pinned 1.81.9 proxy's
+Model registration reads LiteLLM inventory before creating anything. The pinned 1.81.0 proxy's
 `/v2/model/info` route returns an empty catalogue on a fresh installation, allowing its first model
 to be registered. Failed requests and malformed inventory remain errors. A durable provider command
 supplies a deterministic deployment identifier; the inventory entry must match that identifier plus
@@ -84,47 +81,68 @@ derived from their governed Global resource, so a late first POST cannot create 
   `_UpsertLiteLlmCredential`, `_DeleteLiteLlmCredential`, and `_EnsureProviderEmbeddingModels` —
   fixed-coordinate custody and LiteLLM adapters used only after a durable provider command commits.
 - `_EstimateSavings`, `_ReplayEstimate`, `_DoublyRobustEstimate`, `_OpeEstimateWithCi` — the pure
-  shadow-router estimators. `_BYOK_PROVIDER_CATALOG` — the typed per-provider default model
-  catalogue loaded from the package's public `byok-provider-catalog.json` artifact.
+  shadow-router estimators. `_BYOK_PROVIDER_CATALOG` — the per-provider default model catalogue.
 - `_IssueAttemptLiteLlmKey` — mint one short-lived, alias- and budget-bound LiteLLM virtual key for a
   single agent-run attempt (fails hard; the master key never leaves the control plane), with its
   request/result shapes `AttemptLiteLlmKeyRequest` and `AttemptLiteLlmKey`. Issuance requires an
   absolute `notAfter` bound, leaves ten seconds for the mint request and checks the provider's
   returned expiry before handoff. Missing, expired or excessive expiry triggers alias cleanup.
   The key has a one-time budget and never resets its spending allowance within the attempt.
-- `_RevokeAttemptLiteLlmKey` and `_RevokeAttemptLiteLlmKeyByAlias` — revoke an attempt key from its
-  retained raw value, or reconcile an uncertain mint from its durable attempt alias when encrypted
-  custody could not retain that value. Both operations are idempotent: only HTTP 404 with the pinned
-  LiteLLM `No keys found` marker, including its exact `ProxyException` string envelope, proves the
-  cleanup goal is already satisfied. A generic route-level 404 or any other failure remains
-  uncertain and is retried from durable state.
+- `_RevokeAttemptLiteLlmKeyByAlias` — reconcile an uncertain mint from its durable attempt alias when
+  encrypted custody could not retain the raw key.
 - `__RequestConversationModel` — send one chat-completions exchange using the shared
   `ConversationModelRequest` and return a `ConversationModelResponse`. Server composition supplies
   the endpoint, attempt key and model alias; the alias must match `CompiledRunInput`. Completion
   tokens are capped by the smallest reservation, frozen route and frozen run ceiling; at least
   one frozen completion ceiling must exist. The request aborts by the earliest supplied deadline,
-  compiled run deadline or 60 seconds, including time spent reading the body.
+  compiled run deadline or 25 seconds, including time spent reading the body.
+- `__CreateConversationModelTransport` — capture the server's managed-proxy qualification at
+  startup and expose the same single-exchange request port. Only this configured instance may
+  return authenticated pre-provider rejection evidence; the direct request function does not.
 
-The first request can offer the frozen tools that need no approval. Names must be unique and legal,
-with parameters matching their saved schema digests. The model may return text or propose exactly
-one offered tool. The shared declaration retains the provider call id, original argument string
-and accompanying text. Arguments must contain a bounded JSON object; the conversation and IAM
-owners still validate the actual schema and current permission before any execution.
+A request with tool selection enabled can offer every frozen tool definition, including tools that need owner approval.
+Each definition's `modelName` must be unique and legal, with parameters matching their saved schema
+digests. The compiler derives MCP model names from immutable tool revisions; this adapter sends
+that frozen name without deriving or normalizing another one. The original MCP `name` can contain
+dots or exceed the provider's name limit, and stays out of function declarations. Responses and
+continuations must use an offered `modelName`; the original runtime name is never a fallback. The model may
+return text or propose exactly one offered tool. The shared declaration retains the provider call
+id, original argument string and accompanying text. Arguments must contain a bounded JSON object;
+the conversation and IAM owners still validate the actual schema and current permission before any
+execution. Managed company runs filter approval-gated tools before model selection until an entitled
+human resolver exists; personal runs can park the exact proposal in deferred approval.
 
-A continuation supplies that saved declaration and its authorized result. The adapter appends an
-assistant tool-call message and a tool-result message with the same provider call id after the
-unchanged compiled history. It sends no tool definitions on this request and accepts only text,
-so it cannot start a third model/tool cycle. Combined declaration and result content must fit
-65,536 serialized UTF-8 bytes, with valid Unicode. These shared schemas are exported by contracts.
+Each request supplies every earlier accepted declaration and authorized result in order. The adapter
+appends an assistant tool-call message and matching tool-result message for each pair after the
+unchanged compiled history. The conversation owner chooses whether another tool may be selected
+or only a final text answer is permitted. Each pair must fit 65,536 serialized UTF-8 bytes, with valid
+Unicode; the full request must also fit the existing body limit. Oversized history is rejected as a
+whole. The adapter never drops earlier results or schedules another request.
 
 The adapter accepts HTTP(S) origins without paths, credentials, queries or fragments and sends
 one `POST /v1/chat/completions` with redirects disabled. Serialized request and response bodies are
 limited to 1 MiB each; a completed answer is limited to 65,536 UTF-8 bytes. It rejects parallel tool
 calls, refusals, partial answers and unsupported output formats. `ConversationModelError` carries
-a fixed category and, for an HTTP rejection, the numeric response status. The provider body, URL,
-headers and original exception are discarded. The same bounded fields identify the failure in the
-structured warning without exposing a prompt or credential. Request fields never enter its operation
-span, and automatic child tracing is suppressed around the HTTP call.
+a fixed category without the provider body or original exception. Request fields never enter its
+operation span, and automatic child tracing is suppressed around the HTTP call.
+
+The required `CompiledRunInput.finalOutput` mode is captured before dispatch. Text mode preserves
+literal answers, including JSON-looking text. Conversation mode requires a strict final JSON object
+with nonblank `text` and optional `display`; the shared validators accept a complete pair of A2UI 0.8
+operations with literal text and static layout components. Missing modes, malformed displays,
+unknown fields and invalid Unicode fail with a fixed error category. Ordinary text is preserved
+exactly and limited to 65,536 UTF-8 bytes; the optional display has its own 65,536-byte limit.
+The conversation owner checks graph completeness and assigns display ownership before storage.
+Tool calls remain separate provider declarations. This transport does not infer a format from text
+or require provider-specific structured-response support.
+
+Every request fixes LiteLLM's `num_retries` and `max_retries` to zero and `disable_fallbacks` to
+true. These settings apply to initial requests, later tool selections and final answers; input
+fields cannot replace them. They prevent the proxy's default retry and fallback behaviour from
+repeating a request outside the saved conversation steps. The pinned router lets deployment-level
+and named retry policies override request retry counts, so an operator-modified or shared proxy
+still needs its own qualification. The current model registration supplies neither override.
+See the [pinned router implementation](https://github.com/BerriAI/litellm/blob/790a5ce0b323c1eefa70c2df25b2780097aa3f80/litellm/router.py).
 
 This adapter has no durable retry state. Its caller must reserve dispatch before calling, retain
 the accepted response before acknowledging it, and treat a lost response as uncertain: a failure
@@ -133,9 +151,24 @@ call and completion budget, keeps one nonrenewed attempt key, admits the propose
 rechecks authority before using its result. Adapter tests alone do not qualify the public tool
 flow or a live provider.
 
-The pinned LiteLLM v1.81.9-stable implementation creates `expires` from a UTC clock and serializes
+Pre-provider rejection is disabled unless both `LITELLM_PREFORWARD_CONTRACT` and
+`LITELLM_PREFORWARD_ENDPOINT` identify the supported contract and the same configured managed
+LiteLLM origin. A response cannot enable it. The adapter authenticates a small, strict HTTP 429
+receipt against the attempt key, physical request nonce, logical reservation, actual request bytes
+and original deadline. An ordinary provider 429, forged receipt or changed request remains an error,
+not permission to retry. The conversation owner saves valid evidence and decides whether to claim
+another send; this adapter never waits, repeats a request or renews a credential.
+
+The library's `src/proxy/` Python modules implement the producer inside the owned LiteLLM image.
+They issue proof only for the selected local limiter's rejection before later callbacks or provider
+dispatch. App-owned, hash-checked bindings install the processor, limiter and startup registration.
+The derived image and its real startup sequence still need qualification before enabling this
+contract. Current model registration sets no explicit RPM/TPM rate limit; the positive producer
+test supplies a synthetic local threshold. This is not generic recovery from provider rate limits.
+
+The pinned LiteLLM v1.81.0-stable implementation creates `expires` from a UTC clock and serializes
 it as an ISO timestamp. The adapter checks that evidence instead of storing a locally guessed
-expiry. Source: [key management](https://github.com/BerriAI/litellm/blob/v1.81.9-stable/litellm/proxy/management_endpoints/key_management_endpoints.py).
+expiry. Source: [key management](https://github.com/BerriAI/litellm/blob/v1.81.0-stable/litellm/proxy/management_endpoints/key_management_endpoints.py).
 Already issued keys still have a bounded validity window. The transport adapter does not repeat
 PostgreSQL admission; the conversation owner must perform that check before reserving dispatch.
 
@@ -169,7 +202,9 @@ unverified alias; this package's catalogue is therefore the allowlist source for
 Run `npx nx run backend-server-model-routing:test` and
 `npx nx run backend-server-model-routing:lint`. The conversation transport tests use an in-memory fetch
 double: they prove limits, cancellation, response validation and absence of retries without making
-a paid model request. These checks do not qualify a live provider or the complete conversation flow.
+a paid model request. They also check the serialized proxy retry controls in every request mode;
+they do not prove that the proxy honours them. These checks do not qualify a live provider or the
+complete conversation flow.
 
 ## See also
 

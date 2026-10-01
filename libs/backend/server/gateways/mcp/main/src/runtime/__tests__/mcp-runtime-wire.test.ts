@@ -11,6 +11,7 @@ describe("MCP runtime wire validation", function _Suite()
 	{
 		expect(__ParseMcpOciServerPromotionCommand({ name: "  Search  ", description: "  Company search  " })).toEqual({ name: "Search", description: "Company search" });
 		expect(function _Extra() { __ParseMcpOciServerPromotionCommand({ name: "Search", description: "", registryReference: "caller-controlled" }); }).toThrow(/invalid shape/u);
+		expect(function _Credential() { __ParseMcpOciServerPromotionCommand({ name: "Search", description: "", credentialRequirement: "shared-credential" }); }).toThrow(/invalid shape/u);
 		expect(function _Blank() { __ParseMcpOciServerPromotionCommand({ name: " ", description: "" }); }).toThrow(/invalid shape/u);
 		expect(function _ControlCharacter() { __ParseMcpOciServerPromotionCommand({ name: "\nSearch", description: "" }); }).toThrow(/invalid shape/u);
 	});

@@ -127,4 +127,16 @@ test("keeps added-line scope when the shell checker fans out a large diff", func
 		assert.match(error.stdout, /file-0\.ts:1\tERROR\tIF-BODY-NEWLINE/u);
 		return true;
 	});
+
+	// Generated-file capabilities are handwritten source; only a generated output directory is excluded.
+	mkdirSync(join(repository, "src/generated"), { recursive: true });
+	writeFileSync(join(repository, "src/generated-file.ts"), "if (handwritten) return;\n");
+	writeFileSync(join(repository, "src/generated/api.ts"), "if (machineWritten) return;\n");
+	assert.throws(function _CheckGeneratedFileCapability() { execFileSync(shell, ["src/generated-file.ts", "src/generated/api.ts"], options); }, function _VerifyGeneratedScope(error)
+	{
+		assert.notEqual(error.status, 0);
+		assert.match(error.stdout, /src\/generated-file\.ts:1\tERROR\tIF-BODY-NEWLINE/u);
+		assert.doesNotMatch(error.stdout, /src\/generated\/api\.ts:1/u);
+		return true;
+	});
 });

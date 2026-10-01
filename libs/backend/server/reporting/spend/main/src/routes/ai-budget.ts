@@ -39,7 +39,7 @@ function _SendSpendAuthorizationError(error: unknown, response: Response): boole
 /**
  * Builds silo-scoped spend-ceiling routes for one organization ceiling and account overrides.
  *
- * Called by: apps/opencrane/src/app/routes.ts, mounted at `/api/v1/ai-budget`.
+ * Called by: apps/opencrane/src/bootstrap/http/routes.ts, mounted at `/api/v1/ai-budget`.
  *
  * @param prisma - Database client passed through to the handlers.
  * @returns An Express router with the five budget routes mounted on it.

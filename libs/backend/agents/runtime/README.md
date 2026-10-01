@@ -2,7 +2,8 @@
 
 > [backend](../../README.md) › [agents](../README.md) › runtime
 
-The runtime group owns shared Kubernetes mechanics for governed, class-specific worker Jobs. The
+The runtime group owns shared Kubernetes mechanics for governed, class-specific worker Jobs and
+the isolated MCP implementations those Jobs can run. The
 conversation-computer image and Agent Sandbox lifecycle are separate 0.11 boundaries; this group
 does not claim, activate, or delete conversation-computer Pods.
 
@@ -13,6 +14,7 @@ does not claim, activate, or delete conversation-computer Pods.
 | [`workloads/contract`](./workloads/contract/README.md) | Shared lease and binding fields for class-specific workload controllers. |
 | [`workloads/k8s-controller`](./workloads/k8s-controller/README.md) | Shared exact Job adoption, release, and first-Pod mechanics. |
 | [`mcp-executor`](./mcp-executor/README.md) | OCI-backed MCP server Job projection with a token-holding companion. |
+| [`mcp-file-generator/main`](./mcp-file-generator/main/README.md) | Validated CSV generation and loopback MCP protocol handling without credentials or external I/O. |
 
 ```text
  product authority ── saved claim ──► class-specific controller ──► governed Job
@@ -26,7 +28,8 @@ stay isolated in the `layer:infra` launcher rather than leaking into those core 
 
 The pool-definition package may consume Kubernetes manifest types but performs no input/output. The
 controller may depend on those definitions and shared contracts; it never imports the app that
-composes it. Runtime packages do not import a model driver. Canonical run, reservation, cancellation,
+composes it. The file-generator runtime imports the pure conversation-assets CSV model so the server can
+verify its output with the same serializer. Runtime packages do not import a model driver. Canonical run, reservation, cancellation,
 and event persistence remains in the execution/runs package.
 
 The workload contract carries only database lease and binding fields. Images, credentials, warm Pod

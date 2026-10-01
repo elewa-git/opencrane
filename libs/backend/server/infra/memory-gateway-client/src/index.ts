@@ -9,13 +9,12 @@
  * that cannot prove complete provenance is dropped rather than returned with partial attribution,
  * and a scoped write without complete provenance is refused before it is sent.
  *
- * Only the two recalls are implemented today. The write methods throw
- * `MemoryGatewayUnavailableError` in both shipped implementations.
+ * Personal-memory writes expose one remote operation per method so the durable workflow remains
+ * the sole sequencing and recovery owner. Scoped injection stays fail closed.
  */
 export { __UnavailableMemoryGatewayClient, MemoryGatewayUnavailableError } from "./unavailable-memory-gateway-client";
 export { __AssertMemoryProvenanceComplete, MemoryProvenanceIncompleteError } from "./memory-provenance";
-export { __AssertPersonalMemoryRecordResult, MemoryGatewayProtocolError } from "./personal-memory-record";
+export { MemoryGatewayMutationFailure, MemoryGatewayProtocolError, MemoryGatewayReadFailure, MemoryGatewayTransportError } from "./memory-gateway-errors";
 export { __CreateHttpCogneeMemoryGatewayClient } from "./http-cognee-memory-gateway-client";
-export { MemoryGatewayTransportError } from "./cognee-http";
 export type { CogneeFetch, CogneeMemoryGatewayHttpOptions, MemoryGatewayTransportFailureCode } from "./http-cognee-memory-gateway-client.types";
-export type { MemoryCorrectionCommand, MemoryFact, MemoryForgetCommand, MemoryGatewayClient, MemoryProvenance, MemoryQueryCommand, MemoryQueryResult, PersonalMemoryRecordCommand, PersonalMemoryRecordDenied, PersonalMemoryRecorded, PersonalMemoryRecordResult, ScopedMemoryFact, ScopedMemoryInjectionCommand, ScopedMemoryRecallCommand, ScopedMemoryRecallResult } from "./memory-gateway-client.types";
+export type { MemoryFact, MemoryGatewayClient, MemoryGatewayOperationContext, MemoryProvenance, MemoryQueryCommand, MemoryQueryResult, ScopedMemoryFact, ScopedMemoryInjectionCommand, ScopedMemoryRecallCommand, ScopedMemoryRecallResult } from "./memory-gateway-client.types";

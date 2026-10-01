@@ -5,6 +5,7 @@ import type { IWorkflowTaskContext, IWorkflowTransaction } from "@opencrane/back
 
 import { McpTaskEvents, McpTaskStates, McpTaskTaskNames } from "./mcp-task.types";
 import type { McpTaskAdmission, McpTaskInputResponse, McpTaskRecord, McpTaskWorkflow, McpTaskWorkflowInput, McpTaskWorkflowOptions, McpTaskWorkflowResult } from "./mcp-task.types";
+import { McpInvocationDispatchOutcomes, McpInvocationOwnerKinds } from "../runtime/remote-mcp-invocation.types";
 
 /** Terminal task states the Absurd handler may return. */
 const _TERMINAL_STATES = new Set<McpTaskStates>([McpTaskStates.Completed, McpTaskStates.Cancelled, McpTaskStates.Failed, McpTaskStates.RecoveryRequired]);
@@ -107,6 +108,18 @@ async function _AdmitRuntime(context: IWorkflowTaskContext, options: McpTaskWork
 	});
 }
 
+/** Let the server execute RemoteHttp work after database admission; OCI work remains companion-owned. */
+async function _DispatchRemote(context: IWorkflowTaskContext, options: McpTaskWorkflowOptions, task: McpTaskRecord): Promise<void>
+{
+	if (task.toolInvocationId === null || _Terminal(task) !== null)
+		return;
+	await context.checkpoint({ stepName: "dispatch-mcp-invocation" }, async function _Dispatch(): Promise<McpInvocationDispatchOutcomes>
+	{
+		// The database claim is the duplicate-effect fence; checkpoint replay is only workflow progress.
+		return options.invocationExecutor.execute({ ownerKind: McpInvocationOwnerKinds.McpTask, siloId: task.siloId, mcpTaskId: task.id, toolInvocationId: task.toolInvocationId as string });
+	});
+}
+
 /** Wait durably until the companion transaction projects a terminal result. */
 async function _AwaitTerminal(context: IWorkflowTaskContext, options: McpTaskWorkflowOptions, input: McpTaskWorkflowInput): Promise<McpTaskWorkflowResult>
 {
@@ -146,6 +159,7 @@ async function _Run(context: IWorkflowTaskContext, options: McpTaskWorkflowOptio
 	terminal = _Terminal(task);
 	if (terminal !== null)
 		return terminal;
+	await _DispatchRemote(context, options, task);
 	return _AwaitTerminal(context, options, input);
 }
 
@@ -167,7 +181,7 @@ export function __McpTaskWorkflowKey(input: McpTaskWorkflowInput): string
 	return `workflows:mcp-task:${digest}`;
 }
 
-/** Register real OCI-backed MCP task execution and return its product-facing control port. */
+/** Register real OCI or remote MCP task execution and return its product-facing control port. */
 export function __CreateMcpTaskWorkflow(options: McpTaskWorkflowOptions): McpTaskWorkflow
 {
 	if (!Number.isSafeInteger(options.statusPollMilliseconds) || options.statusPollMilliseconds < 100 || options.statusPollMilliseconds > 60_000)

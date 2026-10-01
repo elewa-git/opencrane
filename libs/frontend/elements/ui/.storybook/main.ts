@@ -19,6 +19,8 @@ const config: StorybookConfig =
 		,"../../../features/conversation-workspace/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)"
 		,"../../../features/settings/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)"
 		,"../../../../../apps/opencrane-ui/src/app/local-development/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)"
+		,"../../../features/governance/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)"
+		,"../../../features/tools/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)"
 	],
 	addons:
 	[

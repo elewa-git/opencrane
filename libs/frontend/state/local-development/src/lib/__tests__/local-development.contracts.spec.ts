@@ -84,6 +84,7 @@ describe("Tier 1 local-development command contracts", function _DescribeContrac
 			conversationId: "local-conversation-direct",
 			idempotencyKey: "message-receipt",
 			text: "Accepted text",
+			assetIds: [],
 			activation: "none"
 		} as const;
 		await owner.workspace.send(message);
@@ -137,6 +138,7 @@ describe("Tier 1 local-development command contracts", function _DescribeContrac
 			conversationId: "local-conversation-group",
 			idempotencyKey: "parent-message",
 			text: "Create a reviewed child",
+			assetIds: [],
 			activation: "none"
 		});
 		const childCommand = {

@@ -7,13 +7,17 @@ export const ___CONVERSATION_ASSET_MAX_FILES = 10;
 /** Maximum combined bytes admitted by one message. */
 export const ___CONVERSATION_ASSET_MAX_TOTAL_BYTES = 200 * 1024 * 1024;
 
+/** Exact media types the existing browser viewers can display. */
 const _PREVIEW_MEDIA_TYPES = new Set<string>([
 	"application/pdf",
 	"audio/mpeg",
 	"image/png"
 ]);
 
+/** Supported files that the browser must download instead of rendering inline. */
 const _DOWNLOAD_MEDIA_TYPES = new Set<string>([
+	"text/csv",
+	"text/csv;charset=utf-8",
 	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 	"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 	"application/zip"

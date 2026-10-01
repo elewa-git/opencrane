@@ -145,7 +145,7 @@ export function __OciImageValidationTaskKey(input: OciImageValidationTaskInput):
  * The handler checkpoints validation, registry import, and the final product write so a replay can
  * resume without repeating completed external work.
  *
- * Called by: `apps/opencrane/src/app/mcp-workflow-composition.ts` during process composition.
+ * Called by: `apps/opencrane/src/bootstrap/workflows/mcp-workflow-composition.ts` during process composition.
  * @param options - Workflow engine, verifier, importer, and MCP database transaction owner.
  * @returns The API used to save the job in the caller's database transaction.
  */
