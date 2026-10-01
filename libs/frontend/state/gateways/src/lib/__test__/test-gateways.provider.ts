@@ -5,7 +5,6 @@ import { PROVIDER_KEY_GATEWAY } from "@opencrane/state/provider-key/adapter";
 import { PERSONAL_ASSETS_GATEWAY } from "@opencrane/state/assets/adapter";
 import { SKILL_CATALOGUE_GATEWAY } from "@opencrane/state/skills/adapter";
 
-import { GATEWAY_MODE } from "../gateway-mode.types";
 import { MockMcpGateway } from "./mock-mcp-gateway";
 import { MockProviderKeyGateway } from "./mock-provider-key-gateway";
 import { MockPersonalAssetsGateway } from "./mock-personal-assets-gateway";
@@ -23,7 +22,6 @@ export { MockSkillCatalogueGateway } from "./mock-skill-catalogue-gateway";
 export function provideTestGateways(): Provider[]
 {
 	return [
-		{ provide: GATEWAY_MODE, useValue: "mock" },
 		{ provide: MCP_GATEWAY, useClass: MockMcpGateway },
 		{ provide: PROVIDER_KEY_GATEWAY, useClass: MockProviderKeyGateway },
 		{ provide: PERSONAL_ASSETS_GATEWAY, useClass: MockPersonalAssetsGateway },

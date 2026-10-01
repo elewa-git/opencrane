@@ -98,6 +98,10 @@ cannot exhaust a shared deadline or leave later states unchecked after one failu
 must match the discovered contracts before the run can pass. Screenshot names and pixel tolerances
 remain tied to the individual story.
 
+The interactive catalogue listens on `127.0.0.1:4400`. Interaction and Playwright visual commands
+serve the built catalogue on `127.0.0.1:4401`; the separate port lets the Tier 1 workbench keep the
+interactive catalogue open while Playwright verifies the same mocks.
+
 Stories tagged `visual-test-narrow` are captured at the supported 390-pixel viewport instead of the
 default desktop viewport, so responsive contracts remain explicit and reproducible.
 Stories tagged `visual-test-full-viewport` must render one journey canvas or routed workspace shell

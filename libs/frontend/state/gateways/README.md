@@ -34,7 +34,6 @@ so a multi-user presentation cannot become ready merely because of its type.
 ## Public surface
 
 - `provideControlPlaneGateways()` — returns the live gateway providers for `opencrane-ui`.
-- `GatewayMode` / `GATEWAY_MODE` — exposes the active gateway mode to presentation code.
 
 ## Boundary
 

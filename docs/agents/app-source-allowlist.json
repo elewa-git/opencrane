@@ -215,12 +215,27 @@
       "classification": "browser-composition"
     },
     {
+      "path": "apps/opencrane-ui/src/app/app.routes.local.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-route-composition"
+    },
+    {
       "path": "apps/opencrane-ui/src/app/app.routes.ts",
       "owner": "apps/opencrane-ui",
       "classification": "browser-route-composition"
     },
     {
       "path": "apps/opencrane-ui/src/app/conversation-workspace.providers.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-composition"
+    },
+    {
+      "path": "apps/opencrane-ui/src/app/gateway-profile.providers.local.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-composition"
+    },
+    {
+      "path": "apps/opencrane-ui/src/app/gateway-profile.providers.ts",
       "owner": "apps/opencrane-ui",
       "classification": "browser-composition"
     },
@@ -245,17 +260,12 @@
       "classification": "browser-entry-guard"
     },
     {
-      "path": "apps/opencrane-ui/src/environments/environment.dev-live.ts",
+      "path": "apps/opencrane-ui/src/app/local-development-profile.ts",
       "owner": "apps/opencrane-ui",
       "classification": "browser-config"
     },
     {
-      "path": "apps/opencrane-ui/src/environments/environment.prod.ts",
-      "owner": "apps/opencrane-ui",
-      "classification": "browser-config"
-    },
-    {
-      "path": "apps/opencrane-ui/src/environments/environment.ts",
+      "path": "apps/opencrane-ui/src/local-development-build.constants.d.ts",
       "owner": "apps/opencrane-ui",
       "classification": "browser-config"
     },

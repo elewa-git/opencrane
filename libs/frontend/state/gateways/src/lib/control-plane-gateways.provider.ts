@@ -5,8 +5,6 @@ import { OpenCraneProviderKeyGateway, PROVIDER_KEY_GATEWAY } from "@opencrane/st
 import { OpenCranePersonalAssetsGateway, PERSONAL_ASSETS_GATEWAY } from "@opencrane/state/assets/adapter";
 import { OpenCraneSkillCatalogueGateway, SKILL_CATALOGUE_GATEWAY } from "@opencrane/state/skills/adapter";
 
-import { GATEWAY_MODE } from "./gateway-mode.types";
-
 /**
  * Binds every swappable data gateway the **opencrane-ui** app (org-admin
  * console) consumes to their live OpenCrane implementations. All targets are on
@@ -20,7 +18,6 @@ import { GATEWAY_MODE } from "./gateway-mode.types";
 export function provideControlPlaneGateways(): Provider[]
 {
 	return [
-		{ provide: GATEWAY_MODE, useValue: "live" },
 		{ provide: MCP_GATEWAY, useClass: OpenCraneMcpGateway },
 		{ provide: PROVIDER_KEY_GATEWAY, useClass: OpenCraneProviderKeyGateway },
 		{ provide: PERSONAL_ASSETS_GATEWAY, useClass: OpenCranePersonalAssetsGateway },

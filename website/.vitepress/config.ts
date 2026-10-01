@@ -19,7 +19,11 @@ export default defineConfig({
 
   head: [
     // base-aware so the favicon resolves under project pages (/opencrane/) too.
-    ['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}logo.svg` }],
+    ['link', {
+      rel: 'icon',
+      type: 'image/svg+xml',
+      href: `${base}logo.svg`,
+    }],
     ['meta', { name: 'theme-color', content: '#14a8c4' }],
   ],
 
@@ -144,6 +148,7 @@ export default defineConfig({
         collapsed: true,
         items: [
           { text: 'Overview', link: '/contributing/overview' },
+          { text: 'Local development', link: '/contributing/local-development' },
           { text: 'The CI pipeline', link: '/contributing/ci-pipeline' },
           { text: 'Deploying', link: '/contributing/deploying' },
           { text: 'Versions and migrations', link: '/contributing/versions-and-migrations' },

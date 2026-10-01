@@ -176,7 +176,8 @@ export default [
 			{ sourceTag: "scope:conversation-workspace", onlyDependOnLibsWithTags: ["scope:conversation-assets", "scope:conversation-elicitation", "scope:conversation-workspace", "scope:conversations", "scope:shared", "scope:user-onboarding", "scope:web"] },
 			{ sourceTag: "scope:web", onlyDependOnLibsWithTags: ["scope:web", "scope:shared"] },
 			{ sourceTag: "scope:governance", onlyDependOnLibsWithTags: ["scope:governance", "scope:shared"] },
-			{ sourceTag: "scope:opencrane-ui", onlyDependOnLibsWithTags: ["scope:conversation-elicitation", "scope:conversation-assets", "scope:conversation-workspace", "scope:governance", "scope:organization-members", "scope:persona-onboarding", "scope:shared", "scope:web"] },
+			{ sourceTag: "scope:opencrane-ui", onlyDependOnLibsWithTags: ["scope:conversation-elicitation", "scope:conversation-assets", "scope:conversation-workspace", "scope:governance", "scope:local-development", "scope:organization-members", "scope:persona-onboarding", "scope:shared", "scope:user-onboarding", "scope:web"] },
+			{ sourceTag: "scope:local-development", onlyDependOnLibsWithTags: ["scope:conversation-assets", "scope:conversation-workspace", "scope:conversations", "scope:persona-onboarding", "scope:shared", "scope:user-onboarding", "scope:web"] },
             {
               sourceTag: "scope:opencrane",
               onlyDependOnLibsWithTags: [

@@ -113,7 +113,7 @@
 			],
 			"options": {
 				"staticFilePath": "dist/storybook/frontend-elements-ui",
-				"port": 4400,
+				"port": 4401,
 				"host": "127.0.0.1",
 				"watch": false,
 				"cors": false,
@@ -127,7 +127,7 @@
 				"static-storybook"
 			],
 			"options": {
-				"command": "wait-on --timeout 60000 http-get://127.0.0.1:4400/index.json && test-storybook --config-dir libs/frontend/elements/ui/.storybook --url http://127.0.0.1:4400 --index-json --ci --failOnConsole --maxWorkers=1 --disable-telemetry"
+				"command": "wait-on --timeout 60000 http-get://127.0.0.1:4401/index.json && test-storybook --config-dir libs/frontend/elements/ui/.storybook --url http://127.0.0.1:4401 --index-json --ci --failOnConsole --maxWorkers=1 --disable-telemetry"
 			}
 		},
 		"test-storybook-visual": {
@@ -146,7 +146,7 @@
 				"{workspaceRoot}/.nx/test-results/storybook"
 			],
 			"options": {
-				"command": "wait-on --timeout 60000 http-get://127.0.0.1:4400/index.json && playwright test --config playwright.storybook.config.ts"
+				"command": "wait-on --timeout 60000 http-get://127.0.0.1:4401/index.json && playwright test --config playwright.storybook.config.ts"
 			}
 		},
 		"update-storybook-visual": {
@@ -156,7 +156,7 @@
 				"static-storybook"
 			],
 			"options": {
-				"command": "wait-on --timeout 60000 http-get://127.0.0.1:4400/index.json && playwright test --config playwright.storybook.config.ts --update-snapshots=all"
+				"command": "wait-on --timeout 60000 http-get://127.0.0.1:4401/index.json && playwright test --config playwright.storybook.config.ts --update-snapshots=all"
 			}
 		}
 	}

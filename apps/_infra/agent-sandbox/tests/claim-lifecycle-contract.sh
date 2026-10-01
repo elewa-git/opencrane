@@ -98,6 +98,20 @@ if (args.includes('auth')) {
     throw new Error(`Unexpected read: ${resource}`);
   }
 } else if (args.includes('exec')) {
+  if (args.includes('--container=opencrane-ui')) {
+    assert(args.includes('deployment/smoke-opencrane-server'));
+    assert(args.includes('node'));
+    assert(args.includes('smoke-litellm.smoke.svc.cluster.local'));
+    assert(args.includes('4100'));
+    const script = fs.readFileSync(0, 'utf8');
+    assert(script.includes('net.connect'));
+    if (scenario === 'model-refused') {
+      process.stderr.write('The server could not reach the model listener.\n');
+      process.exit(1);
+    }
+    process.stdout.write('Server-to-model listener positive control: PASS\n');
+    process.exit(0);
+  }
   assert(args.includes('python3'));
   assert(args.includes('--container=conversation-computer'));
   const script = fs.readFileSync(0, 'utf8');
@@ -124,8 +138,8 @@ def connect(address, **kwargs):
         return nullcontext()
     if os.environ["FIXTURE_SCENARIO"] == "model-reachable":
         return nullcontext()
-    if os.environ["FIXTURE_SCENARIO"] == "model-refused":
-        raise ConnectionRefusedError("No model service was listening")
+    if os.environ["FIXTURE_SCENARIO"] == "model-denied-rst":
+        raise ConnectionRefusedError("The model connection was refused from the computer")
     raise TimeoutError("The model connection was denied")
 
 socket.getaddrinfo = resolve
@@ -158,6 +172,7 @@ bash -n "$SMOKE"
 : > "$FIXTURE_DIR/calls"
 PATH="$FIXTURE_DIR/bin:$PATH" FIXTURE_SCENARIO=healthy bash "$SMOKE" k3d-contract smoke smoke 5 > "$FIXTURE_DIR/healthy.log"
 grep -Fq 'Sandbox controller lifecycle: PASS' "$FIXTURE_DIR/healthy.log"
+grep -Fq 'exec -i deployment/smoke-opencrane-server' "$FIXTURE_DIR/calls"
 grep -Fq 'get sandbox/computer-controller-proof-g1' "$FIXTURE_DIR/calls"
 grep -Fq 'get pod/computer-controller-proof-g1' "$FIXTURE_DIR/calls"
 grep -Fq 'auth can-i list pods -n smoke' "$FIXTURE_DIR/calls"
@@ -167,6 +182,11 @@ grep -Fq 'auth can-i get pods/computer-controller-proof-g1 -n kube-system' "$FIX
 grep -Fq 'wait --for=delete sandbox/computer-controller-proof-g1 pod/computer-controller-proof-g1' "$FIXTURE_DIR/calls"
 grep -Fq 'wait --for=delete service/controller-proof-service' "$FIXTURE_DIR/calls"
 [[ "$(grep -c ' delete --raw ' "$FIXTURE_DIR/calls")" == 1 ]]
+
+: > "$FIXTURE_DIR/calls"
+PATH="$FIXTURE_DIR/bin:$PATH" FIXTURE_SCENARIO=model-denied-rst bash "$SMOKE" k3d-contract smoke smoke 5 > "$FIXTURE_DIR/model-denied-rst.log"
+grep -Fq 'Server-to-model listener positive control: PASS' "$FIXTURE_DIR/model-denied-rst.log"
+grep -Fq 'Sandbox controller lifecycle: PASS' "$FIXTURE_DIR/model-denied-rst.log"
 
 for scenario in invalid-metadata foreign-owner wrong-pod-lease foreign-address public-dns injected-dns wrong-network-selector dns-unreachable server-unreachable model-reachable model-refused upstream-policy missing-pod cleanup-blocked existing server-pod-read-denied; do
   : > "$FIXTURE_DIR/calls"
