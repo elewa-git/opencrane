@@ -1,0 +1,5 @@
+<div class="wo-pdf-picker">
+	<label for="conversation-pdf-picker">Attach PDF</label>
+	<input id="conversation-pdf-picker" type="file" accept="application/pdf,.pdf" multiple [disabled]="disabled()" (change)="selectFiles($event)" />
+	@if (error(); as error) { <span role="alert">{{ error }}</span> }
+</div>

@@ -3,7 +3,8 @@ import { Router, type NextFunction, type Request, type Response } from "express"
 import type { AuthenticatedPrincipalDirectory } from "@opencrane/backend/server/iam/identity";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import { McpOperatorAuthorizationError } from "../core/mcp-operator-authorization";
-import { approveServer, installServer, listAllServers, listEntitledCatalog, listInstalled, publishServer, rejectServer, setServerEnabled, uninstallServer } from "../core/mcp-operator.logic";
+import { approveServer, installServer, listAllServers, listEntitledCatalog, listInstalled, McpInstallConflictError, publishServer, rejectServer, setServerEnabled } from "../core/mcp-operator.logic";
+import { McpConnectionUninstallOutcomes, type McpConnectionAuthority } from "../connections/mcp-connection.types";
 import type { McpOperatorCaller } from "../core/mcp-operator.logic.types";
 import type { McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
 import { McpRemoteServerRegistrationValidationError, registerRemoteServer } from "../era-probe/mcp-remote-registration";
@@ -33,9 +34,10 @@ import { ___McpEnabledSchema, ___McpInstallSchema } from "./mcp-operator.validat
 	 * @param eraProbeWorkflow - Runs the saved protocol check admitted with a server registration.
  * @param ociImageValidationWorkflow - Saves the background job that verifies an uploaded OCI image.
  * @param ociImageArtifacts - Resolves exact artifact facts inside the authenticated silo.
+ * @param connections - Removes installations through the existing revocation and cleanup owner.
  * @returns Configured Express router.
  */
-export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDirectory: AuthenticatedPrincipalDirectory, eraProbeWorkflow: McpEraProbeWorkflow, ociImageValidationWorkflow: OciImageValidationWorkflow, ociImageArtifacts: OciImageLayoutArtifactResolver): Router
+export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDirectory: AuthenticatedPrincipalDirectory, eraProbeWorkflow: McpEraProbeWorkflow, ociImageValidationWorkflow: OciImageValidationWorkflow, ociImageArtifacts: OciImageLayoutArtifactResolver, connections: Pick<McpConnectionAuthority, "uninstall">): Router
 {
   const router = Router();
 
@@ -84,20 +86,20 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     res.status(201).json(installed);
   });
 
-  /** Removes the calling Principal's install and returns 404 when that Principal has none. */
+  /** Accepts removal for the caller's installation while preserving its execution history. */
   router.delete("/installed/:serverId", async function _uninstall(req: Request<{ serverId: string }>, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
     if (!_SendUnauthorizedWhenMissing(res, caller))
       return;
-    const removed = await uninstallServer(unitOfWork, caller, req.params.serverId);
-    if (removed === "not_found")
+    const result = await connections.uninstall({ siloId: caller.siloId, actorPrincipalId: caller.principalId, serverId: req.params.serverId });
+    if (result.outcome === McpConnectionUninstallOutcomes.NotFound)
     {
       res.status(404).json({ error: "MCP install not found", code: "MCP_INSTALL_NOT_FOUND" });
       return;
     }
 
-    res.status(204).end();
+    res.status(result.outcome === McpConnectionUninstallOutcomes.Removing ? 202 : 204).end();
   });
 
   // -------------------------------------------------------------------------
@@ -235,6 +237,11 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
 
   router.use(function _SendMcpAuthorizationError(error: unknown, _req: Request, res: Response, next: NextFunction): void
   {
+	if (error instanceof McpInstallConflictError)
+	{
+		res.status(409).json({ error: "This installation is still being removed.", code: "MCP_INSTALL_REMOVAL_IN_PROGRESS" });
+		return;
+	}
     if (!(error instanceof McpOperatorAuthorizationError) && (!(error instanceof Error) || error.name !== "McpOperatorAuthorizationError"))
     {
       next(error);

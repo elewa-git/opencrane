@@ -42,7 +42,9 @@ export class PrismaPersonalMemoryAdmissionRepository implements PersonalMemoryAd
 			},
 			select: { id: true, cogneeDatasetId: true },
 		});
-		return dataset === null ? null : { datasetId: dataset.id, cogneeDatasetId: dataset.cogneeDatasetId };
+		if (dataset === null || dataset.cogneeDatasetId === null)
+			return null;
+		return { datasetId: dataset.id, cogneeDatasetId: dataset.cogneeDatasetId };
 	}
 
 	/**

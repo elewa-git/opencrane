@@ -1,4 +1,4 @@
-import type { ConversationAssetDisposition, ConversationAssetProvenance, ConversationAssetSelectionFailure } from "@opencrane/state/conversation/assets";
+import type { ConversationAssetContentCommandStates, ConversationAssetDisposition, ConversationAssetProvenance, ConversationAssetSelectionFailure } from "@opencrane/state/conversation/assets";
 
 /** Finite visible file states, including non-disclosing reference failures. */
 export enum ConversationAssetPresentationStates
@@ -18,6 +18,7 @@ export enum ConversationAssetPresentationStates
 /** Typed user intent emitted by file presentation controls. */
 export enum ConversationAssetActionKinds
 {
+	Deselect = "deselect",
 	Retry = "retry",
 	Remove = "remove",
 	Preview = "preview",
@@ -31,6 +32,10 @@ export interface ConversationAssetPresentation
 {
 	readonly id: string;
 	readonly messageId: string | null;
+	/** Artifact record used to join a history block, or null before publication. */
+	readonly artifactId: string | null;
+	/** Published revision used to join a history block, or null before publication. */
+	readonly artifactRevisionId: string | null;
 	readonly provenance: ConversationAssetProvenance;
 	readonly displayName: string;
 	readonly mediaType: string;
@@ -41,6 +46,10 @@ export interface ConversationAssetPresentation
 	readonly canRetry: boolean;
 	readonly canRemove: boolean;
 	readonly uploadProgressPercent: number | null;
+	/** Component-scoped byte-read state; it does not change the durable asset lifecycle. */
+	readonly contentState: ConversationAssetContentCommandStates;
+	/** Safe retry feedback set only when the current content command failed. */
+	readonly contentDetail: string | null;
 }
 
 /** Safe plain-language feedback for a rejected message-level file selection. */

@@ -4,4 +4,8 @@ import tsconfigPaths from "vite-tsconfig-paths";
 import { _PackageCacheDir } from "../../vitest.cache";
 
 /** Vitest configuration resolving the workspace's TypeScript path aliases. */
-export default defineConfig({ cacheDir: _PackageCacheDir(import.meta.url), plugins: [tsconfigPaths()] });
+export default defineConfig({
+	cacheDir: _PackageCacheDir(import.meta.url),
+	plugins: [tsconfigPaths({ projects: ["../../tsconfig.vitest.json"] })],
+	test: { include: ["src/**/__tests__/**/*.test.ts", "../../tests/memory-gateway/__tests__/memory-gateway-client-contract.test.ts"] },
+});

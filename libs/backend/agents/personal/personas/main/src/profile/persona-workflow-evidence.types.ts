@@ -23,7 +23,7 @@ export interface PersonaWorkflowApprovedEvidence
  * onboarding colours, which means the database enum can be renamed without touching anything outside
  * this package.
  *
- * Called by: `apps/opencrane/src/app/user-onboarding-composition.ts`, which converts each value to
+ * Called by: `libs/backend/server/agents/onboarding/main/src/composition/user-onboarding-composition.ts`, which converts each value to
  * `UserOnboardingPersonaColours`. Produced by `_WorkflowColour` in prisma-persona-workflow-evidence.ts.
  *
  * @see PersonaWorkflowApprovedBootstrapEvidence
@@ -63,7 +63,7 @@ export interface PersonaWorkflowApprovedBootstrapEvidence
  * differently.
  *
  * Called by: `_CreateUserOnboardingPersonaEvidence` in
- * `apps/opencrane/src/app/user-onboarding-composition.ts`. Built by
+ * `libs/backend/server/agents/onboarding/main/src/composition/user-onboarding-composition.ts`. Built by
  * {@link _CreatePersonaWorkflowEvidenceRepository}; implemented by
  * `PrismaPersonaWorkflowEvidenceRepository`.
  *

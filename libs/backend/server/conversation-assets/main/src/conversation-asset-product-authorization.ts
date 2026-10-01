@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { PrismaAuthorizationAuthority, PrismaManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability, type ProductAuthorizationResourceLocator } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
-import type { ConversationAssetProductAuthorizationRepository, ConversationAssetProductCaller } from "./conversation-asset-product-authorization.types";
+import type { ConversationAssetExecutionContext, ConversationAssetProductAuthorizationRepository, ConversationAssetProductCaller } from "./conversation-asset-product-authorization.types";
 
 /** Isolates the minimal exact grants derived from durable artifact ownership. */
 const ARTIFACT_OWNER_GRANT_MANAGER_ID = "artifact-owner-access";
@@ -18,7 +18,7 @@ export class PrismaConversationAssetProductAuthorizationRepository implements Co
 	constructor(transaction: Prisma.TransactionClient) { this.transaction = transaction; this.authority = new PrismaAuthorizationAuthority(transaction); this.managedGrants = new PrismaManagedAuthorizationGrantRepository(transaction); }
 
 	/** Decides a read without introducing another owner or participant policy kernel. */
-	async canAccess(caller: ConversationAssetProductCaller, resource: ProductAuthorizationResourceLocator, action: ProductAuthorizationActions): Promise<boolean>
+	async canAccess(caller: ConversationAssetProductCaller, resource: ProductAuthorizationResourceLocator, action: ProductAuthorizationActions.Read): Promise<boolean>
 	{
 		const entitled = await this.authority.listPrincipalEntitled({ siloId: caller.siloId, principalId: caller.principalId, resources: [resource], action, nowEpochMs: Date.now() });
 		return entitled.length === 1;
@@ -27,13 +27,14 @@ export class PrismaConversationAssetProductAuthorizationRepository implements Co
 	/** Records a protected asset or conversation mutation inside its owning transaction. */
 	async admit(caller: ConversationAssetProductCaller, resource: ProductAuthorizationResourceLocator, action: ProductAuthorizationActions, argumentsValue: JsonValue): Promise<boolean>
 	{
-		return this.admitAs(caller, "user", caller.principalId, resource, action, argumentsValue);
+		const result = await this.authority.admitPrincipal({ siloId: caller.siloId, principalId: caller.principalId, actorKind: "user", actorId: caller.principalId, resource, action, argumentsDigest: ___DigestCanonicalJson(argumentsValue), nowEpochMs: Date.now() });
+		return result.outcome === AuthorizationDecisionOutcomes.Allow;
 	}
 
-	/** Records a workload effect against the exact represented owner's personal boundary. */
-	async admitAs(caller: ConversationAssetProductCaller, actorKind: "user" | "agent-service" | "workload" | "system", actorId: string, resource: ProductAuthorizationResourceLocator, action: ProductAuthorizationActions, argumentsValue: JsonValue): Promise<boolean>
+	/** Keeps the requester as authorization Principal while auditing the actual Pod and run. */
+	async admitWorkload(caller: ConversationAssetProductCaller, execution: ConversationAssetExecutionContext, resource: ProductAuthorizationResourceLocator, action: ProductAuthorizationActions, argumentsValue: JsonValue): Promise<boolean>
 	{
-		const result = await this.authority.admitPrincipal({ siloId: caller.siloId, principalId: caller.principalId, actorKind, actorId, resource, action, argumentsDigest: ___DigestCanonicalJson(argumentsValue), nowEpochMs: Date.now() });
+		const result = await this.authority.admitPrincipal({ siloId: caller.siloId, principalId: caller.principalId, actorKind: "workload", actorId: execution.workload.podUid, workload: execution.workload, run: execution.run, resource, action, argumentsDigest: ___DigestCanonicalJson(argumentsValue), nowEpochMs: Date.now() });
 		return result.outcome === AuthorizationDecisionOutcomes.Allow;
 	}
 

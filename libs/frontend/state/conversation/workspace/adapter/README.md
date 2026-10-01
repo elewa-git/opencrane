@@ -7,6 +7,7 @@
 This package translates the generated signed-in conversation, onboarding, and company-assistant APIs into the
 transport-neutral workspace gateway. It maps only fields the browser state needs, reduces HTTP
 failures to fixed display-safe categories, and submits ordinary participant messages through the generated HTTP client.
+Message submission forwards the state-owned canonical asset-id set with the same retry-stable UUID and text.
 
 ```
  Control Plane generated client ──► workspace gateway  ◄── HERE
@@ -33,13 +34,16 @@ import the gateway only from the package barrel.
 Browser-session cookies supply identity. The adapter never accepts a subject id, email, organisation role,
 or memory identity from UI code. It sends opaque conversation, participant, Agent, message, and run
 coordinates only to the exact generated endpoint that accepts them. It does not read response bodies when
-building errors and does not own the live history connection; the separate conversation event adapter owns streaming.
+building errors. Directory, list and onboarding reads map HTTP 401, 403 and 404 to access loss;
+malformed successful responses remain temporary failures. The adapter does not own the live history connection; the separate conversation event adapter owns streaming.
 The same generated-client adapter implements the narrow computer-review port without releasing sandbox
 network coordinates or lease credentials to the browser.
 It also implements `ConversationPersonalRunsGateway` through `GET /me/runs`. The model-adjacent
 validator rejects unknown states, malformed timestamps, duplicate rows and oversized lists before
 the selected-chat store adopts them. The existing cookie supplies identity and an AbortSignal
-cancels obsolete reads; response bodies never become error copy.
+cancels obsolete reads; response bodies never become error copy. Its Stop command uses the existing
+conversation-message endpoint with the store's stable UUID, fixed `Stop` control text, and `stop`
+activation. It does not append browser history or infer terminal cancellation from the HTTP response.
 The same adapter implements the group-child port. Child reads and creation responses must match the
 requested parent and source; shares forward the reviewed text and UUID unchanged and accept only a
 validated accepted/idempotent acknowledgement. Every request carries the existing session cookie

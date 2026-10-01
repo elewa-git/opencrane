@@ -11,6 +11,7 @@
 {{- if not .Values.memoryGateway.kubernetesApiServerEndpointCidrs }}
 {{- fail "memoryGateway.kubernetesApiServerEndpointCidrs requires exact Kubernetes API backing endpoints for bounded TokenReview egress" }}
 {{- end }}
+{{- $providerCredentialSecret := required "memoryGateway.providerCredential.existingSecret requires a pre-created Cognee service-user Secret" .Values.memoryGateway.providerCredential.existingSecret }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -108,10 +109,19 @@ spec:
               value: opencrane-memory-gateway
             - name: REQUEST_TIMEOUT_MS
               value: {{ mul .Values.memoryGateway.httpTimeoutSeconds 1000 | quote }}
+            - name: COGNEE_CREDENTIAL_EMAIL_PATH
+              value: /var/run/opencrane/cognee-service-user/email
+            - name: COGNEE_CREDENTIAL_PASSWORD_PATH
+              value: /var/run/opencrane/cognee-service-user/password
+            - name: COGNEE_ALLOW_FIRST_INSTALL_REGISTRATION
+              value: {{ .Values.memoryGateway.providerCredential.allowFirstInstallRegistration | quote }}
             {{- include "opencrane.observabilityEnv" (dict "ctx" $ "component" "memory-gateway") | nindent 12 }}
           volumeMounts:
             - name: kubernetes-token
               mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
+            - name: cognee-service-user
+              mountPath: /var/run/opencrane/cognee-service-user
               readOnly: true
           readinessProbe:
             httpGet:
@@ -128,6 +138,15 @@ spec:
           resources:
             {{- toYaml .Values.memoryGateway.resources | nindent 12 }}
       volumes:
+        - name: cognee-service-user
+          secret:
+            secretName: {{ $providerCredentialSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ required "memoryGateway.providerCredential.emailKey is required" .Values.memoryGateway.providerCredential.emailKey | quote }}
+                path: email
+              - key: {{ required "memoryGateway.providerCredential.passwordKey is required" .Values.memoryGateway.providerCredential.passwordKey | quote }}
+                path: password
         - name: kubernetes-token
           projected:
             defaultMode: 0440

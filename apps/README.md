@@ -21,6 +21,7 @@ testing on its own, it belongs in a library, not here.
 | [`artifact-scanner`](./artifact-scanner/README.md) | Outbound-only malware scanner for quarantined conversation files. |
 | [`agent-controller`](./agent-controller/README.md) | Sole Kubernetes mutator for governed one-shot Jobs. |
 | [`mcp-executor`](./mcp-executor/README.md) | One-shot OpenCrane companion for OCI-backed MCP server Jobs. |
+| [`mcp-file-generator`](./mcp-file-generator/README.md) | Credentialless CSV-producing MCP image for the existing governed OCI execution flow. |
 | [`skill-authoring`](./skill-authoring/README.md) | Chart-only isolated candidate-skill Job plane with no standing worker. |
 | [`postgres`](./postgres/README.md) | The durable PostgreSQL deployable. |
 

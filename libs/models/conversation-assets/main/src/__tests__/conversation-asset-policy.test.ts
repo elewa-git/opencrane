@@ -22,6 +22,14 @@ describe("conversation asset policy", () =>
 		expect(___DecideConversationAssetBatch([{ byteLength: 10, mediaType: "application/vnd.sqlite3" }])).toEqual({ accepted: false, failureCode: "unsupported_media_type" });
 	});
 
+	it("admits supported CSV files only as downloads and rejects other encodings", function _CsvDownloads()
+	{
+		expect(___ConversationAssetMediaDisposition("text/csv")).toBe(ConversationAssetDisposition.Download);
+		expect(___ConversationAssetMediaDisposition("text/csv;charset=utf-8")).toBe(ConversationAssetDisposition.Download);
+		expect(___DecideConversationAssetBatch([{ byteLength: 24, mediaType: "text/csv;charset=utf-8" }])).toEqual({ accepted: true, failureCode: null });
+		expect(___DecideConversationAssetBatch([{ byteLength: 24, mediaType: "text/csv;charset=iso-8859-1" }])).toEqual({ accepted: false, failureCode: "unsupported_media_type" });
+	});
+
 	it("enforces ten files and 200 MiB across one message", () =>
 	{
 		const elevenFiles = Array.from({ length: 11 }, () => ({ byteLength: 1, mediaType: "image/png" }));

@@ -1,0 +1,13 @@
+<wo-section-heading title="Recorded usage" subtitle="Available usage records. This is not a live or complete spending report.">
+	<p-button heading-actions label="Refresh recorded usage" icon="pi pi-refresh" [text]="true" [disabled]="pending(feedback().state)" (onClick)="requestRefresh()" />
+</wo-section-heading>
+<wo-resource-feedback [loading]="pending(feedback().state)" loadingLabel="Loading recorded usage…" [error]="readError(feedback())" [retryAvailable]="feedback().state === states.Unavailable || feedback().state === states.RetainedError" (retryRequested)="requestRefresh()" />
+@if (showData(feedback().state)) {
+	<section class="token-usage" [attr.aria-busy]="pending(feedback().state)">
+		<p-table [value]="tableRows()" dataKey="id" [pt]="{ tableContainer: { tabindex: '0', role: 'region', 'aria-label': 'Recorded usage by account and currency' } }">
+			<ng-template #header><tr><th scope="col">Account</th><th scope="col">Currency</th><th scope="col">Input tokens</th><th scope="col">Output tokens</th><th scope="col">Total tokens</th><th scope="col">Recorded cost</th><th scope="col">Budget ceiling</th></tr></ng-template>
+			<ng-template #body let-row><tr><td class="wo-mono">{{ row.userId }}</td><td>{{ row.currency }}</td><td>{{ row.inputTokens ?? 'Unknown' }}</td><td>{{ row.outputTokens ?? 'Unknown' }}</td><td>{{ row.totalTokens ?? 'Unknown' }}</td><td>{{ row.totalCost ?? 'Unknown' }}</td><td>{{ row.budgetCeiling ?? 'Not supplied' }}</td></tr></ng-template>
+			<ng-template #emptymessage><tr><td colspan="7">No recorded usage is visible in this response. This does not prove zero usage; records may be absent or hidden by permissions.</td></tr></ng-template>
+		</p-table>
+	</section>
+}

@@ -1,1 +1,1 @@
-<wo-members-view [view]="view()" (refreshRequested)="directory.refresh()" (inviteReset)="create.reset()" (inviteSubmitted)="invite($event)" (resendRequested)="resendInvitation($event)" (searchChanged)="searchQuery.set($event)" />
+<wo-members-view [view]="view()" (refreshRequested)="directory.refresh()" (inviteReset)="create.reset()" (inviteSubmitted)="invite($event)" (resendRequested)="resendInvitation($event)" (removalRequested)="removal.remove($event)" (searchChanged)="searchQuery.set($event)" />

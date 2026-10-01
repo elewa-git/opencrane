@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { McpRuntimeExecutionKind, McpServerRevisionState, McpServerStatus, McpServerTransport, OciImageValidationState, type Prisma } from "@prisma/client";
+import { McpCredentialRequirement, McpRuntimeExecutionKind, McpServerRevisionState, McpServerStatus, McpServerTransport, OciImageValidationState, type Prisma } from "@prisma/client";
 
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 
@@ -72,6 +72,7 @@ export class PrismaMcpOciServerPromotionRepository implements McpOciServerPromot
 				endpoint: validation.registryReference,
 				transport: McpServerTransport.OciImage,
 				status: McpServerStatus.Draft,
+				credentialRequirement: McpCredentialRequirement.Credentialless,
 			},
 			select: { id: true },
 		});

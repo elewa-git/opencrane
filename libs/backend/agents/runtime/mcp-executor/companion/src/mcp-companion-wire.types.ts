@@ -1,5 +1,5 @@
 import type { JsonValue } from "@opencrane/util";
-import type { McpExecutorDiscoveredTool, McpExecutorToolCallResult } from "@opencrane/backend/agents/runtime/mcp-executor/protocol";
+import type { McpDiscoveredTool, McpToolCallResult } from "@opencrane/contracts";
 
 import type { McpCompanionCommandKinds, McpCompanionFailureCodes } from "./mcp-companion.types";
 
@@ -41,6 +41,8 @@ export interface McpCompanionInvocationClaim extends McpCompanionClaimLease
 	readonly toolName: string;
 	/** Exact reviewed arguments admitted by ToolInvocation authority. */
 	readonly arguments: JsonValue;
+	/** Exact input schema selected from the frozen tool revision. */
+	readonly inputSchema: JsonValue;
 }
 
 /** Complete strict response returned by `POST /claim`. */
@@ -65,7 +67,7 @@ export interface McpCompanionDiscoveryResult
 	/** Identifies the payload as a discovery completion. */
 	readonly kind: McpCompanionCommandKinds.Discovery;
 	/** Tool definitions checked by the pinned MCP protocol parser. */
-	readonly tools: readonly McpExecutorDiscoveredTool[];
+	readonly tools: readonly McpDiscoveredTool[];
 }
 
 /** Carries one checked result from an authorized tool invocation. */
@@ -74,7 +76,7 @@ export interface McpCompanionInvocationResult
 	/** Identifies the payload as an invocation completion. */
 	readonly kind: McpCompanionCommandKinds.Invocation;
 	/** Result checked by the pinned MCP protocol parser. */
-	readonly result: McpExecutorToolCallResult;
+	readonly result: McpToolCallResult;
 }
 
 /** Strict request accepted by `POST /complete`. */

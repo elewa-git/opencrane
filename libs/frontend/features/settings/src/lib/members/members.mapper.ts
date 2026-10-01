@@ -1,5 +1,5 @@
 import { ScopeChipTones } from "@opencrane/elements/ui";
-import { OrganizationInvitationStatuses, OrganizationInviteCommandStates, OrganizationMemberDirectoryStates, OrganizationMemberRoles, OrganizationMemberStatuses, type OrganizationInviteIssue, type OrganizationInvitation, type OrganizationMember, type OrganizationMemberDirectory } from "@opencrane/state/organization/members";
+import { OrganizationInvitationStatuses, OrganizationInviteCommandStates, OrganizationMemberDirectoryStates, OrganizationMemberRoles, OrganizationMemberStatuses, OrganizationMemberRemovalStates, OrganizationMemberRemovalReasons, type OrganizationInviteIssue, type OrganizationInvitation, type OrganizationMember, type OrganizationMemberDirectory } from "@opencrane/state/organization/members";
 
 import { MemberDirectoryRowKinds, type MemberDirectoryRowView, type MembersViewModel } from "./member-directory.types";
 
@@ -30,6 +30,9 @@ interface _MembersMapperInput
 	readonly resentInviteLink: string | null;
 	/** Browser-safe resend failure. */
 	readonly resendError: string | null;
+	readonly removingMembershipIds: ReadonlySet<string>;
+	readonly removalMessage: string | null;
+	readonly removalError: string | null;
 }
 
 /**
@@ -43,12 +46,13 @@ interface _MembersMapperInput
 export function _MapMembersView(input: _MembersMapperInput): MembersViewModel
 {
 	const query = input.searchQuery.trim().toLocaleLowerCase();
-	const directory = input.directory;
-	const invitations = _MergeReturnedInvitations(directory?.invitations ?? [], input.returnedInvitations);
+	const forbidden = input.directoryState === OrganizationMemberDirectoryStates.Forbidden;
+	const directory = forbidden ? null : input.directory;
+	const invitations = _MergeReturnedInvitations(directory?.invitations ?? [], forbidden ? [] : input.returnedInvitations);
 	const visibleInvitations = invitations.filter(invitation => invitation.status !== OrganizationInvitationStatuses.Accepted);
 	const knownInvitationIds = new Set((directory?.invitations ?? []).map(invitation => invitation.invitationId));
-	const newlyCreatedPending = _CountNewPending(input.returnedInvitations, knownInvitationIds);
-	const activeRows = (directory?.members ?? []).map(_MemberRow).filter(row => _Matches(row, query));
+	const newlyCreatedPending = _CountNewPending(forbidden ? [] : input.returnedInvitations, knownInvitationIds);
+	const activeRows = (directory?.members ?? []).map(member => _MemberRow(member, input.removingMembershipIds)).filter(row => _Matches(row, query));
 	const pendingRows = visibleInvitations.map(invitation => _InvitationRow(invitation, input.resendingInvitationIds)).filter(row => _Matches(row, query));
 	return {
 		directoryState: input.directoryState,
@@ -61,9 +65,11 @@ export function _MapMembersView(input: _MembersMapperInput): MembersViewModel
 		inviteState: input.inviteState,
 		inviteIssues: input.inviteIssues,
 		inviteError: input.inviteError,
-		inviteLinks: input.inviteLinks,
-		resentInviteLink: input.resentInviteLink,
-		resendError: input.resendError
+		inviteLinks: forbidden ? [] : input.inviteLinks,
+		resentInviteLink: forbidden ? null : input.resentInviteLink,
+		resendError: forbidden ? null : input.resendError,
+		removalMessage: forbidden ? null : input.removalMessage,
+		removalError: forbidden ? null : input.removalError
 	};
 }
 
@@ -81,13 +87,14 @@ function _MergeReturnedInvitations(directory: readonly OrganizationInvitation[],
 	for (const invitation of directory)
 	{
 		const returnedInvitation = merged.get(invitation.invitationId);
-		if (returnedInvitation === undefined || invitation.invitedAt >= returnedInvitation.invitedAt) merged.set(invitation.invitationId, invitation);
+		if (returnedInvitation === undefined || invitation.invitedAt >= returnedInvitation.invitedAt)
+			merged.set(invitation.invitationId, invitation);
 	}
 	return [...merged.values()];
 }
 
 /** Map one accepted membership into a display row. */
-function _MemberRow(member: OrganizationMember): MemberDirectoryRowView
+function _MemberRow(member: OrganizationMember, busyIds: ReadonlySet<string>): MemberDirectoryRowView
 {
 	return {
 		id: member.membershipId,
@@ -100,7 +107,10 @@ function _MemberRow(member: OrganizationMember): MemberDirectoryRowView
 		detail: member.status === OrganizationMemberStatuses.Active ? "Active member" : "Membership suspended",
 		isCurrentUser: member.isCurrentUser,
 		canResend: false,
-		resending: false
+		resending: false,
+		canRemove: member.removal.state === OrganizationMemberRemovalStates.Available,
+		removing: busyIds.has(member.membershipId),
+		removalDetail: member.removal.state === OrganizationMemberRemovalStates.Unavailable ? _RemovalReason(member.removal.reason) : null
 	};
 }
 
@@ -118,7 +128,8 @@ function _InvitationRow(invitation: OrganizationInvitation, busyIds: ReadonlySet
 		detail: `Invited ${_DateLabel(invitation.invitedAt)} · expires ${_DateLabel(invitation.expiresAt)}`,
 		isCurrentUser: false,
 		canResend: invitation.status === OrganizationInvitationStatuses.Pending || invitation.status === OrganizationInvitationStatuses.Failed || invitation.status === OrganizationInvitationStatuses.Expired,
-		resending: busyIds.has(invitation.invitationId)
+		resending: busyIds.has(invitation.invitationId),
+		canRemove: false, removing: false, removalDetail: null
 	};
 }
 
@@ -174,6 +185,20 @@ function _InvitationTone(status: OrganizationInvitationStatuses): ScopeChipTones
 function _DateLabel(value: string): string
 {
 	const parsed = new Date(value);
-	if (Number.isNaN(parsed.getTime())) return value;
+	if (Number.isNaN(parsed.getTime()))
+		return value;
 	return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(parsed);
+}
+
+/** Uses fixed copy for a server-authored reason; none of these labels grants authority. */
+function _RemovalReason(reason: OrganizationMemberRemovalReasons): string
+{
+	const labels: Record<OrganizationMemberRemovalReasons, string> = {
+		[OrganizationMemberRemovalReasons.Self]: "Your membership",
+		[OrganizationMemberRemovalReasons.Owner]: "Owner protected",
+		[OrganizationMemberRemovalReasons.Inactive]: "Access removed",
+		[OrganizationMemberRemovalReasons.AuthorityUnsupported]: "Removal unavailable",
+		[OrganizationMemberRemovalReasons.NotAuthorized]: "Removal not permitted"
+	};
+	return labels[reason];
 }

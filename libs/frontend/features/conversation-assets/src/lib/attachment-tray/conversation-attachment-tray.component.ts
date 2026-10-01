@@ -16,6 +16,8 @@ export class ConversationAttachmentTrayComponent
 {
 	public readonly items = input<readonly ConversationAssetPresentation[]>([]);
 	public readonly feedback = input<ConversationAssetSelectionFeedback | null>(null);
+	/** Lets the composer remove a selection without asking the server to delete the file. */
+	public readonly canDeselect = input(false);
 	public readonly label = input("Message attachments");
 	public readonly actionRequested = output<ConversationAssetActionIntent>();
 	public readonly readyCount = computed(() => this.items().filter(item => item.state === ConversationAssetPresentationStates.Ready).length);

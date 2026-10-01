@@ -11,3 +11,4 @@ export { PrismaRuntimePersonaEffectEligibilityAuthority } from "./profile/prisma
 export { PersonaWorkflowColours } from "./profile/persona-workflow-evidence.types";
 export type { PersonaWorkflowEvidenceRepository } from "./profile/persona-workflow-evidence.types";
 export type { RuntimePersonaEffectEligibility, RuntimePersonaEffectEligibilityCommand } from "./profile/runtime-persona-effect-eligibility.types";
+export { _CreatePersonaAgentRevisionSelectionFactory } from "./approval/persona-agent-revision-selection.adapter";

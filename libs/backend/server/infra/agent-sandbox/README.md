@@ -31,7 +31,7 @@ identity or lease metadata fails closed.
 ## Public surface
 
 - `AgentSandboxClaimAdapter` creates, observes, inspects, renews and releases claims. Renewal and deletion compare the observed Kubernetes identifier and resource version so they cannot modify a replacement or overwrite a concurrent change.
-- `AgentSandboxPodBindingAdapter` reads the Pod named by the admitted claim and checks its namespace, name, unique identifier, service account and copied lease labels against the identity verified by Kubernetes TokenReview.
+- `AgentSandboxPodBindingAdapter` reads the Pod named by the admitted claim and checks its namespace, name, unique identifier, service account and copied lease labels. Pod-facing requests compare that identity with Kubernetes TokenReview; server workflows derive the live identity from release-fixed namespace and service-account coordinates.
 
 ## Boundary
 

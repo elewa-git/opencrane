@@ -28,8 +28,10 @@ Full run reports belong in the corresponding pull request or issue.
   the live object and release manifest before applying.
 - Verify the running image digest and application health after rollout.
 - Mutate clusters only through the app-owned deployment scripts.
-- The minimal single-silo handoff is context, tenant/domain, OIDC issuer/client/secret, first
-  operator, three distinct external database bootstrap Secrets, and a pull Secret only for private images.
+- A single-silo handoff names the context, tenant/domain, OIDC issuer/client/secret, first operator,
+  immutable application and AgentSandbox images, three distinct database bootstrap Secrets,
+  KurrentDB trust/bootstrap/history credentials and the Cognee service-user Secret. A pull Secret
+  is required only for private images. The deploy wrapper and platform README define the full inputs.
 - On GKE Autopilot, prove the database-privileges Job schedules; requested capacity, not observed
   workload use, decides admission.
 
@@ -1301,3 +1303,81 @@ Full run reports belong in the corresponding pull request or issue.
 - receipts: private `ui-6692b2e59-publication.json`, `installed-ui-6692b2e59-verify.json`,
   `colleague-d-browser-activity-6692b2e59.json`, `colleague-e-browser-activity-6692b2e59.json` and
   source-attributed preflight/install logs. No credentials entered Git, and no merge or tag ran.
+
+## 2026-09-13 · dev · retained-data fleet suspension · c661e6bf997f1bfe66dbf97faa51b3745c6496e2 · LIVE
+
+- findings: all six test silos are stopped: 51 application Deployments, four UID-fenced Acorn MCP
+  Deployments, six pooler Deployments, six hibernated CNPG databases and the KurrentDB StatefulSet.
+  Its backup CronJob and all six shared application-controller Deployments are stopped too. Final
+  readback found zero active OpenCrane Pods; only GKE-managed system workloads remained.
+- findings: retained 20 Bound PVCs/PVs totaling 380 GiB, two SandboxClaims, two Sandboxes, seven
+  Ready snapshots, Secrets, Services and durable history. Only the two revalidated, PVC-free sandbox
+  Pods were deleted, with UID preconditions. No Secret values were collected.
+- findings: all 21 cloud disks have an owner: 20 back the retained PVs, and one 30 GiB boot disk
+  belongs to the stopped sandbox VM. No disk or snapshot was eligible for deletion.
+- friction: one transient Kubernetes API network failure interrupted the first execution after
+  application shutdown. The identical app-owned suspension command rechecked the partial state
+  and completed. Autopilot had reduced live nodes from seven to six at final observation; system
+  capacity, the control plane, Premium ingress load balancer/IP, storage and snapshots remain billed.
+- lesson: keep the six old silos suspended when creating testv6. Restore shared prerequisites from
+  the cleaned immutable candidate through `bootstrap-prerequisites.sh`, then reconcile Agent Sandbox
+  through `k8s-deploy.sh --provision-agent-sandbox-controller` before the fresh-silo deployment.
+
+
+## 2026-09-13 · dev · persist retained Sandbox suspension · c66303d669c05c470ee349a4d58c5d5e402e9037 · PARTIAL
+
+- execution: the app-owned suspension preflight passed. The ordinary rerun persisted both retained
+  testv5 Sandboxes as `Suspended`, preserving their Sandbox and Claim UIDs. It then failed while
+  redundantly patching an already-zero Pooler: `vpooler.cnpg.io` had no service endpoints because
+  the shared CNPG controller was stopped. The final before/after retention comparison did not run.
+- readback: all 62 Deployment/StatefulSet objects in `opencrane-*` namespaces had zero desired and
+  ready replicas, with no Running application Pods. The 19 remaining Pods were terminal history.
+  All 20 PVCs remained Bound, totaling 380 GiB; seven snapshots were Ready. Both Sandbox/Claim
+  pairs and 256 Secret identities were present. No Secret values were read or printed.
+- finding (`script`): a rerun must avoid CNPG admission writes when the owned resource already has
+  the saved original state and requested stopped state. This does not permit skipping owner or
+  state checks, or the final comparison of retained identities.
+- remedy: #891 adds the validated no-op in the existing app-owned PostgreSQL suspension operations.
+  A new clean-source run must complete the retention comparison before shared prerequisites return.
+  Shared controllers, old silos and all retained data remain in their stopped/preserved state;
+  no disk deletion or testv6 bootstrap occurred in this attempt.
+
+
+## 2026-09-13 · dev · completed suspension repair · 239feb2fdaee3f8ef0a9bb750748c37c426e59d9 · LIVE
+
+- execution: read-only preflight and one ordinary app-owned suspension run both exited zero, using
+  the reviewed cluster/context and `--settle-timeout-seconds 1`. The ordinary command took about
+  2 minutes 32 seconds and completed its full before/after retention comparison. Already-owned
+  stopped CNPG resources required no admission writes while their webhook was offline.
+- findings: no active OpenCrane Pods remain; the 19 historical Pods are terminal. Application
+  Deployments and StatefulSets remain at zero, KurrentDB is stopped and its backup CronJob is
+  suspended. The shared AgentSandbox, CNPG and ingress controllers remain at zero.
+- retention: both retained Sandboxes remain `Suspended` with the original Sandbox and Claim UIDs.
+  Claim lifecycle coordinates remain unchanged. All 20 PVCs are Bound, totaling 380 GiB, with
+  their PV references; all seven snapshots are Ready. The 256 Secret identities remain present.
+  The script compared retained identities without reading Secret data. No disk or data was deleted.
+- scope: this closes the incomplete retention comparison in the preceding partial run. No shared
+  prerequisite was restored, no provider account or credential was created, and no testv6 install
+  occurred. Fresh testv6 still requires its final CI/image, DNS, OIDC and bootstrap gates.
+
+
+## 2026-09-13 · dev · legacy disk retirement and testv6 DNS preparation · a2560d903f3b5b799e90c3343dc4282c1853c714 · LIVE
+
+- retirement proof: `opencrane-sandbox` had been terminated since 2026-06-30, had no current source
+  owner and had only its 30 GiB boot disk attached. The latest READY snapshot bound the exact disk
+  ID and was created on 2026-09-13, after the VM stopped. Independent review qualified deletion
+  under the existing stale-disk cleanup request. The actual preflight set contained 14 snapshots;
+  an earlier path-based inventory had counted 15 and is not the final retention receipt.
+- execution: deleted only that terminated VM and boot disk. All 14 preflight snapshot identities
+  remain READY. Their `KEEP_AUTO_SNAPSHOTS` policy preserves them after source-disk deletion; no
+  snapshot or policy was changed. All 20 remaining cloud disks, totaling 380 GiB, match the retained
+  Bound PV disk names and identities. No guest filesystem or Secret value was inspected.
+- DNS: Cloud DNS change `39` added only `testv6.dev.opencrane.ai. A 35.205.225.244`, TTL 300, to
+  `opencrane-ai-zone` in `weownai-proto`. The inspected transaction had one addition and no deletion
+  or SOA edit. Managed-zone readback, two authoritative servers and two public resolvers agree.
+  The wildcard, base and testv5 records preserve their existing values and TTLs.
+- remaining gates: old silos and shared controllers remain stopped. The current Zitadel client
+  rejects the exact testv6 callback; scoped administrator-session/callback approval is pending.
+  No provider credential, first-install registration, shared-controller restore or testv6 workload
+  was created. Final images, database and visual approvals, fresh installation and remaining MVP
+  journeys remain separate from this retirement and DNS evidence.

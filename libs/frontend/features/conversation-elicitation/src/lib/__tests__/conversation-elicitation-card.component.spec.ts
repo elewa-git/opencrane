@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation } from "@opencrane/state/conversation/elicitation";
+import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationConnectionOwnerKinds, ElicitationPurposes, ElicitationRequestStates, McpCredentialRequirement, type ConversationElicitation } from "@opencrane/state/conversation/elicitation";
 
 import { _CanSubmitElicitation } from "../conversation-elicitation-card.component";
 
@@ -26,5 +26,24 @@ describe("conversation elicitation submit boundary", function _SubmitBoundarySui
 		const draft = { kind: ElicitationBodyKinds.FreeText, text: "Done" } as const;
 		expect(_CanSubmitElicitation(request, draft, true)).toBe(false);
 		expect(_CanSubmitElicitation({ ...request, state: ElicitationRequestStates.Answered }, draft, false)).toBe(false);
+	});
+
+	it("allows denial but refuses approval when complete proposal arguments are hidden", function _HiddenArgumentsFence()
+	{
+		const request = _Request({ kind: ElicitationBodyKinds.Approval, prompt: "Proceed?", action: "Create event", target: "Calendar", dataUse: "Meeting details", proposedArguments: null, consequence: "The event may be visible to invitees." });
+		expect(_CanSubmitElicitation(request, { kind: ElicitationBodyKinds.Approval, approved: true }, false)).toBe(false);
+		expect(_CanSubmitElicitation(request, { kind: ElicitationBodyKinds.Approval, approved: false }, false)).toBe(true);
+		const omittedToolProposal = { ...request, purpose: ElicitationPurposes.ToolApproval, body: { ...request.body, proposedArguments: undefined } };
+		expect(_CanSubmitElicitation(omittedToolProposal, { kind: ElicitationBodyKinds.Approval, approved: true }, false)).toBe(false);
+		expect(_CanSubmitElicitation(omittedToolProposal, { kind: ElicitationBodyKinds.Approval, approved: false }, false)).toBe(true);
+	});
+
+	it("refuses incomplete tool connection disclosure even when parsing was bypassed", function _MissingDisclosureFence()
+	{
+		const request = { ..._Request({ kind: ElicitationBodyKinds.Approval, prompt: "Proceed?", action: "Create event", target: "Calendar", dataUse: "Meeting details", proposedArguments: { title: "Planning" }, consequence: "An event is created." }), purpose: ElicitationPurposes.ToolApproval };
+		expect(_CanSubmitElicitation(request, { kind: ElicitationBodyKinds.Approval, approved: true }, false)).toBe(false);
+		expect(_CanSubmitElicitation(request, { kind: ElicitationBodyKinds.Approval, approved: false }, false)).toBe(true);
+		const complete = { ...request, body: { ...request.body, executionConnection: { ownerKind: ElicitationConnectionOwnerKinds.CompanyAssistant, ownerLabel: "Finance assistant", credentialRequirement: McpCredentialRequirement.PrincipalCredential } } };
+		expect(_CanSubmitElicitation(complete, { kind: ElicitationBodyKinds.Approval, approved: true }, false)).toBe(true);
 	});
 });

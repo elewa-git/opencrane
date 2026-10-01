@@ -1,5 +1,6 @@
 enum ConversationAssetProvenance {
   ParticipantUpload @map("participant_upload")
+  AgentOutput       @map("agent_output")
 }
 
 enum ConversationAssetState {
@@ -34,6 +35,7 @@ model ConversationAsset {
   artifact              Artifact?                      @relation(fields: [artifactId, siloId], references: [id, siloId], onDelete: Restrict)
   revision              ArtifactRevision?              @relation(fields: [artifactId, revisionId], references: [artifactId, id], onDelete: Restrict)
   uploadLease           ArtifactUploadLease?           @relation(fields: [uploadLeaseId], references: [id], onDelete: Restrict)
+  generatedFile         ConversationGeneratedFile?
 
   @@unique([conversationId, id])
   @@unique([conversationId, createdByUserId, idempotencyKey], map: "conversation_assets_participant_idempotency_key")
@@ -41,4 +43,61 @@ model ConversationAsset {
   @@index([messageId])
   @@index([artifactId, revisionId])
   @@map("conversation_assets")
+}
+
+/// Immutable coordinates captured for one generated conversation file and its encrypted chunks.
+/// The generated revision is allocated later by the promotion workflow but keeps this saved id.
+model ConversationGeneratedFile {
+  id                    String                               @id @default(cuid())
+  siloId                String                               @map("silo_id")
+  conversationId        String                               @map("conversation_id")
+  runId                 String                               @map("run_id")
+  attempt               Int
+  bootstrapId           String                               @map("bootstrap_id")
+  computerId            String                               @map("computer_id")
+  leaseId               String                               @map("lease_id")
+  leaseGeneration       Int                                  @map("lease_generation")
+  agentIdentityId       String                               @map("agent_identity_id")
+  requesterPrincipalId  String                               @map("requester_principal_id")
+  requesterSubject      String                               @map("requester_subject")
+  toolInvocationRowId   String                               @unique @map("tool_invocation_row_id")
+  toolInvocationId      String                               @map("tool_invocation_id")
+  toolRevisionId        String                               @map("tool_revision_id")
+  serverRevisionId      String                               @map("server_revision_id")
+  rawResultDigest       String                               @map("raw_result_digest")
+  custodyManifestVersion String                              @map("custody_manifest_version")
+  ciphertextManifestDigest String                            @map("ciphertext_manifest_digest")
+  assetId               String                               @unique @map("asset_id")
+  artifactId            String                               @unique @map("artifact_id")
+  revisionId            String                               @unique @map("revision_id")
+  uploadLeaseId         String                               @unique @map("upload_lease_id")
+  contentAddress        String                               @map("content_address")
+  byteLength            BigInt                               @map("byte_length")
+  chunkCount            Int                                  @map("chunk_count")
+  displayName           String                               @map("display_name")
+  mediaType             String                               @map("media_type")
+  workflowTaskId        String                               @unique @map("workflow_task_id")
+  workflowTaskName      String                               @map("workflow_task_name")
+  workflowTaskKey       String                               @map("workflow_task_key")
+  createdAt             DateTime                             @default(now()) @map("created_at")
+  asset                 ConversationAsset                   @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  chunks                ConversationGeneratedFileChunk[]
+
+  @@index([siloId, conversationId, createdAt])
+  @@index([runId, attempt])
+  @@unique([workflowTaskName, workflowTaskKey])
+  @@map("conversation_generated_files")
+}
+
+/// One immutable encrypted payload chunk belonging to a generated file operation.
+model ConversationGeneratedFileChunk {
+  operationId         String                    @map("operation_id")
+  index               Int
+  payloadRef          String                    @unique @map("payload_ref")
+  decodedByteLength   Int                       @map("decoded_byte_length")
+  ciphertextDigest    String                    @map("ciphertext_digest")
+  operation           ConversationGeneratedFile @relation(fields: [operationId], references: [id], onDelete: Restrict)
+
+  @@id([operationId, index])
+  @@map("conversation_generated_file_chunks")
 }

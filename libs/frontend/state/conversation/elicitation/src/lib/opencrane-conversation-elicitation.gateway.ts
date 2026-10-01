@@ -18,9 +18,23 @@ export class OpenCraneConversationElicitationGateway implements ConversationElic
 	private readonly _api = inject(ControlPlaneApiService);
 
 	/** @inheritdoc */
-	public async read(conversationId: string, requestId: string): Promise<ConversationElicitation>
+	public async listOpen(conversationId: string, signal?: AbortSignal): Promise<readonly ConversationElicitation[]>
 	{
-		const { data, error, response } = await this._api.client.GET("/me/conversations/{conversationId}/elicitations/{requestId}", { params: { path: { conversationId, requestId } } });
+		const { data, error, response } = await this._api.client.GET("/me/conversations/{conversationId}/elicitations", { params: { path: { conversationId } }, signal });
+		if (error !== undefined || !response.ok || data === undefined)
+			throw _Error(response.status, error);
+		if (!Array.isArray(data.elicitations) || data.elicitations.length > 50)
+			throw new TypeError("open elicitation list exceeds its response bound");
+		const elicitations = data.elicitations.map(__ParseConversationElicitation);
+		if (elicitations.some(function _BelongsToAnotherConversation(elicitation) { return elicitation.conversationId !== conversationId; }))
+			throw new TypeError("open elicitation list does not match the selected conversation");
+		return elicitations;
+	}
+
+	/** @inheritdoc */
+	public async read(conversationId: string, requestId: string, signal?: AbortSignal): Promise<ConversationElicitation>
+	{
+		const { data, error, response } = await this._api.client.GET("/me/conversations/{conversationId}/elicitations/{requestId}", { params: { path: { conversationId, requestId } }, signal });
 		if (error !== undefined || !response.ok || data === undefined) throw _Error(response.status, error);
 		return __ParseConversationElicitation(data.elicitation);
 	}

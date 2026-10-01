@@ -46,6 +46,9 @@ can repeat it, with fresh adapters and a three-attempt limit.
 
 ## Public surface
 
+- `_CreateResourceShareCallerResolver` resolves verified session coordinates through the local
+  Principal directory before sharing authority is evaluated.
+
 - `ResourceShareService` — the atomic list and revoke authority.
 - `ResourceShareUnitOfWork` and `ResourceShareRepository` — the transaction and persistence ports.
 - `PrismaResourceShareUnitOfWork` — the application-composed PostgreSQL transaction adapter.

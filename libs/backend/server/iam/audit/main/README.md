@@ -12,7 +12,9 @@ domain's database transaction.
 
 The API mounted at `/api/v1/audit` loads one candidate page, filters every row through the central
 `AuthorizationAuthority`, and returns only the exact audit-log resources the current Principal may
-read.
+read. Its opaque cursor carries both fields in the database order, `(timestamp DESC, id DESC)`, so
+entries with the same timestamp remain reachable across pages. The cursor advances after the last
+candidate examined even when authorization hides every candidate in that page.
 
 ```
  audit writer ──► immutable decision rows
@@ -33,11 +35,11 @@ revoked grant cannot race a separate audit query. This package never appends or 
 
 ## Public surface
 
-- `PrismaAuditCatalogueUnitOfWork` and `PrismaAuditCatalogueRepository` — item-filtered audit reads
-  bound to the central authority and the same Prisma transaction.
+- `PrismaAuditCatalogueUnitOfWork` — item-filtered audit reads bound to the central authority and
+  the same Prisma transaction.
 - `auditRouter` and its route types — the read-only `/api/v1/audit` trail API, including the trusted
   caller and injected authority-factory contracts.
-- `_AuditOpenapiPaths` — the OpenAPI (REST API description) path fragment this domain contributes to the aggregated spec.
+- `_AuditOpenapiPaths` and `_AuditOpenapiSchemas` — the OpenAPI (REST API description) fragments this domain contributes to the aggregated spec.
 
 ## Boundary
 

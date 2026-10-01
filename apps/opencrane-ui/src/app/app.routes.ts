@@ -54,14 +54,22 @@ export const APP_ROUTES: Routes =
 		}
 	},
 	{
-		// Organization settings shell; the feature exposes only backed child routes.
+		// App composition combines independent settings features without a feature-to-feature import.
 		path: "settings",
 		canActivate: [___OperatorAccessGuard],
 		loadChildren: function loadSettingsRoutes()
 		{
 			return import("@opencrane/features/settings").then(function pickSettingsRoutes(m)
 			{
-				return m.SETTINGS_ROUTES;
+				return [{
+					path: "",
+					component: m.SettingsShellComponent,
+					children: [
+						{ path: "", pathMatch: "full" as const, redirectTo: "members" },
+						...m.SETTINGS_MEMBER_ROUTES,
+						{ path: "", loadChildren: function loadGovernanceRoutes() { return import("@opencrane/features/governance").then(function pickGovernanceRoutes(governance) { return governance.GOVERNANCE_ROUTES; }); } }
+					]
+				}];
 			});
 		}
 	},

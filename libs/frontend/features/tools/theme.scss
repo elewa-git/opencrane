@@ -27,51 +27,6 @@
 	}
 }
 
-.wo-text-input {
-	width: 100%;
-	padding: 8px 12px;
-	border-radius: var(--oc-radius-chip);
-	border: 1px solid var(--oc-border-default);
-	outline: none;
-	font-size: 13px;
-	background: var(--oc-surface-paper);
-	transition: border-color var(--oc-motion-fast) var(--oc-ease-standard);
-
-	&:hover {
-		border-color: var(--oc-border-strong);
-	}
-}
-
-.wo-select {
-	padding: 8px 12px;
-	border-radius: var(--oc-radius-chip);
-	border: 1px solid var(--oc-border-default);
-	outline: none;
-	background: var(--oc-surface-paper);
-	font-size: 13px;
-	transition: border-color var(--oc-motion-fast) var(--oc-ease-standard);
-
-	&:hover {
-		border-color: var(--oc-border-strong);
-	}
-}
-
-.wo-dashed-button {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 8px 12px;
-	border-radius: var(--oc-radius-chip);
-	border: 1px dashed var(--oc-border-default);
-	font-size: 13px;
-	color: var(--oc-ink-muted);
-	transition: border-color var(--oc-motion-fast) var(--oc-ease-standard);
-
-	&:hover {
-		border-color: var(--oc-border-strong);
-	}
-}
-
 .wo-callout {
 	padding: 12px;
 	border-radius: var(--oc-radius-chip);
@@ -98,55 +53,12 @@
 	}
 }
 
-.wo-tools__act {
-	font-size: 11px;
-	color: var(--oc-accent-active);
-	white-space: nowrap;
-	transition: opacity var(--oc-motion-fast) var(--oc-ease-standard);
-
-	&:hover {
-		opacity: 0.7;
-	}
-
-	&--muted {
-		color: var(--oc-ink-muted);
-	}
-}
-
-.wo-tools__primary {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: 8px;
-	padding: 9px 16px;
-	border-radius: var(--oc-radius-chip);
-	background: var(--oc-ink-strong);
-	color: var(--oc-on-strong);
-	font-size: 13px;
-	transition: opacity var(--oc-motion-fast) var(--oc-ease-standard);
-
-	&:hover {
-		opacity: 0.9;
-	}
-
-	&--block {
-		width: 100%;
-	}
-
-	&--ghost {
-		background: none;
-		color: var(--oc-ink-strong);
-		border: 1px solid var(--oc-border-default);
-	}
-}
-
 .wo-tools__status {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
 	font-size: 10px;
 	font-family: var(--oc-font-mono);
-	opacity: 0.9;
 
 	&--neutral {
 		color: var(--oc-ink-muted);

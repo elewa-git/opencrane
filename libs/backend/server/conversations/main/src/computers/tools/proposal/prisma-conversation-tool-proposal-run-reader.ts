@@ -1,0 +1,116 @@
+import { AgentRunState, type Prisma } from "@prisma/client";
+
+import { ___ExecutionSubjectSchema, ___ParseRunBudgetPolicy, type RunBudgetPolicy, type RunInputSnapshotMcpTool } from "@opencrane/contracts";
+import { __AreRunInputSnapshotMcpToolsValid } from "@opencrane/backend/agents/execution/inputs";
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
+
+import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "../../turns/conversation-computer-turn.types";
+import { ConversationToolProposalRefusal } from "./conversation-tool-proposal-refusal";
+import { ConversationToolProposalRefusals, type PreparedConversationToolProposal } from "./conversation-tool-proposal.types";
+import type { ConversationToolApprovalDisclosure, ConversationToolProposalRun, ConversationToolProposalRunReader } from "./conversation-tool-proposal-run.types";
+
+/**
+ * Checks the running attempt, its saved input and the per-step proposal identity without writing anything.
+ *
+ * The caller must keep these reads and admission in the same Serializable transaction. Counting
+ * existing calls before the insert lets PostgreSQL reject concurrent attempts to claim another slot.
+ * An identical saved proposal can continue even when that slot is already counted.
+ */
+export class PrismaConversationToolProposalRunRepository implements ConversationToolProposalRunReader
+{
+	/** Read through the transaction that will admit the invocation and its executor work. */
+	public constructor(private readonly transaction: Prisma.TransactionClient) {}
+
+	/** Return the checked run identity or refuse before any permission or invocation write. */
+	public async load(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: PreparedConversationToolProposal): Promise<ConversationToolProposalRun>
+	{
+		const query = {
+			where: {
+				id: turn.compile.runId,
+				attempt: turn.compile.attempt,
+				siloId: turn.siloId,
+				state: AgentRunState.Running,
+				conversationId: turn.binding.conversationId,
+				agentIdentityId: turn.binding.agentIdentityId,
+				agentServiceId: turn.binding.agentServiceId,
+			},
+			select: { executionSubject: true, inputSnapshotDigest: true, agentRevisionId: true },
+		} as const;
+		const run = await this.transaction.agentRun.findFirst(query);
+		const parsed = ___ExecutionSubjectSchema.safeParse(run?.executionSubject);
+		if (run === null || !parsed.success)
+			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
+		const checked = { subject: parsed.data, agentRevisionId: run.agentRevisionId, approvalDisclosure: null };
+		const frozenTool = await this._checkSnapshot(turn, candidate, proposal, checked, run.inputSnapshotDigest);
+		await this._checkSlot(turn, candidate, proposal);
+		const approvalDisclosure = proposal.tool.requiresApproval ? await this._readApprovalDisclosure(turn.siloId, frozenTool) : null;
+		return { ...checked, approvalDisclosure };
+	}
+
+	/** Require the proposal's tool and budget to agree with the input saved for this attempt. */
+	private async _checkSnapshot(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: PreparedConversationToolProposal, run: ConversationToolProposalRun, inputSnapshotDigest: string): Promise<RunInputSnapshotMcpTool>
+	{
+		const query = {
+			where: {
+				runId: turn.compile.runId,
+				attempt: turn.compile.attempt,
+				digest: inputSnapshotDigest,
+				siloId: turn.siloId,
+				agentRevisionId: run.agentRevisionId,
+				agentIdentityId: turn.binding.agentIdentityId,
+				principalId: run.subject.principalId,
+				conversationId: turn.binding.conversationId,
+			},
+			select: { budgetPolicy: true, mcpTools: true, executionSubject: true },
+		} as const;
+		const snapshot = await this.transaction.runInputSnapshot.findFirst(query);
+		let budget: RunBudgetPolicy;
+		try
+		{
+			budget = ___ParseRunBudgetPolicy(snapshot?.budgetPolicy);
+		}
+		catch
+		{
+			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
+		}
+		const tools = snapshot?.mcpTools;
+		if (snapshot === null
+			|| budget.wallClockDeadlineEpochMs !== candidate.compiledInput.budget.wallClockDeadlineEpochMs
+			|| budget.maxToolInvocations !== candidate.compiledInput.budget.maxToolInvocations
+			|| ___DigestCanonicalJson(snapshot.executionSubject as JsonValue) !== ___DigestCanonicalJson(run.subject as unknown as JsonValue)
+			|| !Array.isArray(tools) || !__AreRunInputSnapshotMcpToolsValid(tools as unknown as RunInputSnapshotMcpTool[]))
+			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
+		const frozenTool = (tools as unknown as RunInputSnapshotMcpTool[]).find(tool => tool.toolRevisionId === proposal.tool.toolRevisionId);
+		if (frozenTool === undefined || frozenTool.inputSchemaDigest !== proposal.tool.parametersSchemaDigest || frozenTool.name !== proposal.tool.name || (frozenTool.description ?? "") !== proposal.tool.description)
+			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Invalid);
+		return frozenTool;
+	}
+
+	/** Read the operator-owned server name through the exact silo-bound tool revision. */
+	private async _readApprovalDisclosure(siloId: string, frozenTool: RunInputSnapshotMcpTool): Promise<ConversationToolApprovalDisclosure>
+	{
+		const row = await this.transaction.mcpToolRevision.findFirst({
+			where: { id: frozenTool.toolRevisionId, siloId },
+			select: { name: true, description: true, serverRevision: { select: { server: { select: { name: true } } } } },
+		});
+		if (row === null || row.name !== frozenTool.name || row.description !== frozenTool.description)
+			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Invalid);
+		return { toolName: frozenTool.name, toolDescription: frozenTool.description, serverName: row.serverRevision.server.name };
+	}
+
+	/** Reject a changed retry and prevent a new proposal from exceeding the frozen invocation allowance. */
+	private async _checkSlot(turn: FrozenConversationComputerTurn, candidate: ConversationComputerTurnCandidate, proposal: PreparedConversationToolProposal): Promise<void>
+	{
+		const query = {
+			where: { runId_attempt_candidateId: { runId: turn.compile.runId, attempt: turn.compile.attempt, candidateId: proposal.proposalId } },
+			select: { id: true, requestFingerprint: true },
+		} as const;
+		const existing = await this.transaction.toolInvocation.findUnique(query);
+		if (existing !== null && existing.requestFingerprint !== proposal.requestFingerprint)
+			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Conflict);
+		const countQuery = { where: { runId: turn.compile.runId, attempt: turn.compile.attempt } };
+		const count = await this.transaction.toolInvocation.count(countQuery);
+		if (existing === null && count >= candidate.compiledInput.budget.maxToolInvocations)
+			throw new ConversationToolProposalRefusal(ConversationToolProposalRefusals.Denied);
+	}
+}

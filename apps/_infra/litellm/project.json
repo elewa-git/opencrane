@@ -3,10 +3,39 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
   "tags": ["type:app", "layer:entrypoint", "scope:litellm"],
+  "implicitDependencies": ["backend-server-model-routing"],
   "targets": {
     "helm-lint": {
       "executor": "nx:run-commands",
       "options": { "command": "helm lint apps/_infra/litellm/helm" }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "dependsOn": [],
+      "inputs": ["default", "{workspaceRoot}/apps/_infra/deploy-k8s/**/*", "{workspaceRoot}/apps/**/helm/**/*"],
+      "options": { "command": "node --test apps/_infra/litellm/tests/*.test.mjs && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s apps/_infra/litellm/tests -p 'test_*.py'" }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "dependsOn": [],
+      "options": { "command": "node --check apps/_infra/litellm/tests/image-smoke.mjs && node --check apps/_infra/litellm/tests/image-smoke.test.mjs && node --check apps/_infra/litellm/tests/workload-identity.mjs && node --check apps/_infra/litellm/tests/workload-identity.test.mjs && node --check apps/_infra/litellm/tests/preforward-chart.test.mjs && python3 -c \"import ast, pathlib; [ast.parse(path.read_text()) for path in pathlib.Path('apps/_infra/litellm').rglob('*.py')]\"" }
+    },
+    "container": {
+      "executor": "nx:run-commands",
+      "metadata": { "release": { "image": "opencrane-litellm", "dockerfile": "apps/_infra/litellm/deploy/Dockerfile" } },
+      "options": { "command": "docker build --platform linux/amd64 -f apps/_infra/litellm/deploy/Dockerfile ." }
+    },
+    "image-smoke": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "inputs": [
+        "default",
+        "{workspaceRoot}/libs/backend/server/gateways/model-routing/main/**/*",
+        "{workspaceRoot}/apps/_infra/deploy-k8s/values.yaml"
+      ],
+      "options": { "command": "node apps/_infra/litellm/tests/image-smoke.mjs" }
     }
   }
 }

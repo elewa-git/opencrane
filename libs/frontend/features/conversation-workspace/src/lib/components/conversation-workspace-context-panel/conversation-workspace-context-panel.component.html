@@ -35,48 +35,43 @@
       />
     </div>
   }
-  @if (computerReviewVisible()) {
-    <div
-      class="context-panel__tabs"
-      aria-label="Conversation context sections"
-    >
-      <button
-        type="button"
-        [attr.aria-pressed]="activeSection() === sections.Files"
-        (click)="selectedSection.set(sections.Files)"
-      >
-        Files</button
-      ><button
-        type="button"
-        [attr.aria-pressed]="activeSection() === sections.ComputerReview"
-        (click)="selectedSection.set(sections.ComputerReview)"
-      >
-        Computer review
-      </button>
-    </div>
-  }
-  @if (activeSection() === sections.Files) {
+  <ng-template #filesPanel>
     <wo-conversation-files-panel
       [items]="assets()"
       (actionRequested)="assetActionRequested.emit($event)"
     />
-  }
-  @if (activeSection() === sections.ComputerReview) {
-    <wo-conversation-computer-review
-      [busy]="computerReviewBusy()"
-      [error]="computerReviewError()"
-      [file]="computerFile()"
-      [diff]="computerDiff()"
-      [command]="computerCommand()"
-      [browserTargets]="computerBrowserTargets()"
-      [screenshotUrl]="computerScreenshotUrl()"
-      [preview]="computerPreview()"
-      (inspectRequested)="computerInspectRequested.emit($event)"
-      (commandRequested)="computerCommandRequested.emit($event)"
-      (browserRefreshRequested)="computerBrowserRefreshRequested.emit()"
-      (pageRequested)="computerPageRequested.emit($event)"
-      (screenshotRequested)="computerScreenshotRequested.emit($event)"
-      (previewRequested)="computerPreviewRequested.emit($event)"
-    />
+  </ng-template>
+  @if (computerReviewVisible()) {
+    <p-tabs [value]="activeSection()" (valueChange)="selectSection($event)">
+      <p-tablist aria-label="Conversation context sections">
+        <p-tab [value]="sections.Files">Files</p-tab>
+        <p-tab [value]="sections.ComputerReview">Computer review</p-tab>
+      </p-tablist>
+      <p-tabpanels>
+        <p-tabpanel [value]="sections.Files">
+          <ng-container [ngTemplateOutlet]="filesPanel" />
+        </p-tabpanel>
+        <p-tabpanel [value]="sections.ComputerReview">
+          <wo-conversation-computer-review
+            [busy]="computerReviewBusy()"
+            [error]="computerReviewError()"
+            [file]="computerFile()"
+            [diff]="computerDiff()"
+            [command]="computerCommand()"
+            [browserTargets]="computerBrowserTargets()"
+            [screenshotUrl]="computerScreenshotUrl()"
+            [preview]="computerPreview()"
+            (inspectRequested)="computerInspectRequested.emit($event)"
+            (commandRequested)="computerCommandRequested.emit($event)"
+            (browserRefreshRequested)="computerBrowserRefreshRequested.emit()"
+            (pageRequested)="computerPageRequested.emit($event)"
+            (screenshotRequested)="computerScreenshotRequested.emit($event)"
+            (previewRequested)="computerPreviewRequested.emit($event)"
+          />
+        </p-tabpanel>
+      </p-tabpanels>
+    </p-tabs>
+  } @else {
+    <ng-container [ngTemplateOutlet]="filesPanel" />
   }
 </aside>

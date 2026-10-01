@@ -29,6 +29,8 @@ the generic elicitation result.
 
 - `PrismaElicitationUnitOfWork` — starts serializable transactions for browser responses, request
   reads, and personal-memory permission checks.
+- `_CreateSelfElicitationRouter` — lists up to fifty current requests for one readable conversation,
+  reads a named request, and submits one typed response through session-derived ownership.
 - `PrismaRuntimeElicitationUnitOfWork` — opens runtime proposals and expires due requests on the
   dispatch transaction that already holds the run lock; it never nests another transaction.
 - `PersonalMemoryPermissionAuthority` — opens and verifies the exact execution-user receipt without reading or consuming remembered content.
@@ -41,14 +43,45 @@ The package owns request, response-attempt, result-delivery, and one-use memory-
 Tool approval keeps its own audit row, and runtime, browser, and A2UI payloads cannot select the
 respondent, dataset, or protected action.
 
+Tool-approval projections retain IAM's saved connection-owner and credential-use disclosure.
+The public schema requires this disclosure for tool approvals, while other input purposes omit it.
+It exposes the owner's display name, never credentials or connection custody coordinates.
+
+For a personal approval, the assigned participant answers the server-issued request. IAM changes
+the invocation to ready or failed inside that response transaction, and an injected wake port emits
+the existing saved-turn event only after the final pending input is gone. The wake port belongs to
+conversation composition, so this package does not create a scheduler or dispatch a tool.
+
 Runtime protocol code passes its existing transaction into `PrismaRuntimeElicitationUnitOfWork`.
 That unit constructs one repository from the same transaction and reuses it for the callback. This
 keeps the run lock, request change, candidate acceptance, and expiry decision in one commit without
 letting a generic function carry a Prisma client across the boundary.
 
-The internal personal-memory payload module owns construction, reconstruction, and receipt matching
-for the protected memory-permission envelope. The Prisma repository supplies the live invocation,
-snapshot, and receipt; the module never opens a transaction or reads remembered facts.
+The personal-memory payload module builds the permission request and compares it with a saved
+receipt. The personal-memory purpose supplies the live invocation, snapshot and receipt; neither
+module opens a transaction or reads remembered facts.
+
+The request repository owns attribution, response retries, request state and run resumption. Each
+purpose has a transaction-bound implementation under `src/purposes/`: `runtime-input/` writes ordinary
+answers, `tool-approval/` delegates decisions to IAM, `personal-memory/` checks and writes permission
+receipts, and `a2ui-action/` binds a response to the displayed action. They never open a transaction
+or call back into private request-repository methods.
+
+Purpose and lifecycle are separate decisions. The request repository applies these existing rules
+before and after calling the selected purpose implementation:
+
+| Current state and event | Guard and result | Atomic owner |
+| --- | --- | --- |
+| Running run receives a new question | Same run attempt and current participant access; pause as WaitingForInput and save the request. | Request repository |
+| Requested request receives a valid response | Assigned participant, current access, required step-up and central permission; record the response and mark Answered or Declined. | Request repository |
+| Resolved request receives the same response key and digest | Return the saved resolution without applying its purpose twice. A changed digest conflicts. | Request repository |
+| Resolved request receives a new response key | Return a conflict without changing the request. | Request repository |
+| Requested request reaches its deadline | Apply purpose expiry, then mark Expired. | Request repository and selected purpose |
+| WaitingForInput run finishes a response or expiry | Resume only when both requested-input and pending-approval counts are zero. | Request repository |
+| A conditional request/run write loses, or a purpose refuses after a response write | Throw so the whole transaction rolls back. | Enclosing Serializable unit of work |
+
+These changes do not introduce another lifecycle planner. Tool-invocation transitions continue to
+belong to IAM; purpose implementations cannot claim or dispatch a provider request.
 
 ## Dependency direction
 
@@ -58,12 +91,20 @@ conversation, authorization, authentication, agent-model, utility, and shared co
 ## Data & persistence
 
 `elicitation.prisma` owns requests, response attempts, runtime result deliveries, and one-use
-personal-memory permission receipts. The clean baseline and adjacent upgrade SQL enforce exact
+personal-memory permission receipts. The clean baseline enforces exact
 coordinates, terminal finality, and one accepted response.
 
 Ordinary input answers are delivered to the exact runtime attempt once. Protected tool, memory, and
 A2UI payloads remain server-side. The authorization package owns every ToolInvocation transition
 inside the elicitation transaction; this package owns only the response and exact memory receipt.
+Tool-approval bodies carry the frozen display-safe argument projection, tool name, and server label.
+Pending tool approvals also require the assigned participant's current `ApprovalRequest/Read` grant
+for detail, reconnect and Activity reads. Conversation access alone cannot disclose a pending action.
+Resolved approval history keeps the conversation-read policy, because resolution revokes the
+temporary approval grants. An expired request that has not yet been resolved still needs its grant.
+When IAM cannot disclose every proposed value, the body carries `proposedArguments: null` and the
+request can only be denied. Reviewed arguments, schemas, purpose payloads, and provider credentials
+remain outside the browser projection.
 Receipt verification rechecks the current single dispatch claim, fence, revision, lease, execution
 user, query digest, frozen input digest, and persona. Until a transient memory-delivery path can hand
 facts directly to the active model loop without persistence, an accepted receipt stops with the

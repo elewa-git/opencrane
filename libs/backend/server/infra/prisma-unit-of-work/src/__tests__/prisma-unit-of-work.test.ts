@@ -9,6 +9,12 @@ function _Conflict(code: string): Error
 	return new Prisma.PrismaClientKnownRequestError("conflict", { code, clientVersion: "test" });
 }
 
+/** Reproduces Prisma's raw-query error with a PostgreSQL SQLSTATE in structured metadata. */
+function _rawConflict(code: unknown = "40001"): Error
+{
+	return new Prisma.PrismaClientKnownRequestError("raw query failed", { code: "P2010", clientVersion: "test", meta: { code } });
+}
+
 /** A fake root client whose $transaction hands the work a marker transaction. */
 function _Prisma()
 {
@@ -56,6 +62,28 @@ describe("___RunInPrismaUnitOfWork", function _Suite()
 		expect($transaction).toHaveBeenCalledTimes(2);
 	});
 
+	it("retries raw-query serialization rollbacks within the existing attempt budget", async function _rawRetry()
+	{
+		const { prisma, $transaction } = _Prisma();
+		const failure = _rawConflict();
+		$transaction.mockRejectedValueOnce(failure).mockResolvedValueOnce("done");
+		await expect(___RunInPrismaUnitOfWork(prisma, async function _work() { return "done"; }, { isolationLevel: "Serializable", operation: "raw retry", attemptLimit: 2 })).resolves.toBe("done");
+		expect($transaction).toHaveBeenCalledTimes(2);
+		$transaction.mockClear().mockRejectedValue(failure);
+		await expect(___RunInPrismaUnitOfWork(prisma, async function _work() { return "done"; }, { isolationLevel: "Serializable", operation: "raw exhaustion", attemptLimit: 2 })).rejects.toBe(failure);
+		expect($transaction).toHaveBeenCalledTimes(2);
+	});
+
+	it.each([undefined, new Set(["P2002"]), new Set<string>()])("does not invent a retry budget or expand a narrowed policy: %s", async function _rawPolicy(codes)
+	{
+		const { prisma, $transaction } = _Prisma();
+		const failure = _rawConflict();
+		$transaction.mockRejectedValue(failure);
+		const policy = codes === undefined ? {} : { attemptLimit: 3, retryableCodes: codes };
+		await expect(___RunInPrismaUnitOfWork(prisma, async function _work() { return "done"; }, { isolationLevel: "Serializable", operation: "raw policy", ...policy })).rejects.toBe(failure);
+		expect($transaction).toHaveBeenCalledTimes(1);
+	});
+
 	it("never retries an unknown failure, and honors a domain retry trigger when given one", async function _DomainTrigger()
 	{
 		const plain = _Prisma();
@@ -91,5 +119,16 @@ describe("___RunInPrismaUnitOfWork", function _Suite()
 		expect(___IsRolledBackConflict(_Conflict("P2025"))).toBe(false);
 		expect(___IsRolledBackConflict(new Error("boom"))).toBe(false);
 		expect(___IsRolledBackConflict(_Conflict("P0001"), new Set(["P0001"]))).toBe(true);
+	});
+
+	it("recognises only genuine raw-query serialization evidence under the P2034 policy", function _rawClassification()
+	{
+		expect(___IsRolledBackConflict(_rawConflict())).toBe(true);
+		expect(___IsRolledBackConflict(_rawConflict(), new Set(["P2034"]))).toBe(true);
+		expect(___IsRolledBackConflict(_rawConflict(), new Set(["P2002"]))).toBe(false);
+		expect(___IsRolledBackConflict(_rawConflict(), new Set(["P2010"]))).toBe(false);
+		expect(___IsRolledBackConflict(_rawConflict("40P01"), new Set(["P2010", "P2034"]))).toBe(false);
+		for (const error of [_rawConflict("40P01"), _rawConflict("23505"), _rawConflict("08006"), _rawConflict(40001), _rawConflict(null), _Conflict("P2010"), new Error("40001 serialization failure"), { code: "P2010", meta: { code: "40001" } }, new Error("wrapper", { cause: _rawConflict() })])
+			expect(___IsRolledBackConflict(error)).toBe(false);
 	});
 });

@@ -58,7 +58,14 @@ export function __CreateMcpRuntimeCompanionRouter(dependencies: McpRuntimeCompan
 				response.status(410).end();
 				return;
 			}
-			response.status(200).json(claim);
+			if (claim.runInvocation !== null && !await dependencies.publishCurrentRunInvocation(claim.runInvocation))
+			{
+				// The SQL claim is already committed, but current run authority no longer permits release.
+				// 410 keeps the companion from polling a command that cannot safely become executable.
+				response.status(410).end();
+				return;
+			}
+			response.status(200).json(claim.command);
 		}
 		catch (err)
 		{

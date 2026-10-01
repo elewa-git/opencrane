@@ -1,0 +1,17 @@
+<wo-section-heading title="Audit" subtitle="Recorded events visible to your current account." [level]="headingLevels.Page">
+	<p-button heading-actions label="Refresh audit" icon="pi pi-refresh" [text]="true" [disabled]="pending(feedback().state) || loadingMore()" (onClick)="requestRefresh()" />
+</wo-section-heading>
+<wo-resource-feedback [loading]="pending(feedback().state)" [loadingLabel]="feedback().state === states.Refreshing ? 'Refreshing audit entries…' : 'Loading audit entries…'" [error]="readError(feedback())" [retryAvailable]="feedback().state === states.Unavailable || feedback().state === states.RetainedError" (retryRequested)="requestRefresh()" />
+@if (showData(feedback().state)) {
+	<section class="audit-results" [attr.aria-busy]="pending(feedback().state) || loadingMore()">
+		<p-table [value]="tableRows()" dataKey="id" [pt]="{ tableContainer: { tabindex: '0', role: 'region', 'aria-label': 'Visible audit entries' } }">
+			<ng-template #header><tr><th scope="col">Time</th><th scope="col">Action</th><th scope="col">Resource</th><th scope="col">Message</th></tr></ng-template>
+			<ng-template #body let-row><tr><td>{{ row.timestamp }}</td><td>{{ row.action }}</td><td class="wo-mono">{{ row.resource }}</td><td>{{ row.message }}</td></tr></ng-template>
+			<ng-template #emptymessage><tr><td colspan="4">No audit entries are visible in this response. Entries may be hidden by permissions.</td></tr></ng-template>
+		</p-table>
+	</section>
+	<wo-resource-feedback [loading]="loadingMore()" loadingLabel="Loading more audit entries…" [error]="loadMoreError()" />
+	@if (hasMore()) {
+		<p-button class="audit-results__more" label="Load more audit entries" icon="pi pi-chevron-down" [text]="true" [disabled]="pending(feedback().state) || loadingMore()" (onClick)="requestMore()" />
+	}
+}

@@ -53,9 +53,10 @@ runtime assignment does not widen network policy.
 
 ## Egress
 
-Conversation-computer Pods should reach only cluster DNS, same-silo OpenCrane, the release-local model
-proxy and explicitly required managed services. Use Cilium FQDN rules when external HTTPS must
-be narrowed beyond the portable TCP-port floor.
+Conversation-computer Pods should reach only cluster DNS and same-silo OpenCrane for their
+lease-fenced review credential and checkpoint interactions. OpenCrane owns model traffic; direct
+Pod access to the release-local model proxy is denied. Use Cilium FQDN rules when another workload's
+external HTTPS must be narrowed beyond the portable TCP-port floor.
 
 ::: tip
 Write negative tests first: foreign-silo, wrong-ServiceAccount and unlisted-host traffic should

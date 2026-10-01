@@ -23,7 +23,7 @@ function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
  * passes it in as each of the lifecycle ports. The unit of work creates each repository inside its own
  * transaction callback, so the router itself only ever sees ports.
  *
- * Called by: `apps/opencrane/src/app/routes.ts`, which mounts the result at /api/v1/me/persona.
+ * Called by: `apps/opencrane/src/bootstrap/http/routes.ts`, which mounts the result at /api/v1/me/persona.
  *
  * @param prisma - Prisma client for the product database.
  * @param logger - Logger supplied by the app's composition root.

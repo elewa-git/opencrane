@@ -40,7 +40,7 @@ function _SourceRevision()
 		promptPolicyVersion: "prompt-v1",
 		personaRevisionId: "persona-1",
 		modelDefinitionId: "old-model",
-		budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 },
+		budget: { maxTurns: 5, maxTokens: 1000, maxCostUsdMicros: null, maxToolInvocations: 0, maxDurationMs: 30000, maxLoopIterations: 1 },
 		skillAssignments: [{ skillId: "skill-1", skillRevisionId: "skill-revision-1" }],
 		mcpToolAssignments: [{ toolRevisionId: "mcp-tool-revision-1" }],
 		boundaryAttachments: [{
@@ -64,6 +64,7 @@ function _Materializer(prisma: never, logger?: never): _PersonalConfigurationMat
 			admitInitialPublication: vi.fn().mockResolvedValue(undefined),
 			admitRevisionSelection: vi.fn().mockResolvedValue(undefined),
 			admitRevisionPublication: vi.fn().mockResolvedValue(undefined),
+			admitUnusedProfileChange: vi.fn().mockResolvedValue(undefined),
 		};
 	}), logger);
 }
@@ -148,7 +149,7 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 			promptPolicyVersion: "prompt-v1",
 			personaRevisionId: "persona-1",
 			modelDefinitionId: "tenant-model",
-			budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 },
+			budget: { maxTurns: 5, maxTokens: 1000, maxCostUsdMicros: null, maxToolInvocations: 0, maxDurationMs: 30000, maxLoopIterations: 1 },
 			skills: [{ skillId: "skill-1", revisionId: "skill-revision-1" }],
 			mcpToolRevisionIds: ["mcp-tool-revision-1"],
 			boundaryAttachments: [{
@@ -183,7 +184,7 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 				changeMessage: "Owner accepted model alias: careful-model",
 				promptPolicyVersion: "prompt-v1",
 				personaRevisionId: "persona-1",
-				budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 },
+				budget: { maxTurns: 5, maxTokens: 1000, maxCostUsdMicros: null, maxToolInvocations: 0, maxDurationMs: 30000, maxLoopIterations: 1 },
 				skillAssignments: {
 					create: [{
 						skillId: "skill-1",
@@ -191,7 +192,7 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 					}],
 				},
 				mcpToolAssignments: {
-					create: [{ toolRevisionId: "mcp-tool-revision-1", agentServiceId: "service-1", siloId: "silo-1" }],
+					create: [{ toolRevisionId: "mcp-tool-revision-1", siloId: "silo-1" }],
 				},
 				boundaryAttachments: {
 					create: [{

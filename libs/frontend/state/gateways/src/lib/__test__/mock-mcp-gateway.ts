@@ -1,6 +1,6 @@
 import { Injectable } from "@angular/core";
 
-import { McpApprovalStatus, McpConnectionStatus, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
+import { McpApprovalStatus, McpConnectionStatus, McpCredentialRequirement, McpInstallStates, McpInstalledServer, McpServer, type McpConnectionProjection } from "@opencrane/core";
 import { MCP_CATALOGUE, MCP_INSTALLED } from "@opencrane/core/testing";
 import { McpGateway } from "@opencrane/state/mcp/adapter";
 
@@ -24,13 +24,21 @@ export class MockMcpGateway implements McpGateway
 	public install(serverId: string): Promise<McpInstalledServer>
 	{
 		const server = this._catalogue.get(serverId);
-		if (!server) return Promise.reject(new Error(`unknown MCP server: ${serverId}`));
-		const record: McpInstalledServer = { serverId, connectionStatus: server.type === McpServerType.MultiUser ? McpConnectionStatus.SharedKey : McpConnectionStatus.NeedsCredential, lastUsed: null };
+		if (!server)
+			return Promise.reject(new Error(`unknown MCP server: ${serverId}`));
+		const connectionStatus = server.credentialRequirement === McpCredentialRequirement.Credentialless
+			? McpConnectionStatus.Credentialless
+			: McpConnectionStatus.NeedsCredential;
+		const record: McpInstalledServer = { serverId, lifecycleState: McpInstallStates.Installed, connectionStatus, connectionGeneration: null, credentialUpdatedAt: null, failureCode: null, lastUsed: null };
 		this._installed.set(serverId, record);
 		return Promise.resolve({ ...record });
 	}
 
 	public uninstall(serverId: string): Promise<void> { this._installed.delete(serverId); return Promise.resolve(); }
+	/** Tests supply explicit connection outcomes instead of making fixture credentials look active. */
+	public activatePersonalConnection(): Promise<McpConnectionProjection> { return Promise.reject(new Error("This test gateway has no connection command fixture.")); }
+	/** Tests supply an explicit revocation outcome when exercising connection cleanup. */
+	public revokePersonalConnection(): Promise<McpConnectionProjection> { return Promise.reject(new Error("This test gateway has no connection command fixture.")); }
 	public listCatalogue(): Promise<McpServer[]> { return Promise.resolve(Array.from(this._catalogue.values(), function c(s: McpServer): McpServer { return { ...s }; })); }
 	public approve(id: string): Promise<McpServer> { return Promise.resolve(this._setStatus(id, McpApprovalStatus.Approved)); }
 	public publish(id: string): Promise<McpServer> { return Promise.resolve(this._setStatus(id, McpApprovalStatus.Published)); }
@@ -40,7 +48,8 @@ export class MockMcpGateway implements McpGateway
 	private _setStatus(serverId: string, status: McpApprovalStatus): McpServer
 	{
 		const s = this._catalogue.get(serverId);
-		if (!s) throw new Error(`unknown MCP server: ${serverId}`);
+		if (!s)
+			throw new Error(`unknown MCP server: ${serverId}`);
 		const next: McpServer = { ...s, approvalStatus: status };
 		this._catalogue.set(serverId, next);
 		return { ...next };

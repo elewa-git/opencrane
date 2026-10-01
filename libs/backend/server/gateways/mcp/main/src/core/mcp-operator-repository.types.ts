@@ -1,5 +1,6 @@
 import type { AuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import type { IWorkflowTransaction } from "@opencrane/backend/server/infra/workflows/contract";
+import type { McpCredentialRequirement } from "@opencrane/contracts";
 import type { OciImageValidationRepository } from "../oci-image-validation/oci-image-validation-repository.types";
 import type { McpTaskRepository } from "../mcp-tasks/mcp-task-repository.types";
 
@@ -20,7 +21,7 @@ export interface McpOperatorToolRevisionRecord
 	readonly inputSchemaDigest: string;
 }
 
-/** Carries the newest Ready server revision and its stable tool ordering. */
+/** Carries the newest caller-visible Ready server revision and its stable tool ordering. */
 export interface McpOperatorReadyRevisionRecord
 {
 	/** Identifies the immutable server revision selected for catalogue authoring. */
@@ -49,13 +50,19 @@ export interface McpOperatorServerRecord
 	readonly publisher: string | null;
 	/** Holds the optional glyph that a client may show for this server. */
 	readonly glyph: string | null;
-	/** Carries the persisted server type that selects the install connection status. */
+	/** Carries the persisted server type presented to catalogue clients. */
 	readonly serverType: string;
+	/** Carries the explicit credential requirement that selects initial install readiness. */
+	readonly credentialRequirement: string;
 	/** Carries the persisted approval state that controls catalog visibility. */
 	readonly approvalStatus: string;
 	/** Carries the persisted server state that controls whether assignments may select its tools. */
 	readonly status: string;
-	/** Holds the newest Ready OCI server revision, or null when discovery has not produced one. */
+	/** True for the supported OCI and Streamable HTTP installation paths. */
+	readonly supportsStandardInstall: boolean;
+	/** True when installation must wait for a Ready OCI revision. */
+	readonly requiresReadyRevisionForInstall: boolean;
+	/** Holds the newest shared OCI or caller-owned remote Ready revision, or null before discovery. */
 	readonly latestReadyRevision: McpOperatorReadyRevisionRecord | null;
 	/** Holds credential data that the core validates before returning it to a client. */
 	readonly credentialSchema: unknown;
@@ -90,6 +97,8 @@ export interface McpRemoteServerRegistrationRecord
 	readonly description: string;
 	/** Public HTTPS endpoint checked by the worker. */
 	readonly endpoint: string;
+	/** Credential custody required before an installation can execute. */
+	readonly credentialRequirement: McpCredentialRequirement;
 	/** Digest of the client key used to find a retried registration. */
 	readonly registrationKeyDigest: string;
 	/** Digest of every registration field that must remain unchanged on retry. */
@@ -150,11 +159,33 @@ export interface McpOperatorInstallRecord
 {
   /** Identifies the catalog server that this principal installed. */
   readonly mcpServerId: string;
+	/** Carries the durable install/removal state independently of connection readiness. */
+	readonly lifecycleState: string;
   /** Carries the persisted connection state mapped into the installed-server response. */
   readonly connectionStatus: string;
   /** Records when the installed server was last used, when that usage has been recorded. */
   readonly lastUsedAt: Date | null;
+	/** Latest connection coordinates used only for the safe install projection. */
+	readonly currentConnection?: {
+		readonly generation: number;
+		readonly credentialCustodiedAt: Date | null;
+		readonly failureCode: string | null;
+	} | null;
 }
+
+/** Reports whether an install is available or still completing its durable removal. */
+export enum McpOperatorInstallUpsertOutcomes
+{
+	/** A new, existing, or reactivated install is available to the caller. */
+	Installed = "installed",
+	/** The retained install is still waiting for revocation cleanup. */
+	RemovalInProgress = "removal-in-progress",
+}
+
+/** Closed result of creating, recovering, or reactivating one install. */
+export type McpOperatorInstallUpsertResult =
+	| { readonly outcome: McpOperatorInstallUpsertOutcomes.Installed; readonly install: McpOperatorInstallRecord }
+	| { readonly outcome: McpOperatorInstallUpsertOutcomes.RemovalInProgress };
 
 /**
  * Defines the transaction-scoped MCP persistence operations that the operator logic requires.
@@ -171,9 +202,10 @@ export interface IMcpOperatorRepository
 	 *
 	 * Called by: `listEntitledCatalog` before it evaluates each server's grants.
 	 * @param siloId - Identifies the silo whose published catalog the caller may consider.
+	 * @param principalId - Selects only this caller's active remote connection revision; OCI revisions remain shared.
 	 * @returns Published catalog rows in descending creation order; no unpublished row is included.
 	 */
-	listPublishedServers(siloId: string): Promise<readonly McpOperatorServerRecord[]>;
+	listPublishedServers(siloId: string, principalId: string): Promise<readonly McpOperatorServerRecord[]>;
 	/**
 	 * Lists newest-first catalog servers in the requested silo, regardless of approval state.
 	 *
@@ -200,26 +232,16 @@ export interface IMcpOperatorRepository
 	 */
 	listInstalls(principalId: string): Promise<readonly McpOperatorInstallRecord[]>;
 	/**
-	 * Creates an installation when absent, or returns the existing installation without changing it.
+	 * Creates an installation, returns an existing Installed row, or reactivates a Removed row.
 	 *
 	 * Called by: `installServer` after authorization succeeds, so repeated installation requests keep
 	 * one row for the server and principal pair.
 	 * @param serverId - Identifies the server to install.
 	 * @param principalId - Identifies the principal receiving the installation.
 	 * @param connectionStatus - Sets the connection state when this method creates the row.
-	 * @returns The new or existing installation row.
+	 * @returns The available installation, or a typed conflict while removal is still running.
 	 */
-	upsertInstall(serverId: string, principalId: string, connectionStatus: string): Promise<McpOperatorInstallRecord>;
-	/**
-	 * Deletes a principal's installation of one server.
-	 *
-	 * Called by: `uninstallServer`, which appends an audit entry only after this method reports a
-	 * deletion.
-	 * @param serverId - Identifies the server whose installation should be removed.
-	 * @param principalId - Identifies the principal whose installation should be removed.
-	 * @returns `true` when an installation existed and was removed; otherwise `false`.
-	 */
-	deleteInstall(serverId: string, principalId: string): Promise<boolean>;
+	upsertInstall(serverId: string, principalId: string, connectionStatus: string): Promise<McpOperatorInstallUpsertResult>;
 	/**
 	 * Changes a server's approval state when it belongs to the requested silo and protocol-check state.
 	 *

@@ -4,6 +4,7 @@ import type { FleetOrganizationMembershipTransport } from "./fleet-organization-
 import type { AcceptOrganizationInvitationCommand, AcceptOrganizationInvitationResult, CreateOrganizationInvitationsCommand, CreateOrganizationInvitationsResult, OrganizationInviteValidationResult, ResendOrganizationInvitationCommand, ResendOrganizationInvitationResult, ValidateOrganizationInvitationsCommand } from "./invitations.types";
 import { OrganizationMembershipError, OrganizationMembershipErrorKinds } from "./organization-members.errors";
 import { _ParseAcceptOrganizationInvitationResult, _ParseCreateOrganizationInvitationsResult, _ParseOrganizationInviteValidation, _ParseOrganizationMemberDirectory, _ParseResendOrganizationInvitationResult } from "./organization-members.validator";
+import type { RemoveOrganizationMemberCommand, RemoveOrganizationMemberResult } from "./removal.types";
 
 /** Operations whose Fleet error codes have different safe meanings. */
 enum FleetOrganizationMembershipOperations
@@ -50,7 +51,7 @@ function _errorKind(operation: FleetOrganizationMembershipOperations, status: nu
  * rotation, response limits, redirects, and timeouts remain behind its injected transport port.
  * Any transport or response-shape failure refuses closed and no local repository is available.
  *
- * Called by: apps/opencrane/src/app/organization-members-composition.ts in Fleet mode.
+ * Called by: apps/opencrane/src/bootstrap/http/organization-members-composition.ts in Fleet mode.
  * @implements OrganizationMembershipAuthority
  */
 export class FleetOrganizationMembershipAuthority implements OrganizationMembershipAuthority
@@ -71,6 +72,14 @@ export class FleetOrganizationMembershipAuthority implements OrganizationMembers
 	async directory(caller: OrganizationMembershipCaller): Promise<OrganizationMemberDirectory>
 	{
 		return _ParseOrganizationMemberDirectory(await this._request(FleetOrganizationMembershipOperations.Directory, "/v1/organization/members", "GET", caller));
+	}
+
+	/** Refuses removal until Fleet implements that authority; this path performs no remote or local write. */
+	async remove(command: RemoveOrganizationMemberCommand): Promise<RemoveOrganizationMemberResult>
+	{
+		if (command.caller.siloId !== this.credentialSiloId)
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Forbidden, "Fleet membership workload identity does not belong to this silo");
+		throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Unavailable, "member removal is unavailable for this organization authority");
 	}
 
 	/** @inheritdoc */

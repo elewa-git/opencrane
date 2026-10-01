@@ -67,7 +67,7 @@ const _APPROVAL_DENIAL_STATUS_BY_REASON: Readonly<Record<PersonaApprovalDenialRe
  * browser cannot reach another user's onboarding state, and cannot skip a step.
  *
  * Called by: {@link _CreatePersonaOnboardingRouter}, which supplies the Prisma-backed dependencies, and
- * directly by `apps/opencrane/src/app/__tests__/persona-user-onboarding.integration.test.ts` with fakes.
+ * directly by `apps/opencrane/src/bootstrap/http/__tests__/persona-user-onboarding.integration.test.ts` with fakes.
  *
  * @param dependencies - Caller resolution, the five persistence ports, a clock, a logger, and the
  * onboarding workflow notification port.

@@ -17,7 +17,7 @@ remaining grouped with the server code that composes them.
 | [`history-store`](./history-store/README.md) | KurrentDB-backed append-only stream history. |
 | [`http`](./http/README.md) | Express transport plumbing. |
 | [`memory-gateway-client`](./memory-gateway-client/README.md) | Authenticated memory reads with fail-closed writes. |
-| [`mcp-era-probe`](./mcp-era-probe/README.md) | HTTPS-only, DNS-rebinding-resistant MCP 2026-07-28 discovery probe. |
+| [`mcp-remote-client`](./mcp-remote-client/README.md) | Bounded HTTPS transport for MCP discovery, tool listing and admitted tool calls. |
 | [`oci-registry`](./oci-registry/README.md) | Imports checked OCI images into one configured registry repository by digest. |
 | [`organization-membership-gateway`](./organization-membership-gateway/README.md) | Projected-token-authenticated HTTPS transport to Fleet membership and billing. |
 | [`prisma-unit-of-work`](./prisma-unit-of-work/README.md) | The shared transaction envelope: explicit isolation and bounded retry of proven rollbacks. |

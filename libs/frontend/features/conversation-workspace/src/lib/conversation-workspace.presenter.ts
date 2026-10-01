@@ -1,161 +1,182 @@
-import { computed, effect, inject, signal } from "@angular/core";
+import { Injectable, computed, effect, inject, signal } from "@angular/core";
 
 import { ConversationComputerStates } from "@opencrane/contracts";
-import { ConversationComposerStates, ConversationStatusTones, type ConversationStatusPresentation } from "@opencrane/elements/conversation";
-import { ConversationAssetActionKinds, __ConversationAssetPresentation, __PendingConversationAssetPresentation, type ConversationAssetActionIntent, type ConversationAssetPresentation } from "@opencrane/features/conversation-assets";
+import { ConversationAssetActionKinds, __ConversationAssetPresentation, __ConversationAssetSelectionFeedback, __PendingConversationAssetPresentation, type ConversationAssetActionIntent, type ConversationAssetPresentation, type ConversationAssetSelectionFeedback } from "@opencrane/features/conversation-assets";
 import { ConversationActivityReadStates } from "@opencrane/features/conversation-activity";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
-import { CONVERSATION_CURRENT_SUBJECT, ConversationGroupChildStore, ConversationComputerReviewStore, ConversationCreationStates, ConversationEventStreamStatuses, ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, ConversationPersonalRunsStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
+import { ConversationElicitationStore, type ElicitationResponseValue } from "@opencrane/state/conversation/elicitation";
+import { CONVERSATION_CURRENT_SUBJECT, ConversationGroupChildStore, ConversationComputerReviewStore, ConversationCreationStates, ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, ConversationPersonalRunsStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
 import { _GroupRequestSource, _GroupShareSource } from "./conversation-group.mapper";
 import { _PersonalRunActivity } from "./conversation-personal-run-activity.mapper";
+import { _ConversationRunActions } from "./conversation-run-actions.mapper";
+import { ConversationAssetContentCoordinator } from "./state/conversation-asset-content.coordinator";
 
 import { _ConversationEntryViews, _ConversationOnboardingContinuationPresentation, _ConversationOnboardingDialogueEntries, _ConversationOnboardingHistoryPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation } from "./conversation-workspace.mapper";
+import { _ComposerState, _ComputerStatus, _ConnectionStatus } from "./presentation/conversation-workspace-status.mapper";
+import { ConversationWorkspaceTranscriptEntryKinds, type ConversationWorkspaceTranscriptEntry } from "./presentation/conversation-workspace-presentation.types";
 import type { ConversationOnboardingContinuationPresentation, ConversationWorkspaceAvailabilityPresentation } from "./conversation-workspace-feature.types";
 
-/** Display-safe connection notice and whether it offers a participant-requested replacement socket. */
-interface ConversationWorkspaceConnectionPresentation
-{
-	/** Shared status-line copy and tone for the current stream phase. */
-	readonly status: ConversationStatusPresentation;
-	/** Whether the current stream phase allows a participant to reconnect immediately. */
-	readonly reconnectAvailable: boolean;
-}
-
 /** Feature-scoped presenter that derives view state and delegates typed intents to owning stores. */
+@Injectable()
 export class ConversationWorkspacePresenter
 {
 	/** Component-scoped conversation orchestration. */
-	protected readonly store = inject(ConversationWorkspaceStore);
+	public readonly store = inject(ConversationWorkspaceStore);
 	/** Owns company-assistant requests and reviewed human shares for this selection. */
-	protected readonly groupStore = inject(ConversationGroupChildStore);
+	public readonly groupStore = inject(ConversationGroupChildStore);
 	/** Supplies the verified subject solely for presenting own-message actions. */
 	private readonly _subject = inject(CONVERSATION_CURRENT_SUBJECT);
 	/** Existing asset state scoped to the selected conversation. */
-	protected readonly assetsStore = inject(ConversationAssetsStore);
+	public readonly assetsStore = inject(ConversationAssetsStore);
+	/** Coordinates authorized asset reads with runtime-owned file actions. */
+	private readonly _assetContent = inject(ConversationAssetContentCoordinator);
 	/** Component-scoped active-computer review state. */
-	protected readonly reviewStore = inject(ConversationComputerReviewStore);
+	public readonly reviewStore = inject(ConversationComputerReviewStore);
 	/** Reads recent personal work independently from the selected transcript. */
-	protected readonly personalRuns = inject(ConversationPersonalRunsStore);
+	public readonly personalRuns = inject(ConversationPersonalRunsStore);
+	/** Existing typed question and approval state for the selected conversation. */
+	public readonly elicitationStore = inject(ConversationElicitationStore);
 	/** Whether immutable-mode creation is visible. */
-	protected readonly creating = signal(false);
+	public readonly creating = signal(false);
 	/** Stable route state vocabulary used by the template switch. */
-	protected readonly routeStates = ConversationWorkspaceRouteStates;
+	public readonly routeStates = ConversationWorkspaceRouteStates;
 	/** Stable conversation lifecycle used by template permissions. */
-	protected readonly lifecycles = ConversationLifecycles;
+	public readonly lifecycles = ConversationLifecycles;
 	/** Stable immutable modes used by capability-aware presentation. */
-	protected readonly modes = ConversationModes;
+	public readonly modes = ConversationModes;
 	/** Stable lifecycle required before active review controls are shown. */
-	protected readonly computerStates = ConversationComputerStates;
+	public readonly computerStates = ConversationComputerStates;
 	/** Stable create command lifecycle used by the dialog. */
-	protected readonly creationStates = ConversationCreationStates;
+	public readonly creationStates = ConversationCreationStates;
 	/** Privacy-safe list rows. */
-	protected readonly summaries = computed(this._Summaries.bind(this));
+	public readonly summaries = computed(this._Summaries.bind(this));
 	/** Completed onboarding and ordinary conversations in one visual My sessions list. */
-	protected readonly sessionRailItems = computed(this._SessionRailItems.bind(this));
+	public readonly sessionRailItems = computed(this._SessionRailItems.bind(this));
 	/** Selected browser key for the visually unified session rail. */
-	protected readonly selectedSessionKey = computed(this._SelectedSessionKey.bind(this));
+	public readonly selectedSessionKey = computed(this._SelectedSessionKey.bind(this));
 	/** Browser-safe self label shown at the bottom of the rail when the directory exposes one. */
-	protected readonly railIdentity = computed(this._RailIdentity.bind(this));
+	public readonly railIdentity = computed(this._RailIdentity.bind(this));
 	/**
 	 * Header copy for the onboarding history, or `null` when the server recorded no completed exchange.
 	 *
 	 * The template uses the `null` here as its test for whether history can be shown at all, in both the
 	 * rail row and the main panel, so this signal doubles as the "is there a transcript" answer.
 	 */
-	protected readonly onboardingHistoryPresentation = computed(this._OnboardingHistoryPresentation.bind(this));
+	public readonly onboardingHistoryPresentation = computed(this._OnboardingHistoryPresentation.bind(this));
 	/** Dedicated onboarding dialogue that never joins the live conversation message stream. */
-	protected readonly onboardingDialogue = computed(this._OnboardingDialogue.bind(this));
+	public readonly onboardingDialogue = computed(this._OnboardingDialogue.bind(this));
 	/** Explicit availability state derived from the existing privacy-safe directory. */
-	protected readonly availabilityNotice = computed(this._AvailabilityNotice.bind(this));
+	public readonly availabilityNotice = computed(this._AvailabilityNotice.bind(this));
 	/** Read-only tray copy derived from the same directory used by conversation creation. */
-	protected readonly onboardingContinuation = computed(this._OnboardingContinuation.bind(this));
+	public readonly onboardingContinuation = computed(this._OnboardingContinuation.bind(this));
 	/** Privacy-safe row corresponding to the selected authorized snapshot. */
-	protected readonly selectedSummary = computed(() => this.summaries().find(summary => summary.id === this.store.selected()?.id) ?? null);
+	public readonly selectedSummary = computed(() => this.summaries().find(summary => summary.id === this.store.selected()?.id) ?? null);
 	/** Canonical and live transcript rows mapped through the shared sanitizer. */
-	protected readonly messages = computed(this._Messages.bind(this));
+	public readonly messages = computed(this._Messages.bind(this));
 	/** Links recent work only to answers currently rendered in this selection. */
-	protected readonly activityRows = computed(() => _PersonalRunActivity(this.personalRuns.runs(), this.store.selected()?.id ?? null, this.store.live().entries, new Set(this.messages().map(entry => entry.message.id))));
+	public readonly activityRows = computed(() => _PersonalRunActivity(this.personalRuns.runs(), this.store.selected()?.id ?? null, this.store.live().entries, new Set(this.messages().flatMap(entry => entry.kind === ConversationWorkspaceTranscriptEntryKinds.Message ? [entry.message.id] : []))));
 	/** Presents read progress separately from the server's run lifecycle. */
-	protected readonly activityReadState = computed(this._ActivityReadState.bind(this));
+	public readonly activityReadState = computed(this._ActivityReadState.bind(this));
+	/** Current personal work state and Stop availability for the shared action row. */
+	public readonly runActions = computed(() => _ConversationRunActions(this.personalRuns.currentRun(), this.personalRuns.stopPending(), this.personalRuns.stopBusy(), this.personalRuns.stopError()));
 	/** Existing asset presentations for transcript and Files views. */
-	protected readonly assets = computed(this._Assets.bind(this));
+	public readonly assets = computed(this._Assets.bind(this));
+	/** Files currently selected for the next message. */
+	public readonly messageAssets = computed(this._MessageAssets.bind(this));
+	/** Safe message-level feedback for the last rejected file pick. */
+	public readonly assetSelectionFeedback = computed<ConversationAssetSelectionFeedback | null>(() =>
+	{
+		const failure = this.assetsStore.selectionFailure();
+		return failure === null ? null : __ConversationAssetSelectionFeedback(failure);
+	});
+	/** Prevents a selected unfinished or failed file from being silently omitted from Send. */
+	public readonly attachmentSubmissionBlocked = computed(() => this.messageAssets().length > this.assetsStore.messageAssetIds().length);
+	/** Keeps the exact visible file set fixed while an uncertain message command is retried. */
+	public readonly attachmentSelectionLocked = this.store.messageRetryPending;
 	/** Participant-facing name for the selected context panel. */
-	protected readonly contextPanelLabel = computed(this._ContextPanelLabel.bind(this));
+	public readonly contextPanelLabel = computed(this._ContextPanelLabel.bind(this));
 	/** Shared composer state derived from current command and lifecycle. */
-	protected readonly composerState = computed(this._ComposerState.bind(this));
+	public readonly composerState = computed(() => _ComposerState(this.store.sending(), this.store.streamStatus(), this.store.selected()?.lifecycle));
 	/** In-composer connection notice derived from the selected stream phase. */
-	protected readonly connectionStatus = computed(this._ConnectionStatus.bind(this));
+	public readonly connectionStatus = computed(() => _ConnectionStatus(this.store.streamStatus(), this.store.reconnectAttempt()));
 	/** Current logical computer status rendered without exposing its lease or sandbox coordinates. */
-	protected readonly computerStatus = computed(this._ComputerStatus.bind(this));
+	public readonly computerStatus = computed(() => _ComputerStatus(this.store.live().computer?.state));
 	/** Whether the selected conversation currently has a reviewable warm computer. */
-	protected readonly computerReviewVisible = computed(this._ComputerReviewVisible.bind(this));
-	/** Load once when this route-ready component is constructed. */
-	private readonly _loadEffect = effect(this._Load.bind(this));
-	/** Open existing asset and elicitation state whenever stream coordinates change. */
-	private readonly _selectionEffect = effect(this._OpenComposedState.bind(this));
-	/** Last selected coordinate used to purge composed state before changing scope. */
-	private _composedConversationId: string | null = null;
+	public readonly computerReviewVisible = computed(this._ComputerReviewVisible.bind(this));
+	/** Closes the local creation dialog when loading or access loss replaces the ready workspace. */
+	private readonly _creationAvailabilityEffect = effect(this._CloseUnavailableCreation.bind(this));
 
 	/** Show immutable-mode creation. */
-	protected showCreate(): void { this.creating.set(true); }
+	public showCreate(): void { this.creating.set(true); }
 	/** Hide immutable-mode creation without changing its controlled selection. */
-	protected hideCreate(): void { this.creating.set(false); }
+	public hideCreate(): void { this.creating.set(false); }
 	/** Select one conversation from the feature-local rail. */
-	protected async open(conversationId: string): Promise<void> { await this.store.open(conversationId); }
+	public async open(conversationId: string): Promise<void> { await this.store.open(conversationId); }
 	/** Opens the explicit company assistant picker for an eligible own message. */
-	protected askAssistant(messageId: string): void
+	public askAssistant(messageId: string): void
 	{
-		const source = this.messages().find(entry => entry.message.id === messageId)?.requestSource;
+		const entry = this.messages().find(candidate => candidate.id === messageId);
+		const source = entry?.kind === ConversationWorkspaceTranscriptEntryKinds.Message ? entry.requestSource : null;
 		if (source != null)
 			this.groupStore.ask(source);
 	}
 	/** Opens editable text review for a completed assistant response in the selected child. */
-	protected reviewGroupShare(messageId: string): void
+	public reviewGroupShare(messageId: string): void
 	{
-		const source = this.messages().find(entry => entry.message.id === messageId)?.shareSource;
+		const entry = this.messages().find(candidate => candidate.id === messageId);
+		const source = entry?.kind === ConversationWorkspaceTranscriptEntryKinds.Message ? entry.shareSource : null;
 		if (source != null)
 			this.groupStore.reviewShare(source);
 	}
 	/** Keep ordinary message input controlled by the conversation store. */
-	protected updateDraft(value: string): void { this.store.updateDraft(value); }
+	public updateDraft(value: string): void { this.store.updateDraft(value); }
 	/** Submit ordinary participant text through the authenticated history command. */
-	protected async send(): Promise<void> { await this.store.send(); }
-	/** Ask the selected workspace store to replace a paused or failed socket. */
-	protected reconnect(): void { this.store.reconnect(); }
-	/** Route existing asset intents back to their owning store. */
-	protected async assetAction(intent: ConversationAssetActionIntent): Promise<void>
+	public async send(): Promise<void>
 	{
-		if (intent.kind === ConversationAssetActionKinds.Retry)
-			await this.assetsStore.retry(intent.assetId);
-		if (intent.kind === ConversationAssetActionKinds.Remove)
-			{ this.assetsStore.removeLocal(intent.assetId); await this.assetsStore.remove(intent.assetId); }
+		if (this.attachmentSubmissionBlocked())
+			return;
+		const assetIds = this.store.messageAssetIdsForSend(this.assetsStore.messageAssetIds());
+		if (await this.store.send(assetIds))
+			this.assetsStore.clearMessageSelection(assetIds);
 	}
-	/** Start the initial parallel directory/list read. */
-	private _Load(): void { void this.store.load(); }
-
-	/** Open the asset state whenever the selected conversation changes. */
-	private _OpenComposedState(): void
+	/** Starts resumable upload state for files selected by the PDF picker. */
+	public async selectFiles(files: readonly File[]): Promise<void>
 	{
-		const selected = this.store.selected();
-		this.groupStore.select(selected);
-		if (selected === null)
+		if (!this.attachmentSelectionLocked())
+			await this.assetsStore.select(files);
+	}
+	/** Ask the selected workspace store to replace a paused or failed socket. */
+	public reconnect(): void { this.store.reconnect(); }
+	/** Ask the personal work store to append one retry-stable Stop control message. */
+	public async stopCurrentWork(): Promise<void> { await this.personalRuns.requestStop(); }
+	/** Keep the selected approval response in its component-scoped state owner. */
+	public selectElicitation(value: ElicitationResponseValue): void { this.elicitationStore.select(value); }
+	/** Submit the selected response through the existing authority-backed store. */
+	public async submitElicitation(): Promise<void> { await this.elicitationStore.submit(); }
+	/** Reconcile the exact request after verified sign-in completes. */
+	public async recoverElicitationAfterStepUp(): Promise<void> { await this.elicitationStore.recoverAfterStepUp(); }
+	/** Route existing asset intents back to their owning store. */
+	public async assetAction(intent: ConversationAssetActionIntent): Promise<void>
+	{
+		if (intent.kind === ConversationAssetActionKinds.Deselect)
 		{
-			this._composedConversationId = null;
-			this.assetsStore.clear();
-			this.reviewStore.select(null);
+			if (!this.attachmentSelectionLocked())
+				this.assetsStore.deselectMessageAsset(intent.assetId);
 			return;
 		}
-		if (this._composedConversationId !== selected.id)
-		{
-			this.assetsStore.clear();
-			this._composedConversationId = selected.id;
-		}
-		this.assetsStore.open(selected.id);
-		const computer = this.store.live().computer;
-		const reviewConversationId = selected.mode === ConversationModes.AgentSession && computer?.state === ConversationComputerStates.Warm ? selected.id : null;
-		const generationKey = computer === null ? null : `${computer.id}:${computer.leaseGeneration}`;
-		this.reviewStore.select(reviewConversationId, generationKey);
+		if (intent.kind === ConversationAssetActionKinds.Retry)
+			{ await this.assetsStore.retry(intent.assetId); return; }
+		if (intent.kind === ConversationAssetActionKinds.Remove)
+			{ this.assetsStore.removeLocal(intent.assetId); await this.assetsStore.remove(intent.assetId); return; }
+		await this._assetContent.open(intent);
+	}
+
+	/** Prevent a dismissed workspace dialog from reopening after authority is rechecked. */
+	private _CloseUnavailableCreation(): void
+	{
+		if (this.store.routeState() !== ConversationWorkspaceRouteStates.Ready)
+			this.creating.set(false);
 	}
 
 	/** Map safe rail rows. */
@@ -235,7 +256,7 @@ export class ConversationWorkspacePresenter
 	}
 
 	/** Map immutable Kurrent history using only server-resolved private text payloads. */
-	private _Messages()
+	private _Messages(): ConversationWorkspaceTranscriptEntry[]
 	{
 		const selected = this.store.selected();
 		if (selected === null)
@@ -244,9 +265,11 @@ export class ConversationWorkspacePresenter
 		const entries = new Map(history.entries.map(entry => [entry.id, entry]));
 		const subject = this._subject() ?? undefined;
 		const children = this.groupStore.children();
-		return _ConversationEntryViews(history.entries, history.payloads).map(function _GroupActions(view)
+		return _ConversationEntryViews(history.entries, history.payloads, this.assets()).map(function _GroupActions(view)
 		{
-			const entry = entries.get(view.message.id)!;
+			if (view.kind !== ConversationWorkspaceTranscriptEntryKinds.Message)
+				return view;
+			const entry = entries.get(view.id)!;
 			return { ...view, requestSource: _GroupRequestSource(entry, history.payloads, selected, subject), shareSource: _GroupShareSource(entry, history.payloads, selected), children: children.filter(child => child.parentMessageId === entry.id) };
 		});
 	}
@@ -254,7 +277,14 @@ export class ConversationWorkspacePresenter
 	/** Merge durable and browser-private asset transfers without retaining File bytes here. */
 	private _Assets(): readonly ConversationAssetPresentation[]
 	{
-		const durable = this.assetsStore.assets.hasValue() ? this.assetsStore.assets.value().map(__ConversationAssetPresentation) : [];
+		const durable = this.assetsStore.assets.hasValue() ? this.assetsStore.assets.value().map(asset => __ConversationAssetPresentation(asset, this._assetContent.state(asset.id))) : [];
+		return [...durable, ...this.assetsStore.pendingUploads().map(__PendingConversationAssetPresentation)];
+	}
+
+	/** Maps only files which still belong to the next message selection. */
+	private _MessageAssets(): readonly ConversationAssetPresentation[]
+	{
+		const durable = this.assetsStore.messageAssets().map(asset => __ConversationAssetPresentation(asset, this._assetContent.state(asset.id)));
 		return [...durable, ...this.assetsStore.pendingUploads().map(__PendingConversationAssetPresentation)];
 	}
 
@@ -269,55 +299,10 @@ export class ConversationWorkspacePresenter
 		return this.personalRuns.error() === null ? ConversationActivityReadStates.Ready : ConversationActivityReadStates.Error;
 	}
 
-	/** Derive composer state without mixing run lifecycle into ordinary chats. */
-	private _ComposerState(): ConversationComposerStates
-	{
-		if (this.store.sending())
-			return ConversationComposerStates.Submitting;
-		if (this.store.streamStatus() !== ConversationEventStreamStatuses.Live)
-			return ConversationComposerStates.Disabled;
-		return this.store.selected()?.lifecycle === ConversationLifecycles.Open ? ConversationComposerStates.Available : ConversationComposerStates.Disabled;
-	}
-
-	/** Map stream connection and failure truth to the in-composer recovery bar. */
-	private _ConnectionStatus(): ConversationWorkspaceConnectionPresentation | null
-	{
-		const status = this.store.streamStatus();
-		if (status === ConversationEventStreamStatuses.Connecting)
-			return { status: { label: "Connecting to chat", detail: "Messages will be available when the connection is ready.", tone: ConversationStatusTones.Neutral }, reconnectAvailable: false };
-		if (status === ConversationEventStreamStatuses.Reconnecting)
-			return { status: { label: `Reconnecting — attempt ${this.store.reconnectAttempt()}`, detail: "Your draft is still here. Sending resumes when the connection returns.", tone: ConversationStatusTones.Attention }, reconnectAvailable: true };
-		if (status === ConversationEventStreamStatuses.Failed)
-			return { status: { label: "Connection lost", detail: "Automatic reconnecting stopped. Your draft is still here.", tone: ConversationStatusTones.Danger, assertive: true }, reconnectAvailable: true };
-		return null;
-	}
-
-	/** Map the current logical computer lifecycle to concise participant-facing copy. */
-	private _ComputerStatus(): ConversationStatusPresentation | null
-	{
-		const state = this.store.live().computer?.state;
-		if (state === undefined)
-			return null;
-		return { label: _ComputerLabel(state), detail: "Your conversation history remains available while the computer changes state.", tone: state === ConversationComputerStates.RecoveryRequired ? ConversationStatusTones.Danger : ConversationStatusTones.Neutral };
-	}
 
 	/** Admit the review visual only for a warm Agent-session computer. */
 	private _ComputerReviewVisible(): boolean
 	{
 		return this.store.selected()?.mode === ConversationModes.AgentSession && this.store.live().computer?.state === ConversationComputerStates.Warm;
-	}
-}
-
-/** Plain participant-facing label for every logical computer lifecycle. */
-function _ComputerLabel(state: ConversationComputerStates): string
-{
-	switch (state)
-	{
-		case ConversationComputerStates.Cold: return "Computer is asleep";
-		case ConversationComputerStates.ClaimPending: return "Computer is waking";
-		case ConversationComputerStates.Warm: return "Computer is ready";
-		case ConversationComputerStates.Cooling: return "Computer is saving work";
-		case ConversationComputerStates.RecoveryRequired: return "Computer needs attention";
-		case ConversationComputerStates.Retired: return "Computer is retired";
 	}
 }

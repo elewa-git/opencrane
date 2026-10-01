@@ -10,9 +10,8 @@ the image from a release-owned profile after OpenCrane admits a generation-bound
 ```text
  KurrentDB lease event ──► SandboxClaim ──► conversation-computer ◄── HERE
                                                   │
-                                                  ├── Pod-bound bootstrap
-                                                  ├── server model-step request
-                                                  ├── turn outcome polling
+                                                  ├── lease-bound review credential
+                                                  ├── fenced workspace restore
                                                   └── lease-local review gateway
 ```
 
@@ -21,28 +20,23 @@ the image from a release-owned profile after OpenCrane admits a generation-bound
 
 The process refuses readiness unless it receives the computer id, lease id, computer generation and
 private server endpoint. It re-reads a short-lived, audience-bound projected token for every exchange.
-After binding the Pod to the current lease, the server returns a bootstrap id and its outcome. The
-process sends exactly `{bootstrapId}` to the private model-step route when that outcome is `ready`.
-The server chooses the next step from saved progress. It owns the compiled input, model credential,
-original call and token budgets, tool selection, result continuation and conversation output. The Pod
-receives none of those inputs or credentials and has no direct tool-proposal or output route.
+At startup it fetches the review credential for the current lease, opens the private review gateway
+and asks the server to restore the checkpoint bound to the same computer, lease and generation. Both
+server calls are fenced by the TokenReviewed Pod identity and current lease coordinates. The health
+listener starts only after this preparation succeeds.
 
-Pending work polls bootstrap at the normal two-second cadence. A `response_unavailable` or
-`authority_ended` model outcome keeps readiness degraded while the process polls for recovery; it
-does not resubmit that bootstrap's model step. Bootstrap also preserves `response_unavailable` after
-a process restart. Private HTTP requests allow 30 seconds, covering the server's 25-second model
-dispatch deadline. The server may use one permitted tool result for a second, text-only request;
-the worker neither chooses that request nor acquires a fresh model allowance. This continuation is
-implemented in PR #830 and awaits CI and live qualification. Visible tool progress,
-approvals and recovery controls remain separate product work.
+The process does not receive a bootstrap id, poll turn state, choose an outcome or call a model route.
+Absurd advances the durable turn inside the server. The server chooses the next saved step and owns
+the compiled input, model credentials, call and token budgets, tool permissions, continuation and
+conversation output. None of that material enters this Pod.
 
 ## Public surface
 
-Entrypoint: `python3 -m src.main` serves `/healthz` and `/readyz` on port 8080. A second listener on
-private port 8090 accepts one bearer: a review credential the server derives with a server-only key
-from the silo, computer, generation and lease id. The process fetches that secret once at start over
-the TokenReviewed private API and writes it to a tmpfs file; the listener refuses every request until
-the file exists. The lease id itself is a public Pod label and never grants access. The listener
+Entrypoint: `python3 -m src.main` prepares the leased workspace and then serves `/healthz` and
+`/readyz` on port 8080. A second listener on private port 8090 accepts one bearer: a review credential
+the server derives with a server-only key from the silo, computer, generation and lease id. The
+process fetches that secret once at start over the TokenReviewed private API and writes it to a tmpfs
+file. The lease id itself is a public Pod label and never grants access. The listener
 exposes bounded argv-only commands, selected workspace files and diffs, plus GET-only proxying to five
 release-allowlisted localhost preview ports. NetworkPolicy admits that port only from this release's
 OpenCrane server. The server presents one credential per key still in its keyring, comma-separated

@@ -6,11 +6,15 @@
 >
 	<span class="wo-file-row__type wo-mono">{{ typeLabel() }}</span>
 	<span class="wo-file-row__name">{{ item().displayName }}</span>
-	<span class="wo-file-row__state">{{ item().detail }}</span>
+	<span class="wo-file-row__state" [class.wo-file-row__state--error]="item().contentDetail !== null" [attr.role]="item().contentDetail !== null ? 'alert' : null">{{ item().contentDetail ?? item().detail }}</span>
 	@if (item().canRetry) {
 		<p-button label="Retry" severity="contrast" [link]="true" size="small" (onClick)="act(actions.Retry)" />
-	} @else if (item().state === states.Ready) {
-		<p-button label="Open" severity="contrast" [link]="true" size="small" (onClick)="act(actions.Open)" />
+	} @else if (item().state === states.Ready && item().disposition !== null) {
+		@if (item().contentState === contentStates.Loading) {
+			<p-button label="Opening file" severity="contrast" [link]="true" size="small" [loading]="true" [disabled]="true" />
+		} @else {
+			<p-button label="Open" severity="contrast" [link]="true" size="small" (onClick)="act(actions.Open)" />
+		}
 	}
 	@if (item().messageId !== null) {
 		<p-button icon="pi pi-arrow-up-right" severity="contrast" [text]="true" [rounded]="true" size="small" [ariaLabel]="'Show ' + item().displayName + ' in conversation'" (onClick)="act(actions.FocusMessage)" />

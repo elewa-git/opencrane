@@ -74,11 +74,13 @@ the ordinary exact boundary-matching rules.
   grant on the retiring coordinates inside the owning product transaction.
 - `PrismaManagedShareRevocationRepository` soft-revokes the exact manager-owned grant linked from
   an explicit resource-share relation; it cannot create, list, or revoke arbitrary grants.
-- `__DecideDeferredToolRequest`, `__OpenDeferredToolApproval`,
-  `PrismaMcpToolInvocationParticipantUnitOfWork`, and their lifecycle contracts own durable human approval and
+- `__DecideDeferredToolRequest`, `__OpenDeferredToolApproval`, `__OpenDeferredToolApprovalInTransaction`,
+  `__CreatePrismaMcpToolInvocationParticipantFactory`, and their public request/result contracts own durable human approval and
   provider-effect recovery for tool calls. A deferred approval opens only when the run and admitted
   invocation carry the same immutable execution subject, including the active conversation-computer
   lease id and generation; released or replaced leases fail closed.
+  Approval transition planning, projection and argument-replacement helpers stay private to this
+  package; callers enter through the transaction-bound approval operations.
 - `__AdmitPreparingToolInvocationInTransaction` and `__PrepareToolInvocationInTransaction` let the
   conversation owner save and prepare a permitted call in the transaction that queues its MCP
   executor. The existing lifecycle still enforces approval requirements and observed revisions.
@@ -91,19 +93,62 @@ the ordinary exact boundary-matching rules.
   A read outage propagates so the transaction rolls back.
   Task-owned calls retain their distinct task projection. The unused external-action transaction
   wrapper is removed; the MCP runtime owns production dispatch.
-- `__CancelPendingRunApprovalAuthority` lets the runs domain close pending approval and unclaimed
-  tool work inside the runs domain's cancellation transaction.
+- `PrismaRunWorkCancellationRepository` lets the runs domain close requested elicitations,
+  pending approvals and only provider-free Preparing, AwaitingApproval or Ready invocations after
+  KurrentDB records cancellation as the terminal winner. Dispatched or uncertain outcomes remain
+  durable; expired claims may shed their lease while their recovery state is preserved.
+
+`ToolInvocationRecord.requestIdentity` groups the runtime instance, command and candidate ids read
+from their immutable database columns. JSON projection fields cannot replace those coordinates.
+Consumers use them to match the current invocation to its original MCP execution.
 
 Run-owned tool result reads use `__ReadRunToolResultInTransaction`. The caller supplies all saved
 run, attempt, computer, command, public invocation and fingerprint coordinates. IAM checks the
 current run and the full immutable terminal payload and digest, then returns the existing invocation
-record for a current-authority check in the same transaction. Pending or inconsistent work exposes
+record and its original completion time for a current-authority check in the same transaction. Pending or inconsistent work exposes
 no result content. `__ConsumeRunToolResultInTransaction` acknowledges only that exact payload;
 the conversation owner must first prove the saved second-model-request reservation and current
 permission. An exact replay preserves its first acknowledgement time, and consumed results remain
 readable for restart verification. Neither API grants model dispatch or starts a provider call.
 
+`__ReadRunToolProgressInTransaction` reads the latest invocation phase for an already authorized
+run, scoped to silo, run and current attempt. The personal status owner must check ownership and
+current Read permission in that same transaction first. This projection does not consume a result,
+record a new decision or grant any authority; database errors remain errors rather than empty work.
+
 ## Boundary
+
+Source is grouped into `authority/`, `grants/`, `approvals/`, and `tool-invocations/`. Each keeps
+its contracts and tests beside its owner, with database adapters in `persistence/`. The public
+entrypoint remains `src/index.ts`; consumers never import these internal folders.
+Run-result reads, delivery acknowledgement, and invocation row mapping belong to `tool-invocations/`.
+The row mapper translates stored values without importing Prisma; its database callers live in
+`tool-invocations/persistence/`.
+
+Approval opening, reviewer decisions, deadline expiry, reviewer grants, and run-batch completion
+have separate command owners. They receive the caller's transaction and preserve the same atomic
+approval/invocation/run changes. The split introduces no independent commit, policy authority,
+retry loop, or network call.
+
+Tool approval saves the display-safe argument projection with the participant request. The body
+also freezes the admitted tool name, its provider-authored description, and the operator-authored
+server name before the participant decides. It also freezes the selected installation owner's safe
+display name, whether that owner is a person or company assistant, and the immutable connection's
+credential requirement. IAM resolves that evidence through the run revision's exact tool assignment:
+OCI revisions must be credentialless and have no remote coordinates, while remote revisions must
+match the complete saved connection generation and endpoint digest. Missing, cross-silo, wrong-owner,
+or unsafe evidence refuses the approval before the run is paused. A replay uses the saved body and
+digest instead of re-reading a renamed profile. If the schema marks any proposed value as sensitive,
+the body contains no arguments and IAM accepts denial only.
+
+For personal and company assistants, only the original human requester saved identically on the
+run and invocation can decide. They must still have one external Principal in the silo, active
+organisation membership and active participation in that conversation. The linked participant
+request cannot be swapped on opening, decision or replay. A company approval keeps the company's
+Principal as execution owner; the human receives only the existing manager's temporary Read and
+Decide grants for that approval. Decisions revoke those grants. Approval never lends the human's
+tool credentials or restores removed execution permission: dispatch still checks the assistant's
+current grants, connection and run limits.
 
 The authority decides product permission; it does not authenticate a browser or Pod, own another
 domain's lifecycle, execute a provider call, or grant Kubernetes access. The caller derives the silo

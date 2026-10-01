@@ -1,4 +1,4 @@
-import { SkillCatalogueRevisionStates, SkillCatalogueStates } from "./skill-catalogue.types";
+import { SkillCatalogueRevisionStates, SkillCatalogueStates } from "./catalogue/skill-catalogue.types";
 
 /** OpenAPI paths for the browser-safe skill catalogue and validation start command. */
 export const _SkillCatalogueOpenapiPaths = {

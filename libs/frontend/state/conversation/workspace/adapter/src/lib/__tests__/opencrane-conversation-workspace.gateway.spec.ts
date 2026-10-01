@@ -15,9 +15,25 @@ function _Gateway(post: ReturnType<typeof vi.fn>, get: ReturnType<typeof vi.fn> 
 
 describe("OpenCraneConversationWorkspaceGateway", function _DescribeMessageGateway()
 {
+	it.each([401, 403, 404])("maps directory and list HTTP %s to access loss without exposing server details", async function _DirectoryAccessLoss(status)
+	{
+		const get = vi.fn().mockResolvedValue({ error: { message: "private server details" }, response: { status } });
+		const gateway = _Gateway(vi.fn(), get);
+		await expect(gateway.directory()).rejects.toMatchObject({ kind: "access_changed", message: "This conversation is no longer available." });
+		await expect(gateway.list()).rejects.toMatchObject({ kind: "access_changed", message: "This conversation is no longer available." });
+	});
+
+	it("keeps malformed directory and list success responses distinct from authority loss", async function _MalformedDirectory()
+	{
+		const get = vi.fn().mockResolvedValue({ data: {}, response: { status: 200 } });
+		const gateway = _Gateway(vi.fn(), get);
+		await expect(gateway.directory()).rejects.toThrow("invalid conversation response");
+		await expect(gateway.list()).rejects.toThrow("invalid conversation response");
+	});
+
 	it("reads recent personal work with cancellation and rejects unknown status or duplicate rows", async function _PersonalRuns()
 	{
-		const run = { runId: "run", attempt: 1, state: "completed", conversationId: "chat", agentRevisionId: "revision", acceptedAt: "2026-09-08T12:00:00Z", finishedAt: "2026-09-08T12:00:01Z" };
+		const run = { runId: "run", attempt: 1, state: "completed", conversationId: "chat", agentRevisionId: "revision", acceptedAt: "2026-09-08T12:00:00Z", latestTool: { phase: "result_received" }, finishedAt: "2026-09-08T12:00:01Z" };
 		const get = vi.fn().mockResolvedValueOnce({ data: { runs: [run] } }).mockResolvedValueOnce({ data: { runs: [{ ...run, state: "unknown" }] } }).mockResolvedValueOnce({ data: { runs: [run, run] } }).mockResolvedValueOnce({ error: { message: "server secret" }, response: { status: 403 } });
 		const gateway = _Gateway(vi.fn(), get);
 		const signal = new AbortController().signal;
@@ -26,6 +42,14 @@ describe("OpenCraneConversationWorkspaceGateway", function _DescribeMessageGatew
 		await expect(gateway.listPersonalRuns(signal)).rejects.toThrow("invalid conversation response");
 		await expect(gateway.listPersonalRuns(signal)).rejects.toThrow("invalid conversation response");
 		await expect(gateway.listPersonalRuns(signal)).rejects.toMatchObject({ kind: "access_changed", message: "This conversation is no longer available." });
+	});
+
+	it("appends an explicit Stop control message without requesting another turn", async function _StopWork()
+	{
+		const post = vi.fn().mockResolvedValue({ data: { outcome: "appended", position: "3" } });
+		const gateway = _Gateway(post);
+		await gateway.requestStop({ conversationId: "conversation-1", idempotencyKey: "stop-command-1" });
+		expect(post).toHaveBeenCalledWith("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: "conversation-1" } }, body: { idempotencyKey: "stop-command-1", text: "Stop", assetIds: [], activation: "stop" } });
 	});
 
 	it("binds a child request to the selected parent and preserves its retry command and abort signal", async function _ChildRequest()
@@ -83,8 +107,10 @@ describe("OpenCraneConversationWorkspaceGateway", function _DescribeMessageGatew
 	{
 		const post = vi.fn().mockResolvedValue({ data: { outcome: "appended", position: "1" } });
 		const gateway = _Gateway(post);
-		await gateway.send({ conversationId: "conversation-1", idempotencyKey: "command-1", text: "Hello", activation: "start" });
-		expect(post).toHaveBeenCalledWith("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: "conversation-1" } }, body: { idempotencyKey: "command-1", text: "Hello", activation: "start" } });
+		const command = { conversationId: "conversation-1", idempotencyKey: "command-1", text: "Hello", assetIds: ["asset-1"], activation: "start" } as const;
+		await gateway.send(command);
+		expect(post).toHaveBeenCalledWith("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: "conversation-1" } }, body: { idempotencyKey: "command-1", text: "Hello", assetIds: ["asset-1"], activation: "start" } });
+		expect(post.mock.calls[0]![1].body.assetIds).not.toBe(command.assetIds);
 	});
 
 	it("rejects malformed command output before state can adopt it", async function _RejectsCommand()

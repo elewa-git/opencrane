@@ -1,4 +1,4 @@
-# @opencrane/backend/server/reporting/spend — LLM spend, budgets & virtual keys
+# @opencrane/backend/server/reporting/spend — recorded model usage and spend ceilings
 
 > [backend](../../../../README.md) › [server](../../../README.md) › [reporting](../../README.md) › spend
 
@@ -17,7 +17,7 @@ catalogue: one batch decision returns only the exact rows the current Principal 
         ▼
  ┌───────────────────────────────────────────────────────────────┐
  │  spend   ◄── HERE                                               │
- │  · aggregate token usage  · global + per-account ceilings       │
+ │  · recorded token usage  · global + per-account ceilings        │
  └───────────────────────────────────────────────────────────────┘
         │  persisted usage snapshots
         ▼
@@ -34,13 +34,22 @@ accept provider credentials or call a model provider directly.
 
 - `tokenUsageRouter` — exposes per-account token usage at `/api/v1/token-usage`.
 - `aiBudgetRouter` — exposes the global and per-account controls at `/api/v1/ai-budget`.
-- `PrismaSpendUnitOfWork` and `PrismaSpendRepository` — bind central authorization, budget
+- `PrismaSpendUnitOfWork` — binds central authorization, budget
   persistence, and token-usage reads to one transaction.
 - Spend authority, caller, budget, and token-usage types — the contracts used by routes and tests.
 
+The public HTTP contract returns `{ currency, ceilingAmount }` for the global budget and
+`{ userId, currency, ceilingAmount }` for each account budget. Budget write bodies may omit either
+field: the existing handlers default the currency to `USD` and the ceiling to `0`. Budget updates
+and account-budget removal return `204 No Content`. `GET /api/v1/token-usage` returns rows with
+`userId`, input, output, and total token counts, `currency`, and `totalCost`; `budgetCeiling` is
+omitted when no same-currency account or global ceiling applies. Missing Principals and denied
+organization administration return `403`; malformed JSON returns `400` and unexpected route
+failures use the server's standard `500` envelope.
+
 ## Boundary
 
-Consumed by the opencrane-server HTTP layer. It resolves the Principal from the authenticated
+Consumed by the OpenCrane HTTP bootstrap. It resolves the Principal from the authenticated
 request and delegates permission decisions to `AuthorizationAuthority`; it does not route model
 calls itself — that is LiteLLM's job.
 

@@ -1,0 +1,15 @@
+{
+  "name": "mcp-file-generator",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "metadata": { "release": { "adaptedVersion": "0.11.0" } },
+  "sourceRoot": "apps/mcp-file-generator/src",
+  "tags": ["type:app", "layer:entrypoint", "scope:mcp-runtime"],
+  "targets": {
+    "build": { "executor": "nx:run-commands", "outputs": ["{workspaceRoot}/dist/apps/mcp-file-generator"], "options": { "command": "rm -rf dist/apps/mcp-file-generator && esbuild apps/mcp-file-generator/src/index.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/apps/mcp-file-generator/index.js" } },
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "apps/mcp-file-generator" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "bash apps/mcp-file-generator/tests/image-contract.sh", "cwd": "." } },
+    "image-smoke": { "executor": "nx:run-commands", "options": { "command": "bash apps/mcp-file-generator/tests/image-smoke.sh", "cwd": "." } },
+    "container": { "executor": "nx:run-commands", "metadata": { "release": { "image": "opencrane-mcp-file-generator", "dockerfile": "apps/mcp-file-generator/deploy/Dockerfile" } }, "options": { "command": "docker build -f apps/mcp-file-generator/deploy/Dockerfile ." } }
+  }
+}

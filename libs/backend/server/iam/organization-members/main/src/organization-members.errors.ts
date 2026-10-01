@@ -9,6 +9,8 @@ export enum OrganizationMembershipErrorKinds
 {
 	/** The verified caller is not an active owner or administrator. */
 	Forbidden = "forbidden",
+	/** The member is absent from the caller's silo; foreign and missing rows have the same result. */
+	NotFound = "not_found",
 	/** The selected membership authority could not answer. */
 	Unavailable = "unavailable",
 	/** Fleet seat or payment authority refused the requested invitation operation. */

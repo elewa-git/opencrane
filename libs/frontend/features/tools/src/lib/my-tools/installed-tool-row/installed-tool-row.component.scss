@@ -1,0 +1,15 @@
+.wo-mytools {
+
+	&__name {
+		font-size: 13px;
+	}
+
+	&__muted {
+		color: var(--oc-ink-muted);
+	}
+
+	&__actions {
+		text-align: right;
+		white-space: nowrap;
+	}
+}

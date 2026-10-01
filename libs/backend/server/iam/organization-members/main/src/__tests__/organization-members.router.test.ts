@@ -17,6 +17,7 @@ function _app(kind: OrganizationMembershipErrorKinds)
 		validate: vi.fn(),
 		create: vi.fn(),
 		resend: vi.fn(),
+		remove: vi.fn(),
 		accept: vi.fn(async function _Accept(): Promise<never> { throw new OrganizationMembershipError(kind, "invitation refused"); }),
 	} satisfies OrganizationMembershipAuthority;
 	const app = express();
@@ -43,5 +44,48 @@ describe("organization member router error contract", function _Suite()
 	{
 		const response = await request(_app(OrganizationMembershipErrorKinds.AlreadyUsed)).post("/invitations/accept").send({ token: "short" }).expect(400);
 		expect(response.body).toEqual({ error: "request body is invalid", code: "invalid" });
+	});
+});
+
+/** Builds a removal route using only the authenticated caller resolver. */
+function _RemovalApp(remove = vi.fn())
+{
+	const authority = { directory: vi.fn(), validate: vi.fn(), create: vi.fn(), resend: vi.fn(), accept: vi.fn(), remove } satisfies OrganizationMembershipAuthority;
+	const app = express();
+	app.use(express.json());
+	app.use(_CreateOrganizationMembersRouter(authority, function _ResolveCaller() { return _CALLER; }));
+	return { app, remove };
+}
+
+describe("organization member removal HTTP contract", function _RemovalSuite()
+{
+	it("binds the empty request to the route target and verified caller", async function _Remove()
+	{
+		const member = { membershipId: "member-2", status: "suspended", removal: { state: "unavailable", reason: "inactive" } };
+		const f = _RemovalApp(vi.fn().mockResolvedValue({ member }));
+		const response = await request(f.app).post("/member-2/remove").send({}).expect(200);
+		expect(response.body).toEqual({ member });
+		expect(f.remove).toHaveBeenCalledWith({ caller: _CALLER, membershipId: "member-2" });
+	});
+
+	it.each([{ siloId: "other" }, { subjectId: "other" }, { role: "owner" }, { mode: "standalone" }, { membershipId: "different" }, { idempotencyKey: "new-allowance" }])("rejects extra browser-owned command fields", async function _ExtraFields(body)
+	{
+		const f = _RemovalApp();
+		await request(f.app).post("/member-2/remove").send(body).expect(400);
+		expect(f.remove).not.toHaveBeenCalled();
+	});
+
+	it.each(["%20", "x".repeat(129)])("rejects malformed membership paths", async function _InvalidPath(id)
+	{
+		const f = _RemovalApp();
+		await request(f.app).post(`/${id}/remove`).send({}).expect(400);
+		expect(f.remove).not.toHaveBeenCalled();
+	});
+
+	it.each([[OrganizationMembershipErrorKinds.Forbidden, 403], [OrganizationMembershipErrorKinds.NotFound, 404], [OrganizationMembershipErrorKinds.Conflict, 409], [OrganizationMembershipErrorKinds.Unavailable, 503]] as const)("maps %s without exposing private details", async function _Denied(kind, status)
+	{
+		const f = _RemovalApp(vi.fn().mockRejectedValue(new OrganizationMembershipError(kind, "member removal refused")));
+		const response = await request(f.app).post("/member-2/remove").send({}).expect(status);
+		expect(response.body).toEqual({ error: "member removal refused", code: kind });
 	});
 });

@@ -68,9 +68,16 @@ describe("MCP OCI server promotion router", function _DescribeRouter()
 	it("rejects extra promotion authority fields", async function _RejectsExtraFields()
 	{
 		const dependencies = _Dependencies();
-		const response = await request(_App(dependencies)).post("/api/v1/mcp/oci-image-validations/validation-1/server").send({ ..._COMMAND, siloId: "attacker-silo" });
+		const injectedFields = [
+			{ siloId: "attacker-silo" },
+			{ credentialRequirement: "shared-credential" },
+		];
 
-		expect(response.status).toBe(400);
+		for (const injected of injectedFields)
+		{
+			const response = await request(_App(dependencies)).post("/api/v1/mcp/oci-image-validations/validation-1/server").send({ ..._COMMAND, ...injected });
+			expect(response.status).toBe(400);
+		}
 		expect(dependencies.authority.promoteImportedValidation).not.toHaveBeenCalled();
 	});
 });
