@@ -50,6 +50,8 @@ signed-in participant ──► main ◄── HERE ──► history
 - `PrismaConversationMetadataUnitOfWork` and `_CreateConversationMetadataRouter` compose directory, list, create, archive and close operations. `PrismaConversationMetadataReader` supplies review coordinates without exposing creation.
 - `PrismaAgentSessionCreationUnitOfWork` creates or recovers a personal assistant conversation from its caller-scoped UUID.
 - `PrismaSelfConversationHistoryUnitOfWork` and `_CreateSelfConversationHistoryRouter` bind current access to messages, history and event streams. `PrismaConversationMessageAdmissionUnitOfWork` commits the encrypted payload and delegates selected-asset binding through a transaction-scoped `ConversationMessageAttachmentAdmissionFactory` before KurrentDB append.
+  The event stream requires a method-independent browser-origin authority injected by the application
+  authentication composition; this package still owns participant and per-page product permission.
   A retry rechecks current permission and adopts the saved entry's original author name and sign-in
   time. A profile edit or later sign-in cannot turn the same message into a new dispatch; changed
   issuer, principal, participant, content, attachments or activation still conflict.

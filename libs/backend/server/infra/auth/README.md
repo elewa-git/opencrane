@@ -63,6 +63,10 @@ Consumers continue to import the same public entrypoint, `src/index.ts`.
   local Principal and independently rechecked host silo without importing any backend-domain caller
   type. A verified application boundary may bind the already-admitted session silo when its external
   proxy hostname does not encode an OpenCrane silo; the binding rejects identity mismatches.
+- `_CreateRequestBrowserOriginAuthority`, `_HasSameOriginBrowserEvidence`,
+  `SameOriginBrowserRequestAuthority` — select the effective browser authority at the authentication
+  boundary and require matching Origin, Referer, or same-origin fetch metadata for guarded browser
+  transports, including safe-method streams that the session CSRF middleware deliberately skips.
 - `_CreateMountedPublicKeySource`, `MountedPublicKeySource` — fail-closed access to an absolute
   projected public-key file, reloaded on each use so Secret rotation takes effect without restart.
 - `per-org-client`, `request-silo`, `_RequestHost` — per-organisation clients and host/silo resolution.

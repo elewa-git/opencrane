@@ -6,7 +6,7 @@ import express, { type Express } from "express";
 import { __CreateStandaloneFirstUserAdmissionAuditAppender } from "@opencrane/backend/server/iam/audit-writer";
 import { ___AuthRouter, ___CreateOidcAuthService, PrismaAuthenticatedPrincipalAdmissionUnitOfWork, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 import { ___RequestContext } from "@opencrane/backend/observability";
-import { ___AuthMiddleware, PrismaOidcSessionUnitOfWork } from "@opencrane/backend/server/infra/auth";
+import { _CreateRequestBrowserOriginAuthority, ___AuthMiddleware, PrismaOidcSessionUnitOfWork } from "@opencrane/backend/server/infra/auth";
 import { _CheckHealth, _ErrorHandler, _RateLimit, _TransportSecurity, type PublicHealthReportReader } from "@opencrane/backend/server/infra/http";
 
 import { _log } from "../process/log";
@@ -37,7 +37,7 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
 	const authService = ___CreateOidcAuthService(_log, prisma, customApi, standaloneFirstUserAdmission, _CreateStandaloneFirstUserAudit(standaloneFirstUserAdmission));
 	const admission = new PrismaAuthenticatedPrincipalAdmissionUnitOfWork(prisma, _log);
 	const sessions = new PrismaOidcSessionUnitOfWork(prisma);
-	return { authService, sessionMiddleware: authService.createSessionMiddleware(sessions), authMiddleware: ___AuthMiddleware(admission) };
+	return { authService, browserOriginAuthority: _CreateRequestBrowserOriginAuthority(), sessionMiddleware: authService.createSessionMiddleware(sessions), authMiddleware: ___AuthMiddleware(admission) };
 }
 
 /**
@@ -82,7 +82,7 @@ export function _CreatePublicApp(prisma: PrismaClient, authentication: PublicAut
 		app.use(organizationMembers.productAccess);
 
 	// 5. Mount authenticated product routes, then terminate failures through one structured handler.
-	_RegisterRoutes(app, prisma, artifactScannerEnabled, organizationMembers.router, mcpWorkflows, mcpRuntime, providerEffects, memoryWorkflow, historyStore, conversationPrivatePayloadKeyringPath, releaseProfile, conversationAssetRoutesEnabled);
+	_RegisterRoutes(app, prisma, artifactScannerEnabled, organizationMembers.router, mcpWorkflows, mcpRuntime, providerEffects, memoryWorkflow, authentication.browserOriginAuthority, historyStore, conversationPrivatePayloadKeyringPath, releaseProfile, conversationAssetRoutesEnabled);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

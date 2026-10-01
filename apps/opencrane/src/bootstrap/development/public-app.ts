@@ -3,6 +3,7 @@ import { PrismaAuthenticatedPrincipalAdmissionUnitOfWork, PrismaAuthenticatedPri
 import { _CreatePublicApp } from "../http/public-app";
 import { _log } from "../process/log";
 import { _CreateDevelopmentAuthentication } from "./authentication";
+import { _CreateTier2DevelopmentAuthenticationTransport } from "./browser-origin-authority";
 import { _DEVELOPMENT_IDENTITY } from "./config";
 import type { DevelopmentPublicAppDependencies } from "./public-app.types";
 
@@ -21,14 +22,7 @@ export function _CreateDevelopmentPublicApp(dependencies: DevelopmentPublicAppDe
 {
 	const principalAdmission = new PrismaAuthenticatedPrincipalAdmissionUnitOfWork(dependencies.prisma, _log);
 	const principalCapabilities = new PrismaAuthenticatedPrincipalCapabilityUnitOfWork(dependencies.prisma, _log);
-	const browserOrigin = new URL(dependencies.browserOrigin);
-	const transport = {
-		browserHost: browserOrigin.host,
-		browserScheme: browserOrigin.protocol === "https:" ? "https" as const : "http" as const,
-		directHost: "local-development.localhost:8080",
-		proxyTargets: new Set(["127.0.0.1:8080", "localhost:8080"]),
-		scheme: "http" as const,
-	};
+	const transport = _CreateTier2DevelopmentAuthenticationTransport(dependencies.browserOrigin);
 	const authentication = _CreateDevelopmentAuthentication(_DEVELOPMENT_IDENTITY, principalCapabilities, principalAdmission, dependencies.browserSessionCredential, _log, transport);
 	return _CreatePublicApp(
 		dependencies.prisma,

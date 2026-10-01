@@ -610,6 +610,11 @@
       "classification": "process-composition"
     },
     {
+      "path": "apps/opencrane/src/bootstrap/development/browser-origin-authority.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
       "path": "apps/opencrane/src/bootstrap/development/cleanup.ts",
       "owner": "apps/opencrane",
       "classification": "process-composition"

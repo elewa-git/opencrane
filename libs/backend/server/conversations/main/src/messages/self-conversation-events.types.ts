@@ -1,5 +1,6 @@
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import type { Logger } from "@opencrane/backend/observability";
+import type { SameOriginBrowserRequestAuthority } from "@opencrane/backend/server/infra/auth";
 
 import type { ConversationCallerResolver, SelfConversationHistoryAuthority } from "./self-conversation-history.types";
 
@@ -35,6 +36,8 @@ export interface SelfConversationEventsDependencies
 {
 	/** Rechecks membership, participation, Read permission, and private visibility for each page. */
 	readonly authority: Pick<SelfConversationHistoryAuthority, "read">;
+	/** Requires browser-origin evidence selected by the authentication composition. */
+	readonly browserOriginAuthority: Pick<SameOriginBrowserRequestAuthority, "isSameOrigin">;
 	/** Derives the caller from the verified browser session. */
 	readonly resolveCaller: ConversationCallerResolver;
 	/** Opens only the conversation stream derived after participant authorization succeeds. */

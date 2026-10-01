@@ -8,6 +8,7 @@ import type { AuthenticatedPrincipalCapabilityReader } from "@opencrane/backend/
 
 import { _CreateDevelopmentAuthentication } from "../authentication";
 import type { DevelopmentAuthenticationTransport } from "../authentication.types";
+import { _CreateTier2DevelopmentAuthenticationTransport } from "../browser-origin-authority";
 import { _DEVELOPMENT_IDENTITY } from "../config";
 
 /** Exact per-launch credential supplied to the focused browser boundary. */
@@ -30,7 +31,8 @@ function _Admission(): AuthenticatedPrincipalAdmission
 function _App(admission: AuthenticatedPrincipalAdmission = _Admission(), transport?: DevelopmentAuthenticationTransport, logger: Logger = { warn: vi.fn() } as unknown as Logger)
 {
 	const capabilities: AuthenticatedPrincipalCapabilityReader = { canAdministerOrganization: vi.fn().mockResolvedValue(true) };
-	const authentication = _CreateDevelopmentAuthentication(_DEVELOPMENT_IDENTITY, capabilities, admission, _BROWSER_CREDENTIAL, logger, transport);
+	const selectedTransport = transport ?? _CreateTier2DevelopmentAuthenticationTransport("http://local-development.localhost:4200");
+	const authentication = _CreateDevelopmentAuthentication(_DEVELOPMENT_IDENTITY, capabilities, admission, _BROWSER_CREDENTIAL, logger, selectedTransport);
 	if (!authentication.router)
 	{
 		throw new Error("Development authentication requires its fixed router");
@@ -47,6 +49,13 @@ function _App(admission: AuthenticatedPrincipalAdmission = _Admission(), transpo
 			requestHost: _RequestHost(incoming),
 			siloId: principal?.siloId,
 		});
+	});
+	app.get("/api/v1/protected-origin", function _ProtectedOrigin(incoming, response): void
+	{
+		if (!authentication.browserOriginAuthority.isSameOrigin(incoming))
+			return void response.status(403).end();
+
+		response.status(204).end();
 	});
 	app.post("/api/v1/protected", function _Mutating(_incoming, response): void
 	{
@@ -140,6 +149,24 @@ describe("Tier 2 development authentication", function _Suite(): void
 		const refused = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "opencrane.local.opencrane.test").set("X-Forwarded-Host", "opencrane.local.opencrane.test").set("Origin", "http://opencrane.local.opencrane.test").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
 		expect(accepted.status).toBe(204);
 		expect(refused.status).toBe(403);
+	});
+
+	it("admits the Tier 2 event-stream origin through the selected proxy tuple", async function _AcceptsEventStreamOrigin(): Promise<void>
+	{
+		const headers = {
+			"Host": "127.0.0.1:8080",
+			"Referer": "http://local-development.localhost:4200/chats/conversation-1",
+			"Sec-Fetch-Site": "same-origin",
+			"X-Forwarded-Host": "local-development.localhost:4200",
+			"X-OpenCrane-Development-Session": _BROWSER_CREDENTIAL,
+		};
+		const accepted = await request(_App()).get("/api/v1/protected-origin").set(headers);
+		const wrongReferer = await request(_App()).get("/api/v1/protected-origin").set(headers).set("Referer", "http://attacker.localhost:4200/");
+		const wrongTarget = await request(_App()).get("/api/v1/protected-origin").set(headers).set("Host", "127.0.0.1:9090");
+
+		expect(accepted.status).toBe(204);
+		expect(wrongReferer.status).toBe(403);
+		expect(wrongTarget.status).toBe(403);
 	});
 
 	it("redirects a same-origin browser click to the private fragment without a response body", async function _CompletesHandoff(): Promise<void>
