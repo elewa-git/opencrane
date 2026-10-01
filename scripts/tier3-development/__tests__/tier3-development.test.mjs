@@ -66,6 +66,13 @@ function _RunFakeSmokeGuard(scenario)
 	return result;
 }
 
+/** Evaluates the smoke cleanup retention policy without contacting Docker. */
+function _RunSmokeRetentionPolicy(keepCluster, clusterCreated, clusterPresentAtStart)
+{
+	const script = fileURLToPath(new URL("../../../apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh", import.meta.url));
+	return spawnSync("bash", [script, "--assert-retention-policy", keepCluster, clusterCreated, clusterPresentAtStart], { encoding: "utf8" });
+}
+
 test("parses the separate infra and agent contracts", function _Options()
 {
 	assert.equal(parseTier3Options(["--profile", "infra"]).storageMode, "fast");
@@ -584,7 +591,9 @@ test("keeps the shared smoke defaults compatible with CI", async function _Smoke
 	assert.match(source, /--prune-owned-images\)/u);
 	assert.match(source, /docker image rm --no-prune "\$reference"/u);
 	assert.match(source, /docker image prune --all --force --filter "label=\$\{SMOKE_OWNER_IMAGE_LABEL\}"/u);
-	assert.match(source, /if \[\[ "\$KEEP_CLUSTER" == "1" && "\$SMOKE_CLUSTER_CREATED" == "1" \]\]; then/u);
+	assert.match(source, /if _should_retain_cluster; then/u);
+	assert.match(source, /SMOKE_CLUSTER_PRESENT_AT_START=1/u);
+	assert.match(source, /SMOKE_CLUSTER_PRESENT_AT_START=0/u);
 	assert.match(source, /SMOKE_CLUSTER_CREATED=1/u);
 	assert.match(source, /set -Eeuo pipefail/u);
 	assert.match(source, /trap '_capture_failure "\$\?" "\$LINENO"' ERR/u);
@@ -598,6 +607,17 @@ test("keeps the shared smoke defaults compatible with CI", async function _Smoke
 	assert.equal((source.match(/--wait --timeout "\$\{SMOKE_PREREQUISITE_TIMEOUT_SECONDS\}s"/gu) ?? []).length, 2);
 	assert.match(source, /TIMEOUT_SECONDS="\$SMOKE_INSTALL_TIMEOUT_SECONDS" \\\n"\$ROOT_DIR\/apps\/_infra\/deploy-k8s\/deploy\.sh"/u);
 	assert.match(source, /_start_phase "prepare candidate images"/u);
+	assert.match(source, /_start_phase "validate hosted server trust"/u);
+	assert.match(source, /_pass_phase "hosted server trust validated"/u);
+	assert.match(source, /_start_phase "validate Tier 3 workspace dependencies"/u);
+});
+
+test("retains only a complete current or ownership-verified pre-existing cluster", function _SmokeRetentionPolicy()
+{
+	assert.equal(_RunSmokeRetentionPolicy("1", "0", "1").status, 0);
+	assert.equal(_RunSmokeRetentionPolicy("1", "1", "0").status, 0);
+	assert.notEqual(_RunSmokeRetentionPolicy("0", "1", "1").status, 0);
+	assert.notEqual(_RunSmokeRetentionPolicy("1", "0", "0").status, 0);
 });
 
 test("smoke ownership mode fails closed on orphans, foreign nodes, volumes, and Docker errors", function _SmokeOwnershipBehavior()

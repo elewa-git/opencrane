@@ -249,8 +249,10 @@ package imports it.
   CI retains only named public evidence and image/byte digests under
   `.nx/test-results/hosted-generated-file`; credentials, setup state and file contents stay outside
   that artifact. The smoke first renders the actual server certificate-trust configuration and
-  stops before creating a cluster or credentials when that support is absent. Optional server
-  certificate trust remains pending, and the public-marker client integration is under validation.
+  stops before creating a cluster or credentials when that support is absent. Tier 3 explicitly
+  selects its generated public CA bundle through the default-disabled
+  `clustertenantManager.additionalCaCertificates` contract; ordinary deployment values add no trust.
+  The public-marker client integration remains under validation.
   Offline checks do not prove a hosted conversation or
   authorise a testv5 deployment.
 

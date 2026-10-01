@@ -7,6 +7,18 @@ _SMOKE_STORAGE_PROBE_IMAGE="busybox:1.36.1"
 _SMOKE_DOCKER_PRUNE_TARGET_GIB="$((_SMOKE_REQUIRED_DOCKER_FREE_GIB + 1))"
 _SMOKE_DOCKER_PRUNE_TARGET_BYTES="$((_SMOKE_DOCKER_PRUNE_TARGET_GIB * 1024 * 1024 * 1024))"
 
+# A checkout damaged by the earlier minimum-host policy needs one explicit `npm ci` repair. Future
+# minimum-host runs preserve these active prerequisites instead of hiding a network reinstall.
+_require_smoke_host_dependencies()
+{
+  if [[ -x "$ROOT_DIR/node_modules/.bin/nx" ]] \
+    && [[ -f "$ROOT_DIR/node_modules/js-yaml/package.json" ]]; then
+    return 0
+  fi
+  echo "[develop-smoke] Tier 3 workspace dependencies are incomplete. Run 'npm ci' once in this checkout, then retry." >&2
+  return 1
+}
+
 # Fail before image builds or deployment pulls can turn exhausted Docker storage into node disk pressure.
 _require_smoke_docker_free_space()
 {
@@ -23,15 +35,15 @@ _require_smoke_docker_free_space()
   fi
 }
 
-# Remove reproducible host dependencies and caches before image builds consume the minimum disk.
+# Reclaim caches before image builds consume the minimum disk. The active workspace dependency tree
+# remains available because the trust preflight, Nx qualification and host-side build tools use it.
 _prepare_smoke_host_storage()
 {
   if [[ "$SMOKE_HOST_PROFILE" == "recommended" ]]; then
     return 0
   fi
 
-  echo "[develop-smoke] Reclaiming host dependencies, package cache, and Docker caches for the minimum disk"
-  rm -rf -- "$ROOT_DIR/node_modules"
+  echo "[develop-smoke] Reclaiming package and Docker caches for the minimum disk"
   npm cache clean --force || return $?
   docker buildx prune --all --force --min-free-space "$_SMOKE_DOCKER_PRUNE_TARGET_BYTES" || return $?
   docker image prune --force || return $?

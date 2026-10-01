@@ -43,7 +43,7 @@ if rg -n --pcre2 '^import .* from "(?!node:)' "$FIXTURE_DIR/protocol-fixture.mjs
 fi
 
 for project in agent-controller artifact-scanner mcp-executor skill-authoring; do
-  grep -Fq "\"${project}|opencrane/${project}:develop-smoke" "$SMOKE"
+  grep -Fq "\"${project}|opencrane/${project}:\${SMOKE_IMAGE_TAG}" "$SMOKE"
 done
 grep -Fq 'apps/mcp-file-generator/deploy/Dockerfile' "$FIXTURE_DIR/prepare-oci-archive.sh"
 grep -Fq -- '--output "type=oci,dest=${oci_tar}"' "$FIXTURE_DIR/prepare-oci-archive.sh"

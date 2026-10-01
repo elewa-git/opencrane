@@ -74,6 +74,20 @@ _assert_log()
 CLUSTER_NAME="smoke"
 SMOKE_IMAGES=(image-a image-b)
 
+# An already-reclaimed checkout fails with the exact one-time repair instead of an opaque import
+# error, while a complete active runtime is accepted without any network work.
+mkdir -p "$ROOT_DIR/node_modules/.bin" "$ROOT_DIR/node_modules/js-yaml"
+touch "$ROOT_DIR/node_modules/js-yaml/package.json"
+touch "$ROOT_DIR/node_modules/.bin/nx"
+chmod +x "$ROOT_DIR/node_modules/.bin/nx"
+_require_smoke_host_dependencies
+rm "$ROOT_DIR/node_modules/js-yaml/package.json"
+if _require_smoke_host_dependencies 2>/dev/null; then
+  echo "Tier 3 must reject an incomplete workspace dependency runtime." >&2
+  exit 1
+fi
+touch "$ROOT_DIR/node_modules/js-yaml/package.json"
+
 # The recommended and CI paths retain reusable dependencies and caches.
 _reset_fixture
 mkdir -p "$ROOT_DIR/node_modules"
@@ -82,15 +96,19 @@ _prepare_smoke_host_storage
 [[ -d "$ROOT_DIR/node_modules" ]]
 _assert_log ''
 
-# Minimum-host preparation removes reproducible dependencies and clears caches before image builds.
+# Minimum-host preparation preserves the active dependency runtime while clearing caches before
+# image builds. A second preparation pass must remain runnable from the same checkout.
 _reset_fixture
+mkdir -p "$ROOT_DIR/node_modules"
+touch "$ROOT_DIR/node_modules/runtime-marker"
 SMOKE_HOST_PROFILE="minimum"
 _prepare_smoke_host_storage
-if [[ -e "$ROOT_DIR/node_modules" ]]; then
-  echo "Minimum-host preparation must remove the reproducible workspace dependency tree." >&2
+_prepare_smoke_host_storage
+if [[ ! -f "$ROOT_DIR/node_modules/runtime-marker" ]]; then
+  echo "Minimum-host preparation must preserve the active workspace dependency tree." >&2
   exit 1
 fi
-_assert_log $'npm cache clean --force\ndocker buildx prune --all --force --min-free-space 13958643712\ndocker image prune --force\ndocker run --rm --pull=missing --network none --read-only busybox:1.36.1 df -Pk /'
+_assert_log $'npm cache clean --force\ndocker buildx prune --all --force --min-free-space 13958643712\ndocker image prune --force\ndocker run --rm --pull=missing --network none --read-only busybox:1.36.1 df -Pk /\nnpm cache clean --force\ndocker buildx prune --all --force --min-free-space 13958643712\ndocker image prune --force\ndocker run --rm --pull=missing --network none --read-only busybox:1.36.1 df -Pk /'
 
 # Pruning cannot admit a minimum host when other Docker allocations still consume the reserve.
 _reset_fixture

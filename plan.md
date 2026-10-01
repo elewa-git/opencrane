@@ -1365,14 +1365,16 @@ retention. The smoke copies only named public evidence and image/byte digests in
 its credentials, checkpoints and generated file contents remain outside the artifact. The app
 bridge is implemented. No complete k3d qualification has run.
 
-Automatic approval review rejected optional production outbound CA trust. The exact source-only
-proposal at `/private/tmp/opencrane-additional-ca-source-proposal.md` passes independent review and
-explicit approval is pending; no trust change or substitute Pod/image injection is applied.
+The optional outbound CA contract is now explicitly approved and applied to the production server
+chart as a default-disabled capability. Tier 3 selects one namespace-local public CA bundle, mounts
+only its configured key read-only, and supplies `NODE_EXTRA_CA_CERTS`; a required revision rolls the
+server when that bundle changes. Ordinary production values remain empty and render no additional
+trust. No substitute Pod/image injection is used.
 Only newly generated fixture identities and credentials belong to this CI work. Testv5 and
 existing databases remain outside the slice.
 
-The actual server-trust render now fails before cluster or credential creation when the proposed
-certificate bundle has no production consumer. The independently reviewed shared-LiteLLM fixture
+The actual server-trust render now fails before cluster or credential creation when the selected
+certificate bundle is not consumed through that exact server contract. The independently reviewed shared-LiteLLM fixture
 was replaced with the required instance mode; fake model/key administration and its unused master
 Secret were removed. Automatic approval review also rejected the public synthetic-provider setup
 source patch because it forwards a key into provider configuration. The exact rejected proposal is

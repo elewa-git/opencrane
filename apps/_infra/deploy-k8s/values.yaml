@@ -492,6 +492,13 @@ clustertenantManager:
   mcpConnectionMaterialKeyring:
     existingSecret: opencrane-mcp-connection-material
     secretKey: keyring.json
+  # -- Optional process-wide Node.js trust extension for HTTPS services signed by a private CA.
+  # Keep all fields empty to use the ordinary public roots only. Rotate the public CA bundle and
+  # revision together so the server Pod rolls onto the new projection.
+  additionalCaCertificates:
+    existingSecret: ""
+    secretKey: ""
+    revision: ""
   # -- Bound run admission before snapshot assembly can take a pooled PostgreSQL connection.
   # These apply per silo and AgentService; keep the active limit below the server's five-connection
   # Prisma budget so a hot service cannot starve unrelated control-plane work.

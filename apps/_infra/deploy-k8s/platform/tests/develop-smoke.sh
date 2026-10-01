@@ -36,6 +36,7 @@ OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL="${OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL:-}"
 SMOKE_LOCAL_REGISTRY_NAME="${CLUSTER_NAME}-registry"
 SMOKE_LOCAL_REGISTRY_ADDRESS=""
 SMOKE_CLUSTER_CREATED=0
+SMOKE_CLUSTER_PRESENT_AT_START=0
 SMOKE_REGISTRY_CREATED=0
 SMOKE_REGISTRY_CONTAINER_ID=""
 SMOKE_CURRENT_PHASE="initialization"
@@ -112,6 +113,15 @@ _start_phase()
 _pass_phase()
 {
   echo "[develop-smoke] PASS: $1"
+}
+
+_should_retain_cluster()
+{
+  local keep_cluster="${1:-$KEEP_CLUSTER}"
+  local cluster_created="${2:-$SMOKE_CLUSTER_CREATED}"
+  local cluster_present_at_start="${3:-$SMOKE_CLUSTER_PRESENT_AT_START}"
+  [[ "$keep_cluster" == "1" ]] \
+    && { [[ "$cluster_created" == "1" ]] || [[ "$cluster_present_at_start" == "1" ]]; }
 }
 
 source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-image-storage.sh"
@@ -304,7 +314,7 @@ _cleanup()
     bash "$HOSTED_FIXTURE_DIR/hosted-services.sh" stop "$HOSTED_RUN_DIR" "$CLUSTER_NAME" "$ROOT_DIR" || true
     rm -rf -- "$HOSTED_RUN_DIR"
   fi
-  if [[ "$KEEP_CLUSTER" == "1" && "$SMOKE_CLUSTER_CREATED" == "1" ]]; then
+  if _should_retain_cluster; then
     echo "[develop-smoke] KEEP_CLUSTER=1; leaving '$CLUSTER_NAME' running"
   else
     if ! _teardown_cluster_storage; then
@@ -725,6 +735,12 @@ case "${1:-}" in
     _prune_owned_smoke_images
     exit 0
     ;;
+  --assert-retention-policy)
+    if _should_retain_cluster "${2:-}" "${3:-}" "${4:-}"; then
+      exit 0
+    fi
+    exit 1
+    ;;
   "") ;;
   *) echo "[develop-smoke] Unknown internal mode '$1'." >&2; exit 2 ;;
 esac
@@ -738,7 +754,6 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 for command in awk curl docker git helm jq k3d kubectl node npm openssl tar zip; do _require_command "$command"; done
-bash "$HOSTED_FIXTURE_DIR/require-server-trust.sh" "$ROOT_DIR"
 docker info >/dev/null 2>&1 || { echo "[develop-smoke] Docker daemon is not reachable." >&2; exit 1; }
 if [[ "$SMOKE_STORAGE_MODE" != "fast" && "$SMOKE_STORAGE_MODE" != "full" ]]; then
   echo "[develop-smoke] SMOKE_STORAGE_MODE must be 'fast' or 'full', got '$SMOKE_STORAGE_MODE'." >&2
@@ -757,10 +772,26 @@ if [[ -n "$OPENCRANE_K3D_DEVELOPMENT_CREDENTIAL" ]] && ! [[ "$OPENCRANE_K3D_DEVE
   exit 1
 fi
 
+_start_phase "verify retained Tier 3 ownership"
+_assert_owned_resource_set
+if docker inspect "k3d-${CLUSTER_NAME}-server-0" >/dev/null 2>&1; then
+  SMOKE_CLUSTER_PRESENT_AT_START=1
+fi
+_pass_phase "retained Tier 3 ownership verified"
+
+_start_phase "validate Tier 3 workspace dependencies"
+_require_smoke_host_dependencies
+_pass_phase "Tier 3 workspace dependencies validated"
+
+_start_phase "validate hosted server trust"
+bash "$HOSTED_FIXTURE_DIR/require-server-trust.sh" "$ROOT_DIR"
+_pass_phase "hosted server trust validated"
+
 echo "[develop-smoke] Creating disposable k3d cluster '$CLUSTER_NAME'"
 _assert_owned_resource_set
 if docker inspect "k3d-${CLUSTER_NAME}-server-0" >/dev/null 2>&1; then
   _assert_owned_resource_set
+  SMOKE_CLUSTER_PRESENT_AT_START=0
   if docker inspect "k3d-${SMOKE_LOCAL_REGISTRY_NAME}" >/dev/null 2>&1; then
     k3d registry delete "$SMOKE_LOCAL_REGISTRY_NAME"
   fi

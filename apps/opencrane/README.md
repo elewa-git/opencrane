@@ -266,6 +266,22 @@ remote dispatch to the actual server Pod through TokenReview. The projected audi
 The connection API, database and runtime integration are under source validation. Remote and hosted
 provider qualification and the testv5 journey remain separate gates.
 
+### Optional outbound certificate authority
+
+The server uses the public Node.js certificate roots by default. A deployment that must call an
+HTTPS service signed by a private authority can set all three
+`clustertenantManager.additionalCaCertificates` fields: `existingSecret`, `secretKey`, and
+`revision`. The selected Secret key must contain public CA certificate material or a public CA
+bundle. It is projected read-only as `/var/run/opencrane/outbound-ca/ca.crt` and supplied through
+`NODE_EXTRA_CA_CERTS`; no private CA key belongs in this Secret.
+
+All three fields empty means disabled, and any partial configuration fails Helm rendering. The
+capability adds transport trust only: it does not add a network path, registry authorization,
+product permission, or provider credential, and normal hostname and certificate verification stay
+enabled. Rotate the Secret contents and `revision` together so the Pod-template annotation starts a
+new server rollout. Production behavior is unchanged until an operator explicitly configures the
+tuple; Tier 3 does so only for its disposable hosted generated-file fixtures.
+
 ### Conversation-computer activation consumer
 
 Every server replica joins the silo's `conversation-computer-activation` KurrentDB consumer group as
