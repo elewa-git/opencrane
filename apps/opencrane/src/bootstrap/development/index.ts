@@ -1,5 +1,5 @@
 // OpenTelemetry must load before the current server dependencies it instruments.
-import "../app/instrument";
+import "../process/instrument";
 
 import { ___BindConsole, ___ShutdownTelemetry } from "@opencrane/backend/observability";
 
