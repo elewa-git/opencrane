@@ -20,7 +20,7 @@ export function _CreateSelfConversationEventsHandler(dependencies: SelfConversat
 		const caller = dependencies.resolveCaller(request);
 		if (caller === null)
 			return void response.status(401).json({ error: "unauthorized" });
-		if (!_SameOrigin(request))
+		if (!dependencies.browserOriginAuthority.isSameOrigin(request))
 			return void response.status(403).json({ error: "same_origin_required" });
 		const cursor = _Cursor(request);
 		const conversationId = request.params["conversationId"];
@@ -193,25 +193,6 @@ async function _Wake(next: Promise<IteratorResult<HistoryRecordedEvent>>, signal
 	{
 		timer.abort();
 	}
-}
-
-/** Requires same-origin browser evidence; the general session CSRF guard deliberately skips GET requests. */
-function _SameOrigin(request: Request): boolean
-{
-	const site = request.get("sec-fetch-site");
-	if (site !== undefined && site !== "same-origin")
-		return false;
-	const expected = `${request.protocol}://${request.get("host")}`;
-	const origin = request.get("origin");
-	if (origin !== undefined)
-		return origin === expected;
-	const referer = request.get("referer");
-	if (referer !== undefined)
-	{
-		try { return new URL(referer).origin === expected; }
-		catch { return false; }
-	}
-	return site === "same-origin";
 }
 
 /** Accepts one bounded unsigned stream revision and rejects ambiguous replay coordinates. */

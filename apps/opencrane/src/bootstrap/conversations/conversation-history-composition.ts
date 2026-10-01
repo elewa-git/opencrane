@@ -13,6 +13,7 @@ import { _CreateHumanMembershipEvidenceConfig } from "@opencrane/backend/server/
 import { PrismaConversationMessageAttachmentRepository } from "@opencrane/backend/server/conversation-assets";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
+import type { SameOriginBrowserRequestAuthority } from "@opencrane/backend/server/infra/auth";
 import type { ConversationComputerReleaseProfileConfig } from "../configuration/config.types";
 import { _ProcessShutdownSignal } from "../process/process-shutdown";
 import { _log } from "../process/log";
@@ -25,6 +26,7 @@ export function _CreateConversationHistoryComposition(
   releaseProfile: ConversationComputerReleaseProfileConfig,
   workflows: IWorkflowEngine,
   memoryWorkflow: PersonalMemoryWorkflowCompositionOptions,
+  browserOriginAuthority: SameOriginBrowserRequestAuthority,
 ): ConversationHistoryComposition
 {
   const cipher = AesGcmConversationPrivatePayloadCipher.fromDocument(
@@ -62,7 +64,7 @@ export function _CreateConversationHistoryComposition(
   const router = _CreateConversationMetadataRouter(metadata, resolveCaller, _log);
   router.use(_CreateGroupChildRouter(children, resolveCaller, _log));
   router.use(
-    _CreateSelfConversationHistoryRouter({ authority, resolveCaller, logger: _log, events: { historyStore, shutdownSignal: _ProcessShutdownSignal, logger: _log } }),
+    _CreateSelfConversationHistoryRouter({ authority, resolveCaller, logger: _log, events: { browserOriginAuthority, historyStore, shutdownSignal: _ProcessShutdownSignal, logger: _log } }),
   );
   return { conversations: router, memory: _CreatePersonalMemoryCommandComposition(prisma, authority, workflows) };
 }

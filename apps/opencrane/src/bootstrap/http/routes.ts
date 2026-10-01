@@ -30,7 +30,7 @@ import { ConversationComputerHistory } from "@opencrane/backend/server/conversat
 import { PrismaConversationComputerTurnWorkflowEventRepository } from "@opencrane/backend/server/conversations";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { _ResolveSkillAuthoringValidationCaller, PrismaSkillAuthoringValidationSubmissionUnitOfWork, _CreateSkillCatalogueRouter, __CreateSkillAuthoringValidationSubmissionRouter } from "@opencrane/backend/server/agents/skills";
-import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
+import { _ResolveRequestPrincipal, type SameOriginBrowserRequestAuthority } from "@opencrane/backend/server/infra/auth";
 import { _OpenapiRouter, _RateLimit } from "@opencrane/backend/server/infra/http";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
 
@@ -58,12 +58,12 @@ import type { McpRuntimeComposition } from "../workflows/mcp-runtime-composition
  * @returns The configured public listener.
  * @throws When the deployment has not supplied its conversation-computer profile.
  */
-export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition | null, providerEffects: ProviderEffectCommandExecutor, memoryWorkflow: PersonalMemoryWorkflowCompositionOptions, historyStore?: HistoryStore, conversationPrivatePayloadKeyringPath?: string, releaseProfile?: ConversationComputerReleaseProfileConfig, conversationAssetRoutesEnabled = true): Express
+export function _RegisterRoutes(app: Express, prisma: PrismaClient, artifactScannerEnabled: boolean, organizationMembersRouter: Router, mcpWorkflows: McpWorkflowComposition, mcpRuntime: McpRuntimeComposition | null, providerEffects: ProviderEffectCommandExecutor, memoryWorkflow: PersonalMemoryWorkflowCompositionOptions, browserOriginAuthority: SameOriginBrowserRequestAuthority, historyStore?: HistoryStore, conversationPrivatePayloadKeyringPath?: string, releaseProfile?: ConversationComputerReleaseProfileConfig, conversationAssetRoutesEnabled = true): Express
 {
 	if (releaseProfile === undefined)
 		throw new Error("Product routes require the configured conversation-computer profile");
 	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner, releaseProfile.profileName, [releaseProfile.profileName]);
-	const conversationHistory = historyStore === undefined || conversationPrivatePayloadKeyringPath === undefined ? null : _CreateConversationHistoryComposition(prisma, historyStore, conversationPrivatePayloadKeyringPath, releaseProfile, mcpWorkflows.execution, memoryWorkflow);
+	const conversationHistory = historyStore === undefined || conversationPrivatePayloadKeyringPath === undefined ? null : _CreateConversationHistoryComposition(prisma, historyStore, conversationPrivatePayloadKeyringPath, releaseProfile, mcpWorkflows.execution, memoryWorkflow, browserOriginAuthority);
 	const computerReviewAuthority = historyStore === undefined || conversationPrivatePayloadKeyringPath === undefined ? null : new _ConversationComputerReviewAuthority(new PrismaConversationMetadataReader(prisma), new ConversationComputerHistory(historyStore), KeyedConversationComputerReviewCredentialDeriver.fromKeyring(_ReadConversationPrivatePayloadKeyring(conversationPrivatePayloadKeyringPath)));
 	const agentSandboxReleaseProfile = "namespace" in releaseProfile ? releaseProfile as AgentSandboxReleaseProfileConfig : null;
 	const computerReview = computerReviewAuthority === null || agentSandboxReleaseProfile === null ? null : _CreateConversationComputerReviewRouter({ authority: computerReviewAuthority, sandboxNamespace: agentSandboxReleaseProfile.namespace, logger: _log }, _ResolveRequestPrincipal);

@@ -30,6 +30,8 @@ export type { AuthenticatedPrincipalAdmission, AuthenticatedPrincipalAdmissionIn
 export { ___LoadOidcAuthConfig } from "./configuration/oidc-config";
 export type { OidcAuthConfig } from "./configuration/oidc-config.types";
 export { _RequestHost } from "./requests/request-host";
+export { _CreateRequestBrowserOriginAuthority, _HasSameOriginBrowserEvidence } from "./requests/browser-origin-authority";
+export type { SameOriginBrowserRequestAuthority } from "./requests/browser-origin-authority.types";
 export { _BindRequestPrincipalSilo, _ResolveRequestPrincipal } from "./requests/request-principal";
 export type { RequestPrincipal } from "./requests/request-principal.types";
 export { _CreateMountedPublicKeySource } from "./keys/mounted-public-key";
