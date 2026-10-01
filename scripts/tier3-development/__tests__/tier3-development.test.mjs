@@ -306,7 +306,7 @@ test("pins Tier 3 proxy trust and replaces untrusted forwarding and credential c
 		url: "/api/v1/me/conversations/conversation/events",
 		headers: {
 			host: "localhost:4200",
-			origin: "https://localhost:4200",
+			origin: "http://localhost:4200",
 			referer: "https://example-codespace-4200.app.github.dev/conversations/conversation",
 			"sec-fetch-site": "same-origin",
 			"x-forwarded-host": "example-codespace-4200.app.github.dev",
@@ -349,7 +349,7 @@ test("rejects foreign Host even for safe reads before the proxy attaches credent
 		method: "GET",
 		headers: {
 			host: "localhost:4200",
-			origin: "https://localhost:4200",
+			origin: "http://localhost:4200",
 			referer: "https://example-codespace-4200.app.github.dev/",
 			"sec-fetch-site": "same-origin",
 			"x-forwarded-host": "example-codespace-4200.app.github.dev",
@@ -388,6 +388,9 @@ test("rejects foreign Host even for safe reads before the proxy attaches credent
 	assert.equal(isAllowedTier3BrowserRequest({ ...rewrittenRead, headers: { ...rewrittenRead.headers, referer: "https://attacker.example/" } }, allowed), false);
 	assert.equal(isAllowedTier3BrowserRequest({ ...rewrittenRead, headers: { ...rewrittenRead.headers, "sec-fetch-site": "cross-site" } }, allowed), false);
 	assert.equal(isAllowedTier3BrowserRequest({ ...rewrittenRead, headers: { ...rewrittenRead.headers, host: "127.0.0.1:4200", "x-forwarded-host": undefined, "x-forwarded-proto": undefined } }, allowed), false);
+	assert.equal(isAllowedTier3BrowserRequest({ ...directRewrittenRead, headers: { ...directRewrittenRead.headers, origin: "https://localhost:4200" } }, allowed), false);
+	assert.equal(isAllowedTier3BrowserRequest({ ...directRewrittenRead, headers: { ...directRewrittenRead.headers, origin: "http://localhost:4201" } }, allowed), false);
+	assert.equal(isAllowedTier3BrowserRequest({ ...directRewrittenRead, headers: { ...directRewrittenRead.headers, origin: "http://127.0.0.1:4200" } }, allowed), false);
 	assert.equal(isAllowedTier3BrowserRequest(foreignRead, allowed), false);
 	assert.equal(isAllowedTier3BrowserRequest(foreignUpgrade, allowed), false);
 	assert.equal(isAllowedTier3BrowserRequest({ method: "GET", headers: { host: "127.0.0.1:4200", origin: "http://foreign.example" } }, allowed), false);
@@ -412,7 +415,7 @@ test("requires the mutation origin to match a coordinator-selected direct or for
 		method: "POST",
 		headers: {
 			host: "localhost:4200",
-			origin: "https://localhost:4200",
+			origin: "http://localhost:4200",
 			referer: "https://example-codespace-4200.app.github.dev/onboarding",
 			"sec-fetch-site": "same-origin",
 			"x-forwarded-host": "example-codespace-4200.app.github.dev",
@@ -424,6 +427,7 @@ test("requires the mutation origin to match a coordinator-selected direct or for
 	const forgedProtocol = { method: "POST", headers: { host: "127.0.0.1:4200", origin: "https://127.0.0.1:4200", "x-forwarded-proto": "https" } };
 	const mismatchedHost = { method: "POST", headers: { host: "127.0.0.1:4200", origin: "https://example-codespace-4200.app.github.dev" } };
 	const localReferer = { method: "POST", headers: { host: "127.0.0.1:4200", referer: "http://127.0.0.1:4200/onboarding" } };
+	const rewrittenUpgrade = { ...rewritten, method: "GET", headers: { ...rewritten.headers, host: "example-codespace-4200.app.github.dev", upgrade: "websocket", "x-forwarded-host": undefined, "x-forwarded-proto": undefined } };
 	const missingUpgradeOrigin = { method: "GET", headers: { host: "127.0.0.1:4200", upgrade: "websocket" } };
 	const refererOnlyUpgrade = { method: "GET", headers: { host: "127.0.0.1:4200", referer: "http://127.0.0.1:4200/onboarding", upgrade: "websocket" } };
 	const otherUpgrade = { method: "GET", headers: { host: "127.0.0.1:4200", origin: "http://127.0.0.1:4200", upgrade: "h2c" } };
@@ -431,6 +435,7 @@ test("requires the mutation origin to match a coordinator-selected direct or for
 	assert.equal(isAllowedTier3BrowserRequest(forwarded, allowed), true);
 	assert.equal(isAllowedTier3BrowserRequest(defaultHttpsPort, allowed), true);
 	assert.equal(isAllowedTier3BrowserRequest(rewritten, allowed), true);
+	assert.equal(isAllowedTier3BrowserRequest(rewrittenUpgrade, allowed), true);
 	assert.equal(isAllowedTier3BrowserRequest(localReferer, allowed), true);
 	assert.equal(isAllowedTier3BrowserRequest(foreignForward, allowed), false);
 	assert.equal(isAllowedTier3BrowserRequest(wrongForwardedProtocol, allowed), false);

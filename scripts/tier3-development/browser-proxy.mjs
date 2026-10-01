@@ -153,7 +153,7 @@ function _HasExpectedCodespacesOriginRewrite(request, origin, expected, allowedB
 	if (external.protocol !== "https:" || external.hostname === "127.0.0.1" || !loopback)
 		return false;
 	const loopbackUrl = new URL(loopback);
-	const rewrittenOrigin = `https://localhost${loopbackUrl.port ? `:${loopbackUrl.port}` : ""}`;
+	const rewrittenOrigin = `${loopbackUrl.protocol}//localhost${loopbackUrl.port ? `:${loopbackUrl.port}` : ""}`;
 
 	if (!_MatchesOrigin(origin, rewrittenOrigin))
 		return false;
