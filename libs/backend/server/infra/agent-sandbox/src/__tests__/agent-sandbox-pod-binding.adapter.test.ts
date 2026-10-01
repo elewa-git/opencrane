@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { AgentSandboxPodBindingAdapter } from "../agent-sandbox-pod-binding.adapter";
+import type { AgentSandboxPodBindingCommand } from "../agent-sandbox-pod-binding.types";
 
 /** Supplies a claim and its named Pod without granting namespace-wide discovery. */
 function _Fixture()
@@ -11,7 +12,7 @@ function _Fixture()
 	const customApi = { getNamespacedCustomObject: vi.fn().mockResolvedValue(claim) };
 	const coreApi = { readNamespacedPod: vi.fn().mockResolvedValue(pod) };
 	const adapter = new AgentSandboxPodBindingAdapter(coreApi as never, customApi as never);
-	const command = { computerId: "computer-one", lease: { leaseId: "lease-one", leaseGeneration: 2, sandboxClaimId: "computer-one-g2" }, workload: { subject: "system:serviceaccount:testv5:conversation-computer", namespace: "testv5", serviceAccountName: "conversation-computer", podUid: "pod-uid-1" } };
+	const command = { computerId: "computer-one", lease: { leaseId: "lease-one", leaseGeneration: 2 }, realization: { kind: "agent_sandbox" as AgentSandboxPodBindingCommand["realization"]["kind"], claimId: "computer-one-g2", sandboxId: "sandbox-one", serviceFQDN: "sandbox-one.testv5.svc.cluster.local" }, workload: { subject: "system:serviceaccount:testv5:conversation-computer", namespace: "testv5", serviceAccountName: "conversation-computer", podUid: "pod-uid-1" } } satisfies AgentSandboxPodBindingCommand;
 	return { adapter, command, coreApi, customApi, claim, pod };
 }
 
@@ -27,7 +28,7 @@ describe("AgentSandboxPodBindingAdapter", function _Suite()
 	it("resolves the live Pod identity from release-fixed coordinates", async function _ResolveIdentity()
 	{
 		const fixture = _Fixture();
-		await expect(fixture.adapter.resolve({ computerId: fixture.command.computerId, lease: fixture.command.lease, namespace: "testv5", serviceAccountName: "conversation-computer" })).resolves.toEqual(fixture.command.workload);
+		await expect(fixture.adapter.resolve({ computerId: fixture.command.computerId, lease: { ...fixture.command.lease, sandboxClaimId: fixture.command.realization.claimId }, namespace: "testv5", serviceAccountName: "conversation-computer" })).resolves.toEqual(fixture.command.workload);
 	});
 
 	it.each(["uid", "name", "namespace"] as const)("rejects a Pod with a foreign %s", async function _ForeignIdentity(field)

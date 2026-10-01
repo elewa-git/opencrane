@@ -8,9 +8,9 @@
  * Every field is validated by `_IssueAttemptLiteLlmKey` before the mint, and issuance fails hard
  * rather than falling back — a run cannot proceed without its own scoped key.
  *
- * @see LiteLLM proxy `POST /key/generate`, pinned to `main-v1.81.0-stable` by `litellm.image.tag`
+ * @see LiteLLM proxy `POST /key/generate`, pinned to `main-v1.81.9-stable` by `litellm.image.tag`
  *      in apps/_infra/deploy-k8s/values.yaml.
- * @see https://github.com/BerriAI/litellm/blob/v1.81.0-stable/litellm/proxy/management_endpoints/key_management_endpoints.py
+ * @see https://github.com/BerriAI/litellm/blob/v1.81.9-stable/litellm/proxy/management_endpoints/key_management_endpoints.py
  */
 export interface AttemptLiteLlmKeyRequest
 {

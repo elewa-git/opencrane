@@ -1,4 +1,4 @@
-import { AgentIdentityStates } from "@opencrane/contracts";
+import { AgentIdentityKinds, AgentIdentityStates } from "@opencrane/contracts";
 import { HistoryExpectedRevisions } from "@opencrane/backend/server/infra/history-store";
 import { describe, expect, it, vi } from "vitest";
 
@@ -9,7 +9,7 @@ const _RESULT = { created: true, siloId: "silo-1", agentServiceId: "service-1", 
 /** Keeps append failures and independently checked current identity reads observable. */
 function _History()
 {
-	return { load: vi.fn().mockResolvedValue(null), append: vi.fn().mockResolvedValue({}), loadActive: vi.fn().mockResolvedValue({ identity: { kind: "managed", state: AgentIdentityStates.Active } }) };
+	return { load: vi.fn().mockResolvedValue(null), append: vi.fn().mockResolvedValue({}), loadActive: vi.fn().mockResolvedValue({ identity: { kind: AgentIdentityKinds.Managed, state: AgentIdentityStates.Active } }) };
 }
 
 describe("__EnsureCompanyAssistantIdentity", function _Suite()
@@ -18,7 +18,7 @@ describe("__EnsureCompanyAssistantIdentity", function _Suite()
 	{
 		const history = _History();
 		await __EnsureCompanyAssistantIdentity(history as never, _RESULT);
-		expect(history.append).toHaveBeenCalledExactlyOnceWith({ expectedRevision: HistoryExpectedRevisions.NoStream, eventId: _RESULT.identityEventId, identity: expect.objectContaining({ kind: "managed", id: "identity-1", principalId: "company-principal", createdByPrincipalId: "admin", createdAt: _RESULT.createdAt }) });
+		expect(history.append).toHaveBeenCalledExactlyOnceWith({ expectedRevision: HistoryExpectedRevisions.NoStream, eventId: _RESULT.identityEventId, identity: expect.objectContaining({ kind: AgentIdentityKinds.Managed, id: "identity-1", principalId: "company-principal", createdByPrincipalId: "admin", createdAt: _RESULT.createdAt }) });
 		expect(history.loadActive).toHaveBeenCalledWith({ siloId: "silo-1", agentIdentityId: "identity-1", agentServiceId: "service-1", principalId: "company-principal" });
 	});
 
@@ -34,7 +34,7 @@ describe("__EnsureCompanyAssistantIdentity", function _Suite()
 	it("never appends over a suspended identity during a setup retry", async function _KeepsSuspension()
 	{
 		const history = _History();
-		history.load.mockResolvedValue({ identity: { kind: "managed", state: AgentIdentityStates.Suspended } });
+		history.load.mockResolvedValue({ identity: { kind: AgentIdentityKinds.Managed, state: AgentIdentityStates.Suspended } });
 		history.loadActive.mockRejectedValue(new Error("identity suspended"));
 		await expect(__EnsureCompanyAssistantIdentity(history as never, _RESULT)).rejects.toThrow("identity suspended");
 		expect(history.append).not.toHaveBeenCalled();

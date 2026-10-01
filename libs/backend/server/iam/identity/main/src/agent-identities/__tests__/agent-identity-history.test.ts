@@ -1,4 +1,4 @@
-import { AgentIdentityStates, type AgentIdentity, type ManagedAgentIdentity, type ManagedSubChatAgentIdentity, type ProxiedAgentIdentity } from "@opencrane/contracts";
+import { AgentIdentityKinds, AgentIdentityStates, type AgentIdentity, type ManagedAgentIdentity, type ManagedSubChatAgentIdentity, type ProxiedAgentIdentity } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { describe, expect, it, vi } from "vitest";
 
@@ -21,7 +21,7 @@ function _ManagedIdentity(overrides: Partial<ManagedAgentIdentity> = {}): Manage
 		state: AgentIdentityStates.Active,
 		createdByPrincipalId: "principal-owner-1",
 		createdAt: "2026-09-01T00:00:00.000Z",
-		kind: "managed",
+		kind: AgentIdentityKinds.Managed,
 		principalId: "principal-agent-1",
 		...overrides,
 	};
@@ -32,7 +32,7 @@ function _SubChatIdentity(overrides: Partial<ManagedSubChatAgentIdentity> = {}):
 {
 	return {
 		..._ManagedIdentity(),
-		kind: "managed_subchat",
+		kind: AgentIdentityKinds.ManagedSubChat,
 		principalId: "principal-subchat-1",
 		parentAgentIdentityId: "identity-parent-1",
 		parentPrincipalId: "principal-agent-1",
@@ -49,7 +49,7 @@ function _ProxiedIdentity(overrides: Partial<ProxiedAgentIdentity> = {}): Proxie
 	const { principalId: _ManagedPrincipalId, ...identity } = _ManagedIdentity();
 	return {
 		...identity,
-		kind: "proxied",
+		kind: AgentIdentityKinds.Proxied,
 		proxiedPrincipalId: "principal-proxied-1",
 		delegationPolicyId: "policy-1",
 		...overrides,
@@ -71,7 +71,7 @@ function _AppendCommand(overrides: Partial<AgentIdentityAppendCommand> = {}): Ag
 /** Builds a recorded history envelope that must agree with its typed identity snapshot. */
 function _Event(revision: bigint, identity: AgentIdentity = _ManagedIdentity()): HistoryRecordedEvent
 {
-	const principalId = identity.kind === "proxied" ? identity.proxiedPrincipalId : identity.principalId;
+	const principalId = identity.kind === AgentIdentityKinds.Proxied ? identity.proxiedPrincipalId : identity.principalId;
 	return {
 		streamName: `agent-identity-${identity.id}`,
 		id: _EVENT_ID,
@@ -127,7 +127,7 @@ describe("AgentIdentityHistory", function ()
 				id: _EVENT_ID,
 				type: "opencrane.agent-identity.v1",
 				data: { identity: _ManagedIdentity() },
-				metadata: { siloId: "silo-1", agentIdentityId: "identity-1", agentServiceId: "service-1", principalId: "principal-agent-1", kind: "managed" },
+				metadata: { siloId: "silo-1", agentIdentityId: "identity-1", agentServiceId: "service-1", principalId: "principal-agent-1", kind: AgentIdentityKinds.Managed },
 			}],
 		});
 	});

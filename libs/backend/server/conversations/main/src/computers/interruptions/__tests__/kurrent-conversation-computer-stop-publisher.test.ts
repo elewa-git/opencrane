@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { HistoryExpectedRevisions, type HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
+import { ConversationComputerRealizationKinds } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { describe, expect, it, vi } from "vitest";
 
@@ -37,7 +38,7 @@ function _Event(streamName: string, revision: bigint, id: string, type: string, 
 	return { streamName, revision, id, type, data, metadata, recordedAt: new Date("2026-09-11T08:00:00.000Z") };
 }
 
-const _FROZEN = _Event(`conversation-computer-turn-${_BOOTSTRAP}`, 0n, _BOOTSTRAP, "opencrane.conversation-computer-turn-frozen.v2", { turn: { bootstrapId: _BOOTSTRAP, siloId: "testv5", computerId: "computer-1", generation: 1, leaseId: "lease-1", sandboxClaimId: "computer-1-g1", binding: { siloId: "testv5", conversationId: "conversation-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Ada", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: "1", maximumEntryBytes: 65_536 }, latestPendingEntryId: "message-1", latestPendingEntryPosition: "1", modelAlias: "model-1", maximumBudgetUsd: 0.05, credentialLifetimeSeconds: 300, compile: { runId: "run-1", attempt: 1, promptCompilerVersion: "computer-v1", digest: _DIGEST }, budget: { maxModelTurns: 3, maxCompletionTokens: 300, maxCostUsdMicros: null, maxToolInvocations: 2, maxLoopIterations: 2, wallClockDeadlineEpochMs: 4_070_908_800_000 } } }, { siloId: "testv5", computerId: "computer-1", leaseId: "lease-1", generation: "1", bootstrapId: _BOOTSTRAP });
+const _FROZEN = _Event(`conversation-computer-turn-${_BOOTSTRAP}`, 0n, _BOOTSTRAP, "opencrane.conversation-computer-turn-frozen.v2", { turn: { bootstrapId: _BOOTSTRAP, siloId: "testv5", computerId: "computer-1", generation: 1, leaseId: "lease-1", realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g1", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.computers.svc.cluster.local" }, binding: { siloId: "testv5", conversationId: "conversation-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Ada", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: "1", maximumEntryBytes: 65_536 }, latestPendingEntryId: "message-1", latestPendingEntryPosition: "1", modelAlias: "model-1", maximumBudgetUsd: 0.05, credentialLifetimeSeconds: 300, compile: { runId: "run-1", attempt: 1, promptCompilerVersion: "computer-v1", digest: _DIGEST }, budget: { maxModelTurns: 3, maxCompletionTokens: 300, maxCostUsdMicros: null, maxToolInvocations: 2, maxLoopIterations: 2, wallClockDeadlineEpochMs: 4_070_908_800_000 } } }, { siloId: "testv5", computerId: "computer-1", leaseId: "lease-1", generation: "1", bootstrapId: _BOOTSTRAP });
 const _ACTIVE = _Event(_ACTIVE_STREAM, 0n, _BOOTSTRAP, "opencrane.conversation-computer-turn-active.v1", { bootstrapId: _BOOTSTRAP, siloId: "testv5", computerId: "computer-1", generation: 1, leaseId: "lease-1" });
 
 function _Target(): Extract<ConversationComputerStopAdmission, { kind: ConversationComputerStopAdmissionKinds.Target }>

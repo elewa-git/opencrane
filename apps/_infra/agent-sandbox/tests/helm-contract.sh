@@ -40,6 +40,8 @@ grep -Fq 'image: "registry.invalid/opencrane-conversation-computer@sha256:aaaaaa
 grep -Fq '        - name: conversation-computer' <<<"$template"
 grep -Fq '            - name: OPENCRANE_COMPUTER_ID' <<<"$template"
 grep -Fq "fieldPath: metadata.labels['opencrane.ai/computer-id']" <<<"$template"
+grep -Fq '            - name: OPENCRANE_COMPUTER_REALIZATION_KIND' <<<"$template"
+grep -Fq '              value: agent_sandbox' <<<"$template"
 grep -Fq '            - name: OPENCRANE_COMPUTER_GENERATION' <<<"$template"
 grep -Fq '            - name: OPENCRANE_COMPUTER_LEASE_ID' <<<"$template"
 grep -Fq "fieldPath: metadata.labels['opencrane.ai/computer-lease-id']" <<<"$template"

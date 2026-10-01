@@ -12,7 +12,7 @@ const appSourceExtensions = new Set([
 ]);
 const runtimeSourceExtensions = new Set([...appSourceExtensions, ".sh", ".yaml", ".yml"]);
 const typedSourceExtensions = new Set([".ts", ".tsx", ".mts", ".cts"]);
-const ignoredDirectories = new Set(["node_modules", "dist", "coverage", ".nx", ".cache"]);
+const ignoredDirectories = new Set(["node_modules", "dist", "coverage", ".nx", ".cache", ".venv"]);
 const workloadKinds = new Set(["Pod", "Deployment", "StatefulSet", "DaemonSet", "CronJob", "Job"]);
 const appSourceClassifications = new Set([
   "app-config", "browser-composition", "browser-config", "browser-entry-guard",

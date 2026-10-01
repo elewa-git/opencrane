@@ -1,9 +1,8 @@
-import type * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
-import type { ConversationComputerToolInvocationDispatch, ConversationComputerRunAdmissionPort, ConversationToolProposalRuntimeAdmission, ConversationGeneratedFileResultRepositoryFactory, ConversationGeneratedFileOutputLinker } from "@opencrane/backend/server/conversations";
+import type { ConversationComputerCredentialIssuer, ConversationComputerModelTransport, ConversationComputerProcessAuthenticator, ConversationComputerProcessResolver, ConversationComputerRealizer, ConversationComputerRunAdmissionPort, ConversationComputerToolInvocationDispatch, ConversationGeneratedFileOutputLinker, ConversationGeneratedFileResultRepositoryFactory, ConversationToolProposalRuntimeAdmission } from "@opencrane/backend/server/conversations";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
-import type { AgentSandboxReleaseProfileConfig } from "../configuration/config.types";
+import type { ConversationComputerReleaseProfileConfig } from "../configuration/config.types";
 
 /** Supplies the process services and configuration used to register conversation turn and stop workflows. */
 export interface ConversationExecutionContext
@@ -12,19 +11,22 @@ export interface ConversationExecutionContext
 	readonly prisma: PrismaClient;
 	/** Stores and reads durable conversation events. */
 	readonly history: HistoryStore;
-	/** Provides the workload identity and Pod clients used by this composition. */
-	readonly kubernetes: {
-		/** Reviews the projected token presented to the credential route. */
-		readonly authApi: k8s.AuthenticationV1Api;
-		/** Reads the Pod bound to a conversation computer. */
-		readonly coreApi: k8s.CoreV1Api;
-		/** Reads the custom resources used to resolve the computer's Pod binding. */
-		readonly customApi: k8s.CustomObjectsApi;
-	};
 	/** Identifies the silo whose conversations these workflows serve. */
 	readonly siloId: string;
-	/** Supplies the sandbox identity and maximum turn cost. */
-	readonly profile: AgentSandboxReleaseProfileConfig;
+	/** Supplies the immutable profile identity and maximum turn cost. */
+	readonly profile: ConversationComputerReleaseProfileConfig;
+	/** Owns realization binding for the selected process kind. */
+	readonly realizer: Pick<ConversationComputerRealizer, "bind">;
+	/** Resolves the live process selected by a persisted lease. */
+	readonly processes: ConversationComputerProcessResolver;
+	/** Authenticates callers of the private review-credential route. */
+	readonly authenticator: ConversationComputerProcessAuthenticator;
+	/** Holds the model credentials selected by this deployment profile. */
+	readonly credentials: ConversationComputerCredentialIssuer;
+	/** Sends already-reserved model requests through the selected profile transport. */
+	readonly model: ConversationComputerModelTransport;
+	/** Identifies the selected model transport endpoint without granting authority. */
+	readonly modelEndpoint: string;
 	/** Locates the keyring used for private payload encryption and review credentials. */
 	readonly keyringPath: string;
 	/** Admits conversation turns through the production run authority. */

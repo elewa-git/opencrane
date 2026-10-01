@@ -16,6 +16,7 @@ import { ConversationToolProgressNotificationOutcomes } from "./tool-progress-no
 import { ConversationToolProposalRefusal } from "../tools/proposal/conversation-tool-proposal-refusal";
 import { _CONVERSATION_MODEL_MAX_RETRIES, _ConversationModelInitialNonce, _ConversationModelLogicalFence } from "./conversation-computer-model-retry";
 import type { ConversationComputerModelRetryClaim } from "./conversation-computer-model-retry.types";
+import { _ConversationComputerWorkloadIdentity } from "../../conversation-computer-realization";
 
 /**
  * Advances bounded model/tool cycles and a final text answer within the original attempt.
@@ -59,6 +60,9 @@ export async function _AdvanceConversationComputerModel(turn: FrozenConversation
 async function _ContinueResultReady(turn: FrozenConversationComputerTurn, step: Extract<ConversationComputerTurnStep, { state: ConversationComputerTurnProtocolStates.ResultReady }>, dependencies: ConversationComputerTurnAuthorityDependencies, appendOutput: (command: ConversationComputerOutputCommand) => Promise<unknown>): Promise<ConversationComputerModelProgress>
 {
 	const current = await _Current(turn, dependencies);
+	const workload = _ConversationComputerWorkloadIdentity(current.process);
+	if (workload === null)
+		return { outcome: ConversationComputerModelProgressOutcomes.ResponseUnavailable };
 	const saved = await dependencies.modelCustody.loadDeclaration(turn, step.reservation.ordinal);
 	const firstDeclaration = await dependencies.modelCustody.loadDeclaration(turn, 1);
 	if (saved === null || firstDeclaration === null)
@@ -69,7 +73,7 @@ async function _ContinueResultReady(turn: FrozenConversationComputerTurn, step: 
 	if (!await dependencies.store.reserveModel(turn.bootstrapId, reservation))
 		return _ConversationModelReservationStatus((await dependencies.store.load(turn.bootstrapId))?.protocol.steps.at(-1)?.reservation ?? reservation);
 	const reserved = (await dependencies.store.load(turn.bootstrapId))!;
-	const consumed = await dependencies.toolResults.consume(reserved, current.workload);
+	const consumed = await dependencies.toolResults.consume(reserved, workload);
 	if (consumed.outcome !== ConversationComputerToolResultOutcomes.Available || consumed.payloadDigest !== step.result.resultDigest)
 		throw new Error("Conversation tool result could not acknowledge its saved exchange");
 	const savedExchange = await dependencies.modelCustody.loadExchange(reserved, step.result.exchange);
@@ -190,7 +194,9 @@ async function _ContinueTool(turn: FrozenConversationComputerTurn, declaration: 
 		await dependencies.store.selectTool(turn.bootstrapId, selection);
 	}
 	const selected = (await dependencies.store.load(turn.bootstrapId))!;
-	const workload = currentExecution.workload;
+	const workload = _ConversationComputerWorkloadIdentity(currentExecution.process);
+	if (workload === null)
+		return { outcome: ConversationComputerModelProgressOutcomes.ResponseUnavailable };
 	let admitted;
 	try
 	{

@@ -2,6 +2,9 @@ import type { CompiledRunInput } from "../inputs/compiled-run-input.types";
 import type { ConversationModelDelivery, ConversationModelPreForwardReceipt } from "./conversation-model-retry.types";
 import type { ConversationA2uiDisplay } from "./conversation-a2ui.types";
 
+/** Caps one model exchange while the caller's shorter authority deadlines still win. */
+export const CONVERSATION_MODEL_REQUEST_TIMEOUT_MILLISECONDS = 60_000;
+
 /**
  * Selects whether an admitted model request may propose a tool. The conversation owner and model
  * adapter share these closed in-process values; unknown modes fail before dispatch. A mode grants

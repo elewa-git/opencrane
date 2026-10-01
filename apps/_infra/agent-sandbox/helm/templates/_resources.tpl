@@ -300,6 +300,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.labels['opencrane.ai/computer-id']
+            - name: OPENCRANE_COMPUTER_REALIZATION_KIND
+              value: agent_sandbox
             - name: OPENCRANE_COMPUTER_GENERATION
               valueFrom:
                 fieldRef:

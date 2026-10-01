@@ -9,11 +9,11 @@
  */
 export enum ConversationComputerStates
 {
-	/** The computer has no live sandbox and may be restored when work is admitted. */
+	/** The computer has no live realization and may be restored when work is admitted. */
 	Cold = "cold",
-	/** The computer has requested one sandbox but has not received a live lease. */
+	/** The computer has reserved one realization but has not received a live lease. */
 	ClaimPending = "claim_pending",
-	/** The computer has one fenced live sandbox lease. */
+	/** The computer has one fenced live realization lease. */
 	Warm = "warm",
 	/** The computer has stopped admitting work while an active attempt reaches a safe boundary. */
 	Cooling = "cooling",
@@ -40,6 +40,35 @@ export enum ComputerLeaseStates
 	/** The lease expired or its claim disappeared before an orderly release, so no checkpoint was captured. */
 	Lost = "lost",
 }
+
+/** Selects how one conversation-computer lease is physically realized. */
+export enum ConversationComputerRealizationKinds
+{
+	/** An Agent Sandbox claim and its assigned Kubernetes sandbox realize the lease. */
+	AgentSandbox = "agent_sandbox",
+	/** A child process bound to loopback realizes the lease for local development. */
+	HostDevelopmentProcess = "host_development_process",
+}
+
+/** Records the controller coordinates for one production Agent Sandbox realization. */
+export interface AgentSandboxConversationComputerRealization
+{
+	readonly kind: ConversationComputerRealizationKinds.AgentSandbox;
+	readonly claimId: string;
+	readonly sandboxId: string | null;
+	readonly serviceFQDN: string | null;
+}
+
+/** Records the non-secret coordinates for one workstation child-process realization. */
+export interface HostDevelopmentConversationComputerRealization
+{
+	readonly kind: ConversationComputerRealizationKinds.HostDevelopmentProcess;
+	readonly processId: string;
+	readonly endpoint: string;
+}
+
+/** Describes the physical process behind a lease without storing its authentication secret. */
+export type ConversationComputerRealization = AgentSandboxConversationComputerRealization | HostDevelopmentConversationComputerRealization;
 
 /**
  * Fixes the requested and maximum resources that one immutable profile permits.
@@ -172,12 +201,8 @@ export interface ComputerLease
 	readonly computerId: string;
 	/** Fences this realization from every earlier lease. */
 	readonly generation: number;
-	/** Identifies the upstream Agent Sandbox claim. */
-	readonly sandboxClaimId: string;
-	/** Identifies the upstream sandbox after assignment. */
-	readonly sandboxId: string | null;
-	/** Carries the controller-reported in-cluster Service DNS name after assignment. */
-	readonly serviceFQDN: string | null;
+	/** Describes the physical process behind this lease without storing its bearer credential. */
+	readonly realization: ConversationComputerRealization;
 	/** States whether this realization may process work. */
 	readonly state: ComputerLeaseStates;
 	/** Records when this lease was claimed. */

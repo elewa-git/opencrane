@@ -1,5 +1,6 @@
 import { ConversationComputerHistory, _LeaseScopeOf } from "@opencrane/backend/server/conversations/computers";
 import { ProductAuthorizationActions } from "@opencrane/models/authorization";
+import { ConversationComputerRealizationKinds } from "@opencrane/contracts";
 import type { ConversationMetadataAuthority } from "../../metadata/conversation-metadata.types";
 
 import type { ConversationComputerReviewAuthority, ConversationComputerReviewCaller, ConversationComputerReviewCredentialDeriver, ConversationComputerReviewRoute } from "./conversation-computer-review.types";
@@ -31,11 +32,12 @@ export class _ConversationComputerReviewAuthority implements ConversationCompute
 		if (coordinates === null)
 			return null;
 		const current = await this.history.loadActiveLease({ computer: { siloId: caller.siloId, conversationId, computerId: coordinates.computerId, agentIdentityId: coordinates.agentIdentityId }, profileRevisionId: coordinates.profileRevisionId, nowEpochMilliseconds: Date.now() });
-		if (current.lease.sandboxId === null)
+		const realization = current.lease.realization;
+		if (realization.kind !== ConversationComputerRealizationKinds.AgentSandbox || realization.sandboxId === null)
 			return null;
-		if (current.lease.serviceFQDN === null)
+		if (realization.serviceFQDN === null)
 			return null;
 		const reviewCredential = this.credentials.bearer({ siloId: caller.siloId, computerId: coordinates.computerId, lease: _LeaseScopeOf(current.lease) });
-		return { reviewCredential, sandboxId: current.lease.sandboxId, serviceFQDN: current.lease.serviceFQDN };
+		return { reviewCredential, sandboxId: realization.sandboxId, serviceFQDN: realization.serviceFQDN };
 	}
 }

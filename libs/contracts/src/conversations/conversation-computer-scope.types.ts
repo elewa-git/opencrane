@@ -1,3 +1,5 @@
+import type { ConversationComputerRealization } from "./conversation-computer.types";
+
 /**
  * Groups the coordinates that every conversation-computer command carries into three named bundles.
  *
@@ -41,6 +43,13 @@ export interface LeaseScope
 	readonly leaseGeneration: number;
 }
 
+/** Adds the persisted physical realization selected for one lease generation. */
+export interface RealizedLeaseScope extends LeaseScope
+{
+	/** Identifies the exact sandbox or workstation process behind this lease without storing a bearer secret. */
+	readonly realization: ConversationComputerRealization;
+}
+
 /** Adds the Agent Sandbox claim to a lease so Pod-binding checks can name the exact claim. */
 export interface ClaimedLeaseScope extends LeaseScope
 {
@@ -49,7 +58,7 @@ export interface ClaimedLeaseScope extends LeaseScope
 }
 
 /** Adds the expiry to a lease so projections can refuse work after the lease stops admitting it. */
-export interface ActiveLeaseScope extends LeaseScope
+export interface ActiveLeaseScope extends RealizedLeaseScope
 {
 	/** Records the ISO instant the lease stops admitting work; renewal moves it later, and it fences approvals and credential issuance to a live lease. */
 	readonly expiresAt: string;

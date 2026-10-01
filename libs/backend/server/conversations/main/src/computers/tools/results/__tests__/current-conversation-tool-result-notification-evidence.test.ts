@@ -1,4 +1,4 @@
-import { CompiledFinalOutputModes } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ConversationComputerRealizationKinds } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import { ___DigestCanonicalJson } from "@opencrane/util";
@@ -13,6 +13,7 @@ const _PAYLOAD = { toolInvocationId: "invoke-1", outcome: "succeeded" as const, 
 const _RESULT_DIGEST = ___DigestCanonicalJson(_PAYLOAD);
 const _COMMAND: ConversationToolResultNotificationCommand = { bootstrapId: "turn-1", siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 1, toolInvocationId: "invoke-1", expectedResultDigest: _RESULT_DIGEST };
 const _WORKLOAD = { subject: "system:serviceaccount:computers:computer", namespace: "computers", serviceAccountName: "computer", podUid: "pod-1" };
+const _PROCESS = { kind: ConversationComputerRealizationKinds.AgentSandbox, workload: _WORKLOAD } as const;
 
 /** Build one selected turn and its matching current compiled candidate. */
 function _Fixture()
@@ -24,7 +25,7 @@ function _Fixture()
 	const protocol = { state: ConversationComputerTurnProtocolStates.ToolPending, revision: 2n, steps: [{ state: ConversationComputerTurnProtocolStates.ToolPending, reservation, selection, result: null }], accounting: { reservedModelCalls: 1, reservedCompletionTokens: 100, reservedToolInvocations: 1, toolResultCyclesFed: 0 }, modelRetry: null, output: null, unavailable: null, cancellation: null };
 	const turn = { bootstrapId: "turn-1", siloId: "silo-1", computerId: "computer-1", binding: { siloId: "silo-1", conversationId: "conversation-1", runId: "run-1" }, compile: { runId: compiledInput.runId, attempt: compiledInput.attempt, promptCompilerVersion: compiledInput.promptCompilerVersion, digest: compiledInput.digest }, budget: compiledInput.budget, protocol } as unknown as FrozenConversationComputerTurn;
 	const load = vi.fn().mockResolvedValue(turn);
-	const assertCurrentForWorkflow = vi.fn().mockResolvedValue({ candidate: { ...turn, compiledInput }, workload: _WORKLOAD });
+	const assertCurrentForWorkflow = vi.fn().mockResolvedValue({ candidate: { ...turn, compiledInput }, process: _PROCESS });
 	const read = vi.fn().mockResolvedValue({ outcome: ConversationComputerToolResultOutcomes.Available, payload: _PAYLOAD, payloadDigest: _RESULT_DIGEST, toolRevisionId: tool.toolRevisionId, occurredAt: "2026-09-11T10:00:00.000Z", notAfterEpochMs: Date.parse("2026-09-11T10:01:00.000Z") });
 	return { reader: new CurrentConversationToolResultNotificationEvidenceReader({ load }, { assertCurrentForWorkflow }, { read }), load, assertCurrentForWorkflow, read, turn, compiledInput };
 }
@@ -51,7 +52,7 @@ describe("Current conversation tool-result notification evidence", function _Sui
 		if ("result" in change && change.result !== undefined)
 			fixture.read.mockResolvedValue({ ...(await fixture.read()), ...change.result });
 		if ("candidate" in change && change.candidate !== undefined)
-			fixture.assertCurrentForWorkflow.mockResolvedValue({ candidate: { ...fixture.turn, compiledInput: { ...fixture.compiledInput, ...change.candidate.compiledInput } }, workload: _WORKLOAD });
+			fixture.assertCurrentForWorkflow.mockResolvedValue({ candidate: { ...fixture.turn, compiledInput: { ...fixture.compiledInput, ...change.candidate.compiledInput } }, process: _PROCESS });
 		await expect(fixture.reader.readCurrent(_COMMAND)).resolves.toBeNull();
 	});
 

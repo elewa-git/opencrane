@@ -50,6 +50,8 @@ signed-in participant ──► main ◄── HERE ──► history
 - `PrismaConversationMetadataUnitOfWork` and `_CreateConversationMetadataRouter` compose directory, list, create, archive and close operations. `PrismaConversationMetadataReader` supplies review coordinates without exposing creation.
 - `PrismaAgentSessionCreationUnitOfWork` creates or recovers a personal assistant conversation from its caller-scoped UUID.
 - `PrismaSelfConversationHistoryUnitOfWork` and `_CreateSelfConversationHistoryRouter` bind current access to messages, history and event streams. `PrismaConversationMessageAdmissionUnitOfWork` commits the encrypted payload and delegates selected-asset binding through a transaction-scoped `ConversationMessageAttachmentAdmissionFactory` before KurrentDB append.
+  The event stream requires a method-independent browser-origin authority injected by the application
+  authentication composition; this package still owns participant and per-page product permission.
   A retry rechecks current permission and adopts the saved entry's original author name and sign-in
   time. A profile edit or later sign-in cannot turn the same message into a new dispatch; changed
   issuer, principal, participant, content, attachments or activation still conflict.
@@ -90,7 +92,10 @@ signed-in participant ──► main ◄── HERE ──► history
   decrypted text outside the SQL transaction. `PrismaPersonalMemoryMessageSourceRepository`
   rechecks current read access, the visible position and the encrypted payload coordinates in the
   caller's transaction. Later conversation entries do not invalidate an unchanged selected message.
-- Computer activation atomically admits the existing Absurd turn task when it publishes an active lease. The workflow advances saved model, tool-result, continuation and completion state; the only Pod-facing turn route returns its lease-derived review credential.
+- Computer activation atomically admits the existing Absurd turn task when it publishes an active
+  lease. The workflow advances saved model, tool-result, continuation and completion state; the
+  private turn route authenticates a neutral process identity and returns its lease-derived review
+  credential.
 - Stop handling reloads the immutable causation message to derive its requester and never enters activation. Its Kurrent publisher gives final output and cancellation one checked turn-stream winner; cancellation commits the private receipt, safe interrupted log and active-turn settlement together.
   The turn store constructs and validates cancellation and settlement appends at the revision it
   decoded. The Stop publisher composes that pair with its receipt and log; it cannot substitute a
@@ -101,7 +106,7 @@ signed-in participant ──► main ◄── HERE ──► history
   records the Kurrent winner, cancels the original turn task, revokes model credentials and waits
   for provider claims before finalizing. Missing relational lease coordinates fail closed; a
   no-target receipt is written only when an existing exact lease names the checked pointer stream.
-- Lifecycle, checkpoint, turn and review authorities, routers and adapter ports support server composition. The activation worker receives a process logger and an explicit exhaustion callback.
+- Lifecycle, checkpoint, turn and review authorities, routers and adapter ports support server composition. Realization and process-resolver ports keep Agent Sandbox Pods and host-development processes behind one persisted lease boundary. The activation worker receives a process logger and an explicit exhaustion callback.
 - `ConversationComputerTurnAuthority` owns the final output-authority recheck. The turn store commits the receipt, ordinary answer and optional read-only display atomically; the existing history writer prepares and exactly confirms each entry. The activation and lifecycle units of work own their transaction isolation.
 - `PrismaCompanyAssistantDirectory`, `PrismaGroupChildAgentResolver`, `_ResolveConversationCaller` and `_RegisterGroupChildWorkflow` bind current identity and recovery to participant operation owners.
 - `_SelfConversationHistoryOpenapiPaths` contributes the conversation API description.
@@ -212,8 +217,10 @@ Every new model request reserves its entire token ceiling, even when its respons
 Another tool may be offered only while the original allowance can also reserve a final text call.
 Later requests carry every accepted call/result pair in order and reuse the same attempt credential
 and expiry. Lost paid responses become durable unavailable progress; they cannot create replacement
-requests. Absurd selects saved progress and owns waits and recovery. The Pod retains only its
-lease-fenced isolated execution and review interactions.
+requests. Absurd selects saved progress and owns waits and recovery. The physical process retains
+only its lease-fenced isolated execution and review interactions. Tool execution narrows the neutral
+process identity to a verified Agent Sandbox workload; host-development processes cannot enter
+workload-only tool authority.
 
 An authenticated pre-provider rejection is the exception to the no-redispatch rule: the transport
 has proved that this physical request did not reach a provider. The turn saves that proof and the

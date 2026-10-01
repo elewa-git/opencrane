@@ -740,7 +740,7 @@ litellm:
     # -- Pinned to the audited stable tag (matches the k3d overlays) for
     #    supply-chain integrity + reproducible deploys. Do NOT use a rolling
     #    `main-latest` tag in production — bump deliberately after re-auditing.
-    tag: main-v1.81.0-stable
+    tag: main-v1.81.9-stable
     # -- Optional published image digest; when set, it replaces the tag in the image reference.
     digest: ""
     pullPolicy: IfNotPresent
@@ -774,9 +774,11 @@ litellm:
   podAnnotations: {}
   podSecurityContext:
     runAsNonRoot: true
-    runAsUser: 10001
-    runAsGroup: 10001
-    fsGroup: 10001
+    # -- The non_root image generates Prisma files as nobody during its build. Run the Pod as the
+    #    same uid/gid so startup can update the generated client after database migrations.
+    runAsUser: 65534
+    runAsGroup: 65534
+    fsGroup: 65534
     seccompProfile:
       type: RuntimeDefault
   securityContext:

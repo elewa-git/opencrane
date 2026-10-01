@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.main import _HealthHandler, _configuration, _install_review_credential, _prepare_sandbox, _restore
+from src.main import _HealthHandler, _configuration, _install_review_credential, _prepare_sandbox, _publish_host_readiness, _restore
 
 
 class ConfigurationTests(unittest.TestCase):
@@ -25,17 +25,19 @@ class ConfigurationTests(unittest.TestCase):
     def test_accepts_complete_coordinates(self) -> None:
         """Return the frozen coordinates when every release-owned value is present."""
         environment = {
+            "OPENCRANE_COMPUTER_REALIZATION_KIND": "agent_sandbox",
             "OPENCRANE_COMPUTER_ID": "computer-1",
             "OPENCRANE_COMPUTER_GENERATION": "3",
             "OPENCRANE_COMPUTER_LEASE_ID": "lease-1",
             "OPENCRANE_INTERNAL_ENDPOINT": "http://opencrane-internal:8081",
         }
         with patch.dict(os.environ, environment, clear=True):
-            self.assertEqual(_configuration(), {"computerId": "computer-1", "generation": "3", "internalEndpoint": "http://opencrane-internal:8081", "leaseId": "lease-1", "reviewCredentialPath": "/var/run/opencrane/review/credential", "tokenPath": "/var/run/secrets/opencrane/token"})
+            self.assertEqual(_configuration(), {"computerId": "computer-1", "generation": "3", "internalEndpoint": "http://opencrane-internal:8081", "leaseId": "lease-1", "realizationKind": "agent_sandbox", "reviewCredentialPath": "/var/run/opencrane/review/credential", "tokenPath": "/var/run/secrets/opencrane/token"})
 
     def test_rejects_missing_generation(self) -> None:
         """Fail readiness when the sandbox lacks a generation fence."""
         environment = {
+            "OPENCRANE_COMPUTER_REALIZATION_KIND": "agent_sandbox",
             "OPENCRANE_COMPUTER_ID": "computer-1",
             "OPENCRANE_COMPUTER_LEASE_ID": "lease-1",
             "OPENCRANE_INTERNAL_ENDPOINT": "http://opencrane-internal:8081",
@@ -47,6 +49,7 @@ class ConfigurationTests(unittest.TestCase):
     def test_health_listener_reports_ready_only_with_complete_coordinates(self) -> None:
         """Keep readiness tied to the same lease coordinates used during preparation."""
         environment = {
+            "OPENCRANE_COMPUTER_REALIZATION_KIND": "agent_sandbox",
             "OPENCRANE_COMPUTER_ID": "computer-1",
             "OPENCRANE_COMPUTER_GENERATION": "3",
             "OPENCRANE_COMPUTER_LEASE_ID": "lease-1",
@@ -63,11 +66,59 @@ class ConfigurationTests(unittest.TestCase):
                 with self.assertRaises(urllib.error.HTTPError) as failure:
                     urllib.request.urlopen(f"http://127.0.0.1:{server.server_port}/readyz")
                 self.assertEqual(failure.exception.code, 503)
-                self.assertEqual(json.loads(failure.exception.read()), {"status": "not_ready", "reason": "OPENCRANE_COMPUTER_ID is required"})
+                self.assertEqual(json.loads(failure.exception.read()), {"status": "not_ready", "reason": "OPENCRANE_COMPUTER_REALIZATION_KIND is required"})
                 failure.exception.close()
         finally:
             server.shutdown()
             server.server_close()
+
+    def test_accepts_host_lifecycle_coordinates_without_sandbox_capabilities(self) -> None:
+        """Keep host readiness separate from review credential and checkpoint configuration."""
+        environment = {
+            "OPENCRANE_COMPUTER_REALIZATION_KIND": "host_development_process",
+            "OPENCRANE_COMPUTER_PROCESS_ID": "local-computer-1",
+            "OPENCRANE_COMPUTER_ID": "computer-1",
+            "OPENCRANE_COMPUTER_GENERATION": "3",
+            "OPENCRANE_COMPUTER_LEASE_ID": "lease-1",
+            "OPENCRANE_HOST_BEARER_PATH": "/tmp/opencrane-computer/bearer",
+            "OPENCRANE_HOST_READY_PATH": "/tmp/opencrane-computer/ready",
+            "OPENCRANE_INTERNAL_ENDPOINT": "http://127.0.0.1:8081",
+        }
+        with patch.dict(os.environ, environment, clear=True):
+            self.assertEqual(_configuration(), {
+                "computerId": "computer-1",
+                "generation": "3",
+                "internalEndpoint": "http://127.0.0.1:8081",
+                "leaseId": "lease-1",
+                "processId": "local-computer-1",
+                "readyPath": "/tmp/opencrane-computer/ready",
+                "realizationKind": "host_development_process",
+                "tokenPath": "/tmp/opencrane-computer/bearer",
+            })
+
+    def test_rejects_non_loopback_host_endpoint(self) -> None:
+        """Prevent the development process owner from reaching a non-loopback control plane."""
+        environment = {
+            "OPENCRANE_COMPUTER_REALIZATION_KIND": "host_development_process",
+            "OPENCRANE_COMPUTER_PROCESS_ID": "local-computer-1",
+            "OPENCRANE_COMPUTER_ID": "computer-1",
+            "OPENCRANE_COMPUTER_GENERATION": "3",
+            "OPENCRANE_COMPUTER_LEASE_ID": "lease-1",
+            "OPENCRANE_HOST_BEARER_PATH": "/tmp/opencrane-computer/bearer",
+            "OPENCRANE_HOST_READY_PATH": "/tmp/opencrane-computer/ready",
+            "OPENCRANE_INTERNAL_ENDPOINT": "https://server.example.test:8081",
+        }
+        with patch.dict(os.environ, environment, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "loopback"):
+                _configuration()
+
+    def test_publishes_private_host_readiness(self) -> None:
+        """Write only the expected process identity to the owner-only readiness marker."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "ready"
+            _publish_host_readiness({"processId": "local-computer-1", "readyPath": str(path)})
+            self.assertEqual(path.read_text(encoding="utf-8"), "local-computer-1")
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
 
 class LeasePreparationTests(unittest.TestCase):
@@ -102,7 +153,7 @@ class LeasePreparationTests(unittest.TestCase):
         """Install the secret before opening the review listener and restoring the workspace."""
         config = {"computerId": "computer-1"}
         events: list[str] = []
-        with patch("src.main._configuration", return_value=config), patch("src.main._install_review_credential", side_effect=lambda _config: events.append("credential")) as credential, patch("src.main.start_review_surface", side_effect=lambda: events.append("review")) as review, patch("src.main._restore", side_effect=lambda _config: events.append("restore")) as restore:
+        with patch("src.main._configuration", return_value=config), patch("src.main._install_review_credential", side_effect=lambda _config: events.append("credential")) as credential, patch("src.main._start_review_surface", side_effect=lambda: events.append("review")) as review, patch("src.main._restore", side_effect=lambda _config: events.append("restore")) as restore:
             _prepare_sandbox()
         self.assertEqual(events, ["credential", "review", "restore"])
         credential.assert_called_once_with(config)

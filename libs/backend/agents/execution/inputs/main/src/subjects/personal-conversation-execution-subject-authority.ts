@@ -4,7 +4,7 @@ import type { ExecutionSubject } from "@opencrane/models/agents";
 
 import { SessionAssemblyLoadOutcomes, type ExecutionSubjectAuthority, type SessionAssemblyCommand, type SessionAssemblyLoad } from "../assembly/session-assembly.types";
 import type { PersonalConversationExecutionSubjectDependencies } from "./personal-conversation-execution-subject-authority.types";
-import { _MatchesConversationExecutionCommand, _MatchesConversationExecutionLease } from "./conversation-execution-subject.validator";
+import { _MatchesConversationExecutionSubjectAdmissionFence, _MatchesConversationExecutionSubjectCommand } from "../conversation-execution-subject-admission-fence";
 
 /** Builds an attempt-one personal execution subject only from current authority evidence. */
 export class PersonalConversationExecutionSubjectAuthority implements ExecutionSubjectAuthority
@@ -17,7 +17,7 @@ export class PersonalConversationExecutionSubjectAuthority implements ExecutionS
 	{
 		const coordinates = this.dependencies.coordinates;
 		const { computer, agent, lease } = coordinates;
-		if (command.conversationId === null || command.trigger !== "interactive" || !_MatchesConversationExecutionCommand(command, run, coordinates)
+		if (command.conversationId === null || !_MatchesConversationExecutionSubjectCommand(command, run, coordinates)
 			|| coordinates.requesterPrincipalId.trim().length === 0)
 			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "identity_unavailable" };
 
@@ -52,7 +52,7 @@ export class PersonalConversationExecutionSubjectAuthority implements ExecutionS
 		const value = evidence.value;
 		if (value.identity.siloId !== command.siloId || value.identity.agentIdentityId !== computer.agentIdentityId
 			|| value.identity.agentServiceId !== run.agentServiceId || value.identity.agentRevisionId !== run.agentRevisionId
-			|| value.identity.principalId !== coordinates.requesterPrincipalId || !_MatchesConversationExecutionLease(activeComputer, coordinates))
+			|| value.identity.principalId !== coordinates.requesterPrincipalId || !_MatchesConversationExecutionSubjectAdmissionFence(command, run, coordinates, activeComputer))
 			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "identity_unavailable" };
 
 		// The stored execution subject keeps `computerScope` flat with `leaseId` and `leaseGeneration`: PostgreSQL triggers read that shape.

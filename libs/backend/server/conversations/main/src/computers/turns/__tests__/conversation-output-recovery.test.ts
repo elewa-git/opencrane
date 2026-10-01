@@ -158,7 +158,7 @@ describe("chosen answer recovery across fresh server instances", function _Suite
 		f.runLifecycle.complete.mockRejectedValueOnce(new Error("completion unavailable"));
 		await expect(f.authority.appendOutput(f.output)).rejects.toThrow("completion unavailable");
 		f.pods.resolve.mockResolvedValueOnce(null);
-		await expect(f.restart().start(f.workflowCommand)).rejects.toThrow("lease-bound Sandbox Pod");
+		await expect(f.restart().start(f.workflowCommand)).rejects.toThrow("lease-bound process");
 		expect(f.credentials.revoke).not.toHaveBeenCalled();
 	});
 

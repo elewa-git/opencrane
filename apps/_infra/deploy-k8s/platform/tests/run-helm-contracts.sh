@@ -28,6 +28,7 @@ for contract in \
   server-rbac-contract.sh \
   mcp-connection-custody-contract.sh \
   server-network-policy-contract.sh \
+  litellm-security-context-contract.sh \
   platform-network-policy-contract.sh \
   post-deploy-health-contract.sh \
   qualified-release-image-contract.sh \

@@ -3,7 +3,7 @@
 > [apps](../../README.md) › [_infra](../README.md) › litellm
 
 <!-- A vendored-infra app: a pinned third-party product we run and wrap in Helm. No import
-     alias — the deliverable is a Helm named-template library. Named by `project.json` (`litellm`). -->
+     alias. Named by `project.json` (`litellm`). -->
 
 ## What it owns
 
@@ -21,8 +21,15 @@ composed by the silo umbrella chart ([`deploy-k8s`](../deploy-k8s/README.md)).
 
 `Entrypoint:` the Helm named-template library under `helm/`. The umbrella chart includes the
 deployment, service account, service, Secret, and `opencrane.litellm.networkPolicy` templates.
+
 `deploy/Dockerfile` builds `opencrane-litellm`; its build-time installer selects the model-routing
 library's processor, rate limiter and startup registration at three hash-checked vendor binding points.
+
+`local-development/` — selects one provider/model from the production-owned catalogue and writes
+the secret-free, session-owned LiteLLM configuration used by Tier 2. See its
+[local-development README](local-development/README.md). The Tier 2 coordinator runs the reviewed
+deployment tag through an immutable multi-platform digest and waits for an authenticated `/v1/models`
+response before the server can reserve a model attempt.
 
 ## Boundary
 
@@ -42,10 +49,22 @@ The derived image copies Python from `backend-server-model-routing`. Nx records 
 explicitly because a Docker `COPY` does not create a TypeScript import edge. Request processing,
 proof signing and limiter behaviour belong to that library, not this deployment app.
 
+The repository-level Tier 2 coordinator imports only the local-development helpers; production
+applications do not.
+
 ## Runtime & config
 
-- **Pinned image:** `ghcr.io/berriai/litellm-non_root:main-v1.81.0-stable` (the `non_root` wolfi-free
-  build — the plain wolfi image crashes Prisma).
+- **Pinned image:** `ghcr.io/berriai/litellm-non_root:main-v1.81.9-stable` (the `non_root` wolfi-free
+  build — the plain wolfi image crashes Prisma). This version includes the
+  [upstream correction](https://github.com/BerriAI/litellm/pull/20000) that makes Prisma's generated
+  files writable by the image's `nobody` runtime user. The cluster deployment sets `runAsUser` and
+  `runAsGroup` to that account's numeric uid/gid, `65534`, and owns this version tag; Tier 2 pins the
+  tag's multi-platform digest in its coordinator.
+- **Offline tokenizer startup:** the image bundles the OpenAI `cl100k_base` tokenizer cache, but its
+  [non-root fallback](https://github.com/BerriAI/litellm/blob/v1.81.9-stable/litellm/litellm_core_utils/default_encoding.py)
+  otherwise selects an empty writable directory and downloads the same data at startup. The cluster
+  and Tier 2 set `CUSTOM_TIKTOKEN_CACHE_DIR` to the bundled read-only cache so startup does not
+  depend on `openaipublic.blob.core.windows.net`.
 - `litellm.enabled` / `opencrane.litellmShared` — render an in-cluster workload, or use a shared endpoint.
 - `litellm.masterKey` / `litellm.existingSecret` (+ `secretKey`) — the LiteLLM master key.
 - `litellm.databaseUrl` / `litellm.existingDatabaseSecret` (+ `databaseSecretKey`) — Postgres connection

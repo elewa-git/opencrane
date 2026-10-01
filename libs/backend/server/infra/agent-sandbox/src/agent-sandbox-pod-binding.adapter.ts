@@ -25,7 +25,15 @@ export class AgentSandboxPodBindingAdapter implements AgentSandboxPodBinding
 	/** Reject a missing or mismatched Pod while preserving Kubernetes authorization and transport failures. */
 	public async verify(command: AgentSandboxPodBindingCommand): Promise<boolean>
 	{
-		const resolved = await this.resolve({ computerId: command.computerId, lease: command.lease, namespace: command.workload.namespace, serviceAccountName: command.workload.serviceAccountName });
+		const resolved = await this.resolve({
+			computerId: command.computerId,
+			lease: {
+				...command.lease,
+				sandboxClaimId: command.realization.claimId,
+			},
+			namespace: command.workload.namespace,
+			serviceAccountName: command.workload.serviceAccountName,
+		});
 		return resolved?.podUid === command.workload.podUid && resolved.subject === command.workload.subject;
 	}
 

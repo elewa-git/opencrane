@@ -25,7 +25,7 @@ const _LITELLM_MODEL_HTTP_TIMEOUT_MS = 10_000;
  * @param log - Logger that receives secret-free convergence outcomes.
  * @returns The admitted deployment id when it is live, or null when registration is still needed.
  * @throws When inventory is unavailable or malformed, coordinates differ, or deletion is not confirmed.
- * @see https://github.com/BerriAI/litellm/blob/main-v1.81.0-stable/litellm/proxy/proxy_server.py for the pinned model-management API.
+ * @see https://github.com/BerriAI/litellm/blob/v1.81.9-stable/litellm/proxy/proxy_server.py for the pinned model-management API.
  */
 export async function _ConvergeLiteLlmModelDeployment(endpoint: string, masterKey: string, input: LiteLlmModelRegistration, log: Logger = _log): Promise<string | null>
 {
@@ -83,7 +83,7 @@ export async function _ConvergeLiteLlmModelDeployment(endpoint: string, masterKe
  * @param credentialName - Credential whose live model references must be empty before removal.
  * @param log - Logger that receives secret-free deletion outcomes.
  * @throws When LiteLLM is unconfigured, inventory is ambiguous, or any exact deletion is unconfirmed.
- * @see https://github.com/BerriAI/litellm/blob/main-v1.81.0-stable/litellm/proxy/proxy_server.py for the pinned model-management API.
+ * @see https://github.com/BerriAI/litellm/blob/v1.81.9-stable/litellm/proxy/proxy_server.py for the pinned model-management API.
  */
 export async function _RetireLiteLlmModelDeployments(targets: readonly LiteLlmModelDeploymentTarget[], credentialName: string, log: Logger = _log): Promise<void>
 {

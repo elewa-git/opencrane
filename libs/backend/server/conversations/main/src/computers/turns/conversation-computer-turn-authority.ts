@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { CompiledFinalOutputModes, ___ConversationFinalTextSchema, type CompiledRunInput } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { ConversationComputerOutputCommand, ConversationComputerPodLeaseCommand, ConversationComputerReviewCredentialGrant, ConversationComputerRunLifecycleCommand, ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityPort, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, ConversationComputerTurnWorkflowCommand, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
+import type { ConversationComputerOutputCommand, ConversationComputerProcessLeaseCommand, ConversationComputerReviewCredentialGrant, ConversationComputerRunLifecycleCommand, ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityPort, ConversationComputerTurnAuthorityDependencies, ConversationComputerTurnCandidate, ConversationComputerTurnWorkflowCommand, FrozenConversationComputerTurn } from "./conversation-computer-turn.types";
 import { _InitialConversationComputerTurnProtocol } from "./conversation-computer-turn-protocol";
 import { ConversationComputerTurnProtocolStates, ConversationComputerTurnUnavailableReasons } from "./conversation-computer-turn-protocol.types";
 import type { ConversationComputerTurnUnavailableReceipt } from "./conversation-computer-turn-protocol.types";
@@ -17,7 +17,7 @@ import { _PrepareConversationStructuredOutput } from "./output/conversation-stru
 import { _AssertConversationComputerOutputPayload, _PrepareConversationComputerOutput } from "./output/conversation-computer-output";
 import { _ConversationComputerOutputIntents } from "./output/conversation-computer-output-receipt";
 
-/** Coordinates one durable, lease-fenced conversation turn for a bound sandbox Pod. */
+/** Coordinates one durable, lease-fenced conversation turn for a bound process. */
 export class ConversationComputerTurnAuthority implements ConversationComputerTurnAuthorityPort
 {
 	public constructor(private readonly dependencies: ConversationComputerTurnAuthorityDependencies) {}
@@ -29,7 +29,7 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 	 * review surface when it streams the workspace back. The value is derived, not stored, so a retry
 	 * returns the same secret and a new lease invalidates it.
 	 */
-	public async reviewCredential(command: ConversationComputerPodLeaseCommand): Promise<ConversationComputerReviewCredentialGrant>
+	public async reviewCredential(command: ConversationComputerProcessLeaseCommand): Promise<ConversationComputerReviewCredentialGrant>
 	{
 		await this.dependencies.candidates.admit(command);
 		return { reviewCredential: this.dependencies.reviewCredentials.derive({ siloId: this.dependencies.siloId, computerId: command.computerId, lease: command.lease }) };
@@ -199,12 +199,12 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 				throw new Error("Conversation computer display was not requested by its frozen input");
 			const outputTurn = { ...turn, binding: execution.candidate.binding };
 			const payload = await this.dependencies.outputPayloads.store(outputTurn, command.sourceCommandId, text, display);
-			const authority = await __AssertConversationComputerAnswerAuthority(turn, execution.workload, this.dependencies);
+			const authority = await __AssertConversationComputerAnswerAuthority(turn, execution.process, this.dependencies);
 			const notAfter = Math.min(command.modelNotAfterEpochMs, authority.notAfterEpochMs);
 			const commitTurn = { ...turn, binding: authority.candidate.binding };
-			const receipt = await _PrepareConversationComputerOutput(commitTurn, execution.workload, this.dependencies.writers, command.sourceCommandId, payload, authority.generatedFile);
+			const receipt = await _PrepareConversationComputerOutput(commitTurn, execution.process, this.dependencies.writers, command.sourceCommandId, payload, authority.generatedFile);
 			const finalExecution = await this.dependencies.candidates.assertCurrentForWorkflow(turn);
-			const finalAuthority = await __AssertConversationComputerAnswerAuthority(turn, finalExecution.workload, this.dependencies);
+			const finalAuthority = await __AssertConversationComputerAnswerAuthority(turn, finalExecution.process, this.dependencies);
 			_AssertSameConversationGeneratedFile(authority.generatedFile, finalAuthority.generatedFile);
 			if (finalAuthority.candidate.binding.expectedRevision !== commitTurn.binding.expectedRevision)
 				continue;
@@ -240,10 +240,10 @@ export class ConversationComputerTurnAuthority implements ConversationComputerTu
 		}
 		else
 		{
-			const workload = await this.dependencies.candidates.assertLeaseForWorkflow(turn);
+			const process = await this.dependencies.candidates.assertLeaseForWorkflow(turn);
 			for (const intent of _ConversationComputerOutputIntents(output.receipt))
 			{
-				const writer = this.dependencies.writers.create({ ...turn, binding: { ...turn.binding, expectedRevision: BigInt(intent.expectedRevision) } }, workload);
+				const writer = this.dependencies.writers.create({ ...turn, binding: { ...turn.binding, expectedRevision: BigInt(intent.expectedRevision) } }, process);
 				await writer.confirm(intent);
 			}
 		}
@@ -273,7 +273,7 @@ function _Freeze(candidate: ConversationComputerTurnCandidate, command: Conversa
 		bootstrapId,
 		siloId: candidate.binding.siloId,
 		computerId: command.computerId,
-		lease: { leaseId: candidate.lease.leaseId, leaseGeneration: candidate.lease.leaseGeneration, sandboxClaimId: candidate.lease.sandboxClaimId },
+		lease: { leaseId: candidate.lease.leaseId, leaseGeneration: candidate.lease.leaseGeneration, realization: candidate.lease.realization },
 		binding: candidate.binding,
 		latestPendingEntryId: candidate.latestPendingEntryId,
 		latestPendingEntryPosition: candidate.latestPendingEntryPosition,

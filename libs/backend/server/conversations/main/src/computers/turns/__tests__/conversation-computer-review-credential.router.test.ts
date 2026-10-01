@@ -1,28 +1,32 @@
 import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
+import { ConversationComputerRealizationKinds } from "@opencrane/contracts";
 
 import { _CreateConversationComputerReviewCredentialRouter } from "../conversation-computer-review-credential.router";
 
-/** Mount the remaining Pod transport with controlled identity and product authority. */
+/** Mount the remaining process transport with controlled identity and product authority. */
 function _App()
 {
 	const workload = { subject: "system:serviceaccount:testv5:computer", namespace: "testv5", serviceAccountName: "computer", podUid: "pod-1" };
+	const process = { kind: ConversationComputerRealizationKinds.AgentSandbox, workload } as const;
 	const authority = { reviewCredential: vi.fn().mockResolvedValue({ reviewCredential: "keyed-review-secret" }), start: vi.fn(), advance: vi.fn() };
 	const logger = { warn: vi.fn() };
-	const app = express().use(express.json()).use(_CreateConversationComputerReviewCredentialRouter({ logger, tokenReviewer: { __Review: vi.fn().mockResolvedValue(workload) }, authority }));
-	return { app, authority, logger, workload };
+	const authenticator = { authenticate: vi.fn().mockResolvedValue(process) };
+	const app = express().use(express.json()).use(_CreateConversationComputerReviewCredentialRouter({ logger, authenticator, authority }));
+	return { app, authority, authenticator, logger, process };
 }
 
 describe("conversation computer review credential router", function _Suite()
 {
-	it("hands the review credential only to a TokenReviewed Pod with exact lease coordinates", async function _ReviewCredential()
+	it("hands the review credential only to an authenticated process with exact lease coordinates", async function _ReviewCredential()
 	{
 		const fixture = _App();
 		const response = await request(fixture.app).get("/review-credential?computerId=computer-one&generation=2&leaseId=lease-one").set("authorization", "Bearer projected-token");
 		expect(response.status).toBe(200);
 		expect(response.body).toEqual({ reviewCredential: "keyed-review-secret" });
-		expect(fixture.authority.reviewCredential).toHaveBeenCalledWith({ computerId: "computer-one", lease: { leaseId: "lease-one", leaseGeneration: 2 }, workload: fixture.workload });
+		expect(fixture.authority.reviewCredential).toHaveBeenCalledWith({ computerId: "computer-one", lease: { leaseId: "lease-one", leaseGeneration: 2 }, process: fixture.process });
+		expect(fixture.authenticator.authenticate).toHaveBeenCalledWith("projected-token");
 		expect((await request(fixture.app).get("/review-credential?computerId=computer-one&leaseId=lease-one").set("authorization", "Bearer projected-token")).status).toBe(400);
 		expect((await request(fixture.app).get("/review-credential?computerId=computer-one&generation=2&leaseId=lease-one")).status).toBe(401);
 	});

@@ -1,7 +1,6 @@
 import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZonelessChangeDetection } from "@angular/core";
 import { provideRouter, withComponentInputBinding } from "@angular/router";
 import { provideAnimationsAsync } from "@angular/platform-browser/animations/async";
-import { provideHttpClient, withFetch } from "@angular/common/http";
 import { providePrimeNG } from "primeng/config";
 
 import { OpenCranePreset } from "@opencrane/core";
@@ -10,6 +9,7 @@ import { provideWebPlatform } from "@opencrane/platform";
 
 import { APP_ROUTES } from "./app.routes";
 import { OPENCRANE_UI_GATEWAY_PROVIDERS } from "./gateway-profile.providers";
+import { OPENCRANE_HTTP_PROVIDER } from "./http-profile.provider";
 
 /**
  * Root application configuration for the OpenCrane frontend.
@@ -36,7 +36,7 @@ export const appConfig: ApplicationConfig =
 		provideBrowserGlobalErrorListeners(),
 		provideZonelessChangeDetection(),
 		provideRouter(APP_ROUTES, withComponentInputBinding()),
-		provideHttpClient(withFetch()),
+		OPENCRANE_HTTP_PROVIDER,
 		provideAnimationsAsync(),
 		providePrimeNG({ theme: { preset: OpenCranePreset } }),
 		provideWebPlatform(),

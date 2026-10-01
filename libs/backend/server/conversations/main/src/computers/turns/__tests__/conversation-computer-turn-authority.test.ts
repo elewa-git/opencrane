@@ -1,4 +1,4 @@
-import { CompiledFinalOutputModes } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ConversationComputerRealizationKinds } from "@opencrane/contracts";
 import { _ReserveConversationOutputFixture } from "./conversation-output-intent.fixture";
 import { _PrepareBoundDraft } from "./conversation-output-intent.fixture";
 import type { BoundConversationWriterAppend } from "@opencrane/backend/server/conversations/history";
@@ -18,6 +18,8 @@ const _WORKLOAD = {
   serviceAccountName: "conversation-computer",
   podUid: "pod-1",
 };
+const _REALIZATION = { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g2", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.testv5.svc.cluster.local" } as const;
+const _PROCESS = { kind: ConversationComputerRealizationKinds.AgentSandbox, workload: _WORKLOAD } as const;
 const _BINDING = {
   siloId: "testv5",
   conversationId: "conversation-1",
@@ -76,10 +78,10 @@ function _Harness() {
           maximumBudgetUsd: 0.1,
           credentialLifetimeSeconds: 300,
           credentialExpiresAt: "2099-01-01T00:00:00.000Z",
-          lease: { leaseId: "lease-1", leaseGeneration: 2, sandboxClaimId: "computer-1-g2" },
-        }, workload: _WORKLOAD }),
+          lease: { leaseId: "lease-1", leaseGeneration: 2, realization: _REALIZATION },
+        }, process: _PROCESS }),
       assertCurrentForWorkflow: vi.fn().mockResolvedValue(undefined),
-      assertLeaseForWorkflow: vi.fn().mockResolvedValue(_WORKLOAD),
+      assertLeaseForWorkflow: vi.fn().mockResolvedValue(_PROCESS),
       assertCurrent: vi.fn().mockResolvedValue(undefined),
       admit: vi.fn().mockResolvedValue(undefined),
     },
@@ -186,7 +188,7 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     const { authority, dependencies } = _Harness();
     const command = { computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 },
       causationId: "entry-1",
-      causationPosition: "1", workload: _WORKLOAD };
+      causationPosition: "1", process: _PROCESS };
     expect(await authority.reviewCredential(command)).toEqual({ reviewCredential: "keyed-review-secret" });
     expect(dependencies.candidates.admit).toHaveBeenCalledWith(command);
     expect(dependencies.reviewCredentials.derive).toHaveBeenCalledWith({ siloId: "testv5", computerId: "computer-1", lease: { leaseId: "lease-1", leaseGeneration: 2 } });
@@ -299,9 +301,9 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
         maximumBudgetUsd: 0.1,
         credentialLifetimeSeconds: 300,
         credentialExpiresAt: "2099-01-01T00:00:00.000Z",
-        lease: { leaseId: "lease-1", leaseGeneration: 2, sandboxClaimId: "computer-1-g2" },
+        lease: { leaseId: "lease-1", leaseGeneration: 2, realization: _REALIZATION },
       },
-      workload: _WORKLOAD,
+      process: _PROCESS,
     });
     dependencies.candidates.resolveForWorkflow.mockResolvedValue(await dependencies.candidates.assertCurrentForWorkflow());
     await expect(authority.start(command)).rejects.toThrow(
@@ -325,7 +327,7 @@ describe("ConversationComputerTurnAuthority", function _Suite() {
     const execution = await dependencies.candidates.resolveForWorkflow(command);
     const candidate = execution.candidate;
     const notAfter = new Date(Date.now() + 20_000).toISOString();
-    dependencies.candidates.resolveForWorkflow.mockResolvedValue({ candidate: { ...candidate, credentialLifetimeSeconds: 20, credentialExpiresAt: notAfter }, workload: _WORKLOAD });
+    dependencies.candidates.resolveForWorkflow.mockResolvedValue({ candidate: { ...candidate, credentialLifetimeSeconds: 20, credentialExpiresAt: notAfter }, process: _PROCESS });
     expect(await authority.advance(bootstrap!.bootstrapId)).toEqual({ outcome: "completed" });
     expect(dependencies.credentials.issueOnce).toHaveBeenLastCalledWith(expect.objectContaining({ expirySeconds: 20, notAfter }));
     expect(dependencies.model.request).toHaveBeenCalledWith(expect.objectContaining({ maxCompletionTokens: 512, notAfterEpochMs: Date.parse(notAfter) }));

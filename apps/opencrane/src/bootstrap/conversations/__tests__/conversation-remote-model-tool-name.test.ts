@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ConversationComputerTurnAuthorityService, ConversationComputerToolResultOutcomes, type ConversationComputerTurnModelReservation, type ConversationComputerTurnToolSelection, type ConversationComputerTurnCandidate, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { McpInvocationDispatchOutcomes, RemoteMcpInvocationExecutor } from "@opencrane/backend/server/gateways/mcp";
-import { CompiledFinalOutputModes, ConversationModelResponseKinds, ConversationToolProposalOutcomes, McpConnectionCredentialKinds } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ConversationComputerRealizationKinds, ConversationModelResponseKinds, ConversationToolProposalOutcomes, McpConnectionCredentialKinds } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { _OpenConversationTurnProtocol, _ReserveConversationTurnModel, _SelectConversationTurnTool } from "./conversation-turn-protocol.fixture";
@@ -31,7 +31,7 @@ function _ModelSelectionHarness(callName: string)
 	};
 	const candidate = {
 		binding: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Ada", agentAvatarArtifactRevisionId: null, runId: compiledInput.runId, expectedRevision: 1n, maximumEntryBytes: 65_536 },
-		lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" },
+		lease: { leaseId: "lease-1", leaseGeneration: 1, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g1", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.test.svc.cluster.local" } },
 		latestPendingEntryId: "message-1",
 		latestPendingEntryPosition: "1",
 		modelAlias: compiledInput.model.modelAlias,
@@ -68,7 +68,7 @@ function _ModelSelectionHarness(callName: string)
 		siloId: "silo-1",
 		logger,
 		store,
-		candidates: { assertCurrentForWorkflow: vi.fn().mockResolvedValue({ candidate, workload: { namespace: "computers", serviceAccountName: "computer", podUid: "pod-1" } }) },
+		candidates: { assertCurrentForWorkflow: vi.fn().mockResolvedValue({ candidate, process: { kind: ConversationComputerRealizationKinds.AgentSandbox, workload: { subject: "system:serviceaccount:computers:computer", namespace: "computers", serviceAccountName: "computer", podUid: "pod-1" } } }) },
 		credentials: { issueOnce: vi.fn().mockResolvedValue({ key: "test-key", credentialDigest: `sha256:${"c".repeat(64)}`, expiresAt: candidate.credentialExpiresAt }) },
 		model,
 		modelCustody,

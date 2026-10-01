@@ -15,6 +15,21 @@
       "classification": "build-entrypoint"
     },
     {
+      "path": "apps/_infra/litellm/local-development/codespaces-provider-credentials.mjs",
+      "owner": "apps/_infra/litellm",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/_infra/litellm/local-development/config-generation.mjs",
+      "owner": "apps/_infra/litellm",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/_infra/litellm/local-development/provider-selection.mjs",
+      "owner": "apps/_infra/litellm",
+      "classification": "app-config"
+    },
+    {
       "path": "apps/_infra/cognee/deploy/patches/apply-source-patch.py",
       "owner": "apps/_infra/cognee",
       "classification": "build-entrypoint"
@@ -53,6 +68,11 @@
       "path": "apps/opencrane/src/bootstrap/conversations/conversation-history-composition.ts",
       "owner": "apps/opencrane",
       "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/conversations/conversation-computer-agent-sandbox-realizer.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
     },
     {
       "path": "apps/opencrane/src/bootstrap/conversations/conversation-computer-lifecycle-composition.ts",
@@ -215,7 +235,17 @@
       "classification": "browser-composition"
     },
     {
+      "path": "apps/opencrane-ui/src/app/app.routes.live.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-route-composition"
+    },
+    {
       "path": "apps/opencrane-ui/src/app/app.routes.local.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-route-composition"
+    },
+    {
+      "path": "apps/opencrane-ui/src/app/app.routes.tier2.ts",
       "owner": "apps/opencrane-ui",
       "classification": "browser-route-composition"
     },
@@ -243,6 +273,31 @@
       "path": "apps/opencrane-ui/src/app/governance.providers.ts",
       "owner": "apps/opencrane-ui",
       "classification": "browser-composition"
+    },
+    {
+      "path": "apps/opencrane-ui/src/app/http-profile.provider.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-composition"
+    },
+    {
+      "path": "apps/opencrane-ui/src/app/http-profile.provider.tier2.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-composition"
+    },
+    {
+      "path": "apps/opencrane-ui/src/app/local-development/tier2-development-session-required-page.component.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-entry-view"
+    },
+    {
+      "path": "apps/opencrane-ui/src/app/local-development/tier2-development-session.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-entry-guard"
+    },
+    {
+      "path": "apps/opencrane-ui/src/app/local-development/tier2-development-session.types.ts",
+      "owner": "apps/opencrane-ui",
+      "classification": "browser-entry-guard"
     },
     {
       "path": "apps/opencrane-ui/src/app/login/login-page.component.ts",
@@ -536,6 +591,96 @@
     },
     {
       "path": "apps/opencrane/src/bootstrap/conversations/conversation-history-composition.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/development/authentication.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/development/authentication.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/development/browser-origin-authority.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/development/cleanup.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/development/composition.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/development/composition.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/development/config.ts",
+      "owner": "apps/opencrane",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/development/config.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "app-config"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/development/conversation-computer-host-realizer.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/development/conversation-computer-host-realizer.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/development/conversation-computer-lifecycle.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/development/conversation-computer-runtime.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/development/index.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-entrypoint"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/development/lifecycle.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/development/public-app.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/development/public-app.types.ts",
+      "owner": "apps/opencrane",
+      "classification": "route-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/development/simulated-conversation-model.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
+      "path": "apps/opencrane/src/bootstrap/development/simulated-conversation-model.types.ts",
       "owner": "apps/opencrane",
       "classification": "process-composition"
     }

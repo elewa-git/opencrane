@@ -8,9 +8,12 @@ import { ___BindConsole } from "@opencrane/backend/observability";
 import { _ReadAgentSandboxReleaseProfileConfig, _ReadProcessConfig } from "./bootstrap/configuration/config";
 import { _CreateHistoryStoreComposition } from "@opencrane/backend/server/infra/history-store";
 import { _AssertHistoryStoreSilo } from "@opencrane/backend/server/infra/history-store";
-import { _StartConversationComputerActivationWorker } from "@opencrane/backend/server/conversations";
+import { PrismaConversationComputerCredentialUnitOfWork, _StartConversationComputerActivationWorker } from "@opencrane/backend/server/conversations";
+import { AesGcmConversationPrivatePayloadCipher, _ReadConversationPrivatePayloadKeyring } from "@opencrane/backend/server/conversations/history";
+import { __CreateConversationModelTransport, _IssueAttemptLiteLlmKey, _RevokeAttemptLiteLlmKey, _RevokeAttemptLiteLlmKeyByAlias } from "@opencrane/backend/server/gateways/model-routing";
 import { _CreateConversationGeneratedFileWorkflowComposition } from "./bootstrap/conversations/conversation-generated-file-workflow-composition";
 import { _CreateConversationComputerWorkflowComposition } from "./bootstrap/conversations/conversation-computer-workflow-composition";
+import { AgentSandboxConversationComputerRealizer, KubernetesConversationComputerProcessAuthenticator } from "./bootstrap/conversations/conversation-computer-agent-sandbox-realizer";
 import { _CreateConversationComputerLifecycleComposition } from "./bootstrap/conversations/conversation-computer-lifecycle-composition";
 import { _CreateInternalApp } from "./bootstrap/http/internal-app";
 import { _CreateMcpWorkflowComposition } from "./bootstrap/workflows/mcp-workflow-composition";
@@ -27,6 +30,7 @@ import { PrismaConversationPromptDocumentRepository } from "@opencrane/backend/s
 import { ___CreatePrismaClient } from "@opencrane/backend/server/infra/prisma-unit-of-work";
 import { ___CreatePublicHealthReportReader } from "@opencrane/backend/server/infra/http";
 import { _CreateProviderEffectCommandExecutor } from "@opencrane/backend/server/gateways/providers";
+import { _CreateConversationComputerTokenReviewer } from "@opencrane/backend/server/infra/workload-identity";
 
 /**
  * Compose the process once, from telemetry through coordinated shutdown.
@@ -64,12 +68,25 @@ async function _Main(): Promise<void>
 	// Run admission creates document repositories inside its prompt-preparation and compilation transactions.
 	const documentAuthorities = { create: function _CreatePromptDocumentAuthority(transaction: Prisma.TransactionClient) { return new PrismaConversationPromptDocumentRepository(transaction); } };
 	const conversationRunAdmission = _CreateProductionConversationRunAdmission(prisma, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, documentAuthorities, _CreatePublishedArtifactReader(prisma), config.runAdmission, _log);
+	const computerRealizer = new AgentSandboxConversationComputerRealizer(kubernetes.customApi, kubernetes.coreApi, agentSandboxReleaseProfile);
+	const computerAuthenticator = new KubernetesConversationComputerProcessAuthenticator(_CreateConversationComputerTokenReviewer(kubernetes.authApi, agentSandboxReleaseProfile.namespace, agentSandboxReleaseProfile.serviceAccountName));
+	const conversationCipher = AesGcmConversationPrivatePayloadCipher.fromDocument(_ReadConversationPrivatePayloadKeyring(config.conversationPrivatePayloadKeyringPath));
+	const conversationCredentials = new PrismaConversationComputerCredentialUnitOfWork(prisma, conversationCipher, {
+		issue: _IssueAttemptLiteLlmKey,
+		revoke: _RevokeAttemptLiteLlmKey,
+		revokeByAlias: _RevokeAttemptLiteLlmKeyByAlias,
+	}, config.workflows.siloId);
 	const conversationComputerWorkflows = _CreateConversationComputerWorkflowComposition({
 		prisma,
 		history: historyStore.historyStore,
-		kubernetes,
 		siloId: config.workflows.siloId,
 		profile: agentSandboxReleaseProfile,
+		realizer: computerRealizer,
+		processes: computerRealizer,
+		authenticator: computerAuthenticator,
+		credentials: conversationCredentials,
+		model: __CreateConversationModelTransport(process.env),
+		modelEndpoint: process.env.LITELLM_ENDPOINT ?? "",
 		keyringPath: config.conversationPrivatePayloadKeyringPath,
 		runAdmission: conversationRunAdmission,
 		runtimeAdmission: mcpRuntime.admitToolInvocationInTransaction,
@@ -79,8 +96,8 @@ async function _Main(): Promise<void>
 		generatedOutput: generatedFiles.outputLinker,
 	});
 	// Register turn and stop handlers before activation can enqueue turns or request computer cleanup.
-	const conversationComputerActivations = await _StartConversationComputerActivationWorker(prisma, kubernetes.customApi, historyStore.historyStore, workflows.execution, config.workflows.siloId, agentSandboxReleaseProfile, { stopAuthority: conversationComputerWorkflows.stopAuthority, logger: _log, onExhausted: function _RequestProcessShutdown() { process.kill(process.pid, "SIGTERM"); } });
-	const conversationComputerLifecycle = _CreateConversationComputerLifecycleComposition(prisma, historyStore.historyStore, kubernetes.authApi, kubernetes.coreApi, kubernetes.customApi, config.workflows.siloId, agentSandboxReleaseProfile, config.conversationPrivatePayloadKeyringPath, workflows.execution);
+	const conversationComputerActivations = await _StartConversationComputerActivationWorker(prisma, historyStore.historyStore, workflows.execution, config.workflows.siloId, agentSandboxReleaseProfile, computerRealizer, { stopAuthority: conversationComputerWorkflows.stopAuthority, logger: _log, onExhausted: function _RequestProcessShutdown() { process.kill(process.pid, "SIGTERM"); } });
+	const conversationComputerLifecycle = _CreateConversationComputerLifecycleComposition(prisma, historyStore.historyStore, kubernetes.authApi, kubernetes.coreApi, kubernetes.customApi, config.workflows.siloId, agentSandboxReleaseProfile, config.conversationPrivatePayloadKeyringPath, workflows.execution, computerRealizer);
 	// Give process shutdown one stop hook for both computer workers before their shared stores close.
 	const conversationComputerWorkers = { stop: async function _StopComputerWorkers(): Promise<void> { await Promise.all([conversationComputerActivations.stop(), conversationComputerLifecycle.worker.stop()]); } };
 

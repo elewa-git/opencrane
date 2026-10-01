@@ -1,13 +1,10 @@
 import type { Prisma } from "@prisma/client";
 import { PrismaElicitationRepository } from "@opencrane/backend/agents/execution/elicitation";
 import { PrismaConversationRunLifecycleUnitOfWork } from "@opencrane/backend/agents/execution/runs";
-import { CurrentConversationToolRequestedNotificationEvidenceReader, KurrentConversationToolRequestedNotificationPublisher, _ConversationComputerStopAuthority, _RegisterConversationComputerStopWorkflow, PrismaConversationComputerStopAdmissionUnitOfWork, PrismaConversationComputerStopLifecycleUnitOfWork, PrismaConversationComputerStopTargetUnitOfWork, KurrentConversationComputerStopActiveTurnReader, KurrentConversationComputerStopPublisher, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, PrismaConversationModelCustodyUnitOfWork, ConversationComputerTurnWriterFactory, ActiveConversationComputerTurnCandidateResolver, ConversationComputerTurnAuthorityService, KeyedConversationComputerReviewCredentialDeriver, CurrentConversationToolResultNotificationEvidenceReader, KurrentConversationToolResultNotificationPublisher, KurrentConversationApprovalNotificationPublisher, KurrentConversationComputerTurnStore, PrismaConversationApprovalNotificationUnitOfWork, PrismaConversationComputerCredentialUnitOfWork, PrismaConversationComputerTurnUnitOfWork, PrismaConversationComputerTurnWorkflowReceiptBinder, PrismaConversationComputerTurnWorkflowEventRepository, _CreateConversationComputerReviewCredentialRouter, _RegisterConversationComputerTurnWorkflow } from "@opencrane/backend/server/conversations";
+import { CurrentConversationToolRequestedNotificationEvidenceReader, KurrentConversationToolRequestedNotificationPublisher, _ConversationComputerStopAuthority, _RegisterConversationComputerStopWorkflow, PrismaConversationComputerStopAdmissionUnitOfWork, PrismaConversationComputerStopLifecycleUnitOfWork, PrismaConversationComputerStopTargetUnitOfWork, KurrentConversationComputerStopActiveTurnReader, KurrentConversationComputerStopPublisher, PrismaConversationToolProposalUnitOfWork, PrismaConversationToolResultsUnitOfWork, PrismaConversationModelCustodyUnitOfWork, ConversationComputerTurnWriterFactory, ActiveConversationComputerTurnCandidateResolver, ConversationComputerTurnAuthorityService, KeyedConversationComputerReviewCredentialDeriver, CurrentConversationToolResultNotificationEvidenceReader, KurrentConversationToolResultNotificationPublisher, KurrentConversationApprovalNotificationPublisher, KurrentConversationComputerTurnStore, PrismaConversationApprovalNotificationUnitOfWork, PrismaConversationComputerTurnUnitOfWork, PrismaConversationComputerTurnWorkflowReceiptBinder, PrismaConversationComputerTurnWorkflowEventRepository, _CreateConversationComputerReviewCredentialRouter, _RegisterConversationComputerTurnWorkflow } from "@opencrane/backend/server/conversations";
 import { ConversationComputerHistory } from "@opencrane/backend/server/conversations/computers";
 import { AesGcmConversationPrivatePayloadCipher, ConversationHistoryAuthority, ConversationHistoryReader, _ReadConversationPrivatePayloadKeyring } from "@opencrane/backend/server/conversations/history";
-import { __CreateConversationModelTransport, _IssueAttemptLiteLlmKey, _RevokeAttemptLiteLlmKey, _RevokeAttemptLiteLlmKeyByAlias } from "@opencrane/backend/server/gateways/model-routing";
 import { _CreateHumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
-import { AgentSandboxPodBindingAdapter } from "@opencrane/backend/server/infra/agent-sandbox";
-import { _CreateConversationComputerTokenReviewer } from "@opencrane/backend/server/infra/workload-identity";
 import { _log } from "../process/log";
 import { _CreateConversationToolDispatchDependencies } from "../workflows/mcp-runtime-composition";
 import type { ConversationExecutionContext } from "./conversation-computer-workflow-composition.types";
@@ -18,13 +15,12 @@ import type { ConversationExecutionContext } from "./conversation-computer-workf
  */
 export function _CreateConversationComputerWorkflowComposition(executionContext: ConversationExecutionContext)
 {
-	const { prisma, history, kubernetes: { authApi, coreApi, customApi }, siloId, profile, keyringPath, runAdmission, runtimeAdmission, toolDispatch, workflows, generatedFiles, generatedOutput } = executionContext;
+	const { prisma, history, siloId, profile, keyringPath, runAdmission, runtimeAdmission, toolDispatch, workflows, generatedFiles, generatedOutput, realizer, processes, authenticator, credentials, model, modelEndpoint } = executionContext;
 	// Turn payloads, credentials and model custody share the cipher loaded from this keyring.
 	const keyring = _ReadConversationPrivatePayloadKeyring(keyringPath);
 	const cipher = AesGcmConversationPrivatePayloadCipher.fromDocument(keyring);
 	const unitOfWork = new PrismaConversationComputerTurnUnitOfWork(prisma, history, cipher, profile.maximumTurnCostUsdMicros, runAdmission);
-	const candidates = new ActiveConversationComputerTurnCandidateResolver(siloId, unitOfWork, new ConversationComputerHistory(history), new AgentSandboxPodBindingAdapter(coreApi, customApi), unitOfWork, { namespace: profile.namespace, serviceAccountName: profile.serviceAccountName });
-	const credentials = new PrismaConversationComputerCredentialUnitOfWork(prisma, cipher, { issue: _IssueAttemptLiteLlmKey, revoke: _RevokeAttemptLiteLlmKey, revokeByAlias: _RevokeAttemptLiteLlmKeyByAlias }, siloId);
+	const candidates = new ActiveConversationComputerTurnCandidateResolver(siloId, unitOfWork, new ConversationComputerHistory(history), realizer, processes, unitOfWork);
 	const turnStore = new KurrentConversationComputerTurnStore(history);
 	const toolDependencies = _CreateConversationToolDispatchDependencies(history, _CreateHumanMembershipEvidenceConfig());
 	/** Expires approvals and records workflow wake-ups in the proposal caller's transaction so they commit together. */
@@ -46,7 +42,7 @@ export function _CreateConversationComputerWorkflowComposition(executionContext:
 	const toolResultNotifications = new KurrentConversationToolResultNotificationPublisher(toolResultEvidence, historyAuthority, historyReader, history);
 	const requestedEvidence = new CurrentConversationToolRequestedNotificationEvidenceReader(prisma, turnStore, candidates);
 	const toolRequestedNotifications = new KurrentConversationToolRequestedNotificationPublisher(requestedEvidence, historyAuthority, historyReader, history);
-	const authority = new ConversationComputerTurnAuthorityService({ logger: _log, model: __CreateConversationModelTransport(process.env), modelCustody, toolResults, toolResultNotifications, toolRequestedNotifications, toolProposals, siloId, candidates, credentials, endpoint: process.env.LITELLM_ENDPOINT ?? "", outputPayloads: unitOfWork, generatedFiles: generatedOutput, reviewCredentials: KeyedConversationComputerReviewCredentialDeriver.fromKeyring(keyring), runLifecycle: new PrismaConversationRunLifecycleUnitOfWork(prisma), store: turnStore, writers });
+	const authority = new ConversationComputerTurnAuthorityService({ logger: _log, model, modelCustody, toolResults, toolResultNotifications, toolRequestedNotifications, toolProposals, siloId, candidates, credentials, endpoint: modelEndpoint, outputPayloads: unitOfWork, generatedFiles: generatedOutput, reviewCredentials: KeyedConversationComputerReviewCredentialDeriver.fromKeyring(keyring), runLifecycle: new PrismaConversationRunLifecycleUnitOfWork(prisma), store: turnStore, writers });
 	const approvalNotifications = new KurrentConversationApprovalNotificationPublisher(new PrismaConversationApprovalNotificationUnitOfWork(prisma), historyAuthority, historyReader, history);
 	// Registration installs handlers; the workflow engine runs them when work is submitted.
 	_RegisterConversationComputerTurnWorkflow(workflows, { approvalNotifications, authority, toolDispatch, receipts: new PrismaConversationComputerTurnWorkflowReceiptBinder(prisma), siloId });
@@ -57,6 +53,6 @@ export function _CreateConversationComputerWorkflowComposition(executionContext:
 	const stopLifecycle = new PrismaConversationComputerStopLifecycleUnitOfWork(prisma);
 	// Stop cleanup uses the same credential service that issues credentials for turns.
 	_RegisterConversationComputerStopWorkflow(workflows, { admissions: stopAdmissions, publisher: stopPublisher, lifecycle: stopLifecycle, credentials });
-	const reviewCredentialRouter = _CreateConversationComputerReviewCredentialRouter({ logger: _log, tokenReviewer: _CreateConversationComputerTokenReviewer(authApi, profile.namespace, profile.serviceAccountName), authority });
+	const reviewCredentialRouter = _CreateConversationComputerReviewCredentialRouter({ logger: _log, authenticator, authority });
 	return { reviewCredentialRouter, stopAuthority };
 }

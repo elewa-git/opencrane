@@ -47,8 +47,9 @@ function _Harness(limits: Partial<SelfConversationEventLimits> = {})
 	const read = vi.fn<SelfConversationHistoryAuthority["read"]>(async function _Read(_caller, _id, cursor) { return _Page(cursor?.toString() ?? "0"); });
 	const shutdown = new AbortController();
 	const resolveCaller = vi.fn().mockReturnValue(_CALLER);
+	const isSameOrigin = vi.fn().mockReturnValue(true);
 	const warn = vi.fn();
-	const handler = _CreateSelfConversationEventsHandler({ authority: { read }, historyStore: { subscribe }, resolveCaller, shutdownSignal: shutdown.signal, logger: { warn }, limits: { durationMs: 2000, idleMs: 1500, heartbeatMs: 1000, ...limits } });
+	const handler = _CreateSelfConversationEventsHandler({ authority: { read }, browserOriginAuthority: { isSameOrigin }, historyStore: { subscribe }, resolveCaller, shutdownSignal: shutdown.signal, logger: { warn }, limits: { durationMs: 2000, idleMs: 1500, heartbeatMs: 1000, ...limits } });
 	function _Start(headers: Record<string, string> = {}, query: Record<string, string> = {}, response = new _Response())
 	{
 		const allHeaders: Record<string, string> = { host: "opencrane.test", "sec-fetch-site": "same-origin", ...headers };
@@ -56,7 +57,7 @@ function _Harness(limits: Partial<SelfConversationEventLimits> = {})
 		handler(request, response as unknown as Response, vi.fn());
 		return response;
 	}
-	return { read, subscribe, close, events, shutdown, resolveCaller, warn, start: _Start };
+	return { read, subscribe, close, events, shutdown, isSameOrigin, resolveCaller, warn, start: _Start };
 }
 
 async function _Ended(response: _Response)
@@ -84,8 +85,8 @@ describe("participant conversation SSE", function ()
 		const harness = _Harness();
 		harness.resolveCaller.mockReturnValueOnce(null);
 		expect(harness.start().statusCode).toBe(401);
+		harness.isSameOrigin.mockReturnValueOnce(false);
 		expect(harness.start({ origin: "https://other.test" }).statusCode).toBe(403);
-		expect(harness.start({ "sec-fetch-site": "same-site" }).statusCode).toBe(403);
 		expect(harness.start({ "last-event-id": "1,2" }).statusCode).toBe(400);
 		expect(harness.start({}, { afterPosition: "18446744073709551616" }).statusCode).toBe(400);
 		expect(harness.read).not.toHaveBeenCalled();

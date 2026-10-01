@@ -1,7 +1,7 @@
 import { AgentRunState, ExternalActionRecoveryMode, Prisma, ToolInvocationState, ToolResultDeliveryState, type PrismaClient } from "@prisma/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, ConversationModelToolModes } from "@opencrane/contracts";
+import { CONVERSATION_COMPUTER_PROJECTED_TOKEN_AUDIENCE, ConversationComputerRealizationKinds, ConversationModelToolModes } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -10,7 +10,7 @@ import { _ConversationComputerTurnHistoryDigest, _InitialConversationComputerTur
 import { ConversationComputerTurnProtocolStates, type ConversationComputerTurnModelReservation } from "../../../turns/conversation-computer-turn-protocol.types";
 import { _ConversationModelRequestDigest } from "../../../turns/conversation-computer-model-reservation";
 import { KurrentConversationComputerTurnStore } from "../../../turns/conversation-computer-turn-store";
-import type { FrozenConversationComputerTurn } from "../../../turns/conversation-computer-turn.types";
+import type { ConversationComputerProcessLeaseCommand, FrozenConversationComputerTurn } from "../../../turns/conversation-computer-turn.types";
 import type { ConversationToolDispatchDependencies } from "../../dispatch/conversation-tool-dispatch.types";
 import { PrismaConversationToolDispatchAuthority } from "../../dispatch/prisma-conversation-tool-dispatch-authority";
 import { ConversationGeneratedFileResultStates } from "../conversation-generated-file-result.types";
@@ -68,7 +68,7 @@ async function _savedTurn(reserve: boolean)
 	const frozen: FrozenConversationComputerTurn = {
 		bootstrapId: "55555555-5555-4555-8555-555555555555", siloId: "silo-1", computerId: "computer-1",
 		binding: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Ada", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 1n, maximumEntryBytes: 65_536 },
-		lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" }, compile: { runId: "run-1", attempt: 1, promptCompilerVersion: "test-v1", digest: _DIGEST },
+		lease: { leaseId: "lease-1", leaseGeneration: 1, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g1", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.computers.svc.cluster.local" } }, compile: { runId: "run-1", attempt: 1, promptCompilerVersion: "test-v1", digest: _DIGEST },
 		latestPendingEntryId: "input-1", modelAlias: "model-1", maximumBudgetUsd: 1, credentialLifetimeSeconds: 60,
 		latestPendingEntryPosition: "1",
 		budget: { maxModelTurns: 2, maxCompletionTokens: 200, maxCostUsdMicros: null, maxToolInvocations: 1, maxLoopIterations: 1, wallClockDeadlineEpochMs: _NOW.getTime() + 60_000 }, protocol: _InitialConversationComputerTurnProtocol(),
@@ -144,9 +144,11 @@ async function _fixture(reserve = true)
 		catch (error) { row = before; throw error; }
 	});
 	const prisma = { $transaction: run } as unknown as PrismaClient;
-	const admit = vi.fn(async function _Pod(command: { workload: typeof _WORKLOAD })
+	const admit = vi.fn(async function _Pod(command: ConversationComputerProcessLeaseCommand)
 	{
-		if (command.workload.podUid !== _WORKLOAD.podUid)
+		if (command.process.kind !== ConversationComputerRealizationKinds.AgentSandbox)
+			throw new Error("Agent Sandbox process required");
+		if (command.process.workload.podUid !== _WORKLOAD.podUid)
 			throw new Error("Pod binding denied");
 	});
 	const guard = vi.spyOn(PrismaConversationToolDispatchAuthority.prototype, "admit").mockImplementation(async function _Current(this: PrismaConversationToolDispatchAuthority, invocation, _now, workload)

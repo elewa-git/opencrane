@@ -1,5 +1,5 @@
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
-import { ___ParseRunBudgetPolicy } from "@opencrane/contracts";
+import { ___ConversationComputerRealizationSchema, ___ParseRunBudgetPolicy, type ConversationComputerRealization } from "@opencrane/contracts";
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryRecordedEvent, type HistoryStore } from "@opencrane/backend/server/infra/history-store";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -321,7 +321,7 @@ function _FrozenEvent(turn: FrozenConversationComputerTurn)
 	return { id: turn.bootstrapId, type: _FROZEN_EVENT, data: { turn: _Serializable(turn) }, metadata: _Metadata(turn) };
 }
 
-type _StoredFrozenTurn = Omit<FrozenConversationComputerTurn, "lease" | "binding" | "protocol" | "budget"> & { readonly generation: number; readonly leaseId: string; readonly sandboxClaimId: string; readonly binding: Omit<FrozenConversationComputerTurn["binding"], "expectedRevision"> & { readonly expectedRevision: string }; readonly budget: unknown };
+type _StoredFrozenTurn = Omit<FrozenConversationComputerTurn, "lease" | "binding" | "protocol" | "budget"> & { readonly generation: number; readonly leaseId: string; readonly realization: ConversationComputerRealization; readonly binding: Omit<FrozenConversationComputerTurn["binding"], "expectedRevision"> & { readonly expectedRevision: string }; readonly budget: unknown };
 
 function _Frozen(event: HistoryRecordedEvent, bootstrapId: string): FrozenConversationComputerTurn
 {
@@ -333,9 +333,10 @@ function _Frozen(event: HistoryRecordedEvent, bootstrapId: string): FrozenConver
 		|| typeof value.compile?.digest !== "string" || typeof value.compile.runId !== "string" || typeof value.compile.attempt !== "number" || typeof value.compile.promptCompilerVersion !== "string")
 		throw new Error("Conversation computer turn received malformed frozen data");
 	const budget = ___ParseRunBudgetPolicy(value.budget);
+	const realization = ___ConversationComputerRealizationSchema.parse(value.realization);
 	const turn: FrozenConversationComputerTurn = {
 		bootstrapId: value.bootstrapId, siloId: value.siloId, computerId: value.computerId,
-		lease: { leaseId: value.leaseId, leaseGeneration: value.generation, sandboxClaimId: value.sandboxClaimId },
+		lease: { leaseId: value.leaseId, leaseGeneration: value.generation, realization },
 		binding: { ...value.binding, expectedRevision: BigInt(value.binding.expectedRevision) },
 		latestPendingEntryId: value.latestPendingEntryId, latestPendingEntryPosition: value.latestPendingEntryPosition,
 		modelAlias: value.modelAlias, maximumBudgetUsd: value.maximumBudgetUsd, credentialLifetimeSeconds: value.credentialLifetimeSeconds,
@@ -352,7 +353,7 @@ function _Serializable(turn: FrozenConversationComputerTurn): Record<string, unk
 {
 	return {
 		bootstrapId: turn.bootstrapId, siloId: turn.siloId, computerId: turn.computerId,
-		generation: turn.lease.leaseGeneration, leaseId: turn.lease.leaseId, sandboxClaimId: turn.lease.sandboxClaimId,
+		generation: turn.lease.leaseGeneration, leaseId: turn.lease.leaseId, realization: turn.lease.realization,
 		binding: { ...turn.binding, expectedRevision: turn.binding.expectedRevision.toString() },
 		latestPendingEntryId: turn.latestPendingEntryId, latestPendingEntryPosition: turn.latestPendingEntryPosition,
 		modelAlias: turn.modelAlias, maximumBudgetUsd: turn.maximumBudgetUsd, credentialLifetimeSeconds: turn.credentialLifetimeSeconds,

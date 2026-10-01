@@ -138,7 +138,7 @@ async function _Fixture(history: _KurrentHistoryStore)
 		profileRevisionId: `profile-${conversationId}`, state: ConversationComputerStates.Warm, leaseGeneration: 1, workspaceCheckpoint: null,
 		createdAt: now.toISOString(), updatedAt: now.toISOString(),
 	}, lease: { schemaVersion: 1, id: seeded.turn.lease.leaseId, computerId: seeded.turn.computerId, generation: 1,
-		sandboxClaimId: seeded.turn.lease.sandboxClaimId, sandboxId: `sandbox-${conversationId}`, serviceFQDN: `sandbox-${conversationId}.test.svc.cluster.local`,
+		realization: seeded.turn.lease.realization,
 		state: ComputerLeaseStates.Active, claimedAt: now.toISOString(), expiresAt: new Date(now.getTime() + 300_000).toISOString(), releasedAt: null } });
 	const assetId = await _SeedReadyPdf(_ConnectPrisma(), seeded.siloId, conversationId, seeded.principalId);
 	return { siloId: seeded.siloId, conversationId, caller, assetId };

@@ -1,11 +1,12 @@
 import type { Prisma } from "@prisma/client";
+import { ConversationComputerRealizationKinds } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import { CONVERSATION_COMPUTER_TURN_TASK } from "../../turns/workflow/conversation-computer-turn-task";
 import { PrismaConversationComputerActivationUnitOfWork } from "../db/prisma-conversation-computer-activation-unit-of-work";
 
 const _ACTIVATION = { activationEventId: "11111111-1111-4111-8111-111111111111", causationId: "22222222-2222-4222-8222-222222222222", causationPosition: "1" };
-const _LEASE = { computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" }, lease: { leaseId: "lease-2", leaseGeneration: 2, expiresAt: "2099-09-05T13:00:00.000Z" } };
+const _LEASE = { computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" }, lease: { leaseId: "lease-2", leaseGeneration: 2, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g2", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.computers.svc.cluster.local" } as const, expiresAt: "2099-09-05T13:00:00.000Z" } };
 
 describe("PrismaConversationComputerActivationUnitOfWork", function _Suite()
 {

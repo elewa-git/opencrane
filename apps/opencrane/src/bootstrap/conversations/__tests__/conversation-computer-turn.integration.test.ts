@@ -3,7 +3,7 @@ import type { ConversationComputerTurnCandidate } from "@opencrane/backend/serve
 import { ConversationComputerTurnProtocolStates, ConversationComputerActivationAuthorityAdapter, ConversationComputerTurnAuthorityService, CONVERSATION_COMPUTER_TURN_TASK, _RegisterConversationComputerTurnWorkflow } from "@opencrane/backend/server/conversations";
 import { ConversationComputerHistory } from "@opencrane/backend/server/conversations/computers";
 import type { IWorkflowTaskContext, IWorkflowTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
-import { CompiledFinalOutputModes, ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ComputerLeaseStates, ConversationComputerRealizationKinds, ConversationComputerStates } from "@opencrane/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { _ReserveConversationTurnModel } from "./conversation-turn-protocol.fixture";
@@ -19,7 +19,7 @@ describe("conversation computer turn integration", function _Suite()
 			state: ConversationComputerStates.ClaimPending, leaseGeneration: 1, workspaceCheckpoint: null, createdAt: "2026-09-05T00:00:00.000Z", updatedAt: "2026-09-05T00:00:00.000Z",
 		};
 		const lease = {
-			schemaVersion: 1 as const, id: "lease-one", computerId: computer.id, generation: 1, sandboxClaimId: "computer-one-g1", sandboxId: null, serviceFQDN: null,
+			schemaVersion: 1 as const, id: "lease-one", computerId: computer.id, generation: 1, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox as const, claimId: "computer-one-g1", sandboxId: null, serviceFQDN: null },
 			state: ComputerLeaseStates.Claimed, claimedAt: "2026-09-05T00:00:00.000Z", expiresAt: "2099-09-05T00:00:00.000Z", releasedAt: null,
 		};
 		vi.spyOn(ConversationComputerHistory.prototype, "load").mockResolvedValue({ streamName: "conversation-computer-computer-one", revision: 1n, computer, lease });
@@ -27,24 +27,25 @@ describe("conversation computer turn integration", function _Suite()
 		const activation = new ConversationComputerActivationAuthorityAdapter(
 			{ resolve: vi.fn().mockResolvedValue({ agentIdentityId: computer.agentIdentityId, profileRevisionId: computer.profileRevisionId }), publishActiveLease: vi.fn().mockResolvedValue(undefined) },
 			{} as never,
-			{ claim: vi.fn().mockResolvedValue({ claimId: "computer-one-g1", outcome: "existing", sandboxId: "sandbox-one", serviceFQDN: "sandbox-one.testv5.svc.cluster.local" }) } as never,
-			{ profileRevisionId: computer.profileRevisionId, profileName: "developer", warmPoolName: "pool", namespace: "testv5", leaseTtlMilliseconds: 60_000 },
+			{ prepare: vi.fn().mockReturnValue(lease.realization), claim: vi.fn().mockResolvedValue({ ...lease.realization, sandboxId: "sandbox-one", serviceFQDN: "sandbox-one.testv5.svc.cluster.local" }) } as never,
+			{ profileRevisionId: computer.profileRevisionId, leaseTtlMilliseconds: 60_000 },
 		);
 		await expect(activation.activate({ siloId: "testv5", computerId: computer.id, conversationId: computer.conversationId, generation: 1, activationEventId: "41c1f1dc-0010-4f13-9c2f-d3841ffd6651", causationId: "entry-one", causationPosition: "1" })).resolves.toBe("activated");
 
 		let frozen: any = null;
 		const append = vi.fn().mockResolvedValue({});
 		const workload = { subject: "system:serviceaccount:testv5:computer", namespace: "testv5", serviceAccountName: "computer", podUid: "pod-one" };
+		const processIdentity = { kind: ConversationComputerRealizationKinds.AgentSandbox, workload } as const;
 		const candidate: ConversationComputerTurnCandidate = {
 			binding: { siloId: "testv5", conversationId: computer.conversationId, computerId: computer.id, leaseGeneration: 1, agentIdentityId: computer.agentIdentityId, agentServiceId: "service-one", agentName: "Ada", agentAvatarArtifactRevisionId: null, runId: "run-one", expectedRevision: 1n, maximumEntryBytes: 65_536 },
 			compiledInput: { finalOutput: CompiledFinalOutputModes.Text,  promptCompilerVersion: "v1", runId: "run-one", attempt: 1, instructions: "help", messages: [{ role: "user", content: "hello" }], tools: [], model: { modelAlias: "model-one", maxOutputTokens: null, generatedOutputCapabilities: [] }, budget: { maxModelTurns: 1, maxCompletionTokens: 100, maxCostUsdMicros: 100_000, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: 2_000_000_000_000 }, digest: `sha256:${"b".repeat(64)}` },
 			latestPendingEntryId: "entry-one", latestPendingEntryPosition: "1", modelAlias: "model-one", maximumBudgetUsd: 0.1, credentialLifetimeSeconds: 300, credentialExpiresAt: "2099-01-01T00:00:00.000Z",
-			lease: { leaseId: "lease-one", leaseGeneration: 1, sandboxClaimId: "computer-one-g1" },
+			lease: { leaseId: "lease-one", leaseGeneration: 1, realization: lease.realization },
 		};
-		const execution = { candidate, workload };
+		const execution = { candidate, process: processIdentity };
 		const authority = new ConversationComputerTurnAuthorityService({
 			logger: { warn: vi.fn() }, model: { request: vi.fn().mockResolvedValue({ kind: "text", text: "assistant answer" }) }, toolProposals: { admit: vi.fn() }, siloId: "testv5", runLifecycle: { start: vi.fn(), complete: vi.fn(), enterRecoveryRequired: vi.fn() },
-			candidates: { resolve: vi.fn().mockResolvedValue(candidate), resolveForWorkflow: vi.fn().mockResolvedValue(execution), assertCurrentForWorkflow: vi.fn().mockResolvedValue(execution), assertLeaseForWorkflow: vi.fn().mockResolvedValue(workload), assertCurrent: vi.fn().mockResolvedValue(candidate), admit: vi.fn() },
+			candidates: { resolve: vi.fn().mockResolvedValue(candidate), resolveForWorkflow: vi.fn().mockResolvedValue(execution), assertCurrentForWorkflow: vi.fn().mockResolvedValue(execution), assertLeaseForWorkflow: vi.fn().mockResolvedValue(processIdentity), assertCurrent: vi.fn().mockResolvedValue(candidate), admit: vi.fn() },
 			reviewCredentials: { bearer: vi.fn(), derive: vi.fn().mockReturnValue("keyed-review-secret") }, modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadExchange: vi.fn(), storeExchange: vi.fn() }, generatedFiles: { link: vi.fn() }, toolResults: { read: vi.fn(), consume: vi.fn() }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") }, toolRequestedNotifications: { publishRequested: vi.fn() },
 			credentials: { reuseExact: vi.fn(), issueOnce: vi.fn().mockResolvedValue({ key: "sk-turn", credentialDigest: "sha256:key", expiresAt: "2099-01-01T00:00:00.000Z" }), revoke: vi.fn() }, endpoint: "http://model.stub",
 			outputPayloads: { store: vi.fn().mockResolvedValue({ blockId: "block-one", payloadRef: "payload-one", ciphertextDigest: "sha256:cipher", display: null }) },

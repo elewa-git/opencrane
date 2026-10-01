@@ -2786,6 +2786,8 @@
 		],
 		"compositions": [
 			"libs/backend/server/agents/artifacts/main/src/service/artifact-upload.factory.ts",
+			"apps/opencrane/src/bootstrap/development/composition.ts",
+			"apps/opencrane/src/bootstrap/development/conversation-computer-lifecycle.ts",
 			"apps/opencrane/src/bootstrap/http/public-app.ts",
 			"libs/backend/server/conversations/main/src/admission/run-admission-composition.ts",
 			"apps/opencrane/src/bootstrap/conversations/conversation-computer-lifecycle-composition.ts",

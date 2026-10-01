@@ -4,7 +4,7 @@ import { PrismaRunAdmissionUnitOfWork, type RunAdmissionCommand, type RunAdmissi
 import { PrismaPromptCompilerRepository, type ExecutionSubjectAuthority } from "@opencrane/backend/agents/execution/inputs";
 import { ConversationComputerTurnAuthorityService, type ConversationComputerRunAdmissionCommand, type FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
 import { FleetMembershipDeploymentModes, PrismaHumanMembershipEvidenceRepository, type HumanMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
-import { ___ExecutionSubjectSchema, CompiledFinalOutputModes, ExecutionSubjectMembershipKinds, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, type CompiledRunInput, type ExecutionSubject, type RunInputSnapshot } from "@opencrane/contracts";
+import { ___ExecutionSubjectSchema, CompiledFinalOutputModes, ConversationComputerRealizationKinds, ExecutionSubjectMembershipKinds, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, type CompiledRunInput, type ExecutionSubject, type RunInputSnapshot } from "@opencrane/contracts";
 import { PrismaAuthorizationAuthority } from "@opencrane/backend/server/iam/authorization";
 import { AgentServiceKind, ModelRoutingScope } from "@prisma/client";
 import { AuthorizationDecisionOutcomes, ProductAuthorizationActions, ProductAuthorizationResourceKinds } from "@opencrane/models/authorization";
@@ -44,7 +44,7 @@ function _savedRun(): { snapshot: RunInputSnapshot; compiled: CompiledRunInput }
 /** Supplies the same claimed computer and immutable message coordinates as the accepted request. */
 function _command(): ConversationComputerRunAdmissionCommand
 {
-	return { runId: "run-1", computer: { siloId: "silo-1", computerId: "computer-1", conversationId: "child-1", agentIdentityId: "identity-1" }, agent: { agentServiceId: "service-1", agentRevisionId: "revision-1", profileRevisionId: "profile-1" }, lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "claim-1" }, requesterPrincipalId: "human-principal", requesterSubjectId: "human-subject", requesterIssuer: "https://issuer.test", requesterAuthenticatedAt: "2026-09-07T00:00:00.000Z", requestIdempotencyKey: "message-1", messageInput: { mode: "pre_persisted_history", messageId: "message-1", historyRevision: "1", orderedMessageIds: ["message-1"] } };
+	return { runId: "run-1", computer: { siloId: "silo-1", computerId: "computer-1", conversationId: "child-1", agentIdentityId: "identity-1" }, agent: { agentServiceId: "service-1", agentRevisionId: "revision-1", profileRevisionId: "profile-1" }, lease: { leaseId: "lease-1", leaseGeneration: 1, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "claim-1", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.test.svc.cluster.local" } }, requesterPrincipalId: "human-principal", requesterSubjectId: "human-subject", requesterIssuer: "https://issuer.test", requesterAuthenticatedAt: "2026-09-07T00:00:00.000Z", requestIdempotencyKey: "message-1", messageInput: { mode: "pre_persisted_history", messageId: "message-1", historyRevision: "1", orderedMessageIds: ["message-1"] } };
 }
 
 /** Supplies an empty command-bound document preparation for tests outside the PDF slice. */
@@ -218,6 +218,7 @@ function _StandaloneComputerFixture()
 				return { binding: { siloId: "silo-1", conversationId: "child-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Company", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 1n, maximumEntryBytes: 65_536 }, lease: command.lease, compiledInput: result.compiledInput, latestPendingEntryId: "message-1", latestPendingEntryPosition: "1", modelAlias: "company-model", maximumBudgetUsd: 0.1, credentialLifetimeSeconds: 300, credentialExpiresAt: result.authorityExpiresAt };
 			};
 	const workload = { subject: "system:serviceaccount:test:computer", namespace: "test", serviceAccountName: "computer", podUid: "pod-1" };
+	const processIdentity = { kind: ConversationComputerRealizationKinds.AgentSandbox, workload } as const;
 	const computer = new ConversationComputerTurnAuthorityService({
 		logger: { warn: vi.fn() }, modelCustody: { loadDeclaration: vi.fn().mockResolvedValue(null), storeDeclaration: vi.fn(), loadExchange: vi.fn(), storeExchange: vi.fn() }, generatedFiles: { link: vi.fn() }, toolResults: { read: vi.fn(), consume: vi.fn() }, toolResultNotifications: { publishTerminal: vi.fn().mockResolvedValue("published") }, toolRequestedNotifications: { publishRequested: vi.fn() }, model: { request: vi.fn() },
 		toolProposals: { admit: vi.fn() },
@@ -228,9 +229,9 @@ function _StandaloneComputerFixture()
 		candidates: {
 			admit: vi.fn(),
 			resolve: resolveCandidate,
-			resolveForWorkflow: async function _ResolveForWorkflow() { return { candidate: await resolveCandidate(), workload }; },
-			assertCurrentForWorkflow: async function _AssertCurrentForWorkflow() { return { candidate: await resolveCandidate(), workload }; },
-			assertLeaseForWorkflow: vi.fn().mockResolvedValue(workload),
+			resolveForWorkflow: async function _ResolveForWorkflow() { return { candidate: await resolveCandidate(), process: processIdentity }; },
+			assertCurrentForWorkflow: async function _AssertCurrentForWorkflow() { return { candidate: await resolveCandidate(), process: processIdentity }; },
+			assertLeaseForWorkflow: vi.fn().mockResolvedValue(processIdentity),
 			assertCurrent: resolveCandidate,
 		},
 	});

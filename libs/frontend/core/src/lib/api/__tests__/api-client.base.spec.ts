@@ -1,15 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OpenCraneApiClientBase } from "../api-client.base";
+import type { ControlPlaneUnauthorizedResponseHandler } from "../api-client.types";
 import { OpenCraneApiError } from "../api-error";
 
 /** Concrete client exposing the shared raw-request path for transport tests. */
 class _TestApiClient extends OpenCraneApiClientBase<Record<string, never>>
 {
-	/** Bind the client to a stable test origin. */
-	public constructor()
+	/** Bind the client to a stable test origin and optional application-profile 401 handler. */
+	public constructor(unauthorizedResponseHandler?: ControlPlaneUnauthorizedResponseHandler)
 	{
-		super("https://control.example.test");
+		super("https://control.example.test", {}, unauthorizedResponseHandler);
 	}
 }
 
@@ -50,6 +51,30 @@ describe("OpenCraneApiClientBase.request", function _Suite()
 
 		expect(failure).toMatchObject({ status: 502, code: "HTTP_ERROR", issues: [] });
 		expect((failure as Error).message).not.toContain("upstream secret");
+	});
+
+	it("lets a profile claim its exact unauthorized response before OIDC recovery", async function _ClaimedUnauthorizedResponse()
+	{
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: "PROFILE_SESSION_REQUIRED" }), { status: 401 })));
+		const assign = vi.fn();
+		vi.stubGlobal("window", { location: { assign, pathname: "/chats/one", search: "" } });
+		const handler = vi.fn().mockResolvedValue(true);
+		const client = new _TestApiClient(handler);
+
+		await expect(client.request("GET", "/profile")).rejects.toMatchObject({ status: 401 });
+		expect(handler).toHaveBeenCalledOnce();
+		expect(assign).not.toHaveBeenCalled();
+	});
+
+	it("preserves ordinary OIDC recovery when a profile leaves a 401 unclaimed", async function _UnclaimedUnauthorizedResponse()
+	{
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: "UNRELATED" }), { status: 401 })));
+		const assign = vi.fn();
+		vi.stubGlobal("window", { location: { assign, pathname: "/chats/one", search: "?panel=activity" } });
+		const client = new _TestApiClient(vi.fn().mockResolvedValue(false));
+
+		await expect(client.request("GET", "/profile")).rejects.toMatchObject({ status: 401 });
+		expect(assign).toHaveBeenCalledWith("https://control.example.test/api/v1/auth/login?returnTo=%2Fchats%2Fone%3Fpanel%3Dactivity");
 	});
 });
 

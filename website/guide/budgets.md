@@ -74,7 +74,7 @@ The continuation implementation may reserve a first request that can select one 
 approval, followed by a final text request after the exact result is available. The whole first
 token reservation is subtracted before the second is reserved, even if the provider reports less
 usage. Both requests reuse the same key and spend ceiling. The key's original authority window,
-capped at 300 seconds, is separate from each request's at-most-25-second deadline; actual key expiry
+capped at 300 seconds, is separate from each request's at-most-60-second deadline; actual key expiry
 or shorter current authority ends further work. Expired, missing or uncertain key custody cannot
 produce a replacement allowance. Cleanup clears secret material and retains a spent-attempt marker.
 

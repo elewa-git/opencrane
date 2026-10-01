@@ -3,7 +3,7 @@ import { ExecutionEvidenceOutcomes } from "@opencrane/backend/server/agents/agen
 import type { ExecutionSubject } from "@opencrane/models/agents";
 
 import type { ManagedConversationExecutionSubjectDependencies } from "./managed-conversation-execution-subject-authority.types";
-import { _MatchesConversationExecutionCommand, _MatchesConversationExecutionLease } from "./conversation-execution-subject.validator";
+import { _MatchesConversationExecutionSubjectAdmissionFence, _MatchesConversationExecutionSubjectCommand } from "../conversation-execution-subject-admission-fence";
 import { SessionAssemblyLoadOutcomes, type ExecutionSubjectAuthority, type SessionAssemblyCommand, type SessionAssemblyLoad } from "../assembly/session-assembly.types";
 
 /** Freezes a company assistant's own execution authority while retaining the requesting human separately. */
@@ -17,7 +17,7 @@ export class ManagedConversationExecutionSubjectAuthority implements ExecutionSu
 	{
 		const coordinates = this.dependencies.coordinates;
 		const { computer, agent, lease } = coordinates;
-		if (command.conversationId === null || command.trigger !== "interactive" || !_MatchesConversationExecutionCommand(command, run, coordinates))
+		if (command.conversationId === null || !_MatchesConversationExecutionSubjectCommand(command, run, coordinates))
 			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "identity_unavailable" };
 		const principalId = await this.dependencies.resolvePrincipalId(transaction);
 		if (principalId === null || principalId === coordinates.requesterPrincipalId)
@@ -35,7 +35,7 @@ export class ManagedConversationExecutionSubjectAuthority implements ExecutionSu
 		}
 		if (identity.identity.kind !== AgentIdentityKinds.Managed || identity.identity.principalId !== principalId
 			|| identity.identity.id !== computer.agentIdentityId || identity.identity.siloId !== command.siloId || identity.identity.agentServiceId !== agent.agentServiceId
-			|| !_MatchesConversationExecutionLease(active, coordinates))
+			|| !_MatchesConversationExecutionSubjectAdmissionFence(command, run, coordinates, active))
 			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "identity_unavailable" };
 		if (transaction.authorization === undefined)
 			return { outcome: SessionAssemblyLoadOutcomes.Denied, reason: "product_authorization_unavailable" };

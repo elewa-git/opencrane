@@ -6,7 +6,7 @@ import { CurrentConversationToolRequestedNotificationEvidenceReader, KurrentConv
 import { ConversationHistoryAuthority, ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
 import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
 
-import { _GENERATED_OUTPUT_CIPHER, _GENERATED_OUTPUT_WORKLOAD } from "./conversation-generated-file-output.integration.sql.fixture";
+import { _GENERATED_OUTPUT_CIPHER, _GENERATED_OUTPUT_PROCESS } from "./conversation-generated-file-output.integration.sql.fixture";
 import { _ToolHandoffSqlRuntime } from "./conversation-tool-handoff.sql-fixture";
 import type { _SeedConversationToolProposalSqlFixture } from "./conversation-tool-proposal.sql-fixture";
 
@@ -18,10 +18,10 @@ export function _McpModelNameAuthority(prisma: PrismaClient, history: HistorySto
 	const candidates = {
 		async admit() {},
 		async resolve() { return fixture.candidate; },
-		async resolveForWorkflow() { return { candidate: fixture.candidate, workload: _GENERATED_OUTPUT_WORKLOAD }; },
+		async resolveForWorkflow() { return { candidate: fixture.candidate, process: _GENERATED_OUTPUT_PROCESS }; },
 		async assertCurrent() { return fixture.candidate; },
-		async assertCurrentForWorkflow() { return { candidate: fixture.candidate, workload: _GENERATED_OUTPUT_WORKLOAD }; },
-		async assertLeaseForWorkflow() { return _GENERATED_OUTPUT_WORKLOAD; },
+		async assertCurrentForWorkflow() { return { candidate: fixture.candidate, process: _GENERATED_OUTPUT_PROCESS }; },
+		async assertLeaseForWorkflow() { return _GENERATED_OUTPUT_PROCESS; },
 	};
 	const toolResults = {
 		async read() { return { outcome: ConversationComputerToolResultOutcomes.Pending as const, waitFor: "result" as const }; },

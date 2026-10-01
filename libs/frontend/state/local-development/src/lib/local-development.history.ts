@@ -1,4 +1,4 @@
-import { MessageContentBlockKinds, type MessageEntry } from "@opencrane/contracts";
+import { ConversationAuthorKinds, ConversationEntryKinds, ConversationMessageContentBlockKinds, MessageStates, type MessageEntry } from "@opencrane/contracts";
 import { type GroupChildOrigin, type GroupChildShareCommand } from "@opencrane/models/conversations";
 import { type SubmitConversationMessageCommand } from "@opencrane/state/conversation/workspace";
 import { __CreateConversationHistoryProjection, type ConversationHistoryProjection } from "@opencrane/state/conversation/stream";
@@ -23,7 +23,7 @@ function _AssistantEntry(state: Pick<_LocalDevelopmentState, "archetype">, conve
 		conversationId,
 		position: "1",
 		author: {
-			kind: "agent",
+			kind: ConversationAuthorKinds.Agent,
 			agentIdentityId: `local-identity-${state.archetype}`,
 			agentServiceId: author.agentServiceId,
 			name: author.displayName,
@@ -37,11 +37,11 @@ function _AssistantEntry(state: Pick<_LocalDevelopmentState, "archetype">, conve
 		idempotencyKey: `local-seed-${conversationId}`,
 		occurredAt: _LOCAL_DEVELOPMENT_NOW,
 		attestation: null,
-		kind: "message",
-		state: "completed",
+		kind: ConversationEntryKinds.Message,
+		state: MessageStates.Completed,
 		blocks: [{
 			id: `local-block-assistant-${conversationId}`,
-			kind: MessageContentBlockKinds.Text,
+			kind: ConversationMessageContentBlockKinds.Text,
 			payloadRef: `local-payload-assistant-${conversationId}`,
 			ciphertextDigest: "sha256:local-development"
 		}],
@@ -73,7 +73,7 @@ function _ParticipantEntry(command: SubmitConversationMessageCommand, position: 
 		conversationId: command.conversationId,
 		position,
 		author: {
-			kind: "human",
+			kind: ConversationAuthorKinds.Human,
 			principalId: "local-principal",
 			participantId: "local-developer",
 			issuer: "https://local-development.opencrane.invalid",
@@ -89,11 +89,11 @@ function _ParticipantEntry(command: SubmitConversationMessageCommand, position: 
 		idempotencyKey: command.idempotencyKey,
 		occurredAt: _LOCAL_DEVELOPMENT_NOW,
 		attestation: null,
-		kind: "message",
-		state: "completed",
+		kind: ConversationEntryKinds.Message,
+		state: MessageStates.Completed,
 		blocks: [{
 			id: `local-block-${command.idempotencyKey}`,
-			kind: MessageContentBlockKinds.Text,
+			kind: ConversationMessageContentBlockKinds.Text,
 			payloadRef,
 			ciphertextDigest: "sha256:local-development"
 		}],
@@ -106,7 +106,7 @@ function _ParticipantEntry(command: SubmitConversationMessageCommand, position: 
 /** Reads the text payload reference created by the local participant helper. */
 function _TextPayloadRef(entry: MessageEntry): string
 {
-	const block = entry.blocks.find(candidate => candidate.kind === MessageContentBlockKinds.Text);
+	const block = entry.blocks.find(candidate => candidate.kind === ConversationMessageContentBlockKinds.Text);
 	if (!block)
 	{
 		throw new Error("The local message did not contain its required text block.");

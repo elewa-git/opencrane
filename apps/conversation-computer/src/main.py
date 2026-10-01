@@ -4,19 +4,20 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Final
 
-from review_surface.review_surface import start_review_surface
-
 _HEALTH_PATH: Final = "/healthz"
 _READINESS_PATH: Final = "/readyz"
 _DEFAULT_TOKEN_PATH: Final = "/var/run/secrets/opencrane/token"
 _DEFAULT_REVIEW_CREDENTIAL_PATH: Final = "/var/run/opencrane/review/credential"
 _MAX_RESPONSE_BYTES: Final = 4 * 1024 * 1024
+_AGENT_SANDBOX_REALIZATION: Final = "agent_sandbox"
+_HOST_DEVELOPMENT_REALIZATION: Final = "host_development_process"
 
 
 def _required(name: str) -> str:
@@ -29,14 +30,36 @@ def _required(name: str) -> str:
 
 def _configuration() -> dict[str, str]:
     """Freeze the private gateway and generation coordinates supplied by the sandbox template."""
-    return {
+    realization_kind = _required("OPENCRANE_COMPUTER_REALIZATION_KIND")
+    if realization_kind not in {_AGENT_SANDBOX_REALIZATION, _HOST_DEVELOPMENT_REALIZATION}:
+        raise RuntimeError("OPENCRANE_COMPUTER_REALIZATION_KIND is invalid")
+    config = {
         "computerId": _required("OPENCRANE_COMPUTER_ID"),
         "generation": _required("OPENCRANE_COMPUTER_GENERATION"),
         "internalEndpoint": _required("OPENCRANE_INTERNAL_ENDPOINT").rstrip("/"),
         "leaseId": _required("OPENCRANE_COMPUTER_LEASE_ID"),
+        "realizationKind": realization_kind,
+    }
+    if realization_kind == _HOST_DEVELOPMENT_REALIZATION:
+        config.update({
+            "processId": _required("OPENCRANE_COMPUTER_PROCESS_ID"),
+            "readyPath": _required("OPENCRANE_HOST_READY_PATH"),
+            "tokenPath": _required("OPENCRANE_HOST_BEARER_PATH"),
+        })
+        endpoint = urllib.parse.urlparse(config["internalEndpoint"])
+        if (
+            endpoint.scheme != "http"
+            or endpoint.hostname not in {"127.0.0.1", "localhost"}
+            or endpoint.username
+            or endpoint.password
+        ):
+            raise RuntimeError("host development requires a loopback private endpoint")
+        return config
+    config.update({
         "reviewCredentialPath": os.environ.get("OPENCRANE_REVIEW_CREDENTIAL_PATH", _DEFAULT_REVIEW_CREDENTIAL_PATH),
         "tokenPath": os.environ.get("OPENCRANE_PROJECTED_TOKEN_PATH", _DEFAULT_TOKEN_PATH),
-    }
+    })
+    return config
 
 
 def _read_token(path: str) -> str:
@@ -97,12 +120,26 @@ def _restore(config: dict[str, str]) -> dict[str, Any]:
     return _json_request(f"{config['internalEndpoint']}/api/internal/conversation-computer/checkpoint/restore", token, payload, empty_outcome="absent")
 
 
+def _start_review_surface() -> None:
+    """Load and start the sandbox-only review surface after realization selection."""
+    from review_surface.review_surface import start_review_surface
+
+    start_review_surface()
+
+
 def _prepare_sandbox() -> None:
     """Install the lease secret, open the review surface and restore the fenced workspace once."""
     config = _configuration()
     _install_review_credential(config)
-    start_review_surface()
+    _start_review_surface()
     _restore(config)
+
+
+def _publish_host_readiness(config: dict[str, str]) -> None:
+    """Publish the exact process identity after host-only configuration has passed."""
+    descriptor = os.open(config["readyPath"], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        handle.write(config["processId"])
 
 
 class _HealthHandler(BaseHTTPRequestHandler):
@@ -140,6 +177,11 @@ class _HealthHandler(BaseHTTPRequestHandler):
 
 def main() -> None:
     """Prepare the sandbox once, then serve process health for the lease."""
+    config = _configuration()
+    if config["realizationKind"] == _HOST_DEVELOPMENT_REALIZATION:
+        _publish_host_readiness(config)
+        threading.Event().wait()
+        return
     _prepare_sandbox()
     port = int(os.environ.get("OPENCRANE_COMPUTER_HEALTH_PORT", "8080"))
     server = ThreadingHTTPServer(("0.0.0.0", port), _HealthHandler)

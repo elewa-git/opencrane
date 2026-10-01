@@ -12,7 +12,7 @@ export { ConversationComputerActivationAuthorityAdapter } from "./computers/acti
 export { KurrentConversationComputerActivityReader, _ConversationComputerActiveTurnStreamName } from "./computers/lifecycle/conversation-computer-activity";
 export type { ConversationComputerActivity, ConversationComputerActivityReader } from "./computers/lifecycle/conversation-computer-activity.types";
 export { ConversationComputerLifecycleAuthority } from "./computers/lifecycle/conversation-computer-lifecycle";
-export type { ConversationComputerAttemptActivity, ConversationComputerCheckpointStore, ConversationComputerIdlePolicy, ConversationComputerLeaseProjectionCommand, ConversationComputerLifecycleCommand, ConversationComputerLifecycleOutcome, ConversationComputerSandboxClaims } from "./computers/lifecycle/conversation-computer-lifecycle.types";
+export type { ConversationComputerAttemptActivity, ConversationComputerCheckpointStore, ConversationComputerIdlePolicy, ConversationComputerLeaseProjectionCommand, ConversationComputerLifecycleCommand, ConversationComputerLifecycleOutcome } from "./computers/lifecycle/conversation-computer-lifecycle.types";
 export { ConversationComputerCheckpointAuthority, _CheckpointArtifactId, _CheckpointRevisionId } from "./computers/checkpoints/conversation-computer-checkpoint";
 export type { ConversationComputerCheckpointCapture, ConversationComputerCheckpointCatalogue, ConversationComputerCheckpointFence, ConversationComputerCheckpointPolicy, ConversationComputerCheckpointReader, ConversationComputerCheckpointRestoreCommand, ConversationComputerCheckpointRestoreResult, ConversationComputerCheckpointSandbox, ConversationComputerCheckpointUploader } from "./computers/checkpoints/conversation-computer-checkpoint.types";
 export { _CreateConversationComputerCheckpointRouter } from "./computers/checkpoints/conversation-computer-checkpoint.router";
@@ -23,7 +23,9 @@ export { ConversationComputerCheckpointFenceAdapter, ConversationComputerLifecyc
 export { PrismaConversationComputerActivationProjectionRepository } from "./computers/activation/db/prisma-conversation-computer-activation-repository";
 export { PrismaConversationComputerLifecycleProjectionRepository } from "./computers/lifecycle/db/prisma-conversation-computer-lifecycle-projection-repository";
 export { _CreateConversationComputerReviewCredentialRouter } from "./computers/turns/conversation-computer-review-credential.router";
-export type { ConversationComputerOutputCommand, ConversationComputerReviewCredentialGrant, ConversationComputerTurnAuthority } from "./computers/turns/conversation-computer-turn.types";
+export type { ConversationComputerOutputCommand, ConversationComputerProcessLeaseCommand, ConversationComputerReviewCredentialGrant, ConversationComputerReviewCredentialRouterOptions, ConversationComputerTurnAuthority, ConversationComputerTurnExecution } from "./computers/turns/conversation-computer-turn.types";
+export { _ConversationComputerWorkloadIdentity } from "./conversation-computer-realization";
+export type { ConversationComputerProcessAuthenticator, ConversationComputerProcessIdentity, ConversationComputerProcessResolver, ConversationComputerRealizationClaimCommand, ConversationComputerRealizationCommand, ConversationComputerRealizationRenewCommand, ConversationComputerRealizationStatus, ConversationComputerRealizer } from "./conversation-computer-realization.types";
 export { ConversationComputerTurnAuthority as ConversationComputerTurnAuthorityService } from "./computers/turns/conversation-computer-turn-authority";
 export { ActiveConversationComputerTurnCandidateResolver } from "./computers/turns/conversation-computer-turn-candidate-resolver";
 export { KurrentConversationComputerTurnStore } from "./computers/turns/conversation-computer-turn-store";

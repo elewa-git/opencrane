@@ -3,7 +3,7 @@ import { Router, type Request, type Response } from "express";
 import type { ConversationComputerReviewCredentialRouterOptions } from "./conversation-computer-turn.types";
 import { _ConversationFailureDiagnostic } from "../../messages/conversation-failure-diagnostic";
 
-/** Build the Pod-authenticated transport that hands out only its lease-derived review secret. */
+/** Build the process-authenticated transport that hands out only its lease-derived review secret. */
 export function _CreateConversationComputerReviewCredentialRouter(options: ConversationComputerReviewCredentialRouterOptions): Router
 {
 	const router = Router();
@@ -26,14 +26,14 @@ export function _CreateConversationComputerReviewCredentialRouter(options: Conve
 	return router;
 }
 
-/** TokenReview the caller and read its lease coordinates, answering 401 or 400 when either is missing. */
+/** Authenticate the caller and read its lease coordinates, answering 401 or 400 when either is missing. */
 async function _LeaseCommand(request: Request, response: Response, options: ConversationComputerReviewCredentialRouterOptions)
 {
-	const workload = await _Workload(request, options);
+	const process = await _Process(request, options);
 	const computerId = _String(request.query["computerId"]);
 	const leaseId = _String(request.query["leaseId"]);
 	const generation = Number(request.query["generation"]);
-	if (workload === null)
+	if (process === null)
 	{
 		response.sendStatus(401);
 		return null;
@@ -43,16 +43,16 @@ async function _LeaseCommand(request: Request, response: Response, options: Conv
 		response.sendStatus(400);
 		return null;
 	}
-	return { computerId, lease: { leaseId, leaseGeneration: generation }, workload };
+	return { computerId, lease: { leaseId, leaseGeneration: generation }, process };
 }
 
-/** TokenReview one bearer credential without exposing denial details. */
-async function _Workload(request: Request, options: ConversationComputerReviewCredentialRouterOptions)
+/** Authenticate one process bearer without exposing denial details. */
+async function _Process(request: Request, options: ConversationComputerReviewCredentialRouterOptions)
 {
 	const header = request.header("authorization") ?? "";
 	if (!header.startsWith("Bearer "))
 		return null;
-	return options.tokenReviewer.__Review(header.slice("Bearer ".length));
+	return options.authenticator.authenticate(header.slice("Bearer ".length));
 }
 
 /** Accept one non-empty scalar string without normalization. */

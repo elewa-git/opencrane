@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { AgentServiceKind, McpExecutionTransport, PrismaClient } from "@prisma/client";
 import { Client } from "pg";
 
-import { AgentIdentityStates, ConversationModelToolModes, ComputerLeaseStates, ConversationComputerStates, ExecutionSubjectMembershipKinds, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, ___ExecutionSubjectSchema, type ConversationToolProposal, type RunInputSnapshot } from "@opencrane/contracts";
+import { AgentIdentityStates, ConversationComputerRealizationKinds, ConversationModelToolModes, ComputerLeaseStates, ConversationComputerStates, ExecutionSubjectMembershipKinds, PROMPT_COMPILER_VERSION, RUN_INPUT_SNAPSHOT_VERSION, ___ExecutionSubjectSchema, type ConversationToolProposal, type RunInputSnapshot } from "@opencrane/contracts";
 import { PrismaPromptCompilerUnitOfWork } from "@opencrane/backend/agents/execution/inputs";
 import { __DigestRunInputSnapshot } from "@opencrane/backend/agents/execution/runs";
 import type { ConversationComputerTurnCandidate, FrozenConversationComputerTurn } from "@opencrane/backend/server/conversations";
@@ -81,7 +81,7 @@ export async function _SeedConversationToolProposalSqlFixture(options: _FixtureO
 	const now = new Date();
 	const trustedUntil = new Date(now.getTime() + (options.trustLifetimeMs ?? 300_000)).toISOString();
 	const leaseExpiresAt = new Date(now.getTime() + (options.currentLeaseLifetimeMs ?? 300_000)).toISOString();
-	const lease = { leaseId: id("lease"), leaseGeneration: 1, sandboxClaimId: `${computerId}-g1` };
+	const lease = { leaseId: id("lease"), leaseGeneration: 1, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox as const, claimId: `${computerId}-g1`, sandboxId: id("sandbox"), serviceFQDN: `${id("sandbox")}.test.svc.cluster.local` } };
 	const requesterMembership = { kind: ExecutionSubjectMembershipKinds.Standalone, principalId: requesterPrincipalId, siloId, issuer: "https://identity.example.test", subjectId: requesterPrincipalId, membershipId: id("membership"), membershipUpdatedAt: now.toISOString(), observedAt: now.toISOString(), trustedUntil };
 	const membership = managed ? { kind: ExecutionSubjectMembershipKinds.Managed, principalId, siloId, agentServiceId, agentRevisionId, agentRevisionDigest: ___DigestCanonicalJson(agentRevisionId), decisionEvidenceId: id("managed-membership"), trustedUntil } : requesterMembership;
 	const subject = ___ExecutionSubjectSchema.parse({ schemaVersion: 1, siloId, agentIdentityId, principalId,

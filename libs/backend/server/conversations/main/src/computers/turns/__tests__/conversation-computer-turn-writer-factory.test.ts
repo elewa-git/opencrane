@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { BoundConversationWriterAppend } from "@opencrane/backend/server/conversations/history";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 import { ConversationComputerToolResultOutcomes } from "../conversation-computer-continuation.types";
-import { ConversationModelToolModes } from "@opencrane/contracts";
+import { ConversationComputerRealizationKinds, ConversationModelToolModes } from "@opencrane/contracts";
 import { ConversationComputerTurnWriterFactory } from "../conversation-computer-turn-writer-factory";
 import type { FrozenConversationComputerTurn } from "../conversation-computer-turn.types";
 import { _InitialConversationComputerTurnProtocol } from "../conversation-computer-turn-protocol";
@@ -12,7 +12,7 @@ import type { ConversationComputerTurnOutputReceipt } from "../conversation-comp
 
 const _TURN: FrozenConversationComputerTurn = {
 	bootstrapId: "bootstrap-1", siloId: "silo-1", computerId: "computer-1",
-	lease: { leaseId: "lease-1", leaseGeneration: 4, sandboxClaimId: "computer-1-g4" },
+	lease: { leaseId: "lease-1", leaseGeneration: 4, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g4", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.testv5.svc.cluster.local" } },
 	binding: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", leaseGeneration: 4, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Archive", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 7n, maximumEntryBytes: 10_000 },
 	latestPendingEntryId: "human-entry-1", modelAlias: "model-1", maximumBudgetUsd: 1, credentialLifetimeSeconds: 300,
 	latestPendingEntryPosition: "1",
@@ -21,6 +21,7 @@ const _TURN: FrozenConversationComputerTurn = {
 	protocol: _InitialConversationComputerTurnProtocol(),
 };
 const _WORKLOAD = { subject: "system:serviceaccount:testv5:computer", namespace: "testv5", serviceAccountName: "computer", podUid: "pod-1" };
+const _PROCESS = { kind: ConversationComputerRealizationKinds.AgentSandbox, workload: _WORKLOAD } as const;
 const _COMMAND: BoundConversationWriterAppend = { sourceCommandId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", entry: { kind: "message", state: "completed", blocks: [{ id: "block-1", kind: "text", payloadRef: "payload-1", ciphertextDigest: "sha256:payload" }], replyToEntryId: null, addressedAgentIdentityId: null, activation: "none", visibility: { audience: "conversation" }, causationId: "source-1", correlationId: "request-1" } };
 
 /** Retain the accepted event so the real writer can confirm its exact physical append. */
@@ -41,7 +42,7 @@ function _Fixture(turn = _TURN)
 	const assertCurrent = vi.fn().mockResolvedValue({ credentialExpiresAt: "2099-01-01T00:00:00Z" });
 	const read = vi.fn().mockResolvedValue({ outcome: ConversationComputerToolResultOutcomes.Available, payloadDigest: "sha256:result", notAfterEpochMs: Date.parse("2099-01-01T00:00:00Z") });
 	const factory = new ConversationComputerTurnWriterFactory(history, { load }, { assertCurrent }, { read });
-	return { factory, append, load, assertCurrent, read, writer: factory.create(turn, _WORKLOAD) };
+	return { factory, append, load, assertCurrent, read, writer: factory.create(turn, _PROCESS) };
 }
 
 /** Bind the answer to the result consumed by the saved final model reservation. */
@@ -99,7 +100,7 @@ describe("conversation computer output policy", function _Suite()
 		const intent = await writer.prepare(_COMMAND);
 		await writer.append(intent);
 		expect(load).toHaveBeenCalledWith(_TURN.bootstrapId);
-		expect(assertCurrent).toHaveBeenCalledWith(_TURN, _WORKLOAD);
+		expect(assertCurrent).toHaveBeenCalledWith(_TURN, _PROCESS);
 		expect(read).not.toHaveBeenCalled();
 		expect(append).toHaveBeenCalledWith(expect.objectContaining({ streamName: "conversation-conversation-1", expectedRevision: 7n }));
 	});

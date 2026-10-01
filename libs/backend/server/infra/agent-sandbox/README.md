@@ -4,9 +4,11 @@
 
 ## What it owns
 
-This package connects an admitted assistant conversation to its computer. The conversations backend
+This package provides the production Agent Sandbox realization of an admitted assistant computer. The conversations backend
 first records a lease: the computer identity, generation and expiry that may execute work. This
 adapter asks Agent Sandbox to provide a Pod and checks that Kubernetes still reflects that lease.
+Tier 2 host development uses a separate infrastructure process owner composed through an app-owned
+realization bridge and does not pass through this Kubernetes package.
 
 ```text
 conversations backend ── admitted computer lease ──┐
@@ -40,6 +42,10 @@ pinned Agent Sandbox v0.5.3 API; it neither chooses profiles nor grants product 
 accepts the controller's four known bookkeeping annotations while rejecting altered application
 metadata. The Service address can appear before Pod readiness: the computer needs its active lease
 to obtain the review credential that completes bootstrap.
+
+Pod binding and TokenReview are specific to this production realization. A host-development child
+proves a supervisor-owned process identity instead and cannot use checkpoint, review-surface or
+production tool routes.
 
 ## Dependency direction
 

@@ -42,7 +42,8 @@
 				"{workspaceRoot}/libs/frontend/features/settings/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/governance/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/tools/src/**/*",
-				"{workspaceRoot}/libs/frontend/features/tools/theme.scss"
+				"{workspaceRoot}/libs/frontend/features/tools/theme.scss",
+				"{workspaceRoot}/apps/opencrane-ui/src/app/local-development/**/*"
 			],
 			"options": {
 				"browserTarget": "frontend-elements-ui:build-storybook",
@@ -81,7 +82,8 @@
 				"{workspaceRoot}/libs/frontend/features/settings/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/governance/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/tools/src/**/*",
-				"{workspaceRoot}/libs/frontend/features/tools/theme.scss"
+				"{workspaceRoot}/libs/frontend/features/tools/theme.scss",
+				"{workspaceRoot}/apps/opencrane-ui/src/app/local-development/**/*"
 			],
 			"outputs": [
 				"{options.outputDir}"

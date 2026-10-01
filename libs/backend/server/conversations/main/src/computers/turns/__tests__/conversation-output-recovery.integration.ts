@@ -1,4 +1,4 @@
-import { ConversationEntryKinds, ConversationModelToolModes } from "@opencrane/contracts";
+import { ConversationComputerRealizationKinds, ConversationEntryKinds, ConversationModelToolModes } from "@opencrane/contracts";
 import { _ConversationComputerTurnHistoryDigest, _InitialConversationComputerTurnProtocol } from "../conversation-computer-turn-protocol";
 import { _ConversationModelRequestDigest } from "../conversation-computer-model-reservation";
 import { _ModelReservationFixture, _PrepareConversationOutputIntent, _PreparePairedConversationOutputIntent, _ReserveConversationOutputFixture } from "./conversation-output-intent.fixture";
@@ -52,7 +52,7 @@ describe.skipIf(_URL === undefined)("saved conversation answers against a live K
 		await history.append(genesis);
 		const turn: FrozenConversationComputerTurn = {
 			bootstrapId: randomUUID(), siloId, computerId,
-			lease: { leaseId: randomUUID(), leaseGeneration: 1, sandboxClaimId: `${computerId}-g1` },
+			lease: { leaseId: randomUUID(), leaseGeneration: 1, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: `${computerId}-g1`, sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.computers.svc.cluster.local" } },
 			latestPendingEntryId: randomUUID(), modelAlias: "proof-model", maximumBudgetUsd: 0.05,
 			latestPendingEntryPosition: "1",
 			credentialLifetimeSeconds: 60, budget: { maxModelTurns: 3, maxCompletionTokens: 300, maxCostUsdMicros: null, maxToolInvocations: 2, maxLoopIterations: 2, wallClockDeadlineEpochMs: Date.parse("2099-01-01T00:00:00Z") }, protocol: _InitialConversationComputerTurnProtocol(),

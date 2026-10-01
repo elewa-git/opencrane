@@ -1,9 +1,8 @@
-import { URL } from "node:url";
-
 import type { RequestHandler } from "express";
 import session from "express-session";
 
 import type { OidcAuthConfig } from "../configuration/oidc-config.types";
+import { _CreateRequestBrowserOriginAuthority } from "../requests/browser-origin-authority";
 import type { OidcSessionRepository } from "./oidc-session-repository.types";
 import { OidcSessionStore } from "./oidc-session-store";
 
@@ -53,35 +52,14 @@ export function ___CreateOidcSessionMiddleware(config: OidcAuthConfig, repositor
 function _CsrfOriginCheck(): RequestHandler
 {
 	const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
+	const browserOriginAuthority = _CreateRequestBrowserOriginAuthority();
 	return function _csrfCheck(request, response, next)
 	{
 		if (safeMethods.has(request.method) || !request.session?.authUser)
 			return void next();
-		const expected = `${request.protocol}://${request.hostname}`;
-		const origin = request.headers.origin;
-		const referer = request.headers.referer;
-		if (origin !== undefined)
-		{
-			if (origin !== expected)
-				response.status(403).json({ error: "CSRF check failed.", code: "CSRF_ORIGIN_MISMATCH" });
-			else next();
-			return;
-		}
-		if (referer !== undefined)
-		{
-			let refererOrigin: string;
-			try { refererOrigin = new URL(referer).origin; }
-			catch
-			{
-				response.status(403).json({ error: "CSRF check failed.", code: "CSRF_INVALID_REFERER" });
-				return;
-			}
-			if (refererOrigin !== expected)
-			{
-				response.status(403).json({ error: "CSRF check failed.", code: "CSRF_REFERER_MISMATCH" });
-				return;
-			}
-		}
-		next();
+		if (browserOriginAuthority.isSameOrigin(request))
+			return void next();
+
+		response.status(403).json({ error: "CSRF check failed.", code: "CSRF_ORIGIN_MISMATCH" });
 	};
 }

@@ -155,7 +155,7 @@ ceiling or substitutes a different allowance.
 - `PersonalConversationExecutionSubjectAuthority` — joins the checked current AgentIdentity head,
   transaction-bound personal service and authorization evidence, and the current active
   ConversationComputer lease. It rechecks every request, service, revision, profile, computer,
-  lease, generation, and SandboxClaim coordinate before issuing an attempt-one subject. Its
+  lease, generation, and exact persisted realization before issuing an attempt-one subject. Its
   evidence-authority factory receives the admission transaction so Prisma evidence cannot escape
   onto a root client.
 - `__CreatePrismaSessionAssemblyAuthorities` — composes the production readers around that subject

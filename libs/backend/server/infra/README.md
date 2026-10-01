@@ -13,6 +13,7 @@ remaining grouped with the server code that composes them.
 | [`api`](./api/README.md) | Kubernetes API constants and error normalisation. |
 | [`agent-sandbox`](./agent-sandbox/README.md) | SandboxClaim realization and exact Pod-to-lease verification. |
 | [`auth`](./auth/README.md) | OIDC login, sessions, and request-principal resolution. |
+| [`conversation-computer-host`](./conversation-computer-host/README.md) | Workstation child-process ownership for Tier 2 conversation computers. |
 | [`workload-identity`](./workload-identity/README.md) | Kubernetes TokenReview and bounded workload identities. |
 | [`history-store`](./history-store/README.md) | KurrentDB-backed append-only stream history. |
 | [`http`](./http/README.md) | Express transport plumbing. |

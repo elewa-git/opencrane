@@ -1,16 +1,15 @@
-import type * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
+import type { Logger } from "@opencrane/backend/observability";
+import { ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
+import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
+import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
+
+import type { ConversationComputerRealizer } from "../../conversation-computer-realization.types";
 import { __StartConversationComputerActivationConsumer } from "./conversation-computer-activation";
 import { ConversationComputerActivationAuthorityAdapter } from "./conversation-computer-activation-authority";
 import { PrismaConversationComputerActivationUnitOfWork } from "./db/prisma-conversation-computer-activation-unit-of-work";
 import { ConversationComputerActivationConsumerEventKinds, ConversationComputerActivationConsumerStates, type ConversationComputerActivationConsumerEvent, type ConversationComputerActivationProfile } from "./conversation-computer-activation.types";
-import type { HistoryStore } from "@opencrane/backend/server/infra/history-store";
-import { AgentSandboxClaimAdapter } from "@opencrane/backend/server/infra/agent-sandbox";
-
 import type { ConversationComputerActivationWorkerHandle, ConversationComputerActivationWorkerOptions } from "./conversation-computer-activation-composition.types";
-import type { Logger } from "@opencrane/backend/observability";
-import type { IWorkflowEngine } from "@opencrane/backend/server/infra/workflows/contract";
-import { ConversationHistoryReader } from "@opencrane/backend/server/conversations/history";
 
 /** Consumer group the KurrentDB bootstrap Job provisions for every silo. */
 const _ACTIVATION_GROUP = "conversation-computer-activation";
@@ -25,11 +24,10 @@ const _ACTIVATION_GROUP = "conversation-computer-activation";
  *
  * Called by: `_Main` in apps/opencrane/src/index.ts.
  */
-export async function _StartConversationComputerActivationWorker(prisma: PrismaClient, customApi: k8s.CustomObjectsApi, historyStore: HistoryStore, workflows: Pick<IWorkflowEngine, "spawn">, siloId: string, profile: ConversationComputerActivationProfile, options: ConversationComputerActivationWorkerOptions): Promise<ConversationComputerActivationWorkerHandle>
+export async function _StartConversationComputerActivationWorker(prisma: PrismaClient, historyStore: HistoryStore, workflows: Pick<IWorkflowEngine, "spawn">, siloId: string, profile: ConversationComputerActivationProfile, realizer: ConversationComputerRealizer, options: ConversationComputerActivationWorkerOptions): Promise<ConversationComputerActivationWorkerHandle>
 {
 	const projections = new PrismaConversationComputerActivationUnitOfWork(prisma, workflows);
-	const claims = new AgentSandboxClaimAdapter(customApi);
-	const authority = new ConversationComputerActivationAuthorityAdapter(projections, historyStore, claims, profile);
+	const authority = new ConversationComputerActivationAuthorityAdapter(projections, historyStore, realizer, profile);
 	const stop = new AbortController();
 	const streamName = `computer-activations-${siloId}`;
 	const consumer = __StartConversationComputerActivationConsumer(

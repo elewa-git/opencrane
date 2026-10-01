@@ -1,0 +1,17 @@
+:host {
+	display: block;
+	min-height: 100%;
+}
+
+.tier2-session-help {
+	&__action {
+		text-decoration: none;
+	}
+
+	&__privacy {
+		margin: 0;
+		color: var(--oc-ink-muted);
+		font-size: var(--oc-text-sm);
+		line-height: 1.5;
+	}
+}

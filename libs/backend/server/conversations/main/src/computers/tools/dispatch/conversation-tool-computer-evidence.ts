@@ -1,4 +1,4 @@
-import { AgentIdentityStates, ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
+import { AgentIdentityStates, ComputerLeaseStates, ConversationComputerRealizationKinds, ConversationComputerStates } from "@opencrane/contracts";
 
 import type { ConversationToolDispatchDependencies } from "./conversation-tool-dispatch.types";
 import type { ConversationToolComputerCoordinates, ConversationToolComputerEvidence, ConversationToolRunEvidence } from "./conversation-tool-dispatch-evidence.types";
@@ -27,7 +27,10 @@ export class ConversationToolComputerEvidenceReader
 		if (current === null || current.computer.state !== ConversationComputerStates.Warm || lease === null || lease === undefined
 			|| lease.state !== ComputerLeaseStates.Active || lease.id !== subject.computerScope.leaseId
 			|| lease.generation !== subject.computerScope.leaseGeneration || current.computer.leaseGeneration !== lease.generation
-			|| lease.computerId !== subject.computerScope.computerId || lease.sandboxId === null || Date.parse(lease.expiresAt) <= now.getTime())
+			|| lease.computerId !== subject.computerScope.computerId
+			|| lease.realization.kind !== ConversationComputerRealizationKinds.AgentSandbox
+			|| lease.realization.sandboxId === null
+			|| Date.parse(lease.expiresAt) <= now.getTime())
 			return null;
 		return { identity: identity.identity, leaseExpiresAtEpochMs: Date.parse(lease.expiresAt) };
 	}

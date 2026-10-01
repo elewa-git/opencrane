@@ -1,16 +1,17 @@
-import { CompiledFinalOutputModes } from "@opencrane/contracts";
+import { CompiledFinalOutputModes, ConversationComputerRealizationKinds } from "@opencrane/contracts";
 import type { CompiledRunInput, ConversationEntry, MessageEntry } from "@opencrane/contracts";
 import type { HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PrismaConversationComputerTurnUnitOfWork } from "../db/prisma-conversation-computer-turn-unit-of-work";
+import type { ConversationComputerTurnCompileCommand } from "../conversation-computer-turn.types";
 import { _ConversationAuthorizationFixture } from "../../../authorization/__tests__/conversation-authorization.fixtures";
 
 const _COMMAND = {
   computer: { siloId: "silo-1", conversationId: "conversation-1", computerId: "computer-1", agentIdentityId: "identity-1" },
   profileRevisionId: "profile-1",
-  lease: { leaseId: "lease-1", leaseGeneration: 2, sandboxClaimId: "computer-1-g2" },
-};
+  lease: { leaseId: "lease-1", leaseGeneration: 2, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g2", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.testv5.svc.cluster.local" } },
+} satisfies ConversationComputerTurnCompileCommand;
 
 function _Entry(): MessageEntry {
   return {

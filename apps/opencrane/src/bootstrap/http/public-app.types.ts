@@ -1,12 +1,16 @@
-import type { RequestHandler } from "express";
-
+import type { RequestHandler, Router } from "express";
 import type { OidcAuthService } from "@opencrane/backend/server/iam/identity";
+import type { SameOriginBrowserRequestAuthority } from "@opencrane/backend/server/infra/auth";
 
 /** Browser authentication built once and shared by the public and internal listeners. */
 export interface PublicAuthenticationComposition
 {
-	/** OIDC authority used by the public login and callback routes. */
-	readonly authService: OidcAuthService;
+	/** OIDC authority used by production authentication. */
+	readonly authService?: OidcAuthService;
+	/** Selects the browser authority used by method-independent public stream guards. */
+	readonly browserOriginAuthority: SameOriginBrowserRequestAuthority;
+	/** Precomposed authentication routes used by the development-only browser boundary. */
+	readonly router?: Router;
 	/** One signed-session middleware instance and store shared by both listeners. */
 	readonly sessionMiddleware: readonly RequestHandler[];
 	/** Product authentication middleware shared by HTTP requests and WebSocket upgrades. */

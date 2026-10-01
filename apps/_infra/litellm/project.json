@@ -14,7 +14,7 @@
       "cache": true,
       "dependsOn": [],
       "inputs": ["default", "{workspaceRoot}/apps/_infra/deploy-k8s/**/*", "{workspaceRoot}/apps/**/helm/**/*"],
-      "options": { "command": "node --test apps/_infra/litellm/tests/*.test.mjs && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s apps/_infra/litellm/tests -p 'test_*.py'" }
+      "options": { "command": "node --test apps/_infra/litellm/local-development/*.test.mjs apps/_infra/litellm/tests/*.test.mjs && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s apps/_infra/litellm/tests -p 'test_*.py'" }
     },
     "lint": {
       "executor": "nx:run-commands",

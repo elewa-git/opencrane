@@ -25,7 +25,9 @@ its Kubernetes workload still exists.
 
 - `ConversationComputerHistory` appends snapshots and loads the checked current computer or active lease.
 - Computer command, snapshot and lease coordinate types define inputs and checked read results.
-- `_ComputerScopeOf` and `_LeaseScopeOf` map stored snapshots to the shared coordinate bundles.
+- `_ComputerScopeOf` and `_LeaseScopeOf` map stored snapshots to the shared coordinate bundles. A
+  realized lease scope retains the exact realization discriminant and coordinates instead of
+  flattening Agent Sandbox fields into the neutral lease identity.
 
 ## Boundary
 

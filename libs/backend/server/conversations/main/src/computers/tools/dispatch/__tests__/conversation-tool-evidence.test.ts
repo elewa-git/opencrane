@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { AgentIdentityStates, ComputerLeaseStates, ConversationComputerStates } from "@opencrane/contracts";
+import { AgentIdentityStates, ComputerLeaseStates, ConversationComputerRealizationKinds, ConversationComputerStates } from "@opencrane/contracts";
 import { __DigestCanonicalJson, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import type { ExecutionSubject } from "@opencrane/models/agents";
 
@@ -38,7 +38,7 @@ function _fixture()
 	const identity = { identity: { state: AgentIdentityStates.Active }, headDigest: subject.identity.headDigest, revision: 3n };
 	const current = {
 		computer: { state: ConversationComputerStates.Warm, leaseGeneration: 2 },
-		lease: { state: ComputerLeaseStates.Active, id: "lease", generation: 2, computerId: "computer", sandboxId: "sandbox", expiresAt: trustedUntil },
+		lease: { state: ComputerLeaseStates.Active, id: "lease", generation: 2, computerId: "computer", realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "claim", sandboxId: "sandbox", serviceFQDN: "sandbox.computers.svc.cluster.local" }, expiresAt: trustedUntil },
 	};
 	const identities = { load: vi.fn().mockResolvedValue(identity) };
 	const computers = { load: vi.fn().mockResolvedValue(current) };

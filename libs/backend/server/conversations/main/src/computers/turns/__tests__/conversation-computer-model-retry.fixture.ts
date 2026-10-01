@@ -1,6 +1,6 @@
 import { WrongExpectedVersionError } from "@kurrent/kurrentdb-client";
 import { HistoryExpectedRevisions, type HistoryAppend, type HistoryReadRequest, type HistoryRecordedEvent } from "@opencrane/backend/server/infra/history-store";
-import { ConversationModelPreForwardContracts, ConversationModelPreForwardReasons, ConversationModelToolModes } from "@opencrane/contracts";
+import { ConversationComputerRealizationKinds, ConversationModelPreForwardContracts, ConversationModelPreForwardReasons, ConversationModelToolModes } from "@opencrane/contracts";
 import { vi } from "vitest";
 
 import { _ConversationModelInitialNonce, _ConversationModelLogicalFence } from "../conversation-computer-model-retry";
@@ -16,7 +16,7 @@ export const _NOW = 1_800_000_000_000;
 export const _DIGEST = `sha256:${"a".repeat(64)}`;
 export const _TURN: FrozenConversationComputerTurn = {
 	bootstrapId: "31c1f1dc-0010-4f13-9c2f-d3841ffd6651", siloId: "testv5", computerId: "computer-1",
-	lease: { leaseId: "lease-1", leaseGeneration: 1, sandboxClaimId: "computer-1-g1" },
+	lease: { leaseId: "lease-1", leaseGeneration: 1, realization: { kind: ConversationComputerRealizationKinds.AgentSandbox, claimId: "computer-1-g1", sandboxId: "sandbox-1", serviceFQDN: "sandbox-1.testv5.svc.cluster.local" } },
 	latestPendingEntryId: "entry-1", latestPendingEntryPosition: "1", modelAlias: "primary", maximumBudgetUsd: 0.05, credentialLifetimeSeconds: 300,
 	binding: { siloId: "testv5", conversationId: "conversation-1", computerId: "computer-1", leaseGeneration: 1, agentIdentityId: "identity-1", agentServiceId: "service-1", agentName: "Ada", agentAvatarArtifactRevisionId: null, runId: "run-1", expectedRevision: 1n, maximumEntryBytes: 65_536 },
 	compile: { runId: "run-1", attempt: 1, promptCompilerVersion: "computer-v2", digest: _DIGEST },

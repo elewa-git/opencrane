@@ -124,6 +124,7 @@ export default [
             { sourceTag: "scope:auth", onlyDependOnLibsWithTags: ["scope:auth", "scope:k8s-api", "scope:shared"] },
             { sourceTag: "scope:workload-identity", onlyDependOnLibsWithTags: ["scope:workload-identity", "scope:shared"] },
             { sourceTag: "scope:history-store", onlyDependOnLibsWithTags: ["scope:history-store", "scope:shared"] },
+            { sourceTag: "scope:conversation-computer-host", onlyDependOnLibsWithTags: ["scope:conversation-computer-host", "scope:shared"] },
             { sourceTag: "scope:workflows", onlyDependOnLibsWithTags: ["scope:shared", "scope:workflows"] },
             { sourceTag: "scope:runtime-workloads", onlyDependOnLibsWithTags: ["scope:runtime-workloads", "scope:shared"] },
             // The file-producing runtime reuses the pure conversation-assets CSV model.
@@ -191,6 +192,7 @@ export default [
                 "scope:auth",
                 "scope:authorization",
                 "scope:conversations",
+                "scope:conversation-computer-host",
                 "scope:conversation-assets",
                 "scope:execution-inputs",
                 "scope:execution-runs",

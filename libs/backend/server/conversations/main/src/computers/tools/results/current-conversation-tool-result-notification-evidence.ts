@@ -5,6 +5,7 @@ import { ConversationComputerToolResultOutcomes, type ConversationComputerToolRe
 import type { ConversationComputerTurnCandidateResolver, ConversationComputerTurnStore } from "../../turns/conversation-computer-turn.types";
 import { ConversationComputerTurnProtocolStates } from "../../turns/conversation-computer-turn-protocol.types";
 import type { ConversationToolResultNotificationCommand, ConversationToolResultNotificationEvidence, ConversationToolResultNotificationEvidenceReader } from "../../turns/tool-result-notifications/conversation-tool-result-notification.types";
+import { _ConversationComputerWorkloadIdentity } from "../../../conversation-computer-realization";
 
 /** Rechecks one frozen selection, live workflow identity, and terminal delivery without database access. */
 export class CurrentConversationToolResultNotificationEvidenceReader implements ConversationToolResultNotificationEvidenceReader
@@ -29,10 +30,13 @@ export class CurrentConversationToolResultNotificationEvidenceReader implements 
 			|| turn.protocol.output !== null || turn.protocol.unavailable !== null || turn.protocol.cancellation !== null)
 			return null;
 		const execution = await this._candidates.assertCurrentForWorkflow(turn);
+		const workload = _ConversationComputerWorkloadIdentity(execution.process);
+		if (workload === null)
+			return null;
 		const input = execution.candidate.compiledInput;
 		if (input.runId !== turn.compile.runId || input.attempt !== turn.compile.attempt || input.promptCompilerVersion !== turn.compile.promptCompilerVersion || input.digest !== turn.compile.digest)
 			return null;
-		const result = await this._results.read(turn, execution.workload);
+		const result = await this._results.read(turn, workload);
 		if (result.outcome !== ConversationComputerToolResultOutcomes.Available || result.payloadDigest !== command.expectedResultDigest
 			|| result.payload.toolInvocationId !== command.toolInvocationId || !/^sha256:[0-9a-f]{64}$/u.test(result.payloadDigest)
 			|| !Number.isFinite(Date.parse(result.occurredAt)) || result.occurredAt !== new Date(result.occurredAt).toISOString()

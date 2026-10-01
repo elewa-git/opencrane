@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { ArtifactScannerVerdict, ConversationModelResponseKinds, ConversationModelToolModes } from "@opencrane/contracts";
+import { ArtifactScannerVerdict, ConversationComputerRealizationKinds, ConversationModelResponseKinds, ConversationModelToolModes } from "@opencrane/contracts";
 import type { PrismaClient, Prisma } from "@prisma/client";
 
 import { PrismaConversationRunLifecycleUnitOfWork } from "@opencrane/backend/agents/execution/runs";
@@ -33,6 +33,9 @@ export const _GENERATED_OUTPUT_WORKLOAD: RuntimeWorkloadIdentity = {
 	serviceAccountName: _GENERATED_FILE_PROPOSER.serviceAccountName,
 	podUid: _GENERATED_FILE_PROPOSER.podUid,
 };
+
+/** Neutral process identity that carries the fixture's reviewed Pod. */
+export const _GENERATED_OUTPUT_PROCESS = { kind: ConversationComputerRealizationKinds.AgentSandbox, workload: _GENERATED_OUTPUT_WORKLOAD } as const;
 
 /** Optional recovery faults injected after one durable output milestone. */
 export interface _GeneratedFileOutputRecoveryHooks
@@ -176,8 +179,9 @@ function _Candidates(capture: _ActualGeneratedFileCapture, expectedTurn: FrozenC
 		if (turn.bootstrapId !== expectedTurn.bootstrapId || turn.compile.runId !== capture.fixture.runId || turn.lease.leaseId !== expectedTurn.lease.leaseId)
 			throw new Error("Generated output fixture received another turn");
 	}
-	function _AssertWorkload(workload: RuntimeWorkloadIdentity): void
+	function _AssertProcess(process: typeof _GENERATED_OUTPUT_PROCESS): void
 	{
+		const workload = process.workload;
 		if (workload.namespace !== _GENERATED_OUTPUT_WORKLOAD.namespace || workload.serviceAccountName !== _GENERATED_OUTPUT_WORKLOAD.serviceAccountName || workload.podUid !== _GENERATED_OUTPUT_WORKLOAD.podUid)
 			throw new Error("Generated output fixture received another Pod");
 	}
@@ -189,12 +193,12 @@ function _Candidates(capture: _ActualGeneratedFileCapture, expectedTurn: FrozenC
 		return { ...capture.fixture.candidate, binding: { ...capture.fixture.candidate.binding, expectedRevision: head.revision } };
 	}
 	return {
-		async admit(command) { _AssertWorkload(command.workload); },
+		async admit(command) { _AssertProcess(command.process as typeof _GENERATED_OUTPUT_PROCESS); },
 		async resolve() { return _CurrentCandidate(); },
-		async resolveForWorkflow() { return { candidate: await _CurrentCandidate(), workload: _GENERATED_OUTPUT_WORKLOAD }; },
-		async assertCurrent(turn, workload) { _AssertTurn(turn); _AssertWorkload(workload); return _CurrentCandidate(); },
-		async assertCurrentForWorkflow(turn) { _AssertTurn(turn); return { candidate: await _CurrentCandidate(), workload: _GENERATED_OUTPUT_WORKLOAD }; },
-		async assertLeaseForWorkflow(turn) { _AssertTurn(turn); return _GENERATED_OUTPUT_WORKLOAD; },
+		async resolveForWorkflow() { return { candidate: await _CurrentCandidate(), process: _GENERATED_OUTPUT_PROCESS }; },
+		async assertCurrent(turn, process) { _AssertTurn(turn); _AssertProcess(process as typeof _GENERATED_OUTPUT_PROCESS); return _CurrentCandidate(); },
+		async assertCurrentForWorkflow(turn) { _AssertTurn(turn); return { candidate: await _CurrentCandidate(), process: _GENERATED_OUTPUT_PROCESS }; },
+		async assertLeaseForWorkflow(turn) { _AssertTurn(turn); return _GENERATED_OUTPUT_PROCESS; },
 	};
 }
 
