@@ -30,6 +30,7 @@ describe("Tier 1 local-development adapters", function _DescribeAdapters()
 			conversationId: created.id,
 			idempotencyKey: "message-once",
 			text: "Accepted exactly once",
+			assetIds: [],
 			activation: "none"
 		} as const;
 		await owner.workspace.send(sendCommand);
@@ -52,6 +53,7 @@ describe("Tier 1 local-development adapters", function _DescribeAdapters()
 			contentAddress: "sha256:hello"
 		};
 		const reserved = await owner.assets.reserve("conversation-agent", request);
+		expect(reserved).toMatchObject({ artifactId: null, artifactRevisionId: null });
 		expect(await owner.assets.reserve("conversation-agent", request)).toEqual(reserved);
 		expect(await owner.assets.list("conversation-agent")).toHaveLength(1);
 
@@ -69,6 +71,7 @@ describe("Tier 1 local-development adapters", function _DescribeAdapters()
 			conversationId: "local-conversation-group",
 			idempotencyKey: "parent-message",
 			text: "Ask the company assistant",
+			assetIds: [],
 			activation: "none"
 		});
 		const childCommand = {

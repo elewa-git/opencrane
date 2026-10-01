@@ -99,6 +99,9 @@ missing, or ambiguous agent authority rejects and rolls back the whole approval.
 
 ## Public surface
 
+- `_CreatePersonaAgentRevisionSelectionFactory` adapts approved persona publication to the
+  transaction-bound agent-revision selection authority.
+
 - `__CreatePersonaOnboardingRouter` — the API-first self-persona surface. It starts ordinary or
   proposal-bound refresh interviews, records one answer, and completes them using only
   session-and-host-derived ownership.
@@ -150,11 +153,13 @@ Callers cannot bypass that composition through the package barrel.
 ## Dependency direction
 
 Tagged `scope:personal-personas`: it may depend on its own scope, `scope:shared`, and the narrow
-`scope:auth` request-principal seam. It also has one intentional sibling dependency on
+`scope:auth` request-principal seam. Its sibling dependencies include
 `scope:personal-configuration`: the configuration-owned
 `PrismaPersonalConfigurationPersonaRefreshRepository` claims and applies the exact accepted refresh
 proposal on the persona unit of work's transaction. Configuration retains delegate ownership; this
-package imports no other sibling business domain and never depends on an app.
+package also uses `scope:agent-services` through the approval adapter, which selects the approved
+persona on the agent revision within that same transaction. Persona owns approval decisions;
+agent-services owns revision persistence. This package never depends on an app.
 
 ## Data & persistence
 

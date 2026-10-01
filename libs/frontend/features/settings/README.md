@@ -6,7 +6,7 @@
 
 This feature owns the responsive settings frame, its navigation, the member directory, the
 invitation form, and the public invitation-acceptance screen. The routed page coordinates separate
-directory, create, resend, and acceptance stores; presentational components receive one mapped view
+directory, create, resend, removal, and acceptance stores; presentational components receive one mapped view
 model and emit user intents.
 
 ```
@@ -25,15 +25,24 @@ The feature never decides whether a caller may invite, whether an external addre
 whether payment is required. It displays server-authoritative success and refusal states, including
 a payment-required refusal supplied by Fleet or another host.
 
+An offered Remove access action confirms the exact member with Cancel focused first. The dialog
+interpolates names as text; it never inserts member text as HTML. Protected and removed status remains
+visible beside identity on narrow screens. Removed memberships stay in the Members tab so existing
+conversation attribution remains understandable. A denied directory closes invitation drafts and
+confirmation and removes private links and controls; Refresh explicitly rechecks access.
+
 ## Public surface
 
-- `SETTINGS_ROUTES` — lazy child routes for the settings shell and member directory.
+- `SettingsShellComponent` — responsive frame reused by the app's Settings composition.
+- `SETTINGS_MEMBER_ROUTES` — member-directory children; the app owns the shell and default redirect.
 - `OrganizationInviteAcceptanceComponent` — public token-acceptance route component.
 
 ## Boundary
 
 Consumed by `opencrane-ui`. It owns routing and presentation only; the backend remains the authority
 for roles, invitations, membership, expiry, identity matching, and host payment policy.
+The Audit and Usage navigation links target the separately composed governance feature. This package
+does not import that feature, load its data, or grant access to those destinations.
 
 ## Dependency direction
 

@@ -4,6 +4,9 @@
 
 ## What it owns
 
+`src/connection/` owns mounted-credential connection setup and the silo sentinel. Startup must
+complete the silo guard before any worker reads or appends history.
+
 This package gives OpenCrane server code one narrow way to read, append, and subscribe to a
 KurrentDB stream. A stream is an ordered log of events such as the history for one conversation.
 It keeps the database client and its expected-revision checks outside the conversation domain.
@@ -27,6 +30,9 @@ The adapter rejects non-object event data rather than converting it into a secon
 never reads the global ledger, grants database administration, or supplies a PostgreSQL fallback.
 
 ## Public surface
+
+- `_CreateHistoryStoreComposition` creates the authenticated client and exposes its close operation.
+- `_AssertHistoryStoreSilo` prevents two silos from sharing the same history database.
 
 - `HistoryStore` defines stream reads, checked appends, atomic checked records, transient
   subscriptions, and acknowledged persistent subscriptions for durable consumers.
@@ -64,14 +70,16 @@ dependencies. It must not import a backend domain or an app entrypoint.
 
 ## Runtime & config
 
-The composing server creates the KurrentDB client with the silo-local TLS endpoint and credential.
-The adapter receives that client and reads no environment variable itself.
+The connection factory receives `OpenCraneHistoryStoreConfig`: a silo-local TLS endpoint, certificate
+authority file and mounted username/password paths. It validates the fixed `opencrane-history`
+service identity and opens the client. The adapter receives that client; neither reads process
+environment variables.
 
 ### One KurrentDB instance per silo
 
 Stream names such as `conversation-{id}` and `conversation-computer-{id}` carry no silo id, so silo
 isolation depends on every silo owning its own KurrentDB endpoint. The OpenCrane server checks that
-at startup (`apps/opencrane/src/app/history-store-silo-guard.ts`). The first server to start writes
+at startup (`src/connection/history-store-silo-guard.ts`). The first server to start writes
 one event of type `opencrane.silo.v1` to the well-known stream `opencrane-silo`, carrying its
 configured silo id and fenced with the `NoStream` expected revision so two racing replicas cannot
 both create it. Every later start reads that event and compares it with its own silo id: a match

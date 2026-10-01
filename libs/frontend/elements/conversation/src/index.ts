@@ -2,9 +2,9 @@
 //
 // Every component here only DISPLAYS one presentation object and emits an intent output; none of
 // them calls a gateway or decides whether an action is allowed. ConversationRunActionsComponent,
-// for example, emits retryRequested, cancelRequested, and steerRequested, and the host page turns
-// those into server calls — so hiding a button here never protects a run, and the server still
-// re-checks every retry.
+// for example, emits stopRequested and the host store turns that into a retry-stable control
+// message. Hiding the button here never protects a run; the server still checks the requester and
+// current work.
 //
 // The one host today is ConversationWorkspacePageComponent in
 // libs/frontend/features/conversation-workspace, which owns the stores and the gateway.

@@ -2,13 +2,13 @@ import { Prisma, type PrismaClient, type RunInputSnapshot as PrismaRunInputSnaps
 
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 import { PrismaAuthorizationAuthority, PrismaManagedAuthorizationGrantRepository, type ManagedAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
-import { ___ExecutionSubjectSchema, type RunInputSnapshot } from "@opencrane/contracts";
+import { RUN_INPUT_SNAPSHOT_VERSION, ___ExecutionSubjectSchema, ___ParseRunBudgetPolicy, type RunInputSnapshot } from "@opencrane/contracts";
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationSubjectKinds, ProductAuthorizationActions, ProductAuthorizationResourceKinds, __ProductAuthorizationCapability } from "@opencrane/models/authorization";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { RunAdmissionPersistenceRepository } from "./run-admission-persistence.types";
-import { RunAdmissionDenialReasons, RunAdmissionMessageInputModes, type InitialRunAuthority, type RunAdmissionBuild, type RunAdmissionBuildResult, type RunAdmissionClock, type RunAdmissionCommand, type RunAdmissionCommit, type RunAdmissionExistingVerifier, type RunAdmissionPrepare, type RunAdmissionRepository, type RunAdmissionResult, type RunAdmissionTransaction } from "./run-admission.types";
+import { RunAdmissionBuildOutcomes, RunAdmissionDenialReasons, RunAdmissionExistingVerificationOutcomes, RunAdmissionMessageInputModes, RunAdmissionOutcomes, type InitialRunAuthority, type RunAdmissionBuild, type RunAdmissionBuildResult, type RunAdmissionClock, type RunAdmissionCommand, type RunAdmissionCommit, type RunAdmissionExistingVerifier, type RunAdmissionPrepare, type RunAdmissionRepository, type RunAdmissionResult, type RunAdmissionTransaction } from "./run-admission.types";
 
 /** Forces Prisma to roll back authority writes whenever later admission checks refuse the run. */
 class _AdmissionDenied<TDenial> extends Error
@@ -61,11 +61,11 @@ export class PrismaRunAdmissionUnitOfWork implements RunAdmissionRepository
 				const duplicate = await persistence.resolveExisting(command);
 				if (duplicate !== null)
 				{
-					if (duplicate.outcome === "denied")
+					if (duplicate.outcome === RunAdmissionOutcomes.Denied)
 						return duplicate;
 					const verifiedAt = clock.now();
 					const verified = await verifyExisting(duplicate.snapshot, { prisma: transaction, authorization, admittedAt: verifiedAt.toISOString(), admittedAtEpochMs: verifiedAt.getTime() });
-					if (verified.outcome === "denied")
+					if (verified.outcome === RunAdmissionExistingVerificationOutcomes.Denied)
 						throw new _AdmissionDenied(verified.reason);
 					return duplicate;
 				}
@@ -78,7 +78,7 @@ export class PrismaRunAdmissionUnitOfWork implements RunAdmissionRepository
 
 				// 3. Compile under the same snapshot and convert every refusal into a transaction rollback.
 				const compiled = await build(transactionContext);
-				if (compiled.outcome === "denied")
+				if (compiled.outcome === RunAdmissionBuildOutcomes.Denied)
 					throw new _AdmissionDenied(compiled.reason);
 				if (!_MatchesAdmission(compiled.value, command))
 					throw new _AdmissionDenied(RunAdmissionDenialReasons.AuthorityConflict);
@@ -87,13 +87,13 @@ export class PrismaRunAdmissionUnitOfWork implements RunAdmissionRepository
 				await persistence.persist(command, compiled.value, admittedAt);
 				if (commit !== undefined)
 					await commit(transactionContext, compiled.value);
-				return { outcome: "accepted", snapshot: compiled.value.snapshot };
+				return { outcome: RunAdmissionOutcomes.Accepted, snapshot: compiled.value.snapshot };
 			});
 		}
 		catch (error)
 		{
 			if (error instanceof _AdmissionDenied)
-				return { outcome: "denied", reason: error.reason as TDenial };
+				return { outcome: RunAdmissionOutcomes.Denied, reason: error.reason as TDenial };
 			if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
 			{
 				const recovered = await this._RecoverDuplicate(command, verifyExisting);
@@ -101,7 +101,7 @@ export class PrismaRunAdmissionUnitOfWork implements RunAdmissionRepository
 					return recovered;
 			}
 			this._logger.error({ err: error, runId: command.runId, siloId: command.siloId, agentServiceId: command.agentServiceId }, "Run admission persistence failed");
-			return { outcome: "denied", reason: RunAdmissionDenialReasons.PersistenceUnavailable };
+			return { outcome: RunAdmissionOutcomes.Denied, reason: RunAdmissionDenialReasons.PersistenceUnavailable };
 		}
 	}
 
@@ -114,11 +114,11 @@ export class PrismaRunAdmissionUnitOfWork implements RunAdmissionRepository
 			return await this._Run(Prisma.TransactionIsolationLevel.ReadCommitted, async function _ReadWinner(persistence, transaction, authorization)
 			{
 				const recovered = await persistence.resolveExisting(command);
-				if (recovered === null || recovered.outcome === "denied")
+				if (recovered === null || recovered.outcome === RunAdmissionOutcomes.Denied)
 					return recovered;
 				const verifiedAt = clock.now();
 				const verified = await verifyExisting(recovered.snapshot, { prisma: transaction, authorization, admittedAt: verifiedAt.toISOString(), admittedAtEpochMs: verifiedAt.getTime() });
-				return verified.outcome === "denied" ? { outcome: "denied", reason: verified.reason } : recovered;
+				return verified.outcome === RunAdmissionExistingVerificationOutcomes.Denied ? { outcome: RunAdmissionOutcomes.Denied, reason: verified.reason } : recovered;
 			});
 		}
 		catch (error)
@@ -169,11 +169,11 @@ class PrismaRunAdmissionRepository implements RunAdmissionPersistenceRepository
 		if (run === null)
 			return null;
 		if (!_MatchesRun(run, command))
-			return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
+			return { outcome: RunAdmissionOutcomes.Denied, reason: RunAdmissionDenialReasons.AuthorityConflict };
 		const row = await this._transaction.runInputSnapshot.findUnique({ where: { runId_attempt_digest: { runId: run.id, attempt: run.attempt, digest: run.inputSnapshotDigest } } });
 		if (row === null || !_MatchesSnapshot(row, run.id, command))
-			return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
-		return { outcome: "idempotent", snapshot: _RunInputSnapshot(row) };
+			return { outcome: RunAdmissionOutcomes.Denied, reason: RunAdmissionDenialReasons.AuthorityConflict };
+		return { outcome: RunAdmissionOutcomes.Idempotent, snapshot: _RunInputSnapshot(row) };
 	}
 
 	/** Persist the logical run and its first append-only snapshot as one deferred-relation pair. */
@@ -219,7 +219,7 @@ function _MatchesSnapshot(snapshot: PrismaRunInputSnapshot, storedRunId: string,
 	const parsed = ___ExecutionSubjectSchema.safeParse(snapshot.executionSubject);
 	if (!parsed.success || parsed.data.principalId !== snapshot.principalId || parsed.data.agentIdentityId !== snapshot.agentIdentityId)
 		return false;
-	return snapshot.runId === storedRunId && snapshot.siloId === command.siloId && snapshot.agentServiceId === command.agentServiceId && snapshot.conversationId === command.conversationId && (command.messageInput === null || parsed.data.requester.requesterPrincipalId === command.messageInput.author.principalId) && _MatchesMessageInput(command, snapshot.messageIds);
+	return snapshot.snapshotVersion === RUN_INPUT_SNAPSHOT_VERSION && snapshot.runId === storedRunId && snapshot.siloId === command.siloId && snapshot.agentServiceId === command.agentServiceId && snapshot.conversationId === command.conversationId && (command.messageInput === null || parsed.data.requester.requesterPrincipalId === command.messageInput.author.principalId) && _MatchesMessageInput(command, snapshot.messageIds);
 }
 
 /** Require the transaction-built authority, snapshot, and execution subject to name one first attempt. */
@@ -288,7 +288,7 @@ function _RunInputSnapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnaps
 function _RunInputSnapshot(row: PrismaRunInputSnapshot): RunInputSnapshot
 {
 	const executionSubject = _ExecutionSubject(row.executionSubject, row.agentIdentityId, row.principalId);
-	return { runId: row.runId, attempt: row.attempt, siloId: row.siloId, agentServiceId: row.agentServiceId, agentRevisionId: row.agentRevisionId, snapshotVersion: row.snapshotVersion, conversationId: row.conversationId, messageIds: row.messageIds, personaRevisionId: row.personaRevisionId, preferenceFactIds: row.preferenceFactIds, artifactRevisionIds: row.artifactRevisionIds, skillRevisionIds: row.skillRevisionIds, memoryQueryPolicy: row.memoryQueryPolicy as RunInputSnapshot["memoryQueryPolicy"], mcpTools: row.mcpTools as unknown as RunInputSnapshot["mcpTools"], modelRoute: row.modelRoute as RunInputSnapshot["modelRoute"], budgetPolicy: row.budgetPolicy as RunInputSnapshot["budgetPolicy"], executionSubject, promptCompilerVersion: row.promptCompilerVersion, digest: row.digest, compiledAt: row.compiledAt.toISOString() };
+	return { runId: row.runId, attempt: row.attempt, siloId: row.siloId, agentServiceId: row.agentServiceId, agentRevisionId: row.agentRevisionId, snapshotVersion: row.snapshotVersion, conversationId: row.conversationId, messageIds: row.messageIds, personaRevisionId: row.personaRevisionId, preferenceFactIds: row.preferenceFactIds, artifactRevisionIds: row.artifactRevisionIds, skillRevisionIds: row.skillRevisionIds, memoryQueryPolicy: row.memoryQueryPolicy as RunInputSnapshot["memoryQueryPolicy"], mcpTools: row.mcpTools as unknown as RunInputSnapshot["mcpTools"], modelRoute: row.modelRoute as RunInputSnapshot["modelRoute"], budgetPolicy: ___ParseRunBudgetPolicy(row.budgetPolicy), executionSubject, promptCompilerVersion: row.promptCompilerVersion, digest: row.digest, compiledAt: row.compiledAt.toISOString() };
 }
 
 /** Parse subject evidence and reject a row whose indexed identity coordinates diverge. */

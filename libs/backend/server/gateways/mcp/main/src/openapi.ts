@@ -1,3 +1,5 @@
+import { _McpConnectionOpenapiPaths } from "./openapi/mcp-connection-paths";
+
 // Common response helpers
 function notFound(description: string)
 {
@@ -33,6 +35,7 @@ function created(description: string, schema: object)
 
 /** OpenAPI path fragments owned by the mcp domain (composed into the opencrane-ui spec). */
 export const _McpOpenapiPaths = {
+  ..._McpConnectionOpenapiPaths,
   "/mcp/catalog": {
     get: {
       operationId: "listMcpCatalog",
@@ -65,6 +68,7 @@ export const _McpOpenapiPaths = {
         201: created("Server installed.", { $ref: "#/components/schemas/McpInstalled" }),
         400: badRequest("serverId is required."),
         404: notFound("MCP server not found."),
+        409: badRequest("Installation removal is still in progress."),
       },
     },
   },
@@ -76,6 +80,7 @@ export const _McpOpenapiPaths = {
       tags: ["MCP Operator"],
       parameters: [{ name: "serverId", in: "path", required: true, schema: { type: "string" } }],
       responses: {
+        202: { description: "Removal accepted. The installed list retains a Removing row until execution and credential cleanup finish." },
         204: { description: "Server uninstalled." },
         404: notFound("MCP install not found."),
       },
@@ -98,7 +103,7 @@ export const _McpOpenapiPaths = {
       tags: ["MCP Operator"],
       requestBody: {
         required: true,
-        content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["idempotencyKey", "name", "endpoint"], properties: { idempotencyKey: { type: "string", minLength: 8, maxLength: 128 }, name: { type: "string", minLength: 1, maxLength: 120 }, description: { type: "string", maxLength: 1000 }, endpoint: { type: "string", format: "uri", maxLength: 2048 } } } } },
+        content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["idempotencyKey", "name", "endpoint", "credentialRequirement"], properties: { idempotencyKey: { type: "string", minLength: 8, maxLength: 128 }, name: { type: "string", minLength: 1, maxLength: 120 }, description: { type: "string", maxLength: 1000 }, endpoint: { type: "string", format: "uri", maxLength: 2048 }, credentialRequirement: { type: "string", enum: ["credentialless", "principal-credential", "shared-credential"] } } } } },
       },
       responses: {
         201: created("Remote server and protocol-check job saved.", { type: "object", required: ["id", "name", "endpoint", "eraProbeStatus"], properties: { id: { type: "string" }, name: { type: "string" }, endpoint: { type: "string", format: "uri" }, eraProbeStatus: { type: "string", enum: ["Pending", "Accepted", "Rejected"] } } }),

@@ -281,6 +281,33 @@ test("accepts only checker-pinned live raw procedure sources", function _AllowsP
 	assert.equal(validateRawProcedureDeclarations(procedure.path, source, changedProcedures).some(function _Policy(finding) { return finding.rule === "PRISMA-POLICY-RAW-PROCEDURE"; }), true);
 });
 
+test("accepts the previous pinned event procedure only as an exact historical declaration", function _PreviousEventProcedure()
+{
+	const policy = _LivePolicy();
+	const event = policy.rawProcedureCalls.find(function _Event(procedure) { return procedure.adapter === "WorkflowTaskEventAdmission"; });
+	const previous = { ...event, sqlTemplate: "SELECT absurd.emit_event(${this.queueName}, ${acceptedEventName}, ${serializedPayload}::jsonb)", sourceSha256: "fd789bf1efe78a9b0134f75e9ef1446cd6eebbc295bd328b7c3451ea88b01625" };
+	const historical = { ...policy, rawProcedureCalls: [previous] };
+	assert.doesNotThrow(function _HistoricalBase() { validatePolicy(historical, true); });
+	assert.throws(function _CurrentPolicy() { validatePolicy(historical); }, /invalid raw procedure call/u);
+	for (const change of [{ sourceSha256: "0".repeat(64) }, { sqlTemplate: `${previous.sqlTemplate} LIMIT 1` }, { method: "$queryRawUnsafe" }, { contractImportPath: "./lookalike" }])
+		assert.throws(function _ChangedHistory() { validatePolicy({ ...historical, rawProcedureCalls: [{ ...previous, ...change }] }, true); }, /invalid raw procedure call/u);
+});
+
+test("accepts earlier rollback source pins only in exact historical declarations", function _previousRollbackPins()
+{
+	const policy = _LivePolicy();
+	for (const [adapter, sourceSha256] of [["WorkflowTaskAdmission", "eaaec9a78dc51cae458385b93640e85888a3032da656632022f3e6e892833acf"], ["WorkflowTaskEventAdmission", "12e9a4db34f7ff277e535cd260a9bd3f7765026293ece5768499b56e99b7293e"], ["WorkflowTaskAdmission", "eabc0843f3e395ec2bc2a03838d8806857537e933a92b21a4f4d0546179e6309"], ["WorkflowTaskEventAdmission", "ec1ec85d8e6fbf15c4afa55ef5bcf282e2667e45b70749a222f94ba8f869b24f"]])
+	{
+		const current = policy.rawProcedureCalls.find(procedure => procedure.adapter === adapter);
+		const previous = { ...current, sourceSha256 };
+		const historical = { ...policy, rawProcedureCalls: [previous] };
+		assert.doesNotThrow(function _basePolicy() { validatePolicy(historical, true); });
+		assert.throws(function _livePolicy() { validatePolicy(historical); }, /invalid raw procedure call/u);
+		for (const change of [{ sourceSha256: "0".repeat(64) }, { path: "libs/lookalike.ts" }, { adapter: "Lookalike" }, { contract: "Lookalike" }, { contractImportPath: "./lookalike" }, { method: "$queryRawUnsafe" }, { sqlTemplate: `${previous.sqlTemplate} LIMIT 1` }, { reason: "" }])
+			assert.throws(function _changedHistory() { validatePolicy({ ...historical, rawProcedureCalls: [{ ...previous, ...change }] }, true); }, /invalid raw procedure call/u);
+	}
+});
+
 test("requires transaction-scoped repository construction to match the owning policy entry", function _RejectsUndeclaredConstruction()
 {
 	const undeclared = { ..._OWNERS, unitsOfWork: [{ ..._OWNERS.unitsOfWork[0], constructs: [] }] };
@@ -298,6 +325,20 @@ test("requires transaction-scoped repository construction to match the owning po
 	assert.equal(nestedRootClient.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
 	assert.equal(aliasedRootClient.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
 	assert.equal(namedRootConfig.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
+});
+
+test("checks every repeated construction against its own transaction without duplicate policy entries", function _RepeatedConstruction()
+{
+	const path = "libs/widgets/prisma-widget-unit-of-work.ts";
+	const source = _Fixture("positive-unit-of-work").replace("\n\tasync run()", "\n\tasync read() { return this.prisma.$transaction(async function _Read(tx) { return new PrismaWidgetRepository(tx); }); }\n\tasync run()");
+	assert.deepEqual(validateOwnerDeclarations(path, source, _OWNERS), []);
+	assert.deepEqual(inspectPrismaBoundary(path, source, ["widget"], _OWNERS), []);
+	const rootClient = source.replace("function _Read(tx) { return new PrismaWidgetRepository(tx)", "function _Read(tx) { return new PrismaWidgetRepository(this.prisma)");
+	assert.equal(validateOwnerDeclarations(path, rootClient, _OWNERS).some(function _Unbound(finding) { return finding.rule === "PRISMA-POLICY-CONSTRUCTION"; }), true);
+	assert.equal(inspectPrismaBoundary(path, rootClient, ["widget"], _OWNERS).some(function _Unbound(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
+	const duplicateOwner = { ..._OWNERS.unitsOfWork[0], constructs: [..._OWNERS.unitsOfWork[0].constructs, ..._OWNERS.unitsOfWork[0].constructs] };
+	const owners = { ..._OWNERS, unitsOfWork: [duplicateOwner] };
+	assert.throws(function _DuplicateDeclaration() { validatePolicy({ version: 1, owners, rawProcedureCalls: [], exemptions: [] }); }, /duplicate Prisma-boundary construction declaration/u);
 });
 
 test("treats a transaction-bound authority like a repository construction", function _AcceptsAuthorityConstruction()

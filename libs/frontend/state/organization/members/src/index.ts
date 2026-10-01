@@ -8,3 +8,5 @@ export * from "./lib/organization-invitation-resend.store";
 export * from "./lib/organization-invitations.types";
 export * from "./lib/organization-invite-acceptance.store";
 export * from "./lib/organization-invite-acceptance.types";
+export * from "./lib/organization-member-removal.store";
+export * from "./lib/organization-member-removal.validator";

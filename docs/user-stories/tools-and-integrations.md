@@ -29,12 +29,16 @@ tool set only while I choose to use it.
 Acceptance criteria:
 
 - Installation revalidates published state and entitlement by ID.
-- Initial connection state is truthful: `needs-credential` or `shared-key`.
+- Every catalogue server states whether it is `credentialless`, needs a Principal credential, or
+  needs a shared organisation credential; presentation type does not imply readiness.
+- Initial connection state is truthful: `credentialless` only when no provider credential is
+  required, otherwise `needs-credential`.
 - Uninstall removes only the local install because no credential or OAuth custody is accepted here.
 
 APIs: `GET/POST /api/v1/mcp/installed`, `DELETE /api/v1/mcp/installed/{serverId}`.
 
-Status: `API partial`; direct install currently does not fully enforce publication/entitlement.
+Status: `API built`; install rechecks active publication, a Ready revision, and current Install
+authority. Credential activation and live provider qualification remain absent.
 
 ## TOL-03 — Supply write-only credentials
 

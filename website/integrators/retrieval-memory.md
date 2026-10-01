@@ -115,8 +115,8 @@ authorised conversation history + current grants
                         │ compiled non-memory context
                         ▼
                 ┌───────────────┐
-                │ claimed Pod   │
-                │ bounded loop  │
+                │ server turn   │
+                │ Absurd loop   │
                 └───────┬───────┘
                         │ proposes memory_recall
                         ▼
@@ -156,15 +156,21 @@ dataset, and a conflicting correction must fail closed.
 
 ## Outbound and return boundaries
 
-The conversation-computer reads bootstrap status and requests the next server-owned model step.
-It receives no compiled prompt or model key and has no direct LiteLLM network path. The server
-reserves each request within the original run limits and retains accepted content privately.
+The activation worker admits an existing Absurd turn task in the same transaction that publishes
+the active computer lease. Absurd resumes the server-owned turn from saved progress and owns its
+durable deadlines and tool-result waits. The conversation-computer Pod does not request, poll or
+advance model work. It has no direct LiteLLM network path, and receives no compiled prompt, model
+key, tool declaration, result or output. The server reserves each request within the original run
+limits and retains accepted content privately.
 
 ```text
-conversation-computer Pod
-      │ bootstrapId only                 ▲ outcome only
-      ▼                                  │
-OpenCrane server ─────────────────────────┘
+KurrentDB activation
+      │ publish active lease + spawn task in one transaction
+      ▼
+Absurd turn workflow ◄────────────────────────────┐
+      │ select the next saved step                │ durable sleep or event wake
+      ▼                                           │
+OpenCrane server ─────────────────────────────────┘
       │ saved reservation before each dispatch
       ├──► LiteLLM ──► selected provider
       │       │ text or one permitted tool declaration
@@ -183,13 +189,13 @@ stored as encrypted content, and the second reservation must commit before deliv
 No intermediate participant entry changes the original compiled conversation head. Both requests
 use the same key; the second deducts the entire first token reservation from the original allowance.
 
-Bootstrap cannot create a fresh allowance after reservation. A saved answer recovers through its
+Workflow replay cannot create a fresh allowance after reservation. A saved answer recovers through its
 original event, and a saved declaration may resume tool admission without repeating its model call.
 An uncertain model response stays pending, then unavailable, without paid redispatch. The run remains
 pending for future recovery controls. LiteLLM and provider-internal retries have not been qualified
 as exactly-once execution.
 
-The continuation implementation in PR #830 awaits CI and live qualification.
+The continuation implementation and its Absurd-owned orchestration follow-up await live qualification.
 Neither replacement is installed on testv5. A permitted integration fixture, company tool support,
 approvals and visible recovery remain outstanding. The authorities below are separate governance
 primitives; this continuation does not enable personal memory, direct provider access or delegation.

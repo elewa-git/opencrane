@@ -7,6 +7,7 @@ import type { IWorkflowEngine, IWorkflowTaskDeclaration, IWorkflowTaskDefinition
 
 import { _TaskScopedIdempotencyKey, WorkflowTaskAdmission } from "./workflow-task-admission";
 import { WorkflowTaskEventAdmission } from "./workflow-task-event-admission";
+import { _RequiredString, _ValidateAbsurdWorkflowEngineOptions } from "./absurd-workflow-engine-configuration";
 import type { IAbsurdWorkflowEngineOptions } from "./absurd-workflow-engine.types";
 import { _AbsurdTaskContext, _AbsurdTaskEventName } from "./absurd-task-context";
 import { _AbsurdTerminalTaskFailure } from "./absurd-terminal-task-failure";
@@ -39,26 +40,6 @@ interface IAbsurdTaskContextRuntime
 {
 	/** Claimed task data supplied by the worker runtime. */
 	readonly task: { readonly attempt: unknown };
-}
-
-/** Rejects an empty name before it becomes a persisted queue, event, or task identity. */
-function _RequiredString(name: string, value: string): string
-{
-	if (value.trim().length === 0)
-	{
-		throw new WorkflowError(`${name} must be a non-empty string.`);
-	}
-	return value;
-}
-
-/** Rejects an invalid shared-pool limit before the engine creates database connections. */
-function _DatabasePoolSize(value: number): number
-{
-	if (!Number.isSafeInteger(value) || value < 1)
-	{
-		throw new WorkflowError("databasePoolSize must be a positive integer.");
-	}
-	return value;
 }
 
 /** Converts the shared retry policy to the field names used by Absurd admission. */
@@ -149,7 +130,7 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	constructor(options: IAbsurdWorkflowEngineOptions)
 	{
 		// 1. Validate connection settings before any SDK client can use them.
-		this.options = { ...options, databaseUrl: _RequiredString("databaseUrl", options.databaseUrl), databasePoolSize: _DatabasePoolSize(options.databasePoolSize) };
+		this.options = _ValidateAbsurdWorkflowEngineOptions(options);
 		// 2. Bind declarations to the queue authority before any task can be admitted.
 		this.declarations = new _WorkflowTaskDeclarationRegistry(this.options.queueAuthority);
 		// 3. Retain ownership so close never releases a caller-shared pool.
@@ -241,7 +222,7 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 		// 3. Give the handler a context that routes child work and events through this engine.
 		try
 		{
-			return await definition.run(new _AbsurdTaskContext(context, task, _AbsurdTaskAttempt(context), this), envelope.inputUndefined ? undefined : envelope.input);
+			return await definition.run(new _AbsurdTaskContext(context, task, _AbsurdTaskAttempt(context), this, this.options.checkpointOperationLeaseSeconds), envelope.inputUndefined ? undefined : envelope.input);
 		}
 		catch (error)
 		{
@@ -310,11 +291,12 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	/** Calls the fixed, parameterized Absurd procedure on the caller's existing transaction. */
 	private async spawnWithTransaction<TInput>(transactionClient: unknown, task: IWorkflowTaskSpawn<TInput>, declaration: IWorkflowTaskDeclaration): Promise<IWorkflowTaskReceipt>
 	{
+		const isRolledBackConflict = this.requireRollbackClassifier();
 		const taskName = _RequiredString("task.taskName", task.taskName);
 		const idempotencyKey = _RequiredString("task.idempotencyKey", task.idempotencyKey);
 		const retry = _AbsurdRetryPolicy(declaration.retryPolicy);
 		const cmd = { taskName, idempotencyKey, input: _EnvelopeForTask(idempotencyKey, task.input), ...retry };
-		const taskAdmission = new WorkflowTaskAdmission(this.queueForTask(taskName));
+		const taskAdmission = new WorkflowTaskAdmission(this.queueForTask(taskName), isRolledBackConflict);
 		const receipt = await taskAdmission.admit(transactionClient, cmd);
 		return { taskId: receipt.taskId, taskName, idempotencyKey };
 	}
@@ -342,10 +324,19 @@ export class AbsurdWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 	/** Delivers a task event through the same transaction that persisted its product outcome. */
 	async emitEventInTransaction<TPayload>(transaction: IWorkflowTransaction, task: IWorkflowTaskReceipt, event: IWorkflowTaskEvent<TPayload>): Promise<IWorkflowTaskEventReceipt>
 	{
+		const isRolledBackConflict = this.requireRollbackClassifier();
 		const eventName = _RequiredString("event.eventName", event.eventName);
-		const admission = new WorkflowTaskEventAdmission(this.queueForTask(task.taskName));
+		const admission = new WorkflowTaskEventAdmission(this.queueForTask(task.taskName), isRolledBackConflict);
 		await admission.emit(transaction.client, _AbsurdTaskEventName(task.taskId, eventName), event.payload);
 		return { task, eventName };
+	}
+
+	/** Refuses transactional work before SQL when the process has not supplied its database rollback checker. */
+	private requireRollbackClassifier(): (error: unknown) => boolean
+	{
+		if (typeof this.options.isRolledBackConflict !== "function")
+			throw new WorkflowError("Transactional workflows require isRolledBackConflict.");
+		return this.options.isRolledBackConflict;
 	}
 
 	/** Cancels an incomplete task through the reviewed queue that owns its task definition. */

@@ -1,0 +1,5 @@
+:host { display: block; }
+.wo-pdf-picker { display: flex; align-items: center; gap: var(--oc-space-2); flex-wrap: wrap; }
+label { color: var(--oc-ink-default); font-size: var(--oc-text-sm); font-weight: var(--oc-font-weight-medium); }
+input { min-width: 0; max-width: 100%; color: var(--oc-ink-default); font-size: var(--oc-text-sm); }
+[role="alert"] { color: var(--oc-danger); font-size: var(--oc-text-sm); }

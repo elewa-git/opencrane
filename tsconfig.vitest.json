@@ -6,7 +6,8 @@
   "include": [
     "apps/**/*.ts",
     "libs/**/*.ts",
-    "website/**/*.ts"
+    "website/**/*.ts",
+    "tests/memory-gateway/**/*.ts"
   ],
   "exclude": [
     "node_modules",

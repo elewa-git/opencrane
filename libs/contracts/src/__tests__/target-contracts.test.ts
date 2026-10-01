@@ -1,7 +1,7 @@
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationGrantEffects, AuthorizationSubjectKinds } from "@opencrane/models/authorization";
-import { AgentServiceKinds, ConversationLifecycles, ConversationModes, MemoryFactProvenanceSourceKinds } from "../index";
+import { AgentServiceKinds, ConversationLifecycles, ConversationModes, MemoryFactProvenanceSourceKinds, MemoryMutationDeliveryStates } from "../index";
 import type { AgentRun, AgentService, AuthorizationGrant, Conversation, RunEvent, SignedFleetMembershipRevision } from "../index";
 
 describe("canonical model exports", function ()
@@ -94,6 +94,7 @@ describe("canonical model exports", function ()
   {
     expect([AgentServiceKinds.Personal, AgentServiceKinds.Managed]).toEqual(["personal", "managed"]);
     expect([MemoryFactProvenanceSourceKinds.Message, MemoryFactProvenanceSourceKinds.Artifact, MemoryFactProvenanceSourceKinds.ExplicitUserFact]).toEqual(["message", "artifact", "explicit-user-fact"]);
+    expect([MemoryMutationDeliveryStates.ProvenNotSent, MemoryMutationDeliveryStates.Ambiguous]).toEqual(["proven_not_sent", "ambiguous"]);
   });
 });
 describe("canonical fleet and platform exports", function ()

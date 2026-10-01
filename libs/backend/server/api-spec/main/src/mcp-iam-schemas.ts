@@ -1,25 +1,30 @@
+import { _McpConnectionOpenapiSchemas } from "./mcp-connection-schemas";
+import { McpConnectionStatus, McpInstallStates } from "@opencrane/contracts";
+
 /** MCP operator and explicit resource-sharing OpenAPI components. */
 export const _McpIamOpenapiSchemas = {
+	..._McpConnectionOpenapiSchemas,
 	McpCatalogServer: {
 		type: "object",
-		description: "An MCP server exposed by the operator API. Display metadata is optional because this shape serves both the entitled catalogue and the organisation-admin governance view; tools is always present and empty when no Ready OCI revision exists.",
-		required: ["id", "tools"],
+		description: "An MCP server exposed by the operator API. Display metadata is optional because this shape serves both the entitled catalogue and the organisation-admin governance view; tools is always present and empty when no entitled Ready revision exists.",
+		required: ["id", "tools", "credentialRequirement"],
 		properties: {
 			id: { type: "string", description: "Stable server identifier." },
 			name: { type: "string", description: "Display name shown in the catalogue." },
 			description: { type: "string", description: "Short summary shown to callers deciding whether to install the server." },
 			publisher: { type: "string", description: "Organisation or author label for the server." },
 			glyph: { type: "string", description: "Frontend icon key for the server." },
-			type: { type: "string", enum: ["single-user", "multi-user", "remote-oauth"], description: "How the server is configured for connection: single-user requires a caller-owned credential through an external custody flow, multi-user uses an administrator-managed shared key, and remote-oauth requires an OAuth handshake outside this API." },
+			type: { type: "string", enum: ["single-user", "multi-user", "remote-oauth"], description: "How the catalogue presents the connection. This value does not grant installation readiness." },
+			credentialRequirement: { type: "string", enum: ["credentialless", "principal-credential", "shared-credential"], description: "Credential custody required for execution. Credential-requiring installations become usable only after an authorized exact-generation activation." },
 			approvalStatus: { type: "string", enum: ["pending-review", "approved", "published", "disabled"], description: "Organisation-admin review state. Only published servers appear in the user-facing catalogue; approved servers remain hidden until publication." },
-			credentialSchema: { type: "array", description: "Input fields required by an external custody flow for a single-user connection. This API describes requested values but neither receives nor returns credential material.", items: { $ref: "#/components/schemas/CredentialField" } },
+			credentialSchema: { type: "array", description: "Fields declared by the server for credential setup, independent of its presentation type. Catalogue reads describe the fields and never return credential values. The separate write-only activation command supports the declared authentication profile.", items: { $ref: "#/components/schemas/CredentialField" } },
 			entitlementSummary: { type: "string", description: "Human-readable summary of access grants, returned for the governance view." },
-			tools: { type: "array", description: "Tools from the newest Ready OCI server revision. User catalogue rows are entitlement-filtered; administrator visibility never grants execution permission.", items: { $ref: "#/components/schemas/McpAssignableToolRevision" } },
+			tools: { type: "array", description: "Tools from the newest entitled Ready server revision. User catalogue rows are entitlement-filtered; administrator visibility never grants execution permission.", items: { $ref: "#/components/schemas/McpAssignableToolRevision" } },
 		},
 	},
 	McpAssignableToolRevision: {
 		type: "object",
-		description: "An immutable OCI-backed MCP tool schema selected from the newest Ready server revision. Governance eligibility does not replace caller authorization.",
+		description: "An immutable MCP tool schema selected from the newest Ready server revision. Governance eligibility does not replace caller authorization.",
 		required: ["toolRevisionId", "serverRevisionId", "name", "description", "inputSchema", "inputSchemaDigest", "eligibility", "readiness"],
 		properties: {
 			toolRevisionId: { type: "string", description: "Immutable tool revision identifier saved during discovery." },
@@ -34,7 +39,7 @@ export const _McpIamOpenapiSchemas = {
 	},
 	CredentialField: {
 		type: "object",
-		description: "One input an external custody flow requires to connect a single-user MCP server. This API describes the input but neither receives nor returns its value.",
+		description: "One field declared by an MCP server for credential setup. This API describes the field but neither receives nor returns its value.",
 		required: ["key", "label", "required", "sensitive"],
 		properties: {
 			key: { type: "string", description: "Stable submission key for the value." },
@@ -48,10 +53,12 @@ export const _McpIamOpenapiSchemas = {
 	McpInstalled: {
 		type: "object",
 		description: "An MCP server installed by the calling user, with its current connection state.",
-		required: ["serverId"],
+		required: ["serverId", "lifecycleState", "connectionStatus", "connectionGeneration", "credentialUpdatedAt", "failureCode"],
 		properties: {
+			..._McpConnectionOpenapiSchemas.McpConnectionProjection.properties,
 			serverId: { type: "string", description: "Identifier of the installed server." },
-			connectionStatus: { type: "string", enum: ["needs-credential", "shared-key"], description: "Recorded activation requirement: needs-credential requires an external custody flow, while shared-key records an administrator-managed shared key. This API does not activate either state." },
+			lifecycleState: { type: "string", enum: Object.values(McpInstallStates), description: "Durable installation and removal state. Removed installations are omitted from lists." },
+			connectionStatus: { type: "string", enum: Object.values(McpConnectionStatus), description: "Safe installation and connection state; current authority and exact generation still govern every execution." },
 			lastUsed: { type: ["string", "null"], format: "date-time", description: "ISO-8601 timestamp of the server's last use, or null when it has never been used." },
 		},
 	},
@@ -108,7 +115,7 @@ export const _McpIamOpenapiSchemas = {
 	},
 	McpTaskSubmission: {
 		type: "object",
-		description: "One idempotent asynchronous call of a discovered tool on an installed OCI-backed MCP server.",
+		description: "One idempotent asynchronous call of a discovered tool on an installed MCP server.",
 		required: ["idempotencyKey", "serverRevisionId", "toolRevisionId", "arguments"],
 		additionalProperties: false,
 		properties: {
@@ -121,11 +128,11 @@ export const _McpIamOpenapiSchemas = {
 	},
 	McpTask: {
 		type: "object",
-		description: "Caller-visible durable state for one OCI-backed MCP tool call. Arguments, workflow receipts, and executor identifiers are never returned.",
+		description: "Caller-visible durable state for one MCP tool call. Arguments, workflow receipts, and executor identifiers are never returned.",
 		required: ["id", "serverRevisionId", "toolRevisionId", "toolName", "protocolVersion", "state", "inputRequest", "inputResponse", "result", "failureCode"],
 		properties: {
 			id: { type: "string", description: "Stable task identifier." },
-			serverRevisionId: { type: "string", description: "Immutable OCI-backed MCP server revision." },
+			serverRevisionId: { type: "string", description: "Immutable MCP server revision." },
 			toolRevisionId: { type: "string", description: "Immutable discovered tool revision." },
 			toolName: { type: "string", description: "Tool name frozen during MCP discovery." },
 			protocolVersion: { type: "string", enum: ["2026-07-28"], description: "Only MCP protocol version accepted by the runtime." },

@@ -9,8 +9,8 @@
 ## What it owns
 
 This is the **install root** for one **silo** — one customer's isolated slice of OpenCrane. The
-trusted services run in the release namespace; conversation computers run in
-two restricted sibling namespaces owned by the same release. Nothing is shared with other customers. Everything else under `apps/` ships a small
+trusted services run in the release namespace; the release's Agent Sandbox profile fixes where
+conversation computers run and which network paths they can use. Nothing is shared with other customers. Everything else under `apps/` ships a small
 Helm chart; this app is the **umbrella chart** (`opencrane-silo`) that pulls those deployment
 contracts together into one release, plus `deploy.sh`, the entrypoint that installs and upgrades it.
 
@@ -60,14 +60,13 @@ against the checked-out in-repo `file://` sources. The commit is the version aut
 `Chart.lock` and `charts/` outputs are derived packaging, not release inputs.
 
 The artifact preprocessor runs in its own PSA-restricted sibling namespace with a fixed zero-RBAC
-identity, bounded scratch, and no ArtifactStore route. The `conversation-computer` image runs in
-two fixed warm Deployments rather than one Job per attempt. Each generic Pod has only DNS and
-same-silo OpenCrane reachability. An admitted run claims one Pod once; that fixed profile additionally
-admits the exact controller binding path and same-silo LiteLLM. The release owns both namespaces,
-their zero-RBAC ServiceAccount, default-deny and profile-specific standard `NetworkPolicy` objects,
-and a release-scoped admission policy that permits only the exact generic-to-claimed label change or
-discard. Aggregate quotas bound each Deployment, its Pods, CPU, and memory. The admission boundary
-requires Kubernetes 1.30+.
+identity, bounded scratch, and no ArtifactStore route. Conversation computers start from a
+release-owned `SandboxTemplate` and a zero-replica `SandboxWarmPool`. OpenCrane admits each claim
+with its computer lease and generation; the external Agent Sandbox controller creates and deletes
+the Pod. The profile fixes the image digest, RuntimeClass, service account and resource limits.
+Release-owned claim admission keeps the computer identity and lease generation fixed, while
+`NetworkPolicy` allows the computer to reach DNS and the private OpenCrane server. The server owns
+model requests. These admission checks require Kubernetes 1.30+.
 
 ## Public surface
 
@@ -90,6 +89,37 @@ exact keep-marked database resources, their doubly-labelled data volumes, releas
 namespaces, and exact tenant-suffixed cluster role bindings. Shared controllers, custom resource
 definitions, ingress, certificate management, and the protected active tenant remain outside its
 deletion surface.
+
+`Entrypoint: suspend.sh` — stops compute for the six development test silos recorded in
+`suspendible-test-silos.json` while retaining their databases, volumes, snapshots, Secrets,
+Sandbox records, Services, and durable history. It verifies the exact cluster context, Helm
+releases, tenant namespaces, storage totals, externally managed workloads, and shared controller
+identities before changing anything. Each change uses the resource version it just read and stores
+the original replica or suspension value in annotations. Unknown workloads, foreign ownership,
+active standalone Pods, storage drift, or concurrent changes stop the operation. This command is a
+fleet-specific cost-control action; it does not retire a tenant or provide a general resume flow.
+
+Run its read-only inventory first:
+
+```bash
+apps/_infra/deploy-k8s/suspend.sh \
+  --context gke_weownai-proto_europe-west1_opencrane-dev \
+  --confirm-suspend suspend-all-opencrane-dev-test-silos \
+  --preflight
+```
+
+Omit `--preflight` only for the reviewed suspension run. The operation suspends scheduled work,
+allows active Kubernetes Jobs a bounded settle window, scales tenant compute to zero, hibernates
+CloudNativePG, and then stops the reviewed shared controllers. It retains the load balancer,
+Kubernetes control plane, and 380 GiB of persistent disks, so those resources can continue to cost
+money while compute is stopped.
+
+On a rerun, the PostgreSQL operations in `platform/k8s-suspend-postgres.sh` skip a write only
+when the resource is already stopped and has this operation's owner and saved original state.
+This lets the full retention check finish while the stopped CNPG admission webhook is unavailable.
+Missing evidence is revalidated and either repaired with a version-checked write or rejected;
+foreign ownership and invalid saved values stop the operation. The parent script keeps responsibility
+for the shutdown order and the final comparison of retained data identities.
 
 ## Boundary
 
@@ -122,14 +152,28 @@ package imports it.
   `<release>-skill-authoring`, so different silos never share its Helm-owned namespace.
 - `--release` — optional only as a restatement of the silo identity. The wrapper derives and
   enforces `opencrane-<cluster-tenant>` so all Helm-owned namespaces stay inside one release.
-- `testv5` — the first 0.11 target silo additionally requires immutable KurrentDB and bootstrap
-  image digests; immutable TLS, administrator, operations, and `opencrane-history` service
-  Secrets; the ready Agent Sandbox controller with extensions enabled; and each Sandbox,
-  SandboxClaim, SandboxTemplate, and SandboxWarmPool CRD served and stored as `v1beta1`. The
-  deploy script rejects a missing Secret key, a different service username, or a CRD that does not
-  meet both API conditions before it changes the silo.
+- `--cognee-service-user-secret` — required name of the pre-created Secret containing the Cognee
+  service user's `email` and `password`. The wrapper passes the name to
+  `memoryGateway.providerCredential.existingSecret`; it neither creates nor reads this Secret.
+  First-install registration remains disabled unless an operator explicitly sets
+  `memoryGateway.providerCredential.allowFirstInstallRegistration=true` for an approved bootstrap.
+- `platform/provision-cognee-service-user-secret.sh` — creates that immutable Secret after the
+  silo namespace exists. Supply `--context`, `--namespace`, `--secret`, `--email`, and `--yes`
+  explicitly. Reruns verify the existing ownership and key contract and never rotate credentials.
+- Every silo requires the complete conversation profile: KurrentDB history and Agent Sandbox
+  execution. `deploy.sh` enables both after checking immutable history, bootstrap and computer
+  image digests; immutable TLS, administrator, operations and `opencrane-history` service Secrets;
+  the ready Agent Sandbox controller with extensions enabled; an approved `gvisor` RuntimeClass;
+  and each Sandbox, SandboxClaim, SandboxTemplate and SandboxWarmPool custom resource definition
+  (CRD) served and stored as `v1beta1`. A missing Secret key, a different service username or an
+  unsupported CRD version stops installation before the silo changes.
+- `historyStore.kurrentdb.enabled=false` and `agentSandbox.enabled=false` are generic Helm-rendering
+  defaults for component checks. They do not describe a supported silo installation. The shared
+  deploy engine rejects disabled or incomplete conversation configuration before installation or
+  successful install preflight, including calls that bypass `deploy.sh`. Separate credential,
+  prerequisite and recovery commands remain available before a complete install profile exists.
 - `platform/provision-kurrentdb-bootstrap-secrets.sh` — creates the namespace-local immutable TLS,
-  administrator, operations, and `opencrane-history` Secrets for one fresh testv5 silo. Reruns
+  administrator, operations, and `opencrane-history` Secrets for a fresh silo. Reruns
   validate the existing authorities and never rotate them.
 - `--kurrentdb-replay-parked` — replays the installed silo's parked computer activations through a
   separate bounded Job derived from its verified KurrentDB bootstrap template. It leaves the
@@ -150,6 +194,12 @@ package imports it.
   exists, because a `sub` is scoped to its original OIDC issuer. Later upgrades must restate that
   same `--oidc-issuer-url`; they may not use chart `--values` or `--reset-values`, which could
   replace or erase the binding.
+- `OPENCRANE_MCP_CONNECTION_MATERIAL_SECRET` selects the server's MCP credential-verification keyring
+  Secret (default `opencrane-mcp-connection-material`). The app-owned
+  `apps/opencrane/deploy/ensure-mcp-material-keyring.sh` creates it only when absent. Failed reads
+  stop deployment; existing keys are preserved. Connection credentials live separately in the
+  release-owned namespace that permits no Pods. Keep old verification keys during rotation so
+  previously admitted connection commands remain verifiable.
 - `platform/provider-key-secrets.sh` — creates only missing fixed-name provider Secret placeholders.
   Authenticated durable provider commands later fill or clear them; redeployment never overwrites a
   previously admitted key.
@@ -178,6 +228,27 @@ package imports it.
   requests use fast local-path storage; storage-sensitive changes, manual k3d qualification, and
   every `develop` push also prove pinned expandable storage. Neither tier substitutes for
   backup/recovery or production qualification.
+- Hosted generated-file qualification is being connected to that same disposable smoke lifecycle.
+  Its fixtures supply two generated test identities, a login service, a synthetic model provider,
+  and an authenticated TLS registry. The existing instance LiteLLM owns model and credential
+  administration; the deployment wrapper creates its master and encryption keys. The fixtures
+  use a fixed public marker for the synthetic provider and a separate random evidence key. No
+  confidential upstream key is generated or accepted. The public client creates the
+  requester through a real invitation and configures
+  their personal agent before uploading, importing and assigning the producer tool. The server
+  remains the only durable workflow worker. The runner checks the disposable context and resource
+  ownership before forwarding the database or restarting services; its private database URL reaches
+  only the identity lookup and exact test prerequisite grant. After restart, the public checks must
+  prove replay, identical downloads and denial after the Owner removes the requester.
+- `npm exec -- nx run deploy-k8s:test:hosted-generated-file` runs the offline protocol, runner and
+  evidence-collection checks. The ordinary deployment test target includes the same contract.
+  CI retains only named public evidence and image/byte digests under
+  `.nx/test-results/hosted-generated-file`; credentials, setup state and file contents stay outside
+  that artifact. The smoke first renders the actual server certificate-trust configuration and
+  stops before creating a cluster or credentials when that support is absent. Optional server
+  certificate trust remains pending, and the public-marker client integration is under validation.
+  Offline checks do not prove a hosted conversation or
+  authorise a testv5 deployment.
 
 ## Sub-docs (the deep detail)
 

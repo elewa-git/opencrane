@@ -17,6 +17,8 @@ export interface IAbsurdWorkflowEngineOptions
 	readonly databasePoolSize: number;
 	/** Optional caller-owned pool for a bounded live qualification or composition root. */
 	readonly databasePool?: Pool;
+	/** Recognises proven transaction rollbacks. Required for transactional admission; worker-only processes may omit it. */
+	readonly isRolledBackConflict?: (error: unknown) => boolean;
 	/** Optional structured process logger for worker lifecycle outcomes. */
 	readonly log?: Pick<Logger, "info">;
 	/** Stores the reviewed queue authority that the workflow guard also uses. */
@@ -25,4 +27,6 @@ export interface IAbsurdWorkflowEngineOptions
 	readonly workerConcurrency?: number;
 	/** Idle polling interval in milliseconds. */
 	readonly pollIntervalMs?: number;
+	/** Lease extension used immediately before an uncached checkpoint operation. */
+	readonly checkpointOperationLeaseSeconds?: number;
 }

@@ -1,40 +1,34 @@
-# @opencrane/features/context — the right-hand context pane
+# @opencrane/features/context — selected document canvas
 
 > [frontend](../../README.md) › [features](../README.md) › context
 
 ## What it owns
 
-This is a frontend **feature** package. A feature owns one UI slice — here, the right-hand pane of
-the workspace console — and exports the component the shell drops into that slot. It shows the
-context behind the current conversation: the awareness contract (what the agent is allowed to see),
-the scopes in play, the retrieved sources it cited, the skills it has active, and the ledger trace
-of what it did.
+This frontend feature presents a selected document's summary, metrics, initiatives, risks and cited
+boundaries. The caller supplies the document and save state; the canvas emits save and export intents.
+Its isolated stories cover empty, draft, saving, saved, failure, and long document presentation.
 
-It is presentational: it receives typed models from its owner and renders them. It does not fetch
-from the API itself or hold long-lived state — the workspace shell decides when it is shown and
-when a canvas document is selected, saved, or exported.
+The previous context-panel prototype had no application consumers and contained fixed sample
+identity and retired runtime text. Its removal preserves the independently tested canvas renderer;
+the active chat Activity and Files panel belongs to `features/conversation-workspace`.
 
 ## Public surface
 
-- `ContextPanelComponent` — the pane: an awareness card and scope strip, an expandable
-  retrieved-scope rail with citations, active skills, the ledger trace, and a pass-through canvas
-  document/action contract for its owner.
+- `CanvasDocComponent` — renders an owner-supplied `CanvasDocument`, takes its save lifecycle, and
+  emits `saveRequested` and `exportRequested` without claiming persistence succeeded.
 
 ## Boundary
 
-Intended for the future workspace surface, which hosts it as the right pane. It must not import other
-feature packages; shared visuals come from `elements/ui`. Enforcement of what the agent may see
-lives on the server — this pane only displays it.
+The canvas owns presentation only. It never loads documents, starts saves, or enforces access rules.
+Its caller must supply browser-safe content and adopt authoritative save results.
 
 ## Dependency direction
 
-Tagged `type:lib`, `layer:frontend`, and `scope:web` (the frontend dependency tier): it may import
-only other `scope:web` packages and `scope:shared` contracts. It depends on `@opencrane/core`
-(context models and data) and `@opencrane/elements/ui` (collapsible section, ledger card, scope
-chip).
+Tagged `type:lib`, `layer:frontend`, and `scope:web`: this package may import other frontend packages
+and shared contracts. It uses core document models and shared UI elements without importing apps or backend code.
 
 ## See also
 
 - Parent index: [features](../README.md)
-- Consumer: future workspace surface
+- Active chat context owner: [conversation workspace](../conversation-workspace/README.md)
 - Shared visuals: [elements/ui](../../elements/ui/README.md)

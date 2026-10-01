@@ -71,6 +71,15 @@ describe("REDACT_PATHS", function _redactSuite()
     expect(replay["cursor"]).toBe("[Redacted]");
   });
 
+  it("redacts model rejection authenticators at every logged depth", function _modelReceipt()
+  {
+    const { logger, records } = _redactingLogger();
+    logger.info({ res: { headers: { "x-opencrane-preforward-receipt": "receipt-authentication" } }, nested: { Headers: { "X-OpenCrane-Preforward-Receipt": "nested-authentication" } }, outcome: "rejected" }, "model rejection");
+    expect(records[0]?.["res"]).toEqual({ headers: { "x-opencrane-preforward-receipt": "[Redacted]" } });
+    expect(records[0]?.["nested"]).toEqual({ Headers: { "X-OpenCrane-Preforward-Receipt": "[Redacted]" } });
+    expect(records[0]?.["outcome"]).toBe("rejected");
+  });
+
   it("redacts artifact claim fences and write leases at every logged depth", function _artifactAuthority()
   {
     const { logger, records } = _redactingLogger();
@@ -87,16 +96,24 @@ describe("REDACT_PATHS", function _redactSuite()
     const { logger, records } = _redactingLogger();
     logger.info({
       reviewedToolArguments: { nested: { secret: "top-level-reviewed" } },
+      safeProposedArguments: { nested: { privateValue: "top-level-safe" } },
+      proposedArguments: { nested: { privateValue: "top-level-proposed" } },
       finalArguments: { nested: { secret: "top-level-final" } },
       approval: {
         reviewedToolArguments: { nested: { secret: "nested-reviewed" } },
+        safeProposedArguments: { nested: { privateValue: "nested-safe" } },
+        proposedArguments: { nested: { privateValue: "nested-proposed" } },
         finalArguments: { nested: { secret: "nested-final" } },
       },
     }, "approval");
     const approval = records[0]?.["approval"] as Record<string, unknown>;
     expect(records[0]?.["reviewedToolArguments"]).toBe("[Redacted]");
+    expect(records[0]?.["safeProposedArguments"]).toBe("[Redacted]");
+    expect(records[0]?.["proposedArguments"]).toBe("[Redacted]");
     expect(records[0]?.["finalArguments"]).toBe("[Redacted]");
     expect(approval["reviewedToolArguments"]).toBe("[Redacted]");
+    expect(approval["safeProposedArguments"]).toBe("[Redacted]");
+    expect(approval["proposedArguments"]).toBe("[Redacted]");
     expect(approval["finalArguments"]).toBe("[Redacted]");
   });
 

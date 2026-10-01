@@ -1,4 +1,5 @@
 enum MemoryDatasetState {
+  Provisioning @map("provisioning")
   Active  @map("active")
   Retired @map("retired")
 }
@@ -15,18 +16,57 @@ enum MemoryConsentState {
   Confirmed @map("confirmed")
 }
 
+/// Selects the user command retained by a personal-memory operation independently of its phase.
+enum PersonalMemoryOperationKind {
+  Remember @map("remember")
+  Correct  @map("correct")
+  Forget   @map("forget")
+}
+
+/// Names the saved work that may advance after the operation owner verifies its evidence.
+enum PersonalMemoryOperationPhase {
+  DatasetEnsurePending       @map("dataset_ensure_pending")
+  DocumentAddPending         @map("document_add_pending")
+  CognifyPending             @map("cognify_pending")
+  CatalogCommitPending       @map("catalog_commit_pending")
+  PriorDocumentDeletePending @map("prior_document_delete_pending")
+  DocumentDeletePending      @map("document_delete_pending")
+  CatalogFinalizePending     @map("catalog_finalize_pending")
+  RecoveryRequired           @map("recovery_required")
+  Completed                  @map("completed")
+}
+
+/// Records why a personal-memory operation stopped without retaining provider or source details.
+enum PersonalMemoryOperationFailureCode {
+  AuthorityEnded      @map("authority_ended")
+  DatasetUnavailable  @map("dataset_unavailable")
+  SourceUnavailable   @map("source_unavailable")
+  DocumentConflict    @map("document_conflict")
+  IndexInputChanged   @map("index_input_changed")
+  IndexingUnavailable @map("indexing_unavailable")
+  CatalogConflict     @map("catalog_conflict")
+  DeletionUnavailable @map("deletion_unavailable")
+}
+
+/// Distinguishes a mutation that can be retried from one that first needs read-only reconciliation.
+enum PersonalMemoryOperationDeliveryState {
+  ProvenNotSent @map("proven_not_sent")
+  Ambiguous     @map("ambiguous")
+}
+
 model MemoryDataset {
   id                  String                    @id @default(cuid())
   siloId              String                    @map("silo_id")
   boundaryKind        AuthorizationBoundaryKind @map("boundary_kind")
   boundaryGroupId     String?                   @map("boundary_group_id")
   boundaryPrincipalId String?                   @map("boundary_principal_id")
-  cogneeDatasetId     String                    @map("cognee_dataset_id")
+  cogneeDatasetId     String?                   @map("cognee_dataset_id")
   state               MemoryDatasetState        @default(Active)
   createdBy           String                    @map("created_by")
   createdAt           DateTime                  @default(now()) @map("created_at")
   retiredAt           DateTime?                 @map("retired_at")
   facts               MemoryFactCatalog[]
+  operations          PersonalMemoryOperation[]
   boundaryGroup       Group?                    @relation("MemoryDatasetBoundaryGroup", fields: [boundaryGroupId, siloId], references: [id, siloId], onDelete: Restrict)
   boundaryPrincipal   Principal?                @relation("MemoryDatasetBoundaryPrincipal", fields: [boundaryPrincipalId, siloId], references: [id, siloId], onDelete: Restrict)
 
@@ -41,6 +81,7 @@ model MemoryFactCatalog {
   datasetId                String              @map("dataset_id")
   cogneeExternalId         String              @map("cognee_external_id")
   contentDigest            String              @map("content_digest")
+  revision                 Int                 @default(1)
   state                    MemoryFactState     @default(Active)
   consentState             MemoryConsentState  @map("consent_state")
   sensitivity              String
@@ -56,6 +97,7 @@ model MemoryFactCatalog {
   dataset                  MemoryDataset       @relation(fields: [datasetId], references: [id], onDelete: Restrict)
   supersedes               MemoryFactCatalog?  @relation("MemoryFactCorrections", fields: [supersedesFactId], references: [id], onDelete: Restrict)
   corrections              MemoryFactCatalog[] @relation("MemoryFactCorrections")
+  targetedByOperations     PersonalMemoryOperation[] @relation("PersonalMemoryOperationTargetFact")
 
   @@unique([datasetId, cogneeExternalId])
   @@unique([id, datasetId])
@@ -63,4 +105,51 @@ model MemoryFactCatalog {
   @@index([sourceMessageId])
   @@index([datasetId, state])
   @@map("memory_fact_catalog")
+}
+
+/// Saves identifiers, digests, and provider receipts for one admitted personal-memory command.
+/// Remembered text and provider payloads stay outside PostgreSQL.
+model PersonalMemoryOperation {
+  id                          String                               @id
+  siloId                      String                               @map("silo_id")
+  datasetId                   String                               @map("dataset_id")
+  actorPrincipalId            String                               @map("actor_principal_id")
+  idempotencyKeyDigest        String                               @map("idempotency_key_digest")
+  commandDigest               String                               @map("command_digest")
+  kind                        PersonalMemoryOperationKind
+  phase                       PersonalMemoryOperationPhase
+  recoveryPhase               PersonalMemoryOperationPhase?        @map("recovery_phase")
+  revision                    Int                                  @default(1)
+  sourceConversationId        String?                              @map("source_conversation_id")
+  sourceMessageId             String?                              @map("source_message_id")
+  sourceMessagePosition       BigInt?                              @map("source_message_position")
+  sourcePayloadRef            String?                              @map("source_payload_ref")
+  sourceCiphertextDigest      String?                              @map("source_ciphertext_digest")
+  sourceAuthorPrincipalId     String?                              @map("source_author_principal_id")
+  contentDigest               String?                              @map("content_digest")
+  targetFactId                String?                              @map("target_fact_id")
+  targetDocumentId            String?                              @map("target_document_id")
+  expectedFactRevision        Int?                                 @map("expected_fact_revision")
+  admittedProviderDatasetId   String?                              @map("admitted_provider_dataset_id")
+  providerDatasetId           String?                              @map("provider_dataset_id")
+  providerDocumentId          String?                              @map("provider_document_id")
+  indexingOperationId         String?                              @map("indexing_operation_id")
+  expectedInputEvidenceDigest String?                              @map("expected_input_evidence_digest")
+  pipelineRunId               String?                              @map("pipeline_run_id")
+  failureCode                 PersonalMemoryOperationFailureCode?  @map("failure_code")
+  deliveryState               PersonalMemoryOperationDeliveryState? @map("delivery_state")
+  workflowTaskId              String                               @unique @map("workflow_task_id")
+  workflowTaskName            String                               @map("workflow_task_name")
+  workflowTaskKey             String                               @map("workflow_task_key")
+  admittedAt                  DateTime                             @default(now()) @map("admitted_at")
+  recoveryRecordedAt          DateTime?                            @map("recovery_recorded_at")
+  completedAt                 DateTime?                            @map("completed_at")
+  dataset                     MemoryDataset                        @relation(fields: [datasetId], references: [id], onDelete: Restrict)
+  targetFact                  MemoryFactCatalog?                   @relation("PersonalMemoryOperationTargetFact", fields: [targetFactId, datasetId], references: [id, datasetId], onDelete: Restrict)
+
+  @@unique([siloId, idempotencyKeyDigest], map: "personal_memory_operations_replay_key")
+  @@unique([workflowTaskName, workflowTaskKey], map: "personal_memory_operations_workflow_task_key")
+  @@index([datasetId, phase])
+  @@index([targetFactId, datasetId])
+  @@map("personal_memory_operations")
 }

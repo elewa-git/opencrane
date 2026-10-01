@@ -103,6 +103,16 @@ export interface ElicitationUnitOfWork extends SelfElicitationQueryRepository
 	respond(command: RespondToElicitationCommand): Promise<RespondToElicitationResult>;
 }
 
+/** Wakes the already-bound conversation turn after approval or expiry changes tool readiness. */
+export interface ElicitationRunWakePort
+{
+	/** Emit the existing approval-readiness event for the saved conversation turn task. */
+	wake(runId: string, attempt: number, toolInvocationId: string): Promise<void>;
+}
+
+/** Builds a transaction-bound wake port without letting elicitation own workflow infrastructure. */
+export type ElicitationRunWakeFactory = (transaction: object) => ElicitationRunWakePort;
+
 /** Trusted server command for expiring every due request on one waiting run attempt. */
 export interface ExpireElicitationBatchCommand
 {

@@ -191,7 +191,7 @@ export class __FakeWorkflowEngine implements IWorkflowEngine, IWorkflowWorkerRun
 				self._AssertNotCancelled(record);
 				return operation();
 			},
-			async waitForEvent<TPayload>(eventName: string): Promise<IWorkflowTaskEvent<TPayload>>
+			async waitForEvent<TPayload>(eventName: string, _options: { readonly timeoutAt?: Date } = {}): Promise<IWorkflowTaskEvent<TPayload>>
 			{
 				self._AssertNotCancelled(record);
 				const queuedEvents = self.eventsByTask.get(record.receipt.taskId) ?? [];

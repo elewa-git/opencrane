@@ -56,7 +56,7 @@ signed fleet membership proves active silo admission without carrying product sc
 
 ### Runtime execution identity kind
 
-- Owner: `libs/contracts/src/run-input-snapshot.types.ts` and
+- Owner: `libs/contracts/src/inputs/run-input-snapshot.types.ts` and
   `libs/backend/agents/execution/runs/main/src/run-admission.types.ts`
 - Authority consumers: execution input assembly, run admission, and runtime dispatch
 - Proposed enum: `RuntimeExecutionIdentityKind` in `@opencrane/contracts`
@@ -78,7 +78,7 @@ Prisma enums remain adapter-side and map explicitly to model enums.
 
 ### Conversation computer protocol kinds
 
-- Owner: `libs/contracts/src/conversation-computer.types.ts`
+- Owner: `libs/contracts/src/conversations/conversation-computer.types.ts`
 - Authority consumers: conversation computer history, activation, lifecycle, and private turn authorities
 - Stable enums: `ConversationComputerStates` and `ComputerLeaseStates`
 

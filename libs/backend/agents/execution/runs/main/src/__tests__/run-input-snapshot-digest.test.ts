@@ -1,7 +1,7 @@
 import { ExecutionSubjectMembershipKinds } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
-import type { RunInputSnapshot } from "@opencrane/contracts";
+import { RUN_INPUT_SNAPSHOT_VERSION, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { __DigestRunInputSnapshot } from "../run-input-snapshot-digest";
@@ -10,7 +10,7 @@ import { __DigestRunInputSnapshot } from "../run-input-snapshot-digest";
 function _Snapshot(parametersSchema: JsonValue = { type: "object", additionalProperties: false }): Omit<RunInputSnapshot, "digest">
 {
 	return {
-		runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, conversationId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [{ toolRevisionId: "mcp-tool-revision-1", name: "query", description: "Search records", inputSchema: parametersSchema, inputSchemaDigest: ___DigestCanonicalJson(parametersSchema) }], modelRoute: {}, budgetPolicy: {}, executionSubject: { schemaVersion: 1, siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1", identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: "silo-1", headRevision: "1", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-decision", verifiedAt: "2026-08-01T00:00:00.000Z" }, membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "principal-1", siloId: "silo-1", revision: 1, assertionId: "membership", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision", trustedUntil: "2099-08-02T00:00:00.000Z" }, capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-decision", decidedAt: "2026-08-01T00:00:00.000Z" }, runScope: { siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1" }, computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 }, requester: { membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "requester-1", siloId: "silo-1", revision: 1, assertionId: "membership", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision", trustedUntil: "2099-08-02T00:00:00.000Z" }, siloId: "silo-1", requesterPrincipalId: "requester-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-08-01T00:00:00.000Z" }, admission: { authorizingPrincipalId: "authorizer-1", decisionEvidenceId: "admission-decision", admittedAt: "2026-08-01T00:00:00.000Z" } }, promptCompilerVersion: "prompt-v1", compiledAt: "2026-08-01T00:00:00.000Z",
+		runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: RUN_INPUT_SNAPSHOT_VERSION, conversationId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, mcpTools: [{ toolRevisionId: "mcp-tool-revision-1", name: "query", description: "Search records", inputSchema: parametersSchema, inputSchemaDigest: ___DigestCanonicalJson(parametersSchema) }], modelRoute: {}, budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 1, maxCostUsdMicros: null, maxToolInvocations: 0, maxLoopIterations: 1, wallClockDeadlineEpochMs: 2_000 }, executionSubject: { schemaVersion: 1, siloId: "silo-1", agentIdentityId: "identity-1", principalId: "principal-1", identity: { agentIdentityId: "identity-1", principalId: "principal-1", siloId: "silo-1", headRevision: "1", headDigest: `sha256:${"a".repeat(64)}`, decisionEvidenceId: "identity-decision", verifiedAt: "2026-08-01T00:00:00.000Z" }, membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "principal-1", siloId: "silo-1", revision: 1, assertionId: "membership", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision", trustedUntil: "2099-08-02T00:00:00.000Z" }, capability: { agentIdentityId: "identity-1", computerId: "computer-1", capabilitySetDigest: `sha256:${"c".repeat(64)}`, effectiveContractDigest: `sha256:${"d".repeat(64)}`, decisionEvidenceId: "capability-decision", decidedAt: "2026-08-01T00:00:00.000Z" }, runScope: { siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1" }, computerScope: { siloId: "silo-1", computerId: "computer-1", leaseId: "lease-1", leaseGeneration: 1 }, requester: { membership: { kind: ExecutionSubjectMembershipKinds.Fleet, principalId: "requester-1", siloId: "silo-1", revision: 1, assertionId: "membership", payloadDigest: `sha256:${"b".repeat(64)}`, decisionEvidenceId: "membership-decision", trustedUntil: "2099-08-02T00:00:00.000Z" }, siloId: "silo-1", requesterPrincipalId: "requester-1", requestIdempotencyKey: "request-1", authenticatedAt: "2026-08-01T00:00:00.000Z" }, admission: { authorizingPrincipalId: "authorizer-1", decisionEvidenceId: "admission-decision", admittedAt: "2026-08-01T00:00:00.000Z" } }, promptCompilerVersion: "prompt-v1", compiledAt: "2026-08-01T00:00:00.000Z",
 	};
 }
 
@@ -23,6 +23,14 @@ describe("run input snapshot digest", function _RunInputSnapshotDigestSuite()
 		const changed = __DigestRunInputSnapshot(_Snapshot({ type: "object", additionalProperties: true }));
 
 		expect(second).toBe(first);
+		expect(changed).not.toBe(first);
+	});
+
+	it("changes when any admitted allowance changes", function _BindsBudget()
+	{
+		const first = __DigestRunInputSnapshot(_Snapshot());
+		const changed = __DigestRunInputSnapshot(_Snapshot({ budgetPolicy: { maxModelTurns: 1, maxCompletionTokens: 1, maxCostUsdMicros: null, maxToolInvocations: 0, maxLoopIterations: 2, wallClockDeadlineEpochMs: 2_000 } }));
+
 		expect(changed).not.toBe(first);
 	});
 });

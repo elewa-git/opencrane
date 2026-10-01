@@ -102,4 +102,6 @@ subjects:
   - kind: ServiceAccount
     name: {{ include "opencrane.fullname" . }}-opencrane-server
     namespace: {{ .Release.Namespace }}
+---
+{{ include "opencrane.server.mcpCredentialCustody" . }}
 {{- end }}

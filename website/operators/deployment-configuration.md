@@ -62,6 +62,7 @@ apps/_infra/deploy-k8s/deploy.sh \
   --image-tag "$OPENCRANE_BUILD_TAG" \
   --opencrane-ui-digest "$OPENCRANE_UI_DIGEST" \
   --cognee-digest "$OPENCRANE_COGNEE_DIGEST" \
+  --cognee-service-user-secret "$OPENCRANE_COGNEE_SERVICE_USER_SECRET" \
   --postgres-credentials-secret "$OPENCRANE_POSTGRES_SECRET" \
   --litellm-postgres-credentials-secret "$OPENCRANE_LITELLM_POSTGRES_SECRET" \
   --postgres-admin-credentials-secret "$OPENCRANE_POSTGRES_ADMIN_SECRET" \
@@ -75,6 +76,12 @@ engine preserves the release's existing overrides. Supply individual configurati
 the supported flags or `--set-string`. Once a standalone first owner is configured, the installer
 rejects `--values` and `--reset-values` to preserve its immutable email, issuer and silo binding.
 Continue supplying the same first-owner and OIDC coordinates.
+
+The named Cognee Secret must already contain the service user's `email` and `password`. The deploy
+entrypoint only passes its name to the memory gateway and never creates or reads it. Keep
+`memoryGateway.providerCredential.allowFirstInstallRegistration=false` after provisioning. Turning
+it on permits one registration attempt after a rejected login and requires separate operational
+review for a fresh installation.
 
 ## Membership mode
 
@@ -92,14 +99,23 @@ membership and permission checks, and refreshing evidence cannot extend an alrea
 
 ## Conversation execution profile
 
-Generic defaults disable `historyStore.kurrentdb` and `agentSandbox`. The current wrapper enables
-and checks the conversation profile for the named `testv5` target. Other tenant names require an
-explicitly reviewed values profile and the same prerequisites; do not rename a real tenant to
-select development defaults.
+Every supported silo installation requires KurrentDB conversation history and an Agent Sandbox
+execution profile. `deploy.sh` enables and checks both for every tenant name. The shared deploy
+engine also rejects a disabled or incomplete profile before installing or reporting successful
+install preflight, so calling the engine directly preserves the same requirement.
 
-For `testv5`, the wrapper reads these additional environment variables (equivalent CLI flags are
-listed in the source). Store the non-secret configuration in your environment profile and supply
-only Secret names here:
+The generic Helm defaults keep `historyStore.kurrentdb.enabled` and `agentSandbox.enabled` false
+so individual chart components can be rendered and checked without a complete installation
+profile. Those defaults do not define a reduced silo mode. Credential preparation, shared
+prerequisite provisioning and recovery commands remain separate from install admission.
+
+Use the deployment flags to select the target. Raw `--helm-arg` passthrough accepts Helm value
+flags and supported release controls, but rejects target, schema-validation and post-renderer
+overrides that could change the validated installation.
+
+For every silo, the wrapper reads these additional environment variables (equivalent CLI flags
+are listed in the source). Store the non-secret configuration in your environment profile and
+supply only Secret names here:
 
 | Inputs | Variables |
 |---|---|
@@ -173,6 +189,7 @@ apps/_infra/deploy-k8s/deploy.sh \
   --image-tag "$OPENCRANE_BUILD_TAG" \
   --opencrane-ui-digest "$OPENCRANE_UI_DIGEST" \
   --cognee-digest "$OPENCRANE_COGNEE_DIGEST" \
+  --cognee-service-user-secret "$OPENCRANE_COGNEE_SERVICE_USER_SECRET" \
   --postgres-credentials-secret "$OPENCRANE_POSTGRES_SECRET" \
   --litellm-postgres-credentials-secret "$OPENCRANE_LITELLM_POSTGRES_SECRET" \
   --postgres-admin-credentials-secret "$OPENCRANE_POSTGRES_ADMIN_SECRET"

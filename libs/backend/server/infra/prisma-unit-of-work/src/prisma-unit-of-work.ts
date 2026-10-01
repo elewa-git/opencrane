@@ -16,13 +16,21 @@ export const ___ROLLED_BACK_CONFLICT_CODES: ReadonlySet<string> = new Set(["P200
  * Called by: the shared unit-of-work runner, and domain adapters that resolve a committed winner
  * after their final attempt.
  *
+ * Raw queries report serialization failures as P2010 with SQLSTATE 40001. They follow the P2034
+ * policy, not a blanket P2010 allowance. Unknown errors and wrapped causes remain unrecognised.
+ *
  * @param error - The failure raised by one transaction attempt.
  * @param codes - Codes accepted as proven rollbacks; defaults to {@link ___ROLLED_BACK_CONFLICT_CODES}.
  * @returns Whether the failure is a proven full rollback.
+ * @see https://www.postgresql.org/docs/17/mvcc-serialization-failure-handling.html — retry the complete transaction for SQLSTATE 40001.
  */
 export function ___IsRolledBackConflict(error: unknown, codes: ReadonlySet<string> = ___ROLLED_BACK_CONFLICT_CODES): boolean
 {
-	return error instanceof Prisma.PrismaClientKnownRequestError && codes.has(error.code);
+	if (!(error instanceof Prisma.PrismaClientKnownRequestError))
+		return false;
+	if (error.code === "P2010")
+		return error.meta?.code === "40001" && codes.has("P2034");
+	return codes.has(error.code);
 }
 
 /**

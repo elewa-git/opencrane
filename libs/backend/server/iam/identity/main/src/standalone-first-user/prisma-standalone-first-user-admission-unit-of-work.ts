@@ -15,7 +15,7 @@ import { type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdm
  * `AlreadyOwner` or `AlreadyClaimed` instead of racing again.
  *
  * Called by: OidcAuthService.onLoginEstablished in this package, composed with the audit appender
- * from apps/opencrane/src/app/public-app.ts.
+ * from apps/opencrane/src/bootstrap/http/public-app.ts.
  * @implements StandaloneFirstUserAdmissionUnitOfWork
  */
 export class PrismaStandaloneFirstUserAdmissionUnitOfWork implements StandaloneFirstUserAdmissionUnitOfWork

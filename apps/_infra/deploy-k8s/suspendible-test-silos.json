@@ -1,0 +1,230 @@
+{
+  "context": "gke_weownai-proto_europe-west1_opencrane-dev",
+  "confirmation": "suspend-all-opencrane-dev-test-silos",
+  "clusterTenants": [
+    {
+      "name": "d2latency-0823",
+      "mainChart": "opencrane-silo-0.9.3",
+      "postgresChart": "postgres-0.9.3",
+      "retainedPersistentVolumeCount": 3,
+      "retainedStorageGi": 50
+    },
+    {
+      "name": "testjos",
+      "mainChart": "opencrane-silo-0.8.1",
+      "postgresChart": "postgres-0.8.0",
+      "retainedPersistentVolumeCount": 3,
+      "retainedStorageGi": 50
+    },
+    {
+      "name": "testlynn",
+      "mainChart": "opencrane-silo-0.9.2",
+      "postgresChart": "postgres-0.9.3",
+      "retainedPersistentVolumeCount": 3,
+      "retainedStorageGi": 50
+    },
+    {
+      "name": "testv3",
+      "mainChart": "opencrane-silo-0.1.0",
+      "postgresChart": "postgres-0.1.0",
+      "retainedPersistentVolumeCount": 3,
+      "retainedStorageGi": 50
+    },
+    {
+      "name": "testv4",
+      "mainChart": "opencrane-silo-0.10.0",
+      "postgresChart": "postgres-0.10.0",
+      "retainedPersistentVolumeCount": 3,
+      "retainedStorageGi": 50
+    },
+    {
+      "name": "testv5",
+      "mainChart": "opencrane-silo-0.11.0",
+      "postgresChart": "postgres-0.11.0",
+      "retainedPersistentVolumeCount": 5,
+      "retainedStorageGi": 130
+    }
+  ],
+  "sharedDeployments": [
+    {
+      "namespace": "agent-sandbox-system",
+      "name": "agent-sandbox-controller",
+      "matchLabels": {
+        "app": "agent-sandbox-controller"
+      },
+      "selectorLabels": {
+        "app": "agent-sandbox-controller"
+      },
+      "image": "registry.k8s.io/agent-sandbox/agent-sandbox-controller@sha256:ba381b4e0c86cca597d5c5a31860e38d30ec1c45e0a7a8328bb2799c87d059c0",
+      "uid": "e75f3b2a-21c9-4eae-8ae2-08c8eb2cc2ba"
+    },
+    {
+      "namespace": "cnpg-system",
+      "name": "cloudnative-pg",
+      "matchLabels": {
+        "app.kubernetes.io/instance": "cloudnative-pg",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "cloudnative-pg",
+        "app.kubernetes.io/version": "1.30.0",
+        "helm.sh/chart": "cloudnative-pg-0.29.0"
+      },
+      "selectorLabels": {
+        "app.kubernetes.io/instance": "cloudnative-pg",
+        "app.kubernetes.io/name": "cloudnative-pg"
+      },
+      "helmRelease": "cloudnative-pg",
+      "uid": "ddc5d48c-281b-4205-8c38-49dcf375c3bc"
+    },
+    {
+      "namespace": "ingress-nginx",
+      "name": "ingress-nginx-controller",
+      "matchLabels": {
+        "app.kubernetes.io/component": "controller",
+        "app.kubernetes.io/instance": "ingress-nginx",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "ingress-nginx",
+        "app.kubernetes.io/part-of": "ingress-nginx",
+        "app.kubernetes.io/version": "1.15.1",
+        "helm.sh/chart": "ingress-nginx-4.15.1"
+      },
+      "selectorLabels": {
+        "app.kubernetes.io/component": "controller",
+        "app.kubernetes.io/instance": "ingress-nginx",
+        "app.kubernetes.io/name": "ingress-nginx"
+      },
+      "helmRelease": "ingress-nginx",
+      "uid": "fe65b18a-154e-433f-a780-cb6a55b02b36"
+    },
+    {
+      "namespace": "cert-manager",
+      "name": "cert-manager",
+      "matchLabels": {
+        "app.kubernetes.io/component": "controller",
+        "app.kubernetes.io/instance": "cert-manager",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "cert-manager",
+        "app.kubernetes.io/version": "v1.21.1",
+        "helm.sh/chart": "cert-manager-v1.21.1"
+      },
+      "selectorLabels": {
+        "app.kubernetes.io/component": "controller",
+        "app.kubernetes.io/instance": "cert-manager",
+        "app.kubernetes.io/name": "cert-manager"
+      },
+      "helmRelease": "cert-manager",
+      "uid": "0449d305-b1d5-4c2c-b142-19cb612e7d58"
+    },
+    {
+      "namespace": "cert-manager",
+      "name": "cert-manager-cainjector",
+      "matchLabels": {
+        "app.kubernetes.io/component": "cainjector",
+        "app.kubernetes.io/instance": "cert-manager",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "cainjector",
+        "app.kubernetes.io/version": "v1.21.1",
+        "helm.sh/chart": "cert-manager-v1.21.1"
+      },
+      "selectorLabels": {
+        "app.kubernetes.io/component": "cainjector",
+        "app.kubernetes.io/instance": "cert-manager",
+        "app.kubernetes.io/name": "cainjector"
+      },
+      "helmRelease": "cert-manager",
+      "uid": "8e1f5b35-2ff1-4e19-a754-a670b94fca85"
+    },
+    {
+      "namespace": "cert-manager",
+      "name": "cert-manager-webhook",
+      "matchLabels": {
+        "app.kubernetes.io/component": "webhook",
+        "app.kubernetes.io/instance": "cert-manager",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "webhook",
+        "app.kubernetes.io/version": "v1.21.1",
+        "helm.sh/chart": "cert-manager-v1.21.1"
+      },
+      "selectorLabels": {
+        "app.kubernetes.io/component": "webhook",
+        "app.kubernetes.io/instance": "cert-manager",
+        "app.kubernetes.io/name": "webhook"
+      },
+      "helmRelease": "cert-manager",
+      "uid": "2aebfa21-a5a6-46b7-bd99-8d1bb04c33ab"
+    }
+  ],
+  "externalDeployments": [
+    {
+      "namespace": "opencrane-d2latency-0823",
+      "name": "sms1obot-mcp-server",
+      "uid": "d3f0e082-1477-47e7-92fe-b7dd268fbf76",
+      "matchLabels": {
+        "app": "sms1obot-mcp-server"
+      },
+      "selectorLabels": {
+        "app": "sms1obot-mcp-server"
+      },
+      "matchAnnotations": {
+        "apply.acorn.io/owner-sub-context": "sms1obot-mcp-server"
+      },
+      "images": [
+        "ghcr.io/obot-platform/nanobot:v0.0.85",
+        "ghcr.io/obot-platform/obot-mcp-server:v0.2.0"
+      ]
+    },
+    {
+      "namespace": "opencrane-testjos",
+      "name": "sms1obot-mcp-server",
+      "uid": "b38a28e0-acc0-4f30-b4fa-4e4ae964b984",
+      "matchLabels": {
+        "app": "sms1obot-mcp-server"
+      },
+      "selectorLabels": {
+        "app": "sms1obot-mcp-server"
+      },
+      "matchAnnotations": {
+        "apply.acorn.io/owner-sub-context": "sms1obot-mcp-server"
+      },
+      "images": [
+        "ghcr.io/obot-platform/nanobot:v0.0.85",
+        "ghcr.io/obot-platform/obot-mcp-server:v0.2.0"
+      ]
+    },
+    {
+      "namespace": "opencrane-testlynn",
+      "name": "sms1obot-mcp-server",
+      "uid": "4e3d2f15-59bf-48c1-ba09-dbc3bfbb8216",
+      "matchLabels": {
+        "app": "sms1obot-mcp-server"
+      },
+      "selectorLabels": {
+        "app": "sms1obot-mcp-server"
+      },
+      "matchAnnotations": {
+        "apply.acorn.io/owner-sub-context": "sms1obot-mcp-server"
+      },
+      "images": [
+        "ghcr.io/obot-platform/nanobot:v0.0.85",
+        "ghcr.io/obot-platform/obot-mcp-server:v0.2.0"
+      ]
+    },
+    {
+      "namespace": "opencrane-testv3",
+      "name": "sms1obot-mcp-server",
+      "uid": "d164bfbf-a2a5-4713-8509-b5bab63f823e",
+      "matchLabels": {
+        "app": "sms1obot-mcp-server"
+      },
+      "selectorLabels": {
+        "app": "sms1obot-mcp-server"
+      },
+      "matchAnnotations": {
+        "apply.acorn.io/owner-sub-context": "sms1obot-mcp-server"
+      },
+      "images": [
+        "ghcr.io/obot-platform/nanobot:v0.0.85",
+        "ghcr.io/obot-platform/obot-mcp-server:v0.2.0"
+      ]
+    }
+  ]
+}

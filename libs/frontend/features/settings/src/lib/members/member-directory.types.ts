@@ -45,6 +45,12 @@ export interface MemberDirectoryRowView
 	readonly canResend: boolean;
 	/** Whether this row's resend command is currently admitted. */
 	readonly resending: boolean;
+	/** Mirrors the server capability; role labels never enable this action. */
+	readonly canRemove: boolean;
+	/** Prevents a second command for this membership while the first is unresolved. */
+	readonly removing: boolean;
+	/** Explains protected or already removed membership even on narrow screens. */
+	readonly removalDetail: string | null;
 }
 
 /** Complete presentation projection consumed by MembersViewComponent. */
@@ -76,6 +82,10 @@ export interface MembersViewModel
 	readonly resentInviteLink: string | null;
 	/** Browser-safe resend command failure. */
 	readonly resendError: string | null;
+	/** Announces exact successful organization access removal. */
+	readonly removalMessage: string | null;
+	/** Explains an unconfirmed removal without claiming a transition. */
+	readonly removalError: string | null;
 }
 
 /** Controlled submit intent emitted by the invitation form. */

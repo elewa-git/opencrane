@@ -24,6 +24,7 @@
 	&__body strong { overflow: hidden; color: var(--oc-ink-strong); font-size: var(--oc-text-sm); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 	&__body span, &__state { color: var(--oc-ink-muted); font-size: var(--oc-text-xs); }
 	&__actions { display: flex; align-items: center; gap: var(--oc-space-1); }
+	&__content-error { color: var(--oc-danger); font-size: var(--oc-text-xs); }
 }
 
 @media (max-width: 520px) {

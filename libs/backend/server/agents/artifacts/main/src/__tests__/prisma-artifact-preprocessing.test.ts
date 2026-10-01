@@ -22,7 +22,7 @@ function _CompletionRequest()
 /** Returns one claimed preprocessing row that may report a worker failure. */
 function _FailureJob(deliveryCount: number)
 {
-	return { id: "job-1", state: ArtifactPreprocessJobState.Claimed, deliveryCount, claimFence: `claim-${deliveryCount}`, claimExpiresAt: new Date(_DATABASE_NOW.getTime() + 60_000), taskId: "task-1", taskName: "artifacts.preprocess.pdf-to-text/v1", taskKey: "preprocess-task-1" };
+	return { id: "job-1", sourceRevisionId: "source-revision-1", state: ArtifactPreprocessJobState.Claimed, deliveryCount, claimFence: `claim-${deliveryCount}`, claimExpiresAt: new Date(_DATABASE_NOW.getTime() + 60_000), taskId: "task-1", taskName: "artifacts.preprocess.pdf-to-text/v1", taskKey: "preprocess-task-1" };
 }
 
 describe("Prisma artifact preprocessing", function _Suite()
@@ -56,7 +56,7 @@ describe("Prisma artifact preprocessing", function _Suite()
 			artifactOutboxEvent: { create: vi.fn().mockResolvedValue({}) },
 		};
 
-		await expect(new PrismaArtifactPreprocessRepository(transaction as never).completeAtomically(request)).resolves.toEqual({ status: "completed" });
+		await expect(new PrismaArtifactPreprocessRepository(transaction as never, { complete: vi.fn(), fail: vi.fn() }).completeAtomically(request)).resolves.toEqual({ status: "completed" });
 		expect(transaction.artifactPreprocessJob.update).toHaveBeenCalledWith({ where: { id: "job-1" }, data: { derivedRevisionId: "artifact-preprocess:lease-1", completionDigest: request.receiptDigest } });
 		expect(transaction.artifactPreprocessJob.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: expect.anything(), completedAt: expect.anything() }) }));
 	});
@@ -65,21 +65,25 @@ describe("Prisma artifact preprocessing", function _Suite()
 	{
 		const job = _FailureJob(1);
 		const transaction = { artifactAuthorityClock: { findUnique: vi.fn().mockResolvedValue({ now: _DATABASE_NOW }) }, artifactPreprocessJob: { findUnique: vi.fn().mockResolvedValue(job), update: vi.fn().mockResolvedValue({}) } };
-		const repository = new PrismaArtifactPreprocessRepository(transaction as never);
+		const conversationAssets = { complete: vi.fn(), fail: vi.fn() };
+		const repository = new PrismaArtifactPreprocessRepository(transaction as never, conversationAssets);
 
 		await expect(repository.failAtomically({ jobId: "job-1", attempt: 1, claimFence: "claim-1", failureCode: "conversion_failed" })).resolves.toEqual({ status: "retryable" });
 
 		expect(transaction.artifactPreprocessJob.update).toHaveBeenCalledWith({ where: { id: "job-1" }, data: { state: ArtifactPreprocessJobState.RetryableFailed, outputLeaseId: null, failureCode: "conversion_failed", nextAttemptAt: new Date(_DATABASE_NOW.getTime() + 30_000) } });
+		expect(conversationAssets.fail).not.toHaveBeenCalled();
 	});
 
 	it("commits terminal failure without scheduling another delivery", async function _SavesTerminalFailure()
 	{
 		const job = _FailureJob(3);
 		const transaction = { artifactAuthorityClock: { findUnique: vi.fn().mockResolvedValue({ now: _DATABASE_NOW }) }, artifactPreprocessJob: { findUnique: vi.fn().mockResolvedValue(job), update: vi.fn().mockResolvedValue({}) } };
-		const repository = new PrismaArtifactPreprocessRepository(transaction as never);
+		const conversationAssets = { complete: vi.fn(), fail: vi.fn() };
+		const repository = new PrismaArtifactPreprocessRepository(transaction as never, conversationAssets);
 
 		await expect(repository.failAtomically({ jobId: "job-1", attempt: 3, claimFence: "claim-3", failureCode: "conversion_failed" })).resolves.toEqual({ status: "terminal" });
 
 		expect(transaction.artifactPreprocessJob.update).toHaveBeenCalledWith({ where: { id: "job-1" }, data: { state: ArtifactPreprocessJobState.TerminalFailed, outputLeaseId: null, failureCode: "conversion_failed", nextAttemptAt: null } });
+		expect(conversationAssets.fail).toHaveBeenCalledExactlyOnceWith("source-revision-1");
 	});
 });

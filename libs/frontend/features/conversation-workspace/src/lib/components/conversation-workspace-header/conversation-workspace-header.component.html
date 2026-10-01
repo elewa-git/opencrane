@@ -1,0 +1,46 @@
+          <div class="conversation-workspace__top">
+            @if (availabilityNotice(); as notice) {
+              <div class="conversation-workspace__availability" role="status">
+                <strong>{{ notice.heading }}</strong
+                ><span>{{ notice.detail }}</span>
+              </div>
+            }
+            <header class="conversation-workspace__header">
+              <div>
+                @if (hasParent()) { <p-button label="Back to group" icon="pi pi-arrow-left" severity="secondary" [text]="true" (onClick)="backRequested.emit()" /> }
+                <small>{{ summary()?.modeLabel }}</small>
+                <h1>{{ summary()?.title }}</h1>
+                <p>{{ summary()?.participantLabel }}</p>
+              </div>
+              <div class="conversation-workspace__header-actions">
+                <button
+                  #contextPanelToggle
+                  type="button"
+                  class="conversation-workspace__context-toggle"
+                  aria-controls="conversation-workspace-context-panel"
+                  [attr.aria-expanded]="contextPanelOpen()"
+                  (click)="contextRequested.emit()"
+                >
+                  <i class="pi pi-window-maximize" aria-hidden="true"></i
+                  >{{ contextPanelLabel() }}</button
+                ><p-button
+                  label="Archive"
+                  icon="pi pi-inbox"
+                  severity="secondary"
+                  [text]="true"
+                  [disabled]="busy()"
+                  (onClick)="archiveRequested.emit()"
+                /><p-button
+                  label="Close"
+                  icon="pi pi-lock"
+                  severity="danger"
+                  [text]="true"
+                  [disabled]="
+                    busy() ||
+                    closed()
+                  "
+                  (onClick)="closeRequested.emit()"
+                />
+              </div>
+            </header>
+          </div>

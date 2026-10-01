@@ -80,6 +80,18 @@ function _budgetWidening(field: string, before: number, after: number): Revision
 	return after > before ? { kind: "budget", field, detail: `${field} raised from ${before} to ${after}` } : null;
 }
 
+/** Reports when a target raises or removes an extra revision cost cap. */
+function _nullableBudgetWidening(field: string, before: number | null, after: number | null): RevisionWidening | null
+{
+	if (before === null)
+		return null;
+	if (after === null)
+	{
+		return { kind: "budget", field, detail: `${field} removed the revision cap of ${before}` };
+	}
+	return _budgetWidening(field, before, after);
+}
+
 /**
  * Compare two agent revisions so a reviewer can see what a publication would change.
  *
@@ -111,7 +123,10 @@ export function __DiffAgentRevisions(base: AgentRevision, target: AgentRevision)
 		_scalarChange("modelDefinitionId", base.modelDefinitionId, target.modelDefinitionId),
 		_scalarChange("budget.maxTurns", String(base.budget.maxTurns), String(target.budget.maxTurns)),
 		_scalarChange("budget.maxTokens", String(base.budget.maxTokens), String(target.budget.maxTokens)),
+		_scalarChange("budget.maxCostUsdMicros", String(base.budget.maxCostUsdMicros), String(target.budget.maxCostUsdMicros)),
+		_scalarChange("budget.maxToolInvocations", String(base.budget.maxToolInvocations), String(target.budget.maxToolInvocations)),
 		_scalarChange("budget.maxDurationMs", String(base.budget.maxDurationMs), String(target.budget.maxDurationMs)),
+		_scalarChange("budget.maxLoopIterations", String(base.budget.maxLoopIterations), String(target.budget.maxLoopIterations)),
 	].filter(_isPresent);
 
 	// 3. Diff collection configuration fields as stable member-key sets.
@@ -155,7 +170,10 @@ function _collectWidenings(base: AgentRevision, target: AgentRevision, setChange
 	const budgetWidenings = [
 		_budgetWidening("budget.maxTurns", base.budget.maxTurns, target.budget.maxTurns),
 		_budgetWidening("budget.maxTokens", base.budget.maxTokens, target.budget.maxTokens),
+		_nullableBudgetWidening("budget.maxCostUsdMicros", base.budget.maxCostUsdMicros, target.budget.maxCostUsdMicros),
+		_budgetWidening("budget.maxToolInvocations", base.budget.maxToolInvocations, target.budget.maxToolInvocations),
 		_budgetWidening("budget.maxDurationMs", base.budget.maxDurationMs, target.budget.maxDurationMs),
+		_budgetWidening("budget.maxLoopIterations", base.budget.maxLoopIterations, target.budget.maxLoopIterations),
 	].filter(_isPresent);
 	widenings.push(...budgetWidenings);
 

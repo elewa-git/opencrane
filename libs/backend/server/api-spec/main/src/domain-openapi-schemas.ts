@@ -1,3 +1,5 @@
+import { _AuditOpenapiSchemas } from "@opencrane/backend/server/iam/audit";
+import { _SpendOpenapiSchemas } from "@opencrane/backend/server/reporting/spend";
 import { _GroupsOpenapiSchemas } from "@opencrane/backend/server/iam/groups";
 import { _OrganizationMembersOpenapiSchemas } from "@opencrane/backend/server/iam/organization-members";
 
@@ -17,4 +19,6 @@ export const _DomainOpenapiSchemas = {
 	Pagination: _PaginationSchema,
 	..._GroupsOpenapiSchemas,
 	..._OrganizationMembersOpenapiSchemas,
+	..._AuditOpenapiSchemas,
+	..._SpendOpenapiSchemas,
 };

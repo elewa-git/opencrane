@@ -16,6 +16,9 @@ Personal memory might include a person's preferred answer format or the context 
 
 Neither should become available just because it was uploaded or mentioned. The completed product
 must make clear who can use the information, what was retained and how to change or remove it.
+Each person's memory lives in its own dataset, and the memory service runs in the mode that keeps
+one person's recall inside their own dataset. How that is enforced is described in
+[long-term memory](/integrators/long-term-memory-cognee#cognee-runs-in-its-access-control-mode).
 
 ## Source inventory
 

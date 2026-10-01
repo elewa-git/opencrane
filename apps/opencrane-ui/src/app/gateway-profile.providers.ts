@@ -7,6 +7,7 @@ import { ORGANIZATION_MEMBERS_GATEWAY } from "@opencrane/state/organization/memb
 import { OpenCraneOrganizationMembersGateway } from "@opencrane/state/organization/members/adapter";
 
 import { provideConversationWorkspaceComposition } from "./conversation-workspace.providers";
+import { provideGovernanceReads } from "./governance.providers";
 
 /**
  * Provides the live gateway composition used by production and development-live builds.
@@ -22,5 +23,6 @@ export const OPENCRANE_UI_GATEWAY_PROVIDERS: Provider[] =
 	{ provide: PERSONA_FIRST_CHAT_GATEWAY, useClass: OpenCranePersonaFirstChatGateway },
 	{ provide: ORGANIZATION_MEMBERS_GATEWAY, useClass: OpenCraneOrganizationMembersGateway },
 	...provideConversationWorkspaceComposition(),
+	...provideGovernanceReads(),
 	...provideControlPlaneGateways()
 ];

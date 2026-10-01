@@ -1,0 +1,7 @@
+@if (loading()) { <p role="status">{{ loadingLabel() }}</p> }
+@if (error(); as message) {
+	<div class="resource-feedback__error">
+		<p-message severity="error" [text]="message" />
+		@if (retryAvailable()) { <p-button label="Try again" icon="pi pi-refresh" [disabled]="loading()" (onClick)="retryRequested.emit()" /> }
+	</div>
+}

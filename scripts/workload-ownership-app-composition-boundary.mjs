@@ -12,14 +12,14 @@ const appSourceExtensions = new Set([
 ]);
 const runtimeSourceExtensions = new Set([...appSourceExtensions, ".sh", ".yaml", ".yml"]);
 const typedSourceExtensions = new Set([".ts", ".tsx", ".mts", ".cts"]);
-const ignoredDirectories = new Set(["node_modules", "dist", "coverage", ".nx", ".cache"]);
+const ignoredDirectories = new Set(["node_modules", "dist", "coverage", ".nx", ".cache", ".venv"]);
 const workloadKinds = new Set(["Pod", "Deployment", "StatefulSet", "DaemonSet", "CronJob", "Job"]);
 const appSourceClassifications = new Set([
   "app-config", "browser-composition", "browser-config", "browser-entry-guard",
   "browser-entry-view", "browser-entrypoint", "browser-route-composition",
   "build-entrypoint", "composition-test", "hosting-composition", "prisma-composition",
   "process-composition", "process-entrypoint", "process-instrumentation",
-  "process-logging", "route-composition", "test-config", "artifact-broker-composition",
+  "process-logging", "route-composition", "test-config",
 ]);
 
 function fail(message)
@@ -358,6 +358,7 @@ for (const entry of appSourceRegistry.allowedFiles ?? [])
   allowedSourceFiles.set(entry.path, entry);
   if (!/^apps\/(?:_infra\/[^/]+|[^/_][^/]*)\//.test(entry.path ?? "")) fail(`${context}: path must be below one app root`);
   if (!entry.path.startsWith(`${entry.owner}/`) || !exactAppOwner(entry.owner, context)) fail(`${context}: owner does not match path`);
+  if (entry.path.startsWith("apps/opencrane/src/") && entry.path !== "apps/opencrane/src/index.ts" && !entry.path.startsWith("apps/opencrane/src/bootstrap/")) fail(`${context}: server production source must be bootstrap composition`);
   if (!appSourceClassifications.has(entry.classification)) fail(`${context}: classification is not an app-composition class`);
   const path = workspacePath(entry.path ?? "");
   if (!existsSync(path)) fail(`${context}: allowlist entry is stale`);

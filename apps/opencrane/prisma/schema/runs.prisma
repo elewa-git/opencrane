@@ -9,7 +9,11 @@ enum AgentRunState {
   Running          @map("running")
   WaitingForInput  @map("waiting_for_input")
   RecoveryRequired @map("recovery_required")
+  /// Further run work is fenced while its saved workflow and effect cleanup finish.
+  Cancelling       @map("cancelling")
   Completed        @map("completed")
+  /// The requester stopped this run; any uncertain external effect keeps its own recovery evidence.
+  Cancelled        @map("cancelled")
   Failed           @map("failed")
 }
 
@@ -19,6 +23,16 @@ enum AgentRunTerminalReason {
   BudgetExhausted @map("budget_exhausted")
   RuntimeFailure  @map("runtime_failure")
   InvalidInput    @map("invalid_input")
+  /// The original requester stopped the run without requesting another model turn.
+  UserCancelled  @map("user_cancelled")
+}
+
+/// The verified Kurrent terminal winner determines how the admitted Stop workflow finishes the run.
+enum AgentRunCancellationDecision {
+  /// Cancellation fenced final output; the saved workflow must finish cleanup before declaring Cancelled.
+  CancellationWon @map("cancellation_won")
+  /// Final output committed first; the saved workflow must preserve it and complete the original run.
+  OutputWon       @map("output_won")
 }
 
 enum WorkloadKind {
@@ -43,6 +57,31 @@ model AgentRun {
   attempt                           Int                                   @default(1)
   state                             AgentRunState                         @default(Accepted)
   inputSnapshotDigest               String                                @map("input_snapshot_digest")
+  workflowTaskId                    String?                               @unique @map("workflow_task_id")
+  workflowTaskName                  String?                               @map("workflow_task_name")
+  workflowTaskKey                   String?                               @map("workflow_task_key")
+  /// Identifies the one admitted Stop message; retries keep this target instead of selecting a later turn.
+  cancellationCommandId            String?                               @unique @map("cancellation_command_id")
+  /// Binds the immutable cancellation task input to its requester, message, run, attempt and lease.
+  cancellationCommandDigest        String?                               @map("cancellation_command_digest")
+  /// Names the original turn stream whose terminal revision arbitrates Stop against final output.
+  cancellationBootstrapId          String?                               @map("cancellation_bootstrap_id")
+  /// Records the original human requester whose current authority admitted Stop.
+  cancellationRequestedByPrincipalId String?                              @map("cancellation_requested_by_principal_id")
+  /// Records admission time alongside the command and its durable workflow receipt.
+  cancellationRequestedAt          DateTime?                             @map("cancellation_requested_at")
+  /// Binds the digest of the product authorization decision recorded by the admission transaction.
+  cancellationAuthorizationDecisionDigest String?                            @map("cancellation_authorization_decision_digest")
+  /// Identifies the cancellation task; the original turn task remains separately bound above.
+  cancellationWorkflowTaskId       String?                               @unique @map("cancellation_workflow_task_id")
+  /// Names the sole workflow definition permitted to finish the admitted cancellation.
+  cancellationWorkflowTaskName     String?                               @map("cancellation_workflow_task_name")
+  /// Deduplicates admission of the cancellation workflow across request and server retries.
+  cancellationWorkflowTaskKey      String?                               @map("cancellation_workflow_task_key")
+  /// Records the verified terminal Kurrent winner once; it cannot be replaced by the other outcome.
+  cancellationDecision             AgentRunCancellationDecision?         @map("cancellation_decision")
+  /// Records when the matching terminal receipt was adopted into this run.
+  cancellationDecidedAt             DateTime?                             @map("cancellation_decided_at")
   acceptedAt                        DateTime                              @default(now()) @map("accepted_at")
   startedAt                         DateTime?                             @map("started_at")
   finishedAt                        DateTime?                             @map("finished_at")
@@ -53,10 +92,12 @@ model AgentRun {
   service                           AgentService                          @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
   conversation                      Conversation?                         @relation(fields: [conversationId], references: [id], onDelete: Restrict)
   inputSnapshots                    RunInputSnapshot[]
-  modelCredentialMintAuthorizations RunModelCredentialMintAuthorization[]
+  attemptCredentials                ConversationComputerAttemptCredential[]
   approvalRequests                  ApprovalRequest[]
   elicitationRequests               ElicitationRequest[]
   toolInvocations                   ToolInvocation[]
+  treeAccount                       AgentRunTreeAccount?                  @relation("RunTreeAccountRun")
+  closedTreeAccounts                AgentRunTreeAccount[]                 @relation("RunTreeClosureSource")
 
   @@unique([siloId, requestIdempotencyKey])
   @@unique([id, agentServiceId, agentRevisionId])
@@ -66,6 +107,8 @@ model AgentRun {
   @@unique([id, agentRevisionId])
   @@unique([id, inputSnapshotDigest])
   @@unique([conversationId, id])
+  @@unique([workflowTaskName, workflowTaskKey], map: "agent_runs_workflow_task_key")
+  @@unique([cancellationWorkflowTaskName, cancellationWorkflowTaskKey], map: "agent_runs_cancellation_workflow_task_key")
   @@unique([id, conversationId, siloId, agentServiceId], map: "agent_runs_thread_authority_key")
   @@unique([id, inputSnapshotDigest, conversationId, siloId, agentServiceId, agentRevisionId, agentIdentityId, principalId], map: "agent_run_snapshot_identity_key")
   @@index([agentServiceId, state])
@@ -107,23 +150,75 @@ model RunInputSnapshot {
   @@map("run_input_snapshots")
 }
 
-/// One durable, single-consumption authorization for the post-commit LiteLLM key mint.
-model RunModelCredentialMintAuthorization {
-  id                   String    @id @default(cuid())
-  runId                String    @map("run_id")
-  attempt              Int
-  generation           Int
-  principalId          String    @map("principal_id")
-  modelDefinitionId    String    @map("model_definition_id")
-  providerConnectionId String?   @map("provider_connection_id")
-  authorizationDigest  String    @map("authorization_digest")
-  keyAlias             String    @unique @map("key_alias")
-  expiresAt            DateTime  @map("expires_at")
-  claimedAt            DateTime? @map("claimed_at")
-  createdAt            DateTime  @default(now()) @map("created_at")
-  run                  AgentRun  @relation(fields: [runId], references: [id], onDelete: Restrict)
+/// Reads the database clock used to admit and finish run work.
+view AgentRunAuthorityClock {
+  singleton Int      @unique
+  now       DateTime
 
-  @@unique([runId, attempt, generation])
-  @@index([expiresAt])
-  @@map("run_model_credential_mint_authorizations")
+  @@map("agent_run_authority_clock")
+}
+
+/// Records why an account stopped accepting work. It never means physical cleanup has finished.
+enum AgentRunTreeClosureReason {
+  /// An existing requester-authorized Stop on this run or an ancestor closes this account.
+  AuthorizedStop @map("authorized_stop")
+  /// This run or an ancestor already has a saved terminal state.
+  TerminalRun    @map("terminal_run")
+  /// The database clock reached this account's immutable deadline.
+  Deadline       @map("deadline")
+}
+
+/// Partitions a root run's frozen allowance without creating extra spending authority for children.
+model AgentRunTreeAccount {
+  runId                     String                     @id @map("run_id")
+  rootRunId                 String                     @map("root_run_id")
+  parentRunId               String?                    @map("parent_run_id")
+  admissionKey              String                     @map("admission_key")
+  admissionDigest           String                     @map("admission_digest")
+  deadlineAt                DateTime                   @map("deadline_at")
+  allocatedModelCalls       Int                        @map("allocated_model_calls")
+  allocatedCompletionTokens Int                        @map("allocated_completion_tokens")
+  allocatedToolInvocations  Int                        @map("allocated_tool_invocations")
+  allocatedLoopIterations   Int                        @map("allocated_loop_iterations")
+  allocatedCostMicros       BigInt                     @map("allocated_cost_micros")
+  availableModelCalls       Int                        @map("available_model_calls")
+  availableCompletionTokens Int                        @map("available_completion_tokens")
+  availableToolInvocations  Int                        @map("available_tool_invocations")
+  availableLoopIterations   Int                        @map("available_loop_iterations")
+  availableCostMicros       BigInt                     @map("available_cost_micros")
+  /// Serializes every account mutation against the root; it is not a child or concurrency limit.
+  revision                  Int                        @default(0)
+  /// Records that admission is closed, not that descendants or external effects have stopped.
+  closedAt                  DateTime?                  @map("closed_at")
+  closureSourceRunId        String?                    @map("closure_source_run_id")
+  closureReason             AgentRunTreeClosureReason? @map("closure_reason")
+  run                       AgentRun                   @relation("RunTreeAccountRun", fields: [runId], references: [id], onDelete: Restrict)
+  root                      AgentRunTreeAccount        @relation("RunTreeRoot", fields: [rootRunId], references: [runId], onDelete: Restrict)
+  rootAccounts              AgentRunTreeAccount[]      @relation("RunTreeRoot")
+  parent                    AgentRunTreeAccount?       @relation("RunTreeParent", fields: [parentRunId], references: [runId], onDelete: Restrict)
+  children                  AgentRunTreeAccount[]      @relation("RunTreeParent")
+  closureSource             AgentRun?                  @relation("RunTreeClosureSource", fields: [closureSourceRunId], references: [id], onDelete: Restrict)
+  reservations              AgentRunTreeReservation[]
+
+  @@unique([rootRunId, admissionKey], map: "agent_run_tree_accounts_admission_key")
+  @@index([parentRunId, runId])
+  @@map("agent_run_tree_accounts")
+}
+
+/// Holds allowance for one local operation; retries reuse this row and no uncertain spend is refunded.
+model AgentRunTreeReservation {
+  id               String              @id
+  runId            String              @map("run_id")
+  idempotencyKey    String              @map("idempotency_key")
+  commandDigest     String              @map("command_digest")
+  modelCalls       Int                 @map("model_calls")
+  completionTokens Int                 @map("completion_tokens")
+  toolInvocations  Int                 @map("tool_invocations")
+  loopIterations   Int                 @map("loop_iterations")
+  costMicros       BigInt              @map("cost_micros")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  account          AgentRunTreeAccount @relation(fields: [runId], references: [runId], onDelete: Restrict)
+
+  @@unique([runId, idempotencyKey], map: "agent_run_tree_reservations_idempotency_key")
+  @@map("agent_run_tree_reservations")
 }

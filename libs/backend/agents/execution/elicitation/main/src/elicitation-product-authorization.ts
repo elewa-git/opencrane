@@ -52,6 +52,21 @@ export class PrismaElicitationProductAuthorizationRepository implements Elicitat
 		return new Set(entitled.map(resource => resource.id));
 	}
 
+	/** Checks linked approval grants without treating conversation access as permission to see an action. */
+	async filterReadableApprovalElicitationIds(siloId: string, subjectId: string, requestIds: readonly string[], now: Date): Promise<ReadonlySet<string>>
+	{
+		if (requestIds.length === 0)
+			return new Set();
+		const principalId = await this._resolvePrincipal(siloId, subjectId);
+		if (principalId === null)
+			return new Set();
+		const approvals = await this.transaction.approvalRequest.findMany({ where: { siloId, elicitationRequestId: { in: [...new Set(requestIds)] } }, select: { id: true, elicitationRequestId: true } });
+		const resources = approvals.map(approval => ({ kind: ProductAuthorizationResourceKinds.ApprovalRequest, id: approval.id }));
+		const entitled = await this.authorization.listEntitled({ siloId, principalId, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId }, action: ProductAuthorizationActions.Read, resources, nowEpochMs: now.getTime() });
+		const readableApprovalIds = new Set(entitled.map(resource => resource.id));
+		return new Set(approvals.filter(approval => approval.elicitationRequestId !== null && readableApprovalIds.has(approval.id)).map(approval => approval.elicitationRequestId!));
+	}
+
 	/**
 	 * Admits a response against Conversation/Use and, for tool approvals, ApprovalRequest/Decide.
 	 *

@@ -5,7 +5,7 @@ import { Router, type Request, type Response } from "express";
 import { ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, type ArtifactPreprocessorClaimCommand, type ArtifactPreprocessorFailureCode, type ArtifactPreprocessorFailureCommand } from "@opencrane/contracts";
 
 import { __FailArtifactPreprocessJob } from "./artifact-preprocessing";
-import type { ArtifactPreprocessorRouterDependencies, ReviewedArtifactPreprocessorIdentity } from "./artifact-preprocessing.types";
+import { ArtifactPreprocessResultStatuses, type ArtifactPreprocessorRouterDependencies, type ReviewedArtifactPreprocessorIdentity } from "./artifact-preprocessing.types";
 
 /**
  * Build the internal PDF-preprocessing API for the sole dedicated worker.
@@ -28,7 +28,7 @@ import type { ArtifactPreprocessorRouterDependencies, ReviewedArtifactPreprocess
  * words say which step broke, which is all the server-owned retry policy needs, and carry nothing
  * an attacker-supplied document could influence. Adding a free-text field would reopen that.
  *
- * Called by: `_CreateOptionalRuntimeComposition` in apps/opencrane/src/app/runtime-composition.ts
+ * Called by: `_CreateOptionalRuntimeComposition` in apps/opencrane/src/bootstrap/process/runtime-composition.ts
  * builds it; the worker's HTTP client is
  * libs/backend/artifacts/preprocessor/main/src/remote.ts.
  *
@@ -158,7 +158,7 @@ export function __CreateArtifactPreprocessorRouter(dependencies: ArtifactPreproc
 				return;
 			}
 			const result = await __FailArtifactPreprocessJob(dependencies.repository, command);
-			if (result.status === "conflict")
+			if (result.status === ArtifactPreprocessResultStatuses.Conflict)
 			{
 				_RespondProblem(response, 409, "stale_preprocess_claim");
 				return;

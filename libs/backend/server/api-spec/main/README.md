@@ -12,8 +12,8 @@ every request and response shape). It is the single source of truth for the API 
 
 It imports each domain's path fragment (for example `_PoliciesOpenapiPaths`, `_GrantsOpenapiPaths`,
 `_AuditOpenapiPaths`) and composes them, in a fixed order, alongside the shared pieces it owns
-directly: the reusable schema components (tenants, policies, groups, audit entries, and so on), the
-error envelope with optional field-validation issues, the pagination envelope, the security scheme,
+directly: reusable tenant and authentication schema components, the
+error envelope with optional field-validation issues, the pagination envelope, the authentication description,
 and the cross-cutting endpoints that belong to no single domain — the auth flow (`/auth/login`,
 `/auth/callback`, `/auth/me`, …) and the
 `/openapi.json` document itself.
@@ -21,6 +21,13 @@ and the cross-cutting endpoints that belong to no single domain — the auth flo
 The conversation domain contributes the participant-owned list, create, open, message, archive,
 close, and replay paths. Generated clients therefore receive `conversationId` as the durable API
 coordinate; the immutable history API uses `conversationId` throughout.
+It also contributes existing-dataset memory commands and status reads. Their receipts contain
+progress and local result identity, while provider coordinates and selected-message evidence stay
+behind the command authority.
+
+Audit contributes its required entry fields and compound-cursor page contract. Spend contributes
+recorded account usage and currency-specific ceilings, including the empty responses from budget
+writes. This package registers their schemas without keeping separate copies of those domain models.
 
 Used by the running server, which serves this document at `/openapi.json`, and by the SDK/client
 generation step, which reads it to emit the typed contracts client. Editing a route means editing its
@@ -32,8 +39,20 @@ edits. This package describes the API; it does not implement any endpoint.
 
 ## Public surface
 
-- `spec` — the composed OpenAPI 3.1 document (`openapi`, `info`, `servers`, `components`, `security`,
+- `spec` — the composed OpenAPI 3.1 document (`openapi`, `info`, `servers`, `components`,
   and the merged `paths`).
+
+Personal run status documents `latestTool` as either null or one safe phase. The schema shares the
+contract enum and rejects extra progress properties. It distinguishes tool result receipt from the
+run's completion without exposing arguments, results or execution coordinates.
+The run states include `cancelling` while Stop cleanup is owed and `cancelled` after it finishes.
+The conversation message fragment describes Stop admission separately from that eventual result;
+clients cannot submit a run, attempt or lease as the cancellation target.
+
+MCP catalogue responses require an explicit credential requirement, and installation responses
+require their persisted connection status. A multi-user presentation does not imply a configured
+shared credential. Remote registration names the requirement; uploaded OCI promotion fixes it to
+credentialless within the server's existing execution restrictions.
 
 ## Boundary
 

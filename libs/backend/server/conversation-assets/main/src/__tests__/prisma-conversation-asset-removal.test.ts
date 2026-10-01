@@ -74,6 +74,6 @@ describe("PrismaConversationAssetRepository removal", function _Suite()
 		const participant = await new PrismaConversationAssetRepository(transaction as never).list({ ..._CALLER, subjectId: "user-2" }, "conversation-1");
 		expect(owner[0]).toMatchObject({ canRemove: true });
 		expect(participant[0]).toMatchObject({ canRemove: false });
-		expect(transaction.conversationAsset.findMany).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", siloId: "silo-1", state: { not: ConversationAssetState.Removed }, provenance: ConversationAssetProvenance.ParticipantUpload }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+		expect(transaction.conversationAsset.findMany).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", siloId: "silo-1", state: { not: ConversationAssetState.Removed }, provenance: { in: [ConversationAssetProvenance.ParticipantUpload, ConversationAssetProvenance.AgentOutput] } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
 	});
 });

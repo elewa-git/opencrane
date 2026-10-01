@@ -47,8 +47,26 @@ export interface AuditPageQuery
 {
   /** Maximum number of visible entries returned to the caller. */
   readonly limit: number;
-  /** Exclusive timestamp cursor, or null for the newest page. */
-  readonly before: Date | null;
+	/** Exclusive coordinates for the descending catalogue order, or null for the newest page. */
+	readonly before: AuditPageCursor | null;
+}
+
+/** Coordinates that identify the last candidate examined in the descending catalogue order. */
+export interface AuditPageCursor
+{
+	/** Timestamp used as the primary descending order coordinate. */
+	readonly timestamp: Date;
+	/** Database identifier used to order entries that share a timestamp. */
+	readonly id: number;
+}
+
+/** Decoded wire fields validated before they become audit catalogue coordinates. */
+export interface AuditCursorPayload
+{
+	/** Canonical ISO timestamp carried by the opaque cursor. */
+	readonly timestamp: string;
+	/** Positive database identifier carried by the opaque cursor. */
+	readonly id: number;
 }
 
 /** One authorized audit-log page. */
@@ -58,8 +76,8 @@ export interface AuditPage
   readonly data: readonly AuditEntry[];
 	/** Whether the silo-scoped candidate catalogue contains another page. */
 	readonly hasMore: boolean;
-	/** Timestamp of the last examined candidate, or null when no next page exists. */
-	readonly nextCursorAt: Date | null;
+	/** Coordinates of the last examined candidate, or null when no next page exists. */
+	readonly nextCursor: AuditPageCursor | null;
 }
 
 /** Stored audit fields needed to authorize and map one catalogue row. */

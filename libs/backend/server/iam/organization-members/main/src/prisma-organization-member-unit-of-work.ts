@@ -9,6 +9,7 @@ import type { OrganizationInviteRecipientValidation } from "./invitations.types"
 import { OrganizationMembershipError, OrganizationMembershipErrorKinds } from "./organization-members.errors";
 import type { AcceptStandaloneInvitationCommand, CreateStandaloneInvitationsCommand, CreateStandaloneInvitationsResult, OrganizationInvitationRecord, OrganizationMemberAuthorizationAuthorityFactory, OrganizationMemberDirectoryRecords, OrganizationMemberRepository, OrganizationMemberTransactionRepository, ResendStandaloneInvitationCommand } from "./organization-member-repository.types";
 import { PrismaOrganizationMemberRepository } from "./prisma-organization-member-repository";
+import type { RemoveStandaloneMemberCommand } from "./removal.types";
 
 /** Opens one Prisma transaction and constructs the invitation delegate owner inside it. */
 export class PrismaOrganizationMemberUnitOfWork implements OrganizationMemberRepository
@@ -35,6 +36,25 @@ export class PrismaOrganizationMemberUnitOfWork implements OrganizationMemberRep
 	async directory(caller: OrganizationMembershipCaller): Promise<OrganizationMemberDirectoryRecords>
 	{
 		return this._withRepository(function _Directory(repository) { return repository.directory(caller); });
+	}
+
+	/** Retries proven rollbacks with fresh actor checks; suspension and its audit commit together. */
+	async remove(command: RemoveStandaloneMemberCommand): Promise<OrganizationMember>
+	{
+		try
+		{
+			return await this._withRepository(function _Remove(repository)
+			{
+				const currentCommand = { ...command, removedAt: new Date() };
+				return repository.remove(currentCommand);
+			}, "Serializable", 3);
+		}
+		catch (error)
+		{
+			if (!___IsRolledBackConflict(error))
+				throw error;
+			throw new OrganizationMembershipError(OrganizationMembershipErrorKinds.Conflict, "organization member changed during removal");
+		}
 	}
 
 	/** @inheritdoc */
@@ -86,15 +106,15 @@ export class PrismaOrganizationMemberUnitOfWork implements OrganizationMemberRep
 	 * Opens one transaction and binds the repository to its exact client.
 	 *
 	 * The default is ReadCommitted — the PostgreSQL default the old wrapper inherited when no
-	 * isolation level was passed — so only `create` raises it to Serializable.
+	 * isolation level was passed — while create and removal use Serializable.
 	 */
-	private async _withRepository<Result>(operation: (repository: OrganizationMemberTransactionRepository) => Promise<Result>, isolationLevel: PrismaUnitOfWorkIsolationLevel = "ReadCommitted"): Promise<Result>
+	private async _withRepository<Result>(operation: (repository: OrganizationMemberTransactionRepository) => Promise<Result>, isolationLevel: PrismaUnitOfWorkIsolationLevel = "ReadCommitted", attemptLimit = 1): Promise<Result>
 	{
 		const createAuthorization = this.createAuthorization;
 		return ___RunInPrismaUnitOfWork(this.prisma, async function _Run(transaction): Promise<Result>
 		{
 			const authorization = createAuthorization === undefined ? new PrismaAuthorizationAuthority(transaction) : createAuthorization(transaction);
 			return operation(new PrismaOrganizationMemberRepository(transaction, authorization));
-		}, { isolationLevel, operation: "organization membership" });
+		}, { isolationLevel, attemptLimit, operation: "organization membership" });
 	}
 }

@@ -4,7 +4,7 @@ import request from "supertest";
 import { describe, expect, it } from "vitest";
 
 import type { RateLimitOptions } from "@opencrane/backend/server/infra/http";
-import { _CreateRateLimitedResourceSharesRouter } from "../app/routes";
+import { _CreateRateLimitedResourceSharesRouter } from "../bootstrap/http/routes";
 
 /** Builds the application-owned shares composition without bypassing its HTTP abuse boundary. */
 function _app(rateLimit: RateLimitOptions): express.Express

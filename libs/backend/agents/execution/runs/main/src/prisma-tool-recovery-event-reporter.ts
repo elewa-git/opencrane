@@ -12,7 +12,7 @@ import type { ToolRecoveryEventAppendRepository, ToolRecoveryEventAppendUnitOfWo
  * run row's state is the durable record, and participant-visible history lives in the KurrentDB
  * conversation stream.
  *
- * Called by: `apps/opencrane/src/app/mcp-runtime-composition.ts`, which passes it to the
+ * Called by: `apps/opencrane/src/bootstrap/workflows/mcp-runtime-composition.ts`, which passes it to the
  * authorization-owned MCP participant as the recovery event sink.
  *
  * @implements ToolInvocationRecoveryEventSink

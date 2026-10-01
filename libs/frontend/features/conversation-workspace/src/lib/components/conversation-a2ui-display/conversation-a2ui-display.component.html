@@ -1,0 +1,21 @@
+<section class="conversation-a2ui-display" [attr.aria-label]="presentation().authorName + ' structured result'">
+	<header class="conversation-a2ui-display__header">
+		<strong>{{ presentation().authorName }}</strong>
+		<span>Read-only result</span>
+	</header>
+	@switch (presentation().state) {
+		@case (states.Ready) {
+			@if (presentation().surface; as surface) {
+				<a2ui-surface [surfaceId]="presentation().surfaceId" [surface]="surface" />
+			} @else {
+				<wo-resource-feedback error="This structured result is unavailable." />
+			}
+		}
+		@case (states.Waiting) {
+			<wo-resource-feedback [loading]="true" [loadingLabel]="presentation().detail ?? 'Waiting for the structured result…'" />
+		}
+		@case (states.Unavailable) {
+			<wo-resource-feedback [error]="presentation().detail ?? 'This structured result is unavailable.'" />
+		}
+	}
+</section>

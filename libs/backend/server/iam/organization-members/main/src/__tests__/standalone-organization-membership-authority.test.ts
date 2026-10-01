@@ -25,6 +25,7 @@ function _Repository(overrides: Partial<OrganizationMemberRepository> = {}): Org
 		validate: vi.fn().mockResolvedValue([]),
 		create: vi.fn().mockResolvedValue({ invitations: [_Invitation()], createdCount: 1 }),
 		resend: vi.fn().mockResolvedValue(_Invitation()),
+		remove: vi.fn(),
 		accept: vi.fn().mockResolvedValue({ membershipId: "member-1", displayName: "New", email: "new@acme.test", role: OrganizationMemberRoles.Member, status: OrganizationMemberStatuses.Active, joinedAt: "2026-08-17T00:00:00.000Z", isCurrentUser: true }),
 		...overrides,
 	};
@@ -38,6 +39,20 @@ function _Authority(repository: OrganizationMemberRepository): StandaloneOrganiz
 
 describe("StandaloneOrganizationMembershipAuthority", function _Suite()
 {
+	it("passes only the verified caller, selected membership and server time to removal", async function _Remove()
+	{
+		const member = { membershipId: "member-1", status: OrganizationMemberStatuses.Suspended };
+		const repository = _Repository({ remove: vi.fn().mockResolvedValue(member) });
+		await expect(_Authority(repository).remove({ caller: _CALLER, membershipId: "member-1" })).resolves.toEqual({ member });
+		expect(repository.remove).toHaveBeenCalledWith({ caller: _CALLER, membershipId: "member-1", removedAt: expect.any(Date) });
+	});
+
+	it.each(["", " ", "member invalid", "x".repeat(129)])("refuses invalid removal coordinates before persistence", async function _InvalidRemoval(membershipId)
+	{
+		const repository = _Repository();
+		await expect(_Authority(repository).remove({ caller: _CALLER, membershipId })).rejects.toMatchObject({ kind: OrganizationMembershipErrorKinds.Invalid });
+		expect(repository.remove).not.toHaveBeenCalled();
+	});
 	it("authors absolute shareable links without storing bearer tokens", async function _Create()
 	{
 		const result = await _Authority(_Repository()).create({ caller: _CALLER, emails: [" New@Acme.Test "], role: OrganizationMemberRoles.Member, idempotencyKey: "0123456789abcdef" });

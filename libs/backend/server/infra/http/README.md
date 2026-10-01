@@ -4,6 +4,10 @@
 
 ## What it owns
 
+`src/health/` owns bounded service probes, database readiness and the shared report cache.
+`src/logging/` owns HTTP request and response sanitisation. These adapters accept process inputs
+without importing the application.
+
 This library holds the **HTTP transport plumbing** the OpenCrane server wraps around its routes —
 the cross-cutting pieces every web request needs but no single feature owns. It is built on Express
 (the Node.js web framework), and it deliberately holds no business logic.
@@ -45,6 +49,10 @@ one probe — regardless of which route handles the request.
 
 ## Public surface
 
+- `___CreatePublicHealthReportReader` composes the fixed public service report.
+- `___CreateDbHealthProbe` checks the product database through a typed transaction.
+- `_CreateHttpRequestLogger` removes private URL queries and replay cursors from HTTP logs.
+
 - `error-handler` — the global Express error-to-response handler.
 - `___WithValidatedPublicBody` — validates an authorized public JSON body and forwards a parsed
   model, or emits bounded `{ location, path, message }` issues.
@@ -68,6 +76,13 @@ converted into browser-visible validation failures.
 
 Tagged `scope:http` (`layer:infra`): it may depend only on `scope:http` and `scope:shared` packages —
 never on backend domains, the frontend, or app entrypoints.
+
+## Runtime & config
+
+Health composition receives the frozen memory-gateway URL and uses `LITELLM_ENDPOINT`,
+`LITELLM_MASTER_KEY` and `ARTIFACT_SERVICE_URL` for private probes. It coalesces concurrent reads
+and caches reports for five seconds. Logging removes request queries, replay cursors and redirect
+query values before structured HTTP records leave the process.
 
 ## See also
 

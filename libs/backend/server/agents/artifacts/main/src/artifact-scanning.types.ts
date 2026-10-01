@@ -61,11 +61,26 @@ export enum ConversationAssetScanLifecycleStates
 	Failed = "failed",
 }
 
+/** Decision returned before a clean scan may publish a generated conversation file. */
+export enum ConversationAssetCleanPublicationDecisions
+{
+	/** This revision is outside generated-file lifecycle and keeps its existing scan behavior. */
+	NotGenerated = "not_generated",
+	/** Current generated-file authority permits publication in this scanner transaction. */
+	PublishGenerated = "publish_generated",
+	/** Generated-file authority ended and its conversation asset was failed and notified. */
+	Denied = "denied",
+}
+
 /** Conversation-owned transaction repository used by the scanner integration unit of work. */
 export interface ConversationAssetScanLifecycleRepository
 {
-	/** Move one processing conversation asset to the scanner-selected safe terminal state. */
-	report(command: { readonly revisionId: string; readonly state: ConversationAssetScanLifecycleStates; readonly failureCode: "unsafe_file" | "scan_failed" | null }): Promise<void>;
+	/** Recheck generated-file authority before a clean scan changes Artifact publication state. */
+	beforeCleanPublication(command: { readonly revisionId: string; readonly now: Date }): Promise<ConversationAssetCleanPublicationDecisions>;
+	/** Move one processing conversation asset to the scanner-selected safe terminal state and report an exact winner. */
+	report(command: { readonly revisionId: string; readonly state: ConversationAssetScanLifecycleStates; readonly failureCode: "unsafe_file" | "scan_failed" | null }): Promise<boolean>;
+	/** Save task wakes after the revision, asset and final scan verdict have been saved in this transaction. */
+	afterScanSettlement(revisionId: string): Promise<void>;
 }
 
 /** Dependencies for the private scanner router. */

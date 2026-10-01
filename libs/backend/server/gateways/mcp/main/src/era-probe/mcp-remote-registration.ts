@@ -76,16 +76,16 @@ export function registerRemoteServer(unitOfWork: McpOperatorUnitOfWork, workflow
 	{
 		throw new McpRemoteServerRegistrationValidationError("MCP server registration fields are invalid.");
 	}
-	const { idempotencyKey, name } = parsed.data;
+	const { credentialRequirement, idempotencyKey, name } = parsed.data;
 	const description = parsed.data.description ?? "";
 	const endpoint = _Endpoint(parsed.data.endpoint);
 	const registrationKeyDigest = _Digest([caller.siloId, idempotencyKey]);
-	const registrationDigest = _Digest([name, description, endpoint]);
+	const registrationDigest = _Digest([name, description, endpoint, credentialRequirement]);
 
 	return unitOfWork.execute(async function _Register(transaction): Promise<McpRemoteServerRegistrationResult>
 	{
-		await __RequireMcpOrganizationAdministration(transaction.authorization, caller, { operation: "mcp-server-register", name, description, endpoint, registrationKeyDigest, registrationDigest });
-		const stored = await transaction.mcp.createOrFindRemoteServer({ siloId: caller.siloId, name, description, endpoint, registrationKeyDigest, registrationDigest });
+		await __RequireMcpOrganizationAdministration(transaction.authorization, caller, { operation: "mcp-server-register", name, description, endpoint, credentialRequirement, registrationKeyDigest, registrationDigest });
+		const stored = await transaction.mcp.createOrFindRemoteServer({ siloId: caller.siloId, name, description, endpoint, credentialRequirement, registrationKeyDigest, registrationDigest });
 		if (!stored || stored.server.registrationDigest !== registrationDigest)
 		{
 			return { outcome: McpRemoteServerRegistrationOutcomes.Conflict };

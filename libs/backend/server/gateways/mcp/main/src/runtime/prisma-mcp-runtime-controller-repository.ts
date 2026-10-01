@@ -1,4 +1,4 @@
-import { McpExecutorCommandState, McpExecutorWorkloadState, type Prisma } from "@prisma/client";
+import { McpExecutionTransport, McpExecutorCommandState, McpExecutorWorkloadState, type Prisma } from "@prisma/client";
 
 import { RuntimeWorkloadClaimClasses, type RuntimeWorkloadBinding } from "@opencrane/backend/agents/runtime/workloads/contract";
 
@@ -31,7 +31,8 @@ export class PrismaMcpRuntimeControllerRepository implements McpRuntimeControlle
 		if (candidate === null)
 			return null;
 		const execution = await this._transaction.mcpRuntimeExecution.findFirst({ where: { id: candidate.id, siloId: this._options.siloId }, include: { serverRevision: { select: { registryReference: true } } } });
-		if (execution === null || execution.workloadState !== McpExecutorWorkloadState.Pending || execution.profileName !== this._options.profileName)
+		if (execution === null || execution.transport !== McpExecutionTransport.OciImage || execution.workloadState !== McpExecutorWorkloadState.Pending
+			|| execution.profileName !== this._options.profileName || execution.serverRevision.registryReference === null)
 			return null;
 
 		// 2. Propose only the lease length; the trigger replaces both timestamps with database time.
@@ -68,7 +69,7 @@ export class PrismaMcpRuntimeControllerRepository implements McpRuntimeControlle
 		if (!_AssignmentIsValid(binding, this._options.profileName))
 			return "conflict";
 		const execution = await this._transaction.mcpRuntimeExecution.findFirst({ where: { id: binding.claimId, siloId: this._options.siloId } });
-		if (execution === null)
+		if (execution === null || execution.transport !== McpExecutionTransport.OciImage || execution.profileName === null)
 			return "conflict";
 		if (execution.workloadState !== McpExecutorWorkloadState.Pending)
 			return execution.workloadUid === binding.workloadUid && _SameControllerFence(execution, binding) ? "idempotent" : "conflict";
@@ -87,7 +88,9 @@ export class PrismaMcpRuntimeControllerRepository implements McpRuntimeControlle
 		if (candidate === null)
 			return null;
 		const execution = await this._transaction.mcpRuntimeExecution.findFirst({ where: { id: candidate.id, siloId: this._options.siloId }, include: { serverRevision: { select: { registryReference: true } } } });
-		if (execution === null || (execution.workloadState !== McpExecutorWorkloadState.Assigned && execution.workloadState !== McpExecutorWorkloadState.Released) || execution.workloadUid === null || execution.claimedAt === null || execution.claimExpiresAt === null || execution.podUid !== null)
+		if (execution === null || execution.transport !== McpExecutionTransport.OciImage || execution.profileName === null || execution.serverRevision.registryReference === null
+			|| (execution.workloadState !== McpExecutorWorkloadState.Assigned && execution.workloadState !== McpExecutorWorkloadState.Released)
+			|| execution.workloadUid === null || execution.claimedAt === null || execution.claimExpiresAt === null || execution.podUid !== null)
 			return null;
 		const releaseDeliveryCount = execution.releaseDeliveryCount + 1;
 		const claimed = await this._transaction.mcpRuntimeExecution.updateManyAndReturn({
@@ -135,7 +138,8 @@ export class PrismaMcpRuntimeControllerRepository implements McpRuntimeControlle
 			include: { serverRevision: { select: { registryReference: true } } },
 			orderBy: { createdAt: "asc" },
 		});
-		if (execution === null || execution.workloadUid === null || execution.claimedAt === null || execution.claimExpiresAt === null)
+		if (execution === null || execution.transport !== McpExecutionTransport.OciImage || execution.profileName === null || execution.serverRevision.registryReference === null
+			|| execution.workloadUid === null || execution.claimedAt === null || execution.claimExpiresAt === null)
 			return null;
 		const cleanupDeliveryCount = execution.cleanupDeliveryCount + 1;
 		const cleanupExpiresAt = new Date(now.getTime() + this._options.controllerClaimLeaseMilliseconds);
@@ -237,7 +241,7 @@ function _AssignmentIsValid(binding: RuntimeWorkloadBinding, expectedProfileName
 }
 
 /** Compare one saved controller fence with the returned Job binding. */
-function _SameControllerFence(execution: { readonly claimedAt: Date | null; readonly deliveryCount: number; readonly profileName: string }, binding: RuntimeWorkloadBinding): boolean
+function _SameControllerFence(execution: { readonly claimedAt: Date | null; readonly deliveryCount: number; readonly profileName: string | null }, binding: RuntimeWorkloadBinding): boolean
 {
 	return execution.claimedAt?.getTime() === Date.parse(binding.claimedAt) && execution.deliveryCount === binding.deliveryCount && execution.profileName === binding.profileName;
 }

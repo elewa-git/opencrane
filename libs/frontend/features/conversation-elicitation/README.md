@@ -22,22 +22,30 @@ offers verified sign-in recovery without losing the participant's draft.
 ```
 
 In this flow: [`elements/elicitation`](../../elements/elicitation/README.md) renders draft controls;
-the parent workspace integration in issue #351 will connect emitted intents to the state store.
+the conversation workspace connects emitted intents to its component-scoped state store.
 
 ## Public surface
 
 - `ConversationElicitationCardComponent` renders one exact request, controlled draft, recovery
-  action, and separate submit intent.
+  action, separate decision confirmation, and human-facing approved, denied, expired, or cancelled
+  outcome. It restores focus after verified sign-in without exposing request coordinates.
 
 ## Boundary
 
 This is a presentational feature seam, not a route and not an API client. It never creates an
 approval, advances a run, or assumes that a browser selection was accepted.
 
+A pure feature mapper turns the saved personal or company-assistant connection owner and credential
+requirement into display text for the existing approval control. The label is not inferred from the
+person approving, and does not claim an upstream account identity. Missing or malformed tool
+disclosure prevents an affirmative draft and confirmation even if parsing was bypassed. Hidden
+arguments remain denial-only; choosing a response and confirming it stay separate actions.
+
 ## Dependency direction
 
-The card depends inward on the elicitation elements and shared contracts. The workspace may compose
-it; this package imports no sibling feature, app, backend, or HTTP adapter.
+The card depends inward on the elicitation elements and the conversation-elicitation state public
+entrypoint. The workspace may compose it; this package imports no sibling feature, app, backend,
+or HTTP adapter.
 
 ## See also
 

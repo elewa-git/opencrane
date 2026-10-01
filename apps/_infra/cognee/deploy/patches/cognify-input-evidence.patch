@@ -1,0 +1,135 @@
+--- /dev/null
++++ b/cognee/modules/pipelines/operations/cognify_input_evidence.py
+@@ -0,0 +1,132 @@
++"""Bound the exact provider input admitted by an OpenCrane Cognify command."""
++
++import hashlib
++import json
++from enum import Enum
++from typing import Any, Awaitable, Callable
++from uuid import UUID
++
++from cognee.infrastructure.files.utils.open_data_file import open_data_file
++
++
++MAXIMUM_DOCUMENTS = 1000
++MAXIMUM_DOCUMENT_BYTES = 65536
++MAXIMUM_DATASET_BYTES = MAXIMUM_DOCUMENTS * MAXIMUM_DOCUMENT_BYTES
++EVIDENCE_VERSION = "opencrane-cognify-input-v1"
++
++
++def _json_value(value: Any) -> Any:
++    """Normalize JSON-backed provider values without stringifying unknown objects."""
++    if value is None or isinstance(value, (str, bool, int)):
++        return value
++    if isinstance(value, UUID):
++        return str(value)
++    if isinstance(value, Enum):
++        return _json_value(value.value)
++    if isinstance(value, list):
++        return [_json_value(item) for item in value]
++    if isinstance(value, dict):
++        if not all(isinstance(key, str) for key in value):
++            raise ValueError("Cognify input metadata contains a non-string key")
++        return {key: _json_value(value[key]) for key in sorted(value)}
++    if isinstance(value, float) and value == value and abs(value) != float("inf"):
++        return value
++    raise ValueError("Cognify input metadata contains an unsupported value")
++
++
++def _digest(value: Any) -> str:
++    """Hash one versioned canonical JSON value."""
++    encoded = json.dumps(
++        _json_value(value), ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":")
++    ).encode("utf-8")
++    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
++
++
++async def _read_complete_raw(location: str) -> bytes:
++    """Read one bounded complete provider-managed source file."""
++    async with open_data_file(location, mode="rb") as stream:
++        content = stream.read(MAXIMUM_DOCUMENT_BYTES + 1)
++    if len(content) > MAXIMUM_DOCUMENT_BYTES:
++        raise ValueError("Cognify evidence source exceeds the admitted byte limit")
++    return content
++
++
++async def build_cognify_input_evidence(
++    dataset: Any,
++    user: Any,
++    data: list[Any],
++    raw_reader: Callable[[str], Awaitable[bytes]] = _read_complete_raw,
++) -> tuple[str, list[dict[str, Any]]]:
++    """Return the opaque dataset digest and safe per-document byte evidence."""
++    if len(data) > MAXIMUM_DOCUMENTS:
++        raise ValueError("Cognify evidence contains too many documents")
++    if str(dataset.owner_id) != str(user.id):
++        raise PermissionError("Cognify recovery requires the dataset owner")
++
++    documents = []
++    projected = []
++    seen = set()
++    total_bytes = 0
++    expected_tenant = getattr(user, "tenant_id", None)
++    for row in sorted(data, key=lambda item: str(item.id)):
++        document_id = str(row.id)
++        if (
++            document_id in seen
++            or str(row.dataset_id) != str(dataset.id)
++            or str(row.owner_id) != str(user.id)
++            or row.tenant_id != expected_tenant
++        ):
++            raise ValueError("Cognify evidence contains duplicate or foreign data")
++        seen.add(document_id)
++        content = await raw_reader(row.raw_data_location)
++        if len(content) > MAXIMUM_DOCUMENT_BYTES:
++            raise ValueError("Cognify evidence source exceeds the admitted byte limit")
++        total_bytes += len(content)
++        if total_bytes > MAXIMUM_DATASET_BYTES:
++            raise ValueError("Cognify evidence dataset exceeds the admitted byte limit")
++        content_digest = f"sha256:{hashlib.sha256(content).hexdigest()}"
++        documents.append(
++            {
++                "documentId": document_id,
++                "ownerId": str(row.owner_id),
++                "tenantId": str(row.tenant_id) if row.tenant_id is not None else None,
++                "name": row.name,
++                "label": row.label,
++                "extension": row.extension,
++                "originalExtension": row.original_extension,
++                "mimeType": row.mime_type,
++                "originalMimeType": row.original_mime_type,
++                "loaderEngine": row.loader_engine,
++                "contentDigest": content_digest,
++                "byteLength": len(content),
++                "contentHash": row.content_hash,
++                "rawContentHash": row.raw_content_hash,
++                "externalMetadata": row.external_metadata,
++                "systemMetadata": row.system_metadata,
++                "nodeSet": row.node_set,
++                "importanceWeight": row.importance_weight,
++                "cognifyStatus": (row.pipeline_status or {}).get("cognify_pipeline"),
++            }
++        )
++        projected.append(
++            {
++                "document_id": document_id,
++                "content_digest": content_digest,
++                "byte_length": len(content),
++            }
++        )
++
++    evidence = {
++        "version": EVIDENCE_VERSION,
++        "userId": str(user.id),
++        "tenantId": str(getattr(user, "tenant_id", None)) if getattr(user, "tenant_id", None) is not None else None,
++        "datasetId": str(dataset.id),
++        "datasetOwnerId": str(dataset.owner_id),
++        "documents": documents,
++    }
++    return _digest(evidence), projected
++
++
++def build_cognify_request_digest(profile: dict[str, Any]) -> str:
++    """Bind the fixed effect-shaping profile independently of dataset contents."""
++    return _digest({"version": EVIDENCE_VERSION, "profile": profile})

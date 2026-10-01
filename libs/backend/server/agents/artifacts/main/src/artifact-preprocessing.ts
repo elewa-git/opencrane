@@ -1,7 +1,7 @@
 import type { ArtifactPreprocessorFailureCommand } from "@opencrane/contracts";
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
-import type { ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputLeaseProjection, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, FailArtifactPreprocessJobResult } from "./artifact-preprocessing.types";
+import { ArtifactPreprocessResultStatuses, type ArtifactPreprocessCompletionRequest, type ArtifactPreprocessOutputLeaseProjection, type ArtifactPreprocessOutputLeaseRequest, type ArtifactPreprocessRepository, type FailArtifactPreprocessJobResult } from "./artifact-preprocessing.types";
 
 /**
  * Reserve write permission for text the server has already received and hashed.
@@ -27,11 +27,11 @@ export async function __IssueArtifactPreprocessOutputLease(repository: ArtifactP
 		return null;
 	}
 	const result = await repository.issueOutputLeaseAtomically(command);
-	if (result.status === "completed")
+	if (result.status === ArtifactPreprocessResultStatuses.Completed)
 	{
 		return "completed";
 	}
-	return result.status === "issued" ? result.lease : null;
+	return result.status === ArtifactPreprocessResultStatuses.Issued ? result.lease : null;
 }
 
 /**
@@ -53,7 +53,7 @@ export async function __IssueArtifactPreprocessOutputLease(repository: ArtifactP
 export async function __CompleteArtifactPreprocessJob(repository: ArtifactPreprocessRepository, command: ArtifactPreprocessCompletionRequest): Promise<boolean>
 {
 	const result = await repository.completeAtomically(command);
-	return result.status === "completed";
+	return result.status === ArtifactPreprocessResultStatuses.Completed;
 }
 
 /**
