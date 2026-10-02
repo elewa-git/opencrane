@@ -957,7 +957,8 @@ fi
 _pass_phase "candidate image preparation completed"
 echo "[develop-smoke] Importing the tag-based service images"
 _import_smoke_images
-bash "$HOSTED_FIXTURE_DIR/hosted-services.sh" start-protocol "$HOSTED_RUN_DIR" "$CLUSTER_NAME" "$ROOT_DIR"
+bash "$HOSTED_FIXTURE_DIR/hosted-services.sh" start-protocol \
+  "$HOSTED_RUN_DIR" "$CLUSTER_NAME" "$ROOT_DIR" "$SMOKE_IMAGE_TAG"
 # start-protocol appends the canonical issuer and loopback-only provider transport.
 # shellcheck disable=SC1090
 source "$HOSTED_RUN_DIR/hosted-services.env"

@@ -26,6 +26,24 @@ grep -Fq '_write_state HOSTED_REGISTRY_SOURCE_IMAGE "$registry_source_image"' "$
 grep -Fq 'registry_image="opencrane/hosted-registry-${CLUSTER_NAME}:sha256-${registry_digest}"' "$REGISTRY_FIXTURE"
 grep -Fq 'docker tag "$registry_source_image" "$registry_image"' "$REGISTRY_FIXTURE"
 grep -Fq 'imagePullPolicy: Never' "$REGISTRY_FIXTURE"
+grep -Fq 'image: opencrane/opencrane-server:${SERVER_IMAGE_TAG}' "$PROTOCOL_SERVICE"
+grep -Fq 'imagePullPolicy: Never' "$PROTOCOL_SERVICE"
+grep -Fq '"$HOSTED_RUN_DIR" "$CLUSTER_NAME" "$ROOT_DIR" "$SMOKE_IMAGE_TAG"' "$SMOKE"
+if rg -n 'opencrane/opencrane-server:develop-smoke' "$PROTOCOL_SERVICE"; then
+  echo "Hosted protocol fixture retained the shared legacy server image tag" >&2
+  exit 1
+fi
+PROTOCOL_TEST_DIR="$(mktemp -d)"
+touch "$PROTOCOL_TEST_DIR/hosted-services.env"
+bash "$PROTOCOL_SERVICE" stop "$PROTOCOL_TEST_DIR" contract-cluster "$ROOT_DIR"
+if bash "$PROTOCOL_SERVICE" start-protocol \
+  "$PROTOCOL_TEST_DIR" contract-cluster "$ROOT_DIR" 'invalid/tag' \
+  > "$PROTOCOL_TEST_DIR/invalid-tag-output" 2>&1; then
+  echo "Hosted protocol fixture accepted an invalid server image tag" >&2
+  exit 1
+fi
+grep -Fq 'Server image tag is not a valid Docker tag' "$PROTOCOL_TEST_DIR/invalid-tag-output"
+rm -rf -- "$PROTOCOL_TEST_DIR"
 grep -Fq '{ name: model, port: 4000, targetPort: model }' "$PROTOCOL_SERVICE"
 grep -Fq -- '--from-file=evidence-key="$HOSTED_EVIDENCE_KEY_PATH"' "$PROTOCOL_SERVICE"
 grep -Fq 'PUBLIC_UPSTREAM_MARKER = "opencrane-hosted-fixture-public-marker"' "$FIXTURE_DIR/protocol-fixture.mjs"

@@ -5,6 +5,7 @@ MODE="${1:?mode is required}"
 RUN_DIR="${2:?run directory is required}"
 CLUSTER_NAME="${3:?cluster name is required}"
 ROOT_DIR="${4:?repository root is required}"
+SERVER_IMAGE_TAG="${5:-}"
 STATE_FILE="$RUN_DIR/hosted-services.env"
 
 _quote()
@@ -29,9 +30,12 @@ _load_state()
 _start_protocol()
 {
   _load_state
-  local server_image_id port_forward_pid
-  server_image_id="$(docker image inspect opencrane/opencrane-server:develop-smoke --format '{{.Id}}')"
-  [[ "$server_image_id" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "[hosted-services] Server fixture image is not exact" >&2; exit 1; }
+  local port_forward_pid
+  if ! [[ "$SERVER_IMAGE_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]] \
+    || (( ${#SERVER_IMAGE_TAG} > 128 )); then
+    echo "[hosted-services] Server image tag is not a valid Docker tag" >&2
+    exit 1
+  fi
   kubectl create configmap hosted-generated-file-protocol \
     --namespace "$HOSTED_NAMESPACE" \
     --from-file=protocol-fixture.mjs="$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/fixtures/hosted-generated-file/protocol-fixture.mjs" \
@@ -67,8 +71,8 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: protocol
-          image: opencrane/opencrane-server:develop-smoke
-          imagePullPolicy: IfNotPresent
+          image: opencrane/opencrane-server:${SERVER_IMAGE_TAG}
+          imagePullPolicy: Never
           command: [node, /fixture-app/protocol-fixture.mjs]
           env:
             - { name: HOSTED_FIXTURE_HOST, value: 0.0.0.0 }
