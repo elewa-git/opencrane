@@ -22,6 +22,28 @@ grep -Fq '{ name: REGISTRY_AUTH, value: htpasswd }' "$REGISTRY_FIXTURE"
 grep -Fq '{ name: REGISTRY_HTTP_TLS_CERTIFICATE, value: /tls/server.crt }' "$REGISTRY_FIXTURE"
 grep -Fq 'clusterIP: ${HOSTED_REGISTRY_SERVICE_IP}' "$REGISTRY_FIXTURE"
 grep -Fq '_write_state HOSTED_EVIDENCE_KEY_PATH "$RUN_DIR/evidence-key"' "$REGISTRY_FIXTURE"
+grep -Fq '_write_state HOSTED_REGISTRY_SOURCE_IMAGE "$registry_source_image"' "$REGISTRY_FIXTURE"
+grep -Fq 'registry_image="opencrane/hosted-registry-${CLUSTER_NAME}:sha256-${registry_digest}"' "$REGISTRY_FIXTURE"
+grep -Fq 'docker tag "$registry_source_image" "$registry_image"' "$REGISTRY_FIXTURE"
+grep -Fq 'imagePullPolicy: Never' "$REGISTRY_FIXTURE"
+grep -Fq 'image: opencrane/opencrane-server:${SERVER_IMAGE_TAG}' "$PROTOCOL_SERVICE"
+grep -Fq 'imagePullPolicy: Never' "$PROTOCOL_SERVICE"
+grep -Fq '"$HOSTED_RUN_DIR" "$CLUSTER_NAME" "$ROOT_DIR" "$SMOKE_IMAGE_TAG"' "$SMOKE"
+if rg -n 'opencrane/opencrane-server:develop-smoke' "$PROTOCOL_SERVICE"; then
+  echo "Hosted protocol fixture retained the shared legacy server image tag" >&2
+  exit 1
+fi
+PROTOCOL_TEST_DIR="$(mktemp -d)"
+touch "$PROTOCOL_TEST_DIR/hosted-services.env"
+bash "$PROTOCOL_SERVICE" stop "$PROTOCOL_TEST_DIR" contract-cluster "$ROOT_DIR"
+if bash "$PROTOCOL_SERVICE" start-protocol \
+  "$PROTOCOL_TEST_DIR" contract-cluster "$ROOT_DIR" 'invalid/tag' \
+  > "$PROTOCOL_TEST_DIR/invalid-tag-output" 2>&1; then
+  echo "Hosted protocol fixture accepted an invalid server image tag" >&2
+  exit 1
+fi
+grep -Fq 'Server image tag is not a valid Docker tag' "$PROTOCOL_TEST_DIR/invalid-tag-output"
+rm -rf -- "$PROTOCOL_TEST_DIR"
 grep -Fq '{ name: model, port: 4000, targetPort: model }' "$PROTOCOL_SERVICE"
 grep -Fq -- '--from-file=evidence-key="$HOSTED_EVIDENCE_KEY_PATH"' "$PROTOCOL_SERVICE"
 grep -Fq 'PUBLIC_UPSTREAM_MARKER = "opencrane-hosted-fixture-public-marker"' "$FIXTURE_DIR/protocol-fixture.mjs"
@@ -29,7 +51,13 @@ grep -Fq 'name: hosted-generated-file-litellm-provider' "$PROTOCOL_SERVICE"
 grep -Fq 'ports: [{ protocol: TCP, port: 4000 }]' "$PROTOCOL_SERVICE"
 grep -Fq -- '--registry-config "$HOSTED_K3S_REGISTRY_CONFIG_PATH"' "$SMOKE"
 grep -Fq -- '--host-alias "${HOSTED_REGISTRY_SERVICE_IP}:' "$SMOKE"
-grep -Fq -- '--volume "${HOSTED_CA_PATH}:/etc/rancher/k3s/hosted-generated-file/ca.crt@all"' "$SMOKE"
+grep -Fq 'HOSTED_RETAINED_CA_PATH="$HOSTED_EVIDENCE_DIR/${CLUSTER_NAME}-retained-ca.crt"' "$SMOKE"
+grep -Fq 'install -m 0600 "$HOSTED_CA_PATH" "$HOSTED_RETAINED_CA_PATH"' "$SMOKE"
+grep -Fq -- '--volume "${HOSTED_RETAINED_CA_PATH}:/etc/rancher/k3s/hosted-generated-file/ca.crt@all"' "$SMOKE"
+if grep -Fq -- '--volume "${HOSTED_CA_PATH}:/etc/rancher/k3s/hosted-generated-file/ca.crt@all"' "$SMOKE"; then
+  echo "Hosted smoke still bind-mounts the temporary fixture CA" >&2
+  exit 1
+fi
 
 for endpoint in '/.well-known/openid-configuration' '/authorize' '/token' '/userinfo' '/jwks' '/v1/chat/completions' '/__fixture/evidence'; do
   grep -Fq "$endpoint" "$FIXTURE_DIR/protocol-fixture.mjs"
@@ -43,7 +71,7 @@ if rg -n --pcre2 '^import .* from "(?!node:)' "$FIXTURE_DIR/protocol-fixture.mjs
 fi
 
 for project in agent-controller artifact-scanner mcp-executor skill-authoring; do
-  grep -Fq "\"${project}|opencrane/${project}:develop-smoke" "$SMOKE"
+  grep -Fq "\"${project}|opencrane/${project}:\${SMOKE_IMAGE_TAG}" "$SMOKE"
 done
 grep -Fq 'apps/mcp-file-generator/deploy/Dockerfile' "$FIXTURE_DIR/prepare-oci-archive.sh"
 grep -Fq -- '--output "type=oci,dest=${oci_tar}"' "$FIXTURE_DIR/prepare-oci-archive.sh"
@@ -105,6 +133,214 @@ fi
 grep -Fq 'Owner and requester must be different fixture identities' "$COLLISION_TEST_DIR/output"
 [[ ! -e "$COLLISION_RUN_DIR" && ! -e "$COLLISION_TEST_DIR/docker-capture" ]]
 rm -rf -- "$COLLISION_TEST_DIR"
+
+REGISTRY_TEST_DIR="$(mktemp -d)"
+REGISTRY_MOCK_BIN="$REGISTRY_TEST_DIR/bin"
+REGISTRY_RUN_DIR="$REGISTRY_TEST_DIR/run"
+REGISTRY_SOURCE_DIGEST="$(printf '1%.0s' {1..64})"
+REGISTRY_SOURCE_IMAGE="registry@sha256:${REGISTRY_SOURCE_DIGEST}"
+REGISTRY_IMPORT_IMAGE="opencrane/hosted-registry-contract-cluster:sha256-${REGISTRY_SOURCE_DIGEST}"
+mkdir -p "$REGISTRY_MOCK_BIN" "$REGISTRY_RUN_DIR"
+cat > "$REGISTRY_RUN_DIR/hosted-services.env" <<EOF
+HOSTED_REGISTRY_SOURCE_IMAGE='$REGISTRY_SOURCE_IMAGE'
+HOSTED_REGISTRY_IMAGE='$REGISTRY_IMPORT_IMAGE'
+HOSTED_REGISTRY_SERVICE_IP='10.43.0.53'
+HOSTED_NAMESPACE='contract-namespace'
+HOSTED_TLS_CERTIFICATE_PATH='$REGISTRY_TEST_DIR/server.crt'
+HOSTED_TLS_KEY_PATH='$REGISTRY_TEST_DIR/server-key.pem'
+EOF
+cat > "$REGISTRY_MOCK_BIN/docker" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == image && "$2" == inspect ]]; then
+  if [[ "${REGISTRY_INSPECT_ERROR:-0}" == 1 ]]; then
+    echo 'Cannot connect to the Docker daemon' >&2
+    exit 1
+  fi
+  if [[ "${REGISTRY_ALIAS_MISSING:-0}" == 1 && "$3" == "$REGISTRY_IMPORT_IMAGE" ]]; then
+    printf '[]\n'
+    echo "Error response from daemon: No such image: $REGISTRY_IMPORT_IMAGE" >&2
+    exit 1
+  fi
+  if [[ "$3" == "$REGISTRY_SOURCE_IMAGE" ]]; then
+    printf '%s\n' sha256:source-image
+    exit 0
+  fi
+  if [[ "$3" == "$REGISTRY_IMPORT_IMAGE" ]]; then
+    printf '%s\n' "${REGISTRY_ALIAS_IMAGE_ID:-sha256:source-image}"
+    exit 0
+  fi
+fi
+if [[ "$1" == image && "$2" == rm && "$4" == "$REGISTRY_IMPORT_IMAGE" ]]; then
+  printf '%s\n' "$*" >> "$REGISTRY_DOCKER_CAPTURE"
+  exit 0
+fi
+exit 1
+EOF
+cat > "$REGISTRY_MOCK_BIN/k3d" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$REGISTRY_K3D_CAPTURE"
+[[ "${REGISTRY_IMPORT_FAILURE:-0}" != 1 ]]
+EOF
+cat > "$REGISTRY_MOCK_BIN/kubectl" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+  create) printf '%s\n' 'apiVersion: v1' 'kind: List' ;;
+  apply) cat >> "$REGISTRY_KUBECTL_CAPTURE" ;;
+  rollout) ;;
+  *) exit 1 ;;
+esac
+EOF
+chmod +x "$REGISTRY_MOCK_BIN"/*
+REGISTRY_SOURCE_IMAGE="$REGISTRY_SOURCE_IMAGE" REGISTRY_IMPORT_IMAGE="$REGISTRY_IMPORT_IMAGE" \
+  REGISTRY_DOCKER_CAPTURE="$REGISTRY_TEST_DIR/docker-capture" \
+  REGISTRY_K3D_CAPTURE="$REGISTRY_TEST_DIR/k3d-capture" \
+  REGISTRY_KUBECTL_CAPTURE="$REGISTRY_TEST_DIR/kubectl-capture" \
+  PATH="$REGISTRY_MOCK_BIN:$PATH" \
+  bash "$REGISTRY_FIXTURE" start-registry "$REGISTRY_RUN_DIR" contract-cluster "$ROOT_DIR"
+grep -Fxq "image import $REGISTRY_IMPORT_IMAGE --cluster contract-cluster --mode direct" "$REGISTRY_TEST_DIR/k3d-capture"
+grep -Fxq "image rm --no-prune $REGISTRY_IMPORT_IMAGE" "$REGISTRY_TEST_DIR/docker-capture"
+grep -Fq "image: $REGISTRY_IMPORT_IMAGE" "$REGISTRY_TEST_DIR/kubectl-capture"
+grep -Fq 'imagePullPolicy: Never' "$REGISTRY_TEST_DIR/kubectl-capture"
+
+: > "$REGISTRY_TEST_DIR/docker-capture"
+: > "$REGISTRY_TEST_DIR/k3d-capture"
+: > "$REGISTRY_TEST_DIR/kubectl-capture"
+if REGISTRY_IMPORT_FAILURE=1 \
+  REGISTRY_SOURCE_IMAGE="$REGISTRY_SOURCE_IMAGE" REGISTRY_IMPORT_IMAGE="$REGISTRY_IMPORT_IMAGE" \
+  REGISTRY_DOCKER_CAPTURE="$REGISTRY_TEST_DIR/docker-capture" \
+  REGISTRY_K3D_CAPTURE="$REGISTRY_TEST_DIR/k3d-capture" \
+  REGISTRY_KUBECTL_CAPTURE="$REGISTRY_TEST_DIR/kubectl-capture" \
+  PATH="$REGISTRY_MOCK_BIN:$PATH" \
+  bash "$REGISTRY_FIXTURE" start-registry "$REGISTRY_RUN_DIR" contract-cluster "$ROOT_DIR" \
+  > "$REGISTRY_TEST_DIR/import-failure-output" 2>&1; then
+  echo "Hosted registry fixture accepted a failed k3d import" >&2
+  exit 1
+fi
+grep -Fxq "image import $REGISTRY_IMPORT_IMAGE --cluster contract-cluster --mode direct" "$REGISTRY_TEST_DIR/k3d-capture"
+grep -Fxq "image rm --no-prune $REGISTRY_IMPORT_IMAGE" "$REGISTRY_TEST_DIR/docker-capture"
+if grep -Fq "image: $REGISTRY_IMPORT_IMAGE" "$REGISTRY_TEST_DIR/kubectl-capture"; then
+  echo "Hosted registry fixture applied its Deployment after a failed import" >&2
+  exit 1
+fi
+
+: > "$REGISTRY_TEST_DIR/docker-capture"
+: > "$REGISTRY_TEST_DIR/k3d-capture"
+: > "$REGISTRY_TEST_DIR/kubectl-capture"
+if REGISTRY_ALIAS_IMAGE_ID=sha256:changed-image \
+  REGISTRY_SOURCE_IMAGE="$REGISTRY_SOURCE_IMAGE" REGISTRY_IMPORT_IMAGE="$REGISTRY_IMPORT_IMAGE" \
+  REGISTRY_DOCKER_CAPTURE="$REGISTRY_TEST_DIR/docker-capture" \
+  REGISTRY_K3D_CAPTURE="$REGISTRY_TEST_DIR/k3d-capture" \
+  REGISTRY_KUBECTL_CAPTURE="$REGISTRY_TEST_DIR/kubectl-capture" \
+  PATH="$REGISTRY_MOCK_BIN:$PATH" \
+  bash "$REGISTRY_FIXTURE" start-registry "$REGISTRY_RUN_DIR" contract-cluster "$ROOT_DIR" \
+  > "$REGISTRY_TEST_DIR/mismatch-output" 2>&1; then
+  echo "Hosted registry fixture accepted a retargeted import alias" >&2
+  exit 1
+fi
+grep -Fq 'Registry import alias no longer matches its pinned vendor image' "$REGISTRY_TEST_DIR/mismatch-output"
+[[ ! -s "$REGISTRY_TEST_DIR/k3d-capture" && ! -s "$REGISTRY_TEST_DIR/kubectl-capture" ]]
+
+: > "$REGISTRY_TEST_DIR/docker-capture"
+REGISTRY_ALIAS_MISSING=1 \
+  REGISTRY_SOURCE_IMAGE="$REGISTRY_SOURCE_IMAGE" REGISTRY_IMPORT_IMAGE="$REGISTRY_IMPORT_IMAGE" \
+  REGISTRY_DOCKER_CAPTURE="$REGISTRY_TEST_DIR/docker-capture" \
+  PATH="$REGISTRY_MOCK_BIN:$PATH" \
+  bash "$REGISTRY_FIXTURE" remove-registry-alias "$REGISTRY_RUN_DIR" contract-cluster "$ROOT_DIR"
+[[ ! -s "$REGISTRY_TEST_DIR/docker-capture" && -f "$REGISTRY_RUN_DIR/hosted-services.env" ]]
+
+: > "$REGISTRY_TEST_DIR/docker-capture"
+if REGISTRY_INSPECT_ERROR=1 \
+  REGISTRY_SOURCE_IMAGE="$REGISTRY_SOURCE_IMAGE" REGISTRY_IMPORT_IMAGE="$REGISTRY_IMPORT_IMAGE" \
+  REGISTRY_DOCKER_CAPTURE="$REGISTRY_TEST_DIR/docker-capture" \
+  PATH="$REGISTRY_MOCK_BIN:$PATH" \
+  bash "$REGISTRY_FIXTURE" remove-registry-alias "$REGISTRY_RUN_DIR" contract-cluster "$ROOT_DIR" \
+  > "$REGISTRY_TEST_DIR/inspect-error-output" 2>&1; then
+  echo "Hosted registry cleanup accepted an ambiguous Docker inspection failure" >&2
+  exit 1
+fi
+grep -Fq 'Could not prove registry import alias is absent' "$REGISTRY_TEST_DIR/inspect-error-output"
+[[ ! -s "$REGISTRY_TEST_DIR/docker-capture" && -f "$REGISTRY_RUN_DIR/hosted-services.env" ]]
+
+sed -i.bak 's/^HOSTED_REGISTRY_SOURCE_IMAGE=.*/HOSTED_REGISTRY_SOURCE_IMAGE=registry:2/' "$REGISTRY_RUN_DIR/hosted-services.env"
+if REGISTRY_SOURCE_IMAGE="$REGISTRY_SOURCE_IMAGE" REGISTRY_IMPORT_IMAGE="$REGISTRY_IMPORT_IMAGE" \
+  REGISTRY_DOCKER_CAPTURE="$REGISTRY_TEST_DIR/docker-capture" \
+  REGISTRY_K3D_CAPTURE="$REGISTRY_TEST_DIR/k3d-capture" \
+  REGISTRY_KUBECTL_CAPTURE="$REGISTRY_TEST_DIR/kubectl-capture" \
+  PATH="$REGISTRY_MOCK_BIN:$PATH" \
+  bash "$REGISTRY_FIXTURE" start-registry "$REGISTRY_RUN_DIR" contract-cluster "$ROOT_DIR" \
+  > "$REGISTRY_TEST_DIR/malformed-output" 2>&1; then
+  echo "Hosted registry fixture accepted mutable source state" >&2
+  exit 1
+fi
+grep -Fq 'Registry source state is not an immutable vendor digest' "$REGISTRY_TEST_DIR/malformed-output"
+[[ ! -s "$REGISTRY_TEST_DIR/k3d-capture" && ! -s "$REGISTRY_TEST_DIR/kubectl-capture" ]]
+rm -rf -- "$REGISTRY_TEST_DIR"
+
+RETAINED_CA_TEST_DIR="$(mktemp -d)"
+RETAINED_CA_MOCK_BIN="$RETAINED_CA_TEST_DIR/bin"
+RETAINED_CA_CLUSTER="hosted-ca-contract"
+RETAINED_CA_PATH="$ROOT_DIR/.nx/test-results/hosted-generated-file/${RETAINED_CA_CLUSTER}-retained-ca.crt"
+mkdir -p "$RETAINED_CA_MOCK_BIN" "$(dirname "$RETAINED_CA_PATH")"
+cat > "$RETAINED_CA_MOCK_BIN/docker" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == inspect ]]; then
+  target="$2"
+  if [[ "$2" == --format ]]; then target="$4"; fi
+  if [[ "${RETAINED_INSPECT_ERROR:-0}" == 1 ]]; then
+    echo 'Cannot connect to the Docker daemon' >&2
+    exit 1
+  fi
+  if [[ "${RETAINED_CLUSTER_PRESENT:-0}" == 1 && "$target" == "k3d-${RETAINED_CA_CLUSTER}-server-0" ]]; then
+    if [[ "$2" == --format ]]; then printf '%s\n' hosted-ca-contract; fi
+    exit 0
+  fi
+  if [[ "${RETAINED_REGISTRY_PRESENT:-0}" == 1 && "$target" == "k3d-${RETAINED_CA_CLUSTER}-registry" ]]; then
+    exit 0
+  fi
+  printf '[]\n'
+  echo "Error: No such object: $target" >&2
+  exit 1
+fi
+if [[ "$1" == ps && "$2" == -aq ]]; then exit 0; fi
+if [[ "$1" == volume && "$2" == ls ]]; then exit 0; fi
+if [[ "$1" == image && "$2" == ls ]]; then exit 0; fi
+if [[ "$1" == image && "$2" == prune ]]; then exit 0; fi
+exit 1
+EOF
+chmod +x "$RETAINED_CA_MOCK_BIN/docker"
+printf '%s\n' 'public fixture CA' > "$RETAINED_CA_PATH"
+if RETAINED_REGISTRY_PRESENT=1 RETAINED_CA_CLUSTER="$RETAINED_CA_CLUSTER" \
+  CLUSTER_NAME="$RETAINED_CA_CLUSTER" SMOKE_RESOURCE_OWNER=hosted-ca-contract \
+  PATH="$RETAINED_CA_MOCK_BIN:$PATH" bash "$SMOKE" --prune-owned-images \
+  > "$RETAINED_CA_TEST_DIR/retained-output" 2>&1; then
+  echo "Hosted smoke removed retained CA while an unproved registry still existed" >&2
+  exit 1
+fi
+[[ -f "$RETAINED_CA_PATH" ]]
+grep -Fq 'Refusing registry replacement without its owner-labelled cluster' "$RETAINED_CA_TEST_DIR/retained-output"
+if RETAINED_CLUSTER_PRESENT=1 RETAINED_CA_CLUSTER="$RETAINED_CA_CLUSTER" \
+  CLUSTER_NAME="$RETAINED_CA_CLUSTER" SMOKE_RESOURCE_OWNER=hosted-ca-contract \
+  PATH="$RETAINED_CA_MOCK_BIN:$PATH" bash "$SMOKE" --prune-owned-images \
+  > "$RETAINED_CA_TEST_DIR/partial-delete-output" 2>&1; then
+  echo "Hosted smoke removed retained CA while an owner-labelled cluster still existed" >&2
+  exit 1
+fi
+[[ -f "$RETAINED_CA_PATH" ]]
+grep -Fq "Refusing retained cleanup while 'k3d-${RETAINED_CA_CLUSTER}-server-0' still exists" "$RETAINED_CA_TEST_DIR/partial-delete-output"
+if RETAINED_INSPECT_ERROR=1 RETAINED_CA_CLUSTER="$RETAINED_CA_CLUSTER" \
+  CLUSTER_NAME="$RETAINED_CA_CLUSTER" SMOKE_RESOURCE_OWNER=hosted-ca-contract \
+  PATH="$RETAINED_CA_MOCK_BIN:$PATH" bash "$SMOKE" --prune-owned-images \
+  > "$RETAINED_CA_TEST_DIR/inspect-error-output" 2>&1; then
+  echo "Hosted smoke removed retained CA after an ambiguous Docker inspection failure" >&2
+  exit 1
+fi
+[[ -f "$RETAINED_CA_PATH" ]]
+grep -Fq "Could not prove Docker object 'k3d-${RETAINED_CA_CLUSTER}-server-0' is absent" "$RETAINED_CA_TEST_DIR/inspect-error-output"
+RETAINED_CA_CLUSTER="$RETAINED_CA_CLUSTER" CLUSTER_NAME="$RETAINED_CA_CLUSTER" \
+  SMOKE_RESOURCE_OWNER=hosted-ca-contract PATH="$RETAINED_CA_MOCK_BIN:$PATH" \
+  bash "$SMOKE" --prune-owned-images
+[[ ! -e "$RETAINED_CA_PATH" && ! -L "$RETAINED_CA_PATH" ]]
+rm -rf -- "$RETAINED_CA_TEST_DIR"
 
 TEST_DIR="$(mktemp -d)"
 MOCK_BIN="$TEST_DIR/bin"

@@ -20,14 +20,18 @@ export function assertHostedServerTrust(resources)
       || mount?.mountPath !== "/var/run/opencrane/outbound-ca" || mount?.readOnly !== true
       || volume?.secret?.secretName !== "hosted-generated-file-ca" || volume?.secret?.defaultMode !== 0o440 || volume?.secret?.optional === true
       || items?.length !== 1 || items[0]?.key !== "ca.crt" || items[0]?.path !== "ca.crt")
-    throw new Error("Hosted qualification is blocked: the rendered server does not support the reviewed outbound CA bundle; source approval remains required");
+    throw new Error("Hosted qualification is blocked: the rendered server does not satisfy the outbound CA trust contract");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
 {
   try
   {
-    assertHostedServerTrust(loadAll(readFileSync(0, "utf8")));
+    const manifest = readFileSync(0, "utf8");
+    // Kubernetes reads leading-zero file modes as YAML 1.1 octal values. js-yaml uses YAML 1.2,
+    // so normalize only the exact reviewed source spelling before asserting the effective mode.
+    const kubernetesManifest = manifest.replace(/^(\s*defaultMode:) 0440$/gmu, "$1 288");
+    assertHostedServerTrust(loadAll(kubernetesManifest));
   }
   catch (error)
   {

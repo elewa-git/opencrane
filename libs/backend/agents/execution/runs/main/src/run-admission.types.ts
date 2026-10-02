@@ -119,9 +119,9 @@ export interface RunAdmissionCommandCoordinates
 /** Captures server-verified request provenance before the transaction resolves its durable principal. */
 export interface RunAdmissionRequester
 {
-	/** OIDC subject from the verified browser credential. */
+	/** Subject from the deployment-verified browser credential. */
 	readonly subjectId: string;
-	/** OIDC issuer that namespaces the verified subject. */
+	/** Deployment-trusted issuer that namespaces the verified subject. */
 	readonly issuer: string;
 	/** Server-observed credential authentication instant. */
 	readonly authenticatedAt: string;

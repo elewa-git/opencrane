@@ -83,6 +83,53 @@ entrypoint only passes its name to the memory gateway and never creates or reads
 it on permits one registration attempt after a rejected login and requires separate operational
 review for a fresh installation.
 
+## Trust an additional certificate authority
+
+The OpenCrane server uses the public CA bundle selected by
+`clustertenantManager.additionalCaCertificates` when it opens outbound TLS connections. Leave all
+three fields empty to keep the platform trust store unchanged. Production installations remain on
+that default unless an operator explicitly enables this setting.
+
+| Field | Purpose |
+|---|---|
+| `existingSecret` | Name of an existing Secret in the silo namespace |
+| `secretKey` | One key in that Secret containing a PEM-encoded CA certificate or bundle |
+| `revision` | Operator-managed value that rolls the server Deployment when the bundle changes |
+
+Create or update the Secret through your approved secret-management process. For example, this
+imperative command creates a Secret from a local public CA bundle:
+
+```bash
+kubectl --namespace "$OPENCRANE_NAMESPACE" create secret generic opencrane-outbound-ca \
+  --from-file=ca.crt="$OPENCRANE_CA_BUNDLE"
+```
+
+Then add all three settings to the silo values overlay:
+
+```yaml
+clustertenantManager:
+  additionalCaCertificates:
+    existingSecret: opencrane-outbound-ca
+    secretKey: ca.crt
+    revision: "2026-10-01-1"
+```
+
+The chart selects only that key, mounts it read-only at
+`/var/run/opencrane/outbound-ca/ca.crt`, and sets `NODE_EXTRA_CA_CERTS` to the same path. A partial
+configuration fails the Helm render: either leave every field empty or set every field. After
+changing the Secret contents, change `revision` and run the normal deployment command so Kubernetes
+rolls the server Pods and the Node.js process starts with the new bundle.
+
+::: warning
+An additional CA expands which TLS certificate chains the OpenCrane server trusts. It does not
+grant application authority, provider credentials, DNS reachability, Kubernetes network access or
+an exception to [network isolation](/operators/networking). Add only the public CA certificates the
+server needs; never place a private key in the selected bundle.
+:::
+
+Source: [`apps/opencrane/helm/templates/_deployment.tpl`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/helm/templates/_deployment.tpl)
+and [`apps/_infra/deploy-k8s/values.yaml`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/deploy-k8s/values.yaml).
+
 ## Membership mode
 
 Set `clustertenantManager.membership.mode` explicitly. A `standalone` installation admits its first

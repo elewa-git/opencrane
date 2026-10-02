@@ -80,7 +80,12 @@ function _defaultProvider(parsed, repositoryRoot, environment, codespaceName, op
 	const environmentDefault = environment[TIER2_DEFAULT_PROVIDER_ENVIRONMENT_VARIABLE]?.trim() || undefined;
 
 	if (parsed.alternative !== LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM || codespaceName)
+	{
+		if (codespaceName && parsed.defaultProvider)
+			environment[TIER2_DEFAULT_PROVIDER_ENVIRONMENT_VARIABLE] = parsed.defaultProvider;
+
 		return parsed.defaultProvider ?? environmentDefault;
+	}
 
 	const persistDefault = operations.persistWorkstationProviderDefault ?? persistWorkstationProviderDefault;
 	const readDefault = operations.readWorkstationProviderDefault ?? readWorkstationProviderDefault;

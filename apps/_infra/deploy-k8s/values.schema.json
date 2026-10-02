@@ -4,6 +4,20 @@
   "description": "Fail-fast guards for the clean OpenCrane target. Only selected values are constrained; Helm validates merged values on every install, template, and lint.",
   "type": "object",
   "properties": {
+    "clustertenantManager": {
+      "type": "object",
+      "properties": {
+        "additionalCaCertificates": {
+          "type": "object",
+          "required": ["existingSecret", "secretKey", "revision"],
+          "properties": {
+            "existingSecret": { "type": "string", "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", "maxLength": 253 },
+            "secretKey": { "type": "string", "pattern": "^$|^[A-Za-z0-9._-]+$", "maxLength": 253 },
+            "revision": { "type": "string", "pattern": "^$|^[A-Za-z0-9._-]+$", "maxLength": 253 }
+          }
+        }
+      }
+    },
     "controlPlaneSpa": {
       "type": "object",
       "required": ["image", "replicas", "service"],

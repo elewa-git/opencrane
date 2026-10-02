@@ -13,7 +13,7 @@ while :; do
   [ "$remaining" -gt 0 ] || { echo 'KurrentDB readiness exceeded the replay Job timeout.' >&2; exit 1; }
   request_timeout="$remaining"
   [ "$request_timeout" -le 5 ] || request_timeout=5
-  if health_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+  if health_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
     --connect-timeout "$request_timeout" --max-time "$request_timeout" \
     --cacert /var/run/opencrane/kurrentdb-tls/ca.crt "$endpoint/health/live")"; then
     health_exit=0

@@ -26,8 +26,10 @@ Fleet mode selects and verifies the newest signed assertion and advances its acc
 atomically. Signatures, issuer and silo bindings, expiry, staleness and rollback prevention all
 remain required. A missing or invalid Fleet proof never falls back to local membership.
 
-Standalone mode checks the configured silo, the external Principal's trusted OpenID Connect (OIDC)
-issuer and subject, and an active local `OrgMembership`. Its witness freezes the membership row ID,
+Standalone mode checks the configured silo, the external Principal's deployment-trusted identity
+issuer and subject, and an active local `OrgMembership`. Ordinary releases derive that issuer from
+OIDC; the isolated k3d profile fixes a deployment-owned issuer that request and browser data cannot
+select. Its witness freezes the membership row ID,
 `updatedAt`, identity coordinates, observation time and a deployment-bounded trust deadline. It has
 no signature or Fleet revision. Login updates to Principal email or display name do not change this
 version. Membership authority changes must advance `OrgMembership.updatedAt`; replacing the row or
@@ -84,7 +86,10 @@ The existing JSON execution-subject storage accepts the new evidence kind withou
 `OPENCRANE_MEMBERSHIP_MODE` must be `fleet` or `standalone`.
 `OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS` must be positive and no more than 24 hours.
 Fleet requires `OPENCRANE_MEMBERSHIP_ISSUER_ID`, `OPENCRANE_MEMBERSHIP_KEY_ID` and
-`OPENCRANE_MEMBERSHIP_PUBLIC_KEY_FILE`. Standalone requires `OPENCRANE_SILO_ID` and `OIDC_ISSUER_URL`.
+`OPENCRANE_MEMBERSHIP_PUBLIC_KEY_FILE`. Standalone requires `OPENCRANE_SILO_ID` and
+`OPENCRANE_MEMBERSHIP_TRUSTED_IDENTITY_ISSUER`. The chart derives that identity issuer from the configured
+OIDC issuer for ordinary releases and uses the fixed local identity issuer for Tier 3 k3d, so
+membership trust does not require enabling the public OIDC client.
 
 ## See also
 

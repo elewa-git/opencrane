@@ -176,13 +176,14 @@ export interface FleetMembershipEvidenceConfig
  * The value is deployment configuration, not a request claim: `Fleet` retains the independent
  * Fleet signer boundary, while `Standalone` lets a silo start without pretending that an absent
  * Fleet key establishes membership. Standalone verifies the active local organization membership
- * and external Principal in PostgreSQL. Values select deployment policy and are never request claims.
+ * and external Principal in PostgreSQL. Its issuer is either OIDC-derived or fixed by the isolated
+ * development deployment. Values select deployment policy and are never request claims.
  */
 export enum FleetMembershipDeploymentModes
 {
 	/** Requires the independently managed Fleet public verification key. */
 	Fleet = "fleet",
-	/** Requires the deployment-trusted OIDC identity and active local PostgreSQL membership. */
+	/** Requires the deployment-trusted identity and active local PostgreSQL membership. */
 	Standalone = "standalone",
 }
 

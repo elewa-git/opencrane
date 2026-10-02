@@ -38,6 +38,50 @@ _exact_vendor_image()
   printf '%s\n' "$exact_image"
 }
 
+_registry_alias_from_state()
+{
+  local source_digest expected_registry_image
+  if ! [[ "${HOSTED_REGISTRY_SOURCE_IMAGE:-}" =~ ^registry@sha256:([0-9a-f]{64})$ ]]; then
+    echo "[hosted-services] Registry source state is not an immutable vendor digest" >&2
+    return 1
+  fi
+  source_digest="${BASH_REMATCH[1]}"
+  expected_registry_image="opencrane/hosted-registry-${CLUSTER_NAME}:sha256-${source_digest}"
+  if [[ "${HOSTED_REGISTRY_IMAGE:-}" != "$expected_registry_image" ]]; then
+    echo "[hosted-services] Registry import alias does not match its pinned vendor digest" >&2
+    return 1
+  fi
+  printf '%s\n' "$expected_registry_image"
+}
+
+_remove_registry_alias()
+{
+  _load_state
+  if [[ -z "${HOSTED_REGISTRY_SOURCE_IMAGE:-}" && -z "${HOSTED_REGISTRY_IMAGE:-}" ]]; then
+    return 0
+  fi
+  local registry_image source_image_id registry_image_id inspection status
+  registry_image="$(_registry_alias_from_state)" || return 1
+  if inspection="$(docker image inspect "$registry_image" 2>&1 >/dev/null)"; then
+    :
+  else
+    status=$?
+    if [[ "$status" == 1 \
+      && "$inspection" == "Error response from daemon: No such image: $registry_image" ]]; then
+      return 0
+    fi
+    echo "[hosted-services] Could not prove registry import alias is absent" >&2
+    return 1
+  fi
+  if ! source_image_id="$(docker image inspect "$HOSTED_REGISTRY_SOURCE_IMAGE" --format '{{.Id}}')" \
+    || ! registry_image_id="$(docker image inspect "$registry_image" --format '{{.Id}}')" \
+    || [[ "$source_image_id" != "$registry_image_id" ]]; then
+    echo "[hosted-services] Refusing to remove a registry alias that no longer matches its pinned vendor image" >&2
+    return 1
+  fi
+  docker image rm --no-prune "$registry_image" >/dev/null
+}
+
 _prepare()
 {
   local control_plane_host="$5" owner_email="$6" namespace="$7"
@@ -88,8 +132,16 @@ _prepare()
   _write_state HOSTED_OIDC_REDIRECT_URI "https://${control_plane_host}:8443/api/v1/auth/callback"
   _write_state HOSTED_NAMESPACE "$namespace"
   _write_state HOSTED_EVIDENCE_PATH "$RUN_DIR/evidence/hosted-generated-file.json"
-  local registry_image httpd_image registry_password
-  registry_image="$(_exact_vendor_image registry:2)"
+  local registry_source_image registry_digest registry_image httpd_image registry_password
+  registry_source_image="$(_exact_vendor_image registry:2)"
+  registry_digest="${registry_source_image##*@sha256:}"
+  [[ "$registry_digest" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "[hosted-services] Registry source has no usable digest: $registry_source_image" >&2
+    return 1
+  }
+  # k3d 5.8 discovers Docker tags but not repository digests. This private tag keeps the verified
+  # digest in its name and isolates concurrent worktree clusters from the mutable vendor tag.
+  registry_image="opencrane/hosted-registry-${CLUSTER_NAME}:sha256-${registry_digest}"
   httpd_image="$(_exact_vendor_image httpd:2.4-alpine)"
   registry_password="$(<"$RUN_DIR/registry-password")"
   docker run --rm "$httpd_image" htpasswd -Bbn opencrane-hosted "$registry_password" > "$RUN_DIR/registry-auth/htpasswd"
@@ -106,7 +158,9 @@ configs:
     tls:
       ca_file: "/etc/rancher/k3s/hosted-generated-file/ca.crt"
 EOF
+  _write_state HOSTED_REGISTRY_SOURCE_IMAGE "$registry_source_image"
   _write_state HOSTED_REGISTRY_IMAGE "$registry_image"
+  docker tag "$registry_source_image" "$registry_image"
   _write_state HOSTED_REGISTRY_SERVICE_IP "10.43.0.53"
   _write_state HOSTED_REGISTRY_URL "https://hosted-generated-file-registry.${namespace}.svc:443"
   _write_state HOSTED_REGISTRY_REPOSITORY "opencrane/mcp-file-generator"
@@ -116,8 +170,23 @@ EOF
 _start_registry()
 {
   _load_state
+  local expected_registry_image source_image_id registry_image_id import_status
+  expected_registry_image="$(_registry_alias_from_state)" || return 1
+  # Local tags can change after preparation, so prove the alias again immediately before import.
+  if ! source_image_id="$(docker image inspect "$HOSTED_REGISTRY_SOURCE_IMAGE" --format '{{.Id}}')" \
+    || ! registry_image_id="$(docker image inspect "$HOSTED_REGISTRY_IMAGE" --format '{{.Id}}')" \
+    || [[ "$source_image_id" != "$registry_image_id" ]]; then
+    echo "[hosted-services] Registry import alias no longer matches its pinned vendor image" >&2
+    return 1
+  fi
   kubectl create namespace "$HOSTED_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
-  k3d image import "$HOSTED_REGISTRY_IMAGE" --cluster "$CLUSTER_NAME" --mode direct
+  if k3d image import "$HOSTED_REGISTRY_IMAGE" --cluster "$CLUSTER_NAME" --mode direct; then
+    _remove_registry_alias
+  else
+    import_status=$?
+    _remove_registry_alias || true
+    return "$import_status"
+  fi
   kubectl create secret generic hosted-generated-file-registry \
     --namespace "$HOSTED_NAMESPACE" \
     --from-file=server.crt="$HOSTED_TLS_CERTIFICATE_PATH" \
@@ -148,7 +217,7 @@ spec:
       containers:
         - name: registry
           image: ${HOSTED_REGISTRY_IMAGE}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           env:
             - { name: REGISTRY_AUTH, value: htpasswd }
             - { name: REGISTRY_AUTH_HTPASSWD_REALM, value: OpenCraneHostedQualification }
@@ -204,5 +273,6 @@ EOF
 case "$MODE" in
   prepare) _prepare "$@" ;;
   start-registry) _start_registry ;;
+  remove-registry-alias) _remove_registry_alias ;;
   *) echo "[hosted-registry-fixture] Unknown mode: $MODE" >&2; exit 1 ;;
 esac

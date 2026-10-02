@@ -108,6 +108,12 @@ All other production source lives in `src/bootstrap/`:
 | `workflows/` | Compose MCP transport and declare workflow tasks. |
 | `process/` | Initialise telemetry and clients, then start, drain, and close resources. |
 
+When Helm explicitly selects Tier 3 k3d development authentication,
+`process/k3d-development-authentication.ts` admits the chart-selected standalone identity through
+the current Principal authorities and binds the shared development browser session to the exact
+HTTPS `.test` ingress host. Ordinary releases continue to compose OIDC; startup refuses to enable
+the k3d path beside OIDC or Fleet membership.
+
 The [conversation library](../../libs/backend/server/conversations/main/README.md) owns admission and
 compile-before-commit orchestration. [Onboarding](../../libs/backend/server/agents/onboarding/main/README.md)
 and [personas](../../libs/backend/agents/personal/personas/main/README.md) own their publication adapters.
@@ -218,13 +224,14 @@ are:
 | `OPENCRANE_WORKFLOW_*` | Absurd database pool, worker concurrency, and polling limits | small development defaults |
 | `OPENCRANE_MCP_REMOTE_*` | Timeout and response-size limit for remote MCP requests | 5 seconds / 64 KiB |
 | `OPENCRANE_OCI_REGISTRY_*` | Fixed HTTPS registry repository, request timeout, and optional Secret-backed authorization used to import admitted MCP images by digest | deployment profile / 30 seconds / no credential |
-| `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |
+| `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required for ordinary releases; absent only in explicit Tier 3 k3d development |
+| `OPENCRANE_DEVELOPMENT_AUTHENTICATION`, `OPENCRANE_K3D_DEVELOPMENT_*` | Explicit standalone Tier 3 identity, exact `.test` host, and read-only per-launch proof mount; mutually exclusive with OIDC | disabled |
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
 | `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
 | `LITELLM_PREFORWARD_CONTRACT`, `LITELLM_PREFORWARD_ENDPOINT` | Paired, startup-frozen qualification for the model-routing library's authenticated pre-provider rejection contract; only the qualified managed proxy may supply retry evidence | disabled; exact-image qualification is still pending |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
 | `AGENT_RUN_ADMISSION_*` | Active and queued personal-conversation admission limits | bounded defaults |
-| `OPENCRANE_MEMBERSHIP_*` | Explicit issuer model; `fleet` mounts its verifier, `standalone` reads current local membership using the deployment silo and OIDC issuer | required |
+| `OPENCRANE_MEMBERSHIP_*` | Explicit issuer model; `fleet` mounts its verifier, while `standalone` reads current local membership using the deployment silo and chart-selected trusted identity issuer | required |
 | `OPENCRANE_INVITATION_SIGNING_KEY_PATH`, `OPENCRANE_PUBLIC_BASE_URL`, `OPENCRANE_INVITATION_TTL_SECONDS` | Standalone invitation-link signing, public link origin, and bounded lifetime | required in standalone mode |
 | `OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_*` | Fleet-owned member directory, invitations, paid-seat, and payment decisions through one silo-scoped service credential | required in Fleet mode |
 | `ARTIFACT_SERVICE_URL` and mounted artifact keys | Private byte promotion/read brokers | required when used |
@@ -259,6 +266,22 @@ remote dispatch to the actual server Pod through TokenReview. The projected audi
 The connection API, database and runtime integration are under source validation. Remote and hosted
 provider qualification and the testv5 journey remain separate gates.
 
+### Optional outbound certificate authority
+
+The server uses the public Node.js certificate roots by default. A deployment that must call an
+HTTPS service signed by a private authority can set all three
+`clustertenantManager.additionalCaCertificates` fields: `existingSecret`, `secretKey`, and
+`revision`. The selected Secret key must contain public CA certificate material or a public CA
+bundle. It is projected read-only as `/var/run/opencrane/outbound-ca/ca.crt` and supplied through
+`NODE_EXTRA_CA_CERTS`; no private CA key belongs in this Secret.
+
+All three fields empty means disabled, and any partial configuration fails Helm rendering. The
+capability adds transport trust only: it does not add a network path, registry authorization,
+product permission, or provider credential, and normal hostname and certificate verification stay
+enabled. Rotate the Secret contents and `revision` together so the Pod-template annotation starts a
+new server rollout. Production behavior is unchanged until an operator explicitly configures the
+tuple; Tier 3 does so only for its disposable hosted generated-file fixtures.
+
 ### Conversation-computer activation consumer
 
 Every server replica joins the silo's `conversation-computer-activation` KurrentDB consumer group as
@@ -282,7 +305,9 @@ leaves activations unread. Operator notes:
   `npm exec -- nx run opencrane:test:stop-sql` exercises the saved authority and cleanup against a
   disposable `DATABASE_URL`; the target uses UTC so fixture timestamps match database timestamps.
 - `npm exec -- nx run opencrane:test:hosted-generated-file-qualification` checks and bundles the
-  disposable hosted-file public client. Its preparation uses public invitation, model, persona and
+  disposable hosted-file public client. The target regenerates the package-local Prisma client
+  before Vitest collects the server import graph, so a fresh checkout never depends on generated
+  state left by another target. Its preparation uses public invitation, model, persona and
   onboarding operations. The personal tool-selection API owns the published selection; the fixture
   never manufactures a personal revision or starts a workflow worker. Its setup mutations end when
   it sends the first message. Restart verification uses the saved command and public reads, followed

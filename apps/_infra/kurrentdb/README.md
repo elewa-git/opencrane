@@ -28,7 +28,10 @@ default access control list (ACL): that user and administrators can read/write u
 only administrators can delete streams or read/write metadata. The bootstrap administrator also
 creates the silo-scoped `conversation-computer-activation` persistent subscription. A retry observes
 the existing group; it never gives the service identity administrator rights, resets a user, changes
-a password, or widens an existing ACL.
+a password, or widens an existing ACL. KurrentDB may return HTTP 408 after a service-user creation
+request has reached its ledger during startup. Bootstrap treats only that status as uncertain: it
+re-reads the user and, if still absent, retries within the original timeout. Every other unexpected
+status remains terminal.
 
 ## Public surface
 
@@ -49,7 +52,8 @@ with its scripts, ServiceAccount, and (per mode) archive PVC or snapshot Role. `
 includes it when `historyStore.kurrentdb.backup.enabled` is true.
 
 `tests/bootstrap-policy-contract.sh` — proves that the shared host script keeps TLS, exact identity,
-ACL, subscription, and disposable-file cleanup requirements before Helm or Tier 2 consumes it.
+ACL, subscription, startup-time service-user reconciliation, and disposable-file cleanup requirements
+before Helm or Tier 2 consumes it.
 
 `tests/helm-contract.sh` — renders the target contract and rejects omitted KurrentDB credentials,
 either unpinned image, an unknown backup mode, or a snapshot backup without its class, image, or

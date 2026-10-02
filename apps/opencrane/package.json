@@ -180,6 +180,7 @@
       },
       "test:hosted-generated-file-qualification": {
         "executor": "nx:run-commands",
+        "dependsOn": ["db:generate"],
         "options": {
           "cwd": "apps/opencrane",
           "commands": [

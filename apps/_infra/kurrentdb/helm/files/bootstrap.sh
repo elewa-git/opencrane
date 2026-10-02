@@ -123,29 +123,42 @@ until curl --silent --show-error --fail --cacert "$ca_file" --header "@$admin_au
 done
 
 user_body="$bootstrap_temporary_directory/user.json"
-user_status="$(curl --silent --show-error --output "$user_body" --write-out '%{http_code}' --cacert "$ca_file" --header "@$admin_authorization_header" "$endpoint/users/opencrane-history")"
-case "$user_status" in
-  200)
-    normalized_user="$(tr -d '[:space:]' < "$user_body")"
-    if ! printf '%s' "$normalized_user" | grep -Eq '"([Ll]ogin[Nn]ame|[Uu]sername)":"opencrane-history"' || ! printf '%s' "$normalized_user" | grep -Eq '"([Gg]roups)":\[\]'; then
-      echo "The existing KurrentDB service user is not the expected unprivileged identity." >&2
+create_body="$bootstrap_temporary_directory/create-user.json"
+jq -n --arg password "$history_password" '{LoginName: "opencrane-history", FullName: "OpenCrane HistoryStore", Groups: [], Password: $password}' > "$create_body"
+while :; do
+  user_status="$(curl --silent --show-error --output "$user_body" --write-out '%{http_code}' --cacert "$ca_file" --header "@$admin_authorization_header" "$endpoint/users/opencrane-history")"
+  case "$user_status" in
+    200)
+      normalized_user="$(tr -d '[:space:]' < "$user_body")"
+      if ! printf '%s' "$normalized_user" | grep -Eq '"([Ll]ogin[Nn]ame|[Uu]sername)":"opencrane-history"' || ! printf '%s' "$normalized_user" | grep -Eq '"([Gg]roups)":\[\]'; then
+        echo "The existing KurrentDB service user is not the expected unprivileged identity." >&2
+        exit 1
+      fi
+      break
+      ;;
+    404)
+      create_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --cacert "$ca_file" --header "@$admin_authorization_header" --header 'Content-Type: application/json' --data-binary "@$create_body" "$endpoint/users")"
+      case "$create_status" in
+        200|201) break ;;
+        408) ;;
+        *)
+          echo "KurrentDB refused creation of the HistoryStore service user (HTTP $create_status)." >&2
+          exit 1
+          ;;
+      esac
+      ;;
+    408) ;;
+    *)
+      echo "KurrentDB did not return an expected service-user status (HTTP $user_status)." >&2
       exit 1
-    fi
-    ;;
-  404)
-    create_body="$bootstrap_temporary_directory/create-user.json"
-    jq -n --arg password "$history_password" '{LoginName: "opencrane-history", FullName: "OpenCrane HistoryStore", Groups: [], Password: $password}' > "$create_body"
-    create_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --cacert "$ca_file" --header "@$admin_authorization_header" --header 'Content-Type: application/json' --data-binary "@$create_body" "$endpoint/users")"
-    if [ "$create_status" != "201" ] && [ "$create_status" != "200" ]; then
-      echo "KurrentDB refused creation of the HistoryStore service user (HTTP $create_status)." >&2
-      exit 1
-    fi
-    ;;
-  *)
-    echo "KurrentDB did not return an expected service-user status (HTTP $user_status)." >&2
+      ;;
+  esac
+  if [ "$(date +%s)" -ge "$wait_deadline" ]; then
+    echo "KurrentDB did not finish HistoryStore service-user bootstrap before the deadline." >&2
     exit 1
-    ;;
-esac
+  fi
+  sleep 2
+done
 
 # The first write is idempotent; the read below always proves the current effective ACL.
 settings_body="$bootstrap_temporary_directory/settings.json"

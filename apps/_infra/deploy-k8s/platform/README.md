@@ -41,10 +41,18 @@ cluster does not match the assumptions needed to do that job safely.
 `tests/develop-smoke.sh` exercises the real silo deploy entrypoint. It rebuilds Nx-affected images
 from the checkout through a per-project BuildKit cache and resolves unaffected owners from the exact
 digest of the last validated image set. Its concurrent image lane overlaps cluster and controller
-preparation, then imports the tag-based service images in one k3d transfer. The KurrentDB bootstrap
-and conversation-computer images go into a disposable registry bound to loopback; their stored
+preparation. The default `recommended` profile imports the five tag-based service images in one k3d
+transfer and retains reusable cache. The Tier 3 coordinator uses `minimum` by default: it clears the
+user npm cache and unused shared Docker builder state, imports those five images individually, and
+releases each accepted local tag. The KurrentDB bootstrap and conversation-computer images go into a
+disposable registry bound to loopback; their stored
 manifest digests become the exact references used inside k3d. Nothing is published to a public
-registry. A pull request bypasses that cluster only when one positive proof binds its exact base SHA to a completed successful push or
+registry. The hosted qualification registry follows the same integrity rule through a private,
+digest-derived local tag because k3d discovers Docker tags rather than repository digests. The
+fixture verifies that alias against the pinned vendor image immediately before import and forbids
+Kubernetes from pulling a replacement. Retained Tier 3 clusters keep only their public fixture CA at
+a stable owner-scoped path; generated private keys and credentials are still removed after every
+run. A pull request bypasses that cluster only when one positive proof binds its exact base SHA to a completed successful push or
 manual-dispatch k3d job, no affected container owner, and only explicitly non-deployment paths. The same evidence works
 for `develop` and reviewed feature-stack bases; unknown or unavailable evidence fails closed to
 k3d. Both tiers install pinned cert-manager, CloudNativePG, and the Agent Sandbox controller with its
@@ -67,6 +75,17 @@ the pinned expandable hostpath CSI driver and exercise expansion. `KEEP_CLUSTER=
 disposable cluster and its private registry for diagnosis in an authorised environment. Backup/restore
 and production storage, DNS, and transport remain separate live
 qualifications.
+
+The repository-level Tier 3 coordinator reuses this smoke with worktree-derived cluster, namespace,
+release, registry, ingress-port and owner coordinates. Its infrastructure profile supplies no human
+or provider credential. Its Agent profile supplies a generated per-launch development-session
+Secret, disables OIDC in the rendered disposable silo, and then exercises BYOK, onboarding and one
+Agent Sandbox turn through the product API. The smoke still owns installation and readiness; the
+coordinator owns the loopback certificate-pinned browser route and the post-install product proof.
+The coordinator allows 30 minutes for external-controller setup and the first silo installation,
+where a fresh k3d node downloads controller and workload images. Post-install workload qualification
+keeps its 10-minute limit.
+See the [local-development guide](../../../../website/contributing/local-development.md#tier-3--k3d-and-codespaces).
 
 Business logic does not belong here. Server-process infrastructure belongs in `libs/backend/server/infra`;
 backend capabilities belong in `libs/backend/server`; independently owned third-party workloads

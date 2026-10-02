@@ -77,9 +77,9 @@ export interface ExecutionSubjectStandaloneMembershipEvidence
 	readonly principalId: string;
 	/** Identifies the deployment-selected silo. */
 	readonly siloId: SiloId;
-	/** Binds the Principal to the deployment-trusted OIDC issuer. */
+	/** Binds the Principal to the deployment-trusted identity issuer. */
 	readonly issuer: string;
-	/** Binds the Principal to the local membership's OIDC subject. */
+	/** Binds the Principal to the local membership's trusted identity subject. */
 	readonly subjectId: string;
 	/** Identifies the local membership row; replacement invalidates this witness. */
 	readonly membershipId: string;

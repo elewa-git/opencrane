@@ -33,7 +33,7 @@ Provider selection:
   --provider / --model                Select an explicit reviewed provider/model first
   --default-provider                  Persist on a workstation; select this launch's fallback
   OPENCRANE_TIER2_DEFAULT_PROVIDER    Override the stored fallback with a lowercase value
-                                      Add manually in Codespaces
+                                      Export manually for persistent Codespaces selection
   No selection                        Use the first configured credential in lexical order
 
 State:

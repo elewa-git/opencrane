@@ -23,6 +23,7 @@ import { _CreateMemoryGatewayClient } from "./bootstrap/process/memory-gateway-c
 import { _CreateKubernetesClients } from "./bootstrap/process/kubernetes-clients";
 import { _StartProcessLifecycle } from "./bootstrap/process/lifecycle";
 import { _log } from "./bootstrap/process/log";
+import { _CreateK3dDevelopmentAuthentication } from "./bootstrap/process/k3d-development-authentication";
 import { _CreatePublicApp, _CreatePublicAuthentication } from "./bootstrap/http/public-app";
 
 import { _CreateArtifactUploadGateway, _CreatePublishedArtifactReader } from "@opencrane/backend/server/agents/artifacts";
@@ -102,7 +103,9 @@ async function _Main(): Promise<void>
 	const conversationComputerWorkers = { stop: async function _StopComputerWorkers(): Promise<void> { await Promise.all([conversationComputerActivations.stop(), conversationComputerLifecycle.worker.stop()]); } };
 
 	// Public product routes authenticate browser sessions; internal routes verify the calling workload's identity.
-	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
+	const authentication = config.k3dDevelopmentAuthentication === null
+		? _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission)
+		: await _CreateK3dDevelopmentAuthentication(prisma, config.k3dDevelopmentAuthentication, _log);
 	const publicHealth = ___CreatePublicHealthReportReader(prisma, config, _log);
 	const publicApp = _CreatePublicApp(prisma, authentication, config.runtime.artifactScannerEnabled, publicHealth, workflows, mcpRuntime, providerEffects, memoryWorkflow, historyStore.historyStore, config.conversationPrivatePayloadKeyringPath, agentSandboxReleaseProfile);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma, workflows.execution);

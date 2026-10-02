@@ -10,7 +10,6 @@ import type { PublicAuthenticationComposition } from "../http/public-app.types";
 import { _CreateDevelopmentBrowserOriginAuthority, _DevelopmentBrowserOrigin, _HasExpectedDevelopmentHost } from "./browser-origin-authority";
 import type { DevelopmentAuthenticationTransport } from "./authentication.types";
 import type { DevelopmentIdentity } from "./config.types";
-
 /** Request methods that cannot change application state. */
 const _SAFE_METHODS = new Set([
 	"GET",
@@ -18,7 +17,7 @@ const _SAFE_METHODS = new Set([
 	"OPTIONS",
 ]);
 
-/** Carries the per-launch credential set only by the dedicated Tier 2 browser. */
+/** Carries the per-launch credential set only by the dedicated Tier 2 browser or Tier 3 proxy. */
 const _DEVELOPMENT_SESSION_HEADER = "x-opencrane-development-session";
 
 /** Development-only route that converts a verified browser click into the private landing URL. */
@@ -86,10 +85,7 @@ function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionC
 	{
 		if (!_HasExpectedDevelopmentHost(request, transport))
 		{
-			response.status(403).json({
-				code: "DEVELOPMENT_HOST_MISMATCH",
-				error: "Tier 2 requests require the dedicated local development host.",
-			});
+			response.status(403).json({ code: "DEVELOPMENT_HOST_MISMATCH", error: "Development requests require the dedicated local host." });
 			return;
 		}
 
@@ -113,13 +109,9 @@ function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionC
 		const supplied = Buffer.from(suppliedCredential, "utf8");
 		if (supplied.byteLength !== expected.byteLength || !timingSafeEqual(supplied, expected))
 		{
-			response.status(401).json({
-				code: "DEVELOPMENT_SESSION_REQUIRED",
-				error: "Tier 2 requests require the private per-launch browser session.",
-			});
+			response.status(401).json({ code: "DEVELOPMENT_SESSION_REQUIRED", error: "Development requests require the private per-launch browser session." });
 			return;
 		}
-
 		if (!_SAFE_METHODS.has(request.method) && !browserOriginAuthority.isSameOrigin(request))
 		{
 			logger.warn({
@@ -131,11 +123,8 @@ function _CreateSessionMiddleware(identity: DevelopmentIdentity, browserSessionC
 				path: request.path,
 				refererOrigin: _ReportedOrigin(request.get("referer")),
 				secFetchSite: request.get("sec-fetch-site"),
-			}, "Tier 2 state change origin did not match the development browser");
-			response.status(403).json({
-				code: "DEVELOPMENT_ORIGIN_MISMATCH",
-				error: "Tier 2 state changes require the dedicated local development origin.",
-			});
+			}, "Development state change origin did not match the configured browser");
+			response.status(403).json({ code: "DEVELOPMENT_ORIGIN_MISMATCH", error: "Development state changes require the dedicated local origin." });
 			return;
 		}
 		const now = new Date();
@@ -190,11 +179,7 @@ function _CreateAdmissionMiddleware(identity: DevelopmentIdentity, admission: Au
 		}
 		catch (err)
 		{
-			logger.warn({
-				err,
-				siloId: identity.siloId,
-				subject: identity.subjectId,
-			}, "Tier 2 Principal admission is unavailable");
+			logger.warn({ err, siloId: identity.siloId, subject: identity.subjectId }, "Development Principal admission is unavailable");
 			response.status(503).json({ error: "identity_projection_unavailable" });
 		}
 	};
@@ -256,7 +241,11 @@ function _CreateAuthRouter(identity: DevelopmentIdentity, capabilities: Authenti
 /**
  * Compose a development-only browser identity over production Principal admission.
  *
- * Called by: the Tier 2 development entrypoint for its loopback-only public listener.
+ * The caller supplies the accepted direct/proxy hosts and scheme; state-changing requests from any
+ * other origin fail before the fixed session is attached. Protected routes then re-read the durable
+ * Principal and current membership-managed capability instead of trusting the browser credential.
+ * Called by: the Tier 2 entrypoint and the explicitly selected Tier 3 k3d composition.
+ * @returns Session, authentication, and `/api/v1/auth` middleware for the public application.
  */
 export function _CreateDevelopmentAuthentication(identity: DevelopmentIdentity, capabilities: AuthenticatedPrincipalCapabilityReader, admission: AuthenticatedPrincipalAdmission, browserSessionCredential: string, logger: Logger, transport: DevelopmentAuthenticationTransport): PublicAuthenticationComposition
 {

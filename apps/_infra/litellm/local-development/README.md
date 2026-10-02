@@ -28,9 +28,11 @@ its uppercase, space-free Codespaces credential prefix.
 Codespaces reads uppercase provider-specific variables such as `OPENAI_TIER2_PROVIDER_API_KEY` and
 `ANTHROPIC_TIER2_PROVIDER_API_KEY`; it never reads workstation key files. An explicit provider or
 model wins, followed by the configured default and then the first recognized variable in lexical
-order. Add `OPENCRANE_TIER2_DEFAULT_PROVIDER` manually as a Codespaces secret when that preference
-must survive a restart; `--default-provider` cannot update an account-owned Codespaces secret. An
-explicit or default provider must have its matching secret. The coordinator removes all
+order. `--default-provider` also sets `OPENCRANE_TIER2_DEFAULT_PROVIDER` in the current coordinator
+environment. A child process cannot update its parent terminal or a GitHub account setting, so add
+an `export OPENCRANE_TIER2_DEFAULT_PROVIDER=<name>` line to the Codespace's `~/.bashrc` or personal
+dotfiles when that nonsecret preference must survive later launches. An explicit or default
+provider must have its matching secret. The coordinator removes all
 matching credential variables before running validation or application child processes. Use
 `--model` to override the selected provider's reviewed default; an unreviewed provider, model,
 credential variable or cross-provider pairing is refused. The retired generic
@@ -51,8 +53,9 @@ LiteLLM needs that database for the per-run virtual keys issued by the current A
 the launch waits for authenticated key storage as well as model discovery before starting OpenCrane.
 Credential bytes are never written into generated YAML or Docker arguments, and normal or failed
 shutdown removes the generated file with the session directory. The Codespaces devcontainer
-recommends every supported environment-secret name and the optional default-provider setting but
-never stores their values in tracked configuration. Codespaces gets a 120-second LiteLLM startup
+recommends every supported provider-secret name. The nonsecret default-provider preference remains
+ordinary shell configuration and is not declared as a devcontainer secret. Codespaces gets a
+120-second LiteLLM startup
 budget; a workstation keeps a 30-second budget. The launcher reserves the final two seconds for
 failure diagnostics. The container excludes loopback addresses from uppercase and lowercase HTTP
 proxy settings so its Prisma client reaches the embedded query engine directly while external model

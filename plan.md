@@ -1365,14 +1365,16 @@ retention. The smoke copies only named public evidence and image/byte digests in
 its credentials, checkpoints and generated file contents remain outside the artifact. The app
 bridge is implemented. No complete k3d qualification has run.
 
-Automatic approval review rejected optional production outbound CA trust. The exact source-only
-proposal at `/private/tmp/opencrane-additional-ca-source-proposal.md` passes independent review and
-explicit approval is pending; no trust change or substitute Pod/image injection is applied.
+The optional outbound CA contract is now explicitly approved and applied to the production server
+chart as a default-disabled capability. Tier 3 selects one namespace-local public CA bundle, mounts
+only its configured key read-only, and supplies `NODE_EXTRA_CA_CERTS`; a required revision rolls the
+server when that bundle changes. Ordinary production values remain empty and render no additional
+trust. No substitute Pod/image injection is used.
 Only newly generated fixture identities and credentials belong to this CI work. Testv5 and
 existing databases remain outside the slice.
 
-The actual server-trust render now fails before cluster or credential creation when the proposed
-certificate bundle has no production consumer. The independently reviewed shared-LiteLLM fixture
+The actual server-trust render now fails before cluster or credential creation when the selected
+certificate bundle is not consumed through that exact server contract. The independently reviewed shared-LiteLLM fixture
 was replaced with the required instance mode; fake model/key administration and its unused master
 Secret were removed. Automatic approval review also rejected the public synthetic-provider setup
 source patch because it forwards a key into provider configuration. The exact rejected proposal is
@@ -2627,7 +2629,7 @@ Sandbox remains the Kubernetes computer boundary.
 | --- | --- |
 | Local Tier 1 — frontend-only development | READY FOR REVIEW from current `develop` — plain `npm run serve:opencrane-ui` enters onboarding and bundles the routed UI, interactive Storybook mock catalogue, and Playwright visual pass; the `commander`, `catalyst`, `anchor`, and `analyst` commands open the matching reviewed archetype conversation. Current routed components and state ports run over one backend-free in-memory profile, with deterministic failure/recovery scenarios and a network tripwire. Local state, UI, gateway, Storybook, documentation, boundary and all seven Angular build gates pass; independent architecture, correctness, residue and contract-verification gates pass. Remote CI remains pending on the successor PR. |
 | Local Tier 2 — application development | READY FOR REVIEW after Tier 1 — `npm run dev:tier2` is the `core` profile and starts the current server, UI, PostgreSQL clean baseline, and KurrentDB. `npm run dev:tier2:agent` adds the current Conversation Computer through a local development supervisor; `npm run dev:tier2:agent:local-llm`, `:remote-llm`, and `:simulated-llm` retain the three explicit model alternatives without claiming Kubernetes isolation. Abort, stop, suspend, failed startup, lease expiry, and the next launch clean only exactly owned processes, containers, networks, and disposable secrets while retaining and reporting cleanup failures. `--reset` recreates the paired PostgreSQL/KurrentDB fresh baseline; it never upgrades it. The affected Nx build, test and lint gate; focused local-development, UI, OpenCrane, host-process, Helm and KurrentDB checks; repository boundary and style checks; website build; architecture, deletion, and independent review gates pass. Remote CI remains pending on the successor PR. |
-| Local Tier 3 — k3d and Codespaces | PLANNED after reviewed Tier 2 — `npm run dev:tier3` remains the short alias for the credential-free `npm run dev:tier3:infra` profile, which proves the current silo, PostgreSQL, KurrentDB, Cognee, LiteLLM, Agent Sandbox prerequisites, ingress, storage, and browser routing without provider credentials. `npm run dev:tier3:agent` adds one governed provider setup and one current Agent Sandbox conversation turn. Minimum host target is 4 cores, 16 GB memory, and 32 GB storage; recommended is 8 cores, 32 GB memory, and 64 GB storage. The minimum-host flow must report a measured storage shortfall instead of deleting unrelated dependencies, caches, clusters, or developer state. |
+| Local Tier 3 — k3d and Codespaces | IMPLEMENTED after Tier 2; static validation and independent review complete — `npm run dev:tier3` remains the short alias for the credential-free `npm run dev:tier3:infra` profile, which proves the current silo, PostgreSQL, KurrentDB, Cognee, LiteLLM, Agent Sandbox prerequisites, ingress, storage, and a certificate-pinned private browser route without provider credentials. `npm run dev:tier3:agent` adds current BYOK admission, persona and guided onboarding, a published personal Agent, and one correlated provider-backed Agent Sandbox response. Resources and replacement are bound to the exact worktree; ordinary releases render no development identity. The Codespaces image pins and verifies its Helm, k3d, and kubectl tools on amd64 and arm64. Minimum host target remains 4 cores, 16 GB memory, and 32 GB Docker backing storage; recommended remains 8 cores, 32 GB memory, and 64 GB Docker backing storage. The minimum-host flow reports measured shortfalls without deleting unrelated developer state. Live k3d/Codespaces proof remains required before the slice is marked ready. |
 
 Each parent head is frozen, validated, independently reviewed, and checked against the live pull-
 request graph before its child branches. If the Tier 3 minimum cannot pass without deleting

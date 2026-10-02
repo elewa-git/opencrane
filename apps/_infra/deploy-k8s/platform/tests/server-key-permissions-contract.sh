@@ -81,6 +81,59 @@ if grep -Fq 'OPENCRANE_OCI_REGISTRY_AUTHORIZATION_FILE' <<<"$server_manifest"; t
   exit 1
 fi
 
+# Extra Node.js trust is absent by default. Enabling it requires one exact public CA projection and
+# a revision that rolls the Pod; it never disables ordinary hostname or certificate verification.
+if grep -Eq 'NODE_EXTRA_CA_CERTS|additional-ca-certificates|additional-ca-certificates-revision' <<<"$server_manifest"; then
+  echo "opencrane-server renders additional CA trust without an explicit complete configuration" >&2
+  exit 1
+fi
+additional_ca_rendered="$(helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
+  --set-string clustertenantManager.additionalCaCertificates.existingSecret=private-service-ca \
+  --set-string clustertenantManager.additionalCaCertificates.secretKey=ca-bundle.pem \
+  --set-string clustertenantManager.additionalCaCertificates.revision=private-service-ca-v2)"
+additional_ca_manifest="$(printf '%s\n' "$additional_ca_rendered" | awk '
+  function flush_document() {
+    if (is_deployment && is_server) { printf "%s", document }
+    document = ""; is_deployment = 0; is_server = 0
+  }
+  /^---$/ { flush_document(); next }
+  { document = document $0 ORS }
+  /^kind: Deployment$/ { is_deployment = 1 }
+  /^  name: opencrane-silo-opencrane-server$/ { is_server = 1 }
+  END { flush_document() }
+')"
+[[ "$(grep -Fc 'opencrane.ai/additional-ca-certificates-revision: "private-service-ca-v2"' <<<"$additional_ca_manifest")" == "1" ]]
+[[ "$(grep -Fc '            - name: NODE_EXTRA_CA_CERTS' <<<"$additional_ca_manifest")" == "1" ]]
+grep -Fq '              value: /var/run/opencrane/outbound-ca/ca.crt' <<<"$additional_ca_manifest"
+[[ "$(grep -Fc '            - name: additional-ca-certificates' <<<"$additional_ca_manifest")" == "1" ]]
+grep -Fq '              mountPath: /var/run/opencrane/outbound-ca' <<<"$additional_ca_manifest"
+additional_ca_volume="$(grep -A 9 '        - name: additional-ca-certificates' <<<"$additional_ca_manifest")"
+grep -Fq '            secretName: "private-service-ca"' <<<"$additional_ca_volume"
+grep -Fq '            optional: false' <<<"$additional_ca_volume"
+grep -Fq '            defaultMode: 0440' <<<"$additional_ca_volume"
+grep -Fq '              - key: "ca-bundle.pem"' <<<"$additional_ca_volume"
+grep -Fq '                path: ca.crt' <<<"$additional_ca_volume"
+if grep -Fq 'NODE_TLS_REJECT_UNAUTHORIZED' <<<"$additional_ca_manifest"; then
+  echo "additional CA trust must not disable TLS verification" >&2
+  exit 1
+fi
+
+if helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
+  --set-string clustertenantManager.additionalCaCertificates.existingSecret=private-service-ca >/dev/null 2>&1; then
+  echo "additional CA trust rendered without its key and revision" >&2
+  exit 1
+fi
+if helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
+  --set-string clustertenantManager.additionalCaCertificates.secretKey=ca-bundle.pem >/dev/null 2>&1; then
+  echo "additional CA trust rendered without its Secret and revision" >&2
+  exit 1
+fi
+if helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
+  --set-string clustertenantManager.additionalCaCertificates.revision=private-service-ca-v2 >/dev/null 2>&1; then
+  echo "additional CA trust rendered without its Secret and key" >&2
+  exit 1
+fi
+
 # A configured registry credential stays in a read-only file that the server re-reads per request.
 oci_registry_rendered="$(helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set-string clustertenantManager.workflows.ociRegistry.authorization.existingSecret=oci-registry-authorization)"

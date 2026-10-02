@@ -8,7 +8,7 @@ import type { FleetMembershipDeploymentModes, FleetMembershipEvidenceConfig } fr
  */
 export type HumanMembershipEvidenceConfig =
 	| (FleetMembershipEvidenceConfig & { readonly mode: FleetMembershipDeploymentModes.Fleet })
-	| { readonly mode: FleetMembershipDeploymentModes.Standalone; readonly siloId: string; readonly trustedOidcIssuer: string; readonly maximumStalenessMs: number };
+	| { readonly mode: FleetMembershipDeploymentModes.Standalone; readonly siloId: string; readonly trustedIdentityIssuer: string; readonly maximumStalenessMs: number };
 
 /** Reads human evidence in the caller's transaction without granting product permissions. */
 export interface HumanMembershipEvidenceRepository

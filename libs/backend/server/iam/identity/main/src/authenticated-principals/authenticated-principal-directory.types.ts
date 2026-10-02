@@ -1,4 +1,4 @@
-/** Stable product identity resolved from one verified OIDC identity. */
+/** Stable product identity resolved from one deployment-trusted external identity. */
 export interface AuthenticatedPrincipal
 {
   /** Silo selected independently from the trusted request host. */
@@ -7,7 +7,7 @@ export interface AuthenticatedPrincipal
   principalId: string;
 }
 
-/** Resolves verified OIDC coordinates to the exact local principal projection. */
+/** Resolves deployment-trusted identity coordinates to the exact local principal projection. */
 export interface AuthenticatedPrincipalDirectory
 {
   /**

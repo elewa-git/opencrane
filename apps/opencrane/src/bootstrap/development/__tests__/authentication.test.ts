@@ -7,6 +7,7 @@ import { _RequestHost, _ResolveRequestPrincipal, type AuthenticatedPrincipalAdmi
 import type { AuthenticatedPrincipalCapabilityReader } from "@opencrane/backend/server/iam/identity";
 
 import { _CreateDevelopmentAuthentication } from "../authentication";
+import type { DevelopmentAuthenticationTransport } from "../authentication.types";
 import { _CreateTier2DevelopmentAuthenticationTransport } from "../browser-origin-authority";
 import { _DEVELOPMENT_IDENTITY } from "../config";
 
@@ -27,12 +28,11 @@ function _Admission(): AuthenticatedPrincipalAdmission
 }
 
 /** Build the development middleware in listener order. */
-function _App(admission: AuthenticatedPrincipalAdmission = _Admission(), browserOrigin?: string, logger: Logger = { warn: vi.fn() } as unknown as Logger)
+function _App(admission: AuthenticatedPrincipalAdmission = _Admission(), transport?: DevelopmentAuthenticationTransport, logger: Logger = { warn: vi.fn() } as unknown as Logger)
 {
 	const capabilities: AuthenticatedPrincipalCapabilityReader = { canAdministerOrganization: vi.fn().mockResolvedValue(true) };
-	const selectedBrowserOrigin = browserOrigin ?? "http://local-development.localhost:4200";
-	const transport = _CreateTier2DevelopmentAuthenticationTransport(selectedBrowserOrigin);
-	const authentication = _CreateDevelopmentAuthentication(_DEVELOPMENT_IDENTITY, capabilities, admission, _BROWSER_CREDENTIAL, logger, transport);
+	const selectedTransport = transport ?? _CreateTier2DevelopmentAuthenticationTransport("http://local-development.localhost:4200");
+	const authentication = _CreateDevelopmentAuthentication(_DEVELOPMENT_IDENTITY, capabilities, admission, _BROWSER_CREDENTIAL, logger, selectedTransport);
 	if (!authentication.router)
 	{
 		throw new Error("Development authentication requires its fixed router");
@@ -95,7 +95,14 @@ describe("Tier 2 development authentication", function _Suite(): void
 	it("presents the fixed development silo to product resolvers after Codespaces admission", async function _ResolvesCodespacesSilo(): Promise<void>
 	{
 		const browserOrigin = "https://careful-crane-123-4200.app.github.dev";
-		const response = await request(_App(_Admission(), browserOrigin)).get("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const transport: DevelopmentAuthenticationTransport = {
+			browserHost: "careful-crane-123-4200.app.github.dev",
+			browserScheme: "https",
+			directHost: "local-development.localhost:8080",
+			proxyTargets: new Set(["127.0.0.1:8080", "localhost:8080"]),
+			scheme: "http",
+		};
+		const response = await request(_App(_Admission(), transport)).get("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
 
 		expect(response.status).toBe(200);
 		expect(response.body).toEqual({
@@ -135,6 +142,15 @@ describe("Tier 2 development authentication", function _Suite(): void
 		expect(response.status).toBe(204);
 	});
 
+	it("accepts only the selected HTTPS k3d ingress transport", async function _AcceptsK3dTransport(): Promise<void>
+	{
+		const transport = { browserHost: "opencrane.local.opencrane.test", directHost: "opencrane.local.opencrane.test", proxyTargets: new Set(["opencrane.local.opencrane.test"]), scheme: "https" as const };
+		const accepted = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "opencrane.local.opencrane.test").set("X-Forwarded-Host", "opencrane.local.opencrane.test").set("Origin", "https://opencrane.local.opencrane.test").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const refused = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "opencrane.local.opencrane.test").set("X-Forwarded-Host", "opencrane.local.opencrane.test").set("Origin", "http://opencrane.local.opencrane.test").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		expect(accepted.status).toBe(204);
+		expect(refused.status).toBe(403);
+	});
+
 	it("admits the Tier 2 event-stream origin through the selected proxy tuple", async function _AcceptsEventStreamOrigin(): Promise<void>
 	{
 		const headers = {
@@ -170,7 +186,14 @@ describe("Tier 2 development authentication", function _Suite(): void
 	it("redirects only through the selected private Codespaces proxy tuple", async function _CompletesCodespacesHandoff(): Promise<void>
 	{
 		const browserOrigin = "https://careful-crane-123-4200.app.github.dev";
-		const response = await _BrowserHandoff(_App(_Admission(), browserOrigin), browserOrigin);
+		const transport: DevelopmentAuthenticationTransport = {
+			browserHost: "careful-crane-123-4200.app.github.dev",
+			browserScheme: "https",
+			directHost: "local-development.localhost:8080",
+			proxyTargets: new Set(["127.0.0.1:8080", "localhost:8080"]),
+			scheme: "http",
+		};
+		const response = await _BrowserHandoff(_App(_Admission(), transport), browserOrigin);
 
 		expect(response.status).toBe(303);
 		expect(response.headers.location).toBe(`${browserOrigin}/#development-session=${_BROWSER_CREDENTIAL}`);
@@ -221,9 +244,16 @@ describe("Tier 2 development authentication", function _Suite(): void
 	it("admits only the selected private HTTPS Codespaces proxy tuple", async function _CodespacesProxy(): Promise<void>
 	{
 		const browserOrigin = "https://careful-crane-123-4200.app.github.dev";
-		const accepted = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Origin", browserOrigin).set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
-		const wrongHost = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "other-4200.app.github.dev").set("Origin", browserOrigin).set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
-		const wrongScheme = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Origin", "http://careful-crane-123-4200.app.github.dev").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const transport: DevelopmentAuthenticationTransport = {
+			browserHost: "careful-crane-123-4200.app.github.dev",
+			browserScheme: "https",
+			directHost: "local-development.localhost:8080",
+			proxyTargets: new Set(["127.0.0.1:8080", "localhost:8080"]),
+			scheme: "http",
+		};
+		const accepted = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Origin", browserOrigin).set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const wrongHost = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "other-4200.app.github.dev").set("Origin", browserOrigin).set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const wrongScheme = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Origin", "http://careful-crane-123-4200.app.github.dev").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
 		expect(accepted.status).toBe(204);
 		expect(wrongHost.status).toBe(403);
 		expect(wrongScheme.status).toBe(403);
@@ -231,15 +261,21 @@ describe("Tier 2 development authentication", function _Suite(): void
 
 	it("admits same-origin Codespaces fetches when the private proxy omits URL headers", async function _CodespacesFetchMetadata(): Promise<void>
 	{
-		const browserOrigin = "https://careful-crane-123-4200.app.github.dev";
-		const accepted = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
-		const crossSite = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Sec-Fetch-Site", "cross-site").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
-		const directHost = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set("Host", "local-development.localhost:8080").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
-		const emptyOrigin = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Origin", "").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
-		const emptyReferer = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Referer", "").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
-		const missingMetadata = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
-		const wrongReferer = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Referer", "https://attacker.example/").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
-		const opaqueOrigin = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Origin", "null").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const transport: DevelopmentAuthenticationTransport = {
+			browserHost: "careful-crane-123-4200.app.github.dev",
+			browserScheme: "https",
+			directHost: "local-development.localhost:8080",
+			proxyTargets: new Set(["127.0.0.1:8080", "localhost:8080"]),
+			scheme: "http",
+		};
+		const accepted = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const crossSite = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Sec-Fetch-Site", "cross-site").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const directHost = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "local-development.localhost:8080").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const emptyOrigin = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Origin", "").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const emptyReferer = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Referer", "").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const missingMetadata = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const wrongReferer = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Referer", "https://attacker.example/").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const opaqueOrigin = await request(_App(_Admission(), transport)).post("/api/v1/protected").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Origin", "null").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
 
 		expect(accepted.status).toBe(204);
 		expect(crossSite.status).toBe(403);
@@ -254,6 +290,13 @@ describe("Tier 2 development authentication", function _Suite(): void
 	it("admits the Codespaces loopback Origin rewrite only with matching external browser evidence", async function _CodespacesOriginRewrite(): Promise<void>
 	{
 		const browserOrigin = "https://careful-crane-123-4200.app.github.dev";
+		const transport: DevelopmentAuthenticationTransport = {
+			browserHost: "careful-crane-123-4200.app.github.dev",
+			browserScheme: "https",
+			directHost: "local-development.localhost:8080",
+			proxyTargets: new Set(["127.0.0.1:8080", "localhost:8080"]),
+			scheme: "http",
+		};
 		const proxyHeaders = {
 			"Host": "127.0.0.1:8080",
 			"Origin": "https://localhost:4200",
@@ -262,16 +305,30 @@ describe("Tier 2 development authentication", function _Suite(): void
 			"X-Forwarded-Host": "careful-crane-123-4200.app.github.dev",
 			"X-OpenCrane-Development-Session": _BROWSER_CREDENTIAL,
 		};
-		const accepted = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set(proxyHeaders);
-		const missingReferer = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set(proxyHeaders).unset("Referer");
-		const wrongReferer = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set(proxyHeaders).set("Referer", "https://attacker.example/");
-		const malformedReferer = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set(proxyHeaders).set("Referer", "not-a-url");
-		const crossSite = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set(proxyHeaders).set("Sec-Fetch-Site", "cross-site");
-		const missingFetchMetadata = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set(proxyHeaders).unset("Sec-Fetch-Site");
-		const wrongRewrite = await request(_App(_Admission(), browserOrigin)).post("/api/v1/protected").set(proxyHeaders).set("Origin", "http://localhost:4200");
+		const accepted = await request(_App(_Admission(), transport)).post("/api/v1/protected").set(proxyHeaders);
+		const missingReferer = await request(_App(_Admission(), transport)).post("/api/v1/protected").set(proxyHeaders).unset("Referer");
+		const wrongReferer = await request(_App(_Admission(), transport)).post("/api/v1/protected").set(proxyHeaders).set("Referer", "https://attacker.example/");
+		const malformedReferer = await request(_App(_Admission(), transport)).post("/api/v1/protected").set(proxyHeaders).set("Referer", "not-a-url");
+		const crossSite = await request(_App(_Admission(), transport)).post("/api/v1/protected").set(proxyHeaders).set("Sec-Fetch-Site", "cross-site");
+		const missingFetchMetadata = await request(_App(_Admission(), transport)).post("/api/v1/protected").set(proxyHeaders).unset("Sec-Fetch-Site");
+		const wrongRewrite = await request(_App(_Admission(), transport)).post("/api/v1/protected").set(proxyHeaders).set("Origin", "http://localhost:4200");
 		const deniedAdmission = _Admission();
-		const wrongInternalHost = await request(_App(deniedAdmission, browserOrigin)).post("/api/v1/protected").set(proxyHeaders).set("Host", "127.0.0.1:9090");
-		const wrongCredential = await request(_App(deniedAdmission, browserOrigin)).post("/api/v1/protected").set(proxyHeaders).set("X-OpenCrane-Development-Session", "b".repeat(43));
+		const wrongInternalHost = await request(_App(deniedAdmission, transport)).post("/api/v1/protected").set(proxyHeaders).set("Host", "127.0.0.1:9090");
+		const wrongCredential = await request(_App(deniedAdmission, transport)).post("/api/v1/protected").set(proxyHeaders).set("X-OpenCrane-Development-Session", "b".repeat(43));
+		const tier3Host = "opencrane.local.opencrane.test";
+		const tier3Transport: DevelopmentAuthenticationTransport = {
+			browserHost: tier3Host,
+			directHost: tier3Host,
+			proxyTargets: new Set([tier3Host]),
+			scheme: "https",
+		};
+		const tier3Headers = {
+			...proxyHeaders,
+			"Host": tier3Host,
+			"Referer": `https://${tier3Host}/onboarding`,
+			"X-Forwarded-Host": tier3Host,
+		};
+		const tier3Rewrite = await request(_App(_Admission(), tier3Transport)).post("/api/v1/protected").set(tier3Headers);
 
 		expect(accepted.status).toBe(204);
 		expect(missingReferer.status).toBe(403);
@@ -284,15 +341,23 @@ describe("Tier 2 development authentication", function _Suite(): void
 		expect(wrongInternalHost.body.code).toBe("DEVELOPMENT_HOST_MISMATCH");
 		expect(wrongCredential.status).toBe(401);
 		expect(wrongCredential.body.code).toBe("DEVELOPMENT_SESSION_REQUIRED");
+		expect(tier3Rewrite.status).toBe(403);
 		expect(deniedAdmission.admit).not.toHaveBeenCalled();
 	});
 
 	it("logs safe proxy evidence when a Codespaces state change has another origin", async function _LogsOriginMismatch(): Promise<void>
 	{
 		const browserOrigin = "https://careful-crane-123-4200.app.github.dev";
+		const transport: DevelopmentAuthenticationTransport = {
+			browserHost: "careful-crane-123-4200.app.github.dev",
+			browserScheme: "https",
+			directHost: "local-development.localhost:8080",
+			proxyTargets: new Set(["127.0.0.1:8080", "localhost:8080"]),
+			scheme: "http",
+		};
 		const warn = vi.fn();
 		const logger = { warn } as unknown as Logger;
-		const response = await request(_App(_Admission(), browserOrigin, logger)).post("/api/v1/protected?secret=not-logged").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Origin", "https://attacker.example/private?secret=not-logged").set("Referer", "https://attacker.example/review?secret=not-logged").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
+		const response = await request(_App(_Admission(), transport, logger)).post("/api/v1/protected?secret=not-logged").set("Host", "127.0.0.1:8080").set("X-Forwarded-Host", "careful-crane-123-4200.app.github.dev").set("Origin", "https://attacker.example/private?secret=not-logged").set("Referer", "https://attacker.example/review?secret=not-logged").set("Sec-Fetch-Site", "same-origin").set("X-OpenCrane-Development-Session", _BROWSER_CREDENTIAL);
 
 		expect(response.status).toBe(403);
 		expect(warn).toHaveBeenCalledWith({
@@ -304,7 +369,7 @@ describe("Tier 2 development authentication", function _Suite(): void
 			path: "/api/v1/protected",
 			refererOrigin: "https://attacker.example",
 			secFetchSite: "same-origin",
-		}, "Tier 2 state change origin did not match the development browser");
+		}, "Development state change origin did not match the configured browser");
 	});
 
 	it("fails closed when the durable Principal is absent", async function _RejectsAbsentPrincipal(): Promise<void>

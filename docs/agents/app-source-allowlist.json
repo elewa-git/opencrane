@@ -55,6 +55,11 @@
       "classification": "process-composition"
     },
     {
+      "path": "apps/opencrane/src/bootstrap/process/k3d-development-authentication.ts",
+      "owner": "apps/opencrane",
+      "classification": "process-composition"
+    },
+    {
       "path": "apps/opencrane/src/bootstrap/configuration/config.ts",
       "owner": "apps/opencrane",
       "classification": "app-config"
