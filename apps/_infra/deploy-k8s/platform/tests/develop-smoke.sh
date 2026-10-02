@@ -45,6 +45,8 @@ SMOKE_FAILURE_PHASE=""
 SMOKE_FAILURE_STATUS=""
 HOSTED_RUN_DIR=""
 HOSTED_FIXTURE_DIR="$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/fixtures/hosted-generated-file"
+HOSTED_EVIDENCE_DIR="$ROOT_DIR/.nx/test-results/hosted-generated-file"
+HOSTED_RETAINED_CA_PATH="$HOSTED_EVIDENCE_DIR/${CLUSTER_NAME}-retained-ca.crt"
 KEY_DIR=""
 CSI_DIR=""
 IMAGE_PREPARATION_PID=""
@@ -271,6 +273,53 @@ _prune_owned_smoke_images()
   docker image prune --all --force --filter "label=${SMOKE_OWNER_IMAGE_LABEL}" >/dev/null || return 1
 }
 
+# The retained k3d nodes bind-mount this public trust root after the secret fixture directory is
+# removed. Delete only this exact regular file after the current checkout's owned nodes are gone.
+_remove_retained_hosted_ca()
+{
+  if [[ -L "$HOSTED_RETAINED_CA_PATH" ]] \
+    || { [[ -e "$HOSTED_RETAINED_CA_PATH" ]] && [[ ! -f "$HOSTED_RETAINED_CA_PATH" ]]; }; then
+    echo "[develop-smoke] Refusing retained CA cleanup for a non-regular path." >&2
+    return 1
+  fi
+  rm -f -- "$HOSTED_RETAINED_CA_PATH"
+}
+
+_assert_owned_resources_absent()
+{
+  local resource inspection status
+  for resource in "k3d-${CLUSTER_NAME}-server-0" "k3d-${SMOKE_LOCAL_REGISTRY_NAME}"; do
+    if inspection="$(docker inspect "$resource" 2>&1)"; then
+      echo "[develop-smoke] Refusing retained cleanup while '$resource' still exists." >&2
+      return 1
+    else
+      status=$?
+    fi
+    if [[ "$status" != 1 || "$inspection" != "Error: No such object: $resource" ]]; then
+      echo "[develop-smoke] Could not prove Docker object '$resource' is absent." >&2
+      return 1
+    fi
+  done
+}
+
+_stage_retained_hosted_ca()
+{
+  local path
+  for path in "$ROOT_DIR/.nx" "$ROOT_DIR/.nx/test-results" "$HOSTED_EVIDENCE_DIR"; do
+    if [[ -L "$path" ]]; then
+      echo "[develop-smoke] Refusing retained CA staging through a symbolic-link directory." >&2
+      return 1
+    fi
+  done
+  if [[ -e "$HOSTED_RETAINED_CA_PATH" ]] || [[ -L "$HOSTED_RETAINED_CA_PATH" ]]; then
+    echo "[develop-smoke] Refusing to overwrite a retained CA before its owned cluster is removed." >&2
+    return 1
+  fi
+  mkdir -p "$HOSTED_EVIDENCE_DIR"
+  install -m 0600 "$HOSTED_CA_PATH" "$HOSTED_RETAINED_CA_PATH"
+  [[ -f "$HOSTED_RETAINED_CA_PATH" ]] && [[ ! -L "$HOSTED_RETAINED_CA_PATH" ]]
+}
+
 _teardown_cluster_storage()
 {
   _assert_owned_resource_set || return 1
@@ -283,6 +332,8 @@ _teardown_cluster_storage()
     k3d cluster delete "$CLUSTER_NAME" || return 1
   fi
   _assert_owned_resource_set || return 1
+  _assert_owned_resources_absent || return 1
+  _remove_retained_hosted_ca || return 1
   _prune_owned_smoke_images || return 1
 }
 
@@ -312,6 +363,10 @@ _cleanup()
       exit_code=1
     fi
     bash "$HOSTED_FIXTURE_DIR/hosted-services.sh" stop "$HOSTED_RUN_DIR" "$CLUSTER_NAME" "$ROOT_DIR" || true
+    if ! bash "$HOSTED_FIXTURE_DIR/hosted-services.sh" remove-registry-alias "$HOSTED_RUN_DIR" "$CLUSTER_NAME" "$ROOT_DIR"; then
+      echo "[develop-smoke] Failed to remove the hosted registry import alias" >&2
+      exit_code=1
+    fi
     rm -rf -- "$HOSTED_RUN_DIR"
   fi
   if _should_retain_cluster; then
@@ -727,11 +782,8 @@ case "${1:-}" in
     ;;
   --prune-owned-images)
     _assert_owned_resource_set
-    if docker inspect "k3d-${CLUSTER_NAME}-server-0" >/dev/null 2>&1 \
-      || docker inspect "k3d-${SMOKE_LOCAL_REGISTRY_NAME}" >/dev/null 2>&1; then
-      echo "[develop-smoke] Refusing image cleanup while the owner cluster or registry is retained." >&2
-      exit 1
-    fi
+    _assert_owned_resources_absent
+    _remove_retained_hosted_ca
     _prune_owned_smoke_images
     exit 0
     ;;
@@ -753,7 +805,7 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-for command in awk curl docker git helm jq k3d kubectl node npm openssl tar zip; do _require_command "$command"; done
+for command in awk curl docker git helm install jq k3d kubectl node npm openssl tar zip; do _require_command "$command"; done
 docker info >/dev/null 2>&1 || { echo "[develop-smoke] Docker daemon is not reachable." >&2; exit 1; }
 if [[ "$SMOKE_STORAGE_MODE" != "fast" && "$SMOKE_STORAGE_MODE" != "full" ]]; then
   echo "[develop-smoke] SMOKE_STORAGE_MODE must be 'fast' or 'full', got '$SMOKE_STORAGE_MODE'." >&2
@@ -803,6 +855,8 @@ elif docker inspect "k3d-${SMOKE_LOCAL_REGISTRY_NAME}" >/dev/null 2>&1; then
   k3d registry delete "$SMOKE_LOCAL_REGISTRY_NAME"
 fi
 _assert_owned_resource_set
+_assert_owned_resources_absent
+_remove_retained_hosted_ca
 _prune_owned_smoke_images
 _prepare_smoke_host_storage
 _pass_phase "owned Tier 3 resources replaced"
@@ -818,6 +872,7 @@ bash "$HOSTED_FIXTURE_DIR/hosted-services.sh" prepare "$HOSTED_RUN_DIR" "$CLUSTE
 # The helper writes only shell-escaped generated paths and synthetic fixture values.
 # shellcheck disable=SC1090
 source "$HOSTED_RUN_DIR/hosted-services.env"
+_stage_retained_hosted_ca
 _pass_phase "hosted generated-file fixture prepared"
 
 # Image preparation is the longest independent lane. Start it before k3d so cluster creation and
@@ -839,12 +894,15 @@ cluster_create_arguments+=(
   --host-alias "${HOSTED_REGISTRY_SERVICE_IP}:hosted-generated-file-registry.${NAMESPACE}.svc,hosted-generated-file-registry.${NAMESPACE}.svc.cluster.local"
   --registry-config "$HOSTED_K3S_REGISTRY_CONFIG_PATH"
   --runtime-label "opencrane.tier3.owner=${SMOKE_RESOURCE_OWNER}@all"
-  --volume "${HOSTED_CA_PATH}:/etc/rancher/k3s/hosted-generated-file/ca.crt@all"
+  --volume "${HOSTED_RETAINED_CA_PATH}:/etc/rancher/k3s/hosted-generated-file/ca.crt@all"
 )
 k3d "${cluster_create_arguments[@]}"
 SMOKE_CLUSTER_CREATED=1
-bash "$HOSTED_FIXTURE_DIR/hosted-services.sh" start-registry "$HOSTED_RUN_DIR" "$CLUSTER_NAME" "$ROOT_DIR"
 _pass_phase "disposable Tier 3 cluster created"
+
+_start_phase "install hosted registry fixture"
+bash "$HOSTED_FIXTURE_DIR/hosted-services.sh" start-registry "$HOSTED_RUN_DIR" "$CLUSTER_NAME" "$ROOT_DIR"
+_pass_phase "hosted registry fixture installed"
 
 _start_phase "install external cluster prerequisites"
 if [[ "$SMOKE_STORAGE_MODE" == "full" ]]; then

@@ -615,6 +615,15 @@ test("keeps the shared smoke defaults compatible with CI", async function _Smoke
 	assert.match(source, /_start_phase "qualify hosted generated-file source"\nnpx nx run opencrane:test:hosted-generated-file-qualification\n_pass_phase "hosted generated-file source qualified"/u);
 	assert.match(source, /_start_phase "prepare hosted generated-file fixture"[\s\S]*_pass_phase "hosted generated-file fixture prepared"/u);
 	assert.match(source, /_start_phase "create disposable Tier 3 cluster"[\s\S]*_pass_phase "disposable Tier 3 cluster created"/u);
+	assert.match(source, /HOSTED_RETAINED_CA_PATH="\$HOSTED_EVIDENCE_DIR\/\$\{CLUSTER_NAME\}-retained-ca\.crt"/u);
+	assert.match(source, /install -m 0600 "\$HOSTED_CA_PATH" "\$HOSTED_RETAINED_CA_PATH"/u);
+	assert.match(source, /--volume "\$\{HOSTED_RETAINED_CA_PATH\}:\/etc\/rancher\/k3s\/hosted-generated-file\/ca\.crt@all"/u);
+	assert.doesNotMatch(source, /--volume "\$\{HOSTED_CA_PATH\}:\/etc\/rancher\/k3s\/hosted-generated-file\/ca\.crt@all"/u);
+	assert.match(source, /k3d "\$\{cluster_create_arguments\[@\]\}"\nSMOKE_CLUSTER_CREATED=1\n_pass_phase "disposable Tier 3 cluster created"\n\n_start_phase "install hosted registry fixture"[\s\S]*_pass_phase "hosted registry fixture installed"/u);
+	assert.match(source, /k3d cluster delete "\$CLUSTER_NAME" \|\| return 1\n  fi\n  _assert_owned_resource_set \|\| return 1\n  _assert_owned_resources_absent \|\| return 1\n  _remove_retained_hosted_ca/u);
+	assert.match(source, /k3d cluster delete "\$CLUSTER_NAME"\nelif[\s\S]*?_assert_owned_resource_set\n_assert_owned_resources_absent\n_remove_retained_hosted_ca\n_prune_owned_smoke_images/u);
+	assert.match(source, /remove-registry-alias "\$HOSTED_RUN_DIR" "\$CLUSTER_NAME" "\$ROOT_DIR"[\s\S]*?rm -rf -- "\$HOSTED_RUN_DIR"/u);
+	assert.match(source, /rm -rf -- "\$HOSTED_RUN_DIR"/u);
 	assert.doesNotMatch(source, /opencrane:test:hosted-generated-file-qualification --excludeTaskDependencies/u);
 	assert.deepEqual(opencrane.nx.targets["test:hosted-generated-file-qualification"].dependsOn, ["db:generate"]);
 });

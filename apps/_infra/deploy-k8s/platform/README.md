@@ -47,7 +47,12 @@ user npm cache and unused shared Docker builder state, imports those five images
 releases each accepted local tag. The KurrentDB bootstrap and conversation-computer images go into a
 disposable registry bound to loopback; their stored
 manifest digests become the exact references used inside k3d. Nothing is published to a public
-registry. A pull request bypasses that cluster only when one positive proof binds its exact base SHA to a completed successful push or
+registry. The hosted qualification registry follows the same integrity rule through a private,
+digest-derived local tag because k3d discovers Docker tags rather than repository digests. The
+fixture verifies that alias against the pinned vendor image immediately before import and forbids
+Kubernetes from pulling a replacement. Retained Tier 3 clusters keep only their public fixture CA at
+a stable owner-scoped path; generated private keys and credentials are still removed after every
+run. A pull request bypasses that cluster only when one positive proof binds its exact base SHA to a completed successful push or
 manual-dispatch k3d job, no affected container owner, and only explicitly non-deployment paths. The same evidence works
 for `develop` and reviewed feature-stack bases; unknown or unavailable evidence fails closed to
 k3d. Both tiers install pinned cert-manager, CloudNativePG, and the Agent Sandbox controller with its
