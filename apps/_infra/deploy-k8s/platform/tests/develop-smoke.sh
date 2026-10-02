@@ -289,7 +289,7 @@ _assert_owned_resources_absent()
 {
   local resource inspection status
   for resource in "k3d-${CLUSTER_NAME}-server-0" "k3d-${SMOKE_LOCAL_REGISTRY_NAME}"; do
-    if inspection="$(docker inspect "$resource" 2>&1)"; then
+    if inspection="$(docker inspect "$resource" 2>&1 >/dev/null)"; then
       echo "[develop-smoke] Refusing retained cleanup while '$resource' still exists." >&2
       return 1
     else

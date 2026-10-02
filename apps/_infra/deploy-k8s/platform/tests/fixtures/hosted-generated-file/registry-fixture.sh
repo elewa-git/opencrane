@@ -62,7 +62,7 @@ _remove_registry_alias()
   fi
   local registry_image source_image_id registry_image_id inspection status
   registry_image="$(_registry_alias_from_state)" || return 1
-  if inspection="$(docker image inspect "$registry_image" 2>&1)"; then
+  if inspection="$(docker image inspect "$registry_image" 2>&1 >/dev/null)"; then
     :
   else
     status=$?

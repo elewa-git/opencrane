@@ -138,6 +138,11 @@ if [[ "$1" == image && "$2" == inspect ]]; then
     echo 'Cannot connect to the Docker daemon' >&2
     exit 1
   fi
+  if [[ "${REGISTRY_ALIAS_MISSING:-0}" == 1 && "$3" == "$REGISTRY_IMPORT_IMAGE" ]]; then
+    printf '[]\n'
+    echo "Error response from daemon: No such image: $REGISTRY_IMPORT_IMAGE" >&2
+    exit 1
+  fi
   if [[ "$3" == "$REGISTRY_SOURCE_IMAGE" ]]; then
     printf '%s\n' sha256:source-image
     exit 0
@@ -218,6 +223,14 @@ grep -Fq 'Registry import alias no longer matches its pinned vendor image' "$REG
 [[ ! -s "$REGISTRY_TEST_DIR/k3d-capture" && ! -s "$REGISTRY_TEST_DIR/kubectl-capture" ]]
 
 : > "$REGISTRY_TEST_DIR/docker-capture"
+REGISTRY_ALIAS_MISSING=1 \
+  REGISTRY_SOURCE_IMAGE="$REGISTRY_SOURCE_IMAGE" REGISTRY_IMPORT_IMAGE="$REGISTRY_IMPORT_IMAGE" \
+  REGISTRY_DOCKER_CAPTURE="$REGISTRY_TEST_DIR/docker-capture" \
+  PATH="$REGISTRY_MOCK_BIN:$PATH" \
+  bash "$REGISTRY_FIXTURE" remove-registry-alias "$REGISTRY_RUN_DIR" contract-cluster "$ROOT_DIR"
+[[ ! -s "$REGISTRY_TEST_DIR/docker-capture" && -f "$REGISTRY_RUN_DIR/hosted-services.env" ]]
+
+: > "$REGISTRY_TEST_DIR/docker-capture"
 if REGISTRY_INSPECT_ERROR=1 \
   REGISTRY_SOURCE_IMAGE="$REGISTRY_SOURCE_IMAGE" REGISTRY_IMPORT_IMAGE="$REGISTRY_IMPORT_IMAGE" \
   REGISTRY_DOCKER_CAPTURE="$REGISTRY_TEST_DIR/docker-capture" \
@@ -266,6 +279,7 @@ if [[ "$1" == inspect ]]; then
   if [[ "${RETAINED_REGISTRY_PRESENT:-0}" == 1 && "$target" == "k3d-${RETAINED_CA_CLUSTER}-registry" ]]; then
     exit 0
   fi
+  printf '[]\n'
   echo "Error: No such object: $target" >&2
   exit 1
 fi
