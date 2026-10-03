@@ -126,7 +126,7 @@
     "express-rate-limit": "^7.4.0",
     "express-session": "^1.19.0",
     "highlight.js": "^11.11.1",
-    "markdown-it": "^14.2.0",
+    "markdown-it": "^14.3.2",
     "markdown-it-task-lists": "^2.1.1",
     "openapi-fetch": "^0.17.0",
     "openid-client": "^6.8.4",
