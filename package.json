@@ -81,7 +81,7 @@
     "express-session": "^1.19.0",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^25.0.1",
-    "nx": "^23.0.2",
+    "nx": "^23.2.1",
     "openapi-typescript": "^7.13.0",
     "storybook": "10.5.7",
     "supertest": "^7.0.0",
