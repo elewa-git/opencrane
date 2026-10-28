@@ -121,7 +121,7 @@
     "@prisma/client": "^6.0.0",
     "@sinclair/typebox": "0.34.49",
     "ajv": "8.18.0",
-    "dompurify": "^3.4.13",
+    "dompurify": "^3.4.17",
     "express": "^5.1.0",
     "express-rate-limit": "^7.4.0",
     "express-session": "^1.19.0",
