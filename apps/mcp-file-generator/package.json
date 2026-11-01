@@ -13,6 +13,6 @@
     "@opentelemetry/sdk-node": "^0.220.0",
     "openapi-fetch": "0.17.0",
     "pino": "^9.6.0",
-    "zod": "3.25.76"
+    "zod": "4.6.6"
   }
 }
